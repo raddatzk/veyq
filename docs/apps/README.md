@@ -81,4 +81,29 @@ and one query. The steps:
 
 The scope's *node list* is not this: it has its own revision ([ADR 0081](../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)).
 
+## How an application shows facts in a level's rows and tiles
+
+Core draws every row (a list item) and tile of a folder level, and of the profile page's Memories list, from the
+`LevelRow` its application's `list.rows` factory answers per node (`web/src/core/node/levelRow.ts`; ADR 0079 Decision 5,
+inbox #407). Under the title sits **one meta line**: the kind's noun (`meta`: "Memory", "File") followed by the node's
+**details** (`details`, inbox #418) - the facts only the application can read: Memories' **date and place**, Files'
+**size and modified time**, a drop box's people count. The hook:
+
+1. **Answer `details` in the row**: an ordered list of `{ id, text }`, already translated and formatted for the reader's
+   locale. The application owns what the facts are, where they are read (the node's unsealed meta, Files' blob listing)
+   and how they read; core owns the line - the " · " between them, the wrapping (two lines, then an ellipsis), the
+   colour tokens and the reading order (it is plain text inside the item's button, no icon-only content).
+2. **Leave out what the node does not have.** A Memory without a place has no `place` entry; a file whose blob carries no
+   modified time has no `modified` entry. Never a placeholder ("unknown", "-", "no date yet"); core drops a blank
+   entry as well (`levelRowDetails`), so a hole cannot reach the line.
+3. **No application is named in core.** The ids are the application's own tokens and only a styling and testing hook
+   (`data-detail`). Another surface that lists an application's nodes the same way (the profile page's Memories) builds the
+   same details with the application's one builder (`features/memory/memoryRowDetails.ts`), so the two cannot drift.
+4. **A share view shows the same details** where the served data carries them (a guest holds the node's key and gets its
+   sealed meta unchanged): rights remove functions, not facts, so no guest-only row exists.
+
+The layout is core's and shared by every kind: a list row's visual is a 4.5 x 3 rem tile (6.5 x 4 rem from 521 px), a grid
+tile a 16:9 cover over text, and the same item component is drawn on the profile page, whose rows/tiles switch is the level's
+own (`ViewModeToggle` over the per-user `useViewMode` preference). A map is not part of this ([inbox #417](../inbox.md)).
+
 A concept doc is **not** state the code answers to: nothing in it is built, refined into use-cases or planned.

@@ -1,6 +1,6 @@
 // The row model's pure half (inbox #407): which actions are buttons, which are in the overflow menu, and core's own.
 import { describe, it, expect } from 'vitest'
-import { MAX_FIRST_ACTIONS, mergeRowActions, splitRowActions, type CoreRowAction, type LevelRowAction } from './levelRow'
+import { MAX_FIRST_ACTIONS, levelRowDetails, mergeRowActions, splitRowActions, type CoreRowAction, type LevelRowAction } from './levelRow'
 
 const a = (id: string, over: Partial<CoreRowAction> = {}): CoreRowAction => ({ id, label: id, icon: 'pi pi-x', onClick: () => {}, ...over })
 const ids = (list: readonly LevelRowAction[]) => list.map((x) => x.id)
@@ -37,5 +37,20 @@ describe('mergeRowActions', () => {
 
   it('is the application\'s list alone when core adds none', () => {
     expect(ids(mergeRowActions([], [a('p')]))).toEqual(['p'])
+  })
+})
+
+describe('levelRowDetails', () => {
+  it('keeps the details with text, in the given order', () => {
+    expect(levelRowDetails({ details: [{ id: 'size', text: '3 kB' }, { id: 'modified', text: 'Modified today' }] }).map((d) => d.id)).toEqual(['size', 'modified'])
+  })
+
+  it('has none for a row without details', () => {
+    expect(levelRowDetails({})).toEqual([])
+    expect(levelRowDetails({ details: [] })).toEqual([])
+  })
+
+  it('drops a blank entry, so a placeholder-shaped hole never reaches the line', () => {
+    expect(levelRowDetails({ details: [{ id: 'date', text: '' }, { id: 'place', text: '   ' }, { id: 'size', text: '1 B' }] }).map((d) => d.id)).toEqual(['size'])
   })
 })

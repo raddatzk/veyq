@@ -1,7 +1,10 @@
 <script setup lang="ts">
 // A person's profile section from Memories (ADR 0083 decision 6, uc.memory.participants): "Memories with <name>" - the
-// Memories in which the person is a participant AND the viewer has access, in core's level-list row (`LevelRowItem`:
-// cover, name, a meta line with date and place, a click that opens the Memory). The list is computed here by the
+// Memories in which the person is a participant AND the viewer has access, in core's level-list item (`LevelRowItem`:
+// cover, name, a meta line with the Memory's date and place - the very builder the level uses, `memoryRowDetails.ts` - and a
+// click that opens the Memory), as rows or as tiles. The rows/tiles switch is core's `ViewModeToggle` over the one
+// per-user view-mode preference (`useViewMode`), so the choice made here is the folder view's too; this page offers the two
+// layouts core draws (`FOLDER_VIEWS`) - no map (inbox #417). The list is computed here by the
 // participants index (`../participantIndex.ts`): a client-side walk of the tenant and the viewer's group scopes, revalidated
 // by ETag, bounded - the page says so when it is `partial`. Four honest states: loading, error (retry), empty, list.
 // A former member's section is the same list; the rows link to Memories, never to the person.
@@ -9,13 +12,15 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import LevelRowItem from '../../../core/node/components/LevelRowItem.vue'
+import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import type { LevelRow } from '../../../core/node/levelRow'
+import { FOLDER_VIEWS, effectiveViewMode } from '../../../core/node/levelViews'
+import { useViewMode } from '../../../shared/state/useViewMode'
 import type { PersonSectionProps } from '../../../core/applications/registry'
 import { hashForNode } from '../../../core/node/location'
 import { createCoverStore } from '../../../core/node/cover/coverStore'
 import { isAbandoned, loadParticipantIndex, type ParticipantIndex, type ParticipatedMemory } from '../participantIndex'
-import { formatClosedRange, formatDay } from '../memoryDateRange'
-import type { MemoryDate } from '../memoryDate'
+import { memoryDetails } from '../memoryRowDetails'
 import MemoryRowCover from './MemoryRowCover.vue'
 
 const props = defineProps<PersonSectionProps>()
@@ -66,11 +71,9 @@ function byScope(memories: ParticipatedMemory[]): Map<string, ParticipatedMemory
   return map
 }
 
-function dateLabel(date: MemoryDate | null): string {
-  if (!date) return ''
-  if (date.mode === 'ongoing') return date.from ? t('memory.date.since', { day: formatDay(date.from, locale.value) }) : ''
-  return formatClosedRange(date.from, date.to, locale.value)
-}
+// The layout: the stored per-user mode where this page offers it (rows or tiles), else the tiles - never rewritten here.
+const { viewMode } = useViewMode()
+const mode = computed<'grid' | 'list'>(() => (effectiveViewMode(viewMode.value, FOLDER_VIEWS) === 'list' ? 'list' : 'grid'))
 
 const rows = computed<{ m: ParticipatedMemory; row: LevelRow }[]>(() => {
   if (state.value.kind !== 'ready') return []
@@ -83,7 +86,11 @@ const rows = computed<{ m: ParticipatedMemory; row: LevelRow }[]>(() => {
         icon: 'pi pi-images',
         leading: { component: MemoryRowCover, props: { src: cover?.url ?? null, crop: cover?.crop ?? null, alt: m.node.name } },
         title: m.node.name,
-        meta: [t('memory.kindMemory'), dateLabel(m.date), m.placeName, m.scopeLabel].filter(Boolean).join(' · '),
+        meta: t('memory.kindMemory'),
+        details: [
+          ...memoryDetails({ date: m.date, placeName: m.placeName }, t, locale.value),
+          ...(m.scopeLabel ? [{ id: 'scope', text: m.scopeLabel }] : []),
+        ],
         primary: { label: m.node.name, onClick: () => void router.push({ hash: hashForNode(m.tree, m.node.id, m.scopeToken) }) },
         actions: [],
       },
@@ -96,7 +103,10 @@ const heading = computed(() => (props.name ? t('memory.people.withName', { name:
 
 <template>
   <section class="person-memories" aria-labelledby="person-memories-title" data-testid="person-memories">
-    <h2 id="person-memories-title" class="person-memories-title">{{ heading }}</h2>
+    <div class="person-memories-head">
+      <h2 id="person-memories-title" class="person-memories-title">{{ heading }}</h2>
+      <ViewModeToggle v-if="state.kind === 'ready' && rows.length > 0" :views="FOLDER_VIEWS" />
+    </div>
     <p v-if="state.kind === 'loading'" class="person-memories-state" role="status">{{ t('memory.people.loading') }}</p>
     <div v-else-if="state.kind === 'error'" class="person-memories-state" role="alert">
       <p>{{ t('memory.people.error') }}</p>
@@ -104,8 +114,8 @@ const heading = computed(() => (props.name ? t('memory.people.withName', { name:
     </div>
     <template v-else>
       <p v-if="rows.length === 0" class="person-memories-state" data-testid="person-memories-empty">{{ t('memory.people.empty') }}</p>
-      <ul v-else class="person-memories-list veyq-level-list is-list">
-        <LevelRowItem v-for="r in rows" :key="r.m.ref" :row="r.row" mode="list" kind="MEMORY" />
+      <ul v-else class="person-memories-list veyq-level-list" :class="{ 'is-list': mode === 'list' }" data-testid="person-memories-list">
+        <LevelRowItem v-for="r in rows" :key="r.m.ref" :row="r.row" :mode="mode" kind="MEMORY" />
       </ul>
       <p v-if="partial" class="person-memories-partial" role="note" data-testid="person-memories-partial">{{ t('memory.people.partial') }}</p>
     </template>
@@ -113,8 +123,16 @@ const heading = computed(() => (props.name ? t('memory.people.withName', { name:
 </template>
 
 <style scoped>
-.person-memories-title {
+.person-memories-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin: 0 0 0.6rem;
+}
+.person-memories-title {
+  margin: 0;
   font-size: 1.1rem;
 }
 .person-memories-state,
@@ -122,7 +140,6 @@ const heading = computed(() => (props.name ? t('memory.people.withName', { name:
   color: var(--app-muted);
 }
 .person-memories-list {
-  list-style: none;
   margin: 0;
   padding: 0;
 }

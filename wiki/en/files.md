@@ -83,6 +83,10 @@ In a folder you can switch between **Grid view** and **List view** with the butt
 where Memories have places). The choice is yours and is remembered; the same switch works for everything in the
 folder.
 
+Under each name a small line says what the thing is and what we know about it: a Memory shows its date and place (when it has
+them), a file its size and when it was last modified, a drop box how many people have a folder in it. What is not known is
+simply not shown. Covers are larger in both views, and the same switch (and the same line) is on a person's profile page.
+
 ## Addresses you can bookmark
 
 The address of a folder in your browser reads like its path, for example `…/#holidays/2026/` — **a folder's

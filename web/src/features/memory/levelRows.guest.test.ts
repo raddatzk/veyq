@@ -131,7 +131,8 @@ describe('Memories rows for a share guest', () => {
       const h = mountGuest(role)
       await flushPromises()
       expect(titlesOf(h.w)).toEqual(['Ostsee', 'Rom'])
-      expect(metaOf(h, 'Rom')).toBe(`${t('memory.kindMemory')} · ${formatClosedRange('2024-04-02', '2024-04-02', 'en')}`)
+      // the place the served meta carries is shown too (rights remove functions, not facts); Ostsee has none, so no hole
+      expect(metaOf(h, 'Rom')).toBe(`${t('memory.kindMemory')} · ${formatClosedRange('2024-04-02', '2024-04-02', 'en')} · Rom`)
       expect(metaOf(h, 'Ostsee')).toBe(`${t('memory.kindMemory')} · ${formatClosedRange('2019-07-01', '2019-07-01', 'en')}`)
       // no rename (the heart is core's, and a guest has none: `core/favorites/favoriteActions.test.ts`); a contributor may move a Memory a folder holds
       expect(await actionIdsOf(h.w, 'Rom')).toEqual(role === ShareRole.Read ? [] : ['move'])

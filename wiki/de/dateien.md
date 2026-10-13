@@ -90,6 +90,11 @@ In einem Ordner wechselst du mit den Schaltflächen oben zwischen **Rasteransich
 **Kartenansicht**, wo Erinnerungen Orte haben). Die Wahl gehört dir und wird gemerkt; derselbe Schalter gilt für alles
 im Ordner.
 
+Unter jedem Namen steht eine kleine Zeile, was es ist und was wir darüber wissen: Eine Erinnerung zeigt ihr Datum und ihren
+Ort (wenn sie welche hat), eine Datei ihre Größe und wann sie zuletzt geändert wurde, ein Briefkasten, wie viele Personen
+einen Ordner darin haben. Was nicht bekannt ist, wird einfach nicht gezeigt. Die Cover sind in beiden Ansichten größer, und
+derselbe Schalter (und dieselbe Zeile) steht auch auf der Profilseite einer Person.
+
 ## Adressen zum Merken
 
 Die Adresse eines Ordners im Browser liest sich wie sein Pfad, zum Beispiel `…/#urlaub/2026/` — **die Adresse eines

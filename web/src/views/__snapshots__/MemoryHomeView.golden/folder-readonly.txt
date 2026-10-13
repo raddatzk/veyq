@@ -48,7 +48,13 @@ div.veyq-node-host
             strong.veyq-level-item-title
               "Italy"
             small.veyq-level-item-meta
-              "Memory · 05/01/2024 – 05/10/2024"
+              "Memory"
+              "·"
+              span.veyq-level-item-detail
+                "05/01/2024 – 05/10/2024"
+              "·"
+              span.veyq-level-item-detail
+                "p-1"
         span.veyq-level-item-actions
           button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
             span.p-button-icon.pi.pi-heart

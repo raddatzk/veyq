@@ -16,7 +16,7 @@ const imageStyle = computed(() => coverImageStyle(props.crop))
 
 <template>
   <span class="memory-cover-image">
-    <img v-if="src" :src="src" :alt="alt ?? ''" :style="imageStyle" draggable="false" />
+    <img v-if="src" :src="src" :alt="alt ?? ''" :style="imageStyle" loading="lazy" decoding="async" draggable="false" />
     <slot v-else name="placeholder">
       <span class="memory-cover-image-ph pi pi-images" />
     </slot>

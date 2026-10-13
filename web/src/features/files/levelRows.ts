@@ -27,7 +27,7 @@
 // the listing (ids, sealed sizes and each blob's sealed meta) and the completion (ids only).
 import { computed, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { LevelNotice, LevelRow, LevelRowAction, LevelRowSource, LevelRowsContext, LevelRowsHost } from '../../core/node/levelRow'
+import type { LevelNotice, LevelRow, LevelRowAction, LevelRowDetail, LevelRowSource, LevelRowsContext, LevelRowsHost } from '../../core/node/levelRow'
 import type { TreeNode } from '../../core/node/tree'
 import { collidingSibling, nameTakenMessage } from '../../core/node/siblingCollision'
 import { useTrashUndo } from '../../core/node/trashUndo'
@@ -127,19 +127,20 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
   /** Whether the file is KNOWN to hold no content: listed without a blob (not merely unlisted after a failed read). */
   const isEmpty = (node: TreeNode): boolean => blobs.value.has(node.id) && blobs.value.get(node.id) === null
 
-  /** A row's facts from its BLOB alone (inbox #397): the plaintext size (exact, from the sealed size) and the modified time
+  /** A row's details from its BLOB alone (inbox #397): the plaintext size (exact, from the sealed size) and the modified time
    *  sealed in the blob's meta - present or not, the node's own payload is never read for it, so a file shows its facts
    *  whatever its node meta holds, and a replace shows the new blob's at once. No blob: not uploaded. */
-  function fileMeta(key: Uint8Array | null, nodeId: string, blob: FileBlobRef | null): string {
-    const kind = t('files.kindFile')
-    if (!blob) return `${kind} · ${t('files.notUploaded')}`
+  function fileDetails(key: Uint8Array | null, nodeId: string, blob: FileBlobRef | null): LevelRowDetail[] {
+    if (!blob) return [{ id: 'state', text: t('files.notUploaded') }]
     const scopeId = source.scopeId()
     const facts = key && scopeId ? fileFacts(scopeId, key, nodeId, blob) : null
     const size = facts?.size ?? Math.max(0, plaintextTotal(blob.byteSize, blob.chunkCount))
     const modifiedAt = facts?.meta?.modifiedAt
-    return [kind, formatBytes(size, locale.value), modifiedAt === undefined ? null : t('files.modified', { date: dateFormat.value.format(modifiedAt) })]
-      .filter((s): s is string => s !== null)
-      .join(' · ')
+    return [
+      { id: 'size', text: formatBytes(size, locale.value) },
+      // The sealed modified time may be missing (a client that did not write it): then it is simply not shown.
+      ...(modifiedAt === undefined ? [] : [{ id: 'modified', text: t('files.modified', { date: dateFormat.value.format(modifiedAt) }) }]),
+    ]
   }
 
   // --- upload and replace -------------------------------------------------------------------------------------------
@@ -385,7 +386,8 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     return {
       icon: 'pi pi-file',
       title: name,
-      meta: fileMeta(key, node.id, blob),
+      meta: t('files.kindFile'),
+      details: fileDetails(key, node.id, blob),
       primary: { label: t('files.detail.open', { name }), onClick: () => host.open(node) },
       actions,
     }
@@ -399,7 +401,8 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     return {
       icon: 'pi pi-inbox',
       title: name,
-      meta: `${t('files.dropBox.kind')} · ${t('files.dropBox.people', guests)}`,
+      meta: t('files.dropBox.kind'),
+      details: [{ id: 'people', text: t('files.dropBox.people', guests) }],
       primary: { label: t('files.dropBox.open', { name }), onClick: () => host.open(node) },
       actions: [
         { id: 'move', label: t('files.move', { name }), icon: 'pi pi-file-export', shown: c.moveNode, onClick: () => source.move?.(node) },

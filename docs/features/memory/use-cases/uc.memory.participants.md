@@ -37,7 +37,9 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
    `#people/<userId>` (the reader also takes the spelling `#/people/<userId>`; `location.ts` builds the first). The fragment is token-less:
    it opens the tenant scope's shell, whichever scope the Memory was in.
 2. The profile shows the **display name**, an **avatar** (the profile picture, else the letter), and a list of **Memories** in which this person is a
-   participant and the viewer has access.
+   participant and the viewer has access. The list is drawn with core's level items (a larger cover, the name, the kind, the Memory's date and place
+   where it has them, and the group's name) as rows or as tiles; the same rows/tiles switch as the folder view sits beside the heading, and the
+   choice is the one per-user setting the folder view uses. There is no map here ([inbox #417](../../../inbox.md)).
 3. The list comes from a lazily built, in-memory index `Map<userId, Set<memoryRef>>`: the client lists the tenant scope
    and every group scope the viewer is in (`fetchTreeRows`, revalidated by ETag, ADR 0081), and unseals each Memory's
    meta. The personal scope is not read.

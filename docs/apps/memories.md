@@ -185,7 +185,7 @@ core tests that need an application at runtime; `:core`'s own run with no applic
 by import direction only**: `features/memory` is the application (core imports it nowhere but the composition root
 and asks a registry for what to render; the folder level view is core's, Memories contributes ROW DATA, not a section
 (inbox #407): its row factory `memoryRows` answers, for each MEMORY and CHAPTER at the level, a row — the cover as the
-leading visual (large on a tile; core resolves the cover, `host.covers`, inbox #411), the name, the meta line "Memory · date range", a primary click that opens it, rename and move in
+leading visual (large on a tile; core resolves the cover, `host.covers`, inbox #411), the name, the meta line "Memory" plus the details date range and place (`details`, `memoryRowDetails.ts`: each left out when the Memory has none, the same for a share guest, [apps/README](README.md#how-an-application-shows-facts-in-a-levels-rows-and-tiles)), a primary click that opens it, rename and move in
 the row's menu (the favorite heart on the row is core's own action, the same for every kind, inbox #409, and so is the ONE "Cover" action - "Set cover" / "Change cover" - that opens core's cover dialog, where the image is chosen, cropped and removed, inbox #411) —
 and the map as its own presentation; core draws the list, orders it (folders first, then everything by name, mixed with
 files and drop boxes) and offers the presentations grid, list and map in the level's toolbar, inbox #370), and its create and share dialogs ride on its kinds
