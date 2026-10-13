@@ -14,7 +14,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
-import { mergeRowActions, splitRowActions, type CoreRowAction, type LevelRow, type LevelRowAction } from '../levelRow'
+import { levelRowDetails, mergeRowActions, splitRowActions, type CoreRowAction, type LevelRow, type LevelRowAction } from '../levelRow'
 
 const props = withDefaults(
   defineProps<{
@@ -33,6 +33,10 @@ const props = withDefaults(
   { kind: undefined, coreActions: () => [], folder: false, unsupported: false },
 )
 const { t } = useI18n()
+
+// The meta line is real text in reading order: the kind, then each detail the application supplied ("Memory · 12 Oct 2026 ·
+// Berlin"), the " · " a literal part of the text. Absent details leave no hole and no separator.
+const details = computed(() => levelRowDetails(props.row))
 
 const split = computed(() => splitRowActions(mergeRowActions(props.coreActions, props.row.actions)))
 const menu = ref<InstanceType<typeof Menu> | null>(null)
@@ -75,7 +79,12 @@ const severityOf = (a: LevelRowAction) => (a.severity === 'danger' ? 'danger' : 
       </span>
       <span class="veyq-level-item-text">
         <strong class="veyq-level-item-title">{{ row.title }}</strong>
-        <small v-if="row.meta" class="veyq-level-item-meta">{{ row.meta }}</small>
+        <small v-if="row.meta || details.length" class="veyq-level-item-meta"
+          ><template v-if="row.meta">{{ row.meta }}</template
+          ><template v-for="(d, i) in details" :key="d.id"
+            >{{ row.meta || i > 0 ? ' · ' : '' }}<span class="veyq-level-item-detail" :data-detail="d.id">{{ d.text }}</span></template
+          ></small
+        >
       </span>
     </button>
     <span v-if="split.buttons.length || split.menu.length" class="veyq-level-item-actions">

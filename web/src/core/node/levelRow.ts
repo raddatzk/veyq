@@ -49,14 +49,32 @@ export interface LevelRowLeading {
   props?: Record<string, unknown>
 }
 
+/** One fact in a row's meta line: a stable `id` (a styling and testing hook, `data-detail`; core names none) and its text. */
+export interface LevelRowDetail {
+  id: string
+  text: string
+}
+
+/** The details core draws: those with text, in the given order. A blank entry is dropped here as well as by the
+ *  application, so a placeholder-shaped hole can never reach the line. */
+export function levelRowDetails(row: Pick<LevelRow, 'details'>): LevelRowDetail[] {
+  return (row.details ?? []).filter((d) => d.text.trim() !== '')
+}
+
 /** What core draws for one node. */
 export interface LevelRow {
   /** The PrimeIcons class drawn when there is no `leading`. */
   icon: string
   leading?: LevelRowLeading
   title: string
-  /** The meta line, already composed and translated ("File · 157 B · 12 Oct 2026"). */
+  /** The kind line of the meta ("File", "Memory"), already translated. The row's details follow it on the same line. */
   meta: string
+  /** What the application knows of THIS node worth a glance, in the order shown after {@link meta}: a Memory's date and
+   *  place, a file's size and modified time. Already translated and formatted for the reader's locale. An entry the node
+   *  has no value for is LEFT OUT (never a placeholder, "unknown", "-"); core also drops a blank one (`levelRowDetails`).
+   *  Omitted or empty: the line is the kind alone. The same hook serves a share guest as a member - rights remove
+   *  functions, not facts the served data already carries. */
+  details?: readonly LevelRowDetail[]
   /** The row's primary click: what a plain click on the row does (open, or download). `label` is its accessible name. */
   primary: { label: string; onClick: () => void; disabled?: boolean }
   actions: readonly LevelRowAction[]

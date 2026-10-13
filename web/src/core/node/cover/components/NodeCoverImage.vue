@@ -12,7 +12,7 @@ const imageStyle = computed(() => coverImageStyle(props.crop))
 
 <template>
   <span class="veyq-node-cover">
-    <img v-if="src" :src="src" :alt="alt ?? ''" :style="imageStyle" draggable="false" />
+    <img v-if="src" :src="src" :alt="alt ?? ''" :style="imageStyle" loading="lazy" decoding="async" draggable="false" />
     <span v-else-if="icon" class="veyq-node-cover-icon" :class="icon" aria-hidden="true" />
   </span>
 </template>

@@ -144,4 +144,38 @@ describe('LevelRowItem', () => {
     expect(w.classes()).toContain('is-unsupported')
     expect(w.text()).toContain('unsupported')
   })
+
+  describe('details (the application-supplied meta line)', () => {
+    const meta = (w: VueWrapper) => w.find('.veyq-level-item-meta')
+
+    it('draws the kind, then each detail as real text in reading order, each tagged for tests and styling', () => {
+      const w = mountItem(row({ meta: 'Memory', details: [{ id: 'date', text: '04/02/2024' }, { id: 'place', text: 'Rom' }] }), 'grid')
+      expect(meta(w).text()).toBe('Memory · 04/02/2024 · Rom')
+      expect(meta(w).findAll('[data-detail]').map((d) => [d.attributes('data-detail'), d.text()])).toEqual([['date', '04/02/2024'], ['place', 'Rom']])
+      // text, not a pseudo-element or an aria-hidden decoration: a reader gets it in this order
+      expect(meta(w).attributes('aria-hidden')).toBeUndefined()
+      expect(w.find('button.veyq-level-item-main').attributes('aria-label')).toBe('Open report.pdf')
+    })
+
+    it('leaves out an absent detail: no placeholder, no dangling separator', () => {
+      const w = mountItem(row({ meta: 'Memory', details: [{ id: 'date', text: '' }, { id: 'place', text: 'Rom' }] }))
+      expect(meta(w).text()).toBe('Memory · Rom')
+      expect(mountItem(row({ meta: 'Memory', details: [{ id: 'date', text: '' }] })).find('.veyq-level-item-meta').text()).toBe('Memory')
+      expect(mountItem(row({ meta: 'Memory', details: undefined })).find('.veyq-level-item-meta').text()).toBe('Memory')
+      expect(mountItem(row({ meta: 'Memory', details: [] })).find('[data-detail]').exists()).toBe(false)
+    })
+
+    it('starts with the first detail, without a leading separator, when the row has no kind line', () => {
+      expect(meta(mountItem(row({ meta: '', details: [{ id: 'size', text: '3 kB' }, { id: 'modified', text: 'Modified x' }] }))).text()).toBe('3 kB · Modified x')
+    })
+
+    it('draws no meta line at all when there is neither a kind nor a detail', () => {
+      expect(mountItem(row({ meta: '', details: [] })).find('.veyq-level-item-meta').exists()).toBe(false)
+    })
+
+    it('draws the same details as a row and as a tile', () => {
+      const r = row({ meta: 'File', details: [{ id: 'size', text: '3 kB' }] })
+      expect(meta(mountItem(r, 'list')).text()).toBe(meta(mountItem(r, 'grid')).text())
+    })
+  })
 })
