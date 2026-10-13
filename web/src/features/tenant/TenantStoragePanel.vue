@@ -44,8 +44,8 @@ const { pending: loading, error: loadErr } = useAsyncData(async () => {
 }, { onError: on401 })
 const loadError = computed(() => loadErrorKind(loadErr.value))
 
-const used = computed(() => formatBytes(usedBytes.value, locale.value))
-const quota = computed(() => (quotaBytes.value === null ? null : formatBytes(quotaBytes.value, locale.value)))
+const used = computed(() => formatBytes(usedBytes.value, locale.value, 'binary'))
+const quota = computed(() => (quotaBytes.value === null ? null : formatBytes(quotaBytes.value, locale.value, 'binary')))
 // Accepts "2", "2.5" and the German "2,5"; anything else (empty, negative, text) is not a limit.
 const limitBytes = computed<number | null>(() => {
   const n = Number(limitGib.value.trim().replace(',', '.'))

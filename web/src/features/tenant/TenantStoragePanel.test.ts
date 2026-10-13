@@ -55,7 +55,7 @@ describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => 
     vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: null, shareLinkLimitBytes: 10 * GIB })
     vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: null, shareLinkLimitBytes: 2.5 * GIB })
     const wrapper = await mountPanel()
-    expect(wrapper.text()).toContain('3 MB')
+    expect(wrapper.text()).toContain('3 MiB')
     const input = wrapper.find('input')
     expect((input.element as HTMLInputElement).value).toBe('10') // the stored bytes, shown in GiB
 
@@ -87,14 +87,14 @@ describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => 
     vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: 5 * GIB, shareLinkLimitBytes: 10 * GIB })
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('storage.quota'))
-    expect(wrapper.text()).toContain('5 GB') // 5 GiB, in formatBytes' binary steps
+    expect(wrapper.text()).toContain('5 GiB') // the storage panel counts in powers of two, and says so
     expect(wrapper.findAll('input')).toHaveLength(1) // the per-link limit only: the owner cannot edit the quota
   })
 
   it('omits the quota when none is set', async () => {
     vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: null, shareLinkLimitBytes: 10 * GIB })
     const wrapper = await mountPanel()
-    expect(wrapper.text()).toContain('3 MB') // control: the panel rendered its figures
+    expect(wrapper.text()).toContain('3 MiB') // control: the panel rendered its figures
     expect(wrapper.text()).not.toContain(t('storage.quota'))
   })
 
