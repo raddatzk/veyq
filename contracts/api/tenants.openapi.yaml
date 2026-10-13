@@ -1239,6 +1239,72 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
 
+  /api/tenants/{tenantId}/storage-fit:
+    post:
+      tags: [tenants]
+      operationId: checkTenantStorageFit
+      summary: Ask whether this many more bytes would still fit the tenant's storage quota (any member, yes or no only).
+      description: >
+        A **preflight** for a large upload batch (an import of an export, ADR 0082): the caller declares how many
+        bytes it is about to upload and learns only whether they would fit under the tenant's quota (`fits`). It is
+        the same rule an upload start applies (`quota_exceeded`, [ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)
+        §1): the declared bytes plus what the tenant already holds (trash and open uploads included) against the
+        quota the Server Owner set; a tenant with **no quota** fits anything. It answers **yes or no and never a
+        number**, so it exposes no more than a refused upload already does - and because a long run of questions
+        could still be bisected towards the free space, it is **rate-limited per member and per tenant**
+        (`veyq.ratelimit.storage-fit.*`, `429 rate_limited` with `Retry-After`). It is **advisory**: another upload
+        may take the room before the caller's own start, which stays the one decision (`quota_exceeded`). Any member
+        of the tenant may ask, not only its owner; a non-member gets `404` (indistinguishable, ADR 0042).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantStorageFitRequest" }
+            example: { bytes: 5368709120 }
+      responses:
+        "200":
+          description: Whether the declared bytes would fit.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantStorageFit" }
+              example: { fits: true }
+        "400":
+          description: The request was malformed (a missing or negative byte count).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_suspended }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "429":
+          description: Too many questions in a short time (per member and per tenant); retry after the `Retry-After` seconds.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
   /api/tenants/{tenantId}/storage-quota:
     put:
       tags: [tenants]
@@ -2164,6 +2230,35 @@ components:
           description: The most any one READ_WRITE or WRITE_ONLY link of the tenant stores, in bytes.
           example: 5368709120
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+
+    TenantStorageFitRequest:
+      type: object
+      description: How many bytes the caller is about to upload (ADR 0082), asked before it starts.
+      required: [bytes]
+      properties:
+        bytes:
+          x-veyq-visibility: measure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+          maximum: 9007199254740991
+          description: The total declared size of what would be uploaded, in bytes.
+          example: 5368709120
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.Max(9007199254740991) @field:jakarta.validation.constraints.NotNull'
+
+    TenantStorageFit:
+      type: object
+      description: >
+        Whether the declared bytes would fit the tenant's quota. A yes or a no and nothing else: never the free space,
+        the usage or the quota (an owner reads those from `getTenantStorage`).
+      required: [fits]
+      properties:
+        fits:
+          x-veyq-visibility: flag
+          type: boolean
+          description: True when the bytes would fit (always true for a tenant with no quota).
+          example: true
 
     TenantStorageQuotaUpdate:
       type: object
