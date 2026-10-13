@@ -759,6 +759,15 @@ const en = {
   // dialogs). Core serves every application's nodes, so no value here names one (inbox #375); Memories' own dialogs and
   // detail read the shared ones (name label, rename, delete, the structure/save errors) from here too, and keep their own
   // wording where it names a Memory (`memory.slugTaken`, `memory.deleteMemoryTitle`).
+  // A member's profile page (`#people/<userId>`, ADR 0083) - core's frame; each application adds its own section.
+  people: {
+    profile: 'Profile',
+    loading: 'Loading…',
+    loadError: 'Could not load this person. Please try again.',
+    retry: 'Try again',
+    formerMember: 'Former member',
+    formerMemberHint: 'No longer in this space.',
+  },
   node: {
     folders: 'Folders',
     folderCreate: 'New folder',
@@ -904,6 +913,31 @@ const en = {
       conflict: 'Someone else changed this meanwhile. It now shows their version — save again to replace it.',
       unreadable:
         'This Memory’s details (date, place, cover) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. Its photos are not affected.',
+    },
+    // Who was there (ADR 0083, uc.memory.participants): opaque member ids sealed in the Memory's details; members only.
+    participants: {
+      title: 'Participants',
+      add: 'Add participants',
+      edit: 'Edit participants',
+      none: 'Nobody listed yet',
+      dialogTitle: 'Who was there?',
+      dialogHint: 'Choose from the members of this space. Only members see this list.',
+      loadError: 'Could not load the members. Please try again.',
+      noMembers: 'There is nobody to choose from.',
+      full: 'A Memory can list up to {max} people.',
+      former: 'Former member',
+      open: 'Open the profile of {name}',
+      saveFailed: 'Could not save the participants. Please try again.',
+    },
+    // A person's profile page: Memories' section (ADR 0083 decision 6).
+    people: {
+      with: 'Memories with this person',
+      withName: 'Memories with {name}',
+      loading: 'Looking through your Memories…',
+      error: 'Could not look through your Memories. Please try again.',
+      retry: 'Try again',
+      empty: 'No Memories you can open list this person.',
+      partial: 'This list may be incomplete: some Memories could not be read, or there are more than can be searched at once.',
     },
     date: {
       title: 'Date',
@@ -1209,6 +1243,7 @@ const en = {
     },
   },
   media: {
+    uploadedBy: 'Added by',
     gallery: 'Memory gallery',
     upload: 'Upload',
     uploadRetry: 'Retry',
@@ -2176,6 +2211,15 @@ const de: typeof en = {
     error: 'Dein Bereich konnte nicht geöffnet werden. Bitte versuche es erneut.',
     unsupportedKind: 'Dieser Client kann diese Art von Eintrag nicht öffnen.',
   },
+  // Das Profil eines Mitglieds (`#people/<userId>`, ADR 0083) - der Rahmen des Kerns; jede Anwendung ergänzt einen Abschnitt.
+  people: {
+    profile: 'Profil',
+    loading: 'Wird geladen…',
+    loadError: 'Diese Person konnte nicht geladen werden. Bitte versuche es erneut.',
+    retry: 'Erneut versuchen',
+    formerMember: 'Ehemaliges Mitglied',
+    formerMemberHint: 'Nicht mehr in diesem Bereich.',
+  },
   node: {
     folders: 'Ordner',
     folderCreate: 'Neuer Ordner',
@@ -2295,6 +2339,31 @@ const de: typeof en = {
       conflict: 'Jemand anderes hat das inzwischen geändert. Jetzt steht dort diese Version — speichere erneut, um sie zu ersetzen.',
       unreadable:
         'Die Angaben dieser Erinnerung (Datum, Ort, Titelbild) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Ihre Fotos sind davon nicht betroffen.',
+    },
+    // Wer dabei war (ADR 0083, uc.memory.participants): anonyme Mitglieds-IDs, in den Details der Erinnerung versiegelt; nur für Mitglieder.
+    participants: {
+      title: 'Beteiligte',
+      add: 'Beteiligte hinzufügen',
+      edit: 'Beteiligte bearbeiten',
+      none: 'Noch niemand eingetragen',
+      dialogTitle: 'Wer war dabei?',
+      dialogHint: 'Wähle aus den Mitgliedern dieses Bereichs. Nur Mitglieder sehen diese Liste.',
+      loadError: 'Die Mitglieder konnten nicht geladen werden. Bitte versuche es erneut.',
+      noMembers: 'Es gibt niemanden zur Auswahl.',
+      full: 'Eine Erinnerung kann bis zu {max} Personen nennen.',
+      former: 'Ehemaliges Mitglied',
+      open: 'Profil von {name} öffnen',
+      saveFailed: 'Die Beteiligten konnten nicht gespeichert werden. Bitte versuche es erneut.',
+    },
+    // Das Profil einer Person: der Abschnitt der Erinnerungen (ADR 0083 Entscheidung 6).
+    people: {
+      with: 'Erinnerungen mit dieser Person',
+      withName: 'Erinnerungen mit {name}',
+      loading: 'Deine Erinnerungen werden durchsucht…',
+      error: 'Deine Erinnerungen konnten nicht durchsucht werden. Bitte versuche es erneut.',
+      retry: 'Erneut versuchen',
+      empty: 'Keine Erinnerung, die du öffnen darfst, nennt diese Person.',
+      partial: 'Diese Liste ist möglicherweise unvollständig: Manche Erinnerungen konnten nicht gelesen werden, oder es sind mehr, als auf einmal durchsucht werden.',
     },
     date: {
       title: 'Datum',
@@ -2568,6 +2637,7 @@ const de: typeof en = {
     },
   },
   media: {
+    uploadedBy: 'Hinzugefügt von',
     gallery: 'Erinnerungs-Galerie',
     upload: 'Hochladen',
     uploadRetry: 'Erneut versuchen',

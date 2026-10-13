@@ -3,11 +3,16 @@
 // reset, a scope is entered, the Master Key rotates.
 import type { LifecycleHooks } from '../../core/applications/registry'
 import { retagItemMarksUnderNewMasterKey } from './itemFavorites'
+import { resetParticipantIndex } from './participantIndex'
 
 export const memoriesLifecycle: LifecycleHooks = {
   // (The covers are core's since inbox #411 and the node pins since #409: `app/activeSpace` clears both and `rotateKeys` re-seals
   // the pins - Memories holds no per-scope state of its own to drop.)
-  onScopeReset() {},
+  // The participants index (a person's profile) holds the Memories' content keys of the scopes it read: it dies with the
+  // scope on screen, and so with a lock or a sign-out (`participantIndex.ts`).
+  onScopeReset() {
+    resetParticipantIndex()
+  },
 
   // Item marks are tagged under the master key, so a rotation that skipped them would leave them unverifiable. Best-effort:
   // a mark whose tag the new key does not verify counts as someone else's set (ADR 0068 §9) and may not abort the rest of

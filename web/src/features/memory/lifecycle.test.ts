@@ -4,6 +4,7 @@
 // (`core/favorites`) and the covers since #411: the shell clears and loads them itself, so this application's hooks touch none of that.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+vi.mock('./participantIndex', () => ({ resetParticipantIndex: vi.fn() }))
 vi.mock('./itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
 vi.mock('../../core/favorites/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn(), loadFavorites: vi.fn(), saveFavorites: vi.fn() }))
 vi.mock('../../core/favorites/favoritesStore', () => ({
@@ -16,10 +17,15 @@ import { memoriesLifecycle } from './lifecycle'
 import { retagItemMarksUnderNewMasterKey } from './itemFavorites'
 import { resealFavoritesUnderNewMasterKey } from '../../core/favorites/favorites'
 import { clearFavorites, loadFavoritesFor } from '../../core/favorites/favoritesStore'
+import { resetParticipantIndex } from './participantIndex'
 
 beforeEach(() => vi.clearAllMocks())
 
 describe('onScopeReset', () => {
+  it('drops the participants index: it holds Memory keys that must not outlive the scope', () => {
+    memoriesLifecycle.onScopeReset?.()
+    expect(resetParticipantIndex).toHaveBeenCalledTimes(1)
+  })
   it('leaves the covers and the node pins to core: it holds no per-scope state of its own to drop', () => {
     memoriesLifecycle.onScopeReset?.()
     expect(clearFavorites).not.toHaveBeenCalled()

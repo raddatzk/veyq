@@ -30,7 +30,7 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 const isoDayOrUndef = (v: unknown): string | undefined => (typeof v === 'string' && ISO_DAY.test(v) ? v : undefined)
 
 /** Normalize a loosely-typed date payload to a valid [MemoryDate], or null when the mode is unrecognized. */
-function normalizeDate(raw: unknown): MemoryDate | null {
+export function normalizeDate(raw: unknown): MemoryDate | null {
   if (!raw || typeof raw !== 'object') return null
   const d = raw as { mode?: unknown; from?: unknown; to?: unknown }
   if (typeof d.mode !== 'string' || !MODES.includes(d.mode as MemoryDateMode)) return null

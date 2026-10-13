@@ -19,13 +19,20 @@
 // (the token-less default home — `/`, `#urlaube`), `~me` is the personal scope, and the `@group` form is
 // reserved for the (later) groups slice — parsed, but only tenant/personal resolve today. `slugify` emits only
 // `[a-z0-9-]`, so a folder slug can never start with `~`/`@` and thus never collides with a scope token.
+//
+// **A person (ADR 0083, 2026-10-13):** `#people/<userId>` is a member's profile page, not a place in the tree. It is
+// token-less (a profile spans the scopes the viewer is in), and `people` is the platform's word at a scope root: a
+// root folder or file called "People" is numbered `people-2` ({@link segmentsOf}), and no application may claim it as a
+// route slug (`RESERVED_ROUTE_SEGMENTS`). {@link parseHash} reads it into {@link ContentLocation.person}; {@link personHash}
+// builds it. A share link never reaches it (the share page has no fragment routes of its own).
 import { type TreeNode } from './tree'
 import { slugify } from '../../shared/naming'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from './kind'
 
-/** A personal/profile scope token is `~<username>` (ADR 0023) — your own opens your personal scope, a foreign
- *  one is the later profile view. `~me` remains a valid fallback token (it also starts with `~`). */
+/** A personal scope token is `~<username>` (ADR 0023) — your own opens your personal scope; a foreign one is still a
+ *  personal-scope token, never a profile (a person's profile is `#people/<userId>`, ADR 0083). `~me` remains a valid
+ *  fallback token (it also starts with `~`). */
 export function isPersonalScope(token: string): boolean {
   return token.startsWith('~')
 }
@@ -42,6 +49,16 @@ export type ContentLocation = {
   segments: string[]
   /** The path ended in a slash: its target is a folder ({@link resolveSlugPath}). Never set for the scope root. */
   folder: boolean
+  /** Present only for a profile fragment (`#people/<userId>`): the user id. Then `segments` is empty and `scope` the tenant's. */
+  person?: string
+}
+
+/** The platform's route word for a person's profile (ADR 0083); reserved at every scope root. */
+export const PEOPLE_SEGMENT = 'people'
+
+/** The fragment of a member's profile page: `#people/<userId>`. */
+export function personHash(userId: string): string {
+  return `#${PEOPLE_SEGMENT}/${encodeURIComponent(userId)}`
 }
 
 /** Parse a `location.hash` into a scope token + path segments + the trailing-slash mark. Empty/`#`/token-less → the
@@ -58,6 +75,7 @@ export function parseHash(hash: string): ContentLocation {
   // A leading scope token (`~<username>` / `@group`) selects the scope; no token → the token-less tenant scope,
   // and every part is a slug under the tenant root.
   if (isPersonalScope(head) || head.startsWith('@')) return { scope: head, segments: rest, folder: slash && rest.length > 0 }
+  if (parts.length === 2 && head === PEOPLE_SEGMENT) return { scope: TENANT_SCOPE, segments: [], folder: false, person: parts[1] }
   return { scope: TENANT_SCOPE, segments: parts, folder: slash }
 }
 
@@ -140,7 +158,9 @@ const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
  * tree and the in-app paths agree; it is client-side only — nothing here is stored or sealed.
  */
 export function segmentsOf(siblings: readonly TreeNode[]): Map<string, string> {
-  const reserved = new Set(registry.routeSlugs())
+  // A scope root also keeps the platform's `people` for the profile route (`#people/<userId>`, ADR 0083).
+  const atRoot = siblings.length > 0 && siblings.every((n) => (n.parentId ?? null) === null)
+  const reserved = new Set(atRoot ? [...registry.routeSlugs(), PEOPLE_SEGMENT] : registry.routeSlugs())
   const keyOf = (group: string, plain: string) => `${group}\0${plain}`
   const buckets = new Map<string, { group: string; plain: string; unprefixed: boolean; nodes: TreeNode[] }>()
   for (const n of siblings) {

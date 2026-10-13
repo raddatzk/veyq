@@ -45,6 +45,8 @@ import { isMarkedByMe, markCount, markedByAnyone, clearItemFavorites } from '../
 import MediaLightbox from './MediaLightbox.vue'
 import MemoryDateEditor from './MemoryDateEditor.vue'
 import MemoryLocationEditor from './MemoryLocationEditor.vue'
+import MemoryParticipants from './MemoryParticipants.vue'
+import { useUploaderNames } from '../useUploaderNames'
 import MemoryCoverImage from './MemoryCoverImage.vue'
 import MemoryCard from './MemoryCard.vue'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
@@ -244,6 +246,20 @@ const { dateEditorOpen, storedDate, autoRange, dateLabel, datedChapters, onDateS
   write: () => (can.value.editMeta ? (props.source.nodeMeta ?? null) : null),
   items,
   onMetaUpdated: (payload) => emit('metaUpdated', payload),
+})
+
+// --- Who added the shown photo (ADR 0083 decision 7): read from the buckets door when the lightbox opens. A guest's
+// source has no such door, so a guest's lightbox shows no uploader - as it never did.
+const uploaderNames = useUploaderNames({
+  scopeId: () => props.scopeId,
+  nodeId: () => props.node.id,
+  memoryKey: () => props.memoryKey,
+  buckets: () => (can.value.buckets ? (props.source.buckets ?? null) : null),
+  formerLabel: () => t('memory.participants.former'),
+  contributorLabel: () => t('memory.buckets.contributor'),
+})
+watch(lightboxIndex, (i) => {
+  if (i !== null) void uploaderNames.ensure()
 })
 
 // --- Memory location (cr-0069, uc.memory.place) → extracted into `useMemoryLocation` (cr-0146). A deliberate
@@ -484,6 +500,16 @@ watch(
             <span>{{ locationLabel || t('memory.place.set') }}</span>
           </button>
         </div>
+        <!-- Who was there (ADR 0083): a member's alone - `can.participants` is false for every share role, so a guest's view
+             mounts the component with `show` false and it renders nothing. A personal scope has nobody to name. -->
+        <MemoryParticipants
+          :scope-id="scopeId"
+          :node="node"
+          :memory-key="memoryKey"
+          :show="can.participants && !personalScope"
+          :write="can.editMeta && !personalScope ? (source.nodeMeta ?? null) : null"
+          @meta-updated="emit('metaUpdated', $event)"
+        />
       </template>
     </NodeHeader>
 
@@ -714,6 +740,7 @@ watch(
       :can-set-cover="can.setCover"
       :can-delete="canDeleteInLightbox"
       :media-meta="source.mediaMeta"
+      :uploader-of="uploaderNames.uploaderOf"
       :preview-loader="previewLoader"
       :original-loader="originalLoader"
       :video-chunk-provider="chunkLoader"
