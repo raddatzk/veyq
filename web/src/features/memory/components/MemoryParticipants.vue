@@ -207,6 +207,10 @@ a.memory-participant-row:focus-visible {
 .memory-participants-group :deep(.p-avatar) {
   border: 2px solid var(--app-surface);
 }
+/* PrimeVue overlaps by 1rem, which hides half of a letter; half of that still reads as a stack. */
+.memory-participants-group :deep(.p-avatar-group .p-avatar + .p-avatar) {
+  margin-inline-start: -0.5rem;
+}
 .memory-participants-group :deep(.is-former) {
   opacity: 0.6;
 }
