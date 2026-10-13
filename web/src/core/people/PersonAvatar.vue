@@ -9,9 +9,12 @@ import Avatar from 'primevue/avatar'
 import { avatarUrlOf } from './avatarCache'
 
 const props = withDefaults(
-  defineProps<{ name: string; userId?: string | null; image?: string | null; size?: 'normal' | 'large' | 'xlarge' }>(),
+  defineProps<{ name: string; userId?: string | null; image?: string | null; size?: 'normal' | 'large' | 'xlarge' | 'xxl' }>(),
   { userId: null, image: null, size: 'normal' },
 )
+// PrimeVue's largest step is `xlarge` (4rem); `xxl` (8rem = 128 px, the profile page's picture) is ours, so the 256 px stored
+// picture is shown at half its pixels and stays sharp on a 2x screen.
+const primeSize = computed(() => (props.size === 'xxl' ? 'xlarge' : props.size))
 const initialOf = (name: string) => name.trim().charAt(0).toUpperCase() || '?'
 
 const src = computed(() => props.image ?? avatarUrlOf(props.userId))
@@ -22,13 +25,18 @@ const shown = computed(() => (src.value && src.value !== broken.value ? src.valu
 </script>
 
 <template>
-  <Avatar v-if="shown" :image="shown" shape="circle" :size="size" aria-hidden="true" data-avatar-image @error="broken = shown" />
-  <Avatar v-else :label="initialOf(name)" shape="circle" :size="size" aria-hidden="true" />
+  <Avatar v-if="shown" :image="shown" shape="circle" :size="primeSize" :class="{ 'is-xxl': size === 'xxl' }" aria-hidden="true" data-avatar-image @error="broken = shown" />
+  <Avatar v-else :label="initialOf(name)" shape="circle" :size="primeSize" :class="{ 'is-xxl': size === 'xxl' }" aria-hidden="true" />
 </template>
 
 <style scoped>
 /* An avatar keeps its size in a flex row: a shrinking circle becomes an oval. */
 .p-avatar {
   flex: none;
+}
+.p-avatar.is-xxl {
+  width: 8rem;
+  height: 8rem;
+  font-size: 4rem;
 }
 </style>

@@ -2332,9 +2332,9 @@ components:
             `avatarVersion` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
             or null = no picture.
           contentEncoding: base64
-          maxLength: 10964
+          maxLength: 21884
           example: c2VhbGVkLWF2YXRhcg==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 10964) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21884) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     MemberAvatar:
       type: object
@@ -2346,7 +2346,7 @@ components:
             The member's profile picture sealed under `K_tenant` with the `member-avatar` purpose bound to (tenant
             scope, that member's user id): opaque, constant-length base64 the server stores and relays verbatim.
           contentEncoding: base64
-          maxLength: 10964
+          maxLength: 21884
           example: c2VhbGVkLWF2YXRhcg==
 
     TenantActivated:
@@ -2487,9 +2487,9 @@ components:
             `avatarVersion` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
             or null = no picture.
           contentEncoding: base64
-          maxLength: 10964
+          maxLength: 21884
           example: c2VhbGVkLWF2YXRhcg==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 10964) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21884) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     AccountRegistration:
       type: object

@@ -85,7 +85,7 @@ watch(() => props.userId, () => { editing.value = false; identity.discard() })
     </div>
     <template v-else>
       <header class="person-head" :class="{ 'is-former': !person }">
-        <PersonAvatar :name="title" :user-id="person ? userId : null" size="xlarge" class="person-avatar" />
+        <PersonAvatar :name="title" :user-id="person ? userId : null" size="xxl" class="person-avatar" />
         <div class="person-head-text">
           <h1 id="person-title" class="person-title">{{ title }}</h1>
           <p v-if="person && person.realName" class="person-username">~{{ person.username }}</p>

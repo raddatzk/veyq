@@ -43,9 +43,10 @@ class MemberAvatarSliceTest {
 
     @Test
     fun theContractLengthIsTheSealedConstantsBase64Length() {
-        // 8 KiB pad + 1 (type) + 12 (nonce) + 16 (tag) = 8221 bytes; base64 of that is 4 * ceil(8221 / 3) chars.
-        assertEquals(10964, 4 * Math.ceilDiv(1 + 12 + 8192 + 16, 3))
-        assertEquals(10964, AVATAR_LEN)
+        // 16 KiB pad + 1 (type) + 12 (nonce) + 16 (tag) = 16413 bytes; base64 of that is 4 * ceil(16413 / 3) chars -
+        // the tenant icon's number too (SetScopeIconRequest.sealedIcon).
+        assertEquals(21884, 4 * Math.ceilDiv(1 + 12 + 16384 + 16, 3))
+        assertEquals(21884, AVATAR_LEN)
         assertTrue(AVATAR_LEN % 4 == 0 && AVATAR_LEN <= 65532, "inside the TEXT column")
     }
 
@@ -341,7 +342,7 @@ class MemberAvatarSliceTest {
     }
 
     private companion object {
-        /** The exact base64 length of the sealed 8 KiB pad - ADR 0084, the contract's `maxLength`. */
-        const val AVATAR_LEN = 10964
+        /** The exact base64 length of the sealed 16 KiB pad - ADR 0084, the contract's `maxLength`. */
+        const val AVATAR_LEN = 21884
     }
 }

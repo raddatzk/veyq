@@ -7,7 +7,7 @@ title: Set your profile picture in a space
 # picture draws in the header, the popover, the profile page, the members list and the user menu were never seen by eye.
 acceptanceCriteria:
   - id: picture-sealed-on-device-constant-length
-    text: The picture is cropped 1:1, encoded to a 128 px WebP, padded to a constant length and sealed on the device under `K_tenant` with the `member-avatar` purpose at (tenant scope, own user id); the server stores the blob verbatim, every blob has the same length, and the contract `maxLength` equals that sealed constant.
+    text: The picture is cropped 1:1, encoded to a 256 px WebP, padded to a constant length and sealed on the device under `K_tenant` with the `member-avatar` purpose at (tenant scope, own user id); the server stores the blob verbatim, every blob has the same length, and the contract `maxLength` equals that sealed constant.
     coverage:
       backend:
         integration:
@@ -20,7 +20,7 @@ acceptanceCriteria:
           - src/features/account/profile/useNameAndPicture.test.ts
     gaps:
       - surface: web
-        reason: The crop, the canvas bake and the WebP encode are the pixel stage, which the dialog test mocks; no test runs them in a real browser, so that a 128 px crop really fits the 8 KiB budget on real photos is unverified.
+        reason: The crop, the canvas bake and the WebP encode are the pixel stage, which the dialog test mocks; no test runs them in a real browser, so that a 256 px crop really fits the 16 KiB budget on real photos is unverified.
   - id: set-clear-and-version
     text: "`PUT` overwrites and bumps `avatar_version`, `DELETE` clears and bumps and is idempotent; the directory and profile carry only the integer `avatarVersion`, never the bytes."
     coverage:

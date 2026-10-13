@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The profile-picture editor (uc.spaces.set-profile-picture, ADR 0084), modelled on the space-icon dialog: choose one image,
-// frame it 1:1 in the shared ImageCropper, and on "use" the crop is baked into a 128 px WebP that fits the constant pad
+// frame it 1:1 in the shared ImageCropper, and on "use" the crop is baked into a 256 px WebP that fits the constant pad
 // (`renderSpaceIcon` with the avatar's edge and byte budget). The bytes are EMITTED - the picture is sealed and sent with
 // the profile's Save, so this is presentation + pixels only (no crypto, no network). `remove` is offered while the member
 // has a picture. A file the browser cannot decode is refused here with a message and nothing is kept (E1).

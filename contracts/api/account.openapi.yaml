@@ -237,7 +237,7 @@ paths:
       description: >
         Stores the caller's profile picture in the tenant resolved from the Host (uc.spaces.set-profile-picture,
         [ADR 0084](../../docs/decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)):
-        one opaque, constant-length ciphertext (a 128 px WebP padded to 8 KiB, sealed under `K_tenant` with the
+        one opaque, constant-length ciphertext (a 256 px WebP padded to 16 KiB, sealed under `K_tenant` with the
         `member-avatar` purpose bound to the tenant scope and the caller's own user id). The server stores it verbatim,
         overwrites any earlier one and bumps the profile's `avatarVersion`; it never sees the image, its size or its
         type. Other tenants' profiles of the same account are untouched.
@@ -1024,15 +1024,15 @@ components:
         sealedAvatar:
           type: string
           description: >
-            The profile picture: a 128 px WebP **padded to a constant 8 KiB plaintext**, sealed under `K_tenant` with
+            The profile picture: a 256 px WebP **padded to a constant 16 KiB plaintext**, sealed under `K_tenant` with
             the `member-avatar` purpose bound to (tenant scope, the caller's user id) (`0x02 || nonce(12) || aead`,
             base64). Opaque base64 the server stores verbatim and never interprets. Its length is a **constant** - the
-            exact base64 length of the sealed padded plaintext (8192 + 29 bytes -> 10964 chars) - so a photo and a
+            exact base64 length of the sealed padded plaintext (16384 + 29 bytes -> 21884 chars, the tenant icon's number) - so a photo and a
             drawing are indistinguishable and the value is provably inside the `TEXT` column (65 535).
           contentEncoding: base64
-          maxLength: 10964
+          maxLength: 21884
           example: c2VhbGVkLWF2YXRhcg==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 10964) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 21884) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     IdentityPins:
       type: object

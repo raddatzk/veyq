@@ -52,7 +52,7 @@ beforeEach(() => {
 })
 
 describe('ProfilePictureDialog', () => {
-  it('"use" is disabled until a picture is chosen and framed; then it emits the baked bytes (128 px, the pad budget)', async () => {
+  it('"use" is disabled until a picture is chosen and framed; then it emits the baked bytes (256 px, the pad budget)', async () => {
     renderSpaceIcon.mockResolvedValue(new Uint8Array([7, 7]))
     const w = await mountDialog()
     expect(use().disabled).toBe(true)
