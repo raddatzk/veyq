@@ -775,6 +775,7 @@ watch(
       :header="t('memory.place.consentTitle')"
       modal
       class="memory-location-consent"
+      :style="{ width: 'min(28rem, 92vw)' }"
       @update:visible="consentDialogOpen = false"
     >
       <p>{{ t('memory.place.consentBody') }}</p>
