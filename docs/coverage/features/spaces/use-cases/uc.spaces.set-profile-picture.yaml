@@ -1,0 +1,23 @@
+useCase: uc.spaces.set-profile-picture
+feature: spaces
+title: Set your profile picture in a space
+# Decided 2026-10-13 (ADR 0084), nothing built: every surface waits under gaps so the flip is mechanical.
+status: planned
+acceptanceCriteria:
+  - id: picture-sealed-on-device-constant-length
+    text: The picture is cropped 1:1, encoded to a 128 px WebP, padded to a constant length and sealed on the device under `K_tenant` with the `member-avatar` purpose at (tenant scope, own user id); the server stores the blob verbatim, every blob has the same length, and the contract `maxLength` equals that sealed constant.
+  - id: set-clear-and-version
+    text: "`PUT` overwrites and bumps `avatar_version`, `DELETE` clears and bumps and is idempotent; the directory and profile carry only the integer `avatarVersion`, never the bytes."
+  - id: members-only-versioned-read
+    text: "`getMemberAvatar` is tenant-membership gated (a non-member gets the ADR 0042 404), answers 200 with an `ETag` from the version, 304 on a matching `If-None-Match`, 404 `avatar_not_found` when none; no share endpoint serves it."
+  - id: edit-on-own-profile-only
+    text: The same component edits name and picture in Settings and on one's own profile page, and renders no edit control on anyone else's.
+  - id: set-at-join-or-after-first-unlock
+    text: A tenant owner seals name and picture together at accept; a joining member, holding no `K_tenant`, is offered the picture after the first unlock, with no unsealed image cached.
+  - id: removal-clears-picture-keeps-handle
+    text: Removing a member from the tenant clears `sealed_avatar` and bumps the version but keeps the username.
+  - id: operator-blind-probe
+    text: The three operations and the new accept fields are covered by the operator-blind probe, and the operator sees only an opaque constant-size blob and a version counter.
+gaps:
+  backend: Decided, not built (ADR 0084); no test exists yet. Planned suites are the avatar slice test, the removal-cascade test and OperatorBlindProbeTest entries.
+  web: Decided, not built (ADR 0084); no test exists yet. Planned suites are memberAvatar.test.ts, the dialog, directory cache, ProfilePanel and PersonProfile tests.

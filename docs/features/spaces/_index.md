@@ -51,6 +51,9 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
 - [Edit your profile in a space](use-cases/uc.spaces.edit-profile.md) — **built (web)** (change your per-tenant
   username and your real name, sealed under `K_tenant` on the device; empty both name fields to remove the name;
   [en.spaces.member-identity](enablers/en.spaces.member-identity.md), [ADR 0023](../../decisions/0023-per-tenant-member-identity.md))
+- [Set your profile picture in a space](use-cases/uc.spaces.set-profile-picture.md) — **decided, not built**
+  (a sealed constant-length picture on the per-tenant profile row, tenant members only, set in Settings or on your
+  own profile page; [ADR 0084](../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md))
 - [Manage pending member invites](use-cases/uc.spaces.manage-member-invites.md) — **built** (the owner lists /
   re-issues / revokes the member invites add-member mints; owner-gated, additive-safe)
 - [Remove a member from a tenant](use-cases/uc.spaces.remove-tenant-member.md) — **web done (cr-0091)** (TenantOwner

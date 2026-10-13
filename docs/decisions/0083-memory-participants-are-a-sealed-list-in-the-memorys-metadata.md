@@ -75,7 +75,7 @@ The comment on `isPersonalScope` in `location.ts` that called a foreign `~userna
 it stays a personal-scope token and the profile is `#people/<id>`.
 
 **6. Profile content.** The **display name** (the sealed real name, falling back to the username — the rule in decision
-9), an **avatar** (a letter only for now; a user avatar is its own later slice), and below them **every Memory in which
+9), an **avatar** (a letter first; the member's picture is [ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md), decided and not yet built), and below them **every Memory in which
 this person is a participant and the viewer has access**. The list is computed **in the client**: a lazily built
 in-memory index `Map<userId, Set<memoryRef>>` over the tenant scope and every group scope the viewer is in
 (`fetchTreeRows` with ETag / `If-None-Match` revalidation, [ADR 0081](0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)),
@@ -108,7 +108,7 @@ The first version is **Memories only**.
   client); the reader treats an id its directory does not know as a former member.
 - **A participants write is a Memory-meta write**, so it is a member's right like date and place: not for a guest, not
   during a pending scope deletion.
-- **Follow-up slices:** a user avatar (contract, backend, upload); an uploader field on Files nodes (contract, backend).
+- **Follow-up slices:** a user avatar ([ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)); an uploader field on Files nodes (contract, backend).
 - **Rejected:** a `veyq_node_participant` table (the leak above); a name snapshot on shares (stale names, and it hands
   a link holder people's names); a `~people` or history-mode route (collides with the personal-scope token, or reaches
   the access log).
