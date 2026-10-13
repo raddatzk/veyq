@@ -127,8 +127,9 @@ watch(() => props.userId, () => { editing.value = false; identity.discard() })
 }
 .person-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem 1rem;
 }
 .person-head.is-former {
   color: var(--app-muted);
@@ -137,8 +138,12 @@ watch(() => props.userId, () => { editing.value = false; identity.discard() })
   flex: none;
 }
 .person-head-text {
-  flex: 1;
+  /* beside the avatar while 10rem fit; on a phone the edit control drops to its own line instead of crushing the name */
+  flex: 1 1 10rem;
   min-width: 0;
+}
+.person-edit {
+  margin-inline-start: auto;
 }
 .person-edit-form {
   max-width: 32rem;
