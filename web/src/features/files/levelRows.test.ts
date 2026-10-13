@@ -186,6 +186,11 @@ describe('Files rows', () => {
     expect(metaOf(h, 'Report.pdf')).toBe(fileMeta(`${formatBytes(123_456, 'en')} · ${t('files.modified', { date: dateOf(MODIFIED) })}`))
     // a blob without meta: the plaintext size the sealed size gives exactly (2 frames of overhead off), no date
     expect(metaOf(h, 'notes.txt')).toBe(fileMeta(formatBytes(3000 + 256 * 1024, 'en')))
+    // the facts are the row's details: size, then the modified time - the latter left out where the blob's meta has none
+    const ids = (title: string) => rowOf(h.w, title).findAll('[data-detail]').map((d) => d.attributes('data-detail'))
+    expect(ids('Report.pdf')).toEqual(['size', 'modified'])
+    expect(ids('notes.txt')).toEqual(['size'])
+    expect(ids('pending.bin')).toEqual(['state'])
     // no blob yet: said so, and nothing to download
     expect(metaOf(h, 'pending.bin')).toBe(fileMeta(t('files.notUploaded')))
     expect(await actionDisabled(h.w, 'pending.bin', 'download')).toBe(true)

@@ -7,8 +7,9 @@
 //   once (a member's from the shared store, a share guest's through the link's own reads; a photo-of-the-Memory source is read
 //   by `./coverLoad.ts`, the kinds' `cover.load`) and hands the map to this source (`host.covers`), which draws it with the
 //   Memory placeholder tile while there is none.
-// - **The sealed date range** (the meta line) from each node's `wrappedMeta` under the key its parent's chain opens - read from
-//   the tree, no media load. A rotated scope mixes epochs across the level; locked (`epochs` null) means no dates.
+// - **The sealed date range and place** (the row's `details`, `memoryRowDetails.ts`, left out when absent) from each node's
+//   `wrappedMeta` under the key its parent's chain opens - read from the tree, no media load. A rotated scope mixes epochs
+//   across the level; locked (`epochs` null) means no facts.
 // - **The map** (the third presentation, `register.ts` names it among the kinds' `views`): core asks `presentation('map')`
 //   and draws the component handed back in place of the list. Its pins span the whole subtree (folders included), unsealed on
 //   device from the `wrappedMeta` the tree already holds (operator-blind - there is no locations API), a guest's from the
@@ -24,10 +25,9 @@ import { nodeById } from '../../core/node/browse'
 import { treeStore } from '../../core/node/treeStore'
 import { activeSpace } from '../../app/activeSpace'
 import { targetOf, type TreeSource } from '../../core/access'
-import { sortNodesByDate, type MemoryDate } from './memoryDate'
 import { collectLocatedPins, collectLocatedPinsBy } from './spaceMap'
 import { memoryCapabilities } from './capabilities'
-import { formatClosedRange, formatDay } from './memoryDateRange'
+import { memoryDetails, NO_FACTS, unsealRowFacts, type MemoryRowFacts } from './memoryRowDetails'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import MemoryRowCover from './components/MemoryRowCover.vue'
 import SpaceMap from './components/SpaceMap.vue'
@@ -57,18 +57,15 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
   /** Only this application's nodes, whatever the level hands in. */
   const memoryNodes = computed(() => ctx.value.nodes.filter((n) => n.kind === MEMORY_KIND || n.kind === CHAPTER_KIND))
 
-  // Each Memory's sealed date range - each K_mem opened under its parent's key: E_{node.epoch} at the scope root, the folder's
-  // key inside a folder (ADR 0080 Decision 1); read from wrappedMeta, no media load.
-  const dates = computed(() => {
-    const nodes = [...memoryNodes.value]
-    const dated = guestAccess
-      ? sortNodesByDate(guestAccess.head.scopeId, (node) => (node.parentId ? ctx.value.tree.keyOf(node.parentId) : null), nodes)
-      : sortNodesByDate(
-          activeSpace.scopeId ?? '',
-          (node) => (ctx.value.epochs && activeSpace.scopeId ? parentContentKey(activeSpace.scopeId, ctx.value.epochs, treeStore.nodes, node) : null),
-          nodes,
-        )
-    return new Map<string, MemoryDate | null>(dated.map((d) => [d.node.id, d.date]))
+  // Each Memory's sealed date and place - each K_mem opened under its parent's key: E_{node.epoch} at the scope root, the folder's
+  // key inside a folder (ADR 0080 Decision 1); read from wrappedMeta, no media load. They are the row's DETAILS.
+  const facts = computed(() => {
+    const parentKey = (node: TreeNode): Uint8Array | null =>
+      guestAccess
+        ? (node.parentId ? ctx.value.tree.keyOf(node.parentId) : null)
+        : ctx.value.epochs && activeSpace.scopeId ? parentContentKey(activeSpace.scopeId, ctx.value.epochs, treeStore.nodes, node) : null
+    const scopeId = guestAccess ? guestAccess.head.scopeId : (activeSpace.scopeId ?? '')
+    return new Map<string, MemoryRowFacts>(memoryNodes.value.map((n) => [n.id, unsealRowFacts(scopeId, parentKey(n), n)]))
   })
 
   // The map pins: every located node in this folder's subtree (or the whole space at root), unsealed on device from the
@@ -96,12 +93,6 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
     if (ctx.value.viewMode === 'map') host.ensureCovers(pins.value.map((pin) => pin.node))
   }, { immediate: true })
 
-  function dateLabel(date: MemoryDate | null | undefined): string {
-    if (!date) return ''
-    if (date.mode === 'ongoing') return date.from ? t('memory.date.since', { day: formatDay(date.from, locale.value) }) : ''
-    return formatClosedRange(date.from, date.to, locale.value)
-  }
-
   function memoryRow(node: TreeNode): LevelRow {
     // The matrix for THIS node: the rename and the move are about the Memory the row stands for. (The heart is core's
     // row action, `core/favorites`: one for every kind.)
@@ -116,7 +107,8 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
       // The cover always: a Memory's tile stays a cover tile (the soft placeholder) while it has none or it is loading.
       leading: { component: MemoryRowCover, props: { src: cover?.url ?? null, crop: cover?.crop ?? null, alt: node.name } },
       title: node.name,
-      meta: [t(node.kind === CHAPTER_KIND ? 'memory.kindChapter' : 'memory.kindMemory'), dateLabel(dates.value.get(node.id))].filter(Boolean).join(' · '),
+      meta: t(node.kind === CHAPTER_KIND ? 'memory.kindChapter' : 'memory.kindMemory'),
+      details: memoryDetails(facts.value.get(node.id) ?? NO_FACTS, t, locale.value),
       primary: { label: node.name, onClick: () => host.open(node) },
       actions,
     }

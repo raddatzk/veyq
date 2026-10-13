@@ -197,6 +197,34 @@ describe('Memories rows', () => {
     expect(titlesOf(h.w)).toEqual(['newer', 'older'])
   })
 
+  it('the meta line carries the Memory\'s date and place as details - and omits what the Memory does not have', () => {
+    const sealed = (label: string, meta: Record<string, unknown> | null): TreeNode => {
+      const id = uid(label)
+      return treeNode({
+        id, kind: MEMORY_KIND, name: label, parentId: null, orderIndex: 0, epoch: 0,
+        wrappedContentKey: wrapFor(id, scopeKey, keyOf(label)),
+        wrappedMeta: meta ? sealNodeMeta(keyOf(label), { scopeId: SCOPE_ID, nodeId: id }, { v: 1, ...meta }) : null,
+        metaVersion: 0, placementVersion: 0,
+      })
+    }
+    const place = { name: 'Rom', nameSource: 'manual', derivedMode: 'fixed' }
+    const both = sealed('both', { date: { mode: 'single', from: '2024-04-02', to: '2024-04-02' }, location: place })
+    const dateOnly = sealed('dateOnly', { date: { mode: 'single', from: '2024-04-02', to: '2024-04-02' } })
+    const placeOnly = sealed('placeOnly', { location: place })
+    const bare = sealed('bare', null)
+    treeStore.nodes = [both, dateOnly, placeOnly, bare]
+    const h = mountSection({ nodes: [both, dateOnly, placeOnly, bare], epochs: epochsOf(scopeKey) })
+    const details = (title: string) => rowOf(h.w, title).findAll('[data-detail]').map((d) => `${d.attributes('data-detail')}=${d.text()}`)
+    const day = formatClosedRange('2024-04-02', '2024-04-02', 'en')
+    expect(details('both')).toEqual([`date=${day}`, 'place=Rom'])
+    expect(details('dateOnly')).toEqual([`date=${day}`])
+    expect(details('placeOnly')).toEqual(['place=Rom'])
+    expect(details('bare')).toEqual([])
+    // the line of a Memory with nothing is the kind alone - no placeholder, no trailing separator
+    expect(metaOf(h, 'bare')).toBe(t('memory.kindMemory'))
+    expect(metaOf(h, 'both')).toBe(`${t('memory.kindMemory')} · ${day} · Rom`)
+  })
+
   it('scopes the map to the current folder subtree', () => {
     const memInA = locatedMemory('memInA', 'fA', located(1, 1))
     const memInB = locatedMemory('memInB', 'fB', located(2, 2))
