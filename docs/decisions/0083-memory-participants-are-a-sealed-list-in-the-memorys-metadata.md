@@ -65,13 +65,14 @@ names, snapshots or anything beyond opaque ids, this decision must be re-decided
 A per-share opt-in is a possible later decision, **not made now**.
 
 **5. A participant opens a member profile — members only.** Clicking a participant opens a profile page at the fragment
-**`#/people/<userId>`**, never reachable from a share. It is routed in `web/src/core/node/location.ts` (`parseHash` /
+**`#people/<userId>`** (the reader also accepts `#/people/<userId>`), never reachable from a share. It is routed in `web/src/core/node/location.ts` (`parseHash` /
 `buildHash`, the one place `validate_web_fragment_paths_via_location.py` allows), and `people` is added to
-`RESERVED_ROUTE_SEGMENTS` in `core/applications/registry.ts` so a folder cannot be called `people` at the tenant root.
+`RESERVED_ROUTE_SEGMENTS` in `core/applications/registry.ts` (no application can claim it as a route slug) and
+`segmentsOf` numbers a folder, file or drop box called "People" at a scope root `people-2`, so no node ever has the profile's path.
 Not `~people` (the `~` prefix is the personal-scope token), and not a history-mode path: those reach the server's access
 logs, a fragment does not.
-*To correct:* the comment on `isPersonalScope` in `location.ts` says a foreign `~username` is "the later profile view";
-with this decision it is not — a foreign `~username` stays a personal-scope token and the profile is `#/people/<id>`.
+The comment on `isPersonalScope` in `location.ts` that called a foreign `~username` "the later profile view" is corrected:
+it stays a personal-scope token and the profile is `#people/<id>`.
 
 **6. Profile content.** The **display name** (the sealed real name, falling back to the username — the rule in decision
 9), an **avatar** (a letter only for now; a user avatar is its own later slice), and below them **every Memory in which

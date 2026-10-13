@@ -12,7 +12,10 @@
   later; the header shows them; a profile page lists the Memories its person is on. The server stored one opaque blob and
   nothing else ([ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)).
 
-**Status: planned — nothing here is built.**
+**Status: built (web only, no backend or contract change).** Not built: a user avatar (a letter for now, [inbox #414](../../../inbox.md)),
+the uploader on **Files** ([inbox #415](../../../inbox.md)), a per-share opt-in for guests. The profile's cover tiles load for the
+Memories of the scopes read in that visit only (no cover cache across scope switches); the index is bounded at
+500 Memories per scope and says so when it is partial.
 
 ## Main flow — name the participants
 
@@ -29,7 +32,8 @@
 ## Main flow — open a person
 
 1. A member clicks a participant chip (or an uploader's name on a photo that a member uploaded). The location becomes
-   `#/people/<userId>`.
+   `#people/<userId>` (the reader also takes the spelling `#/people/<userId>`; `location.ts` builds the first). The fragment is token-less:
+   it opens the tenant scope's shell, whichever scope the Memory was in.
 2. The profile shows the **display name**, a **letter avatar**, and a list of **Memories** in which this person is a
    participant and the viewer has access.
 3. The list comes from a lazily built, in-memory index `Map<userId, Set<memoryRef>>`: the client lists the tenant scope
@@ -77,7 +81,7 @@
 - **Display name rule:** real name when it opens, else username — the same in the dialog, the chip, the profile and the
   uploader name.
 - **Routing:** the profile is a fragment route handled only in `core/node/location.ts`; `people` is a reserved route
-  segment. A history-mode path would reach the server's access log.
+  segment (an application cannot claim it, and a folder, file or drop box called "People" at a scope root is numbered `people-2`). A history-mode path would reach the server's access log.
 
 ## What this means for you / Was das für dich bedeutet
 
@@ -92,9 +96,21 @@ Wer den Bereich später verlässt, bleibt eingetragen und wird grau als „ehema
 Mitglieder; wer eine Erinnerung über einen Link bekommt, bekommt keine Personen angezeigt. Die Liste enthält nur anonyme IDs, nie Namen. Der Server erfährt nie, wer bei
 welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
 
+## Where it is built (web)
+
+- Model and write: `web/src/features/memory/memoryParticipants.ts` (`participants: { userIds }`, cap 100, the merging edit);
+  `editParticipantsOf` in `core/node/nodeMeta.ts`; the capability `participants` in `capabilities.ts`; the door
+  `NodeMetaDoor.setParticipants` in `source.ts`.
+- Header and picker: `components/MemoryParticipants.vue`, `MemoryParticipantsDialog.vue`, `useMemoryParticipants.ts`; names
+  from `core/people/directory.ts` (real name, else username; read from the tenant's member list).
+- Profile: `core/people/PersonProfile.vue` (core's frame, sections claimed through `registry.claimPersonSection`), Memories'
+  section `components/PersonMemories.vue` over `participantIndex.ts`; the route in `core/node/location.ts` and `views/MemoryHomeView.vue`.
+- Uploader in the photo detail: `useUploaderNames.ts` and `MediaLightbox.vue`.
+
 ## Related
 
 - Feature: [Memory](../_index.md)
+- End-user view (wiki): [People in your Memories](../../../../wiki/en/people-in-your-memories.md)
 - Enablers: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta`)
 - Use-cases: [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md) (the versioned meta write),
   [uc.memory.buckets](uc.memory.buckets.md) (the uploader axis), [uc.memory.gallery](uc.memory.gallery.md) (the lightbox)
