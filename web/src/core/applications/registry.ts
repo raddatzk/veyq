@@ -97,6 +97,7 @@ import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
 import { slugify } from '../../shared/naming'
+import type { ExportContentHook, ImportContentHook } from '../export/hooks'
 
 // The platform's own share dialog for a FOLDER (cr-node-key-hierarchy 5b.3), FOLDER's `shareDialog` since P4c. LAZY for
 // a reason: the dialog's module graph reaches this registry again (measured: `shareLink` →
@@ -180,6 +181,11 @@ export interface KindDescriptor {
    *  picker, the upload, the display and the guest read; the kind only opts in - the server's `NodeKindRules.takesCover`
    *  is the authority and must agree. Omitted: no cover, no action. FOLDER's is core's own, pre-registered. */
   cover?: KindCover
+  /** Export and import of this kind's CONTENT (ADR 0082): core walks the subtree and writes / reads the archive; the kind
+   *  says what its content is. A kind with neither is left out of an export (with its subtree) and reported. FOLDER needs
+   *  neither: it has no content. */
+  exportContent?: ExportContentHook
+  importContent?: ImportContentHook
 }
 
 /** What a kind that carries a cover may add to core's mechanism (inbox #411). Core reads one source, the uploaded image; a

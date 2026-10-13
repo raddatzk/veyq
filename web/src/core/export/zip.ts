@@ -367,12 +367,7 @@ export class ZipArchive {
   async *stream(name: string): AsyncGenerator<Uint8Array> {
     const e = this.byName.get(name)
     if (!e) throw new ZipError('missing', `no entry ${name}`)
-    const local = await readAt(this.file, e.offset, e.offset + 30)
-    const lv = new DataView(local.buffer, local.byteOffset, local.byteLength)
-    if (lv.getUint32(0, true) !== SIG_LOCAL) throw new ZipError('corrupt', `bad local header for ${name}`)
-    const start = e.offset + 30 + lv.getUint16(26, true) + lv.getUint16(28, true)
-    const end = start + e.size
-    if (end > this.directoryAt) throw new ZipError('corrupt', `${name} runs into the directory`)
+    const { start, end } = await this.span(name)
     let crc = crc32Start()
     for (let at = start; at < end; at += READ_CHUNK) {
       const chunk = await readAt(this.file, at, Math.min(at + READ_CHUNK, end))
@@ -380,6 +375,27 @@ export class ZipArchive {
       yield chunk
     }
     if (crc32Finish(crc) !== e.crc32) throw new ZipError('crc_mismatch', `${name} does not match its checksum`)
+  }
+
+  /**
+   * An entry as a lazy, seekable `Blob` over the archive (no bytes are read). Its checksum is NOT checked - the caller that
+   * needs it reads {@link stream} once first (an import verifies each payload's SHA-256 that way before it slices it).
+   */
+  async blob(name: string, type = ''): Promise<Blob> {
+    const { start, end } = await this.span(name)
+    return this.file.slice(start, end, type)
+  }
+
+  private async span(name: string): Promise<{ start: number; end: number }> {
+    const e = this.byName.get(name)
+    if (!e) throw new ZipError('missing', `no entry ${name}`)
+    const local = await readAt(this.file, e.offset, e.offset + 30)
+    const lv = new DataView(local.buffer, local.byteOffset, local.byteLength)
+    if (lv.getUint32(0, true) !== SIG_LOCAL) throw new ZipError('corrupt', `bad local header for ${name}`)
+    const start = e.offset + 30 + lv.getUint16(26, true) + lv.getUint16(28, true)
+    const end = start + e.size
+    if (end > this.directoryAt) throw new ZipError('corrupt', `${name} runs into the directory`)
+    return { start, end }
   }
 
   /** A small entry (the manifest) read whole, refused above `maxBytes`. */

@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearActiveSpace()
   vi.mocked(listMyGroups).mockResolvedValue([]) // clearAllMocks keeps impls; reset the defaults per test
-  vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'MEMBER' } as never])
+  vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'MEMBER' } as unknown as Awaited<ReturnType<typeof listMyTenants>>[number]])
   vi.mocked(refusedDocuments).mockResolvedValue([])
   stubMatchMedia(false) // narrow by default → /settings stays the list; the wide-redirect case opts in
 })
@@ -85,14 +85,14 @@ describe('SettingsHubView — a section the caller may not see leads back to /se
     expect(pathOf(m)).toBe('/settings')
     expect(m.find('.stub-mail').exists()).toBe(false) // the page was never mounted: it would have asked the server
     expect(pathOf(await mountHub('/settings/storage'))).toBe('/settings')
-    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' } as never])
+    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' } as unknown as Awaited<ReturnType<typeof listMyTenants>>[number]])
     expect(pathOf(await mountHub('/settings/mail'))).toBe('/settings/mail')
     expect(pathOf(await mountHub('/settings/storage'))).toBe('/settings/storage')
   })
 
   it('judges nothing before the tenant role is in: an owner is not bounced while the role is still being read', async () => {
     let answer: (v: never[]) => void = () => {}
-    vi.mocked(listMyTenants).mockReturnValue(new Promise((r) => { answer = r as typeof answer }) as never)
+    vi.mocked(listMyTenants).mockReturnValue(new Promise((r) => { answer = r as typeof answer }) as unknown as ReturnType<typeof listMyTenants>)
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings/:section?', name: 'settings', component: { template: '<div />' } }] })
     await router.replace('/settings/storage')
     await router.isReady()
@@ -128,7 +128,7 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     expect(asMember).not.toContain(t('mail.navTitle'))
     expect(asMember).not.toContain(t('storage.navTitle'))
 
-    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' } as never])
+    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' } as unknown as Awaited<ReturnType<typeof listMyTenants>>[number]])
     const asOwner = navText(await mountHub())
     expect(asOwner).toContain(t('mail.navTitle'))
     expect(asOwner).toContain(t('storage.navTitle'))

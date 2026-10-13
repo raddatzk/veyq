@@ -71,3 +71,31 @@ export async function streamBlob(source: ChunkSource, sink: ByteSink, options: S
     throw e
   }
 }
+
+/**
+ * The same windowed read as {@link streamBlob}, as an async iterator: a consumer that pulls (the ZIP writer of a subtree
+ * export) gets the chunks in order, at most `inFlight` opened ahead of the one it takes, each dropped once handed out. A
+ * consumer that stops early (a `break`, a throw, the signal) ends the read; chunks already opened are discarded.
+ */
+export async function* iterateBlob(source: ChunkSource, options: Pick<StreamOptions, 'inFlight' | 'signal'> = {}): AsyncGenerator<Uint8Array> {
+  const { signal } = options
+  const inFlight = Math.max(1, Math.floor(options.inFlight ?? STREAM_IN_FLIGHT))
+  const total = source.chunkCount
+  const opened = new Map<number, Promise<Uint8Array>>()
+  let started = 0
+  const start = (upTo: number) => {
+    for (; started < Math.min(upTo, total); started++) {
+      const p = source.getPlaintextChunk(started)
+      p.catch(() => {})
+      opened.set(started, p)
+    }
+  }
+  for (let i = 0; i < total; i++) {
+    throwIfAborted(signal)
+    start(i === 0 ? 1 : i + inFlight)
+    const bytes = await opened.get(i)!
+    opened.delete(i)
+    yield bytes
+  }
+  throwIfAborted(signal)
+}

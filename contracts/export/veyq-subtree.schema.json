@@ -31,7 +31,8 @@
         "path": { "$ref": "#/$defs/archivePath" },
         "size": { "type": "integer", "minimum": 0 },
         "mediaType": { "type": "string" },
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Hex SHA-256 of the stored bytes; the importer verifies it while streaming." }
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Hex SHA-256 of the stored bytes; the importer verifies it while streaming." },
+        "modifiedAt": { "type": "integer", "description": "Optional, Files: the file's modified time at export, in milliseconds since the epoch; restored on import." }
       }
     },
     "node": {

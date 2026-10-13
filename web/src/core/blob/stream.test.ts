@@ -2,7 +2,7 @@
 // bounded window, and a failure of any kind ends the sink with `abort` — never with `close`, which would finalise a
 // partial file as if it were whole.
 import { describe, it, expect } from 'vitest'
-import { streamBlob, type ByteSink, type ChunkSource } from './stream'
+import { iterateBlob, streamBlob, type ByteSink, type ChunkSource } from './stream'
 
 /** A source whose chunk `i` opens only when the test releases it; records how many are open at once. */
 function gatedSource(count: number) {
@@ -158,5 +158,37 @@ describe('streamBlob', () => {
     const seen: number[] = []
     await streamBlob(immediate([1, 2, 3, 4].map((n) => new Uint8Array([n]))), recordingSink().sink, { onProgress: (f) => seen.push(f) })
     expect(seen).toEqual([0.25, 0.5, 0.75, 1])
+  })
+})
+
+describe('iterateBlob', () => {
+  it('yields the chunks in order, opening at most the window ahead of the one taken', async () => {
+    const { source, gates, stats } = gatedSource(6)
+    const it = iterateBlob(source, { inFlight: 2 })
+    const first = it.next()
+    await Promise.resolve()
+    expect(stats.requested).toEqual([0]) // chunk 0 alone first
+    gates[0].release()
+    expect((await first).value).toEqual(new Uint8Array([0]))
+    const second = it.next()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(stats.requested).toEqual([0, 1, 2]) // taking chunk 1 opens 2 ahead (window 2), not the rest
+    gates.forEach((g) => g.release())
+    const rest: number[] = []
+    rest.push((await second).value[0])
+    for await (const c of it) rest.push(c[0])
+    expect(rest).toEqual([1, 2, 3, 4, 5])
+    expect(stats.maxOpen).toBeLessThanOrEqual(3)
+  })
+
+  it('throws what a chunk threw, and stops at an aborted signal', async () => {
+    const failing: ChunkSource = { chunkCount: 2, getPlaintextChunk: async (i) => { if (i === 1) throw new Error('boom'); return new Uint8Array([i]) } }
+    const seen: number[] = []
+    await expect((async () => { for await (const c of iterateBlob(failing)) seen.push(c[0]) })()).rejects.toThrow('boom')
+    expect(seen).toEqual([0])
+    const ctl = new AbortController()
+    ctl.abort()
+    await expect(iterateBlob(immediate([new Uint8Array([1])]), { signal: ctl.signal }).next()).rejects.toBeDefined()
   })
 })
