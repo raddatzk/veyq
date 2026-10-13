@@ -41,6 +41,7 @@ import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
 import FolderNameDialog from '../core/node/FolderNameDialog.vue'
 import LevelView from '../core/node/LevelView.vue'
 import PersonProfile from '../core/people/PersonProfile.vue'
+import { loadTenantPeople, personNow } from '../core/people/directory'
 import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
 import { nodeMover } from '../core/node/move'
 import { registry } from '../core/applications/registry'
@@ -193,9 +194,8 @@ const rootLabel = computed(() =>
       : t('shell.personal'),
 )
 
-// The shown profile's @username (reported by the page once the directory has answered): the last crumb.
-const personHandle = ref<string | null>(null)
-watch(() => place.value.person, () => (personHandle.value = null))
+// The shown profile's handle for the last crumb, from the roster already on the device (empty until it is read).
+const personHandle = computed(() => (place.value.person ? personNow(place.value.person)?.username ?? null : null))
 watch(
   [() => route.hash, () => treeStore.nodes, rootLabel, personHandle],
   () =>
@@ -205,7 +205,7 @@ watch(
           [
             { id: null, name: rootLabel.value, hash: hashForNode(treeStore.nodes, null, TENANT_SCOPE) },
             { id: null, name: t('people.profile'), hash: personHash(place.value.person) },
-            ...(personHandle.value ? [{ id: null, name: `@${personHandle.value}`, hash: personHash(place.value.person) }] : []),
+            ...(personHandle.value ? [{ id: null, name: `~${personHandle.value}`, hash: personHash(place.value.person) }] : []),
           ]
         : breadcrumbOf(treeStore.nodes, currentNodeId.value, rootLabel.value, currentScope.value),
     ),
@@ -217,6 +217,9 @@ watch(
 // both for the newly active scope.
 async function reenter(scope: string) {
   await enterScope(scope)
+  // The tenant's roster is read in the background, ahead of the tree, so a person's name is at hand (a profile page, its
+  // breadcrumb) without waiting for anything.
+  if (activeSpace.status === 'ready') void loadTenantPeople().catch(() => undefined)
   if (activeSpace.status === 'ready' && !treeStore.loaded) await loadTree()
   // Core loads the member's pin set, each application its own per-scope state; both are idempotent per reset.
   if (activeSpace.status === 'ready' && activeSpace.scopeId) {
@@ -335,7 +338,7 @@ async function onDeleteDone() {
       <Message v-if="isPendingDeletion" severity="warn" :closable="false" class="pending-delete-banner">
         {{ t('groups.pendingDeletion', { day: pendingPurgeDay }) }}
       </Message>
-      <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" @named="personHandle = $event" />
+      <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" />
       <component
         :is="kindDetail"
         v-else-if="kindDetail && currentNode && activeSpace.scopeId"

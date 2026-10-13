@@ -30,12 +30,14 @@ vi.mock('../core/node/treeStore', async () => {
   const { reactive } = await import('vue')
   return { treeStore: reactive({ nodes: [], loaded: true, error: false }), loadTree: vi.fn(async () => {}), patchNodeMeta: vi.fn(), pollTree: vi.fn(async () => false) }
 })
+vi.mock('../core/people/directory', () => ({ loadTenantPeople: vi.fn(async () => new Map()), personNow: vi.fn(() => undefined) }))
 vi.mock('../core/people/PersonProfile.vue', async () => {
   const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ name: 'PersonProfileStub', props: ['userId'], emits: ['named'], setup: (p, { emit }) => () => h('div', { class: 'profile-stub', onClick: () => emit('named', 'anna') }, p.userId) }) }
+  return { default: defineComponent({ name: 'PersonProfileStub', props: ['userId'], setup: (p) => () => h('div', { class: 'profile-stub' }, p.userId) }) }
 })
 
 import MemoryHomeView from './MemoryHomeView.vue'
+import { personNow } from '../core/people/directory'
 import { treeStore } from '../core/node/treeStore'
 import { enterScope } from '../app/activeSpace'
 import { breadcrumb } from '../app/breadcrumb'
@@ -78,11 +80,11 @@ describe('MemoryHomeView: #people/<userId>', () => {
     expect(decodeURIComponent(breadcrumb.trail[1].hash)).toBe(`#people/${UID}`)
   })
 
-  it('names the page by the person\'s @username once the profile has reported it', async () => {
-    const w = await mountAt(`#people/${UID}`)
-    expect(breadcrumb.trail.map((c) => c.name)).toEqual(['Shared', 'Profile'])
-    await w.get('.profile-stub').trigger('click')
-    expect(breadcrumb.trail.map((c) => c.name)).toEqual(['Shared', 'Profile', '@anna'])
+  it('names the page by the person\'s ~handle from the roster already on the device', async () => {
+    // The roster read is mocked below; the crumb answers from what `personNow` knows, with no wait on the page.
+    vi.mocked(personNow).mockReturnValue({ userId: UID, username: 'anna', realName: null, displayName: 'anna' })
+    await mountAt(`#people/${UID}`)
+    expect(breadcrumb.trail.map((c) => c.name)).toEqual(['Shared', 'Profile', '~anna'])
   })
 
   it('a folder called "People" is not the route: it opens as people-2, and the profile page stays away', async () => {

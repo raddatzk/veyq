@@ -9,7 +9,7 @@ import { listScopeMembers as listScopeMembersFn } from '../../features/spaces/me
 import { openScope as openScopeFn } from '../../features/spaces/scopes'
 import { unsealName as unsealNameFn } from '../../features/account/profile/memberName'
 import { activeSpace } from '../../app/activeSpace'
-import { displayNameOf, loadScopePeople, loadTenantPeople, resetPeopleDirectory, refreshPeopleDirectory } from './directory'
+import { displayNameOf, loadScopePeople, loadTenantPeople, personNow, resetPeopleDirectory, refreshPeopleDirectory } from './directory'
 import { syncAvatars as syncAvatarsFn, resetAvatars as resetAvatarsFn } from './avatarCache'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
 import { openedScope, scopeMember } from '../../test/models'
@@ -73,6 +73,18 @@ describe('loadTenantPeople', () => {
     await loadTenantPeople()
     await loadTenantPeople()
     expect(listScopeMembers).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('personNow: the roster already on the device, answered synchronously', () => {
+  it('knows nobody before the first read, then every member read, and forgets them on a reset', async () => {
+    listScopeMembers.mockResolvedValue([member('u1', 'anna')])
+    expect(personNow('u1')).toBeUndefined()
+    await loadTenantPeople()
+    expect(personNow('u1')?.username).toBe('anna')
+    expect(personNow('gone')).toBeUndefined()
+    resetPeopleDirectory()
+    expect(personNow('u1')).toBeUndefined()
   })
 })
 

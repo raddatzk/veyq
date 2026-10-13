@@ -7,6 +7,7 @@
 // Two reads: {@link loadScopePeople} - the CURRENT members of one scope (a Memory's picker and chips), and
 // {@link loadTenantPeople} - every member of the tenant (a profile page). A person a roster does not list is a former
 // member to whoever asks (the caller decides how it renders).
+import { shallowRef } from 'vue'
 import { activeScopeKey, activeSpace } from '../../app/activeSpace'
 import { listScopeMembers } from '../../features/spaces/members'
 import { openScope } from '../../features/spaces/scopes'
@@ -38,9 +39,20 @@ let avatarSync: Promise<void> = Promise.resolve()
 const NAMES_TTL_MS = 60_000
 let namesCache: { at: number; tenantScopeId: string; names: Map<string, { username: string; name: MemberName | null }> } | null = null
 
+/** Every member of the tenant as last read (null before the first read): a reactive window onto the cache, so a place that
+ *  names a person (a profile page, its breadcrumb) can answer at once from what is already on the device. */
+const snapshot = shallowRef<Map<string, Person> | null>(null)
+
+/** The member `userId` as already read, or undefined while the roster has not been read yet (or the user is no member).
+ *  Synchronous and reactive; {@link loadTenantPeople} fills it, and the shell starts that read when a tenant space opens. */
+export function personNow(userId: string): Person | undefined {
+  return snapshot.value?.get(userId)
+}
+
 /** Forget the cached tenant names and every cached profile picture, revoking their object URLs (a sign-out, a test). */
 export function resetPeopleDirectory(): void {
   namesCache = null
+  snapshot.value = null
   resetAvatars()
 }
 
@@ -78,6 +90,7 @@ async function tenantNames(): Promise<Map<string, { username: string; name: Memb
       rows.map((m) => [m.userId, { username: m.username, name: key ? unsealName(key, { scopeId, userId: m.userId }, m.sealedName) : null }] as const),
     )
     namesCache = { at: Date.now(), tenantScopeId: scopeId, names }
+    snapshot.value = new Map([...names].map(([userId, v]) => [userId, personOf(userId, v.username, v.name)]))
     // The pictures, in step with the roster: only the version integers were read; a picture is fetched when its version is new.
     // The key is copied for the fetches (the scope's own may be zeroed below) and the copy zeroed when they settle.
     if (key && tenantId) {

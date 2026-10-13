@@ -6,7 +6,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import PrimeVue from 'primevue/config'
 
-vi.mock('./directory', async (orig) => ({ ...(await orig<typeof import('./directory')>()), loadTenantPeople: vi.fn() }))
+vi.mock('./directory', async (orig) => ({ ...(await orig<typeof import('./directory')>()), loadTenantPeople: vi.fn(), personNow: vi.fn(() => undefined) }))
 vi.mock('../../features/account/profile/profile', async (orig) => ({
   ...(await orig<typeof import('../../features/account/profile/profile')>()),
   getMyProfile: vi.fn(),
@@ -23,7 +23,7 @@ vi.mock('../applications/registry', async (orig) => {
 })
 
 import PersonProfile from './PersonProfile.vue'
-import { loadTenantPeople, type Person } from './directory'
+import { loadTenantPeople, personNow, type Person } from './directory'
 import { realI18n, t } from '../../test/i18n'
 import { account } from '../../app/account'
 import { getMyProfile, updateMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName } from '../../features/account/profile/profile'
@@ -44,10 +44,19 @@ async function mountPage(userId = ANNA) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(personNow).mockReturnValue(undefined)
   account.userId = ''
 })
 
 describe('PersonProfile', () => {
+  it('shows a member the device already knows at once, without waiting for the read', async () => {
+    vi.mocked(personNow).mockReturnValue(anna)
+    load.mockReturnValue(new Promise(() => {}))
+    const w = await mountPage()
+    expect(w.get('h1').text()).toBe('Anna Meyer')
+    expect(w.find('[role="status"]').exists()).toBe(false)
+  })
+
   it('says it is loading until the directory is read', async () => {
     load.mockReturnValue(new Promise(() => {}))
     const w = await mountPage()
@@ -58,7 +67,7 @@ describe('PersonProfile', () => {
     load.mockResolvedValue(new Map([[ANNA, anna]]))
     const w = await mountPage()
     expect(w.get('h1').text()).toBe('Anna Meyer')
-    expect(w.get('.person-username').text()).toBe('@anna')
+    expect(w.get('.person-username').text()).toBe('~anna')
     expect(w.get('.person-avatar').text()).toBe('A')
     expect(w.get('.section-stub').text()).toBe(`${ANNA}|Anna Meyer`)
   })

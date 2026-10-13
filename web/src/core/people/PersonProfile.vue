@@ -12,7 +12,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import { registry } from '../applications/registry'
-import { loadTenantPeople, refreshPeopleDirectory, type Person } from './directory'
+import { loadTenantPeople, personNow, refreshPeopleDirectory, type Person } from './directory'
 import PersonAvatar from './PersonAvatar.vue'
 import NamePictureFields from '../../features/account/profile/NamePictureFields.vue'
 import { useNameAndPicture } from '../../features/account/profile/useNameAndPicture'
@@ -22,9 +22,6 @@ import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useToast } from '../../shared/state/useToast'
 
 const props = defineProps<{ userId: string }>()
-// The person's @username once the directory has answered (null while loading, for a former member, on an error): the shell
-// breadcrumb names the page by it.
-const emit = defineEmits<{ named: [username: string | null] }>()
 const { t } = useI18n()
 
 type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; person: Person | null }
@@ -33,7 +30,9 @@ let token = 0
 
 async function load() {
   const mine = ++token
-  state.value = { kind: 'loading' }
+  // Whoever the device already knows is shown at once; the read below only confirms (or finds a former member).
+  const known = personNow(props.userId)
+  state.value = known ? { kind: 'ready', person: known } : { kind: 'loading' }
   try {
     const people = await loadTenantPeople()
     if (mine === token) state.value = { kind: 'ready', person: people.get(props.userId) ?? null }
@@ -47,7 +46,6 @@ watch(() => props.userId, load)
 const sections = registry.personSections()
 const person = computed(() => (state.value.kind === 'ready' ? state.value.person : null))
 const title = computed(() => person.value?.displayName ?? t('people.formerMember'))
-watch(person, (p) => emit('named', p ? p.username : null), { immediate: true })
 
 // Editing one's own name and picture: only when this page is the signed-in member's.
 const toast = useToast()
@@ -90,7 +88,7 @@ watch(() => props.userId, () => { editing.value = false; identity.discard() })
         <PersonAvatar :name="title" :user-id="person ? userId : null" size="xlarge" class="person-avatar" />
         <div class="person-head-text">
           <h1 id="person-title" class="person-title">{{ title }}</h1>
-          <p v-if="person && person.realName" class="person-username">@{{ person.username }}</p>
+          <p v-if="person && person.realName" class="person-username">~{{ person.username }}</p>
           <p v-else-if="!person" class="person-username">{{ t('people.formerMemberHint') }}</p>
         </div>
         <Button
