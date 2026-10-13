@@ -39,13 +39,15 @@ export function useUploaderNames(ctx: UploaderNamesContext) {
     if (!door || !key || loadedFor === nodeId) return
     loadedFor = nodeId
     try {
-      const [buckets, people] = await Promise.all([door.list(nodeId), loadScopePeople(ctx.scopeId()).catch(() => [] as Person[])])
-      const byId = new Map(people.map((p) => [p.userId, p]))
+      const [buckets, people] = await Promise.all([door.list(nodeId), loadScopePeople(ctx.scopeId()).catch(() => null as Person[] | null)])
+      // A directory that could not be read says nothing about who is a member: then a member is left unnamed, not "former".
+      const byId = people ? new Map(people.map((p) => [p.userId, p])) : null
       const above = door.ancestorKeys(nodeId)
       const next = new Map<string, UploaderLabel>()
       for (const b of buckets) {
         if (!b.isPrimary) continue
         if (b.ownerKey.startsWith('user:')) {
+          if (!byId) continue
           const person = byId.get(b.ownerKey.slice('user:'.length))
           next.set(b.ownerKey, person ? { name: person.displayName, userId: person.userId } : { name: ctx.formerLabel(), userId: null })
         } else if (b.ownerKey.startsWith('share:')) {

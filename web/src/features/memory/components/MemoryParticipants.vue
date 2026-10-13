@@ -43,7 +43,7 @@ const initialOf = (name: string) => name.trim().charAt(0).toUpperCase() || '?'
     <template v-for="c in p.chips.value" :key="c.userId">
       <span v-if="c.former" class="memory-participant-chip is-former" data-testid="participant-former">
         <Avatar :label="initialOf(c.name)" shape="circle" size="small" aria-hidden="true" />
-        <span>{{ c.name }}</span>
+        <span class="memory-participant-name">{{ c.name }}</span>
       </span>
       <RouterLink
         v-else
@@ -54,7 +54,7 @@ const initialOf = (name: string) => name.trim().charAt(0).toUpperCase() || '?'
         data-testid="participant-link"
       >
         <Avatar :label="initialOf(c.name)" shape="circle" size="small" aria-hidden="true" />
-        <span>{{ c.name }}</span>
+        <span class="memory-participant-name">{{ c.name }}</span>
       </RouterLink>
     </template>
     <span v-if="p.namesPending.value" class="memory-participants-muted" role="status">{{ t('people.loading') }}</span>

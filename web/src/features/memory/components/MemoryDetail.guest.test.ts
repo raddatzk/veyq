@@ -44,6 +44,7 @@ vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>
 import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { sealName, wrapContentKey } from '../../../core/node/tree'
+import { sealNodeMeta, unsealNodeMeta } from '../../../core/node/nodeMeta'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { saveGuestSession, forgetGuestSession, type GuestIdentity } from '../../../core/sharing/guestIdentity'
 import { ShareRole, type PublicShare, type ShareNode } from '../../../api/generated/sharing'
@@ -72,6 +73,8 @@ const PW = 'cHc='
 const K_SHARE = v1.randomBytes(32)
 const HASH = `#k=${b64url(K_SHARE)}`
 const keys = { root: v1.randomBytes(32), memory: v1.randomBytes(32), chapter: v1.randomBytes(32) }
+// The people the Memory's sealed meta lists - opaque ids, as the member's header wrote them (ADR 0083).
+const PARTICIPANTS = ['aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002']
 const GUEST: GuestIdentity = { identityId: 'id-g', contributorToken: 'tok-g' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
@@ -86,7 +89,8 @@ function head(role: ShareRole): PublicShareHead {
       role, scopeId: SCOPE, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
       nodes: [
         { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
-        child(MEMORY, ROOT, keys.root, keys.memory, 'Rom 2026', MEMORY_KIND),
+        // a share serves the node's `wrappedMeta` UNCHANGED: the Memory's carries its participants, the guest holds its `K_mem`
+        { ...child(MEMORY, ROOT, keys.root, keys.memory, 'Rom 2026', MEMORY_KIND), wrappedMeta: sealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, { v: 1, participants: { userIds: PARTICIPANTS } }) },
         child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND),
       ],
     } as PublicShare,
@@ -155,6 +159,14 @@ function expectGuestOnly(w: Page) {
   expect(w.find('.memory-cover-preview').attributes('disabled'), 'the cover').toBeDefined()
   expect(w.find('.memory-date-chip').attributes('disabled'), 'the date').toBeDefined()
   expect(w.find('.memory-location-chip').attributes('disabled'), 'the place').toBeDefined()
+  // ADR 0083 decision 4: the interface shows a guest no participants - no section, no chip, no control, no link to a profile -
+  // though the sealed meta the share serves lists them (see the residual test below).
+  expect(w.find('[data-testid="memory-participants"]').exists(), 'the participants row').toBe(false)
+  expect(w.find('.memory-participant-chip').exists(), 'a participant chip').toBe(false)
+  expect(w.find('[data-testid="participants-edit"]').exists(), 'the participants control').toBe(false)
+  expect(w.find('a[href*="people/"]').exists(), 'a profile link').toBe(false)
+  expect(byLabel(w, t('memory.participants.add')).exists(), 'add').toBe(false)
+  expect(byLabel(w, t('memory.participants.edit')).exists(), 'edit').toBe(false)
   expect(authenticatedCalls).toEqual([])
   expect(memberReads).toEqual([])
   expect(isFavorite).not.toHaveBeenCalled()
@@ -206,6 +218,16 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
       w.unmount()
     })
   }
+
+  // The ACCEPTED RESIDUAL of ADR 0083 decision 4, pinned so the docs stay honest: the share serves the node's meta as the member
+  // sealed it and the guest holds `K_mem`, so the blob a link holder can open DOES list the participants - as opaque user ids,
+  // never a name. The interface (above) is what shows a guest none; if the list ever carries names, that decision is open again.
+  it('the meta a share serves lists the participants as opaque ids only - the residual the interface hides', async () => {
+    const served = head(ShareRole.Read).share.nodes.find((n) => n.id === MEMORY)!
+    const participants = unsealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, served.wrappedMeta ?? null).participants
+    expect(participants).toEqual({ userIds: PARTICIPANTS })
+    expect(Object.keys(participants as object)).toEqual(['userIds'])
+  })
 
   it('READ: no delete on any tile, not even one this device once sent', async () => {
     saveGuestSession(SHARE, GUEST)

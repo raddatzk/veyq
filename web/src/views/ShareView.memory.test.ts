@@ -71,6 +71,7 @@ vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
 import ShareView from './ShareView.vue'
 import { resolvePublicShare, fetchShareTerms, type PublicShareHead } from '../core/sharing/resolvePublicShare'
 import { sealName, wrapContentKey } from '../core/node/tree'
+import { sealNodeMeta } from '../core/node/nodeMeta'
 import { loadGuestSession, saveGuestSession, forgetGuestSession, type GuestIdentity } from '../core/sharing/guestIdentity'
 import { ShareRole, type PublicShare, type ShareNode } from '../api/generated/sharing'
 import type { ShareMedia } from '../api/generated/share-media'
@@ -109,7 +110,8 @@ function head(role: ShareRole, o: { chapterRoot?: boolean } = {}): PublicShareHe
   }
   const nodes = o.chapterRoot
     ? [{ id: CHAPTER, parentId: null, kind: CHAPTER_KIND, epoch: 0 }]
-    : [{ id: MEMORY, parentId: null, kind: MEMORY_KIND, epoch: 0 }, child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND)]
+    // the served root meta lists the participants as the member sealed it (a share serves `wrappedMeta` unchanged, ADR 0083)
+    : [{ id: MEMORY, parentId: null, kind: MEMORY_KIND, epoch: 0, wrappedMeta: sealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, { v: 1, participants: { userIds: ['aaaaaaaa-0000-4000-8000-000000000001'] } }) }, child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND)]
   const rootKey = o.chapterRoot ? keys.chapter : keys.memory
   return { ...base, share: { role, scopeId: SCOPE, rootKind, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, rootKey)), nodes } as PublicShare }
 }
@@ -178,6 +180,9 @@ function expectGuestOnly(w: Page) {
     expect(w.find(`[aria-label="${label}"]`).exists(), label).toBe(false)
   }
   expect(w.find('.drop-stub, .share-add-button').exists(), "no drop page on a reading guest's page").toBe(false)
+  // ADR 0083 decision 4: no participants in any share view - no row, no chip, no control, no link to a profile
+  expect(w.find('[data-testid="memory-participants"]').exists(), 'the participants row').toBe(false)
+  expect(w.find('.memory-participant-chip, [data-testid="participants-edit"], a[href*="people/"]').exists(), 'a participant control or link').toBe(false)
 }
 
 describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
@@ -288,6 +293,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
     expect(w.find('.share-name-card').text()).toContain(t('share.uploaderIntro'))
     expect(w.find('.memory-detail').exists()).toBe(false)
+    expect(w.find('[data-testid="memory-participants"]').exists(), 'no participants on a drop page').toBe(false)
     expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)
     expect(publicShareMediaApi().listShareMedia, 'an uploader is served no media').not.toHaveBeenCalled()
     expect(authenticatedCalls).toEqual([])
