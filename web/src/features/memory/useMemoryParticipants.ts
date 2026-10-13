@@ -1,4 +1,4 @@
-// uc.memory.participants (web) — the Memory header's participants slice (ADR 0083): who was there, shown as name chips and
+// uc.memory.participants (web) — the Memory header's participants slice (ADR 0083): who was there, shown as avatars (names in a popover) and
 // edited in a picker over the scope's CURRENT members. The ids are the sealed `participants` of the Memory's meta
 // (`memoryParticipants.ts`); the names come from the member directory on this device (`core/people/directory.ts`, real name
 // else username). An id the directory does not list is a FORMER MEMBER: greyed, no link, and removable by hand - nothing

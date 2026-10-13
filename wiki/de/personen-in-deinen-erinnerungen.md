@@ -8,8 +8,9 @@ eine Person öffnen, um alle Erinnerungen zu sehen, an denen sie beteiligt war.
 ## Was du tun kannst
 
 - **Personen nennen.** Öffne eine Erinnerung und wähle unter dem Titel **Beteiligte hinzufügen**. Du wählst aus den
-  Mitgliedern des Bereichs, in dem die Erinnerung liegt. Ihre Namen erscheinen als kleine Chips in der Kopfzeile der
-  Erinnerung. Eine Erinnerung kann bis zu 100 Personen nennen.
+  Mitgliedern des Bereichs, in dem die Erinnerung liegt. Sie erscheinen als Reihe kleiner Avatare in der Kopfzeile der
+  Erinnerung (bis zu drei; bei mehr zeigt der letzte „+2“, „+3“ und so weiter) – fahre darüber oder tippe darauf, um alle mit
+  Namen zu sehen. In der Auswahl kannst du die Mitglieder nach Namen suchen. Eine Erinnerung kann bis zu 100 Personen nennen.
 - **Eine Person öffnen.** Klicke auf einen Namen, und du landest im Profil dieser Person: Name, ein Buchstaben-Avatar und
   darunter die Erinnerungen, an denen sie beteiligt war – nur die, die **du** öffnen darfst. Eine Erinnerung, die du nicht
   sehen darfst, fehlt einfach in der Liste. (Hast du sehr viele Erinnerungen, sagt die Liste, wenn sie unvollständig sein

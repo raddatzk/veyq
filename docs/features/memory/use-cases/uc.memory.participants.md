@@ -27,11 +27,14 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
    is sealed).
 4. On save the client writes the `participants` sub-object (user ids only) into the Memory's `wrappedMeta` under `K_mem`
    with the node-meta compare-and-set, stating the `metaVersion` it read.
-5. The header re-renders with the participants, each a chip with the display name and a letter avatar.
+5. The header re-renders with the participants as overlapping letter avatars (a profile picture can take their place
+   later): up to three, and past three the third slot is a "+N" (two avatars and "+2" for four people). Hovering the
+   group, focusing it by keyboard or tapping it opens a popover with everyone — avatar and display name — and Escape
+   closes it.
 
 ## Main flow — open a person
 
-1. A member clicks a participant chip (or an uploader's name on a photo that a member uploaded). The location becomes
+1. A member clicks a participant in the popover (or an uploader's name on a photo that a member uploaded). The location becomes
    `#people/<userId>` (the reader also takes the spelling `#/people/<userId>`; `location.ts` builds the first). The fragment is token-less:
    it opens the tenant scope's shell, whichever scope the Memory was in.
 2. The profile shows the **display name**, a **letter avatar**, and a list of **Memories** in which this person is a
@@ -78,20 +81,20 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
   graph (who was on which trip). The cost is stated in the ADR: no server-side notifications and no server-side query.
 - **Guests are an exception to "share = member view".** Rights only remove functions everywhere else; here the
   interface withholds a section, because it points at other members (ids only; see E1 for the residual).
-- **Display name rule:** real name when it opens, else username — the same in the dialog, the chip, the profile and the
+- **Display name rule:** real name when it opens, else username — the same in the dialog, the popover, the profile and the
   uploader name.
 - **Routing:** the profile is a fragment route handled only in `core/node/location.ts`; `people` is a reserved route
   segment (an application cannot claim it, and a folder, file or drop box called "People" at a scope root is numbered `people-2`). A history-mode path would reach the server's access log.
 
 ## What this means for you / Was das für dich bedeutet
 
-**EN —** You can say who was there: add the people of your space to a memory, and they show in its header. Click a name
+**EN —** You can say who was there: add the people of your space to a memory, and they show in its header as a row of avatars. Hover or tap them for the names, click a name
 to see that person and every memory of theirs you can open. People who later leave the space stay listed, greyed out as
 "former member". Only members see this; the page of someone who gets a memory through a link shows nobody. The server
 never learns who was on which memory — the list is sealed with the memory. The list holds only anonymous ids, never names.
 
 **DE —** Du kannst festhalten, wer dabei war: Füge Personen deines Bereichs zu einer Erinnerung hinzu, sie erscheinen in
-deren Kopfzeile. Mit einem Klick auf einen Namen siehst du die Person und alle ihre Erinnerungen, die du öffnen darfst.
+deren Kopfzeile als Reihe von Avataren. Fahre darüber oder tippe darauf, um die Namen zu sehen; mit einem Klick auf einen Namen siehst du die Person und alle ihre Erinnerungen, die du öffnen darfst.
 Wer den Bereich später verlässt, bleibt eingetragen und wird grau als „ehemaliges Mitglied“ gezeigt. Das sehen nur
 Mitglieder; wer eine Erinnerung über einen Link bekommt, bekommt keine Personen angezeigt. Die Liste enthält nur anonyme IDs, nie Namen. Der Server erfährt nie, wer bei
 welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
