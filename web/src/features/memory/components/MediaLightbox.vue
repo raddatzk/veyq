@@ -16,6 +16,7 @@
 // the source carries the medium's meta door (`mediaMeta`), the heavy EXIF where it carries `exifLoader`.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import {
   hasDerivatives,
   isVideoMediaType,
@@ -40,6 +41,8 @@ import { registerPlayback, revokePlayback, handleFromUrl } from '../../../sw/reg
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { formatBytes } from '../../../shared/formatBytes'
 import type { MediaMetaDoor } from '../source'
+import type { UploaderLabel } from '../useUploaderNames'
+import { personHash } from '../../../core/node/location'
 
 const props = defineProps<{
   memoryKey: Uint8Array
@@ -65,6 +68,9 @@ const props = defineProps<{
   // The medium's meta writes (capture-time correction, place-name backfill) as the data source carries them; absent:
   // neither is offered nor run.
   mediaMeta?: MediaMetaDoor
+  /** Who added the shown item (ADR 0083 decision 7): the name, and the member's id only where the name may link to a profile.
+   *  Absent: no uploader is shown (a share guest's session carries none). */
+  uploaderOf?: (item: MediaItem) => UploaderLabel | null
   suspendKeys?: boolean // pause the global Escape/arrow handler while a modal (the cover cropper) is open over the lightbox
 }>()
 const emit = defineEmits<{
@@ -382,7 +388,8 @@ const metadataRows = computed(() => {
   }
   return rows.filter((row) => row.value)
 })
-const hasDetail = computed(() => metadataRows.value.length > 0 || hasGps.value)
+const uploader = computed(() => (item.value && props.uploaderOf ? props.uploaderOf(item.value) : null))
+const hasDetail = computed(() => metadataRows.value.length > 0 || hasGps.value || uploader.value !== null)
 
 function prev() {
   if (canPrev.value) current.value -= 1
@@ -670,6 +677,13 @@ onBeforeUnmount(() => {
             <template v-if="isCapturedAtCorrected">
               <dt>{{ t('media.status') }}</dt>
               <dd>{{ t('media.capturedAtCorrected') }}</dd>
+            </template>
+            <template v-if="uploader">
+              <dt>{{ t('media.uploadedBy') }}</dt>
+              <dd data-testid="lightbox-uploader">
+                <RouterLink v-if="uploader.userId" :to="{ hash: personHash(uploader.userId) }" class="media-lightbox-uploader-link" @click="emit('close')">{{ uploader.name }}</RouterLink>
+                <template v-else>{{ uploader.name }}</template>
+              </dd>
             </template>
             <template v-if="placeLabel">
               <dt>{{ t('media.place') }}</dt>

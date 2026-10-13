@@ -43,6 +43,10 @@ export interface MemoryCapabilities {
   /** Move the node on screen elsewhere (core's `MoveNodeDialog`, inbox #358): a Memory to the root or a folder, a chapter
    *  into another Memory (the kinds' `placement`, the backend's `MemoryNodeKindRules`). */
   move: boolean
+  /** Show who was there on a Memory (opaque ids in the node's sealed meta, ADR 0083) and the profile link of each. A MEMBER's,
+   *  read-only ones included; NO share role has it - the interface shows a guest no participants. Editing the list is
+   *  `editMeta`'s. (A personal scope has no participants: the view hides them there, the matrix knows no scope kind.) */
+  participants: boolean
   /** The node's media trash (restore, purge). */
   mediaTrash: boolean
   /** The contributions organizer (buckets: create, rename, move media). */
@@ -64,6 +68,7 @@ export const NO_MEMORY_CAPABILITIES: Readonly<MemoryCapabilities> = Object.freez
   rename: false,
   deleteNode: false,
   move: false,
+  participants: false,
   mediaTrash: false,
   buckets: false,
 })
@@ -106,6 +111,7 @@ function memberCapabilities(readonly: boolean, publicLinks: boolean, uploaderLin
     rename: write,
     deleteNode: write,
     move: write,
+    participants: at.kind === MEMORY_KIND,
   }
 }
 

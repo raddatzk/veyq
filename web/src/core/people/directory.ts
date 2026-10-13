@@ -1,0 +1,89 @@
+// The people of the space, as the interface names them (ADR 0083 decision 9): a member's **real name** when it opens,
+// else the **username**. The real name is sealed under `K_tenant` (`features/account/profile/memberName.ts`, bound to
+// (tenant scope, member)), so it is read from the TENANT scope's member directory whatever scope is on screen: a group's
+// roster carries usernames, and the group's Memory chips and picker take their names from the tenant's. All on device,
+// the server serves ciphertext.
+//
+// Two reads: {@link loadScopePeople} - the CURRENT members of one scope (a Memory's picker and chips), and
+// {@link loadTenantPeople} - every member of the tenant (a profile page). A person a roster does not list is a former
+// member to whoever asks (the caller decides how it renders).
+import { activeScopeKey, activeSpace } from '../../app/activeSpace'
+import { listScopeMembers } from '../../features/spaces/members'
+import { openScope } from '../../features/spaces/scopes'
+import { zeroEpochKeys } from '../../features/spaces/epochs'
+import { unsealName, type MemberName } from '../../features/account/profile/memberName'
+import { ScopeKind } from '../../api/generated/scopes'
+
+/** One person as the interface shows them. */
+export interface Person {
+  userId: string
+  username: string
+  /** The sealed real name when it opened; null otherwise (awaiting access, an unreadable blob). */
+  realName: string | null
+  /** The real name, else the username - the one display rule (ADR 0083 decision 9). */
+  displayName: string
+}
+
+/** The display rule: the real name when it opens (non-blank), else the username. */
+export function displayNameOf(username: string, name: MemberName | null | undefined): string {
+  const real = name ? `${name.firstName} ${name.lastName}`.trim() : ''
+  return real || username
+}
+
+const NAMES_TTL_MS = 60_000
+let namesCache: { at: number; tenantScopeId: string; names: Map<string, { username: string; name: MemberName | null }> } | null = null
+
+/** Forget the cached tenant names (a sign-out, a test). */
+export function resetPeopleDirectory(): void {
+  namesCache = null
+}
+
+/** The tenant's members with their sealed names opened, read once a minute: the tenant scope is the active one (its key is
+ *  held) or is opened for this read and zeroed after it. Empty when the caller holds no tenant grant. */
+async function tenantNames(): Promise<Map<string, { username: string; name: MemberName | null }>> {
+  if (namesCache && Date.now() - namesCache.at < NAMES_TTL_MS) return namesCache.names
+  let scopeId: string
+  let key: Uint8Array | null
+  let release: (() => void) | null = null
+  if (activeSpace.kind === ScopeKind.Tenant && activeSpace.scopeId) {
+    scopeId = activeSpace.scopeId
+    key = activeScopeKey()
+  } else {
+    const opened = await openScope(ScopeKind.Tenant)
+    if (!opened) return new Map()
+    scopeId = opened.scopeId
+    key = opened.key
+    release = () => zeroEpochKeys(opened.epochs)
+  }
+  try {
+    const rows = await listScopeMembers(scopeId)
+    const names = new Map(
+      rows.map((m) => [m.userId, { username: m.username, name: key ? unsealName(key, { scopeId, userId: m.userId }, m.sealedName) : null }] as const),
+    )
+    namesCache = { at: Date.now(), tenantScopeId: scopeId, names }
+    return names
+  } finally {
+    release?.()
+  }
+}
+
+const personOf = (userId: string, username: string, name: MemberName | null): Person => ({
+  userId,
+  username,
+  realName: name ? displayNameOf('', name) || null : null,
+  displayName: displayNameOf(username, name),
+})
+
+/** The CURRENT members of `scopeId` (a proposed-but-unaccepted group member is not one yet), named by the display rule. */
+export async function loadScopePeople(scopeId: string): Promise<Person[]> {
+  const [rows, names] = await Promise.all([listScopeMembers(scopeId), tenantNames().catch(() => new Map<string, { username: string; name: MemberName | null }>())])
+  return rows
+    .filter((m) => !m.pendingConsent)
+    .map((m) => personOf(m.userId, m.username, names.get(m.userId)?.name ?? null))
+}
+
+/** Every member of the tenant by user id, named by the display rule. A user it does not list is a former member. */
+export async function loadTenantPeople(): Promise<Map<string, Person>> {
+  const names = await tenantNames()
+  return new Map([...names].map(([userId, v]) => [userId, personOf(userId, v.username, v.name)]))
+}

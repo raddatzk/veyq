@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { createRouter, createMemoryHistory } from 'vue-router'
 
 vi.mock('../../../api/client', () => ({
   blobApi: vi.fn(),
@@ -998,5 +999,46 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     expect(store.api.updateMediaMeta).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain(t('media.metaUnreadable'))
     expect(wrapper.text()).not.toContain(t('media.capturedAtSaveFailed'))
+  })
+})
+
+// Who added the shown photo (ADR 0083 decision 7), in the detail panel: a member uploader's name LINKS to their profile, a
+// share contributor's and a former member's do not, and a session that carries no resolver (a share guest's) shows nothing.
+describe('MediaLightbox: the uploader', () => {
+  const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
+  async function mountWith(uploaderOf: ((it: MediaItem) => { name: string; userId: string | null } | null) | undefined) {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
+    await router.push('/')
+    const wrapper = mount(MediaLightbox, {
+      props: { memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', coverMediaId: null, ...memberProps(memoryKey), ...(uploaderOf ? { uploaderOf } : {}) },
+      global: { plugins: [realI18n(), router] },
+    })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('a member uploader links to the profile and closes the lightbox on the way', async () => {
+    const w = await mountWith(() => ({ name: 'Anna Meyer', userId: ANNA }))
+    const cell = w.get('[data-testid="lightbox-uploader"]')
+    expect(w.text()).toContain('Added by')
+    const link = cell.get('a')
+    expect(link.text()).toBe('Anna Meyer')
+    expect(link.attributes('href')).toBe(`/#people/${ANNA}`)
+    await link.trigger('click')
+    expect(w.emitted('close')).toBeTruthy()
+  })
+
+  it('a share contributor / a former member is a plain name: no link', async () => {
+    const w = await mountWith(() => ({ name: 'Oma', userId: null }))
+    const cell = w.get('[data-testid="lightbox-uploader"]')
+    expect(cell.text()).toBe('Oma')
+    expect(cell.find('a').exists()).toBe(false)
+  })
+
+  it('shows nothing where the session resolves no uploader (a share guest) - and nothing for an unresolved photo', async () => {
+    expect((await mountWith(undefined)).find('[data-testid="lightbox-uploader"]').exists()).toBe(false)
+    expect((await mountWith(() => null)).find('[data-testid="lightbox-uploader"]').exists()).toBe(false)
   })
 })

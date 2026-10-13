@@ -7,7 +7,8 @@
 // A builder only one file uses stays in that file.
 import type { SetupStatus } from '../api/generated'
 import type { AccountKeyMaterial, MemberProfile } from '../api/generated/account'
-import type { MyTenant } from '../api/generated/scopes'
+import { ScopeKind, type MyTenant, type ScopeMember, type ScopeSummary } from '../api/generated/scopes'
+import type { OpenedScope } from '../features/spaces/scopes'
 import type { InvitePreview } from '../api/generated/tenants'
 import { MEMORY_KIND } from '../features/memory/kinds'
 import type { MediaItem } from '../features/memory/media'
@@ -128,3 +129,27 @@ export const memberTreeOf = (
 /** A member's Memories capabilities on an opened node of `kind` (MEMORY by default) — what `MemoryDetailHost` computes. */
 export const memberMemoryCaps = (o: Partial<Omit<MemberAccess, 'mode'>> = {}, kind: NodeKind = MEMORY_KIND): MemoryCapabilities =>
   memoryCapabilities(memberAccessOf(o), { kind, inIdentityFolder: false, shareable: true })
+
+export const scopeMember = (o: Partial<ScopeMember> = {}): ScopeMember => ({
+  userId: 'user-1',
+  username: 'anna',
+  sealedName: null,
+  role: 'MEMBER',
+  identityPublicKey: 'AAAA',
+  hasGrant: true,
+  ...o,
+})
+
+/** An opened scope holding one epoch key (`key`, defaulting to 32 bytes of 7); a test may zero it and look. */
+export const openedScope = (o: Partial<OpenedScope> = {}): OpenedScope => {
+  const key = o.key ?? new Uint8Array(32).fill(7)
+  return {
+    scopeId: 'scope-1', tenantId: 'tenant-1', kind: ScopeKind.Tenant, key, epochs: { current: 0, keys: new Map([[0, key]]) },
+    nameEpoch: 0, deletedAt: null, purgeAfter: null, ...o,
+  }
+}
+
+export const scopeSummary = (o: Partial<ScopeSummary> = {}): ScopeSummary => ({
+  id: 'scope-1', kind: ScopeKind.Tenant, role: 'OWNER', tenantId: 'tenant-1', nameEpoch: 0, iconEpoch: 0, currentEpoch: 0,
+  grantedEpoch: 0, wrappedGrant: 'AAAA', ...o,
+})

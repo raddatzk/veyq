@@ -63,6 +63,7 @@ import {
 } from './media'
 import { setMemoryDate, reconcileMemoryDate, type MemoryDate } from './memoryDate'
 import { setMemoryLocation, type MemoryLocation } from './memoryLocation'
+import { setMemoryParticipants } from './memoryParticipants'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
 import {
@@ -136,6 +137,8 @@ export interface NodeMetaDoor {
   setDate(nodeId: string, key: Uint8Array, date: MemoryDate, current: SealedMetaState): Promise<SealedMetaState>
   reconcileDate(nodeId: string, key: Uint8Array, items: MediaItem[], current: SealedMetaState): Promise<{ state: SealedMetaState; wrote: boolean }>
   setLocation(nodeId: string, key: Uint8Array, location: MemoryLocation | null, current: SealedMetaState): Promise<SealedMetaState>
+  /** The Memory's participants (opaque user ids, ADR 0083): a merging read-modify-write, see `memoryParticipants.ts`. */
+  setParticipants(nodeId: string, key: Uint8Array, userIds: readonly string[], current: SealedMetaState): Promise<SealedMetaState>
   /** The read-modify-write the location's self-heal runs its own edit through. */
   write: (
     nodeId: string,
@@ -206,6 +209,8 @@ export function sourceCapabilities(caps: MemoryCapabilities, source: MemorySourc
     upload: caps.upload && !!source.upload,
     deleteMedia: caps.deleteMedia !== 'none' && source.deleteMedia?.reach === caps.deleteMedia ? caps.deleteMedia : 'none',
     editMeta: caps.editMeta && !!source.nodeMeta,
+    // shown only by a source that can read the node's meta as a member: the guest's source carries no `nodeMeta` door
+    participants: caps.participants && !!source.nodeMeta,
     mark: caps.mark && !!source.marks,
     mediaTrash: caps.mediaTrash && !!source.trash,
     buckets: caps.buckets && !!source.buckets,
@@ -274,6 +279,7 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       setDate: (nodeId, key, date, current) => setMemoryDate(scope(), nodeId, key, date, current),
       reconcileDate: (nodeId, key, items, current) => reconcileMemoryDate(scope(), nodeId, key, items, current),
       setLocation: (nodeId, key, location, current) => setMemoryLocation(scope(), nodeId, key, location, current),
+      setParticipants: (nodeId, key, userIds, current) => setMemoryParticipants(scope(), nodeId, key, userIds, current),
       write: (nodeId, key, current, edit) => writeNodeMeta(scope(), nodeId, key, current, edit),
     },
     mediaMeta: {

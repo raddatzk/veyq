@@ -11,6 +11,8 @@ import {
   compareByCreation,
   compareById,
   displayNamesOf,
+  personHash,
+  PEOPLE_SEGMENT,
   TENANT_SCOPE,
 } from './location'
 import { breadcrumbOf } from './browse'
@@ -484,5 +486,54 @@ describe('the route grammar', () => {
     const t = [node('u', 'Thing', null, 'FUTURE', 1), node('f', 'Thing', null, FILE, 2), node('d', 'Thing', null, FOLDER_KIND, 3)]
     expect(t.map((n) => hashOf(t, n.id))).toEqual(['#thing', '#thing-2', '#thing/'])
     for (const n of t) expect(resolveHash(t, hashOf(t, n.id))).toBe(n.id)
+  })
+})
+
+// A person's profile is a fragment route (ADR 0083): token-less, `people` is the platform's word at a scope root.
+describe('a person\'s profile: #people/<userId>', () => {
+  const FILE = 'FILE'
+  const hashOf = (t: TreeNode[], id: string) => hashForNode(t, id, TENANT_SCOPE)
+  const resolveHash = (t: TreeNode[], hash: string) => {
+    const { segments, folder } = parseHash(hash)
+    return resolveSlugPath(t, segments, folder)
+  }
+  const UID = '3f2c9e1a-0000-4000-8000-00000000abcd'
+
+  it('is built by personHash and read back by parseHash, in either spelling of the leading slash', () => {
+    expect(personHash(UID)).toBe(`#people/${UID}`)
+    expect(parseHash(personHash(UID))).toEqual({ scope: TENANT_SCOPE, segments: [], folder: false, person: UID })
+    expect(parseHash(`#/people/${UID}`).person).toBe(UID)
+    expect(parseHash(personHash('a b/c'))).toEqual({ scope: TENANT_SCOPE, segments: [], folder: false, person: 'a b/c' })
+  })
+
+  it('is no path of the tree: other shapes stay plain segments, and a foreign ~username stays a personal-scope token', () => {
+    expect(parseHash('#people').person).toBeUndefined()
+    expect(parseHash(`#people/${UID}/more`).person).toBeUndefined()
+    expect(parseHash(`#~kevin/people/${UID}`)).toEqual({ scope: '~kevin', segments: ['people', UID], folder: false })
+    expect(parseHash('#~anna')).toEqual({ scope: '~anna', segments: [], folder: false })
+  })
+
+  it('reserves the word at a scope root: a folder, file or drop box called "People" is numbered, never "people"', () => {
+    const t = [
+      node('d1', 'People', null, FOLDER_KIND, 1),
+      node('d2', 'people', null, FOLDER_KIND, 2),
+      node('f1', 'PEOPLE', null, FILE, 3),
+      node('m1', 'People', null, MEMORY_KIND, 4),
+    ]
+    expect(slugPathOf(t, 'd1')).toEqual(['people-2'])
+    expect(slugPathOf(t, 'd2')).toEqual(['people-3'])
+    expect(slugPathOf(t, 'f1')).toEqual(['people-2'])
+    expect(slugPathOf(t, 'm1')).toEqual(['memories', 'people']) // a Memory carries its application segment first
+    for (const n of t) {
+      const hash = hashOf(t, n.id)
+      expect(parseHash(hash).person, hash).toBeUndefined() // no node ever lands on the profile route
+      expect(resolveHash(t, hash), hash).toBe(n.id)
+    }
+    expect(PEOPLE_SEGMENT).toBe('people')
+  })
+
+  it('does not reserve it below the root: a folder "People" inside a folder keeps its name', () => {
+    const t = [node('f', 'Reisen', null), node('p', 'People', 'f')]
+    expect(slugPathOf(t, 'p')).toEqual(['reisen', 'people'])
   })
 })

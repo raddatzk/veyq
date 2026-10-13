@@ -348,7 +348,8 @@ describe('registry: route slugs', () => {
       expect(() => r.claimRouteSlug(word, ['K']), word).toThrow(/reserved/)
     }
     // the platform's history-mode routes are among them
-    for (const word of ['login', 'settings', 'invitations', 's', 'api']) expect(RESERVED_ROUTE_SEGMENTS).toContain(word)
+    for (const word of ['login', 'settings', 'invitations', 's', 'api', 'people']) expect(RESERVED_ROUTE_SEGMENTS).toContain(word)
+    expect(() => r.claimRouteSlug('people', ['PERSON']), 'the profile route (ADR 0083)').toThrow(/reserved/)
     expect(r.routeSlugs()).toEqual([])
   })
 })
@@ -471,5 +472,18 @@ describe('registry: the unified level list', () => {
       levelActions: [{ id: 'f.up', label: 'x', icon: 'x', order: 1, allowed: () => true, acceptsDrop: true }],
     })
     expect(r.levelMenu().map((e) => ({ id: e.id, kind: e.kind, acceptsDrop: e.acceptsDrop }))).toEqual([{ id: 'f.up', kind: 'FILE', acceptsDrop: true }])
+  })
+})
+
+describe('registry: person-profile sections (ADR 0083)', () => {
+  it('lists the claimed sections in order and refuses the same component twice', () => {
+    const r = createRegistry()
+    const A = { name: 'A' }
+    const B = { name: 'B' }
+    expect(r.personSections()).toEqual([])
+    r.claimPersonSection(A)
+    r.claimPersonSection(B)
+    expect(r.personSections()).toEqual([A, B])
+    expect(() => r.claimPersonSection(A)).toThrow(/already claimed/)
   })
 })

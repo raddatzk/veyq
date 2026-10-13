@@ -141,6 +141,16 @@ here; the server is blind.
   core serves every application's nodes, so its strings are `node.*`/`common.*` and a kind's noun comes from its descriptor). The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
+  **People and participants (ADR 0083, `uc.memory.participants`).** A Memory lists who was there as OPAQUE USER IDS in its sealed meta
+  (`participants: { userIds }`, `features/memory/memoryParticipants.ts`; cap 100 - `wrappedMeta` is limited to 8192 chars). The id list is the only
+  thing stored: **never a name or a snapshot of one** - a share serves the node's meta unchanged and its guest holds `K_mem`, so the
+  guest exclusion is the interface's (`memoryCapabilities().participants` is false for every share role, fail-closed) and the ids are what keep the
+  residual harmless; if participants ever carry names, ADR 0083 decision 4 is open again. The write merges on `409` through
+  `editParticipantsOf` (`core/node/nodeMeta.ts`), not `editField`. Names come from `core/people/directory.ts` (real name, else username, from the
+  TENANT's member list). A person's profile is the fragment `#people/<userId>` (`parseHash().person` / `personHash` in `location.ts`, the one door;
+  `people` is in `RESERVED_ROUTE_SEGMENTS` and numbered away from a root folder's name); core draws `core/people/PersonProfile.vue` and an application adds a
+  section with `registry.claimPersonSection` (Memories: `PersonMemories.vue` over `participantIndex.ts`, which holds Memory keys and so is dropped on
+  every scope reset). A share view never links to a profile.
   **One header for every node (inbox #406).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box and a
   Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button), the title (`level` 1 on a
   node's own page), an optional `subtitle` and `meta` slot, and the actions on the right. The application only feeds data: its action list

@@ -104,6 +104,14 @@ import { slugify } from '../../shared/naming'
 // `.default` explicitly: a test's `vi.mock` of the module is no ES-module namespace Vue would unwrap on its own.
 const FolderShareDialog = defineAsyncComponent(() => import('../sharing/FolderShareDialog.vue').then((m) => m.default))
 
+/** The props of a section an application adds to a person's profile page (`Registry.claimPersonSection`, ADR 0083). */
+export interface PersonSectionProps {
+  /** The person's user id (the fragment's). */
+  userId: string
+  /** How the interface names them (the real name, else the username); empty for a former member. */
+  name: string
+}
+
 /** What core needs to know about a node kind. `detail` is the component the host renders when a node of the kind is
  *  opened. Only the platform's FOLDER has none (a folder browses, it does not open): an application kind that
  *  registers no `detail` renders the host's explicit unsupported state when opened. */
@@ -412,6 +420,12 @@ export interface Registry {
   /** The drop page claimed for a `WRITE_ONLY` link's root kind, or null when nobody claimed it (the shell renders its
    *  unavailable state — never an empty page). */
   shareBody(kind: NodeKind): Component | null
+  /** Add a section to a person's profile page (`#people/<userId>`, ADR 0083): what an application knows of the person -
+   *  Memories' "Memories with this person". The component takes the props `PersonSectionProps` and draws its own loading,
+   *  empty and error states. Sections show in registration order; the same component twice throws. */
+  claimPersonSection(component: Component): void
+  /** The sections claimed for a person's profile page, in registration order. */
+  personSections(): readonly Component[]
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -471,7 +485,7 @@ export interface KindRoute {
 /** Words the platform keeps for itself in a route slug's place: the history-mode routes (`router.ts`) and the scope tokens'
  *  names. An application's slug can never shadow them, whatever a later route or mapping makes of the fragment. */
 export const RESERVED_ROUTE_SEGMENTS: readonly string[] = [
-  'api', 'confirm-email', 'folder', 'invitations', 'login', 'not-set-up', 'offline', 'recover', 's', 'settings', 'tenant', 'terms',
+  'api', 'confirm-email', 'folder', 'invitations', 'login', 'not-set-up', 'offline', 'people', 'recover', 's', 'settings', 'tenant', 'terms',
 ]
 const ROUTE_SLUG = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
 
@@ -494,6 +508,7 @@ export function createRegistry(): Registry {
   const listEntries: { rows: LevelRowsFactory; views: readonly LevelViewOption[]; kinds: NodeKind[] }[] = []
   const tabEntries: LevelTabSpec[] = []
   const shareBodies = new Map<NodeKind, Component>()
+  const personSections: Component[] = []
   // kind → its application's route slug, or null for the application with no segment.
   const routes = new Map<NodeKind, string | null>()
   const slugs = new Set<string>()
@@ -523,6 +538,11 @@ export function createRegistry(): Registry {
       shareBodies.set(kind, component)
     },
     shareBody: (kind) => shareBodies.get(kind) ?? null,
+    claimPersonSection(component) {
+      if (personSections.includes(component)) throw new Error('this person-profile section is already claimed')
+      personSections.push(component)
+    },
+    personSections: () => [...personSections],
     registerLifecycle(applicationId, hooks) {
       if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
       if (typeof hooks.onMasterKeyRotated !== 'function') {

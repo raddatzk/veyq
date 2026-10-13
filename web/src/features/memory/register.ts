@@ -21,6 +21,7 @@ import { memoryPhotoSource } from './memoryCover'
 import MemoryNodeDialog from './components/MemoryNodeDialog.vue'
 import ShareDialog from './components/ShareDialog.vue'
 import MemoryShareBody from './components/MemoryShareBody.vue'
+import PersonMemories from './components/PersonMemories.vue'
 import { memoriesLifecycle } from './lifecycle'
 import { memoryCapabilities } from './capabilities'
 import { targetOf } from '../../core/access'
@@ -76,5 +77,7 @@ export function registerMemories(registry: Registry): void {
   // guest through core's share page (inbox #401).
   registry.claimShareBody(MEMORY_KIND, MemoryShareBody)
   registry.claimShareBody(CHAPTER_KIND, MemoryShareBody)
+  // A person's profile (`#people/<userId>`, ADR 0083) lists the Memories they took part in: Memories' section of core's page.
+  registry.claimPersonSection(PersonMemories)
   registry.registerLifecycle('memories', memoriesLifecycle)
 }

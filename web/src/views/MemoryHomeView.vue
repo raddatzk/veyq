@@ -28,7 +28,7 @@ import { useLevelLive } from '../core/node/useLevelLive'
 import { childrenOf, breadcrumbOf, displayNameOf, nodeById } from '../core/node/browse'
 import { nodeContentKey, restoreNode } from '../core/node/tree'
 import { useTrashUndo } from '../core/node/trashUndo'
-import { parseHash, resolveSlugPath, hashForNode, TENANT_SCOPE } from '../core/node/location'
+import { parseHash, resolveSlugPath, hashForNode, personHash, TENANT_SCOPE } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
 import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
 import { ScopeKind, type MyTenant } from '../api/generated/scopes'
@@ -40,6 +40,7 @@ import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
 import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
 import FolderNameDialog from '../core/node/FolderNameDialog.vue'
 import LevelView from '../core/node/LevelView.vue'
+import PersonProfile from '../core/people/PersonProfile.vue'
 import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
 import { nodeMover } from '../core/node/move'
 import { registry } from '../core/applications/registry'
@@ -160,7 +161,7 @@ const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node
 // upload, a peer's new Memory) without a reload. One read of the scope's tree per tick, applied only when it changed and
 // dropped if a write of this tab re-read the tree meanwhile (`treeStore.pollTree`); skipped while any dialog is open.
 const { ticks: liveTick } = useLevelLive({
-  active: () => activeSpace.status === 'ready' && !treeStore.error && !kindDetail.value && !isOpenable.value,
+  active: () => activeSpace.status === 'ready' && !treeStore.error && !kindDetail.value && !isOpenable.value && !place.value.person,
   paused: () =>
     !!nameDialog.value || !!createKind.value || !!moving.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
   read: (signal) => pollTree(signal),
@@ -194,7 +195,16 @@ const rootLabel = computed(() =>
 
 watch(
   [() => route.hash, () => treeStore.nodes, rootLabel],
-  () => setBreadcrumb(breadcrumbOf(treeStore.nodes, currentNodeId.value, rootLabel.value, currentScope.value)),
+  () =>
+    setBreadcrumb(
+      place.value.person
+        ? // a person's profile (ADR 0083) is no node: the space root, then the page
+          [
+            { id: null, name: rootLabel.value, hash: hashForNode(treeStore.nodes, null, TENANT_SCOPE) },
+            { id: null, name: t('people.profile'), hash: personHash(place.value.person) },
+          ]
+        : breadcrumbOf(treeStore.nodes, currentNodeId.value, rootLabel.value, currentScope.value),
+    ),
   { immediate: true },
 )
 
@@ -321,9 +331,10 @@ async function onDeleteDone() {
       <Message v-if="isPendingDeletion" severity="warn" :closable="false" class="pending-delete-banner">
         {{ t('groups.pendingDeletion', { day: pendingPurgeDay }) }}
       </Message>
+      <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" />
       <component
         :is="kindDetail"
-        v-if="kindDetail && currentNode && activeSpace.scopeId"
+        v-else-if="kindDetail && currentNode && activeSpace.scopeId"
         :node="currentNode"
         :scope-id="activeSpace.scopeId"
         :epochs="epochs"

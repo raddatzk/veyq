@@ -97,3 +97,22 @@ export function editField(
     return meta
   }
 }
+
+/**
+ * An editor's change to the `participants` sub-object (uc.memory.participants, ADR 0083) that MERGES instead of
+ * surfacing a conflict: `merge` gets the ids stored in the blob the edit runs on (the first attempt's or a conflict's) and
+ * returns the list to store. No difference to the stored list means no write (`null`); an empty list drops the sub-object.
+ * Unknown fields inside the sub-object are preserved. The sub-object holds opaque user ids only.
+ */
+export function editParticipantsOf(merge: (stored: string[]) => string[]): (meta: RawNodeMeta, ctx: MetaEditContext) => RawNodeMeta | null {
+  return (meta) => {
+    const raw = meta.participants
+    const rawIds = raw && typeof raw === 'object' && Array.isArray((raw as { userIds?: unknown }).userIds) ? ((raw as { userIds: unknown[] }).userIds) : []
+    const stored = rawIds.filter((id): id is string => typeof id === 'string' && id !== '')
+    const next = merge([...new Set(stored)])
+    if (stableJson(next) === stableJson(stored)) return null
+    if (next.length === 0) delete meta.participants
+    else meta.participants = { ...(raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}), userIds: next }
+    return meta
+  }
+}
