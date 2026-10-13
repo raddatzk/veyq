@@ -30,7 +30,7 @@ beforeEach(() => {
 describe('addGroupMember (cr-0086)', () => {
   it('posts the username to the scope members endpoint and returns the grant-less directory row', async () => {
     // The added member comes back awaiting access — the key is delivered later by grant-delivery, not here.
-    const row: ScopeMember = { userId: 'u1', username: 'partner', role: 'MEMBER', identityPublicKey: 'cGs=', hasGrant: false }
+    const row: ScopeMember = { userId: 'u1', username: 'partner', avatarVersion: 0, role: 'MEMBER', identityPublicKey: 'cGs=', hasGrant: false }
     const { addGroupMember: addGroupMemberFn } = stubApi(scopesApi, { addGroupMember: row })
 
     const result = await addGroupMember('g1', 'partner', 'u1')
@@ -46,7 +46,7 @@ describe('addGroupMember (cr-0086)', () => {
 describe('setMemberRole (cr-0088)', () => {
   it('promotes a member by patching the member endpoint with the role', async () => {
     const { setMemberRole: setRole } = stubApi(scopesApi, {
-      setMemberRole: { userId: 'u1', username: 'partner', role: 'OWNER', identityPublicKey: 'cGs=', hasGrant: true },
+      setMemberRole: { userId: 'u1', username: 'partner', avatarVersion: 0, role: 'OWNER', identityPublicKey: 'cGs=', hasGrant: true },
     })
 
     const result = await setMemberRole('g1', 'u1', SetMemberRoleRequestRoleEnum.Owner)
@@ -99,8 +99,8 @@ describe('removeTenantMember (cr-0091)', () => {
 describe('listScopeMembers', () => {
   it('reads a scope’s member directory by id (operator-blind operational metadata only)', async () => {
     const rows: ScopeMember[] = [
-      { userId: 'o', username: 'owner', role: 'OWNER', identityPublicKey: 'cGs=', hasGrant: true },
-      { userId: 'u1', username: 'partner', role: 'MEMBER', identityPublicKey: 'cGs=', hasGrant: false },
+      { userId: 'o', username: 'owner', avatarVersion: 0, role: 'OWNER', identityPublicKey: 'cGs=', hasGrant: true },
+      { userId: 'u1', username: 'partner', avatarVersion: 0, role: 'MEMBER', identityPublicKey: 'cGs=', hasGrant: false },
     ]
     const { listScopeMembers: listFn } = stubApi(scopesApi, { listScopeMembers: rows })
 

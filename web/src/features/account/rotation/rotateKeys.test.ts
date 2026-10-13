@@ -104,7 +104,7 @@ const SCOPE_SHARED = '5c09e000-0000-4000-8000-0000000000e2'
 const ME = '0e000000-0000-4000-8000-0000000000e9'
 /** A whole scope member; a test passes the identity it is about. */
 const member = (o: Partial<ScopeMember> & Pick<ScopeMember, 'userId' | 'identityPublicKey'>): ScopeMember => ({
-  username: o.userId, role: 'OWNER', hasGrant: true, ...o,
+  username: o.userId, avatarVersion: 0, role: 'OWNER', hasGrant: true, ...o,
 })
 const OLD_PUB = b64std(v1.serializeIdentityPublic(OLD_ID.pub))
 /** A scope the caller holds at epoch 0, its grant wrapping `e0` to the old identity — self-signed by it (ADR 0028

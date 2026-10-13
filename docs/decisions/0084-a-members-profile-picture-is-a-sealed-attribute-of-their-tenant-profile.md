@@ -33,6 +33,11 @@ would need a new owner kind and new erasers. It is also **not** part of `GET /ap
   `404 avatar_not_found` when the member has none.
 - `ScopeMember` and `MemberProfile` carry only the small integer **`avatarVersion`** (`0` = none). The client fetches
   only when it is non-zero and caches by version. Directory reads select the version only, never the bytes.
+  The stored counter only ever moves up (one guarded `UPDATE`, so overlapping writes cannot lose a bump or reuse a
+  version), but the wire shows `0` whenever there is no picture, so a cleared member reads `0`, not the counter a clear
+  left behind; the `ETag` is the stored counter, quoted. The constant: an 8 KiB padded plaintext seals to 8221 bytes,
+  **10964** base64 characters, which is the `maxLength` of `SetAvatarRequest.sealedAvatar`, `MemberAvatar.sealedAvatar` and
+  the accept bodies' `sealedAvatar` (`MemberAvatarSliceTest` pins the arithmetic and the wire bound).
 
 **3. Sealing.** Under `K_tenant` with a **new AEAD purpose `member-avatar`** bound to `[scopeId, userId]`: a new entry in
 the `packages/crypto` seal purposes and a conformance vector in `contracts/crypto/vectors/v1.json`
@@ -65,7 +70,7 @@ there is no second UI.
 **7. Join.** The tenant **OWNER** path holds `K_tenant` at accept (cold birth,
 [ADR 0006](0006-cold-tenant-scope-birth.md)), so name and picture are sealed together there: an optional `sealedAvatar` in
 the accept and register-and-accept request schemas (`tenants.openapi.yaml`), written by `TenantAcceptHandler` with
-`avatarVersion` 1, and `TenantJoinView` gets the picker next to the name fields. A **member** joining holds **no
+`avatarVersion` 1 (a MEMBER invite's body is not read for it: that invitee holds no key, so a picture there is dropped), and `TenantJoinView` gets the picker next to the name fields. A **member** joining holds **no
 `K_tenant`** yet (the grant arrives later through the grant-delivery job), so it cannot seal. The picture, like the name
 today, is offered **after the first unlock with the key**: a one-time "finish your profile" prompt, plus Settings. There is
 **no local plaintext caching** of an unsealed image while waiting.
