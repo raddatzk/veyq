@@ -52,10 +52,10 @@ streaming. ZIP64 is required from the start (a subtree exceeds 4 GiB).
 are **kept by default** and an **opt-out at export time** (`options.includeLocation: false` drops location fields and GPS
 tags; the fields are then absent).
 
-**5. Rights.** Export needs **READ** on the node. A `WRITE_ONLY` drop-box guest gets **no export and no import**. Guests and
-share views get nothing new beyond what their rights already show: a share is the member view, rights only remove
-functions (the principle of inbox #401) — a `READ` guest of a shared folder may export it, a `READ_WRITE` guest likewise
-and never an import that their write rights would not allow node by node.
+**5. Rights.** Export needs **READ** on the node. Import is **a member flow only** (decisions 6 and 7): a guest — whatever
+the share role — never imports. A guest is otherwise the member view with rights removed (the principle of inbox #401): a
+`READ` or `READ_WRITE` guest of a shared folder or Memory may **export** what they can see, a `WRITE_ONLY` drop-box guest
+neither exports nor imports.
 
 **6. Import is a member flow, and the result belongs to the importer.** The restored subtree lands **under the importing
 member**: they become the uploader and owner; media go into the **importer's bucket** (the simplest option; the owner
@@ -66,7 +66,7 @@ target parent gets a numeric suffix, `Name (2)`. An unknown newer `version` is *
 
 **7. Detected by content, offered only to members.** An archive is recognised by its **content** — the ZIP signature plus a
 `manifest.json` whose `format` matches — never by file name. A dropped archive in a Files folder offers **Import** to
-members only: not on a guest view, and not for a `WRITE_ONLY` guest, where it stays an ordinary upload.
+members only: never on a guest view (any role), so for a guest — a `WRITE_ONLY` one included — it stays an ordinary upload.
 
 **8. Failure and atomicity.** The server offers no multi-node atomicity. An import is a sequence of ordinary writes; one
 that aborts or runs out of quota **rolls back what it created** (to the trash) and reports "N of M". A **dry-run** step
