@@ -11,7 +11,9 @@ took part in.
   space the Memory lives in. They appear as a row of small avatars in the Memory's header (up to three; with more, the last one shows "+2", "+3" and so on) — hover over them, or tap them, to see everyone by name. In the picker you can search the members by name. A Memory can name up to 100 people.
 - **Open a person.** Click a name and you land on that person's profile: their name, their picture (or a letter), and below them
   the Memories they took part in — only the ones **you** are allowed to open. A Memory you can't see is simply not
-  in the list. (If you have many Memories, the list says when it may be incomplete.)
+  in the list. Each one shows its cover, name, date and place (when it has them) — as tiles or as rows: use the
+  same **Grid view / List view** buttons as in a folder, and your choice is remembered. (If you have many Memories,
+  the list says when it may be incomplete.)
 - **Who added a photo.** Open a photo and its details say who added it, as a link to that person's profile. This
   is independent of the participant list: someone who only uploaded, and was never named, still shows up.
 - **People who left.** Someone who later leaves the space stays on the Memory, greyed out as "Former member" and

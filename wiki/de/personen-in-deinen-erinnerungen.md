@@ -13,8 +13,9 @@ eine Person öffnen, um alle Erinnerungen zu sehen, an denen sie beteiligt war.
   Namen zu sehen. In der Auswahl kannst du die Mitglieder nach Namen suchen. Eine Erinnerung kann bis zu 100 Personen nennen.
 - **Eine Person öffnen.** Klicke auf einen Namen, und du landest im Profil dieser Person: Name, ihr Bild (oder ein Buchstabe) und
   darunter die Erinnerungen, an denen sie beteiligt war – nur die, die **du** öffnen darfst. Eine Erinnerung, die du nicht
-  sehen darfst, fehlt einfach in der Liste. (Hast du sehr viele Erinnerungen, sagt die Liste, wenn sie unvollständig sein
-  kann.)
+  sehen darfst, fehlt einfach in der Liste. Jede zeigt ihr Cover, ihren Namen sowie Datum und Ort (wenn sie welche hat) –
+  als Kacheln oder als Zeilen: Dafür gibt es dieselben Schaltflächen **Rasteransicht / Listenansicht** wie in einem Ordner,
+  und deine Wahl wird gemerkt. (Hast du sehr viele Erinnerungen, sagt die Liste, wenn sie unvollständig sein kann.)
 - **Wer ein Foto hinzugefügt hat.** Öffne ein Foto, und in den Details steht, wer es hinzugefügt hat – als Link zum
   Profil. Das ist unabhängig von der Liste der Beteiligten: Auch wer nur hochgeladen hat und nie genannt wurde, wird
   angezeigt.

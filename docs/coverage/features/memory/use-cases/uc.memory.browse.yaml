@@ -26,6 +26,19 @@ acceptanceCriteria:
           - src/features/memory/levelRows.test.ts
           - src/core/node/LevelView.test.ts
           - src/features/memory/components/SpaceMap.test.ts
+  - id: row-details
+    text: A row or tile shows, under the name, the kind and the details its application supplies through the row (`LevelRow.details`) - a Memory's date and place from its unsealed node meta (locale-formatted, each left out when the Memory has none, never a placeholder), a file's size and modified time (human-readable units, EN and DE; the modified time left out when the blob carries none), a drop box's people count - the same for a share guest, as real text in reading order; a list row's visual is larger than before (4.5 x 3 rem, 6.5 x 4 rem from 521 px) and a tile is a 16:9 cover (columns 280 to 340 px), tokens only, no horizontal overflow at phone width.
+    coverage:
+      web:
+        unit:
+          - src/core/node/levelRow.test.ts
+          - src/core/node/components/LevelRowItem.test.ts
+          - src/core/node/levelRowStyle.test.ts
+          - src/features/memory/memoryRowDetails.test.ts
+          - src/features/memory/levelRows.test.ts
+          - src/features/memory/levelRows.guest.test.ts
+          - src/features/files/levelRows.test.ts
+          - src/shared/formatBytes.test.ts
   - id: application-tabs
     text: Where the level offers two or more application tabs, a tab bar `All | <one tab per application>` filters the ONE list of the current folder (folders first, then every node by name, whatever its kind) to one application's nodes (sub-folders stay in every tab, no subtree search; a tab is offered where its kinds have a node or the viewer may add one); the selection is a persisted setting per signed-in account (and one for the share-guest pages), shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
     coverage:

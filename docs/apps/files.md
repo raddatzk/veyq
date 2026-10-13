@@ -85,8 +85,8 @@ reads).
 
 - **Files' rows** in core's ONE level list (`levelRows.ts`, the row factory both kinds name as `list.rows`; inbox #407 —
   there is no Files section any more, core draws the list): a FILE is a row or a tile with the leading file icon, the
-  node name and the meta line "File · the plaintext size the blob's sealed size gives · the modified time from the blob's
-  sealed meta" (`download.ts` `fileFacts`; a blob without meta, or one whose meta does not open under this node's key,
+  node name and the meta line "File" plus the details (`details`, [apps/README](README.md#how-an-application-shows-facts-in-a-levels-rows-and-tiles)) the plaintext size the blob's sealed size gives and the modified time from the blob's
+  sealed meta (`download.ts` `fileFacts`; the only modified time Files has is that sealed one - `FileBlobRef` carries no server-observed `updatedAt`; a blob without meta, or one whose meta does not open under this node's key,
   shows its size alone; a file listed without a blob says "not uploaded yet" — none of it reads the node's own payload).
   Its **primary click opens** the file's own page (`FileDetail`); **download is its one first-class action** (a button on
   the row, beside core's own favorite heart, which every kind's row has - `core/favorites`, ADR 0068 §10), and **replace, rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**

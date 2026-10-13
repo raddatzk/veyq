@@ -58,6 +58,14 @@ acceptanceCriteria:
         unit:
           - src/features/memory/participantIndex.test.ts
           - src/features/memory/components/PersonMemories.test.ts
+  - id: profile-list-is-the-level-list
+    text: The profile's Memories list is drawn with the level view's own item component (a larger cover, the name, the kind, the Memory's date and place as details - the level's builder, a missing fact left out - and the group's name), as rows or as tiles through the same switch and the same per-user stored view-mode preference the folder view uses (no map); a stored map mode shows tiles without being rewritten.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/PersonMemories.test.ts
+          - src/core/node/ViewModeToggle.test.ts
+          - src/features/memory/memoryRowDetails.test.ts
           - src/core/people/PersonProfile.test.ts
           - src/features/memory/lifecycle.test.ts
   - id: uploader-name-in-lightbox
