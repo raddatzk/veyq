@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
-vi.mock('../features/spaces/scopes', () => ({ listMyGroups: vi.fn() }))
+vi.mock('../features/spaces/scopes', () => ({ listMyGroups: vi.fn(), listMyTenants: vi.fn() }))
 vi.mock('../features/settings/AppearancePanel.vue', () => ({ default: { template: '<div class="stub-appearance" />' } }))
 vi.mock('../features/account/sessions/SessionsPanel.vue', () => ({ default: { template: '<div class="stub-sessions" />' } }))
 vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { template: '<div class="stub-members" />' } }))
@@ -16,7 +16,7 @@ vi.mock('../features/account/trustReset/TrustResetPanel.vue', () => ({ default: 
 vi.mock('../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn() }))
 
 import SettingsHubView from './SettingsHubView.vue'
-import { listMyGroups } from '../features/spaces/scopes'
+import { listMyGroups, listMyTenants } from '../features/spaces/scopes'
 import { refusedDocuments } from '../features/account/trustReset/refusedDocuments'
 import { activeSpace, clearActiveSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
@@ -49,6 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearActiveSpace()
   vi.mocked(listMyGroups).mockResolvedValue([]) // clearAllMocks keeps impls; reset the defaults per test
+  vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'MEMBER' } as never])
   vi.mocked(refusedDocuments).mockResolvedValue([])
   stubMatchMedia(false) // narrow by default → /settings stays the list; the wide-redirect case opts in
 })
@@ -70,6 +71,29 @@ describe('SettingsHubView — starting a refused trust list over (ADR 0028 Decis
 })
 
 describe('SettingsHubView — section filtering by scope × role', () => {
+  it('the owner-only sections (mail, storage) are in an owner\'s rail and in nobody else\'s', async () => {
+    activeSpace.tenantId = 't-1'
+    activeSpace.kind = ScopeKind.Tenant
+    const asMember = navText(await mountHub())
+    expect(asMember).toContain(t('terms.navTitle')) // terms are member-readable
+    expect(asMember).not.toContain(t('mail.navTitle'))
+    expect(asMember).not.toContain(t('storage.navTitle'))
+
+    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' } as never])
+    const asOwner = navText(await mountHub())
+    expect(asOwner).toContain(t('mail.navTitle'))
+    expect(asOwner).toContain(t('storage.navTitle'))
+  })
+
+  it('a tenant role that cannot be read is no owner: the owner-only sections stay out of the rail', async () => {
+    activeSpace.tenantId = 't-1'
+    activeSpace.kind = ScopeKind.Tenant
+    vi.mocked(listMyTenants).mockRejectedValue(new Error('offline'))
+    const nav = navText(await mountHub())
+    expect(nav).not.toContain(t('mail.navTitle'))
+    expect(nav).not.toContain(t('storage.navTitle'))
+  })
+
   it('a member in the Tenant scope sees Personal + Shared space', async () => {
     activeSpace.tenantId = 't-1'
     activeSpace.kind = ScopeKind.Tenant

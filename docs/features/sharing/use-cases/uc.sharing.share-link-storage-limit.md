@@ -31,7 +31,8 @@ link half of it; the tenant's own ceiling is [uc.admin.tenant-storage-quota](../
 ## Alternate / exception flows
 
 - **A1 — a non-owner reads or edits the limit** → `403 not_tenant_owner`; a non-member is `404` (indistinguishable,
-  ADR 0042).
+  ADR 0042). The settings rail does not list the **storage** section for anyone but the tenant's owner, so a member is
+  never taken to a page that can only refuse them (the server's refusal stays the gate).
 - **A2 — the limit is lowered below what a link already holds** → nothing is deleted; that link's next upload is
   refused until its usage drops below the limit.
 - **A3 — the limit is `0`** → no link of the tenant can upload. There is no "unlimited": the anonymous path is

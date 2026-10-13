@@ -25,7 +25,7 @@ import TrustResetPanel from '../features/account/trustReset/TrustResetPanel.vue'
 import { refusedDocuments } from '../features/account/trustReset/refusedDocuments'
 import { activeSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
-import { listMyGroups, type GroupSpace } from '../features/spaces/scopes'
+import { listMyGroups, listMyTenants, type GroupSpace } from '../features/spaces/scopes'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { SPACES_GROUPS } from '../features/platform/capabilities'
 
@@ -48,8 +48,21 @@ const createGroupOpen = ref(false)
 const trustRefused = ref(false)
 
 onMounted(async () => {
-  await Promise.all([loadGroups(), loadTrustRefusals()])
+  await Promise.all([loadGroups(), loadTrustRefusals(), loadTenantRole()])
 })
+watch(() => activeSpace.tenantId, () => void loadTenantRole())
+
+// Whether the caller owns the active tenant: the owner-only sections (mail, storage) are in the rail for an owner and for
+// nobody else - a member is not offered a page that can only refuse them. False until the answer is in, and on a failed read.
+const isTenantOwner = ref(false)
+async function loadTenantRole() {
+  try {
+    const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
+    isTenantOwner.value = mine?.role === 'OWNER'
+  } catch {
+    isTenantOwner.value = false
+  }
+}
 
 async function loadTrustRefusals() {
   try {
@@ -111,10 +124,14 @@ const categories = computed<NavCategory[]>(() => {
     cats.push({ key: 'tenant', label: t('settings.tenant'), collapsible: false, items: [
       { id: 'tenant-members', label: t('members.title'), icon: 'pi pi-users' },
       { id: 'terms', label: t('terms.navTitle'), icon: 'pi pi-file-edit' },
-      // Mail settings are owner-only (the read is owner-gated); the item shows to every member, the panel gates.
-      { id: 'mail', label: t('mail.navTitle'), icon: 'pi pi-envelope' },
-      // Storage is owner-only the same way (uc.sharing.share-link-storage-limit): shown to every member, the panel gates.
-      { id: 'storage', label: t('storage.navTitle'), icon: 'pi pi-database' },
+      // Mail settings and storage are owner-only (their reads are owner-gated): only an owner's rail lists them, so a member is
+      // never taken to a page that says it could not load. The panels still gate - the server refuses a member either way.
+      ...(isTenantOwner.value
+        ? [
+            { id: 'mail', label: t('mail.navTitle'), icon: 'pi pi-envelope' },
+            { id: 'storage', label: t('storage.navTitle'), icon: 'pi pi-database' },
+          ]
+        : []),
     ] })
   }
   // Gruppen collection — every group I own + a create affordance (management hub, decoupled from active scope).

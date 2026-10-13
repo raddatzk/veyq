@@ -54,7 +54,8 @@ channel, stated honestly.
 ## Alternate / exception flows
 
 - **A non-owner tries to read or edit** → refused (owner-gated, `403 not_tenant_owner`); a non-member is `404`
-  (indistinguishable, ADR 0042).
+  (indistinguishable, ADR 0042). The settings rail lists the **mail** section for the tenant's owner only, so a member
+  is not offered a page that can only refuse them (the server's refusal stays the gate).
 - **No SMTP configured, or `enabled` off, or the KEK absent** → inviting a member is refused with
   `503 mail_unavailable` and a recovery request with the same code. It is not degraded to a copy-link: a token
   minted for a named other person must not be routed through the owner
