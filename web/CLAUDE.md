@@ -152,7 +152,7 @@ here; the server is blind.
   section with `registry.claimPersonSection` (Memories: `PersonMemories.vue` over `participantIndex.ts`, which holds Memory keys and so is dropped on
   every scope reset). A share view never links to a profile.
   **A member's profile picture (ADR 0084, `uc.spaces.set-profile-picture`).** A sealed attribute of the per-tenant profile row, `member-avatar`
-  purpose under `K_tenant` (`features/account/profile/memberAvatar.ts`: 128 px WebP, constant 8 KiB pad, 10964 base64 chars = the contract's
+  purpose under `K_tenant` (`features/account/profile/memberAvatar.ts`: 256 px WebP in the tenant icon's constant 16 KiB pad (shown at 128 px on the profile page), 21884 base64 chars = the contract's
   `maxLength`, pinned by a test that reads the YAML). The directory carries only `avatarVersion`; `core/people/avatarCache.ts` fetches
   `getMemberAvatar` ONLY for a non-zero version it does not hold, keeps ONE object URL per user (revoked on a new version, a 404, `resetPeopleDirectory`)
   and shows the letter for anything that does not open or is no image - **never fetch or draw a member's picture on a share page**

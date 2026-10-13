@@ -4,11 +4,13 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import * as v1 from '@veyq/crypto/v1'
-import { fromB64std } from '@veyq/crypto/base64'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import {
   sealAvatar, openAvatar, AVATAR_PADDED_LEN, AVATAR_ENCODED_BUDGET, AVATAR_SEALED_B64_LEN, AVATAR_EDGE,
 } from './memberAvatar'
 import { sealName } from './memberName'
+import { ICON_PADDED_LEN, padTo } from '../../spaces/spaceIcon'
+import { ICON_EDGE } from '../../spaces/spaceIconImage'
 
 const KEY = new Uint8Array(32).fill(7)
 const AT = { scopeId: '5c09e000-0000-4000-8000-0000000000a1', userId: '5c09e000-0000-4000-8000-0000000000a2' }
@@ -21,12 +23,14 @@ describe('member avatar (sealed under K_tenant, purpose member-avatar)', () => {
     expect(sealAvatar(KEY, AT, flat).length).toBe(sealAvatar(KEY, AT, dense).length)
   })
 
-  it('round-trips and pads to the constant 8 KiB plaintext (budget = pad - 4-byte header)', () => {
+  it('round-trips and pads to the constant 16 KiB plaintext (budget = pad - 4-byte header)', () => {
     const img = new Uint8Array([1, 2, 3, 250, 0, 128])
     expect([...openAvatar(KEY, AT, sealAvatar(KEY, AT, img))!]).toEqual([...img])
-    expect(AVATAR_PADDED_LEN).toBe(8192)
+    expect(AVATAR_PADDED_LEN).toBe(ICON_PADDED_LEN)
+    expect(AVATAR_PADDED_LEN).toBe(16384)
     expect(AVATAR_ENCODED_BUDGET).toBe(AVATAR_PADDED_LEN - 4)
-    expect(AVATAR_EDGE).toBe(128)
+    expect(AVATAR_EDGE).toBe(ICON_EDGE)
+    expect(AVATAR_EDGE).toBe(256)
   })
 
   it('refuses an image over the budget instead of sealing a longer value', () => {
@@ -34,11 +38,11 @@ describe('member avatar (sealed under K_tenant, purpose member-avatar)', () => {
     expect(() => sealAvatar(KEY, AT, new Uint8Array(AVATAR_ENCODED_BUDGET))).not.toThrow()
   })
 
-  it('is exactly 10964 base64 characters = 8221 bytes (1 type + 12 nonce + 8192 + 16 tag)', () => {
+  it('is exactly 21884 base64 characters = 16413 bytes (1 type + 12 nonce + 16384 + 16 tag)', () => {
     const sealed = sealAvatar(KEY, AT, new Uint8Array([1]))
     expect(sealed.length).toBe(AVATAR_SEALED_B64_LEN)
-    expect(AVATAR_SEALED_B64_LEN).toBe(10964)
-    expect(fromB64std(sealed).length).toBe(8221)
+    expect(AVATAR_SEALED_B64_LEN).toBe(21884)
+    expect(fromB64std(sealed).length).toBe(16413)
   })
 
   it('equals the maxLength of every sealedAvatar field in the contract (a mismatch is red)', () => {
@@ -53,6 +57,13 @@ describe('member avatar (sealed under K_tenant, purpose member-avatar)', () => {
     // SetAvatarRequest, MemberAvatar and the two accept bodies
     expect(lengths.length).toBeGreaterThanOrEqual(4)
     expect(new Set(lengths)).toEqual(new Set([AVATAR_SEALED_B64_LEN]))
+  })
+
+  it('a picture sealed with the old 8 KiB pad opens to null (the letter), never as a picture', () => {
+    const old = b64std(v1.seal({ purpose: 'member-avatar', scopeId: AT.scopeId, userId: AT.userId }, KEY, padTo(new Uint8Array([1, 2, 3]), 8192)))
+    expect(old.length).toBe(10964)
+    expect(openAvatar(KEY, AT, old)).toBeNull()
+    expect(openAvatar(KEY, AT, sealAvatar(KEY, AT, new Uint8Array([1, 2, 3])))).not.toBeNull() // control
   })
 
   it('opens to null - never throws - on a wrong key, corrupt or empty input', () => {

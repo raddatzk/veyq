@@ -43,7 +43,7 @@ export function pad(bytes: Uint8Array): Uint8Array {
   return padTo(bytes, ICON_PADDED_LEN)
 }
 
-/** The same `u32be(len) || bytes || zero-fill` pad at another constant length (the member avatar's 8 KiB, ADR 0084).
+/** The same `u32be(len) || bytes || zero-fill` pad at another constant length (the member avatar uses the icon's own, ADR 0084).
  *  Throws `icon_too_large` when the bytes do not fit `paddedLen - 4`. */
 export function padTo(bytes: Uint8Array, paddedLen: number): Uint8Array {
   if (bytes.length > paddedLen - HEADER_LEN) throw new Error('icon_too_large')
