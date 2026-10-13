@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veyq.dev/contracts/export/veyq-subtree.schema.json",
+  "title": "veyq-subtree manifest",
+  "description": "manifest.json of a veyq node-subtree export (ADR 0082): the plaintext tree of one node and everything under it, with a reference per content payload that lives beside it in the store-only ZIP under data/. Core owns the envelope and the node shape; each kind owns the shape of its `content` (the `$defs` below document Files' and Memories'). Readers ignore unknown fields and refuse a `version` newer than they know.",
+  "type": "object",
+  "required": ["format", "version", "exportedAt", "appVersion", "root"],
+  "properties": {
+    "format": { "const": "veyq-subtree" },
+    "version": { "type": "integer", "minimum": 1, "description": "Format version. Bumped only by a change an older reader would misread; an additive field never bumps it." },
+    "exportedAt": { "type": "string", "format": "date-time", "description": "Client clock at export, RFC 3339 UTC." },
+    "appVersion": { "type": "string", "description": "The exporting web client's release identity (informational)." },
+    "options": {
+      "type": "object",
+      "properties": {
+        "includeLocation": { "type": "boolean", "description": "False when GPS and place data were left out at export time (the opt-out); the fields are then absent, not null." }
+      }
+    },
+    "root": { "$ref": "#/$defs/node" }
+  },
+  "$defs": {
+    "archivePath": {
+      "type": "string",
+      "pattern": "^data/[A-Za-z0-9_-]+/[^/\\\\]+$",
+      "description": "A path inside the ZIP: `data/<node.id>/<file name>`. The importer reads only paths it finds in the manifest and refuses any that leaves data/ (no `..`, no absolute path, no backslash)."
+    },
+    "payload": {
+      "type": "object",
+      "required": ["path", "size", "mediaType"],
+      "properties": {
+        "path": { "$ref": "#/$defs/archivePath" },
+        "size": { "type": "integer", "minimum": 0 },
+        "mediaType": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Hex SHA-256 of the stored bytes; the importer verifies it while streaming." }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "kind", "name"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "description": "Archive-local id, unique in this manifest (`n1`, `n2`, ...). Not a veyq node id; carries no meaning outside the file." },
+        "kind": { "type": "string", "description": "The node kind (FOLDER, FILE, FILES_DROPBOX, MEMORY, CHAPTER, ...). An importing build that lacks the kind skips that node and its subtree and reports it." },
+        "name": { "type": "string" },
+        "cover": { "anyOf": [{ "$ref": "#/$defs/payload" }, { "type": "null" }], "description": "The node's cover image (core's COVER attachment), if any." },
+        "metadata": { "type": "object", "description": "The kind's plaintext node metadata that is not content (e.g. a Memory's description). Open: unknown keys are ignored." },
+        "content": { "$ref": "#/$defs/content", "description": "What the kind's export hook supplied; absent for a node that has none (a FOLDER)." },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" }, "description": "In the order the source tree showed them." }
+      }
+    },
+    "content": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "description": "`<application>.<name>`; the importing kind's hook dispatches on it." },
+        "schema": { "type": "integer", "minimum": 1, "description": "The kind's own content schema version; the hook refuses a newer one." }
+      },
+      "oneOf": [
+        { "$ref": "#/$defs/filesFile" },
+        { "$ref": "#/$defs/memoriesMemory" },
+        { "properties": { "type": { "not": { "enum": ["files.file", "memories.memory"] } } } }
+      ]
+    },
+    "filesFile": {
+      "description": "Files: the one blob of a FILE node. The file's name is the node's name.",
+      "properties": {
+        "type": { "const": "files.file" },
+        "file": { "$ref": "#/$defs/payload" }
+      },
+      "required": ["type", "file"]
+    },
+    "memoriesMemory": {
+      "description": "Memories: the media of a MEMORY node. Chapters are the node's CHAPTER children; an item points at its chapter by that child's archive-local id, or is null for the Memory itself.",
+      "properties": {
+        "type": { "const": "memories.memory" },
+        "media": { "type": "array", "items": { "$ref": "#/$defs/memoriesMedium" } }
+      },
+      "required": ["type", "media"]
+    },
+    "memoriesMedium": {
+      "type": "object",
+      "required": ["file"],
+      "properties": {
+        "file": { "$ref": "#/$defs/payload", "description": "The pristine original, never a derivative." },
+        "name": { "type": "string", "description": "The original file name." },
+        "chapter": { "type": ["string", "null"], "description": "Archive-local id of the CHAPTER child this medium belongs to." },
+        "capturedAt": { "type": "string", "format": "date-time", "description": "The capture time as the Memory shows it (EXIF or the member's correction)." },
+        "location": {
+          "type": "object",
+          "description": "Absent when includeLocation is false.",
+          "properties": {
+            "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+            "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+            "place": { "type": "string", "description": "The place name the Memory shows." }
+          }
+        },
+        "exif": { "type": "object", "description": "Camera EXIF the original carries, as read; open. GPS tags are left out when includeLocation is false." },
+        "contributor": { "type": "string", "description": "Text only: who added the medium (\"Anna\"). Not an identity; an import never maps it to a member." }
+      }
+    }
+  }
+}

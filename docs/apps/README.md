@@ -10,6 +10,12 @@ the rejected alternatives). German: *Anwendung*. Never "plugin" or "app".
   private **favorites** of any node (a sealed set per user and scope, the heart on every row and header); and
   *attachments*, sealed files on a node that can be uploaded and downloaded, with size and storage quota;
 - **with whom**: links with `READ`, `READ_WRITE` or `WRITE_ONLY` access, with password, expiry and consent;
+- **out and in**: a member exports any node and everything under it as a plaintext ZIP and imports it again
+  ([ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md),
+  format [`contracts/export/veyq-subtree.schema.json`](../../contracts/export/veyq-subtree.schema.json)). Core owns the
+  tree, names, cover and metadata; a kind supplies and consumes its content through a hook on `KindDescriptor`
+  (`exportContent` / `importContent`, beside `createEntry`) - Files the file bytes, Memories the media originals - so no
+  application imports another;
 - **in the background**: tasks, rate limits, the admin channel and operator-blindness.
 
 An application supplies the **meaning**: which node kinds exist, what the plaintext means, which rules apply to
