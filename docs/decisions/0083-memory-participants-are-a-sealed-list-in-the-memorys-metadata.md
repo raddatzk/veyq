@@ -33,13 +33,36 @@ no `veyq_node_participant` table. Such a table would hand the operator who was o
 **3. Leaving the scope does not remove a participant.** The id stays; it renders greyed as "former member" with **no
 link**. Nothing prunes it automatically — the list is the Memory's record of who was there, not a membership mirror.
 
-**4. Guests do not see participants.** The `participants` sub-object is **stripped from every meta re-sealed for a
-share** (the share path in `memories/share.ts` and `core/sharing/guestAccess.ts`), and **no name snapshot** is stored
-for a share. This is an exception the owner chose to the "share = member view" principle: rights only remove functions,
-but a participant list is a statement about *other members*, who agreed to be in the space, not to be named to a link
-holder. A per-share opt-in is a possible later decision, **not made now**. The header component is the same for a guest
-and a member; whether it shows the participants is a capability flag in `memoryCapabilities` (`participants`), **fail
-closed** like every other right there.
+**3a. Shape, cap and concurrent edits.** The sub-object is `participants: { userIds: string[] }`, user ids only, unique,
+validated on read (non-strings, duplicates dropped). It is **capped at 100 ids**: `wrappedMeta` is limited to 8192
+characters of base64 (about 6 KB sealed), and an id is about 40 bytes of JSON next to the date, place and cover. Unknown
+sibling fields are preserved. A write is a read-modify-write through `writeNodeMeta`; because the list is a *set* that two
+members may extend at once, it uses **its own edit function, not `editField`** (which throws `MetaConflictError` when the
+same field moved and would drop a peer's addition). On `409 stale_version` the client re-reads and **merges**: the union
+of the stored and the editor's list, except that an id the person editing **removed** stays removed. This is the
+reversible choice about storage too: the list stays in `wrappedMeta` rather than a separate column, because the profile
+page lists Memories as level-view rows with cover, date and place and so needs the full meta anyway; moving it later is a
+client-side migration.
+
+**4. Guests do not see participants — in the interface, not cryptographically.** The header component is the same for
+a guest and a member; whether it shows the participants is a capability flag in `memoryCapabilities` (`participants`),
+**fail closed** like every other right there, so no share view for any role (`READ`, `READ_WRITE`, `WRITE_ONLY`, folder
+or Memory link) renders the section, its controls or a profile link. This is an exception the owner chose to the
+"share = member view" principle: rights only remove functions, but a participant list is a statement about *other
+members*, who agreed to be in the space, not to be named to a link holder.
+*Corrected 2026-10-13.* The first draft said the participants are "stripped from every meta re-sealed for a share" and
+that the exclusion is cryptographic. That was wrong: **no meta is re-sealed for a share.** A share serves the node's
+`wrappedMeta` unchanged (`ShareNode.wrappedMeta`, [sharing.openapi.yaml](../../contracts/api/sharing.openapi.yaml)) and the
+guest holds the node's `K_mem` through the key chain, so a link holder can open the very blob a member writes. Making the
+exclusion cryptographic would need a new AEAD purpose (a nested seal under a key guests lack) or a share-specific meta
+on the server — both rejected for the first version.
+**Accepted residual:** a link holder with developer tools can read the participant **count and the opaque user ids**
+from the blob, **but no names**: the list holds ids only, and a guest has no member directory
+([inbox #190](../inbox.md), the public resolve serves no name). This is comparable to the residual already accepted in
+[ADR 0030](0030-contributor-public-share.md) point 8, where a guest's device record of its own uploads is likewise a
+client-side boundary. **No name snapshot is ever stored** — in the list or on a share. **If participants ever carry
+names, snapshots or anything beyond opaque ids, this decision must be re-decided** (the residual then discloses people).
+A per-share opt-in is a possible later decision, **not made now**.
 
 **5. A participant opens a member profile — members only.** Clicking a participant opens a profile page at the fragment
 **`#/people/<userId>`**, never reachable from a share. It is routed in `web/src/core/node/location.ts` (`parseHash` /
