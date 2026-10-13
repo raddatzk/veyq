@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.account.profile
 import me.raddatz.veyq.core.generated.api.AccountProfileApi
 import me.raddatz.veyq.core.generated.model.MemberProfile
 import me.raddatz.veyq.core.generated.model.ProfileUpdateRequest
+import me.raddatz.veyq.core.generated.model.SetAvatarRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.tenant.RequestTenant
@@ -43,6 +44,20 @@ class AccountProfileResource(
             is HttpFailure -> httpError(outcome)
         }
 
-    private fun memberProfile(o: ProfileOutcome.Found) =
-        MemberProfile(username = o.username, requireGroupAddConsent = o.requireGroupAddConsent, sealedName = o.sealedName)
+    override fun setMyAvatar(setAvatarRequest: SetAvatarRequest): Response =
+        when (val outcome = handler.setAvatar(identity.principal.name, tenant.resolve()?.id, setAvatarRequest.sealedAvatar)) {
+            AvatarWriteOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(outcome)
+        }
+
+    override fun clearMyAvatar(): Response =
+        when (val outcome = handler.clearAvatar(identity.principal.name, tenant.resolve()?.id)) {
+            AvatarWriteOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(outcome)
+        }
+
+    private fun memberProfile(o: ProfileOutcome.Found) = MemberProfile(
+        username = o.username, avatarVersion = o.avatarVersion, requireGroupAddConsent = o.requireGroupAddConsent,
+        sealedName = o.sealedName,
+    )
 }

@@ -213,6 +213,9 @@ class OperatorBlindProbeTest {
         "revokeMemberInvite" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/member-invites/$someId") },
         "removeTenantMember" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/members/$someId") },
         "getTenantTerms" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/terms") },
+        // A member's picture (ADR 0084): tenant-gated like the directory. The control reaches the handler and answers
+        // `404 avatar_not_found` for the invented member - a code the gate's own `tenant_not_found` is not.
+        "getMemberAvatar" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/members/$someId/avatar") },
         "updateTenantTerms" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/terms", """{"terms":{"de":"Bedingungen","en":"Terms"}}""")
         },
@@ -264,6 +267,7 @@ class OperatorBlindProbeTest {
             "Host-resolved and self-scoped: reads or writes only the caller's own rows on the Host's own tenant, so " +
                 "the Host filter is a correct suspension gate for exactly these (cr D10).",
             "listMyScopes", "listMyGroupInvitations", "getMyProfile", "updateMyProfile", "requestEmailConfirmation",
+            "setMyAvatar", "clearMyAvatar",
         )
         reason(
             "addressed by the caller's own unaccepted proposal, which the gate by definition does not count as a " +
