@@ -1,6 +1,6 @@
 # ADR 0084 — A member's profile picture is a sealed attribute of their per-tenant profile
 
-- Status: Accepted
+- Status: Accepted; built 2026-10-13 (contract, crypto, backend, web)
 - Date: 2026-10-13
 
 ## Context

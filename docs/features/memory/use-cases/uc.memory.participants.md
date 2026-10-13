@@ -12,7 +12,7 @@
   later; the header shows them; a profile page lists the Memories its person is on. The server stored one opaque blob and
   nothing else ([ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)).
 
-**Status: built (web only, no backend or contract change).** Not built: a user avatar (a letter for now, [inbox #414](../../../inbox.md)),
+**Status: built (web only, no backend or contract change).** The avatar is the member's profile picture when they have one, else the letter ([uc.spaces.set-profile-picture](../../spaces/use-cases/uc.spaces.set-profile-picture.md), [inbox #414](../../../inbox.md)). Not built:
 the uploader on **Files** ([inbox #415](../../../inbox.md)), a per-share opt-in for guests. The profile's cover tiles load for the
 Memories of the scopes read in that visit only (no cover cache across scope switches); the index is bounded at
 500 Memories per scope and says so when it is partial.
@@ -27,8 +27,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
    is sealed).
 4. On save the client writes the `participants` sub-object (user ids only) into the Memory's `wrappedMeta` under `K_mem`
    with the node-meta compare-and-set, stating the `metaVersion` it read.
-5. The header re-renders with the participants as overlapping letter avatars (a profile picture can take their place
-   later): up to three, and past three the third slot is a "+N" (two avatars and "+2" for four people). Hovering the
+5. The header re-renders with the participants as overlapping avatars (the member's profile picture, else the letter): up to three, and past three the third slot is a "+N" (two avatars and "+2" for four people). Hovering the
    group, focusing it by keyboard or tapping it opens a popover with everyone — avatar and display name — and Escape
    closes it.
 
@@ -37,7 +36,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 1. A member clicks a participant in the popover (or an uploader's name on a photo that a member uploaded). The location becomes
    `#people/<userId>` (the reader also takes the spelling `#/people/<userId>`; `location.ts` builds the first). The fragment is token-less:
    it opens the tenant scope's shell, whichever scope the Memory was in.
-2. The profile shows the **display name**, a **letter avatar**, and a list of **Memories** in which this person is a
+2. The profile shows the **display name**, an **avatar** (the profile picture, else the letter), and a list of **Memories** in which this person is a
    participant and the viewer has access.
 3. The list comes from a lazily built, in-memory index `Map<userId, Set<memoryRef>>`: the client lists the tenant scope
    and every group scope the viewer is in (`fetchTreeRows`, revalidated by ETag, ADR 0081), and unseals each Memory's

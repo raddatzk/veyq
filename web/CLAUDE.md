@@ -151,6 +151,14 @@ here; the server is blind.
   `people` is in `RESERVED_ROUTE_SEGMENTS` and numbered away from a root folder's name); core draws `core/people/PersonProfile.vue` and an application adds a
   section with `registry.claimPersonSection` (Memories: `PersonMemories.vue` over `participantIndex.ts`, which holds Memory keys and so is dropped on
   every scope reset). A share view never links to a profile.
+  **A member's profile picture (ADR 0084, `uc.spaces.set-profile-picture`).** A sealed attribute of the per-tenant profile row, `member-avatar`
+  purpose under `K_tenant` (`features/account/profile/memberAvatar.ts`: 128 px WebP, constant 8 KiB pad, 10964 base64 chars = the contract's
+  `maxLength`, pinned by a test that reads the YAML). The directory carries only `avatarVersion`; `core/people/avatarCache.ts` fetches
+  `getMemberAvatar` ONLY for a non-zero version it does not hold, keeps ONE object URL per user (revoked on a new version, a 404, `resetPeopleDirectory`)
+  and shows the letter for anything that does not open or is no image - **never fetch or draw a member's picture on a share page**
+  (`ShareView.memory.test.ts` records every export of the cache and the directory). Draw a person with `core/people/PersonAvatar.vue`
+  (`:user-id`), never a bare PrimeVue `Avatar`. Name and picture are edited by ONE model + component (`useNameAndPicture` /
+  `NamePictureFields`) in Settings > Your profile and on one's OWN profile page only - no edit control on another person's page.
   **One header for every node (inbox #406).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box and a
   Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button), the title (`level` 1 on a
   node's own page), an optional `subtitle` and `meta` slot, and the actions on the right. The application only feeds data: its action list
