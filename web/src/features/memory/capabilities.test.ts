@@ -32,13 +32,13 @@ const rows: [string, Access, CapabilityTarget, Grant][] = [
   ['member in a guest\'s identity folder: no Memory there', member, at(FOLDER_KIND, { inIdentityFolder: true }), { navigate: true }],
   ['member, pending deletion, in a folder: reads only', pending, at(FOLDER_KIND), { navigate: true }],
   // --- member, on a node (the detail) ---
-  ['member on a Memory', member, at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true }],
-  ['member on a chapter: no chapter inside a chapter', member, at(CHAPTER_KIND), MEMBER_ON_NODE],
-  ['member, public links off', memberAccessOf({ publicLinks: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, share: false, shareUpload: false }],
-  ['member, uploader links off', memberAccessOf({ uploaderLinks: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, shareUpload: false }],
-  ['member, a kind the registry will not share', member, at(MEMORY_KIND, { shareable: false }), { ...MEMBER_ON_NODE, createChapter: true, share: false, shareUpload: false }],
+  ['member on a Memory', member, at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true }],
+  ['member on a chapter: no chapter inside a chapter, no participants (a Memory\'s)', member, at(CHAPTER_KIND), MEMBER_ON_NODE],
+  ['member, public links off', memberAccessOf({ publicLinks: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true, share: false, shareUpload: false }],
+  ['member, uploader links off', memberAccessOf({ uploaderLinks: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true, shareUpload: false }],
+  ['member, a kind the registry will not share', member, at(MEMORY_KIND, { shareable: false }), { ...MEMBER_ON_NODE, createChapter: true, participants: true, share: false, shareUpload: false }],
   ['member, pending deletion, on a Memory: reads, links, marks only', pending, at(MEMORY_KIND), {
-    navigate: true, download: true, mark: true, share: true, shareUpload: true, mediaTrash: true, buckets: true,
+    navigate: true, download: true, mark: true, share: true, shareUpload: true, mediaTrash: true, buckets: true, participants: true,
   }],
   ['member on another application\'s kind', member, at(FILE), {}],
   ['member on an unknown kind', member, at('ZULU'), {}],
@@ -111,5 +111,22 @@ describe('memoryCapabilities: a guest\'s move', () => {
         }
       }
     }
+  })
+})
+
+// ADR 0083 decision 4: the interface shows a guest no participants. The flag is a member's on a Memory and no share
+// role's, on any kind - not a function of what the link reaches.
+describe('memoryCapabilities: participants', () => {
+  it('no share role, on any node, has it', () => {
+    for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'OWNER', '']) {
+      for (const kind of [MEMORY_KIND, CHAPTER_KIND, FOLDER_KIND, null, FILE]) {
+        expect(memoryCapabilities(guestAccessOf(role), at(kind)).participants, `${role} on ${kind}`).toBe(false)
+      }
+    }
+  })
+  it('a member has it on a Memory only, pending deletion included', () => {
+    expect(memoryCapabilities(member, at(MEMORY_KIND)).participants).toBe(true)
+    expect(memoryCapabilities(pending, at(MEMORY_KIND)).participants).toBe(true)
+    for (const kind of [CHAPTER_KIND, FOLDER_KIND, null, FILE]) expect(memoryCapabilities(member, at(kind)).participants).toBe(false)
   })
 })
