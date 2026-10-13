@@ -4,7 +4,7 @@
 // invited email already has an account: a NEW owner registers cold (Emergency Kit) here, an EXISTING owner
 // signs in + unlocks. Either way the client cold-births the TENANT scope and seals the first grant to its
 // own identity — the scope key never leaves the device.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -16,7 +16,8 @@ import Checkbox from 'primevue/checkbox'
 import { useBreachCheck } from '../features/account/passwordWarning'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError, type TenantBirth, type TenantOwner } from '../features/tenant/tenantInvite'
-import { sealName, myUserId } from '../features/account/profile/profile'
+import { sealName, sealAvatar, myUserId } from '../features/account/profile/profile'
+import JoinPicturePicker from '../features/account/profile/JoinPicturePicker.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
 import { InviteRole } from '../api/generated/tenants'
@@ -63,6 +64,8 @@ function jcopy(base: string, params?: Record<string, unknown>): string {
 const username = ref('')
 const firstName = ref('')
 const lastName = ref('')
+// The optional picture's encoded bytes (OWNER only, ADR 0084): sealed with the born tenant key at accept, never held anywhere else.
+const avatarBytes = shallowRef<Uint8Array | null>(null)
 const password = ref('')
 const { enabled: checkBreaches, stop: breachStop, proceed: breachCheckPasses } = useBreachCheck(password)
 const secretKeyDisplay = ref('')
@@ -140,6 +143,12 @@ function sealedNameFor(scopeRootKey: Uint8Array, userId: string): string | undef
   return sealName(scopeRootKey, { scopeId: tenantId.value, userId }, { firstName: firstName.value, lastName: lastName.value })
 }
 
+/** Seal the OPTIONAL picture under the same freshly-born K_tenant (`member-avatar`, bound to the tenant scope and the member), or
+ *  undefined when none was chosen. OWNER path only - a MEMBER's body never carries it (it holds no key at join). */
+function sealedAvatarFor(scopeRootKey: Uint8Array, userId: string): string | undefined {
+  return avatarBytes.value ? sealAvatar(scopeRootKey, { scopeId: tenantId.value, userId }, avatarBytes.value) : undefined
+}
+
 /** The unlocked vault's identity as the tenant's birth needs it: the grant is sealed to its public bundle and signed
  *  by its signing half (ADR 0028 Decision 6), under the owner's own account id. */
 function ownerOf(userId: string, priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }): TenantOwner {
@@ -158,12 +167,14 @@ async function finishRegistration() {
     const userId = crypto.randomUUID()
     let birth: TenantBirth | undefined
     let sealedName: string | undefined
+    let sealedAvatar: string | undefined
     if (!isMember.value) {
       const born = bornTenantScope({ userId, identity: built.identity }, tenantId.value)
       birth = born.birth
       sealedName = sealedNameFor(born.scopeRootKey, userId)
+      sealedAvatar = sealedAvatarFor(born.scopeRootKey, userId)
     }
-    await registerAndAccept(secret, userId, username.value.trim().toLowerCase(), built.material, birth, sealedName)
+    await registerAndAccept(secret, userId, username.value.trim().toLowerCase(), built.material, birth, sealedName, sealedAvatar)
     phase.value = 'done'
   } catch (e) {
     error.value = await mapError(e)
@@ -184,13 +195,15 @@ async function signInAndAccept() {
     if (!priv) throw new Error('locked')
     let birth: TenantBirth | undefined
     let sealedName: string | undefined
+    let sealedAvatar: string | undefined
     if (!isMember.value) {
       const userId = await myUserId()
       const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
       birth = born.birth
       sealedName = sealedNameFor(born.scopeRootKey, userId)
+      sealedAvatar = sealedAvatarFor(born.scopeRootKey, userId)
     }
-    await acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName)
+    await acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName, sealedAvatar)
     phase.value = 'done'
   } catch (e) {
     error.value = await mapError(e)
@@ -206,13 +219,15 @@ async function sealAndAccept() {
   if (!priv) throw new Error('locked')
   let birth: TenantBirth | undefined
   let sealedName: string | undefined
+  let sealedAvatar: string | undefined
   if (!isMember.value) {
     const userId = await myUserId()
     const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
     birth = born.birth
     sealedName = sealedNameFor(born.scopeRootKey, userId)
+    sealedAvatar = sealedAvatarFor(born.scopeRootKey, userId)
   }
-  await withRefresh(() => acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName))
+  await withRefresh(() => acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName, sealedAvatar))
   password.value = ''
   phase.value = 'done'
 }
@@ -298,6 +313,7 @@ async function mapError(e: unknown): Promise<string> {
               </label>
             </div>
             <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
+            <JoinPicturePicker v-model="avatarBytes" :name="`${firstName} ${lastName}`.trim() || username" />
           </template>
           <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="join-password" /></label>
           <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
@@ -344,6 +360,7 @@ async function mapError(e: unknown): Promise<string> {
             </label>
           </div>
           <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
+          <JoinPicturePicker v-model="avatarBytes" :name="`${firstName} ${lastName}`.trim() || username" />
         </template>
 
         <!-- Fast path: this browser already holds the invited owner's unlocked vault → accept in one click,

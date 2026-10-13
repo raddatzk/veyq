@@ -12,7 +12,7 @@ import Avatar from 'primevue/avatar'
 import AvatarGroup from 'primevue/avatargroup'
 import Popover from 'primevue/popover'
 import MemoryParticipantsDialog from './MemoryParticipantsDialog.vue'
-import PersonAvatar from './PersonAvatar.vue'
+import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import { personHash } from '../../../core/node/location'
 import { useMemoryParticipants } from '../useMemoryParticipants'
 import type { NodeMetaUpdate } from '../useMetaWriteFeedback'
@@ -119,7 +119,7 @@ onBeforeUnmount(clear)
         @focus="openSoon"
       >
         <AvatarGroup>
-          <PersonAvatar v-for="c in shown" :key="c.userId" :name="c.name" :class="{ 'is-former': c.former }" data-testid="participant-avatar" />
+          <PersonAvatar v-for="c in shown" :key="c.userId" :name="c.name" :user-id="c.former ? null : c.userId" :class="{ 'is-former': c.former }" data-testid="participant-avatar" />
           <Avatar v-if="overflow" :label="`+${overflow}`" shape="circle" aria-hidden="true" data-testid="participant-overflow" />
         </AvatarGroup>
       </button>
@@ -127,7 +127,7 @@ onBeforeUnmount(clear)
         <ul class="memory-participants-list" data-testid="participants-list">
           <li v-for="c in chips" :key="c.userId">
             <span v-if="c.former" class="memory-participant-row is-former" data-testid="participant-former">
-              <PersonAvatar :name="c.name" />
+              <PersonAvatar :name="c.name" :user-id="c.former ? null : c.userId" />
               <span class="memory-participant-name">{{ c.name }}</span>
             </span>
             <RouterLink
@@ -138,7 +138,7 @@ onBeforeUnmount(clear)
               data-testid="participant-link"
               @click="closeNow()"
             >
-              <PersonAvatar :name="c.name" />
+              <PersonAvatar :name="c.name" :user-id="c.former ? null : c.userId" />
               <span class="memory-participant-name">{{ c.name }}</span>
             </RouterLink>
           </li>

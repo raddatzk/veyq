@@ -198,7 +198,9 @@ export default defineConfigWithVueTs(
     // link opens, whose one onward step is the Security card showing the address it just confirmed
     // (uc.account.confirm-email-address). `TrustResetLink.vue` is the third: every trust-state refusal notice
     // carries it to the hub's one reset (ADR 0028 Decision 7's way back), as ONE component rather than a door per
-    // notice. A further legitimate door is one more `ignores` entry. LIMIT: a path
+    // notice. `FinishProfilePrompt.vue` is the fourth: the one-time "finish your profile" notice carries a member whose
+    // profile is empty to Your profile (ADR 0084 decision 7), as one component with one dismissal. A further legitimate
+    // door is one more `ignores` entry. LIMIT: a path
     // assembled at runtime is not a literal and is not seen (`'/' + 'settings'`, a variable passed as `path`,
     // `window.location`). And flat config resolves a rule by name, last block wins: a later block that sets
     // `no-restricted-syntax` for these files replaces these selectors rather than adding to them.
@@ -207,6 +209,7 @@ export default defineConfigWithVueTs(
     ignores: [
       'src/**/*.test.ts', 'src/router.ts', 'src/components/app/ProfileMenu.vue', 'src/views/SettingsHubView.vue',
       'src/views/ConfirmEmailView.vue', 'src/features/account/trustReset/TrustResetLink.vue',
+      'src/features/account/profile/FinishProfilePrompt.vue',
     ],
     rules: {
       'no-restricted-syntax': ['error', ...SETTINGS_DOOR],

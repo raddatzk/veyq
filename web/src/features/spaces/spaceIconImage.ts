@@ -40,11 +40,15 @@ async function bakeSquareCrop(img: HTMLImageElement, crop: CropRect): Promise<Bl
  * background if we passed one — here we keep alpha). Throws only if even the lowest quality overflows the budget,
  * which cannot happen for a 256×256 WebP (far under 16 KiB) — the throw is a guard, not an expected path.
  */
-export async function renderSpaceIcon(deriver: MediaDeriver, img: HTMLImageElement, crop: CropRect): Promise<Uint8Array> {
+export async function renderSpaceIcon(
+  deriver: MediaDeriver, img: HTMLImageElement, crop: CropRect,
+  /** The pixel edge and the encoded-byte budget: the space icon's by default; the member avatar (ADR 0084) passes its own. */
+  target: { edge: number; budget: number } = { edge: ICON_EDGE, budget: ICON_ENCODED_BUDGET },
+): Promise<Uint8Array> {
   const square = await bakeSquareCrop(img, crop)
   for (const quality of QUALITY_STEPS) {
-    const { bytes } = await deriver.deriveImage(square, { maxEdge: ICON_EDGE, quality, mimeType: 'image/webp' })
-    if (bytes.length <= ICON_ENCODED_BUDGET) return bytes
+    const { bytes } = await deriver.deriveImage(square, { maxEdge: target.edge, quality, mimeType: 'image/webp' })
+    if (bytes.length <= target.budget) return bytes
   }
   throw new Error('icon_encode_too_large')
 }

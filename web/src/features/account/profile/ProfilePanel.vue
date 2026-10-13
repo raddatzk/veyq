@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // uc.spaces.edit-profile (web, cr-0083 / ADR 0023) — the "Your profile" rubric of the settings hub: edit your
-// per-tenant `username` (plaintext handle) + your real name (first + last), which is **sealed under K_tenant**
-// on-device before it leaves the browser (operator-blind). The tenant key is opened on demand (openOwnNameKey)
-// so the panel works from any active space; a member without a tenant grant yet can still set their username.
+// per-tenant `username` (plaintext handle) + your real name (first + last) + your profile picture (ADR 0084), the last two
+// **sealed under K_tenant** on-device before they leave the browser (operator-blind). Name and picture are the shared
+// {@link NamePictureFields} (the member's own profile page edits the same). The tenant key is opened on demand
+// (openOwnNameKey) so the panel works from any active space; a member without a tenant grant yet can still set their username.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -10,7 +11,9 @@ import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import { getMyProfile, updateMyProfile, sealName, unsealName, openOwnNameKey } from './profile'
+import { getMyProfile, updateMyProfile } from './profile'
+import NamePictureFields from './NamePictureFields.vue'
+import { useNameAndPicture } from './useNameAndPicture'
 import { useAsyncData, loadErrorKind } from '../../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { useToast } from '../../../shared/state/useToast'
@@ -22,25 +25,15 @@ const toast = useToast()
 const on401 = handle401(useRouter())
 
 const username = ref('')
-const firstName = ref('')
-const lastName = ref('')
+const identity = useNameAndPicture()
 // Account-global "ask before adding me to groups" preference (cr-0094) — a server-visible boolean, not a key.
 const requireGroupAddConsent = ref(false)
 const error = ref('')
-// K_tenant (and the address our name is sealed at) is held outside any reactive proxy — key material must not flow
-// through Vue reactivity.
-let nameKey: Awaited<ReturnType<typeof openOwnNameKey>> = null
-
 const { pending: loading, error: loadErr } = useAsyncData(async () => {
   const profile = await getMyProfile()
   username.value = profile.username
   requireGroupAddConsent.value = profile.requireGroupAddConsent
-  nameKey = await openOwnNameKey()
-  if (nameKey) {
-    const name = unsealName(nameKey.key, nameKey.address, profile.sealedName)
-    firstName.value = name?.firstName ?? ''
-    lastName.value = name?.lastName ?? ''
-  }
+  await identity.load(profile)
 }, { onError: on401 })
 const loadError = computed(() => loadErrorKind(loadErr.value) !== null)
 
@@ -49,14 +42,19 @@ const { run: runSave, pending: saving } = useAsyncAction(
     // Seal whatever the fields hold whenever we hold K_tenant — an EMPTY name included: that is how a member
     // removes their real name (an omitted field would leave the old one on the server, per the contract). Without
     // the key only the username is updated; the name inputs are disabled then, so nothing typed is dropped.
-    const sealedName = nameKey
-      ? sealName(nameKey.key, nameKey.address, { firstName: firstName.value, lastName: lastName.value })
-      : undefined
     await updateMyProfile({
       username: username.value.trim().toLowerCase(),
-      sealedName,
+      sealedName: identity.sealedName(),
       requireGroupAddConsent: requireGroupAddConsent.value,
     })
+    // The picture is its own request after the profile: a failure there leaves the saved profile saved and says so.
+    try {
+      await identity.savePicture()
+    } catch (e) {
+      on401(e)
+      if (!isUnauthorized(e)) error.value = t('profilePicture.saveFailed')
+      return
+    }
     toast.success(t('profile.saved'))
   },
   {
@@ -94,11 +92,7 @@ async function save() {
           <InputText v-model="username" name="username" autocomplete="username" required />
           <small class="field-hint">{{ t('profile.usernameHint') }}</small>
         </label>
-        <div class="name-row">
-          <label>{{ t('profile.firstName') }}<InputText v-model="firstName" autocomplete="given-name" :disabled="!nameKey" /></label>
-          <label>{{ t('profile.lastName') }}<InputText v-model="lastName" autocomplete="family-name" :disabled="!nameKey" /></label>
-        </div>
-        <small v-if="!nameKey" class="field-hint">{{ t('profile.noNameYet') }}</small>
+        <NamePictureFields :model="identity" :display-name="`${identity.firstName} ${identity.lastName}`.trim() || username" />
 
         <!-- Account-global consent preference (cr-0094). Applies in every space you belong to. -->
         <div class="consent-row">

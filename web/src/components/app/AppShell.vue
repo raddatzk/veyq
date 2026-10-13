@@ -12,6 +12,7 @@ import { useCapabilities } from '../../shared/state/useCapabilities'
 import AppSidebar from './AppSidebar.vue'
 import AppTopbar from './AppTopbar.vue'
 import IncompatibleScreen from './IncompatibleScreen.vue'
+import FinishProfilePrompt from '../../features/account/profile/FinishProfilePrompt.vue'
 
 const route = useRoute()
 const { serverState } = useServerState()
@@ -39,6 +40,7 @@ const plainLayout = computed(() => route.meta.layout === 'plain')
     </div>
     <div class="app-workspace">
       <main class="content">
+        <FinishProfilePrompt />
         <RouterView />
       </main>
     </div>

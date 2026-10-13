@@ -14,6 +14,7 @@ import { resetTree, loadTree } from '../core/node/treeStore'
 import { registry } from '../core/applications/registry'
 import { clearFavorites, favoritesStore, loadFavoritesFor } from '../core/favorites/favoritesStore'
 import { resetCovers } from '../core/node/cover/coverStore'
+import { resetPeopleDirectory } from '../core/people/directory'
 import { startGrantDeliveryPolling, stopGrantDeliveryPolling } from '../features/tasks/grantDeliveryPolling'
 import { startScopeRotationPolling, stopScopeRotationPolling } from '../features/tasks/scopeRotationPolling'
 import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/invitations'
@@ -214,6 +215,7 @@ export function clearActiveSpace(): void {
   scopeKey = null
   clearFavorites() // sign-out / re-lock: the decrypted pin set must not outlive the keys
   resetCovers() // …nor the decrypted covers (core's, inbox #411)
+  resetPeopleDirectory() // …nor the decrypted names and the profile pictures' object URLs (core's, ADR 0084)
   registry.scopeReset() // …nor what an application decrypted (Memories' covers)
 }
 

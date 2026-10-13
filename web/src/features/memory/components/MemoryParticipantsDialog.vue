@@ -15,7 +15,7 @@ import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import PersonAvatar from './PersonAvatar.vue'
+import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import type { Person } from '../../../core/people/directory'
 
 const props = defineProps<{
@@ -72,7 +72,7 @@ function save() {
         </label>
         <label v-for="p in visiblePeople" :key="p.userId" class="memory-participants-option">
           <Checkbox :model-value="isChecked(p.userId)" binary :disabled="full && !isChecked(p.userId)" :aria-label="p.displayName" @update:model-value="toggle(p.userId)" />
-          <PersonAvatar :name="p.displayName" />
+          <PersonAvatar :name="p.displayName" :user-id="p.userId" />
           <span class="memory-participants-name">{{ p.displayName }}</span>
         </label>
         <p v-if="noMatches" class="memory-participants-hint" role="status" data-testid="participants-no-matches">{{ t('memory.participants.noMatches') }}</p>

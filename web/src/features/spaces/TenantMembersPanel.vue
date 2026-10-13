@@ -11,6 +11,8 @@ import Message from 'primevue/message'
 import InviteMemberDialog from './InviteMemberDialog.vue'
 import SpaceIconDialog from './SpaceIconDialog.vue'
 import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
+import PersonAvatar from '../../core/people/PersonAvatar.vue'
+import { syncAvatars } from '../../core/people/avatarCache'
 import {
   listMemberInvites,
   listScopeMembers,
@@ -78,6 +80,12 @@ const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewO
     names.value = kTenant
       ? Object.fromEntries(rows.map((m) => [m.userId, unsealName(kTenant, { scopeId, userId: m.userId }, m.sealedName)]))
       : {}
+    // The members' pictures follow the roster (ADR 0084): the version integers it carries decide what is fetched. Not awaited -
+    // the rows draw their letters at once; the key copy is zeroed when the fetches settle.
+    if (kTenant) {
+      const copy = kTenant.slice()
+      void syncAvatars({ tenantId: activeSpace.tenantId, scopeId, key: copy }, rows).finally(() => copy.fill(0))
+    }
     const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
     const owner = mine?.role === 'OWNER'
     // The identity header: the tenant name (plaintext) + its icon opened on-device against our own grant (null when
@@ -333,6 +341,7 @@ async function revoke(invite: PendingMemberInvite) {
       <div v-else class="veyq-list management-list">
         <div class="veyq-list management-list-items">
           <div v-for="member in members" :key="member.userId" class="veyq-list-row member-row">
+            <PersonAvatar :name="fullName(member.userId) || member.username" :user-id="member.userId" class="member-avatar" />
             <div class="veyq-row-main">
               <strong class="veyq-row-title">{{ fullName(member.userId) || '@' + member.username }}</strong>
               <span class="veyq-row-subtitle">
@@ -462,6 +471,18 @@ async function revoke(invite: PendingMemberInvite) {
 </template>
 
 <style scoped>
+/* A member's row leads with their avatar (picture, else the letter): one more grid column in front of the shared three. */
+.member-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+@media (max-width: 820px) {
+  .member-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .member-row .management-actions {
+    grid-column: 1 / -1;
+  }
+}
 
 .reissue-link {
   display: flex;
