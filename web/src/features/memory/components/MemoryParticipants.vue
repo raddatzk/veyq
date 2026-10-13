@@ -182,8 +182,10 @@ onBeforeUnmount(clear)
   /* the same optical pull as the date and place chips, so the first avatar starts flush with the title */
   margin-left: -0.45rem;
 }
+/* Deliberately NOT `position: relative`: the Popover is appended to this element (tab order) but PrimeVue places it in
+ * DOCUMENT coordinates, so a positioned anchor would offset it a second time. */
 .memory-participants-anchor {
-  position: relative;
+  display: inline-block;
 }
 .memory-participants-group {
   display: inline-flex;
