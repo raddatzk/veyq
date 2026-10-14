@@ -1,4 +1,4 @@
-// Live e2e for uc.account.change-email (ADR 0074 Addendum): request → the link read out of a real mailbox → confirm →
+// Live e2e for uc.account.change-email (ADR 0074 Decision 8): request → the link read out of a real mailbox → confirm →
 // sign in with the NEW address, unlock with the same Secret Key, and open the same content. The slice tests mint
 // their own pending rows and sign with JDK keys, and the unit tests stub the transport — so this is the only place
 // the client's real derivation under the new salt meets the server that installs it and the login that must accept it.

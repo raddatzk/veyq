@@ -14,7 +14,7 @@
 
 ## Main flow
 
-0. **Who uploaded it** (ADR 0083 Addendum): a member sees the uploader of the file's current content in the header -
+0. **Who uploaded it** (ADR 0083 Decision 8): a member sees the uploader of the file's current content in the header -
    "Uploaded by" a member's name and picture, linking to their profile; one who left the space as a greyed "former
    member" without a link; a link's guest by the name it gave itself, without a link (inbox #431) - a drop-box guest by
    its identity folder's name, any other guest by its sealed name opened under the file's key or the nearest ancestor key

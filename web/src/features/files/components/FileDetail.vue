@@ -27,7 +27,7 @@
 // through the source's `chunks` (a member's scope READ gate, a guest's link), so a guest of either role sees the member's
 // viewer; nothing about it is a capability of its own beyond the download it offers where the matrix grants one.
 //
-// **Who uploaded the current content** (ADR 0083 Addendum, `../uploader.ts`): a member's page names them in the header's meta
+// **Who uploaded the current content** (ADR 0083 Decision 8, `../uploader.ts`): a member's page names them in the header's meta
 // line - a member by core's display rule with a link to the profile, one who left as a greyed "former member", a guest
 // by the name it gave itself (inbox #431: its identity folder inside a drop box, else its sealed name opened under the
 // nearest key the tree holds), "a guest" where that does not open. It comes from the member listing's `uploaderKey` and

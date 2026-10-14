@@ -194,7 +194,7 @@ describe.each([ShareRole.Read, ShareRole.ReadWrite])('the viewer for a %s guest 
   })
 })
 
-// ADR 0083 Addendum, inbox #190: the uploader is a member's to see. The guest's source has no uploader door and the link's
+// ADR 0083 Decision 8, inbox #190: the uploader is a member's to see. The guest's source has no uploader door and the link's
 // listing serves none, so the page names nobody - and asks no member directory for a name (every authenticated client
 // would be recorded). The control is the rest of the header: the page is there, with its title and facts.
 describe.each([ShareRole.Read, ShareRole.ReadWrite])('a %s guest of a single-file link is shown no uploader', (role) => {

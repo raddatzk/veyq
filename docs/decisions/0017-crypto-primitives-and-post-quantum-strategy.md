@@ -45,7 +45,7 @@ strategy; they do not choose it.
    (`backend/CLAUDE.md`). Its Ed25519 login-auth check runs against the stored `authPublicKey` and never against
    this file. The statements it asserts too are the **Secret-Key proof** over a cold-credential request
    ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2) and the change-email **auth attestation**
-   (`auth_attestation`, ADR 0074 Addendum): both stacks build their signed bytes, so a vector pins them. Pinning a new primitive still means **adding a vector first, then making the
+   (`auth_attestation`, ADR 0074 Decision 8): both stacks build their signed bytes, so a vector pins them. Pinning a new primitive still means **adding a vector first, then making the
    implementation green** — never the reverse.
 5. **The server never chooses a cost parameter.** A key-derivation profile travels with each wrap so that a
    later profile stays readable (rule 3), but a client derives only with a profile it would itself write — today

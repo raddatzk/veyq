@@ -1,4 +1,4 @@
-// uc.account.change-email (web, ADR 0074 Addendum): change the address this account signs in with.
+// uc.account.change-email (web, ADR 0074 Decision 8): change the address this account signs in with.
 //
 // The address is the auth salt's input (ADR 0003), so the auth keypair moves with it: this derives the keypair under
 // the NEW address's salt from the unchanged password and sends its public half, which the server keeps pending and

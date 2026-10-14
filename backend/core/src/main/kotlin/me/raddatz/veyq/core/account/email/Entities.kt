@@ -65,7 +65,7 @@ class EmailConfirmationEntity : PanacheEntityBase {
 }
 
 /**
- * A pending change of the sign-in address (uc.account.change-email, ADR 0074 Addendum): the address asked for and
+ * A pending change of the sign-in address (uc.account.change-email, ADR 0074 Decision 8): the address asked for and
  * the auth public key the client derived under its salt, installed together by the confirmation. At most one per
  * account (`ux_email_change_user`): a newer request replaces the row. Spent by **deleting** it — a compare-and-set
  * by row count — so a used link, an unknown one and a replaced one read alike; an expired one is purged by the

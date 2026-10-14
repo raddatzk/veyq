@@ -1,4 +1,4 @@
-// Who uploaded a file's current content, as its page names it (ADR 0083 Addendum, uc.files.view-file step 0). The server
+// Who uploaded a file's current content, as its page names it (ADR 0083 Decision 8, uc.files.view-file step 0). The server
 // records the upload's opener on the attachment and serves it to MEMBERS only, as an opaque key (`uploaderKey` on the
 // member's listing): `user:<id>` is a member, named by core's display rule (decision 9) and linking to the profile while
 // they are in the scope - one who left is a "former member" with no link; `share:<identity>` is a link's guest, named by

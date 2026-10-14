@@ -61,7 +61,7 @@ class ShareFilesResource(
     override fun listShareFiles(shareId: String, xSharePassword: String?): Response =
         when (val o = handler.list(shareId, xSharePassword)) {
             is ShareFilesListOutcome.Listed -> Response.ok(
-                // The guest's own item: no uploader (inbox #190, ADR 0083 Addendum) — FileRow.uploaderKey stops here.
+                // The guest's own item: no uploader (inbox #190, ADR 0083 Decision 8) — FileRow.uploaderKey stops here.
                 ShareFileListing(items = o.files.map { ShareFileListItem(nodeId = UUID.fromString(it.nodeId), fileBlob = it.blob?.let(FilesResource::toRef)) }),
             ).build()
             is HttpFailure -> httpError(o)

@@ -66,7 +66,7 @@ export interface FilesUpload {
 }
 
 /** One file of a member's listing: its blob (null: none yet) and who uploaded that blob — `user:<id>` | `share:<identity>`,
- *  null with no blob (ADR 0083 Addendum) — with a guest uploader's sealed name and its share (inbox #431; null otherwise). */
+ *  null with no blob (ADR 0083 Decision 8) — with a guest uploader's sealed name and its share (inbox #431; null otherwise). */
 export interface ListedFile {
   blob: FileBlobRef | null
   uploaderKey: string | null
@@ -84,7 +84,7 @@ export interface FilesSource {
    *  May list more files than the level's (a guest's listing is the whole subtree). Throws what the call throws. */
   listBlobs(folderId: string | null): Promise<Map<string, FileBlobRef | null>>
   /** The same one listing as {@link listBlobs}, with who uploaded each file's current content (the file page's header, ADR
-   *  0083 Addendum). Absent: this session is shown no uploader — a guest's link listing carries none (inbox #190). */
+   *  0083 Decision 8). Absent: this session is shown no uploader — a guest's link listing carries none (inbox #190). */
   readonly listWithUploaders?: (folderId: string | null) => Promise<Map<string, ListedFile>>
   /** Save one file: decrypted under `key`, saved as `name`. Starts its save picker before anything else is awaited (the
    *  click's activation). */

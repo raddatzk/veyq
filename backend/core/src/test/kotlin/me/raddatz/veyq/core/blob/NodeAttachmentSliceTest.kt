@@ -206,7 +206,7 @@ class NodeAttachmentSliceTest {
     }
 
     /**
-     * ADR 0083 Addendum: an attachment names exactly one uploader — a member or a guest identity — and the database
+     * ADR 0083 Decision 8: an attachment names exactly one uploader — a member or a guest identity — and the database
      * holds it (`ck_attachment_uploader`), so no writer can store an unattributed or doubly attributed blob. Each refused
      * row differs from its accepted control only in the uploader columns (a fresh blob, a free slot, a real identity).
      */

@@ -56,7 +56,7 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
      * ONE transaction, the caller's if it has one. [expectedBlobId] is the blob the caller saw in the slot: null for a
      * first attach into an empty slot, else the blob a replace replaces. [manifest] is [BlobUploadHandler.verifyBlob]'s.
      * The uploader recorded on the attachment is the session's own opener — a guest identity or a member (ADR 0083
-     * Addendum): exactly one, as the session holds exactly one; a replace moves it to the replacer.
+     * Decision 8): exactly one, as the session holds exactly one; a replace moves it to the replacer.
      *
      * **Order** (each step decided where it writes, developer-styleguide §12):
      *  1. the scope row's lock ([NodesStore.lockScope]) — the lock every tree writer and both attachment erasers take

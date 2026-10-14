@@ -34,7 +34,7 @@ import java.util.Base64
 import java.util.UUID
 
 /**
- * Slice tests for changing the sign-in address (uc.account.change-email, ADR 0074 Addendum).
+ * Slice tests for changing the sign-in address (uc.account.change-email, ADR 0074 Decision 8).
  *
  * Every refusal has a live control on the same predicate, and every "nothing changed" is read from the account row
  * and the pending row, not inferred from a status. The GreenMail mailbox is the oracle for what was mailed where.

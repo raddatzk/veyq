@@ -165,7 +165,7 @@ class ShareFilesSliceTest {
     }
 
     /**
-     * ADR 0083 Addendum, inbox #190, #431: a guest's upload records its identity and no member; the member's listing names
+     * ADR 0083 Decision 8, inbox #190, #431: a guest's upload records its identity and no member; the member's listing names
      * it as `share:<identity>` with that identity's sealed name and share, a member's replace moves it back to `user:<id>`
      * (and drops the name) — and the guest's own listing carries no uploader and no name at all. Read RAW (a parsed shape
      * would drop a field the contract does not name), with the member's listing of the same file as the positive control.

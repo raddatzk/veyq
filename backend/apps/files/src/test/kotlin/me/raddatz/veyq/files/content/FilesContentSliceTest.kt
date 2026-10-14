@@ -118,7 +118,7 @@ class FilesContentSliceTest {
     }
 
     /**
-     * ADR 0083 Addendum: the member's listing names who uploaded each file's CURRENT content — the attachment records the
+     * ADR 0083 Decision 8: the member's listing names who uploaded each file's CURRENT content — the attachment records the
      * upload's opener, and a replace by another member moves it to the replacer. A file without content names nobody.
      */
     @Test

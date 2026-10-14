@@ -24,7 +24,7 @@ data class GuestUploaderName(val sealedName: String, val shareId: String)
 
 /**
  * One live file under a parent and its blob (null: no upload of it has completed yet), with who uploaded that blob:
- * [uploaderKey] is `user:{id}` or `share:{identityId}` (ADR 0083 Addendum), null with no blob; for a `share:` uploader
+ * [uploaderKey] is `user:{id}` or `share:{identityId}` (ADR 0083 Decision 8), null with no blob; for a `share:` uploader
  * whose identity row exists, [uploaderName] is that guest's sealed name (inbox #431). Only a MEMBER's listing reads and
  * serves either; the guest's item has no such field (`ShareFilesResource`, inbox #190).
  */

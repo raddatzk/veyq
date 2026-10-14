@@ -36,7 +36,7 @@
   (`ownerId`) and the role ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md), ADR 0080 Decision 13), so no
   new seal purpose exists for Files. The attachment records **who uploaded the current blob** (core's columns:
   `uploader_user_id` for a member, `share_identity_id` for a guest - exactly one; a replace moves it to the replacer;
-  [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Addendum).
+  [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Decision 8).
 - **The metadata is the blob's** (inbox #397): the picked file's type, its name and its modified time
   (`{type, name, modifiedAt}`, `uploadFile.ts` `fileBlobMeta`) are sealed under the blob's own `K_blob` with core's
   `blob-meta` seal at the upload's declare (`planBlob`'s `meta`, `wrappedBlobMeta` on the start — member and guest
@@ -150,7 +150,7 @@ reads).
   restore stays offered (inbox #391). A failure the same file has since been uploaded over is no longer shown. A
   replace keeps the file's name (the opened file's action says so in its tooltip); a rename selects the name without its extension (`register.ts`
   `renameSelectionEnd`).
-- **The opened file names its uploader** for a member (ADR 0083 Addendum, `uploader.ts`): the header's meta line reads
+- **The opened file names its uploader** for a member (ADR 0083 Decision 8, `uploader.ts`): the header's meta line reads
   "Uploaded by" with the person's avatar and display name (core's `core/people` directory, the scope's current members),
   a real link to `#people/<id>`; a member who left reads a greyed "former member" without a link; a guest by its name
   without a link (`guestUploaderName`, inbox #431: inside a drop box the identity folder of that identity, else the
@@ -529,7 +529,7 @@ write and the display are core's, the image is the box's own blob in the `COVER`
 ## Operator-visible, beyond the platform's `kind`
 
 File sizes (exact sealed sizes, unless padded), upload and change timestamps, the tree's shape, when a file's blob
-was replaced and which member or guest identity uploaded its current blob (ADR 0083 Addendum); of a blob's sealed metadata only its length, padded to one of four 256-byte buckets (a name's rough length
+was replaced and which member or guest identity uploaded its current blob (ADR 0083 Decision 8); of a blob's sealed metadata only its length, padded to one of four 256-byte buckets (a name's rough length
 class, not the name). For a drop box: how many guests sent something (one folder per identity), which identity holds which
 folder and its files, and when.
 

@@ -84,6 +84,6 @@ funktioniert weiter, zeigt aber die alte Adresse.
 - Use-cases: [uc.account.confirm-email-address](uc.account.confirm-email-address.md) (the confirmation record this sets),
   [uc.account.change-password](uc.account.change-password.md) (the proof and the session revocation it mirrors),
   [uc.account.recover-access](uc.account.recover-access.md) (what the address is for)
-- Decisions: [ADR 0074](../../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md) Addendum,
+- Decisions: [ADR 0074](../../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md) Decision 8,
   [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md), [ADR 0049](../../../decisions/0049-email-delivery-boundary.md),
   [ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)

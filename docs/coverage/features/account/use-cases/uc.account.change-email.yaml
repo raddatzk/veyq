@@ -1,7 +1,7 @@
 useCase: uc.account.change-email
 feature: account
 title: Change the address an account signs in with
-# Built by cr-change-email (ADR 0074 Addendum). Every refusal is asserted against a live control on the same predicate,
+# Built by cr-change-email (ADR 0074 Decision 8). Every refusal is asserted against a live control on the same predicate,
 # and each was bitten by injection: removing the check it names turned its test red (the race by dropping the replay
 # question of createOrConflict, which turned the loser into a 500).
 acceptanceCriteria:

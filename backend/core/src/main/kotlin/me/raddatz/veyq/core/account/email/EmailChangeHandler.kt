@@ -60,7 +60,7 @@ sealed interface EmailChangeConfirmOutcome {
 }
 
 /**
- * Changing the address an account signs in with (uc.account.change-email, ADR 0074 Addendum).
+ * Changing the address an account signs in with (uc.account.change-email, ADR 0074 Decision 8).
  *
  * The address is the auth salt's input (ADR 0003), so the auth key changes with it: the client derives the new one
  * and the server installs **both together**, and only once the new address is proven. Asking for it mints a cold
@@ -203,7 +203,7 @@ class EmailChangeHandler(
         val oldEmail = user.email
         user.email = normalizeEmail(row.newEmail)
         user.authPublicKey = row.authPublicKey
-        // The link proved the new address (ADR 0074 Addendum 2). The one writer of the stamp binds it to the address.
+        // The link proved the new address (ADR 0074 Decision 2). The one writer of the stamp binds it to the address.
         user.confirmAddress(user.email)
         presentedAccessToken?.let { sessions.revokeOtherFamilies(userId, it) }
         return EmailChangeConfirmOutcome.Changed(oldEmail)

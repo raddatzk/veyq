@@ -477,7 +477,7 @@ components:
           x-veyq-visibility: structure
           type: [string, "null"]
           description: >
-            Who uploaded the file's CURRENT content (ADR 0083 Addendum): `user:{userId}` (a member) or
+            Who uploaded the file's CURRENT content (ADR 0083 Decision 8): `user:{userId}` (a member) or
             `share:{shareIdentityId}` (a link's guest) — the opaque key shape Memories' `ownerKey` uses. A replace moves
             it to the replacer; who created the node is not recorded. Operator-visible coarse metadata (ADR 0034's class:
             who uploaded which blob), never a name. Null while the file holds no content. Members only: the guest's
@@ -521,7 +521,7 @@ components:
       type: object
       description: >
         One file of a GUEST's listing: the blob reference and nothing about who uploaded it (inbox #190, ADR 0083
-        Addendum) — a schema of its own so the member's item can grow without reaching a guest.
+        Decision 8) — a schema of its own so the member's item can grow without reaching a guest.
       required: [nodeId]
       properties:
         nodeId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }

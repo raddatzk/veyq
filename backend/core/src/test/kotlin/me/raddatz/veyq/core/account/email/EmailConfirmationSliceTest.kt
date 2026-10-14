@@ -39,7 +39,7 @@ import java.util.UUID
 /**
  * Slice tests for address confirmation (uc.account.confirm-email-address, ADR 0074).
  *
- * The record is a **fact set by three events and gating nothing**, so the file has two halves: the three events
+ * The record is a **fact set by four events and gating nothing**, so the file has two halves: the three events
  * that must set it (and the neighbouring events that must not — each the positive control of the one above it),
  * and the confirmation flow's refusals, every one with a live control on the same predicate. The GreenMail
  * mailbox is the oracle for "mailed": the handler cannot repair what did or did not arrive there.
@@ -65,7 +65,7 @@ class EmailConfirmationSliceTest {
     @Inject
     lateinit var recovery: RecoveryHandler
 
-    // --- the three events that set the record (ADR 0074 Decision 2) ---
+    // --- three of the four events that set the record (ADR 0074 Decision 2; the fourth is EmailChangeSliceTest's) ---
 
     @Test
     fun memberInviteRedemptionConfirms() {

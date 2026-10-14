@@ -55,7 +55,7 @@ class VeyqUser : PanacheEntityBase {
     var requireGroupAddConsent: Boolean = false
 
     /** When the account holder last showed they read mail sent to [email] (ADR 0074 Decision 1) — a fact about the
-     *  address, not a permission: nothing is gated on it (Decision 3). Null until one of the three events in
+     *  address, not a permission: nothing is gated on it (Decision 3). Null until one of the four events in
      *  [confirmAddress]'s callers. Server-visible operational metadata, like the address itself.
      *
      *  Only its presence is read today ([me.raddatz.veyq.core.account.email.EmailConfirmationHandler] surfaces
@@ -71,7 +71,7 @@ class VeyqUser : PanacheEntityBase {
      *
      * The one writer of [emailConfirmedAt], called in the same transaction as each of the events that prove it
      * (Decision 2): a redeemed MEMBER invite, a completed reset, a confirmation link, and a confirmed change of the
-     * address (Addendum 2: `EmailChangeHandler` sets the new [email] and stamps it in one write — the link proved
+     * address (Decision 8: `EmailChangeHandler` sets the new [email] and stamps it in one write — the link proved
      * it). Any other path that changes [email] must clear the stamp in the same write.
      */
     fun confirmAddress(address: String, at: Instant = Instant.now()): Boolean {

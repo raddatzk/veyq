@@ -81,7 +81,8 @@ Two other events set the same record without this flow:
 - **A fact, not a gate.** No request is refused because an account is unconfirmed. Recovery proves address
   control at use time, and gating it here would strand the very accounts this flow is for.
 - **Bound to the address.** The token row records the address it was mailed to, and the confirmation stamps only
-  that address. A future address change clears the stamp in the same write.
+  that address. An address change ([uc.account.change-email](uc.account.change-email.md)) stamps the new address
+  in the same write, because its link proved it.
 - **Operator-visible, like the address itself.** The timestamp and the send-fact are operational metadata in the
   [security-model](../../../crosscutting/security-model.md) inventory. They defend against a mistake, not
   against the operator.
@@ -105,9 +106,9 @@ auch kein Passwort zurücksetzen. Bitte die Person, die den Bereich betreibt, E-
 
 - **Feature:** [account](../_index.md)
 - **Use-cases:** [uc.account.recover-access](uc.account.recover-access.md) (the flow this keeps reachable, and
-  one of the three events that set the record),
+  one of the four events that set the record),
   [uc.spaces.add-member](../../spaces/use-cases/uc.spaces.add-member.md) (the mailed member invite, another of
-  the three), [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) (the copy-link
+  the four), [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) (the copy-link
   bootstrap that leaves the first owner unconfirmed),
   [uc.admin.tenant-mail-settings](../../admin/use-cases/uc.admin.tenant-mail-settings.md) (where the owner is
   prompted).

@@ -35,7 +35,7 @@ info:
     is a fact, not a gate: no request anywhere is refused because an account is unconfirmed.
 
     `/api/account/email-change` changes the address an account signs in with (uc.account.change-email, ADR 0074
-    Addendum). The address is the auth salt's input (ADR 0003), so the client derives the auth keypair under the new
+    Decision 8). The address is the auth salt's input (ADR 0003), so the client derives the auth keypair under the new
     address and sends its public half; the server keeps it pending and installs it together with the address when
     the link mailed to the new address is opened in the same account's session.
 tags:
@@ -66,7 +66,7 @@ tags:
     description: The caller's own address as the server holds it, whether it is confirmed, and the
       confirmation mail — uc.account.confirm-email-address (ADR 0074). Separate tag → its own resource interface.
   - name: account-email-change
-    description: Change the address an account signs in with — uc.account.change-email (ADR 0074 Addendum).
+    description: Change the address an account signs in with — uc.account.change-email (ADR 0074 Decision 8).
       Separate tag → its own resource interface.
 
 paths:
@@ -789,7 +789,7 @@ paths:
       operationId: requestEmailChange
       summary: Ask to change the address this account signs in with; a link goes to the new address.
       description: >
-        The first half of uc.account.change-email (ADR 0074 Addendum). The body carries the new address, the auth
+        The first half of uc.account.change-email (ADR 0074 Decision 8). The body carries the new address, the auth
         public key the client derived under that address's salt (ADR 0003 — the address is the salt's input), and
         the two halves of the cold credential, as `POST /api/account/password` does: an attestation signed with the
         CURRENT auth key over the account, the new address and the new key (the password), and a Secret-Key proof
@@ -870,7 +870,7 @@ paths:
         The second half of uc.account.change-email. Only a caller signed in as the account that asked can confirm:
         the proof is that **the account holder** reads the new mailbox. Under the account's lock the pending change
         is spent (single use) and, if the address is still free, the account's email and auth public key are
-        swapped in one transaction, the address is recorded as confirmed (ADR 0074 Addendum 2 — the link proved
+        swapped in one transaction, the address is recorded as confirmed (ADR 0074 Decision 2 — the link proved
         it), and every session but the caller's is revoked. Then the OLD address is mailed a fixed notice that the
         sign-in address changed (link, domain, expiry only — never the new address, ADR 0049).
 
