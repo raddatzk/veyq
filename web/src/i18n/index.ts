@@ -646,7 +646,10 @@ const en = {
     failed: 'The change didn’t go through. Nothing was changed — check your connection and try again.',
     kitTitle: 'Print a new Emergency Kit',
     kitSub:
-      'Your old kit still works, but it shows your old address. Enter your Secret Key — or import the old kit — to make one with the new address.',
+      'Your old kit still works, but it shows your old address. Enter your password and your Secret Key — or import the old kit — and we check them before making one with the new address.',
+    kitCheck: 'Check and make the kit',
+    kitRefused: 'That password or Secret Key didn’t match, so no kit was made — a kit with a wrong key would fail exactly when you need it.',
+    kitFailed: 'The check didn’t go through, so no kit was made. Check your connection and try again.',
   },
   login: {
     title: 'Sign in',
@@ -2343,7 +2346,10 @@ const de: typeof en = {
     failed: 'Die Änderung hat nicht geklappt. Es wurde nichts geändert – prüfe deine Verbindung und versuche es erneut.',
     kitTitle: 'Neues Notfall-Kit erstellen',
     kitSub:
-      'Dein altes Kit funktioniert weiter, zeigt aber deine alte Adresse. Gib deinen Secret Key ein – oder importiere das alte Kit –, um eines mit der neuen Adresse zu erstellen.',
+      'Dein altes Kit funktioniert weiter, zeigt aber deine alte Adresse. Gib dein Passwort und deinen Secret Key ein – oder importiere das alte Kit –; wir prüfen beides, bevor wir eines mit der neuen Adresse erstellen.',
+    kitCheck: 'Prüfen und Kit erstellen',
+    kitRefused: 'Passwort oder Secret Key passen nicht, deshalb wurde kein Kit erstellt – ein Kit mit falschem Schlüssel versagt genau dann, wenn du es brauchst.',
+    kitFailed: 'Die Prüfung hat nicht geklappt, deshalb wurde kein Kit erstellt. Prüfe deine Verbindung und versuche es erneut.',
   },
   login: {
     title: 'Anmelden',

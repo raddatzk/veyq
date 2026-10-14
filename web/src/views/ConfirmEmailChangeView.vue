@@ -6,8 +6,11 @@
 // content.
 //
 // Once the change is done it offers a new Emergency Kit (uc.account.change-email step 5): the old kit's Secret Key is
-// still valid, but the kit prints the old address. The Secret Key is asked for here — typed, pasted, or imported from
-// the old kit (SecretKeyField) — and the kit is EmergencyKitSave's, with the address the server now holds.
+// still valid, but the kit prints the old address. The password and the Secret Key are asked for here (the key typed,
+// pasted, or imported from the old kit), and the kit — EmergencyKitSave's, with the address the server now holds — is
+// offered ONLY once they pass the shared cold-credential check against the stored floor (`checkColdCredential`, the
+// request's check, usable with a locked vault). A kit printed from a mistyped key fails exactly when it is needed, so
+// a key that does not pass prints nothing.
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -21,7 +24,10 @@ import { readdressRemembered } from '../features/account/rememberMe/deviceKeyWra
 import { readdressSessionVault } from '../features/account/rememberMe/sessionVault'
 import { session } from '../app/session'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
+import Password from 'primevue/password'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
+import { ColdCredentialRefused, checkColdCredential } from '../features/account/coldCredential'
+import { useAsyncAction } from '../shared/state/useAsyncAction'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -29,8 +35,33 @@ const router = useRouter()
 type Phase = 'noLink' | 'confirming' | 'done' | ConfirmRefusal
 const phase = ref<Phase>('noLink')
 const newEmail = ref('')
+const kitPassword = ref('')
 const secretKey = ref('')
+// The key the kit prints — set only by a passed check, and dropped the moment the typed key changes.
+const checkedKey = ref('')
+const kitError = ref('')
 const kitReady = ref(false)
+
+const { run: checkKit, pending: checking } = useAsyncAction(
+  async () => {
+    kitError.value = ''
+    checkedKey.value = ''
+    const key = secretKey.value.trim()
+    await checkColdCredential(kitPassword.value, key)
+    checkedKey.value = key
+    kitPassword.value = ''
+  },
+  {
+    onError: (e) => {
+      kitError.value = t(e instanceof ColdCredentialRefused && e.reason === 'credentialRejected' ? 'emailChange.kitRefused' : 'emailChange.kitFailed')
+    },
+  },
+)
+
+function onKeyInput(value: string) {
+  secretKey.value = value
+  if (value.trim() !== checkedKey.value) checkedKey.value = ''
+}
 
 async function consumeFragment() {
   const token = window.location.hash.replace(/^#/, '')
@@ -85,11 +116,27 @@ onUnmounted(() => window.removeEventListener('hashchange', consumeFragment))
         <section v-if="newEmail" class="kit-offer" data-testid="change-email-kit">
           <h3>{{ t('emailChange.kitTitle') }}</h3>
           <p class="veyq-form-copy">{{ t('emailChange.kitSub') }}</p>
-          <label class="settings-field">
-            {{ t('emailChange.secretKeyLabel') }}
-            <SecretKeyField v-model="secretKey" />
-          </label>
-          <EmergencyKitSave v-if="secretKey.trim()" v-model="kitReady" :email="newEmail" :secret-key="secretKey.trim()" />
+          <form class="veyq-form" data-testid="change-email-kit-check" @submit.prevent="checkKit()">
+            <label class="settings-field">
+              {{ t('emailChange.passwordLabel') }}
+              <Password v-model="kitPassword" :feedback="false" toggle-mask autocomplete="current-password" :disabled="checking" />
+            </label>
+            <label class="settings-field">
+              {{ t('emailChange.secretKeyLabel') }}
+              <SecretKeyField :model-value="secretKey" :disabled="checking" @update:model-value="onKeyInput" />
+            </label>
+            <Message v-if="kitError" severity="error" :closable="false" data-testid="change-email-kit-error">{{ kitError }}</Message>
+            <Button
+              v-if="!checkedKey"
+              type="submit"
+              :label="t('emailChange.kitCheck')"
+              icon="pi pi-check"
+              severity="secondary"
+              :disabled="!kitPassword || !secretKey.trim() || checking"
+              :loading="checking"
+            />
+          </form>
+          <EmergencyKitSave v-if="checkedKey" v-model="kitReady" :email="newEmail" :secret-key="checkedKey" />
         </section>
 
         <Button :label="t('emailConfirm.toSettings')" icon="pi pi-cog" @click="router.push('/settings/security')" />

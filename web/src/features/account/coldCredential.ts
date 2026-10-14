@@ -52,28 +52,14 @@ export class ColdCredentialRefused extends Error {
 export async function proveColdCredential(password: string, secretKeyB64: string): Promise<Uint8Array> {
   const held = masterKey()
   if (!held) throw new ColdCredentialRefused('vaultLocked')
-
-  const material = await withRefresh(() => accountApi().getAccountKeyMaterial())
-  const floor = material.wraps.find((w) => w.method === MasterKeyWrapMethodEnum.Password)
-  if (!floor?.kdfParams) {
-    held.fill(0)
-    throw new ColdCredentialRefused('noFloorWrap')
-  }
-
-  const secretKey = fromB64std(secretKeyB64.trim())
-  // A served profile this client does not write throws `v1.KdfProfileRefused` here (ADR 0017 rule 5). It is the
-  // server's fault, not the credential's, so it stays OUTSIDE the refusals above: both screens then say "nothing
-  // was changed, try again", never "that password or Secret Key didn't match".
-  const { params, salt } = v1.decodeKdfParams(fromB64std(floor.kdfParams))
-  const kek = await unlockKekAsync(secretKey, password, salt, params)
   let opened: Uint8Array
   try {
-    opened = v1.open({ purpose: 'master-key' }, kek, fromB64std(floor.wrappedKey))
-  } catch {
+    opened = await openFloor(password, secretKeyB64)
+  } catch (e) {
     held.fill(0)
-    throw new ColdCredentialRefused('credentialRejected')
+    throw e
   }
-  // A wrong Secret Key with a right password (or the reverse) fails the AEAD above; this compares what the
+  // A wrong Secret Key with a right password (or the reverse) fails the AEAD in `openFloor`; this compares what the
   // wrap yielded against what this session is holding, so a *stale* proof — a floor rewritten under us — is
   // refused too rather than silently minting a credential from a Master Key that is no longer the account's.
   const matches = opened.length === held.length && opened.every((b, i) => b === held[i])
@@ -83,4 +69,42 @@ export async function proveColdCredential(password: string, secretKeyB64: string
     throw new ColdCredentialRefused('credentialRejected')
   }
   return held
+}
+
+/**
+ * The same proof where the vault may be LOCKED (uc.account.change-email step 5: the page a mail link opens is not
+ * behind the unlock gate). It opens the stored `PASSWORD` floor with what was typed now — which only the account's
+ * password AND its Secret Key do — and, where this session does hold a Master Key, runs [proveColdCredential] itself.
+ * It returns nothing: its use is to refuse a Secret Key before anything is built from it (a new Emergency Kit printed
+ * from a mistyped key fails exactly on the day it is needed).
+ */
+export async function checkColdCredential(password: string, secretKeyB64: string): Promise<void> {
+  if (masterKey()) {
+    ;(await proveColdCredential(password, secretKeyB64)).fill(0)
+    return
+  }
+  ;(await openFloor(password, secretKeyB64)).fill(0)
+}
+
+/** Open the stored `PASSWORD` floor with the offered password and Secret Key: the Master Key it holds, or a refusal. */
+async function openFloor(password: string, secretKeyB64: string): Promise<Uint8Array> {
+  const material = await withRefresh(() => accountApi().getAccountKeyMaterial())
+  const floor = material.wraps.find((w) => w.method === MasterKeyWrapMethodEnum.Password)
+  if (!floor?.kdfParams) throw new ColdCredentialRefused('noFloorWrap')
+
+  const secretKey = fromB64std(secretKeyB64.trim())
+  try {
+    // A served profile this client does not write throws `v1.KdfProfileRefused` here (ADR 0017 rule 5). It is the
+    // server's fault, not the credential's, so it stays OUTSIDE the refusals: the screens then say "nothing was
+    // changed, try again", never "that password or Secret Key didn't match".
+    const { params, salt } = v1.decodeKdfParams(fromB64std(floor.kdfParams))
+    const kek = await unlockKekAsync(secretKey, password, salt, params)
+    try {
+      return v1.open({ purpose: 'master-key' }, kek, fromB64std(floor.wrappedKey))
+    } catch {
+      throw new ColdCredentialRefused('credentialRejected')
+    }
+  } finally {
+    secretKey.fill(0)
+  }
 }
