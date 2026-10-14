@@ -262,7 +262,8 @@ A refined CR nails **decisions, not keystrokes**:
   fed a chunked source to the upload pump (fine) and to Memories' import, which decodes whole (`createImageBitmap`) - a
   question back to the owner the refine could have asked. And a list of fields in a decision says whether it is
   **exhaustive or illustrative**. A **mode flag** that unlocks trust (a copy's extras riding content an archive also
-  carries) comes from the caller, never from the data.
+  carries) comes from the caller, never from the data. A CR that edits a pre-release baseline says there are **no existing rows** (every dev
+  database is recreated) rather than designing for legacy rows that cannot exist (cr-file-uploader).
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest
   names — an attacker who, with that same link and dump, decrypts every photo of the Memory. The owner took the

@@ -20,6 +20,9 @@
    its identity folder's name, any other guest by its sealed name opened under the file's key or the nearest ancestor key
    the member holds; a guest of a deleted link stays named; "a guest" only where the name does not open. A replace makes
    the replacer the uploader. A share guest sees none: the link's listing carries no uploader and no name.
+   Seen in a real browser on 2026-10-14: the owner's upload read "Uploaded by" with the owner's avatar and a profile
+   link; a `READ_WRITE` folder link's guest named itself "Ben Gast" and uploaded a file - the guest's own file page showed
+   no uploader line, the member's read "Uploaded by Ben Gast" as plain text without a link.
 1. The page opens. Only now does the client read the file (not for a row in a list): it opens the first chunk under the
    file's key and **sniffs the bytes** (magic numbers) — the sealed type and the name only narrow, never decide.
 2. **Image** (JPEG, PNG, GIF, WebP, AVIF, BMP, SVG; HEIC is tried and falls back where the browser cannot decode it):

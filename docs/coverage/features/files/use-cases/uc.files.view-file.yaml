@@ -89,17 +89,11 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [FilesContentSliceTest.theListingNamesTheUploaderOfTheCurrentContentAndAReplaceMovesIt, NodeAttachmentSliceTest.anAttachmentNamesExactlyOneUploader, ShareFilesSliceTest.aGuestsUploadIsAttributedToItsIdentityForMembersAndTheGuestListingNamesNoUploader] }
       web: { unit: [src/features/files/components/FileDetail.uploader.test.ts] }
-    gaps:
-      - surface: web
-        reason: Proven in unit tests with a real router and the real catalog; no real browser has shown the line on the dev instance yet (cr-file-uploader phase 3 leaves that pass to the session that merges it).
   - id: a-member-reads-a-guests-name
     text: For a share uploader the member's listing also serves that identity's sealed display name and its share id (uploaderName; null for a member's upload and a file with no content), a deleted link's guest included. The page names the guest by it without a link - inside a drop box by the identity folder of that same identity, else the sealed name opened under the file's key or the nearest ancestor key the member's tree holds (core's openIdentityName, which Memories' buckets read too) - and reads "a guest" where it does not open (another key, a seal bound to another share, a chain that does not open, no base64).
     coverage:
       backend: { integration: [ShareFilesSliceTest.aGuestsUploadIsAttributedToItsIdentityForMembersAndTheGuestListingNamesNoUploader, ShareFilesSliceTest.aDeletedLinkKeepsItsGuestsIdentityWhileItsFileNamesIt, FilesContentSliceTest.theListingNamesTheUploaderOfTheCurrentContentAndAReplaceMovesIt] }
       web: { unit: [src/features/files/components/FileDetail.uploader.test.ts, src/core/sharing/guestIdentity.test.ts] }
-    gaps:
-      - surface: web
-        reason: Proven in unit tests over real seals and a real key chain; no real browser has shown a guest's name on a file page yet (cr-file-uploader-guest-names ran in a worktree, the session that merges it clicks it).
   - id: a-guest-is-shown-no-uploader
     text: A share guest is never told who uploaded a file - the link's file listing has an item schema of its own with no uploader field and no name (its raw JSON carries neither field, either id nor the sealed name), and the guest's page names nobody and asks no member directory, even were its listing to carry a name it could open.
     coverage:
