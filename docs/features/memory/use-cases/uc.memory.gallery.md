@@ -26,6 +26,15 @@
    ordered by **effective capture time** — newest first by default, a header toggle for oldest first, undated
    media last — read from each media's sealed capture tier, so the blind server never sees a timestamp yet the
    order is exact on device (cr-0066).
+3a. **Zoom and slideshow in the lightbox** (decided 2026-10-14 by the coordinator on the owner's behalf, inbox #90 and
+   #91; not yet built). **Zoom:** double-click / double-tap toggles 1x / 2x, a pinch with two pointers and ctrl+wheel
+   zoom continuously, a drag pans; past the preview's own resolution the **original** is fetched and decrypted once,
+   only for a type the browser decodes (from the sealed media type) and under 50 MB, else the zoom stays on the preview;
+   navigating resets the zoom, and the arrow keys do not navigate while zoomed. **Slideshow:** a play control advances
+   every 5 s through the grid order, a video showing its poster for one interval (no autoplay), and stops on the last
+   item; any key, pointer, zoom or details interaction pauses it, a hidden tab too; the next preview is fetched one
+   ahead; while it runs, no EXIF read and no place-name backfill happen (they start when the user pauses on an item).
+   The member and the guest get both (share view = member view; a guest's loaders are its source's).
 3. **Lightbox:** clicking an item opens it full-view; the client fetches that item's **preview**, decrypts, and
    displays it; **prev/next** page through the grid order. (The preview — not the multi-MB original — keeps the
    lightbox fast.) A **video** (known from the media type sealed in its original's blob meta, which rides the
@@ -88,7 +97,7 @@
 
 - **Operator-blind.** Every tier is fetched as **ciphertext** and decrypted on device; the server never sees a
   pixel, a filename, a media type or a content key. The lightbox shows the **preview**, not the original — the original
-  leaves the store only on explicit download.
+  leaves the store on explicit download, a video's playback, and (decided, not yet built) a zoom past the preview.
 - **One order for every tile — including one that is still uploading.** The grid has a single ordering rule
   and no privileged front. A picked file takes its capture-time place the moment its tile appears — *before* it
   is sealed or uploaded — because that key is derivable on device from the same **EXIF date, else the file's
