@@ -6,7 +6,11 @@
 // fetched as ciphertext and decrypted on device; the decrypted preview becomes an object URL that is **revoked** on
 // navigation / close / unmount.
 // The detail panel (cr-0064) shows the lazily-loaded EXIF tier and lets the user **correct the capture time**
-// (cr-0065, sealed under K_mem). Out of scope (own CRs): highlight, fullscreen-original, sharing.
+// (cr-0065, sealed under K_mem).
+// **Zoom** (cr-lightbox-zoom-slideshow, uc.memory.gallery 3a): double-click/tap, pinch, ctrl+wheel and `+`/`-`/`0` on a
+// photo (`shared/ui/usePanZoom.ts`, a drag pans while zoomed); past the preview's resolution the ORIGINAL replaces it in
+// place where `../lightboxZoom.ts` allows - fetched as ciphertext through the source's `originalLoader`, decrypted here, its
+// object URL revoked on navigation / close like the preview's. A video does not zoom.
 //
 // **One lightbox for a member and a share guest** (inbox #401). It touches no API itself: every byte and seal comes
 // through the loaders the Memory's data source hands in (`../source.ts`, the member's or the guest's — required, so no
@@ -43,6 +47,8 @@ import { formatBytes } from '../../../shared/formatBytes'
 import type { MediaMetaDoor } from '../source'
 import type { UploaderLabel } from '../useUploaderNames'
 import { personHash } from '../../../core/node/location'
+import { usePanZoom } from '../../../shared/ui/usePanZoom'
+import { exceedsPreview, originalZoomable } from '../lightboxZoom'
 
 const props = defineProps<{
   memoryKey: Uint8Array
@@ -55,7 +61,7 @@ const props = defineProps<{
   /** Whether the shown item carries a delete (`delete` event; the parent trashes or purges it, Delete key included). */
   canDelete: (item: MediaItem) => boolean
   previewLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the preview tier
-  originalLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the whole original — the Slice-1 video fallback only
+  originalLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the whole original — the Slice-1 video fallback and the zoom
   metaResolver: (item: MediaItem) => MediaMeta | null // unseal the listed date/GPS tier
   // the original's sealed blob meta — its type, file name, modified time (inbox #397)
   blobMetaResolver: (item: MediaItem) => OpenedBlobMeta | null
@@ -138,6 +144,7 @@ const videoType = computed(() => (isVideoMediaType(mediaType.value) ? mediaType.
 // item (E1) carries no preview tier, so the stage shows a download fallback instead of fetching its original.
 async function loadPreview() {
   clearPreview()
+  dropZoom() // navigation resets the zoom and revokes the previous item's original
   clearVideo() // drop the previous item's playing video (revoke its blob URL)
   stopSwPlayback() // and tear down any SW playback of the previous item (revoke handle + port)
   videoLoading.value = false
@@ -155,6 +162,66 @@ async function loadPreview() {
     if (item.value === target) loading.value = false
   }
 }
+
+// --- zoom (cr-lightbox-zoom-slideshow) ---------------------------------------------------------------------------------
+// Only a shown photo zooms: not a video (poster or playing), not an error or a fallback. The transform sits on the stage's
+// <img>; the stage is the viewport the pan is bounded to.
+const stageEl = ref<HTMLElement | null>(null)
+const stageImg = ref<HTMLImageElement | null>(null)
+const zoomable = computed(() => !!previewUrl.value && !videoType.value && !error.value && !videoSwUrl.value && !videoUrl.value)
+const zoom = usePanZoom(() => {
+  const img = stageImg.value
+  const stage = stageEl.value
+  return img && stage ? { content: { w: img.clientWidth, h: img.clientHeight }, viewport: stage.getBoundingClientRect() } : null
+})
+// The original past the preview's resolution: its own object-URL owner, shown once it decoded (`originalReady`), asked
+// for once per shown item (`originalAsked` holds that item's id), dropped on navigation and revoked on unmount.
+const { url: originalUrl, set: setOriginal, clear: clearOriginal } = useObjectUrl()
+const originalReady = ref(false)
+let originalAsked: string | null = null
+// The preview's own pixel size while the original shows: the original is drawn no larger than the preview was, so the
+// swap lands in place at the same transform (same box, same aspect, more pixels).
+const previewNatural = ref<{ w: number; h: number } | null>(null)
+const shownImageUrl = computed(() => (originalReady.value && originalUrl.value ? originalUrl.value : previewUrl.value))
+const stageImageStyle = computed(() => ({
+  transform: zoom.transform.value,
+  ...(originalReady.value && previewNatural.value
+    ? { maxWidth: `min(100%, ${previewNatural.value.w}px)`, maxHeight: `min(100%, ${previewNatural.value.h}px)` }
+    : {}),
+}))
+
+function dropZoom() {
+  zoom.reset()
+  clearOriginal()
+  originalReady.value = false
+  previewNatural.value = null
+  originalAsked = null
+}
+
+/** Past the preview's resolution, fetch the original once for this item - where its type and size allow (`lightboxZoom.ts`). */
+async function maybeLoadOriginal() {
+  const target = item.value
+  const img = stageImg.value
+  if (!target || !img || !zoomable.value || originalAsked === target.mediaId) return
+  if (!originalZoomable(mediaType.value, target.original.byteSize)) return
+  if (!exceedsPreview(img.clientWidth, zoom.scale.value, window.devicePixelRatio, img.naturalWidth)) return
+  originalAsked = target.mediaId
+  const natural = { w: img.naturalWidth, h: img.naturalHeight }
+  try {
+    const bytes = await originalOf(target)
+    if (item.value !== target) return // navigated away while decrypting — drop it
+    setOriginal(new Blob([bytes as BlobPart]))
+    const probe = new Image()
+    probe.src = originalUrl.value!
+    await probe.decode() // a type that claims a raster but does not decode keeps the preview
+    if (item.value !== target) return
+    previewNatural.value = natural
+    originalReady.value = true
+  } catch {
+    if (item.value === target) clearOriginal() // the preview stays, silently
+  }
+}
+watch(zoom.scale, () => void maybeLoadOriginal())
 
 // Reload when the SHOWN item changes — by identity, not just the index: after a delete (cr-0110) the parent
 // removes the item and the array shifts, so the same index now holds a different item (its mediaId changes).
@@ -483,7 +550,11 @@ function emitDelete() {
 
 function onKeydown(event: KeyboardEvent) {
   if (props.suspendKeys) return // a modal (cover cropper) is open over the lightbox — let it own the keyboard
-  if (event.key === 'Escape') emit('close')
+  if (zoomable.value && !isEditingCapturedAt.value && zoom.onKey(event.key)) return // + / - / 0: the zoom's keyboard path
+  if (event.key === 'Escape') {
+    if (zoom.zoomed.value) zoom.reset() // Escape un-zooms first, then closes
+    else emit('close')
+  } else if (zoom.zoomed.value && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) return // no paging while zoomed
   else if (event.key === 'ArrowLeft') prev()
   else if (event.key === 'ArrowRight') next()
   else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); emitDelete() } // cr-0110 culling hotkey
@@ -565,7 +636,20 @@ onBeforeUnmount(() => {
           <span class="pi pi-chevron-left" />
         </button>
 
-        <div class="media-lightbox-stage">
+        <div
+          ref="stageEl"
+          class="media-lightbox-stage"
+          :class="{
+            'media-lightbox-stage-zoomable': zoomable,
+            'media-lightbox-stage-zoomed': zoomable && zoom.zoomed.value,
+            'media-lightbox-stage-gesturing': zoom.gesturing.value,
+          }"
+          @pointerdown="zoomable && zoom.onPointerDown($event)"
+          @pointermove="zoomable && zoom.onPointerMove($event)"
+          @pointerup="zoomable && zoom.onPointerUp($event)"
+          @pointercancel="zoomable && zoom.onPointerUp($event)"
+          @wheel="zoomable && zoom.onWheel($event)"
+        >
           <p v-if="error" class="media-lightbox-error">{{ t('media.loadError') }}</p>
           <!-- Video playback (#104, ADR 0047): once the user clicks play, the video plays either from the SW range
                path (`videoSwUrl` = /__media/<handle>, Slice 2) or, as a fallback, a decrypted typed blob URL
@@ -584,7 +668,14 @@ onBeforeUnmount(() => {
               <span class="pi" :class="videoLoading ? 'pi-spin pi-spinner' : 'pi-play'" />
             </button>
           </div>
-          <img v-else-if="previewUrl" :src="previewUrl" :alt="memoryName" />
+          <img
+            v-else-if="previewUrl"
+            ref="stageImg"
+            :src="shownImageUrl ?? undefined"
+            :alt="memoryName"
+            :style="stageImageStyle"
+            draggable="false"
+          />
           <span v-else-if="loading" class="media-original-loading">
             <span class="pi pi-spin pi-spinner" />
             <span>{{ t('media.loading') }}</span>
@@ -724,6 +815,28 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* The zoom (cr-lightbox-zoom-slideshow): a shown photo takes the gestures itself (no browser pan / pinch-zoom of the page),
+   a zoomed one is clipped to the stage so it never covers the paging buttons or the details, and the transform eases
+   except while a finger or the mouse drives it. */
+.media-lightbox-stage-zoomable {
+  touch-action: none;
+  user-select: none;
+  cursor: zoom-in;
+}
+.media-lightbox-stage-zoomed {
+  overflow: hidden;
+  cursor: grab;
+}
+.media-lightbox-stage-zoomable img {
+  transition: transform 0.12s ease-out;
+  will-change: transform;
+}
+.media-lightbox-stage-gesturing {
+  cursor: grabbing;
+}
+.media-lightbox-stage-gesturing img {
+  transition: none;
+}
 /* The lightbox trash affordance (cr-0110): a subtle danger tint on hover, set apart from the neutral actions. */
 .lightbox-delete-button:hover {
   color: var(--app-danger);

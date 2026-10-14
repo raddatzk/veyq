@@ -41,6 +41,9 @@ vi.mock('../../../sw/register', () => ({
   registerDownload: vi.fn(async () => null),
 }))
 
+// A share guest's tier reads (the zoom's guest case): recorded at the share helpers, the link's gated presign behind them.
+vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>()), openShareLightbox: vi.fn(), openShareOriginal: vi.fn() }))
+
 // The toast channel (PrimeVue's ToastService is not installed here): the too-large download reports through it.
 const toastError = vi.hoisted(() => vi.fn())
 vi.mock('../../../shared/state/useToast', () => ({
@@ -60,7 +63,12 @@ import { galleryFakeStore } from './galleryFakeStore'
 import { fakeApi } from '../../../test/apiMock'
 import { resetPlaceNameCache } from '../placeName'
 import { realI18n, t } from '../../../test/i18n'
-import { memberMemorySource } from '../source'
+import { memberMemorySource, guestMemorySource } from '../source'
+import { openShareLightbox, openShareOriginal } from '../share'
+import { ZOOM_ORIGINAL_MAX_BYTES } from '../lightboxZoom'
+import { ShareRole } from '../../../api/generated/sharing'
+import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
+import { guestAccessFor } from '../../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -1040,5 +1048,219 @@ describe('MediaLightbox: the uploader', () => {
   it('shows nothing where the session resolves no uploader (a share guest) - and nothing for an unresolved photo', async () => {
     expect((await mountWith(undefined)).find('[data-testid="lightbox-uploader"]').exists()).toBe(false)
     expect((await mountWith(() => null)).find('[data-testid="lightbox-uploader"]').exists()).toBe(false)
+  })
+})
+
+// The zoom (cr-lightbox-zoom-slideshow, uc.memory.gallery 3a): the gestures move the stage <img>'s transform, paging resets
+// it, and past the preview's resolution the ORIGINAL replaces the preview - once, for a decodable type under the cap, through
+// the session's own `originalLoader`. happy-dom lays nothing out, so each test lays the <img> out itself: 1000 CSS px wide
+// from a 2048 px preview on a 1x screen - 2x shows 2000 px (no original), 3x shows 3000 (the original).
+describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
+  beforeEach(() => Object.defineProperty(window, 'devicePixelRatio', { value: 1, configurable: true }))
+
+  const stage = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-stage')
+  const shown = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-stage img')
+  const scaleOf = (w: ReturnType<typeof mountLightbox>) => Number(/scale\(([\d.]+)\)/.exec(shown(w).attributes('style') ?? '')?.[1] ?? 1)
+  function layOut(w: ReturnType<typeof mountLightbox>, fitted = 1000, natural = 2048) {
+    const img = shown(w).element
+    for (const [k, v] of Object.entries({ clientWidth: fitted, clientHeight: fitted * 0.75, naturalWidth: natural, naturalHeight: natural * 0.75 })) {
+      Object.defineProperty(img, k, { value: v, configurable: true })
+    }
+  }
+  function pointer(w: ReturnType<typeof mountLightbox>, type: string) {
+    stage(w).element.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, pointerType: 'mouse', button: 0, clientX: 10, clientY: 10 }))
+  }
+  async function doubleClick(w: ReturnType<typeof mountLightbox>) {
+    for (let i = 0; i < 2; i++) {
+      pointer(w, 'pointerdown')
+      pointer(w, 'pointerup')
+    }
+    await flushPromises()
+  }
+  async function ctrlWheel(w: ReturnType<typeof mountLightbox>, deltaY: number) {
+    const e = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY })
+    Object.defineProperty(e, 'ctrlKey', { value: true }) // happy-dom's WheelEvent is no MouseEvent: it drops ctrlKey
+    stage(w).element.dispatchEvent(e)
+    await flushPromises()
+  }
+  async function key(k: string) {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: k }))
+    await flushPromises()
+  }
+  /** The member's props with the original's loader recorded. */
+  function recordedOriginal(memoryKey: Uint8Array) {
+    const p = memberProps(memoryKey)
+    const originalLoader = vi.fn(p.originalLoader)
+    return { ...p, originalLoader }
+  }
+
+  it('double-click toggles 2x and back, ctrl+wheel zooms continuously, + / - / 0 are the keyboard path', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    expect(stage(w).classes()).toContain('media-lightbox-stage-zoomable')
+    expect(scaleOf(w)).toBe(1)
+    await doubleClick(w)
+    expect(scaleOf(w)).toBe(2)
+    expect(stage(w).classes()).toContain('media-lightbox-stage-zoomed')
+    await doubleClick(w)
+    expect(scaleOf(w)).toBe(1)
+    await ctrlWheel(w, -200)
+    expect(scaleOf(w)).toBeCloseTo(Math.E, 3)
+    await ctrlWheel(w, 10000)
+    expect(scaleOf(w), 'never below 1x').toBe(1)
+    await key('+')
+    expect(scaleOf(w)).toBe(1.5)
+    await key('0')
+    expect(scaleOf(w)).toBe(1)
+    w.unmount()
+  })
+
+  it('paging resets the zoom; the arrows do not page while zoomed; Escape un-zooms first, then closes', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await doubleClick(w)
+    await key('ArrowRight')
+    expect(w.find('.media-lightbox-title small').text(), 'no paging while zoomed').toBe(t('media.itemPosition', { index: 1, count: 2 }))
+    expect(scaleOf(w)).toBe(2)
+    await key('Escape')
+    expect(scaleOf(w), 'Escape un-zooms').toBe(1)
+    expect(w.emitted('close'), 'and does not close').toBeFalsy()
+    await key('ArrowRight')
+    expect(w.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    await doubleClick(w)
+    expect(scaleOf(w)).toBe(2)
+    await w.find('.lightbox-nav-previous').trigger('click')
+    await flushPromises()
+    expect(scaleOf(w), 'paging resets').toBe(1)
+    await key('Escape')
+    expect(w.emitted('close')).toHaveLength(1)
+    w.unmount()
+  })
+
+  it('a video does not zoom', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]) as BlobPart]), mediaType: 'video/mp4' }, stubDeriver())
+    const w = mountLightbox(memoryKey, await listMedia(SCOPE_ID, NODE_ID), 0)
+    await flushPromises()
+    expect(w.find('.media-lightbox-video-poster').exists()).toBe(true)
+    expect(stage(w).classes()).not.toContain('media-lightbox-stage-zoomable')
+    await ctrlWheel(w, -100)
+    await key('+')
+    expect(w.find('.media-lightbox-video-poster img').attributes('style') ?? '').not.toContain('scale')
+    w.unmount()
+  })
+
+  it('past the preview’s resolution the original replaces it once, and its URL is revoked on paging', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const props = recordedOriginal(memoryKey)
+    const created: string[] = []
+    const create = URL.createObjectURL.bind(URL)
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => { const u = create(b); created.push(u); return u })
+    const revoke = vi.spyOn(URL, 'revokeObjectURL')
+    const w = mountLightbox(memoryKey, items, 0, null, props)
+    await flushPromises()
+    const preview = shown(w).attributes('src')
+    layOut(w)
+    await doubleClick(w) // 2x: 2000 px of a 2048 px preview
+    expect(props.originalLoader, 'not yet past the preview').not.toHaveBeenCalled()
+    await key('+') // 3x: 3000 px
+    expect(props.originalLoader).toHaveBeenCalledTimes(1)
+    expect(props.originalLoader).toHaveBeenCalledWith(items[0])
+    const original = shown(w).attributes('src')
+    expect(original).not.toBe(preview)
+    expect(created).toContain(original)
+    expect(scaleOf(w), 'in place, at the same transform').toBe(3)
+    expect(shown(w).attributes('style')).toContain('max-width: min(100%, 2048px)')
+    await key('+')
+    await key('-')
+    await ctrlWheel(w, -200)
+    expect(props.originalLoader, 'once per item').toHaveBeenCalledTimes(1)
+    await key('Escape')
+    await key('ArrowRight')
+    expect(revoke).toHaveBeenCalledWith(original)
+    w.unmount()
+  })
+
+  it('never otherwise: below the threshold, an undecodable type, over the cap; a failed fetch keeps the preview, silently', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const zoomTo3x = async (extra: Record<string, unknown>, list = items, fitted = 1000) => {
+      const props = { ...recordedOriginal(memoryKey), ...extra }
+      const w = mountLightbox(memoryKey, list, 0, null, props)
+      await flushPromises()
+      const preview = shown(w).attributes('src')
+      layOut(w, fitted)
+      await doubleClick(w)
+      await key('+')
+      return { w, preview, originalLoader: props.originalLoader as ReturnType<typeof vi.fn> }
+    }
+    // a small preview on screen: 3x of 600 px is 1800 of 2048
+    let r = await zoomTo3x({}, items, 600)
+    expect(r.originalLoader, 'below the threshold').not.toHaveBeenCalled()
+    r.w.unmount()
+    // HEIC: only Safari decodes it
+    r = await zoomTo3x({ blobMetaResolver: () => ({ v: 1, type: 'image/heic' }) })
+    expect(r.originalLoader, 'undecodable').not.toHaveBeenCalled()
+    r.w.unmount()
+    // no sealed type at all
+    r = await zoomTo3x({ blobMetaResolver: () => null })
+    expect(r.originalLoader, 'untyped').not.toHaveBeenCalled()
+    r.w.unmount()
+    // at the cap
+    const big = [{ ...items[0], original: { ...items[0].original, byteSize: ZOOM_ORIGINAL_MAX_BYTES } }]
+    r = await zoomTo3x({}, big)
+    expect(r.originalLoader, 'at the cap').not.toHaveBeenCalled()
+    r.w.unmount()
+    // control: one byte under the cap is fetched
+    const under = [{ ...items[0], original: { ...items[0].original, byteSize: ZOOM_ORIGINAL_MAX_BYTES - 1 } }]
+    r = await zoomTo3x({ originalLoader: vi.fn(async () => new Uint8Array([1])) }, under)
+    expect(r.originalLoader, 'control: under the cap').toHaveBeenCalledTimes(1)
+    r.w.unmount()
+    // a failed fetch: the preview stays, no error, and it is not asked again on this item
+    r = await zoomTo3x({ originalLoader: vi.fn(async () => { throw new Error('gone') }) })
+    expect(r.originalLoader).toHaveBeenCalledTimes(1)
+    expect(shown(r.w).attributes('src')).toBe(r.preview)
+    expect(r.w.find('.media-lightbox-error').exists()).toBe(false)
+    await key('+')
+    expect(r.originalLoader).toHaveBeenCalledTimes(1)
+    r.w.unmount()
+  })
+
+  // A share guest's lightbox is this one, handed the guest source's loaders (inbox #401): its zoom fetches the original
+  // through the link's gated read (`openShareOriginal`), never the member's media API.
+  it("a guest's lightbox zooms through its own loaders", async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedTwo(memoryKey)
+    const head = { shareId: 'share-1', scopeId: SCOPE_ID, role: ShareRole.Read, kShare: v1.randomBytes(32), name: 'Rom', noteByLocale: {} } as unknown as PublicShareHead
+    const l = guestMemorySource(() => guestAccessFor(head), { rootId: null }).loaders
+    vi.mocked(openShareLightbox).mockResolvedValue(new Uint8Array([0xff, 0xd8, 1]))
+    vi.mocked(openShareOriginal).mockResolvedValue(new Uint8Array([0xff, 0xd8, 2]))
+    store.blob.presignBlobDownloads.mockClear()
+    const w = mountLightbox(memoryKey, items, 0, null, {
+      ...GUEST_WRITES,
+      previewLoader: (it: MediaItem) => l.preview(it, memoryKey),
+      originalLoader: (it: MediaItem) => l.original(it, memoryKey),
+      videoChunkProvider: (it: MediaItem) => l.chunk(it, memoryKey),
+      metaResolver: (it: MediaItem) => l.meta(it, memoryKey),
+      blobMetaResolver: (it: MediaItem) => l.blobMeta(it, memoryKey),
+    })
+    await flushPromises()
+    layOut(w)
+    await doubleClick(w)
+    await key('+')
+    expect(openShareOriginal).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(openShareOriginal).mock.calls[0][0]).toBe('share-1')
+    expect(store.blob.presignBlobDownloads, "no member read").not.toHaveBeenCalled()
+    expect(scaleOf(w)).toBe(3)
+    w.unmount()
   })
 })

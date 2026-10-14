@@ -1,7 +1,7 @@
 ---
 id: cr-lightbox-zoom-slideshow
 title: The lightbox zooms (onto the original past the preview) and plays a slideshow
-status: planned
+status: in-progress
 satisfies: [uc.memory.gallery]
 adrs: ["0047", "0079"]
 invariants: [operator-blind E2EE everywhere]
@@ -59,6 +59,8 @@ runs). Member and guest alike. Decided by the coordinator on the owner's behalf,
     zoomed; the original is loaded once past the threshold for a decodable type under the cap, never otherwise, and its
     URL is revoked on navigation; a guest's lightbox zooms through its own loaders. Bitten.
   - Done when `npm run check` is green and a real browser zoomed a photo (wheel and double-click) on the dev instance.
+  - **Built and unit-proven; the browser pass is OPEN** (the implementer ran in a worktree no browser pane can serve):
+    `npm run check` green, every new test bitten. The box stays open until the main session zoomed a photo after the merge.
 - [ ] 2 web: Decisions 3, 4 (slideshow).
   - Tests (fake timers): advances every 5 s, a video's poster for one interval, stops at the end, pauses on interaction
     and hidden tab, one preview ahead, no EXIF/geocode call while running, details load after pausing. Bitten.
