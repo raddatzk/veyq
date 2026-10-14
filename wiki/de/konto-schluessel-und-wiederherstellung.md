@@ -148,7 +148,8 @@ Warum Passwort **und** Secret Key? An deine Adresse geht ein Link zum Zurückset
 angemeldetes Gerät hat — oder nur dein Passwort —, darf das nicht in ein eigenes Postfach umleiten können.
 
 Erstelle danach ein **neues Notfall-Kit**: Das alte funktioniert weiter, zeigt aber deine alte Adresse. Die Seite,
-die die Änderung abschließt, bietet es dir gleich an.
+die die Änderung abschließt, bietet es dir gleich an, sobald du Passwort und Secret Key eingibst — sie prüft beides
+zuerst, damit nie ein vertippter Schlüssel in einem Kit landet.
 
 Kann die neue Adresse nicht verwendet werden — etwa weil sich schon ein anderes Konto damit anmeldet —, erfährst du
 das erst, wenn du den Link öffnest. Das ist Absicht: Sonst könnte jede Person mit diesem Formular ausprobieren, zu

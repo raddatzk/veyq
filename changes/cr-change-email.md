@@ -118,9 +118,12 @@ mechanism rather than decide anything new:
   the change is offered there, and the use case now says so.
 
 **Residuals, stated:**
-- The new kit on the landing page takes the Secret Key as typed/pasted/imported and **does not verify it** (the page is
-  not unlock-gated, and nothing a session alone can read checks a Secret Key). Importing or scanning the old kit carries
-  the exact key; a mistyped one would print a wrong kit.
+- **The new kit is printed only from a checked Secret Key** — handed back as a question, decided by the coordinator on
+  the owner's behalf: a kit from a mistyped key fails exactly when it is needed. The landing page asks for the password
+  and the Secret Key and offers the kit only once they pass the shared cold-credential check against the stored floor
+  (`checkColdCredential`, the request's check in a form that also runs with a locked vault, since the page is not
+  unlock-gated); a failed check prints nothing, and changing the key afterwards withdraws the kit. No contract change.
+  Bitten: printing from the typed key and a locked-vault check that skips the floor each turned their tests red.
 - A recovery token mailed to the OLD address before the change stays live until it expires; completing it still needs
   the Secret Key, so it buys nobody without the kit anything.
 - The UI was proven by unit tests and the live e2e (through the API, not a browser); it was not clicked in a browser.

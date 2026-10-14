@@ -138,7 +138,8 @@ Why the password **and** the secret key? Your address is where a password-reset 
 signed-in device — or just your password — must not be able to move that to a mailbox of their own.
 
 Afterwards, print a **new Emergency Kit**: the old one still works, but it shows your old address. The page that
-finishes the change offers it right there.
+finishes the change offers it right there, once you enter your password and secret key — it checks them first, so
+a mistyped key never ends up in a kit.
 
 If the new address can't be used — say another account already signs in with it — you only find out when you open
 the link. That is on purpose: otherwise anybody could use this form to test which addresses have an account here.

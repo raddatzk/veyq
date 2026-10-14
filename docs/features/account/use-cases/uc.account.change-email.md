@@ -30,9 +30,11 @@
    every other session, and mails the **old** address a fixed notice ("your sign-in address was changed", the domain,
    no new address - [ADR 0049](../../../decisions/0049-email-delivery-boundary.md)'s closed variable set).
 5. The app says the change is done and offers a **new Emergency Kit** (the old one prints the old address; its Secret
-   Key is still valid): the Secret Key is entered on that page — typed, pasted, or imported from the old kit — and the
-   kit carries the new address. This session and this device's remembered sign-in name the account by the new address
-   from here on.
+   Key is still valid): the password and the Secret Key are entered on that page (the key typed, pasted, or imported
+   from the old kit), and the kit — carrying the new address — is offered only once they pass the same password +
+   Secret-Key check the request ran, against the stored floor; a failed check says so and prints nothing, because a kit
+   printed from a mistyped key fails exactly when it is needed. This session and this device's remembered sign-in name
+   the account by the new address from here on.
 
 ## Alternate / exception flows
 

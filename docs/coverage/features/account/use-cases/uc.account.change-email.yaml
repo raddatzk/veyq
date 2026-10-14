@@ -51,6 +51,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/views/ConfirmEmailChangeView.test.ts
+          - src/features/account/coldCredential.test.ts
           - src/features/account/rememberMe/deviceKeyWrap.test.ts
           - src/features/account/rememberMe/sessionVault.test.ts
   - id: keys-and-content-untouched
