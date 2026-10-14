@@ -12,8 +12,8 @@ import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
-import Checkbox from 'primevue/checkbox'
 import { useBreachCheck } from '../features/account/passwordWarning'
+import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError, type TenantBirth, type TenantOwner } from '../features/tenant/tenantInvite'
 import { sealName, sealAvatar, myUserId } from '../features/account/profile/profile'
@@ -67,7 +67,7 @@ const lastName = ref('')
 // The optional picture's encoded bytes (OWNER only, ADR 0084): sealed with the born tenant key at accept, never held anywhere else.
 const avatarBytes = shallowRef<Uint8Array | null>(null)
 const password = ref('')
-const { enabled: checkBreaches, stop: breachStop, proceed: breachCheckPasses } = useBreachCheck(password)
+const { state: breachState, useAnyway, checkNow: checkBreaches, proceed: breachCheckPasses } = useBreachCheck(password)
 const secretKeyDisplay = ref('')
 const kitReady = ref(false)
 // sign-in form
@@ -315,18 +315,9 @@ async function mapError(e: unknown): Promise<string> {
             <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
             <JoinPicturePicker v-model="avatarBytes" :name="`${firstName} ${lastName}`.trim() || username" />
           </template>
-          <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="join-password" /></label>
+          <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="join-password" @blur="checkBreaches" /></label>
           <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
-          <div class="checkbox-row">
-            <Checkbox v-model="checkBreaches" input-id="join-breach-check" binary :disabled="busy" />
-            <label for="join-breach-check">
-              {{ t('password.pwnedCheck') }}
-              <small class="field-hint">{{ t('password.pwnedCheckNote') }}</small>
-            </label>
-          </div>
-          <Message v-if="breachStop" severity="warn" :closable="false">{{
-            breachStop.count === null ? t('password.pwnedUnavailable') : t('password.pwnedWarning', { count: breachStop.count })
-          }}</Message>
+          <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="join" :disabled="busy" />
           <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
           <Button type="submit" :label="t('tenant.join.continue')" icon="pi pi-arrow-right" :loading="busy"
                   :disabled="!username.trim() || password.length < MIN_PASSWORD_LENGTH" />

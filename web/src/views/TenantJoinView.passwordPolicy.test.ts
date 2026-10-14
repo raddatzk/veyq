@@ -69,7 +69,7 @@ const stubs = {
     props: ['modelValue'],
     template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  // The breach-check box: a native checkbox, so a test ticks it with `setValue(true)`.
+  // The breach warning's "Use it anyway": a native checkbox, so a test ticks it with `setValue(true)`.
   Checkbox: {
     props: ['modelValue'],
     template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
@@ -108,6 +108,8 @@ beforeEach(() => {
   stubApi(setupApi, {
     getSetupStatus: setupStatus(),
   })
+  // The breach check is automatic, so every register submit passes through it: clean unless a case says otherwise.
+  vi.mocked(pwnedCount).mockResolvedValue(0)
   vaultState.unlocked = false
 })
 
@@ -131,13 +133,28 @@ describe('TenantJoinView — where the password floor applies', () => {
     expect(buildAccount).toHaveBeenCalledOnce()
   })
 
-  it('REGISTER with the breach check ticked: a hit stops the first submit and the second goes ahead', async () => {
+  it('REGISTER: the finished password is checked when its field is left — never while typing, once per password', async () => {
+    const w = await mountFor(false)
+    expect(w.text()).toContain(t('password.pwnedNote'))
+    const field = w.find('input[type="password"]')
+    await field.setValue('a long')
+    await field.setValue('a long enough password')
+    await flushPromises()
+    expect(pwnedCount).not.toHaveBeenCalled()
+
+    await field.trigger('blur')
+    await field.trigger('blur')
+    await flushPromises()
+    expect(pwnedCount).toHaveBeenCalledOnce()
+    expect(pwnedCount).toHaveBeenCalledWith('a long enough password')
+  })
+
+  it('REGISTER: a hit blocks the submit until "Use it anyway" — pressing submit again is not the acceptance', async () => {
     // The slip the composable's own test cannot see: a dialog that forgets to await the guard.
     vi.mocked(pwnedCount).mockResolvedValue(3)
     const w = await mountFor(false)
     await w.find('input[name="username"]').setValue('kevin')
     await w.find('input[type="password"]').setValue('a long enough password')
-    await w.find('input[type="checkbox"]').setValue(true)
     await flushPromises()
 
     await w.find('form').trigger('submit')
@@ -147,8 +164,45 @@ describe('TenantJoinView — where the password floor applies', () => {
 
     await w.find('form').trigger('submit')
     await flushPromises()
+    expect(buildAccount).not.toHaveBeenCalled()
+
+    await w.find('input[type="checkbox"]').setValue(true)
+    await w.find('form').trigger('submit')
+    await flushPromises()
     expect(buildAccount).toHaveBeenCalledOnce()
     expect(pwnedCount).toHaveBeenCalledOnce()
+  })
+
+  it('REGISTER: a check that could not run goes ahead, and says so in one line', async () => {
+    vi.mocked(pwnedCount).mockResolvedValue(null)
+    const w = await mountFor(false)
+    await w.find('input[name="username"]').setValue('kevin')
+    const field = w.find('input[type="password"]')
+    await field.setValue('a long enough password')
+    await field.trigger('blur')
+    await flushPromises()
+    expect(w.text()).toContain(t('password.pwnedUnavailable'))
+
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(buildAccount).toHaveBeenCalledOnce()
+    expect(pwnedCount).toHaveBeenCalledOnce()
+  })
+
+  it('SIGN IN: the password that proves an existing account is never sent to the breach check', async () => {
+    // The same `password` ref serves sign-in, which chooses nothing. Its field carries no blur check and its submit
+    // no guard; the register case above is the control on the same lookup.
+    const w = await mountFor(true)
+    await w.find('input[name="username"]').setValue('kevin')
+    const field = w.find('input[type="password"]')
+    await field.setValue('a long enough password')
+    await field.trigger('blur')
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(login).toHaveBeenCalledWith('owner@acme.example', 'a long enough password')
+    expect(pwnedCount).not.toHaveBeenCalled()
+    expect(w.text()).not.toContain(t('password.pwnedNote'))
   })
 })
 

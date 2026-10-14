@@ -68,7 +68,8 @@ Why each non-obvious source is there:
 - **`img-src data: blob:` / `media-src blob:`.** These cover the favicon SVG and QR `data:` URLs, and the object
   URLs of decrypted media.
 - **`connect-src https://api.pwnedpasswords.com`.** This is the client-direct HIBP k-anonymity password check:
-  opt-in per dialog, once on submit. Only a 5-hex SHA-1 prefix leaves the device.
+  automatic in the four password-choosing dialogs, over the finished password on blur and on submit. Only a 5-hex
+  SHA-1 prefix leaves the device ([security model](security-model.md) § the breached-password check).
 - **`<tile-origin>` (img-src) / `<geocoder-origin>` (connect-src).** These are the configured basemap and
   reverse-geocoder ([`mapDefaults.ts`](../../web/src/shared/state/mapDefaults.ts)). The default is
   OSM/Nominatim, and `VITE_VEYQ_MAP_*` overrides it. Both are derived from the **same** config the app fetches

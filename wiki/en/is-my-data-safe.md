@@ -40,6 +40,26 @@ allowed in — the server sees a few **low-sensitivity, operational** facts:
 It's like seeing **labelled boxes on a shelf and who holds a key** — never the contents. Those few
 facts are what let the server be useful without ever decrypting.
 
+## The one check that leaves your device by itself
+
+When you choose a password — setting up a server, joining a space, changing your password, or after a reset —
+veyq checks it against passwords known from data breaches. It does this **by itself**, as soon as you leave the
+password field, and once more when you confirm if you changed the password since. It never checks while you
+are still typing.
+
+**What leaves your device:** the first **5 characters of a fingerprint (a hash) worked out from the
+password** — never the password itself — sent **straight from your device** to the free service *Have I Been
+Pwned*, not through our server. The answer lists hundreds of fingerprints that start the same way, and your
+device looks for the password's own in that list by itself.
+
+**What that service does learn:** your browser tells it which site the question comes from. So *Have I Been
+Pwned* (and the network company in front of it) learns that someone at your internet address uses this veyq
+server and is choosing a password — not who you are, and not the password.
+
+If the password shows up in a breach, you see a warning and decide: pick another one, or tick **"Use it
+anyway"**. If the check can't run — you're offline, or the server has no route to the internet — nothing is
+blocked; you're simply told the password could not be checked.
+
 ## When you share
 
 Sharing is the one moment you **choose** to lower the wall — always by your explicit action:

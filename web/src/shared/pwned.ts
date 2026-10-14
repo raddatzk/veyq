@@ -1,5 +1,6 @@
-// Have I Been Pwned (Pwned Passwords) k-anonymity check — an opt-in, advisory check of a chosen master password
-// against known breaches, run once on submit (features/account/passwordWarning). It is NEVER a hard gate
+// Have I Been Pwned (Pwned Passwords) k-anonymity check — an automatic, advisory check of a chosen master password
+// against known breaches, run over the finished password on blur and on submit (features/account/passwordWarning).
+// It is NEVER a hard gate
 // (operator-blind: choosing a weak password is the user's call). Privacy: the password never leaves the device —
 // only the first 5 hex chars of its SHA-1 are sent, directly to the HIBP range API (not via our server), which
 // returns ~hundreds of padded suffixes; the suffix match is computed locally (k-anonymity). The rule and its
@@ -25,8 +26,8 @@ export function breachCountFromRange(hashHexUpper: string, body: string): number
 
 /**
  * How many known breaches a password appears in (0 = none), or `null` when the check could not run — network,
- * CSP, a non-2xx, a firewalled admin container. Failure is NOT folded into 0: someone who asked for the check
- * must not read "not checked" as "clean".
+ * CSP, a non-2xx, a firewalled admin container. Failure is NOT folded into 0: the dialog says the password could
+ * not be checked, and must never show "not checked" as "clean".
  */
 export async function pwnedCount(password: string): Promise<number | null> {
   if (!password) return 0

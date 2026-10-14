@@ -18,9 +18,9 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import { useBreachCheck } from '../features/account/passwordWarning'
+import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import Message from 'primevue/message'
-import Checkbox from 'primevue/checkbox'
 import { completeRecovery, openWithSecretKey, releaseRecoveryMaterial, requestRecovery } from '../features/account/recovery/recovery'
 import type { OpenedRecovery } from '../features/account/recovery/recovery'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
@@ -36,7 +36,7 @@ const email = ref('')
 const secretKey = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
-const { enabled: checkBreaches, stop: breachStop, proceed: breachCheckPasses } = useBreachCheck(newPassword)
+const { state: breachState, useAnyway, checkNow: checkBreaches, proceed: breachCheckPasses } = useBreachCheck(newPassword)
 
 const busy = ref(false)
 const error = ref('')
@@ -193,23 +193,14 @@ async function setNewPassword() {
       <form v-if="opened && !done" class="veyq-form" @submit.prevent="setNewPassword">
         <label class="veyq-field">
           {{ t('recovery.newPassword') }}
-          <Password v-model="newPassword" toggle-mask :feedback="false" input-id="recovery-password" required />
+          <Password v-model="newPassword" toggle-mask :feedback="false" input-id="recovery-password" required @blur="checkBreaches" />
         </label>
         <label class="veyq-field">
           {{ t('recovery.confirmPassword') }}
           <Password v-model="confirmPassword" toggle-mask :feedback="false" input-id="recovery-confirm" required />
         </label>
         <small v-if="passwordHintKey(newPassword)" class="field-hint">{{ t(passwordHintKey(newPassword)!) }}</small>
-        <div class="checkbox-row">
-          <Checkbox v-model="checkBreaches" input-id="recovery-breach-check" binary :disabled="busy" />
-          <label for="recovery-breach-check">
-            {{ t('password.pwnedCheck') }}
-            <small class="field-hint">{{ t('password.pwnedCheckNote') }}</small>
-          </label>
-        </div>
-        <Message v-if="breachStop" severity="warn" :closable="false">{{
-          breachStop.count === null ? t('password.pwnedUnavailable') : t('password.pwnedWarning', { count: breachStop.count })
-        }}</Message>
+        <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="recovery" :disabled="busy" />
         <p class="field-hint">{{ t('recovery.deviceNote') }}</p>
         <Button
           type="submit"

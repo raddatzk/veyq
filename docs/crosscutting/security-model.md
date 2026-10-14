@@ -41,7 +41,7 @@ state that gap plainly. In a **self-hosted** deployment the operator is the user
 "Operator-blind" names one adversary: **the veyq server / operator.** It does **not** mean the client never
 talks to any external service. A feature may let the client reach a **third party directly** — today the
 opt-in **reverse-geocoding** lookup that turns a photo coordinate into a place name
-([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)) and the opt-in **breached-password check**
+([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)) and the automatic **breached-password check**
 (below), tomorrow map tiles for the tenant map. Such a
 request is a **different trust boundary** the user consents to, and it is fenced so it can never widen the veyq
 operator's view:
@@ -77,7 +77,8 @@ range API whether the password appears in known breaches. The fences apply like 
   and the reason is what crosses: a 5-hex prefix carries no content and no identity, where a geocoding request
   carries the coordinate itself. **What it does disclose, stated:** the browser's `Origin` header names the veyq
   instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
-  The wiki's privacy text says so. A one-sentence note under the password field says what leaves the device.
+  The wiki says so, in [Is my data safe?](../../wiki/en/is-my-data-safe.md) and
+  [Account keys & recovery](../../wiki/en/account-keys-and-recovery.md). A one-sentence note under the password field says what leaves the device.
 - **It advises, never gates.** A hit shows a warning that needs an **explicit "Use it anyway"** before the dialog
   submits that password; the result is not stored. **A check that could not run** (offline, firewalled, the admin
   container with no route out) **does not stop anything**: the dialog submits and says, in one line, that the
@@ -85,9 +86,13 @@ range API whether the password appears in known breaches. The fences apply like 
   internet, for a check nobody opted into.
 
 **Verification:** [`passwordWarning.test.ts`](../../web/src/features/account/passwordWarning.test.ts) (identical
-in `admin-web/`) pins the rule on the request itself — nothing while typing, nothing unticked, one prefix of the
-final password, no second request on the second press — and each dialog's own test (`ChangePasswordPanel.policy`,
-`TenantJoinView.passwordPolicy`, `RecoverView`, admin-web's `SetupView`) pins that it awaits the check.
+in `admin-web/`) pins the rule on the request itself: nothing while typing; one prefix of the finished password on
+blur; no second request for an unchanged blur; a password changed since is queried again on submit; nothing for a
+password the policy refuses; a hit blocks the submit until "Use it anyway"; an edit clears that acceptance; a check
+that could not run goes ahead. Each dialog's own test (`ChangePasswordPanel.policy`, `TenantJoinView.passwordPolicy`,
+`RecoverView`, admin-web's `SetupView`) pins that its password field's blur runs the check, that its submit awaits
+it, the note and the one line for a check that could not run; `TenantJoinView.passwordPolicy` also pins that the
+sign-in password, which chooses nothing, is never sent.
 
 So the veyq operator stays blind by construction; what crosses goes straight to the provider, never through veyq: a
 consented, identity-free request the **user** turned on, or the breached-password check's 5-hex prefix.

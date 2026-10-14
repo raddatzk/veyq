@@ -11,10 +11,10 @@ import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
-import Checkbox from 'primevue/checkbox'
 import { registerServerOwner } from '../features/setup/setupServer'
 import EmergencyKitSave from '../features/setup/EmergencyKitSave.vue'
 import { useBreachCheck } from '../features/account/passwordWarning'
+import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import { setAuthPrefill } from '../app/authPrefill'
 import { useServerState } from '../shared/state/useServerState'
@@ -25,7 +25,7 @@ const { t } = useI18n()
 const { setSetupCompleted } = useServerState()
 const email = ref('')
 const password = ref('')
-const { enabled: checkBreaches, stop: breachStop, proceed: breachCheckPasses } = useBreachCheck(password)
+const { state: breachState, useAnyway, checkNow: checkBreaches, proceed: breachCheckPasses } = useBreachCheck(password)
 const error = ref('')
 const secretKey = ref<string | null>(null)
 const kitReady = ref(false)
@@ -83,19 +83,11 @@ async function proceed() {
               :feedback="false"
               toggle-mask
               fluid
+              @blur="checkBreaches"
             />
           </label>
-          <div class="checkbox-row">
-            <Checkbox v-model="checkBreaches" input-id="setup-breach-check" binary :disabled="busy" />
-            <label for="setup-breach-check">
-              {{ t('password.pwnedCheck') }}
-              <small class="field-hint">{{ t('password.pwnedCheckNote') }}</small>
-            </label>
-          </div>
-          <Message v-if="breachStop" severity="warn" :closable="false">{{
-            breachStop.count === null ? t('password.pwnedUnavailable') : t('password.pwnedWarning', { count: breachStop.count })
-          }}</Message>
           <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
+          <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="setup" :disabled="busy" />
           <Button
             type="submit"
             :label="busy ? t('setup.submitting') : t('setup.submit')"

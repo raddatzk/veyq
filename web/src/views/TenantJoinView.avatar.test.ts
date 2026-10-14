@@ -38,7 +38,8 @@ vi.mock('../features/account/profile/JoinPicturePicker.vue', () => ({
   },
 }))
 vi.mock('@veyq/crypto/accountBirth', () => ({ buildAccount: vi.fn() }))
-vi.mock('../shared/pwned', () => ({ pwnedCount: vi.fn() }))
+// The breach check is automatic on every register submit: a clean answer, so it is out of this file's way.
+vi.mock('../shared/pwned', () => ({ pwnedCount: vi.fn(async () => 0) }))
 vi.mock('../api/client', () => ({ setupApi: vi.fn() }))
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
