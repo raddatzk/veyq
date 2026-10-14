@@ -32,10 +32,15 @@ acceptanceCriteria:
       backend:
         integration: [MediaTrashSliceTest.purgeTrashedMediaHardDeletesNow, MediaTrashSliceTest.purgingALiveMediaIs404, MediaTrashSliceTest.purgeByNonMemberIs404]
   - id: lightbox-delete-and-hotkey
-    text: Delete is a lightbox-only affordance — a trash button in the lightbox top bar and a Delete/Backspace hotkey — with no confirmation dialog (recoverable); it emits a delete for the current photo (the parent trashes it, advances, and shows an undo toast). The hotkey + button respect the lightbox's suspend-keys (no delete while the cover modal is open, cr-0109) and are hidden in the read-only public-share viewer.
+    text: In the gallery, delete is a lightbox-only affordance (the organizer's selection is E7) — a trash button in the lightbox top bar and a Delete/Backspace hotkey — with no confirmation dialog (recoverable); it emits a delete for the current photo (the parent trashes it, advances, and shows an undo toast). The hotkey + button respect the lightbox's suspend-keys (no delete while the cover modal is open, cr-0109) and are hidden in the read-only public-share viewer.
     coverage:
       web:
         unit: [src/features/memory/components/MediaLightbox.test.ts]
+  - id: selection-delete-names-refusals
+    text: The contributions organizer trashes a selection with one delete per medium and a refusal does not stop the rest (E7) — the undo toast counts only what went and its Restore restores exactly those, every refused medium is named with its reason (one error per reason), there is no undo toast when nothing went, and a selection where every delete succeeds shows only the count with its undo.
+    coverage:
+      web:
+        unit: [src/features/memory/components/MemoryBuckets.test.ts]
   - id: trashed-media-leaves-the-share
     text: A trashed media leaves a public share on BOTH guest paths at once (E6) — the anonymous resolve stops listing it AND its blobs stop being authorized for a presign (a non-enumerable 404); a restore brings it back on both. Filtering only the listing would leave a medium invisible in the share yet fully downloadable by anyone holding its blobId, for the whole retention window. Two independent server-side predicates carry it (SharingStore.subtree and SharingStore.subtreeBlobIds), which is why each is proven separately rather than as one assertion.
     coverage:

@@ -33,8 +33,9 @@ delete *whose* — is deferred to a later groups/moderation refine.)
 
 ## Main flow
 
-1. In the gallery **lightbox** (the only delete surface) the user removes the current photo — a **trash button** in
-   the lightbox top bar, or the **Delete / Backspace** key. There is **no confirmation dialog** (it is recoverable):
+1. In the gallery **lightbox** the user removes the current photo — a **trash button** in
+   the lightbox top bar, or the **Delete / Backspace** key (the other delete surface is the contributions organizer's
+   selection, E7). There is **no confirmation dialog** (it is recoverable):
    the media moves to the trash, the lightbox **advances to the next** photo (a fast culling flow), and an **undo
    toast** offers immediate restore.
 2. The client calls **delete** → the server marks the media **trashed** (`deleted_at = now`,
@@ -76,6 +77,13 @@ delete *whose* — is deferred to a later groups/moderation refine.)
   had to be *written*, not just fixed. It is a cross-feature obligation with no single owner — the trash side and
   the sharing side share nothing but the `veyq_media` rows, so neither one's tests would have missed it, and the
   defect shipped exactly there.
+- **E7 — a selection (the contributions organizer, [uc.memory.buckets](uc.memory.buckets.md)):** the organizer
+  trashes a selection of media with one delete per medium, sent together; a refusal does not stop the rest. One undo
+  toast counts only what went to the trash and its *Restore* restores exactly those; every refused medium is named
+  (the file name sealed with its original, else its place in the grid) with its reason — gone or no longer reachable
+  (`404`), the space is being deleted (`409 scope_deleting`), or anything else (try again) — one error per reason.
+  When nothing went there is no undo toast. A selection where every delete succeeds shows only the count with its
+  undo (inbox #427).
 
 ## Quality notes
 

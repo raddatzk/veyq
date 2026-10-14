@@ -5,7 +5,7 @@
 // buttons beside it (upload / create sub-bucket / rename / delete — shown only where they apply), the reused
 // MediaGrid filtered to the active bucket with a per-tile checkbox (top-left) + 3-dot (top-right), and a selection
 // bar with a select-all toggle + visible Move/Delete. Delete is a straight soft-delete to trash with a local undo
-// bar (no confirm modal). The primary bucket is VIRTUAL until the first sub-bucket or upload materializes it (the
+// bar (no confirm modal), and names every medium the server refused (inbox #427). The primary bucket is VIRTUAL until the first sub-bucket or upload materializes it (the
 // server's lazy ensurePrimaryBucket). Names are sealed under K_mem — the client unseals; the server never sees one.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -17,9 +17,10 @@ import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
 import {
-  openBucketName, unsealMeta, originalMediaType, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
+  openBucketName, unsealMeta, originalMediaType, originalBlobMeta, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
 } from '../media'
 import { useMemoryView } from '../source'
+import { decodeHttpError } from '../../../shared/httpError'
 import { useToast } from '../../../shared/state/useToast'
 import { useUndo } from '../../../shared/state/useUndo'
 
@@ -328,16 +329,54 @@ async function submitMove() {
   }
 }
 
-// Delete = a recoverable soft-delete straight to the Papierkorb — no confirm modal, just an undo-toast (cr-0122).
+/** Why the server refused a medium's trash, as the reason the summary names (`memory.buckets.deleteRefusedReason.*`):
+ *  `deleteMedia`'s refusals — `404 media_not_found` (purged, or the caller holds no grant any more) and `409
+ *  scope_deleting` — and `failed` for anything else (a network failure, an unexpected code). */
+type MediaTrashRefusal = 'gone' | 'scope_deleting' | 'failed'
+async function trashRefusalOf(e: unknown): Promise<MediaTrashRefusal> {
+  const { code } = await decodeHttpError(e)
+  if (code === 'media_not_found') return 'gone'
+  if (code === 'scope_deleting') return 'scope_deleting'
+  return 'failed'
+}
+
+/** A medium's name for the summary: the file name sealed in its original's blob meta, else its place in the grid. */
+function mediaNameOf(item: MediaItem | undefined, position: number): string {
+  const key = props.memoryKey
+  const sealed = item && key ? originalBlobMeta(props.scopeId, key, item)?.name?.trim() : undefined
+  return sealed || t('memory.buckets.unnamedMedia', { n: position })
+}
+
+// Delete = a recoverable soft-delete straight to the Papierkorb — no confirm modal, just an undo-toast (cr-0122). One
+// write per medium; a refusal does not stop the rest (inbox #427): the count and its Undo cover only what went, and
+// every refused medium is named with its reason, one error per reason.
 async function deleteSelected() {
   const ids = [...selected.value]
   if (!ids.length) return
+  // Named before the writes: the reload after them no longer lists what went.
+  const shown = filteredMedia.value
+  const names = ids.map((id, i) => {
+    const at = shown.findIndex((m) => m.mediaId === id)
+    return mediaNameOf(at >= 0 ? shown[at] : props.media.find((m) => m.mediaId === id), at >= 0 ? at + 1 : i + 1)
+  })
   selected.value = new Set()
-  await Promise.allSettled(ids.map((id) => buckets.trash(id))) // soft-delete → trash
+  const results = await Promise.allSettled(ids.map((id) => buckets.trash(id))) // soft-delete → trash
+  const deleted = ids.filter((_, i) => results[i].status === 'fulfilled')
+  const refused = new Map<MediaTrashRefusal, string[]>()
+  for (const [i, r] of results.entries()) {
+    if (r.status !== 'rejected') continue
+    const why = await trashRefusalOf(r.reason)
+    refused.set(why, [...(refused.get(why) ?? []), names[i]])
+  }
   await loadBuckets()
   emit('changed')
-  undo.arm({ ids, count: ids.length })
-  toast.showUndo({ summary: t('memory.buckets.deletedToTrash', { count: ids.length }, ids.length), onUndo: undoDelete, life: 8000 })
+  if (deleted.length) {
+    undo.arm({ ids: deleted, count: deleted.length })
+    toast.showUndo({ summary: t('memory.buckets.deletedToTrash', { count: deleted.length }, deleted.length), onUndo: undoDelete, life: 8000 })
+  }
+  for (const [why, refusedNames] of refused) {
+    toast.error(t('memory.buckets.deleteRefused', { names: refusedNames.join(', '), reason: t(`memory.buckets.deleteRefusedReason.${why}`) }))
+  }
 }
 async function undoDelete() {
   const u = undo.cancel()

@@ -15,6 +15,7 @@ vi.mock('../media', () => ({
   openBucketName: vi.fn(),
   unsealMeta: vi.fn(),
   originalMediaType: vi.fn(),
+  originalBlobMeta: vi.fn(),
   isVideoMediaType: vi.fn(),
   hasDerivatives: vi.fn(),
 }))
@@ -25,9 +26,9 @@ vi.mock('../../../app/activeSpace', () => ({ activeEpochKeys: () => space.epochs
 
 // The undo affordance is now a global toast (cr-0157): stub the shared composable so the test can capture the
 // `showUndo({ onUndo })` call and invoke the restore action (the toast surface itself lives in App.vue).
-const { showUndo } = vi.hoisted(() => ({ showUndo: vi.fn() }))
+const { showUndo, toastError } = vi.hoisted(() => ({ showUndo: vi.fn(), toastError: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({
-  useToast: () => ({ success: vi.fn(), showUndo, dismissUndo: vi.fn() }),
+  useToast: () => ({ success: vi.fn(), error: toastError, showUndo, dismissUndo: vi.fn() }),
   UNDO_GROUP: 'undo',
 }))
 
@@ -39,6 +40,7 @@ import {
   moveBucketMedia,
   openBucketName,
   unsealMeta,
+  originalBlobMeta,
   isVideoMediaType,
   hasDerivatives,
   type MediaItem,
@@ -96,6 +98,7 @@ beforeEach(() => {
   vi.mocked(unsealMeta).mockReturnValue({ v: 1, w: 100, h: 100 })
   vi.mocked(isVideoMediaType).mockReturnValue(false)
   vi.mocked(hasDerivatives).mockReturnValue(true)
+  vi.mocked(originalBlobMeta).mockReturnValue(null)
   vi.mocked(listScopeMembers).mockResolvedValue([])
 })
 
@@ -133,6 +136,63 @@ describe('MemoryBuckets — a guest named above this node (cr-node-key-hierarchy
   })
 })
 
+/** A generated-client refusal: the `ResponseError` shape `decodeHttpError` reads (`.response` with a JSON `code`). */
+const refusal = (status: number, code: string) =>
+  Object.assign(new Error(code), { response: new Response(JSON.stringify({ code }), { status, headers: { 'content-type': 'application/json' } }) })
+
+describe('MemoryBuckets — a selection whose delete is partly refused (inbox #427)', () => {
+  async function deleteAllOf(ids: string[]) {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', ids.length)])
+    const wrapper = mountBuckets(ids.map((id) => media(id, 'user:me', 'b-own')))
+    await flushPromises()
+    await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
+    await wrapper.find('.bucket-selection-bar .bucket-action-danger').trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('names the refused one with its reason, counts the two that went, and Undo restores those two only', async () => {
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, item) => ({ v: 1, type: 'image/jpeg', name: `${item.mediaId}.jpg` }))
+    vi.mocked(deleteMedia).mockImplementation(async (_scope, id) => {
+      if (id === 'm2') throw refusal(409, 'scope_deleting')
+    })
+    await deleteAllOf(['m1', 'm2', 'm3'])
+
+    expect(deleteMedia).toHaveBeenCalledTimes(3) // the refusal did not stop the rest
+    expect(toastError).toHaveBeenCalledTimes(1)
+    expect(toastError.mock.calls[0][0]).toBe('Not moved to trash: m2.jpg. This space is being deleted.')
+    expect(showUndo).toHaveBeenCalledTimes(1)
+    const undoArg = showUndo.mock.calls[0][0]
+    expect(undoArg.summary).toBe('2 items moved to trash')
+
+    undoArg.onUndo()
+    await flushPromises()
+    expect(vi.mocked(restoreMedia).mock.calls.map(([, id]) => id).sort()).toEqual(['m1', 'm3']) // never the refused m2
+  })
+
+  it('names a medium without a sealed file name by its place in the grid, one line per reason', async () => {
+    vi.mocked(deleteMedia).mockImplementation(async (_scope, id) => {
+      if (id === 'm1') throw refusal(404, 'media_not_found')
+      if (id === 'm3') throw new TypeError('Failed to fetch') // no response: a network failure
+    })
+    await deleteAllOf(['m1', 'm2', 'm3'])
+
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual([
+      'Not moved to trash: Item 1. Already gone from this Memory, or you no longer have access.',
+      'Not moved to trash: Item 3. Please try again.',
+    ])
+    expect(showUndo.mock.calls[0][0].summary).toBe('1 item moved to trash')
+  })
+
+  it('offers no Undo when nothing went', async () => {
+    vi.mocked(deleteMedia).mockRejectedValue(refusal(409, 'scope_deleting'))
+    await deleteAllOf(['m1', 'm2'])
+
+    expect(showUndo).not.toHaveBeenCalled()
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual(['Not moved to trash: Item 1, Item 2. This space is being deleted.'])
+  })
+})
+
 describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () => {
   it('own bucket: select-all selects every tile, then delete soft-deletes each and offers undo → restore', async () => {
     vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 2)])
@@ -156,6 +216,7 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     undoArg.onUndo() // the toast's "Rückgängig" action
     await flushPromises()
     expect(restoreMedia).toHaveBeenCalledTimes(2) // undo restores each id
+    expect(toastError).not.toHaveBeenCalled() // nothing refused, nothing named
   })
 
   it('contributor bucket: selection shown; Move disabled with no same-owner sibling, Delete still works', async () => {
