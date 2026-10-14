@@ -65,7 +65,8 @@ paths:
       summary: The blob reference of every live file directly in a folder (or at the scope root).
       description: >
         For every live `FILE` node whose parent is `parentId` (absent: the scope root), its `nodeId` and the blob
-        its `FILE_CONTENT` slot holds (`fileBlob`) — or `fileBlob: null` for a file created whose upload has not completed yet.
+        its `FILE_CONTENT` slot holds (`fileBlob`) — or `fileBlob: null` for a file created whose upload has not completed yet —
+        and who uploaded that content (`uploaderKey`, members only: the guest's `listShareFiles` does not carry it).
         Names and keys are not repeated here: the client has them from core's node listing and joins by `nodeId`;
         a file's type and modified time are its blob's `wrappedBlobMeta`, served on `fileBlob`. Trashed files are not listed (core's trash lists them). Ordered by `nodeId`. Guards: the
         caller holds a grant for the scope (READ); the parent, when named, is a live node of this scope
@@ -175,7 +176,7 @@ paths:
       description: >
         **No auth.** The Files half of a guest's read of a link: core's `resolveShare` serves the shared nodes with
         their keys and names, this serves the blob each live `FILE` among them holds (its `wrappedBlobMeta` with it) — `fileBlob:
-        null` for one whose upload has not completed. Core's guest gate runs first (`ShareGuestGate`): an active
+        null` for one whose upload has not completed — and never who uploaded it (inbox #190). Core's guest gate runs first (`ShareGuestGate`): an active
         share → the password → the access mode. Only files of the **live** shared subtree are listed: a file in the
         trash, or under a trashed folder, is not (and its blob answers `404` at `resolveShareBlob`). Ordered by
         `nodeId`. A `WRITE_ONLY` link is served an empty list. A disabled, expired, or unknown share is a
@@ -457,11 +458,39 @@ components:
 
     FileListItem:
       type: object
+      description: >
+        One file of a MEMBER's listing. The guest's listing has its own item (`ShareFileListItem`) on purpose: a field
+        added here never reaches a share guest by accident (inbox #190).
       required: [nodeId]
       properties:
         nodeId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
         # Not `blob`: that name is opaque elsewhere (`account.openapi.yaml#IdentityPins.blob`), and
         # validate_opaque_names_disjoint refuses a name that is opaque in one place and plaintext in another.
+        fileBlob:
+          description: The file's blob, or null while no upload of it has completed.
+          oneOf:
+            - $ref: "#/components/schemas/FileBlobRef"
+            - type: "null"
+        uploaderKey:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          description: >
+            Who uploaded the file's CURRENT content (ADR 0083 Addendum): `user:{userId}` (a member) or
+            `share:{shareIdentityId}` (a link's guest) — the opaque key shape Memories' `ownerKey` uses. A replace moves
+            it to the replacer; who created the node is not recorded. Operator-visible coarse metadata (ADR 0034's class:
+            who uploaded which blob), never a name. Null while the file holds no content. Members only: the guest's
+            listing carries no such field.
+          maxLength: 64
+          example: "user:2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"
+
+    ShareFileListItem:
+      type: object
+      description: >
+        One file of a GUEST's listing: the blob reference and nothing about who uploaded it (inbox #190, ADR 0083
+        Addendum) — a schema of its own so the member's item can grow without reaching a guest.
+      required: [nodeId]
+      properties:
+        nodeId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
         fileBlob:
           description: The file's blob, or null while no upload of it has completed.
           oneOf:
@@ -516,13 +545,13 @@ components:
     ShareFileListing:
       type: object
       description: >
-        What a guest is served of the files under a shared subtree: one item per live `FILE`, the member listing's
-        item shape.
+        What a guest is served of the files under a shared subtree: one item per live `FILE`, the guest's own item
+        shape (`ShareFileListItem`: no uploader).
       required: [items]
       properties:
         items:
           type: array
-          items: { $ref: "#/components/schemas/FileListItem" }
+          items: { $ref: "#/components/schemas/ShareFileListItem" }
 
     DropFolderRequest:
       type: object

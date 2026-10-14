@@ -1,7 +1,7 @@
 ---
 id: cr-file-uploader
 title: A file's page names who uploaded its current content - recorded on the attachment, shown to members only
-status: planned
+status: in-progress
 satisfies: [uc.files.view-file]
 adrs: ["0083", "0034", "0079"]
 invariants: [operator-blind E2EE everywhere]
@@ -64,7 +64,7 @@ no such field. Decided by the coordinator on the owner's behalf, 2026-10-14 (inb
 
 ## Phases
 
-- [ ] 1 contracts: Decision 2.
+- [x] 1 contracts: Decision 2.
   - Done when the trust-chain guards are green.
 - [ ] 2 backend: Decisions 1 and 4 (backend half).
   - Done when `./gradlew check` is green; bitten (the uploader not written, the field leaking to the share listing).
