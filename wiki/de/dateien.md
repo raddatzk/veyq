@@ -68,6 +68,18 @@ nur in eine Erinnerung), und **Hierher verschieben** ist ausgegraut, mit dem Gru
 er schon liegt. Alles darin kommt mit und bleibt lesbar. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken
 darfst, kannst du Dinge **darin** verschieben — aber nicht hinaus.
 
+## Mehreres auf einmal
+
+Wähle **Auswählen** neben **Neu** und dem Papierkorb, und jeder Eintrag des Ordners bekommt ein Kästchen zum Anhaken.
+Hake an, was du möchtest — oder wähle **Alle** — und dann **Verschieben nach …** oder **Löschen**. Die Leiste zeigt, wie
+viele du angehakt hast, und wenn ein Tab einige davon ausblendet, sagt sie auch das: Deine Haken bleiben, wenn du den
+Tab wechselst. Lässt sich ein Teil des Angehakten nicht verschieben oder löschen, sagt veyq, wie viele, und erledigt
+den Rest. **Löschen** fragt einmal für alle, und ein **Rückgängig** holt alle zurück. **Verschieben nach …** öffnet
+dieselbe Ordneransicht wie für einen Eintrag; was dort nicht hinkann — weil dort zum Beispiel schon etwas mit
+demselben Namen liegt —, wird genannt und bleibt, wo es ist, und ein **Rückgängig** verschiebt zurück, was verschoben
+wurde. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken darfst, kannst du dort auch auswählen und
+verschieben, aber nicht löschen.
+
 ## Eine Liste für alles in einem Ordner
 
 Ein Ordner zeigt **eine Liste** von allem, was darin liegt: Unterordner, Erinnerungen, Dateien und Briefkästen

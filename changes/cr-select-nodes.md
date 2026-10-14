@@ -87,7 +87,7 @@ happened. Owner decisions 2026-10-14 (inbox #421). Drag and drop is **not** part
   - Tests: one question naming count and kinds; each node through its kind's door; a failure is named and the rest
     deleted; Undo restores exactly what went; no Delete for a guest. Bitten.
   - Done when `npm run check` is green and a real browser deleted and restored a mixed selection.
-- [ ] 4 docs: the three use cases lose "decided, not yet built" and say what was seen; coverage for the new criteria;
+- [x] 4 docs: the three use cases lose "decided, not yet built" and say what was seen; coverage for the new criteria;
   `docs/apps/*.md` where the matrices name move/delete; both wikis (select, move and delete several).
   - Done when every `scripts/validate_*.py` is green.
 
@@ -100,4 +100,22 @@ happened. Owner decisions 2026-10-14 (inbox #421). Drag and drop is **not** part
 
 ## Retrospective
 
-_(filled at implementation)_
+- **Planning - the CR named who decides but not how core asks.** "Capabilities decide per node" and "each node through
+  the door its single delete uses" were settled, but core may not call `memoryCapabilities` / `filesCapabilities` (ADR
+  0079), and a Memory's row carries no delete action to read. The implementer added the missing seam in place:
+  `LevelRow.selection` (`{ move, delete, remove? }`, each application's capability answer per node; a folder's is core's
+  `folderCapabilities`), with Files' file passing its source's delete as `remove` (`deleteFile(id, { reload: false })`).
+  Small and in the existing pattern ("an action is already a capability answer"), but it is a registry-contract change
+  the refine did not decide. Two smaller calls of the same kind: the summary is shown IN the dialog (it stays open until
+  closed when anything was left out or refused; the toast carries the Undo), and Select is offered only where some node
+  of the level allows an action (a `READ` guest sees none). Root cause: the refine read the hosts and the dialogs, not
+  the core/application boundary the new action crosses. **Next time:** a CR that adds a core action over application
+  nodes names the registry hook that carries the per-node answer, or says it is the implementer's to add.
+- **Execution - the browser pane's coordinate frame.** Clicks by coordinate from a screenshot landed elsewhere (the
+  screenshot frame is 800x600, the page 1024x768); clicks by `ref` after `scroll_to` were exact. The Undo toast lives 6 s,
+  shorter than two tool round trips, so its click had to ride in the same batch as the write. One blind coordinate
+  click was sent after the toast had gone (it hit nothing). **Next time:** drive the pane by `ref`; batch a click that
+  must follow a short-lived element in the same call.
+- **Process.** `npm run check` timed out in setup hooks twice under a load average of ~60 (parallel agents); a rerun was
+  green - a red check under load is re-run before it is believed. The CR's inventory pointed at every file that changed
+  except `test/i18n.ts`, whose `t()` took no plural count (the German hints needed `one | many`).

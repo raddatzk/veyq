@@ -186,6 +186,11 @@ here; the server is blind.
   `veyq-row-action-<id>`), `shown` by the application's fail-closed capability function - a share guest gets this very row with
   fewer actions, never a guest-only one. Core's own actions (the favorite heart of inbox #409) plug in as the
   level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
+  A row's `selection` (`LevelRowSelection` `{ move, delete, remove? }`, inbox #421) is the application's capability answer
+  for the level's Select mode (core's `selection.ts`, the bar in `LevelView`): omitted, the node allows nothing; `remove` is
+  the kind's own delete door without its tree re-read (Files' file), else core's `deleteNode`. Several nodes move through
+  `core/node/MoveNodesDialog.vue` (`NodeMover.moveMany`: N single writes, one re-read) and are deleted through
+  `core/node/components/DeleteNodesDialog.vue` (`deleteSelection.ts`), never a batch request.
 
   **A revisioned list inside a node is core's (inbox #410, `core/items/itemsLive.ts`, [ADR 0033](../docs/decisions/0033-live-media-updates-revision-polling.md)).**
   The client half of the backend's `NodeItemsRevisions`: `itemsPollTick({ cursor, fetch, apply, isCurrent? })` is one tick for
@@ -296,7 +301,7 @@ here; the server is blind.
   the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
   `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind; every node's move is
   `core/node/MoveNodeDialog.vue` (inbox #358) around core's folder browser `core/node/MoveBrowser.vue` (one place at a time,
-  drawn with `LevelRowItem`; it takes a node list for inbox #421's selection), mounted by both hosts when a row factory or a
+  drawn with `LevelRowItem`; it takes a node list, which a level's selection hands it through `MoveNodesDialog`), mounted by both hosts when a row factory or a
   detail asks the host to move the node, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
   guest's `placeShareNodeAsGuest`, none otherwise) and explaining each server refusal by its code; and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`

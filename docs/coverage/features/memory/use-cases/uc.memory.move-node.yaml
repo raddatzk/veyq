@@ -53,3 +53,9 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/core/node/MoveNodeDialog.test.ts, src/views/MemoryHomeView.move.test.ts]
+
+  - id: several-move-as-single-writes
+    text: "A level's selection moves through the same browser and door (inbox #421): a place is blocked where any selected node cannot go, the reason naming that node; before anything is sent a node already there or whose name folds to a sibling's there is named and left out; the rest is sent one node after the other, each the single node's own placement write (no batch request), with the tree re-read once and a guest named once; a refusal part-way leaves what moved and still sends the rest; one summary names each node that did not move with its reason, and one toast's Undo moves back exactly what moved (a guest's folder out of a drop box asked once, no undo)."
+    coverage:
+      web:
+        unit: [src/core/node/move.test.ts, src/core/node/move.wire.test.ts, src/core/node/MoveNodesDialog.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts]

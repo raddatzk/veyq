@@ -61,6 +61,16 @@ goes into a Memory), and **Move here** is greyed out, with the reason, where the
 already is. Everything inside comes along and stays readable. If somebody shared a folder with you and lets you
 contribute, you can move things around **inside** that folder — but not out of it.
 
+## Several at once
+
+Choose **Select** next to **New** and the trash, and every entry of the folder gets a tick box. Tick what you want —
+or choose **All** — and then **Move to…** or **Delete**. The bar says how many you have ticked, and if a tab hides some
+of them it says that too: your ticks stay when you switch tabs. If some of the ticked things cannot be moved or
+deleted, veyq says how many, and does it with the rest. **Delete** asks once for all of them, and one **Undo** brings
+all of them back. **Move to…** opens the same folder view as for one item; anything that cannot go there — something
+with the same name already there, for example — is named and stays where it is, and one **Undo** moves back what moved.
+If somebody shared a folder with you and lets you contribute, you can select and move there too, but not delete.
+
 ## One list for everything in a folder
 
 A folder shows **one list** of everything in it: sub-folders, Memories, files and drop boxes together. Folders come

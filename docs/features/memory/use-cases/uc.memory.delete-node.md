@@ -35,10 +35,12 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
 
 1. In the tree the user deletes a node — the existing delete affordance, with its confirmation naming what goes
    with it (a Memory takes its Chapters and all their photos). **Several at once** (owner decisions 2026-10-14, inbox
-   #421; decided, not yet built): a selection of the level (uc.memory.browse step 6) is deleted after **one** question
+   #421): a selection of the level (uc.memory.browse step 6) is deleted after **one** question
    naming how many nodes of which kinds go; each is its own delete below, one after the other, the tree re-read once;
    one summary names any that failed with its reason, and one toast with **Undo** restores exactly those that went.
-   A `READ_WRITE` guest is offered no delete.
+   A `READ_WRITE` guest is offered no delete. Seen in a real browser on 2026-10-14 (the dev instance): a folder, a file
+   and a Memory - asked once, "Die Auswahl umfasst einen Ordner, eine Datei und eine Erinnerung." - went with three
+   deletes and came back with the toast's Undo, three restores, every node at its place again.
 2. The client calls **delete** → the server marks the node **and its whole subtree** soft-deleted (`deleted_at =
    now`) in one transaction. Nothing else is touched: media, derivatives, buckets and every blob stay exactly as
    they were, which is what makes the restore cheap and complete.
@@ -123,14 +125,17 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
 you handed out. But it is not gone for good yet: it waits in your space's trash, and you can put it back with
 everything still in it — every photo, every chapter, the cover, exactly as it was. Only after the waiting period
 does the system erase it for good, automatically. The name is free again the moment you delete, so you can
-immediately make a new memory with the same title. Everything stays encrypted throughout: the server only notes
+immediately make a new memory with the same title. To delete several things at once, choose "Select", tick them and
+choose "Delete" — you are asked once, and one "Undo" brings all of them back. Everything stays encrypted throughout: the server only notes
 that something was deleted and later removes scrambled files it cannot read.
 
 **DE —** Löschst du eine Erinnerung oder ein Kapitel, ist es sofort weg — aus deinem Space und aus jedem
 Share-Link, den du weitergegeben hast. Endgültig ist es aber noch nicht: es wartet im Papierkorb deines Space, und
 du kannst es vollständig zurückholen — jedes Foto, jedes Kapitel, das Titelbild, genau wie vorher. Erst nach
 Ablauf der Frist löscht das System es automatisch für immer. Der Name ist sofort wieder frei, du kannst also
-gleich eine neue Erinnerung mit demselben Titel anlegen. Alles bleibt dabei verschlüsselt: der Server merkt sich
+gleich eine neue Erinnerung mit demselben Titel anlegen. Um mehreres auf einmal zu löschen, wähle „Auswählen“, hake es
+an und wähle „Löschen“ — du wirst einmal gefragt, und ein „Rückgängig“ holt alles zurück. Alles bleibt dabei
+verschlüsselt: der Server merkt sich
 nur, dass etwas gelöscht wurde, und entfernt später verschlüsselte Dateien, die er nicht lesen kann.
 
 ## Related

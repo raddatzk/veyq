@@ -321,7 +321,11 @@ or move unless the link is `READ_WRITE`), so the guest's columns are the most a 
 core's (`core/node/MoveNodeDialog.vue`, the host's): the row's "Move to…" asks the host through the row factory's
 (or the detail's) `move` event, and the dialog's folder browser (`MoveBrowser.vue`, one place at a time with "Move
 here") lists only places that take what `FilesNodeKindRules` takes — a file or a drop box at the root or in a folder
-(the kinds' `placement`), never into a drop box or a guest's folder.
+(the kinds' `placement`), never into a drop box or a guest's folder. A level's selection (core's Select mode, inbox #421)
+reads the same answers per node (`LevelRow.selection`): a file moves with it where `moveFile` says yes and is deleted with
+it where `deleteFile` does - through the source's own delete (`deleteFile(id, { reload: false })`: the selection re-reads
+the tree once, after the last) -, a drop box where `moveNode` / `deleteNode` do (core's delete); a guest's selection
+deletes nothing.
 
 - **The contract** (tag `share-files` in `files.openapi.yaml`, no auth, behind core's `ShareGuestGate`):
   `listShareFiles` — `GET /api/shares/{shareId}/files`: `{items: [{nodeId, fileBlob|null}]}` for every live `FILE` of

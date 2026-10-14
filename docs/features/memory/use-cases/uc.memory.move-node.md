@@ -41,7 +41,7 @@
 7. The tree is re-read; a node on screen is followed to its new path. A toast says where it went, with **Undo**, which
    moves it back the same way — not after a guest's folder left a drop box.
 
-### Several at once (owner decisions 2026-10-14, inbox #421; decided, not yet built)
+### Several at once (owner decisions 2026-10-14, inbox #421)
 
 A selection of the level (uc.memory.browse step 6) moves through the same browser: it shows the places that take
 **every** selected kind and blocks a place that blocks any selected node, with that node's reason. Before anything is
@@ -50,7 +50,15 @@ and left out, and the rest is sent. There is **no batch request**: each node is 
 one after the other, and the tree is re-read **once** at the end. Afterwards one summary says how many moved and
 names each one refused with its reason (A1-E4), and one toast with **Undo** moves back exactly the nodes that moved -
 a guest's folder that left a drop box excepted, as for one. Not atomic by design: a refusal part-way leaves what was
-already moved where it went, and says so.
+already moved where it went, and says so; a node that did not move stays selected. A guest names itself once for the
+whole selection.
+
+Seen in a real browser on 2026-10-14 (the dev instance): a member moved a folder, a Memory and a file into a sibling
+folder - three placement writes, one re-read of the tree, one toast "3 nach „Gedroppt“ verschoben." - and back; a
+folder, a file and a drop box whose name a folder at the destination already held: the drop box was named and left
+out, the other two moved, and the summary stayed until closed; the toast's Undo moved two nodes back with two writes;
+a `READ_WRITE` guest of a folder link moved a folder, a file and a Memory into a folder of its subtree - three
+`updateShareNode` writes, one re-resolve of the link.
 
 ## Alternate / exception flows
 
@@ -90,16 +98,18 @@ already moved where it went, and says so.
 to…": open the folder it should go to and choose "Move here", and everything inside it comes along and stays readable. If someone shared
 a folder with you and lets you add things, you can move things around inside that folder too — but nothing out of it.
 If a guest sent files into your drop box, you can move their folder out to keep it as an ordinary folder; the guest
-then can no longer add to it. A move can be undone right away. The server only learns that something moved, never what
-it is called.
+then can no longer add to it. To move several things at once, choose "Select", tick them and choose "Move to…": what
+cannot go is named, the rest moves. A move can be undone right away. The server only learns that something moved, never
+what it is called.
 
 **DE —** Mit „Verschieben nach …“ kannst du einen Ordner, eine Erinnerung, ein Kapitel, eine Datei oder einen
 Briefkasten an einen anderen Ort in deinem Bereich verschieben: Öffne den Ordner, in den es soll, und wähle „Hierher
 verschieben“, und alles darin kommt
 mit und bleibt lesbar. Hat dir jemand einen Ordner freigegeben, in den du etwas hinzufügen darfst, kannst du darin auch
 verschieben – aber nichts heraus. Hat eine Person Dateien in deinen Briefkasten eingeworfen, kannst du ihren Ordner
-herausverschieben und als gewöhnlichen Ordner behalten; die Person kann dann nichts mehr hinzufügen. Ein Verschieben
-lässt sich sofort rückgängig machen. Der Server erfährt nur, dass etwas verschoben wurde – nie, wie es heißt.
+herausverschieben und als gewöhnlichen Ordner behalten; die Person kann dann nichts mehr hinzufügen. Um mehreres auf
+einmal zu verschieben, wähle „Auswählen“, hake es an und wähle „Verschieben nach …“: Was nicht dorthin kann, wird
+genannt, der Rest wird verschoben. Ein Verschieben lässt sich sofort rückgängig machen. Der Server erfährt nur, dass etwas verschoben wurde – nie, wie es heißt.
 
 ## Related
 

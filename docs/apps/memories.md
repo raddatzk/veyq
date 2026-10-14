@@ -144,7 +144,10 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 At a folder level (Memories' rows in core's one list): a member creates a Memory (not during a pending deletion, never in a guest's
 identity folder); a share guest creates none — the "New" menu offers a guest no Memory (owner decision 2026-10-14, ADR 0080 decision 6); every role that reads opens
 one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's), and a guest's move
-the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unknown at the link's root). These are the matrix
+the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unknown at the link's root). A level's selection
+(core's Select mode, inbox #421) reads the same matrix per Memory (`LevelRow.selection`): it moves with the selection where
+`move` says yes and is deleted with it where `deleteNode` does (core's delete, as the Memory's own page asks the host for),
+so a guest's selection moves a Memory a folder holds and deletes none. These are the matrix
 half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
 most a guest page can ever offer. Memories' source is `web/src/features/memory/source.ts` (inbox #401 S4): the
 member's wraps the scope's calls; the guest's reads the link's media listing (each node's own media from the subtree's),

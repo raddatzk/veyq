@@ -38,14 +38,19 @@
    the scope root, the folder's key inside one) and POST only ciphertext (every node, a folder too, births its random
    key wrapped under the same parent key — ADR 0080); *rename* re-seals the name + recomputes the slug under it; *delete* takes the node and its whole subtree into the space's recoverable trash
    ([uc.memory.delete-node](uc.memory.delete-node.md)). All via [en.memory.tree](../enablers/en.memory.tree.md).
-6. **Select** (owner decisions 2026-10-14, inbox #421; **decided, not yet built**): **Select** in the level's toolbar,
-   beside "New" and the trash, turns on a selection mode: each row gets a labelled checkbox, the bar offers **All** /
-   **None**, a count (announced to a screen reader) and the actions **Move to…** and **Delete**, and leaving the mode
-   or the level clears it. The selection belongs to the level, not to a tab: switching tabs keeps it, and the count
-   says when part of it is hidden by the tab on screen. Every row is selectable; each action works on the part of the
-   selection the session may act on (the applications' capability functions per node) and says "n of m cannot be
-   moved / deleted" for the rest - a `READ_WRITE` guest selects and moves, and is offered no delete. The map
-   presentation has no rows and offers no Select. Moving several: [uc.memory.move-node](uc.memory.move-node.md) §
+6. **Select** (owner decisions 2026-10-14, inbox #421): **Select** in the level's toolbar, beside "New" and the trash,
+   turns on a selection mode: each row gets a labelled checkbox (a row's own click still opens it), the bar offers
+   **All** / **None**, a count (announced to a screen reader) and the actions **Move to…** and **Delete**, and leaving
+   the mode or the level clears it. The selection belongs to the level, not to a tab: switching tabs keeps it, "All"
+   and "None" act on what the tab on screen shows, and the count says when part of the selection is hidden by the tab
+   on screen; a node that leaves the level (moved, deleted) drops out of it. Every row is selectable; each action works
+   on the part of the selection the session may act on (the applications' capability functions per node) and says
+   "n of m cannot be moved / deleted" for the rest - a `READ_WRITE` guest selects and moves, and is offered no delete.
+   Select is offered only where some node of the level allows an action (a `READ` guest has none), and the map
+   presentation has no rows and offers no Select. Seen in a real browser on 2026-10-14 (the dev instance, a member and
+   a `READ_WRITE` folder link): the checkboxes, the count "3 ausgewählt, davon 1 in diesem Tab nicht sichtbar" after a
+   switch to the Files tab, the guest's bar with Move and no Delete and its hint "1 von 4 kann nicht verschoben werden"
+   for a drop box among the selected. Moving several: [uc.memory.move-node](uc.memory.move-node.md) §
    Several at once; deleting several: [uc.memory.delete-node](uc.memory.delete-node.md) step 1. Drag and drop of a
    selection is a later, separate step (inbox #421).
 

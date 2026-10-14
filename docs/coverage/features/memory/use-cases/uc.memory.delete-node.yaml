@@ -92,3 +92,9 @@ acceptanceCriteria:
       # Carries its own in-window control — a subtree trashed but not yet expired survives on every arm.
       backend:
         integration: [NodeTrashSliceTest.purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects, NodeCoverCoreSliceTest.aTrashedNodeKeepsItsCoverForTheRestoreAndThePurgeFreesIt]
+
+  - id: several-deleted-after-one-question
+    text: "A level's selection is deleted after ONE question naming how many go and of which kinds (each kind's own noun); each node through the door its single delete uses (core's deleteNode, or the kind's own - Files' source for a file), one after the other, the tree re-read once; a failure is named with its reason and the rest is deleted; one toast's Undo restores exactly the nodes that went through core's restoreNode; a share guest is offered no delete (inbox #421)."
+    coverage:
+      web:
+        unit: [src/core/node/deleteSelection.test.ts, src/core/node/components/DeleteNodesDialog.test.ts, src/views/MemoryHomeView.move.test.ts, src/core/node/LevelView.select.test.ts, src/core/sharing/ShareTreePage.move.test.ts]
