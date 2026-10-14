@@ -434,6 +434,13 @@ def mysql_row(sql: str) -> list[str]:
     return proc.stdout.rstrip("\n").split("\t")
 
 
+def mysql_rows(sql: str) -> list[list[str]]:
+    """Run one SELECT as root and return every row's columns (batch mode, no header)."""
+    proc = run(COMPOSE + ["exec", "-T", "mariadb", "mariadb", "-uroot", f"-p{DB_ROOT_PASSWORD}", "-N", "-B", "-e", sql],
+               capture_output=True, text=True)
+    return [line.split("\t") for line in proc.stdout.splitlines() if line]
+
+
 def fresh_database(name: str) -> None:
     """Drop and recreate this file's database, then grant it to the app user.
 
@@ -2232,7 +2239,16 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
                "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file)]
     assert_unsupplied_key_is_refused(restore, target)
     if with_key:
-        backup_tool(*restore, "--key-from", str(kept_key))
+        assert_newer_backup_is_refused(restore, backup, group_dir, target)
+        # The restore of this group is ALSO the older-backup rehearsal (ADR 0056 §7): the target is made to look
+        # one release ahead of the capture before the restore runs, and the restore must leave exactly the
+        # capture's schema behind. It is the same restore the suite then runs against, so the suite going green
+        # is the "and the app starts on it" half.
+        history = simulate_newer_target(target)
+        result = backup_tool_result(*restore, "--key-from", str(kept_key))
+        if result.returncode != 0:
+            raise SystemExit(f"[e2e] instance_backup.py restore failed with exit {result.returncode}")
+        assert_older_backup_restored(target, history, result.stdout + result.stderr)
     else:
         log("leg-3 rehearsal: restoring knowingly without the separately kept key")
         backup_tool(*restore, "--without-key")
@@ -2326,6 +2342,108 @@ def assert_populated_target_is_refused(restore: list[str]) -> None:
             f"Output was: {body.strip()[-500:]}"
         )
     log("A5 control: refused, by the emptiness gate, naming the rows it found")
+
+
+# A table no migration of this tree creates and a history row above every one of them: what a target one release
+# ahead of the capture holds that the capture does not (ADR 0056 §7). Named so no real migration can collide.
+FUTURE_TABLE = "veyq_e2e_future_table"
+FUTURE_VERSION = "999999999999"
+
+
+def flyway_history(database: str) -> list[list[str]]:
+    """The schema's own record, minus what differs between two installs of one release (rank, time, user)."""
+    return mysql_rows(
+        f"SELECT version, description, type, script, checksum, success FROM {database}.flyway_schema_history "
+        f"ORDER BY installed_rank;"
+    )
+
+
+def simulate_newer_target(target: Instance) -> list[list[str]]:
+    """Make the freshly installed target look one release AHEAD of the capture, and return its real history.
+
+    Both halves of what a newer release leaves on a fresh install: a table a later migration added, and a
+    successful history row above every migration the capture knows. Neither is data, so the A5 gate still
+    accepts the target. The history read BEFORE the forgery is the capture's: both instances ran this tree's
+    migrations, so the restore must leave exactly that behind.
+    """
+    history = flyway_history(target.database)
+    if not history:
+        raise SystemExit(f"[e2e] the installed restore target {target.database} has no Flyway history to extend")
+    log(f"older-backup rehearsal: {target.database} gains {FUTURE_TABLE} and a V{FUTURE_VERSION} history row")
+    mysql(
+        f"CREATE TABLE {target.database}.{FUTURE_TABLE} (id BIGINT PRIMARY KEY); "
+        f"INSERT INTO {target.database}.flyway_schema_history (installed_rank, version, description, type, script, "
+        f"checksum, installed_by, execution_time, success) SELECT MAX(installed_rank) + 1, '{FUTURE_VERSION}', "
+        f"'e2e future', 'SQL', 'V{FUTURE_VERSION}__e2e_future.sql', 0, 'e2e', 0, 1 "
+        f"FROM {target.database}.flyway_schema_history;"
+    )
+    if [FUTURE_TABLE] not in mysql_rows(f"SHOW TABLES FROM {target.database} LIKE '{FUTURE_TABLE}';"):
+        raise SystemExit("[e2e] the simulated newer target did not take: the forged table is not there")
+    return history
+
+
+def assert_older_backup_restored(target: Instance, history: list[list[str]], output: str) -> None:
+    """The older-backup case (ADR 0056 §7, uc A9): accepted, every table of the target gone, the capture's history.
+
+    The forged table surviving is the defect this exists for — the dump drops and recreates only the tables it
+    names, so without the restore's own drop the table outlives the backup's older history and the next start
+    fails re-creating it. Asserted on the table and on the history, never on the exit code alone; and the closing
+    log must say the data is migrated up and that a rollback is something else.
+    """
+    leftover = mysql_rows(f"SHOW TABLES FROM {target.database} LIKE '{FUTURE_TABLE}';")
+    if leftover:
+        raise SystemExit(
+            f"[e2e] OLDER BACKUP LEFT THE TARGET'S TABLE: {FUTURE_TABLE} survived the restore. The dump recreates "
+            f"only the tables it names, so the restore must drop every table of the target first (ADR 0056 §7)."
+        )
+    restored = flyway_history(target.database)
+    if restored != history:
+        raise SystemExit(
+            f"[e2e] OLDER BACKUP: the restored history is not the capture's ({len(restored)} row(s), expected "
+            f"{len(history)}; first difference at "
+            f"{next((i for i, (a, b) in enumerate(zip(restored, history)) if a != b), min(len(restored), len(history)))})"
+        )
+    if "OLDER than this instance" not in output or "migrate the data" not in output or "ROLLBACK" not in output:
+        raise SystemExit(
+            f"[e2e] OLDER BACKUP: the restore did not say the data will be migrated up and that a rollback is "
+            f"something else. Output was: {output.strip()[-600:]}"
+        )
+    log(f"older-backup rehearsal: accepted, {FUTURE_TABLE} gone, the capture's {len(history)}-row history restored")
+
+
+def assert_newer_backup_is_refused(restore: list[str], backup: Path, group_dir: Path, target: Instance) -> None:
+    """The newer-backup case (ADR 0056 §7, uc A10): refused by its own message, and nothing written.
+
+    A copy of the capture whose manifest claims a schema above the target's, and a release to name. The version
+    is chosen so that STRING order calls it older (it begins with `1`), so a gate comparing strings would let it
+    through. The refusal is asserted on its message naming the release — a connection failure exits non-zero
+    too — and "nothing written" on the target's tables, history and key, compared with what they were before.
+    """
+    forged = group_dir / "backup-newer"
+    shutil.rmtree(forged, ignore_errors=True)
+    shutil.copytree(backup, forged)
+    manifest_path = forged / instance_backup.MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text())
+    newer = "1" + "0" * (len(str(manifest["database"]["schemaVersion"])) + 1)
+    manifest["database"]["schemaVersion"] = newer
+    manifest["app"]["version"] = "0.9999"
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+    before = (mysql_rows(f"SHOW TABLES FROM {target.database};"), flyway_history(target.database))
+    log(f"A10 control: a capture claiming schema V{newer} from release 0.9999 — must be refused, writing nothing")
+    result = backup_tool_result(*[str(forged) if arg == str(backup) else arg for arg in restore], "--without-key")
+    body = result.stdout + result.stderr
+    shutil.rmtree(forged, ignore_errors=True)
+    if result.returncode == 0:
+        raise SystemExit("[e2e] NEWER BACKUP RESTORED: a capture newer than its target was loaded (ADR 0056 §7)")
+    if "NEWER than this instance" not in body or "release 0.9999" not in body:
+        raise SystemExit(
+            f"[e2e] NEWER BACKUP REFUSED FOR THE WRONG REASON: the restore failed without naming the newer schema "
+            f"and its release. Output was: {body.strip()[-500:]}"
+        )
+    after = (mysql_rows(f"SHOW TABLES FROM {target.database};"), flyway_history(target.database))
+    if after != before or target.secret_file.exists():
+        raise SystemExit("[e2e] NEWER BACKUP REFUSED, BUT WROTE: the target's tables, history or key changed")
+    log("A10 control: refused before the first write, naming the release the backup came from")
 
 
 # Group stem → the hook that runs between its members. A multi-member group with no entry here is a hard error:

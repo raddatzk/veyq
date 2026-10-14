@@ -681,6 +681,15 @@ A restore targets the **same domain** (ADR 0056 §4); `--domain` is required and
 backup did not hold. It also refuses a target that already holds **data**, or a bucket that already holds
 objects — the restore is defined onto an empty instance and nothing reconciles two populated ones (A5).
 
+**It compares the backup's schema with the target's before it writes anything** ([ADR 0056](../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) §7),
+in Flyway's version order. A backup **newer** than the target is refused, and the message names the release it
+came from: install that release (or a newer one) and restore onto it. A backup at the target's schema **or an
+older one** is accepted: the restore first drops every table of the target — safe only because the gate above
+proved it holds no data, and needed because the dump recreates only the tables it names — then loads the dump,
+and the application migrates the data up at its next start, the same forward migration every upgrade runs. So
+"install the backup's release, restore, upgrade" is "restore, start". When the backup is older the restore says
+so, because that is an upgrade — and if you meant a rollback, it is not one (§ An upgrade, step by step).
+
 *Empty* means **holding no data**, not holding nothing. The target is a **normally installed instance**: bring
 the stack up and let the app start once, which migrates the schema and provisions the store. There is no
 shorter path and there is no manual `CREATE DATABASE` step — since ADR 0067 the app is the only thing that can
@@ -853,10 +862,13 @@ it, not from a rehearsal, and you are the one finding out where it is wrong. Rea
    Memory that contains media**. That is the one assertion touching all three legs at once — the row, the
    object and the key are three different failures wearing the same "it looked fine".
 
-**Rollback is the backup plus the tag, and both are nameable only because a release is immutable.** Stop the
-app, restore the capture from step 2 onto an empty instance (§ Restore), and pin `VEYQ_IMAGE` and
-`VEYQ_ADMIN_IMAGE` back to the two lines step 3 kept. There is no other way back: the migrations carry no down path, so an instance that has booted
-on the new schema cannot be handed to the old image.
+**Rollback is the backup plus the tag, and both are nameable only because a release is immutable.** Install the
+release you left first: a freshly installed instance on the two lines step 3 kept (`VEYQ_IMAGE` and
+`VEYQ_ADMIN_IMAGE` pinned back, the app started once and stopped, as § Restore requires), then restore the capture
+from step 2 onto it. The order is the rollback: restored onto the new release, the same capture is accepted as an
+older backup and migrated up again at the next start, which repeats the failed upgrade instead of undoing it —
+the restore says so when it sees one. There is no other way back: the migrations carry no down path, so an instance
+that has booted on the new schema cannot be handed to the old image.
 
 ## Seeding the local dev principal
 

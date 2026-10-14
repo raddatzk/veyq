@@ -85,10 +85,11 @@ bucket. `restore` refuses a non-empty target outright rather than reconciling it
 
 **What this does not do.** It does not collect the instance's garbage: abandoned upload sessions and orphaned
 objects are captured as they are, because they are the running system's steady state and a restore is not
-where they get collected. It does not change a domain (ADR 0056 §4). It does not upgrade or downgrade a
-schema — the dump carries `flyway_schema_history`, so a restored instance boots at the version it was captured
-at and `quarkus.flyway.migrate-at-start=true` is a no-op rather than a re-derivation. And it does not verify
-the *database* leg beyond structure: the dump's rows are ciphertext this tool cannot read, by design.
+where they get collected. It does not change a domain (ADR 0056 §4). It never runs a migration itself: the
+dump carries `flyway_schema_history`, so a restored instance holds the schema it was captured at, and a target
+whose release is newer migrates it up at its next start — the same forward migration every upgrade runs. A
+backup NEWER than the target is refused before anything is written (ADR 0056 §7). And it does not verify the
+*database* leg beyond structure: the dump's rows are ciphertext this tool cannot read, by design.
 
 Environment (the app's own variables — nothing new to configure):
     VEYQ_BACKUP_DB_PASSWORD     Database password. Required by `capture` and `restore`.
@@ -300,12 +301,13 @@ class Database:
         adds is covered without anyone remembering to add it (changes/README.md § a guard derives its anchor set
         from the code).
 
-        **And the load onto an already-migrated schema is safe, measured rather than assumed.** [dump] runs
-        `mariadb-dump` with no `--skip-opt`, and `--add-drop-table` is ON by default there (`mariadb-dump --help`
-        on the pinned mariadb:11.4: *"Defaults to on; use --skip-add-drop-table to disable"*), so every table the
-        dump names is dropped and recreated. The dump is a full dump of the source, so it names every table the
-        source had — including `flyway_schema_history` and `veyq_instance`, which is why the target's own copies
-        of those two are replaced rather than merged.
+        **And the load onto an already-migrated schema is safe because the restore drops every table first**
+        ([drop_all_tables], ADR 0056 §7). [dump] runs `mariadb-dump` with `--add-drop-table` on by default
+        (`mariadb-dump --help` on the pinned mariadb:11.4: *"Defaults to on; use --skip-add-drop-table to
+        disable"*), but that drops and recreates only the tables the dump NAMES — so a table a later migration
+        added to the target, absent from an older backup, would survive under the backup's older history and the
+        next start would fail re-creating it. Dropping is safe only because this gate has just proven the target
+        holds no data.
         """
         rows = self.query(
             f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{self.name}' "
@@ -320,6 +322,26 @@ class Database:
             " UNION ALL ".join(f"SELECT '{n}', COUNT(*) FROM `{n}`" for n in names) + ";"
         )
         return [(r[0], int(r[1])) for r in counts if len(r) > 1 and int(r[1]) > 0]
+
+    def base_tables(self) -> list[str]:
+        """Every base table of the target — the same `information_schema` derivation as [populated_tables], with
+        no exclusions, so a table a future migration adds is covered with nothing to maintain."""
+        rows = self.query(
+            f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{self.name}' "
+            f"AND table_type = 'BASE TABLE' ORDER BY table_name;"
+        )
+        return [r[0] for r in rows if r and r[0]]
+
+    def drop_all_tables(self) -> int:
+        """Drop every base table of the target, in one session with foreign-key checks off (ADR 0056 §7).
+
+        Called only after the A5 gate proved the target holds no data and the version gate accepted the backup:
+        the target's schema is then the one thing it holds, and the dump brings its own.
+        """
+        names = self.base_tables()
+        if names:
+            self.query("SET FOREIGN_KEY_CHECKS = 0; DROP TABLE " + ", ".join(f"`{n}`" for n in names) + ";")
+        return len(names)
 
     def domains(self) -> list[str]:
         return sorted(row[0] for row in self.query("SELECT domain FROM veyq_tenant;"))
@@ -642,6 +664,62 @@ def require_key_from_fits(args: argparse.Namespace, manifest: dict) -> None:
     if args.key_from and placement != SEPARATE:
         raise BackupError(f"--key-from is for a capture that kept its key separately; this one's leg (c) is "
                           f"{placement!r} (manifest configSecret.placement)")
+
+
+def flyway_order(version: str) -> tuple[int, ...]:
+    """A Flyway version as Flyway orders it: dot-separated numeric parts (`_` is a dot in a file name), compared
+    as numbers, trailing zeros insignificant (`1.0` is `1`). Never a string: `"9" > "44"` as strings."""
+    parts = [int(part) for part in version.replace("_", ".").split(".")]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
+NEWER, SAME, OLDER = "newer", "same", "older"
+
+
+def backup_against_target(manifest: dict, target_version: str | None) -> str:
+    """Where the backup's schema stands against the target's (ADR 0056 §7) — or why the restore must not start.
+
+    A newer backup is refused naming the release it came from: the target's image would refuse to start on a
+    history holding migrations it does not know, so loading first would leave the operator with neither instance.
+    """
+    backup_version = (manifest.get("database") or {}).get("schemaVersion")
+    release = (manifest.get("app") or {}).get("version")
+    named = f"release {release}" if release else "an unknown release (the manifest records no app.version)"
+    if not backup_version:
+        raise BackupError("the manifest records no database.schemaVersion, so the restore cannot tell whether "
+                          "this instance can run the backup's schema — refusing rather than guessing")
+    if not target_version:
+        raise BackupError("the target has no applied Flyway migration, so it is not a freshly installed instance "
+                          "and its schema cannot be compared with the backup's. Start the application once so it "
+                          "migrates and provisions the store, stop it, then restore.")
+    try:
+        ours, theirs = flyway_order(target_version), flyway_order(str(backup_version))
+    except ValueError as e:
+        raise BackupError(f"a schema version is not a Flyway version (backup {backup_version!r}, target "
+                          f"{target_version!r}): {e}") from e
+    if theirs > ours:
+        raise BackupError(
+            f"this backup is at schema V{backup_version}, NEWER than this instance's V{target_version}: it came "
+            f"from {named}. This instance's release would refuse to start on a history holding migrations it does "
+            f"not know (ADR 0056 §7). Install {('release ' + release) if release else 'the release the backup came from'} "
+            f"(or a newer one), start it once, stop it, then restore. Nothing was written."
+        )
+    return OLDER if theirs < ours else SAME
+
+
+def older_backup_notice(manifest: dict, target_version: str) -> str:
+    """The closing log for a backup older than its target — an upgrade, which a rollback is not (uc A7, A9)."""
+    backup_version = manifest["database"]["schemaVersion"]
+    release = (manifest.get("app") or {}).get("version")
+    came_from = f"release {release}" if release else "the release it came from (the manifest records none)"
+    return (
+        f"this backup is at schema V{backup_version}, OLDER than this instance's V{target_version}: the "
+        f"application will migrate the data to V{target_version} at its next start — the same forward migration "
+        f"every upgrade runs. If you meant a ROLLBACK, this is not one: it repeats the upgrade. Install "
+        f"{came_from} instead and restore onto that (uc.admin.back-up-and-restore-instance A7)."
+    )
 
 
 def read_manifest(backup: Path) -> dict:
@@ -1008,6 +1086,14 @@ def cmd_restore(args: argparse.Namespace) -> int:
             f"(A5) — this tool copies INTO a bucket and never deletes from one. Empty it first, then restore."
         )
 
+    # ADR 0056 §7 — the backup's schema against the target's, in Flyway's order, before the first write. A newer
+    # backup raises here; the same or an older one is loaded over a target emptied of every table, because the
+    # dump drops and recreates only the tables it names.
+    target_version = db.schema_version()
+    standing = backup_against_target(manifest, target_version)
+    dropped = db.drop_all_tables()
+    log(f"dropped the {dropped} table(s) of the freshly installed target (it holds no data, A5)")
+
     log(f"loading {DUMP_NAME} into {db.describe()}")
     db.load(backup / DUMP_NAME)
 
@@ -1047,6 +1133,8 @@ def cmd_restore(args: argparse.Namespace) -> int:
 
     restored, restored_bytes = store.size()
     log(f"restored: schema V{manifest['database']['schemaVersion']}, {restored} object(s) / {restored_bytes} B")
+    if standing == OLDER:
+        log(older_backup_notice(manifest, target_version))
     log("Now start the application, then read its config-secret state — that is the step that separates a "
         "restore from a hope (ADR 0056 §5): GET /api/tenants/{id}/mail-settings must report "
         "configSecretState: OK, and a person must be able to sign in and open a Memory that has media.")

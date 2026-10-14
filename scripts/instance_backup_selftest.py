@@ -20,7 +20,12 @@ This asserts, with no daemon and no root:
   4. that `cmd_capture` run by a user who cannot read the key (inbox #250: on the production recipe it lives on
      the app's uid-10001 volume) refuses with a message naming `sudo -E`, not a `PermissionError` traceback, and
      before the capture directory exists — for a key whose directory it cannot search and for one it cannot
-     read — with the same kind of positive control. Skipped as root, which reads both.
+     read — with the same kind of positive control. Skipped as root, which reads both;
+  5. the restore's version gate (ADR 0056 §7): Flyway's version order where string order disagrees (`9` vs
+     `44`, a longer number that sorts first as a string, trailing zeros), that a NEWER backup is refused with a
+     message naming the release it came from (and saying so when the manifest records none), that the same and
+     an older one are accepted, that a target with no applied migration is refused, and the closing log an older
+     backup gets — that it will be migrated up, and that a rollback needs the backup's own release.
 
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key
 in a running container — that is the live proof on the production recipe, recorded where the coverage of
@@ -204,6 +209,42 @@ def capture_cases(tmp: pathlib.Path) -> None:
               outcome.startswith("refused:") and "sudo -E" in outcome and not wrote, f"{outcome}, wrote={wrote}")
 
 
+def version_cases() -> None:
+    order = ib.flyway_order
+    check("flyway order: 44 is newer than 9 (string order says the opposite)", order("44") > order("9"))
+    check("flyway order: 1000000000000 is newer than 202610041201 (string order says the opposite)",
+          order("1000000000000") > order("202610041201"))
+    check("flyway order: 1.10 is newer than 1.9", order("1.10") > order("1.9"))
+    check("flyway order: 1.0 equals 1, and 2_1 equals 2.1", order("1.0") == order("1") and order("2_1") == order("2.1"))
+
+    def manifest(schema, release):
+        return {"database": {"schemaVersion": schema}, "app": {"version": release}}
+
+    def outcome(m, target):
+        try:
+            return ib.backup_against_target(m, target)
+        except ib.BackupError as e:
+            return f"refused: {e}"
+
+    newer = outcome(manifest("44", "0.17"), "9")
+    check("a backup at V44 onto a target at V9 is refused, naming its release 0.17",
+          newer.startswith("refused:") and "NEWER" in newer and "release 0.17" in newer, newer)
+    unnamed = outcome(manifest("44", None), "9")
+    check("a newer backup whose manifest names no release says so",
+          unnamed.startswith("refused:") and "unknown release" in unnamed, unnamed)
+    check("a backup at V9 onto a target at V44 is older, not refused (string order would refuse it)",
+          outcome(manifest("9", "0.3"), "44") == ib.OLDER)
+    check("the same schema is accepted as the same", outcome(manifest("44", "0.3"), "44.0") == ib.SAME)
+    unmigrated = outcome(manifest("44", "0.3"), None)
+    check("a target with no applied migration is refused, naming the first start",
+          unmigrated.startswith("refused:") and "Start the application once" in unmigrated, unmigrated)
+    notice = ib.older_backup_notice(manifest("9", "0.3"), "44")
+    check("the older-backup closing log says the data is migrated up at the next start",
+          "migrate the data to V44 at its next start" in notice, notice)
+    check("the older-backup closing log says a rollback installs the backup's own release",
+          "ROLLBACK" in notice and "release 0.3" in notice and "A7" in notice, notice)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyq-backup-selftest-") as tmp:
         tmp_path = pathlib.Path(tmp)
@@ -211,11 +252,12 @@ def main() -> int:
         place_cases(tmp_path)
         restore_cases(tmp_path)
         capture_cases(tmp_path)
+    version_cases()
     if failures:
         print(f"[selftest] {len(failures)} failure(s)", file=sys.stderr)
         return 1
-    print("[selftest] the restored key takes its directory's owner, and an unplaceable or unreadable one is refused "
-          "before the first write")
+    print("[selftest] the restored key takes its directory's owner, an unplaceable or unreadable one is refused "
+          "before the first write, and a backup is ordered against its target the way Flyway orders versions")
     return 0
 
 
