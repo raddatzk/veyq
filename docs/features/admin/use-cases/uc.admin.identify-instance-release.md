@@ -51,6 +51,10 @@ become so.
   answers what was *configured*; this answers what is *running*. They diverge after a pull that was never
   restarted, or a restart that silently reused a cached image — which is the case where an upgrade appears to
   have happened and did not.
+- **A5 — The instance runs a snapshot.** The version reads `<major>.<minor>-SNAPSHOT`, and it is reported as
+  it is: a snapshot is a published, signed build, but its name is the one that moves (ADR 0057 §1). So it is not
+  a rollback target, and a backup of a snapshot instance names a build that may no longer exist under that tag.
+  What does still name it is the digest the operator pinned.
 
 ## Quality notes
 

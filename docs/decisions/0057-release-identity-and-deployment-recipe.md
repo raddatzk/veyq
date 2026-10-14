@@ -39,17 +39,45 @@ A sixth fact shapes the decision rather than motivating it: a version already ex
 `GET /api/setup` as the client-compatibility gate. It is a different number answering a different question, and
 merging the two is the obvious mistake this ADR exists to prevent.
 
+A seventh fact surfaced when the first push was planned, and it reshaped Decision 1. The first form of this
+decision kept `major.minor` in `VERSION` by hand and published on every push to `main`. Under that form the
+first push is release `1.0`, and every push after it is a red run until someone commits a bump: the refusal to
+republish, correct on its own, turned an ordinary commit on a repository that commits straight to `main` into a
+failed release. Nor was there a way to try the publish path before it named something for good.
+
 ## Decision
 
-**1. The release version comes from the tree.** A `VERSION` file at the repository root holds `major.minor`,
-and that value — not a registry count — is what a publish stamps. A publish whose tag already exists **fails**
-rather than replacing it. The cost is one bump commit per release, which is what a release already is. What it
-buys: a checkout answers what it is, no network call decides a version number, a republish is an error instead
-of a silent substitution, and the whole derivation is **checkable locally** — which the registry form can never
-be, and which is the difference between a provable change and an asserted one in a repository with no remote.
+**1. The release version comes from the tree, and publishing is a deliberate act.** A `VERSION` file at the
+repository root holds the **major** alone; the minor is the number of commits since the one that last changed
+`VERSION` (`git rev-list --count "$(git log -1 --format=%H -- VERSION)"..HEAD`), so it restarts at every major:
+the commit that sets `1` is `1.0`. The version is `<major>.<minor>`, both halves a function of the commit — not
+a registry count. Counting every reachable commit instead was considered: it is just as offline, but it put the
+first release at `0.1944`, a number that says nothing about the major it belongs to. What it buys: a checkout answers what it is, no network call decides a version number,
+no commit exists only to move a number, and the whole derivation is **checkable locally** — which the registry
+form can never be, and which is the difference between a provable change and an asserted one in a repository
+with no remote. The count needs the full history: a shallow clone counts 1.
 
-**2. A published image has exactly one git ref, `v<major>.<minor>`,** created by the publish. One release, one
-name, one tree.
+Nothing is published by a push. A push (and a pull request, Dependabot's included) builds both images and
+publishes nothing — the dry run. A publish is started by hand, from `main` or `release/<major>.x` only, and is
+one of two kinds:
+
+- **A snapshot** — the default. Published as `<major>.<minor>-SNAPSHOT` and `sha-<sha>`, signed like a release,
+  and **mutable**: dispatching again on the same commit replaces it. It gets no `<major>`, no `latest` and no
+  git ref. `-SNAPSHOT` is a SemVer pre-release, so a version range does not select it unless asked to. A
+  snapshot is for trying a build on an instance that may be thrown away, and **never a rollback target**: an
+  instance that ran one may hold a migration that changes before it is released, which Flyway's checksum check
+  then refuses at the next start.
+- **A release** — asked for explicitly. Published as `<major>.<minor>`, `<major>`, and `latest` from `main`.
+  A release whose tag already exists **fails** rather than replacing it, so a republish is an error instead of a
+  silent substitution.
+
+**Major `0` is pre-release.** A `0.<minor>` release exercises the publish path end to end — signature, git ref,
+the refusal to republish — and promises no upgrade path. The migration set is frozen by the first release of a
+major ≥ 1, which the owner declares on the `release:` line of `scripts/applied_migrations.sha256`
+([backend/CLAUDE.md](../../backend/CLAUDE.md) § Migrations); a `0.x` release does not move that line.
+
+**2. A release has exactly one git ref, `v<major>.<minor>`,** created by the publish. One release, one name,
+one tree. A snapshot has none: it names a build, not a release.
 
 **3. The deployment recipe travels inside the image.** `infra/docker-compose.prod.yml` and
 `infra/.env.example` are copied into the runtime image, and a tool about to run a given image reads them **out
@@ -108,8 +136,18 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
 
 ## Consequences
 
-- **A release becomes a deliberate act.** Bumping `VERSION` is the release; the publish is its mechanical
-  consequence. Nothing is released by pushing, and nothing is released twice.
+- **A release becomes a deliberate act.** Dispatching the publish as a release is the release; bumping
+  `VERSION` is reserved for a new major. Nothing is released by pushing, and nothing is released twice.
+- **Minors have gaps, and say nothing about size.** `1.42` → `1.57` means fifteen commits, not fifteen
+  releases; a commit `container.yml` does not build (docs only) still counts. A `release/<major>.x` branch counts
+  its own history and can reach a number `main` already released — that publish is refused, red rather than
+  wrong. No such branch exists yet; the first one decides whether it needs a suffix.
+- **`VERSION` is touched only to change the major.** Any commit that touches it, even one that only reformats
+  it, restarts the minor at `0`. The next release would then reuse a number already released, and the refusal to
+  republish turns that red. It cannot ship silently.
+- **A snapshot is the one mutable name, and it says so in the name.** The rule that a name never moves holds
+  for every name an operator is told to roll back to. Whoever runs a snapshot pins it by digest like anything
+  else, so a replaced `-SNAPSHOT` tag changes nothing that is already running.
 - **The upgrade procedure gains the two things it was missing** — a nameable rollback target, and a way to
   obtain the recipe that belongs to a version. That procedure is not decided here; this ADR only makes it
   possible for one to exist.
@@ -136,6 +174,10 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
 - **Rejected — deriving the version from the registry.** It makes the released artifact the authority on its own
   name, which is circular; it cannot be checked without the network; and its error path republishes silently
   (Context 3). A version that a `git checkout` cannot answer is not an identity.
+- **Rejected — a hand-kept minor in `VERSION`, published on every push.** This decision's first form (Context,
+  seventh fact): a bump commit per release, and a red run for every commit in between.
+- **Rejected — publishing every push to `main` as a release.** It removes the red runs by making every commit a
+  release, and with it the line between "built" and "promised"; a rollback target would be any commit at all.
 - **Rejected — fetching the recipe from a raw URL at the matching ref.** It works, but it requires the git tag
   *and* a second trust decision about unsigned files served beside a signed image, and it fails for exactly the
   publishes that have no tag. Extraction from the image needs neither.

@@ -40,7 +40,8 @@
    which is not restored because it was never state (ADR 0056 §4 of Context; the app provisions it,
    [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md)). It holds no data (A5).
 7. The operator **loads the database dump**. It replaces the fresh schema wholesale, migration history included,
-   so the instance is at the version it was captured at.
+   so the instance is at the version it was captured at. The target may run the backup's release or a newer one
+   (A9); a backup newer than the target is refused before anything is written (A10).
 8. The operator **pushes the mirrored objects back** into that bucket.
 9. The operator **puts the config-secret key file**, from wherever it was kept, where the application expects
    it, on storage that survives a container being recreated, **readable by the application's runtime user** — a
@@ -92,7 +93,16 @@
 - **A7 — The restore is a rollback after a failed upgrade.** This is the *reason* the backup exists as a
   precondition of upgrading (ADR 0056 §6): the schema migrates at boot with no gate and the migration set has no
   downgrade path, so the previous image cannot simply be started again. Restore the backup taken before the
-  upgrade; there is no shorter way back.
+  upgrade; there is no shorter way back. The target must run the **release the backup came from** (the
+  manifest's `app.version`). Restored onto the new release, the backup would be migrated up again at the next
+  start (A9), which repeats the failed upgrade instead of undoing it.
+- **A9 — The backup is older than the target.** Accepted (ADR 0056 §7). The restore drops every table of the
+  data-less target before loading, so the instance holds exactly the captured schema. The application then
+  migrates it up at its next start, the same forward migration an ordinary upgrade runs. The restore says so as
+  it finishes, because this is an upgrade, and that matters whenever the operator meant a rollback (A7).
+- **A10 — The backup is newer than the target.** Refused before anything is written, naming the release the
+  backup came from. The older image would refuse to start on a migration history it does not know, so loading
+  and failing at boot would leave the operator with neither instance.
 - **A8 — Only the users' half is lost.** Nothing here helps. A perfectly restored server whose people lost their
   passwords and Emergency Kits is unreadable ciphertext, and that is the design, not a defect
   ([uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md) A7).

@@ -138,6 +138,29 @@ operator gate, and the migration set carries no downgrade path — so returning 
 restoring a backup. The upgrade procedure therefore *begins* with this one, and that ordering belongs to this
 decision rather than to the runbook's discretion.
 
+**7. A restore accepts a backup of the target's schema or an older one, and refuses a newer one.** The restore
+compares the manifest's `database.schemaVersion` with the Flyway version the freshly installed target is at
+(Flyway's own version order, never a string comparison), before anything is written:
+
+- **Newer than the target:** refused. The message names the release the backup came from
+  (`app.version`). The older image would refuse to start on a history holding migrations it does not know, so
+  loading first and failing at boot would leave the operator with neither instance.
+- **The same or older:** the restore first drops **every** table of the target and then loads the dump. Dropping
+  is safe only because the target is proven to hold no data (A5 of the use-case). It is needed because the dump
+  drops and recreates only the tables *it* names: a table a later migration added would otherwise survive under
+  the backup's older history, and the next start would fail re-creating it. After the load the instance is at
+  the version it was captured at, and the target's application **migrates it up at its next start**. That is the
+  same forward migration every upgrade runs, not a second path.
+
+This turns "install the backup's release, restore, upgrade" into "restore, start". It also means **the
+target's release decides the outcome**. A rollback after a failed upgrade (§6) therefore still starts by
+installing the release the backup came from. Restoring the pre-upgrade backup onto the new release would only
+run the failed upgrade again. The restore says this when the backup is older than its target.
+
+**Rejected — refusing every backup that is not exactly the target's version.** It is safe, but it makes the
+operator carry the downgrade-restore-upgrade sequence by hand. Each step in it is one more place to install the
+wrong image, and it buys nothing that the forward migration does not already have to guarantee.
+
 ## Consequences
 
 - **The operator page gains a leg.** Its two-halves framing — the server's ciphertext against the users' keys —

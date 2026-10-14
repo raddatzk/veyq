@@ -139,11 +139,20 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   [ADR 0067](0067-store-provisioning-from-a-declared-type.md)'s Decision 5 — one mechanism, of which this
   chart is one of two callers.
 - **The chart is released the same way the image is.** Packaged and pushed as an **OCI artifact** to the same
-  GHCR registry (`ghcr.io/<owner>/veyq-chart`), versioned `<major>.<minor>` in lockstep with the app image
-  and **cosign-signed** the same way — extending [ADR 0057](0057-release-identity-and-deployment-recipe.md)'s
+  GHCR registry, at `ghcr.io/<owner>/charts/veyq`, by the same publish as the images, with the same version, and
+  **cosign-signed** the same way — extending [ADR 0057](0057-release-identity-and-deployment-recipe.md)'s
   release-identity story to a second artifact type rather than inventing a separate distribution channel
   (Helm's native OCI support makes this a config addition to the existing `container.yml` workflow, not a new
-  tool). **This is the one part of the decision not yet built**, and deliberately so: its only proof is a
+  tool). The path has a `charts/` segment because `helm push` appends the chart's **name** to the target: pushed
+  to `oci://ghcr.io/<owner>` the chart `veyq` would land on `ghcr.io/<owner>/veyq`, the app image's own
+  repository. The chart's `version` and `appVersion` are **both** the release version (`<major>.<minor>`, or
+  `<major>.<minor>-SNAPSHOT` for a snapshot), set at packaging from the publish's version, never by hand. Helm
+  takes a two-part version as it is — measured with Helm 4.0.1, which packages `--version 1.0` and
+  `--version 1.42-SNAPSHOT` unchanged — so the chart needs no patch level of its own. The image repositories
+  default to the upstream's own (`ghcr.io/raddatzk/veyq`, `ghcr.io/raddatzk/veyq-admin`), written out for the
+  same reason the verify identity is: a fork that deploys its own images overrides them, knowingly. A release
+  refuses to republish the chart as it does the images; a release with two images and no chart is a partial
+  release. **This is the one part of the decision not yet built**, and deliberately so: its only proof is a
   workflow run, and no CI run has ever executed in this repository (no remote). V1 is unaffected — it gates on
   the instance being *deployable* onto a cluster, and `helm install ./charts/veyq` is that. It stays the
   remaining sub-slice on [inbox #26](../inbox.md); until it lands, `Chart.yaml`'s `version`/`appVersion` are
