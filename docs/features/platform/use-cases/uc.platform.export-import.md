@@ -7,18 +7,25 @@
 - **Preconditions:** Signed in and unlocked. Export: any node of a kind that can be exported (a folder, a file, a Memory, a chapter). Import: a place where the member may create (not a read-only scope, not a guest's view).
 - **Postconditions (success):** Export: one ZIP on the member's disk, written by the browser while the content was decrypted on the device. Import: a new node tree under the folder on screen, sealed under the importer's keys, uploaded by the importer.
 
-## Main flow — export
+## Main flow — download (formerly "export")
 
-1. The member chooses **Export** on a node: in its row's ⋯ menu, in the folder's header or on the node's own page.
-2. The dialog warns that the file is a plain ZIP, **not encrypted**, and offers **Include places and coordinates** (on).
-3. **Continue** walks the subtree with the keys the member already holds and runs each kind's export hook. The dialog then says how many items and files and how many bytes, and lists what a hook left out.
-4. **Save as ZIP…** asks the browser where to save (the first thing the click does, because the picker needs the click) and streams the content into the file: the archive is never held in memory.
-5. The ZIP holds the files under `data/<id>/` and a `manifest.json` that lists the tree, with a SHA-256 for every file.
+1. The member chooses **Download** on a node: in its row's ⋯ menu, in the folder's header or on the node's own page. A
+   file downloads as itself; a folder, a Memory, a chapter or a drop box as a ZIP (owner decision 2026-10-14: there is no
+   separate "Export"). The ZIP asks no question: no plaintext warning, no location option (ADR 0082 decision 4).
+2. The client walks the subtree with the keys the member already holds and runs each kind's export hook. The dialog then says how many items and files and how many bytes, and lists what a hook left out.
+3. **Save as ZIP…** asks the browser where to save (the first thing the click does, because the picker needs the click) and streams the content into the file: the archive is never held in memory.
+4. The ZIP unpacks as the tree — a directory per node, each file under its own name, names made safe for every file
+   system — with `.veyq/manifest.json` beside them listing the tree, each node's path and a SHA-256 for every file
+   (ADR 0082 decision 3).
 
 ## Main flow — import
 
-1. The member chooses **New → Import an export…**, or drops a file onto the level. A dropped file is recognised **by its content** (a ZIP whose `manifest.json` says `veyq-subtree`), never by its name; any other file is an ordinary upload.
-2. The dialog reads the manifest and says what would be created, how big it is and where it goes; what this version cannot import is listed.
+1. The member uploads a ZIP or picks a directory (or drops either onto the level). It is recognised **by its content** — a
+   ZIP or a directory holding `.veyq/manifest.json` that says `veyq-subtree` — never by its name, and the member is offered
+   **Import** or **Upload as a file**. Anything else is an ordinary upload (a directory: a folder upload, inbox #424).
+2. The dialog reads the manifest and says what would be created, how big it is and where it goes; what this version cannot
+   import is listed — a kind of an application this instance does not have, or newer data of one it has — with **Import the
+   rest** or **Cancel** (ADR 0082 decision 9).
 3. Before anything is written the dialog asks the server one question - would this many bytes still fit the tenant's quota? - and a **no** says so and keeps **Import** shut (E7). **Import** creates the nodes and uploads the files through the ordinary upload. Every file is checked against its SHA-256 and the ZIP's own checksum before it is uploaded. A name that is taken among the siblings becomes `Name (2)`.
 4. The importer is the owner and uploader of everything imported; the tree reloads.
 
@@ -29,7 +36,11 @@
 - **E3 — storage or any other stop part-way:** the same: the top-level node created is moved to the trash (its subtree with it), the message says "N of M".
 - **E4 — a browser that cannot save a file this large** (no file picker, no download route): the dialog says so before anything is written; use a Chromium-based browser on a computer.
 - **E5 — a node a kind cannot export** (a drop box, a kind this build does not know): left out with its subtree and listed.
-- **E6 — a share guest:** sees no Export and no Import for now.
+- **E6 — a share guest:** a `READ` or `READ_WRITE` guest **downloads** what it sees, a ZIP for a folder or a Memory, as a
+  member does (ADR 0082 decision 5); no guest imports, and a recognised archive is an ordinary upload for a guest.
+- **E8 — a tampered or malformed archive:** a manifest that fails its schema, a path or name outside the rules, an offset
+  outside the file, overlapping entries, a declared size that is not the actual one, a field over the API's limit: refused
+  before anything is written, with the reason (ADR 0082 decision 10).
 - **E7 — not enough room:** the preflight (`POST /api/tenants/{tenantId}/storage-fit`, any member, yes or no only) says no: the dialog says there is not enough storage space and offers no import. A question the server could not answer (a rate limit, an outage, an older server) never blocks: the upload that follows decides, and a full quota still ends the import with a rollback (E3).
 
 ## What an import does not carry, by design

@@ -38,7 +38,13 @@ skipped with its subtree and reported, never guessed.
 walks the tree with the keys the member already holds, decrypts, and writes the archive through `saveStream`.
 
 **3. The format.** A **store-only** (no compression — media is already compressed, and it keeps the writer trivial and
-streamable) ZIP holding `manifest.json` and `data/<node-id>/<file>` payloads. The manifest — `format: "veyq-subtree"`,
+streamable) ZIP that **reads as the tree when unpacked** (owner decision 2026-10-14): each node is a directory named after
+the node, its files under their own names (`Trip 2025/Lisbon/IMG_1.jpg`), and the manifest beside them at
+**`.veyq/manifest.json`**, so the same archive is an ordinary download and an importable export. Names are made safe for
+every file system before they become paths: no `/` or `\`, no `.`/`..`, no control characters, none of Windows'
+reserved names (`CON`, `NUL`, …) or trailing dots and spaces, a bounded length, and a numeric suffix where two names of
+one directory fold to the same name ignoring case. The manifest maps every node to its path; the path is a label, never
+an identity. The manifest — `format: "veyq-subtree"`,
 `version`, `exportedAt`, `appVersion`, the options chosen, and the tree (each node: archive-local `id`, `kind`, `name`,
 `cover`, `metadata`, the kind's `content` reference, `children`) — is specified by
 [`contracts/export/veyq-subtree.schema.json`](../../contracts/export/veyq-subtree.schema.json); a worked example is
@@ -48,9 +54,11 @@ end and reads entries with `Blob.slice`, so an import never holds the file in me
 only and are refused if they leave `data/` (no `..`, no absolute path); each payload's `sha256` is verified while
 streaming. ZIP64 is required from the start (a subtree exceeds 4 GiB).
 
-**4. The file is plaintext, and says so.** The export dialog warns that anyone holding the file can read it. GPS and EXIF
-are **kept by default** and an **opt-out at export time** (`options.includeLocation: false` drops location fields and GPS
-tags; the fields are then absent).
+**4. It is a download, and is called one** (owner decision 2026-10-14). There is no "Export": a node offers
+**Download** — a file as itself, a folder, a Memory, a chapter or a drop box as this ZIP. No plaintext warning and no
+location option: a downloaded file is as plaintext as a downloaded archive, and a photo's coordinates sit in its own
+EXIF, which the archive keeps byte for byte (Addendum 2), so an option that dropped only the manifest's copies promised
+more than it did.
 
 **5. Rights.** Export needs **READ** on the node. Import is **a member flow only** (decisions 6 and 7): a guest — whatever
 the share role — never imports. A guest is otherwise the member view with rights removed (the principle of inbox #401): a
@@ -65,14 +73,33 @@ medium stays in the manifest as **text only** ("originally by Anna"), never mapp
 target parent gets a numeric suffix, `Name (2)`. An unknown newer `version` is **refused**; unknown fields are ignored.
 
 **7. Detected by content, offered only to members.** An archive is recognised by its **content** — the ZIP signature plus a
-`manifest.json` whose `format` matches — never by file name. A dropped archive in a Files folder offers **Import** to
+`.veyq/manifest.json` whose `format` matches — never by file name. **A picked directory** that holds `.veyq/manifest.json`
+(the archive, unpacked) is recognised the same way and imported from its files; one without it is an ordinary folder
+upload (inbox #424). Recognised, a member is offered **Import** or **Upload as a file**. A dropped archive in a Files folder offers **Import** to
 members only: never on a guest view (any role), so for a guest — a `WRITE_ONLY` one included — it stays an ordinary upload.
 
 **8. Failure and atomicity.** The server offers no multi-node atomicity. An import is a sequence of ordinary writes; one
 that aborts or runs out of quota **rolls back what it created** (to the trash) and reports "N of M". A **dry-run** step
 reads the manifest and shows total size against the member's quota **before anything is written**.
 
+**9. Unknown applications and newer data are reported, never guessed** (owner decision 2026-10-14). The manifest names, per
+application whose kinds it carries, that application's id and the version of its `content` schema. The dry-run (decision 8)
+lists, before anything is written, every node this build cannot import: a kind of an application it does not have (an
+"Expenses" export into an instance without it), or a known application's content newer than it reads. The member then
+**imports the rest**, with those subtrees left out and named in the report, or **cancels**. Nothing unknown is dropped
+silently, and nothing newer is read as if it were older.
+
+**10. The archive is untrusted input.** The import replays the ordinary writes, so the server checks what it always
+checks; the client additionally checks the archive before and while it reads it: the manifest against its schema; caps on
+node count, depth, name length and every metadata field at the API's own limits; the ZIP structure itself (every offset
+inside the file, no overlapping entries, declared sizes equal to actual sizes, ZIP64 fields in range); each payload's
+`sha256`; and text that is rendered (a note, a description) only through the safe markdown renderer. Being store-only, an
+archive cannot be a compression bomb.
+
 ## Worked example
+
+*(The example below shows the `data/<node-id>/` layout of the first form; decision 3's human-readable layout replaces it,
+and `contracts/export/veyq-subtree.schema.json` is updated with it.)*
 
 A folder "Trip 2025" holding a file and a Memory "Lisbon" with a chapter and two photos (the location of the second photo
 was opted out, so it has none):
@@ -147,8 +174,8 @@ Three things the build found that the decision above did not know, each decided 
 
 ## Consequences
 
-- **A new core surface in the web**: the zip writer/reader, the walk, the dialogs (export with the plaintext warning and
-  the location opt-out; import with the dry-run), the `KindDescriptor` hook, and the drop detection in the Files level.
+- **A new core surface in the web**: the zip writer/reader, the walk, the dialogs (download, which asks nothing for a
+  single file; import with the dry-run), the `KindDescriptor` hook, and the drop detection in the Files level.
   Nothing in the backend or `contracts/api/` — the client uses the existing node, blob and quota endpoints. The schema
   under `contracts/export/` is the one new contract artefact.
 - **The format is a public promise.** `version` bumps only for a change an old reader would misread; kinds version their
