@@ -15,6 +15,17 @@ vi.mock('../../features/account/profile/profile', async (orig) => ({
   setMyAvatar: vi.fn(),
   clearMyAvatar: vi.fn(),
 }))
+// The safety-number sections have their own suite (PersonSafetyNumber.test.ts); here they are recorders of WHERE they mount.
+vi.mock('./MySafetyNumber.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return { default: defineComponent({ setup: () => () => h('div', { class: 'my-safety-stub' }) }) }
+})
+vi.mock('./PersonSafetyNumber.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return {
+    default: defineComponent({ props: ['userId', 'name', 'username'], setup: (p) => () => h('div', { class: 'their-safety-stub' }, `${p.userId}|${p.name}|${p.username}`) }),
+  }
+})
 vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }) }))
 vi.mock('../applications/registry', async (orig) => {
   const real = await orig<typeof import('../applications/registry')>()
@@ -178,5 +189,34 @@ describe('PersonProfile - editing one\'s own name and picture (ADR 0084 decision
     expect(w.find('[data-testid="person-edit-form"]').exists()).toBe(false)
     expect(updateMyProfile).not.toHaveBeenCalled()
     expect(setMyAvatar).not.toHaveBeenCalled()
+  })
+})
+
+describe('PersonProfile - the safety number (ADR 0028 Addendum)', () => {
+  const ME = '5c09e000-0000-4000-8000-0000000000b2'
+  const me: Person = { userId: ME, username: 'kevin', realName: 'Kevin R', displayName: 'Kevin R' }
+
+  it('my own page shows MY number, never the compare', async () => {
+    account.userId = ME
+    load.mockResolvedValue(new Map([[ME, me]]))
+    const w = await mountPage(ME)
+    expect(w.find('.my-safety-stub').exists()).toBe(true)
+    expect(w.find('.their-safety-stub').exists()).toBe(false)
+  })
+
+  it('another member\'s page shows THEIR number and the compare, handed their id, name and username', async () => {
+    account.userId = ME
+    load.mockResolvedValue(new Map([[ANNA, anna], [ME, me]]))
+    const w = await mountPage(ANNA)
+    expect(w.get('.their-safety-stub').text()).toBe(`${ANNA}|Anna Meyer|anna`)
+    expect(w.find('.my-safety-stub').exists()).toBe(false)
+  })
+
+  it('a former member\'s page shows neither', async () => {
+    account.userId = ME
+    load.mockResolvedValue(new Map([[ME, me]]))
+    const w = await mountPage(ANNA)
+    expect(w.find('.their-safety-stub').exists()).toBe(false)
+    expect(w.find('.my-safety-stub').exists()).toBe(false)
   })
 })

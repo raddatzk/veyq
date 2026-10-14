@@ -297,6 +297,69 @@ describe('markVerified (out-of-band compare → verified)', () => {
   })
 })
 
+// ADR 0028 Addendum 2: a member with no pin is pinned AT verification, with the key the compare confirmed - one user
+// action, one sealed write (or the store's merge on 409), never a pin without the verification.
+describe('markVerified with pinIfUnpinned (verifying an unpinned member pins them)', () => {
+  /** A server whose FIRST put meets a concurrent device's store (`concurrent`), then behaves. */
+  function serverRacedBy(concurrent: Record<string, unknown>) {
+    const srv = fakeServer()
+    let firstPut = true
+    srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }) => {
+      if (firstPut) {
+        firstPut = false
+        srv.state.blob = seal(concurrent, 1)
+        srv.state.version = 1
+        throw srv.stale()
+      }
+      if (identityPinsUpdate.version !== srv.state.version) throw srv.stale()
+      srv.state.blob = identityPinsUpdate.blob
+      srv.state.version += 1
+      return { blob: srv.state.blob, version: srv.state.version }
+    })
+    return srv
+  }
+
+  it('pins the compared key already verified, in ONE sealed write', async () => {
+    const srv = fakeServer()
+    await markVerified('u1', 'a2V5', { pinIfUnpinned: true })
+    expect(srv.putIdentityPins).toHaveBeenCalledTimes(1)
+    expect(srv.state.version).toBe(1)
+    const pins = unsealPins(srv.state.blob!, srv.state.version)
+    expect(pins.u1.key).toBe('a2V5')
+    expect(pins.u1.state).toBe('verified')
+  })
+
+  it('control: without the option an unpinned member is still refused - nothing pins on a plain markVerified', async () => {
+    const srv = fakeServer()
+    await expect(markVerified('u1', 'a2V5')).rejects.toBeInstanceOf(IdentityMovedError)
+    expect(srv.putIdentityPins).not.toHaveBeenCalled()
+  })
+
+  it('a concurrent pin of the SAME key merges on 409: it is verified, and the other contact is kept', async () => {
+    const srv = serverRacedBy({
+      u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 3 },
+      other: { key: 'b3Ro', state: 'pinned', firstSeenAt: 1 },
+    })
+    await markVerified('u1', 'a2V5', { pinIfUnpinned: true })
+    const pins = unsealPins(srv.state.blob!, srv.state.version)
+    expect(pins.u1).toEqual({ key: 'a2V5', state: 'verified', firstSeenAt: 3 }) // the concurrent pin's firstSeenAt stays
+    expect(pins.other.key).toBe('b3Ro')
+  })
+
+  it('a concurrent pin of ANOTHER key (the directory moved meanwhile) throws IdentityMovedError and writes nothing', async () => {
+    const srv = serverRacedBy({ u1: { key: 'bmV3', state: 'pinned', firstSeenAt: 3 } })
+    await expect(markVerified('u1', 'a2V5', { pinIfUnpinned: true })).rejects.toBeInstanceOf(IdentityMovedError)
+    expect(srv.state.version).toBe(1) // only the concurrent write landed
+    expect(unsealPins(srv.state.blob!, srv.state.version).u1).toEqual({ key: 'bmV3', state: 'pinned', firstSeenAt: 3 })
+  })
+
+  it('a member pinned to another key at load is refused too - the option never overwrites a pin', async () => {
+    const srv = fakeServer({ blob: seal({ u1: { key: 'bmV3', state: 'pinned', firstSeenAt: 3 } }, 1), version: 1 })
+    await expect(markVerified('u1', 'a2V5', { pinIfUnpinned: true })).rejects.toBeInstanceOf(IdentityMovedError)
+    expect(srv.putIdentityPins).not.toHaveBeenCalled()
+  })
+})
+
 describe('trustState (badge read)', () => {
   it('folds pin state against the current directory key across all branches', async () => {
     fakeServer({
@@ -327,8 +390,27 @@ describe('trustState (badge read)', () => {
       { userId: 'ch', directoryKey: 'bmV3' }, // directory moved away from the pin → changed
       { userId: 'new', directoryKey: 'a2V5' }, // never pinned → unpinned
     ])
-    expect(states).toEqual({ vf: 'verified', pn: 'pinned', ch: 'changed', new: 'unpinned' })
+    expect(states).toEqual({
+      vf: { state: 'verified', pinVerified: true },
+      pn: { state: 'pinned', pinVerified: false },
+      ch: { state: 'changed', pinVerified: false },
+      new: { state: 'unpinned', pinVerified: false },
+    })
     expect(srv.getIdentityPins).toHaveBeenCalledTimes(1) // one store fetch for the whole directory
+  })
+
+  it('a VERIFIED contact whose directory key moved reads as changed AND verified (ADR 0028 Addendum 3)', async () => {
+    fakeServer({ blob: seal({ vf: { key: 'a2V5', state: 'verified', firstSeenAt: 1 } }, 1), version: 1 })
+    expect(await trustStates([{ userId: 'vf', directoryKey: 'bmV3' }])).toEqual({ vf: { state: 'changed', pinVerified: true } })
+  })
+})
+
+describe('accepting a verified contact\'s changed key (ADR 0028 Addendum 3)', () => {
+  it('re-pins the new key as PINNED - verified returns only through a new compare', async () => {
+    const srv = fakeServer({ blob: seal({ vf: { key: 'b2xk', state: 'verified', firstSeenAt: 5 } }, 1), version: 1 })
+    await acceptKeyChange('vf', 'bmV3')
+    expect(unsealPins(srv.state.blob!, srv.state.version).vf).toEqual({ key: 'bmV3', state: 'pinned', firstSeenAt: 5 })
+    expect(await trustStates([{ userId: 'vf', directoryKey: 'bmV3' }])).toEqual({ vf: { state: 'pinned', pinVerified: false } })
   })
 })
 

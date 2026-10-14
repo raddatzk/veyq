@@ -93,9 +93,9 @@ sequenceDiagram
   server. The verification stance is settled by [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md):
   **TOFU-pin on first use**, a **changed** key is a UI notice / a hard block for the grant-delivery worker, and
   out-of-band **safety-number verification** ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)) elevates a
-  contact to *verified*; an opt-in **strict mode** hard-gates on unverified. The pinning is built
-  ([en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)); strict mode and the
-  proactive ceremony are not. The operator cannot invent a member (no admission tag), so what remains is a
+  contact to *verified*; an opt-in **strict mode** hard-gates on unverified. The pinning and the proactive ceremony
+  are built ([en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)); strict mode is
+  not ([uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md)). The operator cannot invent a member (no admission tag), so what remains is a
   substituted key on a real add before anyone pinned the target (self-hosted makes it moot).
 - **E3 — the member's grant won't unwrap** (corrupt / identity rotated without re-wrap): the member can't open the
   group → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not force a wipe),

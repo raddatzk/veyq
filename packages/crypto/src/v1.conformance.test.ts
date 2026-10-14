@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 import * as v1 from './v1'
 // The raw primitives are not in the package's exports (ADR 0072 Decision 6); only this suite reaches them.
 import * as raw from './primitives'
@@ -817,5 +818,20 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
   it('identity fingerprint / safety number', () => {
     const f = vectors.fingerprint
     expect(v1.fingerprint({ kemX: unhex(f.kem_x), kemM: unhex(f.kem_m), sign: unhex(f.sign) })).toBe(f.digits)
+  })
+
+  it('the fingerprint hash is the digest the vector note names, and the digits are its 40-bit chunks', () => {
+    // The safety-number QR carries this digest (ADR 0028 Addendum). It is recomputed here from the note's formula
+    // with node's own sha256, so a change to the domain string or the input order reddens it apart from the digits.
+    const f = vectors.fingerprint
+    const pub = { kemX: unhex(f.kem_x), kemM: unhex(f.kem_m), sign: unhex(f.sign) }
+    const lp = (b: Uint8Array) => Buffer.concat([Buffer.from([0, 0, 0, 0].map((_, i) => (b.length >>> (24 - 8 * i)) & 0xff)), Buffer.from(b)])
+    const expected = createHash('sha256')
+      .update(Buffer.concat([Buffer.from('veyq/v1/fingerprint', 'utf8'), lp(pub.kemX), lp(pub.kemM), lp(pub.sign)]))
+      .digest('hex')
+    const h = v1.fingerprintHash(pub)
+    expect(hex(h)).toBe(expected)
+    const groups = [0, 1, 2, 3, 4, 5].map((i) => String(Number(BigInt('0x' + hex(h.subarray(i * 5, i * 5 + 5))) % 100000n)).padStart(5, '0'))
+    expect(groups.join(' ')).toBe(f.digits)
   })
 }, PRODUCTION_ARGON_TIMEOUT_MS)

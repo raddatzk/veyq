@@ -6,8 +6,9 @@
 - **Goal:** hold an honest, operator-blind record of every contact's identity key — pinned the first time the
   client trusts it — and put any later change to a human: accept a legitimate rotation, or refuse a substituted
   one. Closes the operator key-substitution gap by *detection*, not by proactive verification — actively
-  confirming a key out-of-band and enforcing that account-wide is
-  [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md), the deliberate follow-up
+  confirming a key out-of-band on a member's profile is
+  [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md), and requiring it before a share
+  is [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md)
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)).
 - **Preconditions:** an **authenticated, unlocked** caller; the target appears in a scope **member directory** the
   caller can read; the caller's **pin store** ([en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md))
@@ -29,10 +30,13 @@ which this use-case's flow only narrates from the caller's side.
 2. **A key changes.** On a later wrap, the directory returns a **different** key for that member. The member's row
    in the directory now carries a **changed** badge instead of the usual trust state.
 3. **Open the review.** The caller opens the changed member → the app shows the **expected** (pinned) vs the
-   **current** (directory) safety-numbers side by side.
+   **current** (directory) safety-numbers side by side. A contact the caller had **verified** is said louder — on
+   the badge ("Verified key changed") and in the review, which adds that accepting does not verify the new key
+   ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md) A3).
 4. **Decide.** The caller compares the two out-of-band (a call, a channel already trusted — the *proactive*
    ceremony that produces a fresh comparison is its own use-case) and either:
-   - **accepts** — re-pins the new key (state returns to `pinned`), or
+   - **accepts** — re-pins the new key (state returns to `pinned`, also for a contact that was `verified`;
+     the member's profile then offers the compare again), or
    - **refuses** — leaves it blocked; the wrap and any pending grant delivery stay gated.
 
 ```mermaid
@@ -86,8 +90,8 @@ sequenceDiagram
   ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)) or Key Transparency exists
   (the end-state).
 - **Advisory by default.** Nothing here is *enforced* — a caller who never opens a `changed` review still has the
-  wrap/delivery gated, but nothing stops them from ignoring the badge indefinitely. Enforcing verification
-  account-wide is strict mode, on the follow-up use-case.
+  wrap/delivery gated, but nothing stops them from ignoring the badge indefinitely. Enforcing verification is strict
+  mode, [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md), still open.
 - **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Holds against an active
   operator only on a client it does not serve, once the pin store cannot be rolled back
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator on
@@ -118,7 +122,8 @@ und ein Schlüssel, der sich inzwischen geändert hat, wird nicht mehr gemeldet.
   (the directory the badges hang on), [en.account.key-model](../../account/enablers/en.account.key-model.md)
   (identity rotation → a legitimate key change)
 - Use-cases: [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md) (the proactive
-  ceremony + strict-mode follow-up this pin store also backs), [uc.spaces.add-group-member](uc.spaces.add-group-member.md),
+  ceremony this pin store also backs), [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md)
+  (strict mode, planned), [uc.spaces.add-group-member](uc.spaces.add-group-member.md),
   [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md), [uc.spaces.add-member](uc.spaces.add-member.md)
   (the wrap flows whose E2 key-substitution risk this closes), [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md)
   (the legitimate-rotation source of E1)

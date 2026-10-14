@@ -500,7 +500,7 @@ export const serializeIdentityPublic = (pub: Identity['pub']): Uint8Array =>
  * end-state. Conformance: contracts/crypto/vectors/v1.json#fingerprint.
  */
 export function fingerprint(pub: Identity['pub']): string {
-  const h = sha256(concat(utf8('veyq/v1/fingerprint'), serializeIdentityPublic(pub)))
+  const h = fingerprintHash(pub)
   const groups: string[] = []
   for (let i = 0; i < 6; i++) {
     let v = 0
@@ -508,6 +508,15 @@ export function fingerprint(pub: Identity['pub']): string {
     groups.push(String(v % 100000).padStart(5, '0'))
   }
   return groups.join(' ')
+}
+
+/**
+ * The full 32-byte digest {@link fingerprint} renders its digits from — what a machine compares where a person
+ * compares the digits: the safety-number QR carries it (ADR 0028 Addendum, `web/src/features/account/safetyCode.ts`),
+ * never the identity bundle itself. One derivation for both, so the QR and the digits cannot disagree about a key.
+ */
+export function fingerprintHash(pub: Identity['pub']): Uint8Array {
+  return sha256(concat(utf8('veyq/v1/fingerprint'), serializeIdentityPublic(pub)))
 }
 
 /** Serialize the identity private bundle (wrapped under the master key). */

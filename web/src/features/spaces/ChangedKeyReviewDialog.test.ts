@@ -116,3 +116,23 @@ describe('ChangedKeyReviewDialog — a key that cannot be read (inbox #246)', ()
     expect(accept(w).attributes('disabled')).toBeUndefined()
   })
 })
+
+describe('ChangedKeyReviewDialog - a VERIFIED contact\'s key changed (ADR 0028 Addendum 3)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('says the contact was verified and that accepting does not verify the new key', async () => {
+    vi.mocked(getPin).mockResolvedValue({ key: 'old-key', state: 'verified', firstSeenAt: 0 })
+    const w = mountDialog()
+    await flushPromises()
+    expect(w.get('[data-testid="review-verified-changed"]').text()).toBe(t('safety.reviewVerifiedIntro', { name: '@rotator' }))
+    expect(w.text()).not.toContain(t('verify.reviewIntro'))
+  })
+
+  it('control: a pinned contact\'s change reads as the ordinary review', async () => {
+    vi.mocked(getPin).mockResolvedValue({ key: 'old-key', state: 'pinned', firstSeenAt: 0 })
+    const w = mountDialog()
+    await flushPromises()
+    expect(w.find('[data-testid="review-verified-changed"]').exists()).toBe(false)
+    expect(w.text()).toContain(t('verify.reviewIntro'))
+  })
+})

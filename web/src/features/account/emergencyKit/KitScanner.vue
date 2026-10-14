@@ -16,7 +16,9 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 
-const props = defineProps<{ accepts?: (text: string) => boolean }>()
+// `hint` / `errorText` are what the overlay says; a scan that is no Emergency-Kit scan (the safety-number compare on a
+// member's profile, ADR 0028 Addendum) passes its own, every other caller keeps the kit's words.
+const props = defineProps<{ accepts?: (text: string) => boolean; hint?: string; errorText?: string }>()
 const emit = defineEmits<{ found: [string]; close: [] }>()
 const { t } = useI18n()
 
@@ -36,7 +38,7 @@ async function start() {
     raf = requestAnimationFrame(scan)
   } catch {
     // permission denied / no camera / insecure context — let the user fall back to upload or paste
-    error.value = t('unlock.scanError')
+    error.value = props.errorText ?? t('unlock.scanError')
   }
 }
 
@@ -79,7 +81,7 @@ onUnmounted(stop)
 <template>
   <div class="scanner-overlay" @click.self="cancel">
     <div class="scanner-box">
-      <p class="veyq-form-copy">{{ t('unlock.scanHint') }}</p>
+      <p class="veyq-form-copy">{{ hint ?? t('unlock.scanHint') }}</p>
       <video ref="video" playsinline muted class="scanner-video"></video>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" text @click="cancel" />

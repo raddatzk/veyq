@@ -33,6 +33,7 @@ import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { useToast } from '../../shared/state/useToast'
 import { useConfirm } from '../../shared/state/useConfirm'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
+import MemberTrustBadge from './MemberTrustBadge.vue'
 import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 import CompromiseRotationNotice from './CompromiseRotationNotice.vue'
 import type { CompromiseRotation } from '../../api/generated/scopes'
@@ -352,11 +353,10 @@ async function revoke(invite: PendingMemberInvite) {
                 <span class="veyq-badge" :class="member.hasGrant ? 'success' : 'warning'">
                   {{ member.hasGrant ? t('members.statusActive') : t('members.statusAwaiting') }}
                 </span>
-                <!-- Changed-identity warning (cr-0099): the ONLY trust surface — the directory key differs from the
-                     pin (a rotation or an operator substitution). Verified/recognized are intentionally not shown. -->
-                <span v-if="trust[member.userId] === 'changed'" class="veyq-badge changed">
-                  <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ t('verify.badgeChanged') }}
-                </span>
+                <!-- Identity trust (ADR 0028 Addendum 4): "Verified" after a compare on the member's profile, "Key changed"
+                     when the directory key differs from the pin (a rotation or an operator substitution) - louder for a
+                     verified contact. -->
+                <MemberTrustBadge :trust="trust[member.userId]" />
                 <!-- Admission not verified (ADR 0020 move 6): no key-holder's worker delivers to this member. -->
                 <span v-if="unadmitted[member.userId]" class="veyq-badge changed">
                   <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ t('members.badgeNotAdmitted') }}
@@ -367,7 +367,7 @@ async function revoke(invite: PendingMemberInvite) {
               <!-- Review a changed key (cr-0099), available to ANY member: compare expected-vs-current out-of-band,
                    then accept (re-pin) or refuse (leave blocked). -->
               <Button
-                v-if="trust[member.userId] === 'changed'"
+                v-if="trust[member.userId]?.state === 'changed'"
                 :label="t('verify.review')"
                 icon="pi pi-exclamation-triangle"
                 severity="warn"
@@ -465,7 +465,7 @@ async function revoke(invite: PendingMemberInvite) {
          on-device and this panel seals + POSTs it. -->
     <SpaceIconDialog v-if="iconDialogOpen" :busy="iconBusy" @save="onIconSave" @close="iconDialogOpen = false" />
 
-    <!-- Review a changed identity key (cr-0099) — the only verify surface until scope-wide strict-mode (cr-0100). -->
+    <!-- Review a changed identity key (cr-0099); the proactive compare is on the member's profile (ADR 0028 Addendum). -->
     <ChangedKeyReviewDialog v-if="reviewTarget" v-model:visible="reviewOpen" :member="reviewTarget" @accepted="refreshTrust" />
   </section>
 </template>

@@ -30,6 +30,7 @@ vi.mock('./scopes', () => ({
 }))
 vi.mock('../account/identityPins', () => ({
   acceptKeyChange: vi.fn(),
+  trustStates: vi.fn(),
   IdentityChangedError: class extends Error {},
 }))
 vi.mock('../account/profile/profile', () => ({ getMyProfile: vi.fn() }))
@@ -45,7 +46,7 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 import GroupMembersPanel from './GroupMembersPanel.vue'
 import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember, memberError } from './members'
 import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee, scopeLifecycle, requeueScopeRotation, revokeScopeShares } from './scopes'
-import { acceptKeyChange, IdentityChangedError } from '../account/identityPins'
+import { acceptKeyChange, IdentityChangedError, trustStates } from '../account/identityPins'
 import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { getMyProfile } from '../account/profile/profile'
 import { bumpSpaceIcon } from './spaceIconSignal'
@@ -95,6 +96,7 @@ const button = (w: ReturnType<typeof mount>, label: string) => w.findAll('button
 
 beforeEach(() => {
   vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
+  vi.mocked(trustStates).mockResolvedValue({})
   vi.mocked(scopeLifecycle).mockResolvedValue(null)
   vi.mocked(setSpaceIcon).mockResolvedValue(undefined)
   vi.mocked(clearSpaceIcon).mockResolvedValue(undefined)
@@ -281,5 +283,20 @@ describe('GroupMembersPanel — a stuck compromise rotation, on an owner row (uc
     const w = await mountPanel({ me: 'owner' })
     expect(w.text()).not.toContain(t('members.compromiseRotation.stalled'))
     expect(w.text()).not.toContain(t('members.compromiseRotation.failed'))
+  })
+})
+
+describe('GroupMembersPanel - who is verified (ADR 0028 Addendum 4)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('shows "verified" beside the member, and the louder change on a verified contact', async () => {
+    vi.mocked(trustStates).mockResolvedValueOnce({ 'u-own': { state: 'verified', pinVerified: true } })
+    const w = await mountPanel({ me: 'owner' })
+    expect(w.get('[data-testid="member-trust-verified"]').text()).toBe(t('safety.stateVerified'))
+
+    vi.mocked(trustStates).mockResolvedValueOnce({ 'u-own': { state: 'changed', pinVerified: true } })
+    const w2 = await mountPanel({ me: 'owner' })
+    expect(w2.get('[data-testid="member-trust-changed"]').text()).toBe(t('safety.badgeVerifiedChanged'))
+    expect(button(w2, t('verify.review'))).toBeDefined()
   })
 })

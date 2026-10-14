@@ -200,7 +200,7 @@ thing remains:
 ## Addendum (2026-10-14): the verification ceremony ships without strict mode
 
 Owner decisions 2026-10-14 ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)
-main flow; decided, not yet built). The ceremony was held back on the argument that a "verified" mark nothing acts on
+main flow; built in web by cr-identity-verification). The ceremony was held back on the argument that a "verified" mark nothing acts on
 is advisory noise. It is not: TOFU (Decision 2) only detects a key that changes **after** the first pin, so an operator
 that serves a substituted key **at first contact** goes unnoticed - the gap the security model lists as open - and an
 out-of-band compare is the one thing in the tree that closes it until key transparency exists. So:
@@ -217,4 +217,5 @@ out-of-band compare is the one thing in the tree that closes it until key transp
 4. **Where it shows:** the person's profile and the tenant's and groups' member lists (a "verified" mark beside the
    existing "key changed").
 
-Strict mode (Decision 4) stays open as above.
+Strict mode (Decision 4) stays open as above, on its own use-case,
+[uc.spaces.require-verified-identities](../features/spaces/use-cases/uc.spaces.require-verified-identities.md).

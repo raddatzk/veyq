@@ -359,7 +359,7 @@
 }
 
 /* Changed-identity warning badge (cr-0099): the directory key differs from the pin (a rotation or a substitution)
-   and needs review. The only trust surface shown by default — verified/recognized states are not surfaced. */
+   and needs review. A verified contact reads `.veyq-badge.success` (`MemberTrustBadge.vue`, ADR 0028 Addendum 4). */
 .veyq-badge.changed {
   border-color: var(--app-warning-line);
   background: var(--app-warning-soft);

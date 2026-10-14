@@ -2,8 +2,8 @@ useCase: uc.spaces.verify-identity
 feature: spaces
 title: Trust-on-first-use, notice, and review a changed identity key
 # Split 2026-08-25 (inbox #128) from what this file used to also cover: the proactive verify ceremony (QR /
-# read-aloud compare -> mark verified) and scope-wide strict mode now live on their own use-case,
-# uc.spaces.enforce-verified-identities, deliberately still `status: planned`. Everything below this file
+# read-aloud compare -> mark verified) lives on uc.spaces.enforce-verified-identities (built by
+# cr-identity-verification) and strict mode on uc.spaces.require-verified-identities (planned). Everything below this file
 # still claims IS built and tested, so the split also closes a second, quieter hole `status: planned` had been
 # hiding: three of these four criteria carried ZERO coverage refs before this split, riding on the file-wide
 # `planned` flag even though cr-0098/cr-0099 built and unit-tested them. Only `changed-key-review` had a ref.
@@ -22,16 +22,17 @@ acceptanceCriteria:
       web: { unit: [src/features/account/identityPins.test.ts, src/features/tasks/grantDeliveryWorker.test.ts] }
       backend: { unit: [TasksSliceTest.declineReleasesJobToOtherWorkersButNeverBackToTheDecliner] }
   - id: changed-key-review
-    text: A changed badge opens a review showing expected (pinned) vs current (directory) safety-numbers side by side; the caller verifies out-of-band and either accepts (re-pin the new key, optionally verified) or refuses (leave blocked, the wrap/delivery stays gated).
+    text: A changed badge opens a review showing expected (pinned) vs current (directory) safety-numbers side by side; the caller verifies out-of-band and either accepts (re-pin the new key as pinned - verified returns only through a new compare on the profile) or refuses (leave blocked, the wrap/delivery stays gated).
     # web (cr-0099): the accept path is acceptKeyChange (re-pin as pinned, firstSeenAt preserved) and the badge
-    # read is trustState/trustStates, both unit-tested; the ChangedKeyReviewDialog renders the side-by-side compare.
+    # read is trustState/trustStates, both unit-tested; the ChangedKeyReviewDialog renders the side-by-side compare
+    # (ChangedKeyReviewDialog.test.ts: the accept's ordering, an unreadable key, a verified contact said louder).
     # The accept was only HALF an accept until cr-account-key-rotation-after-compromise: a decline is permanent —
     # nothing expired one — so the re-pin authorised a wrap that nothing then performed (ADR 0028 (2)'s "the wrap
     # then proceeds" did not hold; ADR 0060 Decision 7). `acceptKeyChange` now also clears this key-holder's own
     # declines against that contact, and the backend refs below are that seam: the delivery becomes claimable
     # again, and — the half that shares a table with it — a rotator's exclusion from their own rotation does not.
     coverage:
-      web: { unit: [src/features/account/identityPins.test.ts] }
+      web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/ChangedKeyReviewDialog.test.ts] }
   - id: operator-blind-pinning
     text: Verification is client-only (compare against the sealed pin, no server call) and the pin store is one Master-Key-sealed ciphertext, so the operator never learns who pinned or verified whom, nor the count — the trust graph stays off the server.
     # Real but indirect: no test asserts the negative (that a growing pin/verified set never changes the wire

@@ -37,7 +37,14 @@ export function displayNameOf(username: string, name: MemberName | null | undefi
 /** The latest picture sync, started by a roster read and NOT awaited by it: names show at once, pictures follow reactively. */
 let avatarSync: Promise<void> = Promise.resolve()
 const NAMES_TTL_MS = 60_000
-let namesCache: { at: number; tenantScopeId: string; names: Map<string, { username: string; name: MemberName | null }> } | null = null
+/** One tenant member as the roster read holds it: the username, the opened real name, and the identity bundle the directory
+ *  serves for them (base64) - the key a profile's safety-number compare starts from (ADR 0028 Addendum). */
+interface TenantRow {
+  username: string
+  name: MemberName | null
+  identityPublicKey: string
+}
+let namesCache: { at: number; tenantScopeId: string; names: Map<string, TenantRow> } | null = null
 
 /** Every member of the tenant as last read (null before the first read): a reactive window onto the cache, so a place that
  *  names a person (a profile page, its breadcrumb) can answer at once from what is already on the device. */
@@ -66,7 +73,7 @@ export async function refreshPeopleDirectory(): Promise<void> {
 
 /** The tenant's members with their sealed names opened, read once a minute: the tenant scope is the active one (its key is
  *  held) or is opened for this read and zeroed after it. Empty when the caller holds no tenant grant. */
-async function tenantNames(): Promise<Map<string, { username: string; name: MemberName | null }>> {
+async function tenantNames(): Promise<Map<string, TenantRow>> {
   if (namesCache && Date.now() - namesCache.at < NAMES_TTL_MS) return namesCache.names
   let scopeId: string
   let tenantId: string | null
@@ -87,7 +94,11 @@ async function tenantNames(): Promise<Map<string, { username: string; name: Memb
   try {
     const rows = await listScopeMembers(scopeId)
     const names = new Map(
-      rows.map((m) => [m.userId, { username: m.username, name: key ? unsealName(key, { scopeId, userId: m.userId }, m.sealedName) : null }] as const),
+      rows.map((m) => [m.userId, {
+        username: m.username,
+        name: key ? unsealName(key, { scopeId, userId: m.userId }, m.sealedName) : null,
+        identityPublicKey: m.identityPublicKey,
+      }] as const),
     )
     namesCache = { at: Date.now(), tenantScopeId: scopeId, names }
     snapshot.value = new Map([...names].map(([userId, v]) => [userId, personOf(userId, v.username, v.name)]))
@@ -112,7 +123,7 @@ const personOf = (userId: string, username: string, name: MemberName | null): Pe
 
 /** The CURRENT members of `scopeId` (a proposed-but-unaccepted group member is not one yet), named by the display rule. */
 export async function loadScopePeople(scopeId: string): Promise<Person[]> {
-  const [rows, names] = await Promise.all([listScopeMembers(scopeId), tenantNames().catch(() => new Map<string, { username: string; name: MemberName | null }>())])
+  const [rows, names] = await Promise.all([listScopeMembers(scopeId), tenantNames().catch(() => new Map<string, TenantRow>())])
   return rows
     .filter((m) => !m.pendingConsent)
     .map((m) => personOf(m.userId, m.username, names.get(m.userId)?.name ?? null))
@@ -122,4 +133,10 @@ export async function loadScopePeople(scopeId: string): Promise<Person[]> {
 export async function loadTenantPeople(): Promise<Map<string, Person>> {
   const names = await tenantNames()
   return new Map([...names].map(([userId, v]) => [userId, personOf(userId, v.username, v.name)]))
+}
+
+/** The identity bundle (base64) the tenant's directory serves for `userId`, or null for a user it does not list (a former
+ *  member). Read with the roster, so it is as fresh as the names: a profile's compare starts from it when no pin exists. */
+export async function loadIdentityKey(userId: string): Promise<string | null> {
+  return (await tenantNames()).get(userId)?.identityPublicKey ?? null
 }

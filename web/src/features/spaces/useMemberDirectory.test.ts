@@ -39,14 +39,14 @@ beforeEach(() => {
 
 describe('useMemberDirectory', () => {
   it('loads rows + ownership on mount and refreshes trust', async () => {
-    vi.mocked(trustStates).mockResolvedValueOnce({ a: 'changed' })
+    vi.mocked(trustStates).mockResolvedValueOnce({ a: { state: 'changed', pinVerified: false } })
     const { api } = harness(() => useMemberDirectory(async () => ({ rows: [member('a'), member('b')], isOwner: true })))
     expect(api.loading.value).toBe(true)
     await flushPromises()
     expect(api.loading.value).toBe(false)
     expect(api.members.value.map((m) => m.userId)).toEqual(['a', 'b'])
     expect(api.isOwner.value).toBe(true)
-    expect(api.trust.value).toEqual({ a: 'changed' })
+    expect(api.trust.value).toEqual({ a: { state: 'changed', pinVerified: false } })
     expect(api.loadError.value).toBe('')
   })
 

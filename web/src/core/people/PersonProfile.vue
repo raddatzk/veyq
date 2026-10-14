@@ -7,6 +7,8 @@
 // is withheld from it (the sections still run - a former member can have been on a Memory), but nothing links to anything.
 // On a member's OWN page (`userId` is the signed-in account) an "Edit profile" control opens the shared name + picture editor
 // (`NamePictureFields`, the same one Settings > Your profile uses); on anyone else's page there is no edit control at all.
+// The safety number (ADR 0028 Addendum): my own page shows MY number and its QR (`MySafetyNumber`); a current member's page
+// shows theirs with the compare that marks them verified (`PersonSafetyNumber`). A former member's page shows neither.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -14,6 +16,8 @@ import Message from 'primevue/message'
 import { registry } from '../applications/registry'
 import { loadTenantPeople, personNow, refreshPeopleDirectory, type Person } from './directory'
 import PersonAvatar from './PersonAvatar.vue'
+import MySafetyNumber from './MySafetyNumber.vue'
+import PersonSafetyNumber from './PersonSafetyNumber.vue'
 import NamePictureFields from '../../features/account/profile/NamePictureFields.vue'
 import { useNameAndPicture } from '../../features/account/profile/useNameAndPicture'
 import { updateMyProfile } from '../../features/account/profile/profile'
@@ -114,6 +118,8 @@ watch(() => props.userId, () => { editing.value = false; identity.discard() })
           <Button type="submit" :label="t('profile.save')" icon="pi pi-check" :loading="savingOwn" />
         </div>
       </form>
+      <MySafetyNumber v-if="isMe" />
+      <PersonSafetyNumber v-else-if="person" :user-id="userId" :name="person.displayName" :username="person.username" />
       <component :is="section" v-for="(section, i) in sections" :key="i" :user-id="userId" :name="person?.displayName ?? ''" />
     </template>
   </section>
