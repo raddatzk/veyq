@@ -1,7 +1,10 @@
 # UC: Change the address an account signs in with
 
 - **ID:** uc.account.change-email
-- **Status:** built (backend + web, cr-change-email); decided 2026-10-14 by the coordinator on the owner's behalf (inbox #197).
+- **Status:** built (backend + web, cr-change-email); decided 2026-10-14 by the coordinator on the owner's behalf (inbox #197). The whole flow ran green against a real backend in an e2e suite (request, the link read from the
+  mailbox, confirm, the old address's notice, a spent link refused, the old address's sign-in refused, the new one signs in,
+  unlocks with the same Secret Key and opens content). In a real browser (2026-10-14) only the form was seen (new address,
+  password, Secret Key with the kit import) - not submitted, because the dev login is tied to the seeded address.
 - **Primary actor:** A signed-in, unlocked account holder who belongs to a tenant with a working mail relay.
 - **Goal:** Sign in with a new address from now on, without losing the account, its keys or its data - and without
   letting a stolen session move the address a password reset is sent to.

@@ -263,7 +263,9 @@ A refined CR nails **decisions, not keystrokes**:
   question back to the owner the refine could have asked. And a list of fields in a decision says whether it is
   **exhaustive or illustrative**. A **mode flag** that unlocks trust (a copy's extras riding content an archive also
   carries) comes from the caller, never from the data. A CR that edits a pre-release baseline says there are **no existing rows** (every dev
-  database is recreated) rather than designing for legacy rows that cannot exist (cr-file-uploader).
+  database is recreated) rather than designing for legacy rows that cannot exist (cr-file-uploader). A CR that changes an
+  identifier greps the client's local records keyed by it too (cr-change-email found the remember-me record and the
+  session vault only by following the address end to end).
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest
   names — an attacker who, with that same link and dump, decrypts every photo of the Memory. The owner took the
