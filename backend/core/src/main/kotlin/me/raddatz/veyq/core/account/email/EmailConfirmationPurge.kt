@@ -11,11 +11,15 @@ import java.time.Instant
  * are flipped to EXPIRED first, so a replay between expiry and deletion reads as spent rather than unknown; only
  * later are terminal rows deleted.
  *
- * Expiry is enforced at confirmation too (`EmailConfirmationStore.isLive`), so this sweep is hygiene, not the
+ * Expiry is enforced at confirmation too (and at an address change's, `EmailChangeStore.spend`) (`EmailConfirmationStore.isLive`), so this sweep is hygiene, not the
  * boundary.
  */
 @ApplicationScoped
-class EmailConfirmationPurge(private val store: EmailConfirmationStore, config: VeyqConfig) {
+class EmailConfirmationPurge(
+    private val store: EmailConfirmationStore,
+    private val changes: EmailChangeStore,
+    config: VeyqConfig,
+) {
 
     private val retention = config.emailConfirmation().token().retention()
 
@@ -26,5 +30,8 @@ class EmailConfirmationPurge(private val store: EmailConfirmationStore, config: 
         val now = Instant.now()
         store.expireOverdue(now)
         store.purgeTerminal(now.minus(retention))
+        // Pending address changes past their expiry (uc.account.change-email) ride the same schedule. A spent one is
+        // already gone, so there is no replay window to keep: an expired one is deleted at once.
+        changes.purgeExpired(now)
     }
 }

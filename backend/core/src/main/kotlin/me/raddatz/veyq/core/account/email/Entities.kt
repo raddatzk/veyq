@@ -63,3 +63,39 @@ class EmailConfirmationEntity : PanacheEntityBase {
         val TERMINAL = listOf(CONSUMED, SUPERSEDED, EXPIRED)
     }
 }
+
+/**
+ * A pending change of the sign-in address (uc.account.change-email, ADR 0074 Addendum): the address asked for and
+ * the auth public key the client derived under its salt, installed together by the confirmation. At most one per
+ * account (`ux_email_change_user`): a newer request replaces the row. Spent by **deleting** it — a compare-and-set
+ * by row count — so a used link, an unknown one and a replaced one read alike; an expired one is purged by the
+ * confirmation purge's schedule.
+ *
+ * Only the SHA-256 of the mailed token is stored, so a dump yields no link that confirms. [newEmail] is the address
+ * as asked for; the swap normalizes it as every stored address is.
+ */
+@Entity
+@Table(name = "veyq_email_change")
+@DynamicUpdate
+class EmailChangeEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "id", columnDefinition = "uuid")
+    lateinit var id: String
+
+    @Column(name = "user_id", nullable = false, columnDefinition = "uuid")
+    lateinit var userId: String
+
+    @Column(name = "new_email", nullable = false, length = 254)
+    lateinit var newEmail: String
+
+    @Column(name = "auth_public_key", nullable = false, columnDefinition = "TEXT")
+    lateinit var authPublicKey: String
+
+    @Column(name = "token_hash", nullable = false, length = 64)
+    lateinit var tokenHash: String
+
+    @Column(name = "expires_at", nullable = false)
+    lateinit var expiresAt: Instant
+
+    companion object : PanacheCompanionBase<EmailChangeEntity, String>
+}

@@ -65,6 +65,7 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_device_pairing.created_at" to "PairingStore purges terminal rows older than the retention",
             "veyq_email_confirmation.expires_at" to "EmailConfirmationStore refuses and expires a stale link",
             "veyq_email_confirmation.created_at" to "EmailConfirmationStore purges terminal rows older than the retention",
+            "veyq_email_change.expires_at" to "EmailChangeStore spends only a live change; the confirmation purge deletes on it",
             // --- tenants + scopes
             "veyq_tenant_invite.expires_at" to "TenantStore/TenantAcceptHandler refuse and expire; served to the admin",
             "veyq_tenant_invite.created_at" to "TenantStore.currentInvite: the newest invite of a tenant",

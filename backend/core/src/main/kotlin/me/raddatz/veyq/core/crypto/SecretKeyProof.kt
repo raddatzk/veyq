@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.crypto
 
+import me.raddatz.veyq.core.identity.normalizeEmail
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.util.Base64
@@ -7,12 +8,12 @@ import java.util.Base64
 /**
  * The server half of the cold-credential gate (ADR 0060 Decision 2, ADR 0054 Decision 1).
  *
- * Every flow that mints a cold credential — rotation, change-password, recovery completion — carries an Ed25519
- * signature under the account's **Secret-Key proof key**: a keypair the client derives from the Secret Key alone,
- * whose public half is registered at account birth (`veyq_user.secret_key_proof_public_key`). A session is not
- * enough, because a device-link holder is handed one without a password and a phished password buys one; neither
- * has the Secret Key. The server rebuilds each statement here from the request and the account's current state,
- * so a client cannot choose what it signed, and verifies it against the stored public key.
+ * Every flow that mints a cold credential — rotation, change-password, recovery completion, change-email —
+ * carries an Ed25519 signature under the account's **Secret-Key proof key**: a keypair the client derives from the
+ * Secret Key alone, whose public half is registered at account birth (`veyq_user.secret_key_proof_public_key`). A
+ * session is not enough, because a device-link holder is handed one without a password and a phished password buys
+ * one; neither has the Secret Key. The server rebuilds each statement here from the request and the account's
+ * current state, so a client cannot choose what it signed, and verifies it against the stored public key.
  *
  * **This is auth crypto, not content crypto** — the same class as [Ed25519Verifier]: a signature check over
  * public values. Nothing here reads or produces a secret.
@@ -72,6 +73,21 @@ object SecretKeyProof {
             wrapDigest(passwordWrap),
         )
     }.getOrNull()
+
+    /**
+     * Change-email: the auth key it replaces, the one derived under the new address's salt, and that address,
+     * normalized as every stored address is ([normalizeEmail]). The password change's shape with the address where
+     * that one binds the wrap digest — there is no wrap here, and the address is what this flow installs.
+     */
+    fun emailChangeStatement(currentAuthPublicKey: String, authPublicKey: String, email: String): ByteArray? =
+        runCatching {
+            statement(
+                "veyq/v1/secret-key-proof/change-email",
+                decode(currentAuthPublicKey),
+                decode(authPublicKey),
+                normalizeEmail(email).toByteArray(Charsets.UTF_8),
+            )
+        }.getOrNull()
 
     /**
      * True iff [signature] verifies over [statement] under [publicKey]. Every missing or malformed input — no key
