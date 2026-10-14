@@ -7,6 +7,7 @@ import { computed, ref, type ComputedRef } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
+import { i18n } from '../../i18n'
 import type { PublicShareHead } from './resolvePublicShare'
 import { openShareRoot } from './shareTree'
 
@@ -41,6 +42,17 @@ export function openIdentityName(
     }
   }
   return null
+}
+
+/**
+ * A guest's self-chosen `name` as a MEMBER is shown it: marked as a guest's - "Ben (guest)", "Ben (Gast)" (inbox #433).
+ * A guest names itself freely, so a bare name could pass for a member's ("Kevin Raddatz"); every place a member reads a
+ * guest's name - Files' uploader line, Memories' lightbox uploader and contributor buckets - goes through here, so the
+ * mark cannot be left out in one of them. Never for a guest's own view ("You are here as Ben" stays), and never for a
+ * fallback that already says "a guest". Reactive to the language where it is read inside a computed or a template.
+ */
+export function guestDisplayName(name: string): string {
+  return i18n.global.t('node.guestName', { name })
 }
 
 /** What creating an identity yields: the client-minted id and the capability token every guest write presents — and,

@@ -170,13 +170,22 @@ const sealedAs = (key: Uint8Array, name: string, shareId = SHARE): FileUploaderN
   ({ sealedName: b64std(v1.seal(identityNameContext(SCOPE, shareId, GUEST_IDENTITY), key, v1.utf8(name))), shareId })
 
 describe('a guest\'s upload is named by the name the guest gave itself (inbox #431)', () => {
+  it('a guest who took a member\'s name is still told apart: the guest\'s is marked, the member\'s is not (inbox #433)', async () => {
+    const { world, docsKey } = folderWorld()
+    const guest = await mountDetail(`share:${GUEST_IDENTITY}`, BLOB, { world, uploaderName: sealedAs(docsKey, 'Anna Meyer') })
+    expect(spoken(guest)).toBe('Uploaded by Anna Meyer (guest)')
+    expect(uploaderLine(guest).find('a').exists()).toBe(false)
+    const member = await mountDetail(`user:${ANNA}`)
+    expect(spoken(member)).toBe('Uploaded by Anna Meyer')
+  })
+
   const guestKey = `share:${GUEST_IDENTITY}`
   const aGuest = () => `${t('files.detail.uploadedBy')} ${t('files.detail.aGuest')}`
 
   it('a folder link\'s guest: its name, sealed under the FOLDER\'s key above the file, opens - no link, no directory read', async () => {
     const { world, docsKey } = folderWorld()
     const w = await mountDetail(guestKey, BLOB, { world, uploaderName: sealedAs(docsKey, 'Ben Gast') })
-    expect(spoken(w)).toBe(`${t('files.detail.uploadedBy')} Ben Gast`)
+    expect(spoken(w)).toBe('Uploaded by Ben Gast (guest)') // marked as a guest's (inbox #433)
     expect(uploaderLine(w).find('a').exists()).toBe(false)
     expect(loadScopePeople).not.toHaveBeenCalled()
   })
@@ -184,7 +193,7 @@ describe('a guest\'s upload is named by the name the guest gave itself (inbox #4
   it('a single-file link\'s guest: its name, sealed under the file\'s own key, opens', async () => {
     const { world, reportKey } = folderWorld()
     const w = await mountDetail(guestKey, BLOB, { world, uploaderName: sealedAs(reportKey, 'Ben Gast') })
-    expect(spoken(w)).toBe(`${t('files.detail.uploadedBy')} Ben Gast`)
+    expect(spoken(w)).toBe('Uploaded by Ben Gast (guest)') // marked as a guest's (inbox #433)
   })
 
   it('"a guest" where the name does not open: another key, another share bound, a chain the session cannot open', async () => {
@@ -204,7 +213,7 @@ describe('a guest\'s upload is named by the name the guest gave itself (inbox #4
   it('a drop box\'s guest: named by ITS identity folder, not by a seal under its own key', async () => {
     const underKUp = sealedAs(v1.randomBytes(32), 'Clara Sealed')
     const w = await mountDetail(guestKey, BLOB, { world: dropBoxWorld(GUEST_IDENTITY), uploaderName: underKUp })
-    expect(spoken(w)).toBe(`${t('files.detail.uploadedBy')} Clara`)
+    expect(spoken(w)).toBe('Uploaded by Clara (guest)') // the identity folder's name is the guest's own: marked too (inbox #433)
     expect(uploaderLine(w).find('a').exists()).toBe(false)
 
     // the folder of ANOTHER guest names nobody else: this file's uploader is still "a guest"

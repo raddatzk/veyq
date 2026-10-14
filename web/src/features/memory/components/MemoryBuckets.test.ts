@@ -337,3 +337,35 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     expect(w2.find('.select-stub').text()).toContain('Aaa Contributor')
   })
 })
+
+describe('MemoryBuckets — a guest\'s name is marked as a guest\'s (inbox #433)', () => {
+  it('a contributor primary reads "<name> (guest)"; a member\'s primary and a member\'s sub-bucket stay as they are', async () => {
+    vi.mocked(listScopeMembers).mockResolvedValue([{ userId: 'u-anna', username: 'Anna Meyer' } as Awaited<ReturnType<typeof listScopeMembers>>[number]])
+    vi.mocked(listBuckets).mockResolvedValue([
+      bucket('b-own', 'user:u-anna', 0),
+      bucket('b-share', 'share:x', 1, 'ct'),
+      bucket('s-share', 'share:x', 0, 'sub', false, 'b-share'),
+    ])
+    // The guest named itself like the member; the sub-bucket under its contributions is a member's own folder name.
+    vi.mocked(openBucketName).mockImplementation((_s, _n, _k, b) => (b.bucketId === 's-share' ? 'Best of' : 'Anna Meyer'))
+    const wrapper = mountBuckets([media('m3', 'share:x', 'b-share')])
+    await flushPromises()
+    const shown = async (id: string) => {
+      await selectBucket(wrapper, id)
+      return wrapper.find('.bucket-select-value > span:not(.pi)').text() // the active bucket's name
+    }
+    expect(await shown('b-own')).toBe('Anna Meyer')
+    expect(await shown('b-share')).toBe('Anna Meyer (guest)')
+    expect(await shown('s-share')).toBe('Best of')
+  })
+
+  it('a contributor whose name does not open keeps the plain fallback, which already says what it is', async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 0), bucket('b-share', 'share:x', 1, 'ct')])
+    vi.mocked(openBucketName).mockReturnValue(null)
+    const wrapper = mountBuckets([media('m3', 'share:x', 'b-share')])
+    await flushPromises()
+    await selectBucket(wrapper, 'b-share')
+    expect(wrapper.find('.bucket-select-value').text()).toContain('Contribution')
+    expect(wrapper.find('.bucket-select-value').text()).not.toContain('(guest)')
+  })
+})

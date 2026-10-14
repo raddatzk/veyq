@@ -10,7 +10,8 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
 import { stubApi } from '../../test/apiMock'
-import { createGuestIdentity, identityNameContext, loadGuestSession, openIdentityName, saveGuestSession } from './guestIdentity'
+import { createGuestIdentity, guestDisplayName, identityNameContext, loadGuestSession, openIdentityName, saveGuestSession } from './guestIdentity'
+import { realI18n } from '../../test/i18n'
 
 const SCOPE_ID = '22222222-2222-4222-8222-222222222222'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_0' // a 43-char base64url id, as `newShareId` mints
@@ -79,6 +80,25 @@ describe('openIdentityName', () => {
     expect(openIdentityName(SCOPE_ID, 'Oth3rIdOth3rIdOth3rIdOth3rIdOth3rIdOth3r-_0', identityId, sealed, [root])).toBeNull()
     expect(openIdentityName(SCOPE_ID, SHARE_ID, identityId, sealed, [])).toBeNull()
     expect(openIdentityName(SCOPE_ID, SHARE_ID, identityId, '%%%', [root])).toBeNull()
+  })
+})
+
+describe('guestDisplayName (inbox #433)', () => {
+  it('marks a guest\'s self-chosen name as a guest\'s, in the active language', () => {
+    const i18n = realI18n()
+    try {
+      expect(guestDisplayName('Ben')).toBe('Ben (guest)')
+      i18n.global.locale.value = 'de'
+      expect(guestDisplayName('Ben')).toBe('Ben (Gast)')
+    } finally {
+      i18n.global.locale.value = 'en'
+    }
+  })
+
+  it('takes the name as typed: a name that reads like a message or a member\'s is never interpreted, only marked', () => {
+    realI18n()
+    expect(guestDisplayName('Kevin Raddatz')).toBe('Kevin Raddatz (guest)')
+    expect(guestDisplayName('{name} @:node.folders | x')).toBe('{name} @:node.folders | x (guest)')
   })
 })
 

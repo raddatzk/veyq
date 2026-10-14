@@ -30,7 +30,8 @@
 // **Who uploaded the current content** (ADR 0083 Addendum, `../uploader.ts`): a member's page names them in the header's meta
 // line - a member by core's display rule with a link to the profile, one who left as a greyed "former member", a guest
 // by the name it gave itself (inbox #431: its identity folder inside a drop box, else its sealed name opened under the
-// nearest key the tree holds), "a guest" where that does not open. It comes from the member listing's `uploaderKey` and
+// nearest key the tree holds) and marked as a guest's ("Ben (guest)", core's `guestDisplayName`, inbox #433), "a guest"
+// where that does not open. It comes from the member listing's `uploaderKey` and
 // `uploaderName`, a door only the member's source carries (`listWithUploaders`): a share guest's source has none and its
 // link listing serves no uploader, so a guest's page names nobody and asks no directory.
 //
@@ -63,6 +64,7 @@ import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import { personHash } from '../../../core/node/location'
 import { loadScopePeople, type Person } from '../../../core/people/directory'
 import { guestUploaderName, needsPeople, uploaderOf, type FileUploader } from '../uploader'
+import { guestDisplayName } from '../../../core/sharing/guestIdentity'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
@@ -306,8 +308,9 @@ async function replaceAnyway(n: Notice) {
             <PersonAvatar :name="t('people.formerMember')" />
             <span class="file-detail-uploader-name">{{ t('people.formerMember') }}</span>
           </span>
-          <!-- A guest by the name it gave itself (no link: a guest has no profile), else "a guest". -->
-          <span v-else class="file-detail-uploader-person file-detail-uploader-name">{{ uploader.name ?? t('files.detail.aGuest') }}</span>
+          <!-- A guest by the name it gave itself, marked as a guest's (inbox #433: a guest may pick a member's name; no link: a
+               guest has no profile), else "a guest". -->
+          <span v-else class="file-detail-uploader-person file-detail-uploader-name">{{ uploader.name ? guestDisplayName(uploader.name) : t('files.detail.aGuest') }}</span>
         </p>
       </template>
     </NodeHeader>

@@ -21,6 +21,7 @@ import {
   openBucketName, unsealMeta, originalMediaType, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
 } from '../media'
 import { useMemoryView } from '../source'
+import { guestDisplayName } from '../../../core/sharing/guestIdentity'
 import { refusalsByReason, sealedMediaName } from '../mediaRefusal'
 import { useToast } from '../../../shared/state/useToast'
 import { useUndo } from '../../../shared/state/useUndo'
@@ -98,7 +99,11 @@ function labelFor(b: BucketItem, key: Uint8Array | null, members: Map<string, st
   // Both a sub-bucket's name and a contributor primary's are bound to their object (ADR 0072), addressed by the
   // scope + node this panel is for; openBucketName picks the right seal from the row.
   if (!b.isPrimary || b.ownerKey.startsWith('share:')) {
-    return (key && openBucketName(props.scopeId, props.nodeId, key, b, above)) || t('memory.buckets.contributor')
+    const name = key ? openBucketName(props.scopeId, props.nodeId, key, b, above) : null
+    if (!name) return t('memory.buckets.contributor')
+    // A contributor primary's name is the one its guest chose: marked as a guest's (inbox #433), so a guest cannot pass
+    // for a member. A sub-bucket's name is a member's own words and stays as it is.
+    return b.isPrimary ? guestDisplayName(name) : name
   }
   return members.get(b.ownerKey.slice('user:'.length)) ?? t('memory.buckets.member')
 }
