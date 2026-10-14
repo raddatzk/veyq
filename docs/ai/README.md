@@ -258,6 +258,11 @@ A refined CR nails **decisions, not keystrokes**:
   migration that no build in the run carried. And **a guard's list of what it refuses derives from the authority's rule, not from
   today's instances**: cr-helm-upgrade-check's refine listed the StatefulSet fields the chart sets, the API server
   refuses every field outside a small mutable set, and the build had to widen it.
+- **A CR that changes what a hook is handed traces every reader down to the native API**, not only the first one: cr-copy-node
+  fed a chunked source to the upload pump (fine) and to Memories' import, which decodes whole (`createImageBitmap`) - a
+  question back to the owner the refine could have asked. And a list of fields in a decision says whether it is
+  **exhaustive or illustrative**. A **mode flag** that unlocks trust (a copy's extras riding content an archive also
+  carries) comes from the caller, never from the data.
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest
   names — an attacker who, with that same link and dump, decrypts every photo of the Memory. The owner took the
