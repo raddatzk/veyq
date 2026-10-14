@@ -8,7 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import * as v1 from '@veyq/crypto/v1'
-import type { FileListPage } from '../../../api/generated/files'
+import { b64std } from '@veyq/crypto/base64'
+import type { FileListPage, FileUploaderName } from '../../../api/generated/files'
 
 vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
@@ -30,9 +31,12 @@ import { fileChunkProvider } from '../download'
 import { loadScopePeople, type Person } from '../../../core/people/directory'
 import { personHash } from '../../../core/node/location'
 import { providerOf } from '../../../test/fileChunks'
-import { FILE_KIND } from '../kinds'
+import { DROPBOX_KIND, FILE_KIND } from '../kinds'
 import { FOLDER_KIND } from '../../../core/node/kind'
+import { wrapContentKey, type TreeNode } from '../../../core/node/tree'
+import { identityNameContext } from '../../../core/sharing/guestIdentity'
 import { epochsOf } from '../../spaces/epochsTestUtil'
+import type { EpochKeys } from '../../spaces/epochs'
 import { realI18n, t } from '../../../test/i18n'
 import { stubApi } from '../../../test/apiMock'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
@@ -49,14 +53,25 @@ const BLOB = { blobId: 'b-1', chunkCount: 1, byteSize: 100, wrappedBlobKey: 'eA=
 const anna: Person = { userId: ANNA, username: 'anna', realName: 'Anna Meyer', displayName: 'Anna Meyer' }
 
 let router: Router
-async function mountDetail(uploaderKey: string | null | undefined, fileBlob: typeof BLOB | null = BLOB) {
-  stubApi(filesApi, { listFiles: { items: [{ nodeId: R, fileBlob, ...(uploaderKey === undefined ? {} : { uploaderKey }) }] } satisfies FileListPage })
-  const epochs = epochsOf(v1.randomBytes(32))
-  const tree = memberTreeOf(() => [DOCS, REPORT], { scopeId: SCOPE, epochs })
+/** A tree whose keys really open (inbox #431): `Docs` under the epoch key, `Report.txt` under `Docs`' key. */
+type World = { nodes: TreeNode[]; node: TreeNode; epochs: EpochKeys }
+async function mountDetail(
+  uploaderKey: string | null | undefined, fileBlob: typeof BLOB | null = BLOB,
+  o: { uploaderName?: FileUploaderName; world?: World } = {},
+) {
+  const node = o.world?.node ?? REPORT
+  stubApi(filesApi, {
+    listFiles: {
+      items: [{ nodeId: node.id, fileBlob, ...(uploaderKey === undefined ? {} : { uploaderKey }), ...(o.uploaderName ? { uploaderName: o.uploaderName } : {}) }],
+    } satisfies FileListPage,
+  })
+  const epochs = o.world?.epochs ?? epochsOf(v1.randomBytes(32))
+  const nodes = o.world?.nodes ?? [DOCS, REPORT]
+  const tree = memberTreeOf(() => nodes, { scopeId: SCOPE, epochs })
   await router.push('/')
   const w = mount(FileDetail, {
     props: {
-      node: REPORT, scopeId: SCOPE, epochs, contentKey: v1.randomBytes(32), children: { folders: [], byKind: new Map() },
+      node, scopeId: SCOPE, epochs, contentKey: v1.randomBytes(32), children: { folders: [], byKind: new Map() },
       access: memberAccessOf({ scopeId: SCOPE, epochs }), tree,
     },
     global: { plugins: [router, realI18n()], directives: { tooltip: {} } },
@@ -102,7 +117,7 @@ describe('an opened file names who uploaded its current content (ADR 0083 Addend
     expect(line.find('.is-former').exists()).toBe(true)
   })
 
-  it('a guest\'s upload reads "a guest" - no name, no link, no directory read', async () => {
+  it('a guest\'s upload the listing serves no name for reads "a guest" - no link, no directory read', async () => {
     const w = await mountDetail(`share:${GUEST_IDENTITY}`)
     const line = uploaderLine(w)
     expect(spoken(w)).toBe(`${t('files.detail.uploadedBy')} ${t('files.detail.aGuest')}`)
@@ -121,5 +136,79 @@ describe('an opened file names who uploaded its current content (ADR 0083 Addend
     vi.mocked(loadScopePeople).mockRejectedValue(new Error('offline'))
     const failed = await mountDetail(`user:${ANNA}`)
     expect(uploaderLine(failed).exists(), 'an unread directory says nothing about membership: not "former"').toBe(false)
+  })
+})
+
+// --- a guest's name (inbox #431) ---------------------------------------------------------------------------------------
+
+const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_6'
+const OTHER_SHARE = 'Oth3rIdOth3rIdOth3rIdOth3rIdOth3rIdOth3r-_6'
+const OTHER_IDENTITY = 'bbbbbbbb-0000-4000-8000-000000000003'
+const F = '5c09e000-0000-4000-8000-0000000000f0'
+const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 })
+
+/** `Docs` at the scope root holding `Report.txt`, every key really wrapped - the chain a member's tree opens. */
+function folderWorld() {
+  const e0 = v1.randomBytes(32)
+  const docsKey = v1.randomBytes(32)
+  const reportKey = v1.randomBytes(32)
+  const docs = treeNode({ id: D, kind: FOLDER_KIND, name: 'Docs', parentId: null, wrappedContentKey: wrapContentKey(e0, at(D), docsKey) })
+  const report = treeNode({ id: R, kind: FILE_KIND, name: 'Report.txt', parentId: D, wrappedContentKey: wrapContentKey(docsKey, at(R), reportKey) })
+  return { world: { nodes: [docs, report], node: report, epochs: epochsOf(e0) }, docsKey, reportKey }
+}
+
+/** A drop box holding the identity folder `Clara` of `folderIdentity`, which holds `Report.txt`. */
+function dropBoxWorld(folderIdentity: string): World {
+  const box = treeNode({ id: D, kind: DROPBOX_KIND, name: 'Inbox', parentId: null })
+  const folder = treeNode({ id: F, kind: FOLDER_KIND, name: 'Clara', parentId: D, shareIdentityId: folderIdentity, wrappedIdentityKey: 'd3JhcA==' })
+  const report = treeNode({ id: R, kind: FILE_KIND, name: 'Report.txt', parentId: F })
+  return { nodes: [box, folder, report], node: report, epochs: epochsOf(v1.randomBytes(32)) }
+}
+
+/** The guest's display name as `createGuestIdentity` seals it: under `key`, bound to (scope, share, identity). */
+const sealedAs = (key: Uint8Array, name: string, shareId = SHARE): FileUploaderName =>
+  ({ sealedName: b64std(v1.seal(identityNameContext(SCOPE, shareId, GUEST_IDENTITY), key, v1.utf8(name))), shareId })
+
+describe('a guest\'s upload is named by the name the guest gave itself (inbox #431)', () => {
+  const guestKey = `share:${GUEST_IDENTITY}`
+  const aGuest = () => `${t('files.detail.uploadedBy')} ${t('files.detail.aGuest')}`
+
+  it('a folder link\'s guest: its name, sealed under the FOLDER\'s key above the file, opens - no link, no directory read', async () => {
+    const { world, docsKey } = folderWorld()
+    const w = await mountDetail(guestKey, BLOB, { world, uploaderName: sealedAs(docsKey, 'Ben Gast') })
+    expect(spoken(w)).toBe(`${t('files.detail.uploadedBy')} Ben Gast`)
+    expect(uploaderLine(w).find('a').exists()).toBe(false)
+    expect(loadScopePeople).not.toHaveBeenCalled()
+  })
+
+  it('a single-file link\'s guest: its name, sealed under the file\'s own key, opens', async () => {
+    const { world, reportKey } = folderWorld()
+    const w = await mountDetail(guestKey, BLOB, { world, uploaderName: sealedAs(reportKey, 'Ben Gast') })
+    expect(spoken(w)).toBe(`${t('files.detail.uploadedBy')} Ben Gast`)
+  })
+
+  it('"a guest" where the name does not open: another key, another share bound, a chain the session cannot open', async () => {
+    const { world, docsKey } = folderWorld()
+    // control: the same world and seal opens
+    expect(spoken(await mountDetail(guestKey, BLOB, { world, uploaderName: sealedAs(docsKey, 'Ben Gast') }))).toContain('Ben Gast')
+
+    const foreign = sealedAs(v1.randomBytes(32), 'Ben Gast')
+    expect(spoken(await mountDetail(guestKey, BLOB, { world, uploaderName: foreign })), 'a key no node holds').toBe(aGuest())
+    const rebound = { ...sealedAs(docsKey, 'Ben Gast'), shareId: OTHER_SHARE }
+    expect(spoken(await mountDetail(guestKey, BLOB, { world, uploaderName: rebound })), 'the seal bound to another share').toBe(aGuest())
+    const locked = { ...world, epochs: epochsOf(v1.randomBytes(32)) }
+    expect(spoken(await mountDetail(guestKey, BLOB, { world: locked, uploaderName: sealedAs(docsKey, 'Ben Gast') })), 'a chain that does not open').toBe(aGuest())
+    expect(spoken(await mountDetail(guestKey, BLOB, { world, uploaderName: { sealedName: '%%%', shareId: SHARE } })), 'no base64').toBe(aGuest())
+  })
+
+  it('a drop box\'s guest: named by ITS identity folder, not by a seal under its own key', async () => {
+    const underKUp = sealedAs(v1.randomBytes(32), 'Clara Sealed')
+    const w = await mountDetail(guestKey, BLOB, { world: dropBoxWorld(GUEST_IDENTITY), uploaderName: underKUp })
+    expect(spoken(w)).toBe(`${t('files.detail.uploadedBy')} Clara`)
+    expect(uploaderLine(w).find('a').exists()).toBe(false)
+
+    // the folder of ANOTHER guest names nobody else: this file's uploader is still "a guest"
+    const other = await mountDetail(guestKey, BLOB, { world: dropBoxWorld(OTHER_IDENTITY), uploaderName: underKUp })
+    expect(spoken(other)).toBe(aGuest())
   })
 })

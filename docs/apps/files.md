@@ -152,8 +152,11 @@ reads).
   `renameSelectionEnd`).
 - **The opened file names its uploader** for a member (ADR 0083 Addendum, `uploader.ts`): the header's meta line reads
   "Uploaded by" with the person's avatar and display name (core's `core/people` directory, the scope's current members),
-  a real link to `#people/<id>`; a member who left reads a greyed "former member" without a link; a guest's upload "a
-  guest" (its sealed name is inbox #431); a directory that cannot be read names nobody. The key comes from the member
+  a real link to `#people/<id>`; a member who left reads a greyed "former member" without a link; a guest by its name
+  without a link (`guestUploaderName`, inbox #431: inside a drop box the identity folder of that identity, else the
+  sealed name `listFiles` serves beside a `share:` key - `uploaderName` `{sealedName, shareId}`, core's identity row read
+  once per listing, a deleted link's too - opened by core's `openIdentityName` under the file's key or the nearest
+  ancestor's) or "a guest" where that does not open; a directory that cannot be read names nobody. The key comes from the member
   source's `listWithUploaders` door (the same one `listFiles` request as `listBlobs`); the guest's source has no such door
   and asks no directory (`FileDetail.guest.test.ts`). No row shows it.
 - **The download** (`download.ts`) saves under core's `downloadName` (the node name, else the blob's sealed name, plus

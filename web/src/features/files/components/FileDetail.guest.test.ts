@@ -53,7 +53,7 @@ import { planBlob } from '../../../core/blob/transport'
 import { deleteNode } from '../../../core/node/tree'
 import { loadTree } from '../../../core/node/treeStore'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
-import type { GuestIdentity } from '../../../core/sharing/guestIdentity'
+import { identityNameContext, type GuestIdentity } from '../../../core/sharing/guestIdentity'
 import { clearUploads } from '../../../core/blob/queue'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { formatBytes } from '../../../shared/formatBytes'
@@ -204,6 +204,23 @@ describe.each([ShareRole.Read, ShareRole.ReadWrite])('a %s guest of a single-fil
     expect(w.find('.file-detail-facts').exists()).toBe(true)
     expect(w.find('[data-testid="file-uploader"]').exists()).toBe(false)
     expect(w.text()).not.toContain(t('files.detail.uploadedBy'))
+    expectNoMemberWorld()
+  })
+
+  // inbox #431: a guest's name rides the MEMBER's listing only. Were the link's listing ever to carry one - sealed under the
+  // file's key, which this guest holds, so it would open - the guest's page still reads none: its source has no such door.
+  it('a link listing that carried an uploader and a sealed name still names nobody', async () => {
+    const identityId = 'cccccccc-0000-4000-8000-000000000004'
+    const name = b64std(v1.seal(identityNameContext(SCOPE, SHARE, identityId), fileKey, v1.utf8('Ben Gast')))
+    listShareFiles = stubApi(publicShareFilesApi, {
+      listShareFiles: {
+        items: [{ nodeId: FILE, fileBlob: BLOB, uploaderKey: `share:${identityId}`, uploaderName: { sealedName: name, shareId: SHARE } }],
+      } as unknown as ShareFileListing,
+    }).listShareFiles
+    const w = await mountPage(role)
+    expect(w.find('.file-detail-facts').exists()).toBe(true) // control: the listing was read and the page drawn
+    expect(w.find('[data-testid="file-uploader"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('Ben Gast')
     expectNoMemberWorld()
   })
 })

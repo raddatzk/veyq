@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.files.FilesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -18,12 +19,16 @@ data class FileBlobData(
     val wrappedBlobMeta: String?,
 )
 
+/** A link guest's display name as core's identity row holds it: sealed client-side, bound to its [shareId] (ADR 0072). */
+data class GuestUploaderName(val sealedName: String, val shareId: String)
+
 /**
  * One live file under a parent and its blob (null: no upload of it has completed yet), with who uploaded that blob:
- * [uploaderKey] is `user:{id}` or `share:{identityId}` (ADR 0083 Addendum), null with no blob. Only a MEMBER's listing
- * puts it on the wire; the guest's item has no such field (`ShareFilesResource`, inbox #190).
+ * [uploaderKey] is `user:{id}` or `share:{identityId}` (ADR 0083 Addendum), null with no blob; for a `share:` uploader
+ * whose identity row exists, [uploaderName] is that guest's sealed name (inbox #431). Only a MEMBER's listing reads and
+ * serves either; the guest's item has no such field (`ShareFilesResource`, inbox #190).
  */
-data class FileRow(val nodeId: String, val blob: FileBlobData?, val uploaderKey: String?)
+data class FileRow(val nodeId: String, val blob: FileBlobData?, val uploaderKey: String?, val uploaderName: GuestUploaderName? = null)
 
 /**
  * Files' reads of core's tables (cr-files-application F1a): a file's blob is the [FilesBlobRoles.FILE_CONTENT] slot of
@@ -47,8 +52,25 @@ class FilesStore(private val blobs: BlobUploadStore) {
             )
             .setParameter(1, scopeId).setParameter(2, parentSlot).setParameter(3, FilesNodeKinds.FILE)
             .resultList
-        return withBlobs(nodeIds.sorted()) // by the text, not the column: a UUID column orders by its own segments
+        // by the text, not the column: a UUID column orders by its own segments
+        return withGuestNames(withBlobs(nodeIds.sorted()))
     }
+
+    /**
+     * [rows] with each guest uploader's sealed name (inbox #431): ONE read of core's identity rows for the listing, by
+     * the identities its rows name. An identity of a deleted link is still there while an attachment names it
+     * (`fk_attachment_share_identity`; `SharingStore.dropDeadIdentities` asks core's attachment usage first), so its guest
+     * stays named. The member listing's only: the guest's ([listFilesAmong]) never reads a name (inbox #190).
+     */
+    private fun withGuestNames(rows: List<FileRow>): List<FileRow> {
+        val identityIds = rows.mapNotNull { guestIdentityOf(it.uploaderKey) }.distinct()
+        if (identityIds.isEmpty()) return rows
+        val nameOf = ShareIdentityEntity.list("id in ?1", identityIds).associate { it.id to GuestUploaderName(it.sealedDisplayName, it.shareId) }
+        return rows.map { r -> guestIdentityOf(r.uploaderKey)?.let { r.copy(uploaderName = nameOf[it]) } ?: r }
+    }
+
+    /** The guest identity id a `share:{identityId}` uploader key names; null for a member's key or none. */
+    private fun guestIdentityOf(uploaderKey: String?): String? = uploaderKey?.takeIf { it.startsWith(SHARE_KEY) }?.removePrefix(SHARE_KEY)
 
     /**
      * Every live `FILE` among [liveNodeIds] — a share's live subtree, as core's guest gate read it — in [scopeId], with
@@ -89,4 +111,9 @@ class FilesStore(private val blobs: BlobUploadStore) {
     fun blob(scopeId: String, blobId: String): FileBlobData? = blobs.findBlob(scopeId, blobId)?.let(::toData)
 
     private fun toData(b: BlobEntity) = FileBlobData(b.id, b.chunkCount, b.byteSize, b.wrappedBlobKey, blobs.decodeManifest(b.manifest), b.wrappedBlobMeta)
+
+    private companion object {
+        /** A guest uploader's key prefix (`NodeAttachmentEntity.uploaderKey`). */
+        const val SHARE_KEY = "share:"
+    }
 }

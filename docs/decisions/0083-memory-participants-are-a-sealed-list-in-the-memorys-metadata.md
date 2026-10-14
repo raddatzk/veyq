@@ -125,7 +125,11 @@ Decided by the coordinator on the owner's behalf, 2026-10-14 (inbox #415, the fo
    operator learns which member uploaded which file's current bytes, which it otherwise saw only during the upload. Taken
    for the same reasons; a sealed uploader inside the blob meta was rejected because an uploader could claim anyone.
 3. **Shown on the file's page header, to members only.** A member is named by decision 9's rule and links to the profile;
-   one who left is a "former member"; a guest's upload reads "a guest" without a name in this slice (no endpoint serves a
-   member the sealed identity names yet - inbox #431). A share guest's listing carries **no** uploader field (inbox #190):
+   one who left is a "former member"; a link's guest by the name it gave itself, without a link (inbox #431, decided
+   2026-10-14 by the coordinator on the owner's behalf): the member's listing serves the identity's sealed display name and
+   its share beside the `share:` key - a ciphertext the server already stores, to a member it already serves, so no new
+   plaintext and no new relation -, opened under the file's key or the nearest ancestor key the member holds (core's
+   reader, which Memories' buckets use too); a drop-box guest is named by its identity folder; a guest of a deleted link
+   stays named; "a guest" only where the name does not open. A share guest's listing carries **no** uploader field (inbox #190):
    the contract keeps it off the share's file listing, which has an item schema of its own (`ShareFileListItem`) so the
    member's `FileListItem.uploaderKey` cannot reach it by accident. No row meta in this slice.

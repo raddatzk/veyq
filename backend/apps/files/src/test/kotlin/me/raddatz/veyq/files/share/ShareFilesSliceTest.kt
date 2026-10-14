@@ -165,28 +165,32 @@ class ShareFilesSliceTest {
     }
 
     /**
-     * ADR 0083 Addendum, inbox #190: a guest's upload records its identity and no member; the member's listing names it
-     * as `share:<identity>`, a member's replace moves it back to `user:<id>` — and the guest's own listing carries no
-     * uploader at all. Read RAW (a parsed shape would drop a field the contract does not name), with the member's listing
-     * of the same file as the positive control.
+     * ADR 0083 Addendum, inbox #190, #431: a guest's upload records its identity and no member; the member's listing names
+     * it as `share:<identity>` with that identity's sealed name and share, a member's replace moves it back to `user:<id>`
+     * (and drops the name) — and the guest's own listing carries no uploader and no name at all. Read RAW (a parsed shape
+     * would drop a field the contract does not name), with the member's listing of the same file as the positive control.
      */
     @Test
     fun aGuestsUploadIsAttributedToItsIdentityForMembersAndTheGuestListingNamesNoUploader() {
         val t = tree()
         val link = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
         val identity = identityOf(link)
+        val sealedName = nameIdentity(identity)
 
         val guestBlob = completeShare(link, t.file, guestStartStaged(link, t.file), expected = blobOf(t.file)).statusCode(200)
             .extract().path<String>("blobId")
         assertEquals(null to identity, uploaderOf(t.file), "a guest's upload records the identity and no member")
         memberList(t).body("items.find { it.nodeId == '${t.file}' }.uploaderKey", equalTo("share:$identity"))
+            .body("items.find { it.nodeId == '${t.file}' }.uploaderName.sealedName", equalTo(sealedName))
+            .body("items.find { it.nodeId == '${t.file}' }.uploaderName.shareId", equalTo(link.shareId))
 
-        // The guest's listing: the same file, no uploader field and neither id anywhere in the body.
+        // The guest's listing: the same file, no uploader field, neither id nor the sealed name anywhere in the body.
         val raw = listShare(link).statusCode(200)
             .body("items.find { it.nodeId == '${t.file}' }.fileBlob.blobId", equalTo(guestBlob)) // control: the file is listed
             .extract().asString()
         assertFalse(raw.contains("uploader"), "the guest's listing carries no uploader field: $raw")
         assertFalse(raw.contains(identity), "nor the identity id")
+        assertFalse(raw.contains(sealedName), "nor the guest's sealed name: $raw")
         assertEquals(setOf("nodeId", "fileBlob"), ObjectMapper().readTree(raw)["items"][0].fieldNames().asSequence().toSet())
 
         // A member's replace moves it back to the member, whose id never reaches the guest either.
@@ -195,7 +199,15 @@ class ShareFilesSliceTest {
             .`when`().post("/api/scopes/${t.scopeId}/files/${t.file}/content").then().statusCode(200)
         assertEquals(t.userId to null, uploaderOf(t.file), "the member's replace clears the identity")
         memberList(t).body("items.find { it.nodeId == '${t.file}' }.uploaderKey", equalTo("user:${t.userId}"))
+            .body("items.find { it.nodeId == '${t.file}' }.uploaderName", nullValue())
         assertFalse(listShare(link).statusCode(200).extract().asString().contains(t.userId), "the member's id never reaches the guest")
+    }
+
+    /** Give [identity] a sealed name of its own (a stand-in ciphertext no other field of the test carries); returns it. */
+    private fun nameIdentity(identity: String): String {
+        val sealed = "c2VhbGVkLWd1ZXN0LW5hbWU="
+        tx { ShareIdentityEntity.findById(identity)!!.sealedDisplayName = sealed }
+        return sealed
     }
 
     private fun memberList(t: Tree): ValidatableResponse =
@@ -297,12 +309,17 @@ class ShareFilesSliceTest {
         GuestTreeShare.create(link, t.folder, FilesNodeKinds.FILE, nodeId = file).statusCode(201)
         completeShare(link, file, guestStartStaged(link, file)).statusCode(200)
         val identity = identityOf(link)
+        val sealedName = nameIdentity(identity)
 
         given().header("Authorization", bearer(t.userId)).`when`().delete("/api/shares/${link.shareId}").then().statusCode(204)
         assertNotNull(tx { ShareIdentityEntity.findById(identity) }, "core's attachment usage keeps the identity")
         assertEquals(identity, attachmentIdentity(file))
         // The tombstoned link serves nothing.
         listShare(link).statusCode(404)
+        // ...and its guest stays named for a member (inbox #431): the same sealed name, bound to the dead link's id.
+        memberList(t).body("items.find { it.nodeId == '$file' }.uploaderKey", equalTo("share:$identity"))
+            .body("items.find { it.nodeId == '$file' }.uploaderName.sealedName", equalTo(sealedName))
+            .body("items.find { it.nodeId == '$file' }.uploaderName.shareId", equalTo(link.shareId))
     }
 
     // --- the wire ------------------------------------------------------------------------------------------------

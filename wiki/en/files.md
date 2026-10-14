@@ -33,8 +33,9 @@ space, side by side.
   button is right there.
 - **See who uploaded it** — at the top of a file's page, members of the space see who uploaded its current version:
   a member's name and picture (click it to open their profile), "Former member" for someone who has left the space, or
-  "a guest" when it came in through a link. After a replace it names whoever replaced it. People you share a link with
-  never see this.
+  the name a guest gave when it came in through a link (in a drop box, the name of that guest's folder) - "a guest" only
+  where that name cannot be read. After a replace it names whoever replaced it. People you share a link with never see
+  this.
 - **Replace** — put a newer version of a file in its place: upload a file with the **same name** into its folder, or
   open the file and use the replace button at the top of its page. The name stays. veyq **asks first**, because there is
   **no version history**: the old content cannot be brought back. A file whose upload never finished is simply filled,
