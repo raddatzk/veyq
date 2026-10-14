@@ -15,6 +15,39 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
       web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MediaLightbox.test.ts] }
+  - id: lightbox-zoom
+    text: >
+      A photo in the lightbox zooms - double-click / double-tap toggles 1x / 2x at the pointer, a two-pointer pinch and
+      ctrl+wheel zoom continuously within 1x - 8x, a drag and the arrow keys pan only while zoomed and never past the photo's
+      edges, + / - / 0 zoom from the keyboard; a video does not zoom. Navigating resets it, the arrow keys pan instead of
+      navigating while zoomed and Escape un-zooms before it closes. Past the preview's resolution in device pixels the
+      ORIGINAL replaces the preview in place, fetched once per shown item through the session's own original loader (a
+      share guest's through the link's gated read) and only where the preview was scaled down (its longer edge at the
+      2048 px tier), for a sealed type every browser decodes under 50 MB of ciphertext; any other case, and a
+      failed fetch, keeps the preview without an error; its object URL is revoked on navigation (cr-lightbox-zoom-slideshow).
+    coverage:
+      web:
+        unit:
+          - src/shared/ui/usePanZoom.test.ts
+          - src/features/memory/lightboxZoom.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+    gaps:
+      - surface: web
+        reason: The gestures are driven by synthetic pointer, wheel and key events in happy-dom, which lays nothing out (each test sets the image's fitted and natural size by hand); no real browser had zoomed a photo when the CR closed its implementation - the first pass is the merge's.
+  - id: lightbox-slideshow
+    text: >
+      A play / pause control in the lightbox advances every 5 s through the grid order, shows a video's poster for one
+      interval and never plays it, waits for a preview still loading, and stops on the last item; any key, pointer or
+      wheel in the lightbox, a hidden tab and a dialog over it pause it, the toggle's own press excepted; the state is
+      announced (aria-live). One preview is fetched ahead and dropped when it is not shown. While it runs no EXIF read and
+      no place-name backfill happen; pausing on an item runs both (cr-lightbox-zoom-slideshow).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/MediaLightbox.test.ts
+    gaps:
+      - surface: web
+        reason: Proven on fake interval/timeout/Date clocks in happy-dom; no real browser had run a slideshow over a Memory with a photo and a video when the CR closed its implementation - the first pass is the merge's.
   - id: download-original
     text: An explicit download fetches the pristine, full-resolution original (the only byte-identical copy).
     coverage:
