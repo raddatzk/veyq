@@ -27,14 +27,21 @@
    media last — read from each media's sealed capture tier, so the blind server never sees a timestamp yet the
    order is exact on device (cr-0066).
 3a. **Zoom and slideshow in the lightbox** (decided 2026-10-14 by the coordinator on the owner's behalf, inbox #90 and
-   #91; not yet built). **Zoom:** double-click / double-tap toggles 1x / 2x, a pinch with two pointers and ctrl+wheel
-   zoom continuously, a drag pans; past the preview's own resolution the **original** is fetched and decrypted once,
-   only for a type the browser decodes (from the sealed media type) and under 50 MB, else the zoom stays on the preview;
-   navigating resets the zoom, and the arrow keys do not navigate while zoomed. **Slideshow:** a play control advances
-   every 5 s through the grid order, a video showing its poster for one interval (no autoplay), and stops on the last
-   item; any key, pointer, zoom or details interaction pauses it, a hidden tab too; the next preview is fetched one
-   ahead; while it runs, no EXIF read and no place-name backfill happen (they start when the user pauses on an item).
-   The member and the guest get both (share view = member view; a guest's loaders are its source's).
+   #91; built the same day). **Zoom** (a photo; a video does not zoom): double-click / double-tap toggles 1x / 2x at the
+   pointer, a pinch with two pointers and ctrl+wheel zoom continuously (1x - 8x), a drag pans within the zoomed photo's
+   edges, and `+` / `-` / `0` are the keyboard path. Once the zoomed photo shows more device pixels than the preview
+   has, the **original** is fetched and decrypted once for that item - only for a sealed media type every browser decodes
+   (JPEG, PNG, GIF, WebP, AVIF, BMP; HEIC is left out, only Safari decodes it) and under 50 MB of ciphertext - and
+   replaces the preview in place; anything else, or a failure, stays on the preview without a message. Navigating
+   resets the zoom and drops the original; the arrow keys do not navigate while zoomed, and Escape un-zooms before it
+   closes. **Slideshow:** a play / pause control in the lightbox's toolbar advances every 5 s through the grid order, a
+   video showing its poster for one interval (no autoplay), and stops on the last item; any key, pointer or wheel in the
+   lightbox (so any zoom or details interaction) pauses it, a hidden tab and a dialog over the lightbox too; the state is
+   announced to a screen reader. A slow preview is waited for, never skipped. The next preview is fetched one ahead and
+   dropped when it is not shown; while it runs, no EXIF read and no place-name backfill happen - they start when the
+   slideshow pauses on an item. The member and the guest get both (share view = member view; a guest's loaders are its
+   source's). Proven by unit tests; the first real-browser pass (zoom by wheel and double-click, a slideshow over a
+   photo and a video) is the merge's.
 3. **Lightbox:** clicking an item opens it full-view; the client fetches that item's **preview**, decrypts, and
    displays it; **prev/next** page through the grid order. (The preview — not the multi-MB original — keeps the
    lightbox fast.) A **video** (known from the media type sealed in its original's blob meta, which rides the
@@ -97,7 +104,8 @@
 
 - **Operator-blind.** Every tier is fetched as **ciphertext** and decrypted on device; the server never sees a
   pixel, a filename, a media type or a content key. The lightbox shows the **preview**, not the original — the original
-  leaves the store on explicit download, a video's playback, and (decided, not yet built) a zoom past the preview.
+  leaves the store on explicit download, a video's playback, and a zoom past the preview (3a) - each fetched as
+  ciphertext and opened on the device.
 - **One order for every tile — including one that is still uploading.** The grid has a single ordering rule
   and no privileged front. A picked file takes its capture-time place the moment its tile appears — *before* it
   is sealed or uploaded — because that key is derivable on device from the same **EXIF date, else the file's
@@ -142,9 +150,10 @@ and a panel beside it tells you what the picture knows about itself: the file an
 lens, how it was exposed, who made it — and, if it was taken with location on, **where**, as a place name and a
 small map rather than a pair of numbers. Nothing you did not give it appears there, and none of it is ever
 readable by the server. To keep it quick, the grid and the large view use **compact copies your device made**; the
-**full-quality original is only fetched when you actually download it** — and a video is **streamed piece by
-piece as you watch**, so only the parts you actually play are fetched, not the whole file. Journal, chapters,
-maps and playlists come in later steps.
+**full-quality original is only fetched when you download it, or zoom into a photo further than the compact copy
+can show** — and a video is **streamed piece by piece as you watch**, so only the parts you actually play are fetched, not the whole file. Double-click or pinch a
+photo to **zoom** in, and press play for a **slideshow** that moves on every five seconds and stops the moment you
+touch anything. Journal, chapters, maps and playlists come in later steps.
 
 **DE —** Öffne eine Erinnerung und du siehst ihre Fotos als Raster; tippe eines an, um es groß zu sehen und
 durch die anderen zu blättern. Du kannst **die guten mit einem Herz markieren** und dann nur die markierten
@@ -162,9 +171,10 @@ gemacht hat — und, wenn es mit eingeschaltetem Ort aufgenommen wurde, **wo**, 
 statt als Zahlenpaar. Es steht dort nichts, was du nicht selbst mitgegeben hast, und nichts davon kann der
 Server lesen. Damit es flott bleibt, nutzen das
 Raster und die Großansicht **kompakte Kopien, die dein Gerät erstellt hat**; das **Original in voller Qualität
-wird nur geladen, wenn du es wirklich herunterlädst** — und ein Video wird beim Ansehen **Stück für Stück
-gestreamt**, sodass nur die tatsächlich abgespielten Teile geladen werden, nicht die ganze Datei. Journal,
-Kapitel, Karten und Playlists kommen in späteren Schritten.
+wird nur geladen, wenn du es herunterlädst oder ein Foto weiter vergrößerst, als die kompakte Kopie zeigen kann** — und ein Video wird beim Ansehen **Stück für Stück
+gestreamt**, sodass nur die tatsächlich abgespielten Teile geladen werden, nicht die ganze Datei. Mit Doppelklick oder zwei
+Fingern **vergrößerst** du ein Foto, und Play startet eine **Diashow**, die alle fünf Sekunden weiterblättert und
+anhält, sobald du etwas berührst. Journal, Kapitel, Karten und Playlists kommen in späteren Schritten.
 
 ## Related
 

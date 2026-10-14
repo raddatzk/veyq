@@ -67,9 +67,13 @@ runs). Member and guest alike. Decided by the coordinator on the owner's behalf,
   - Done when `npm run check` is green and a real browser ran a slideshow over a Memory with a photo and a video.
   - **Built and unit-proven; the browser pass is OPEN** (as phase 1): `npm run check` green, every new test bitten, the
     lightbox suite 8 of 8 runs green. The box stays open until the main session ran a slideshow after the merge.
-- [ ] 3 docs: uc.memory.gallery step 3a and the quality note (built, what was seen), its coverage, both wikis' gallery
+- [x] 3 docs: uc.memory.gallery step 3a and the quality note (built, what was seen), its coverage, both wikis' gallery
   text, inbox #90/#91 done.
   - Done when every `scripts/validate_*.py` is green, run on a detached worktree.
+  - "Both wikis' gallery text" has no `wiki/` page to land on (measured: `grep -rniE "original|zoom|slideshow|gallery"
+    wiki/` names no gallery page; `is-my-data-safe` speaks for this use-case and stays true). The bilingual end-user text
+    that said "the original is only fetched when you download it" is the use-case's own EN/DE section - updated there.
+    The "what was seen" half is the merge's browser pass; 3a says so until then.
 
 ## Definition of done
 
@@ -78,4 +82,44 @@ runs). Member and guest alike. Decided by the coordinator on the owner's behalf,
 
 ## Retrospective
 
-_(filled at implementation)_
+**Built** (worktree branch, three commits): phase 1 - `shared/ui/usePanZoom.ts` (ImageCropper's zoom-about-a-point and
+pan clamp, re-framed for a CONTAINED image: the pan is bounded to the overhang, an axis that fits stays centred; the
+gestures as plain handlers) and `features/memory/lightboxZoom.ts` (the three gates for the original); phase 2 - the
+slideshow inside `MediaLightbox.vue` over `createVisibilityPoller`; phase 3 - these docs. `MemoryDetail` needed no change:
+it already handed the lightbox the source's `original` loader, so the guest's zoom reads through `openShareOriginal`.
+
+**Interpretations the CR left room for, taken and stated** (each is one line to change):
+- "fetched one ahead (and revoked if not shown)": the prefetch holds the decrypt's PROMISE, never an object URL - a URL
+  is minted only for the item on screen, so an unshown prefetch has nothing to revoke and is simply dropped (on pause,
+  on navigation elsewhere, on close).
+- "a type `<img>` decodes": JPEG, PNG, GIF, WebP, AVIF, BMP. HEIC is out (Files' viewer TRIES it, since Safari decodes it;
+  here a miss costs a whole-original fetch of up to 50 MB for nothing). The original is also `decode()`d before the swap,
+  so a sealed type that lies keeps the preview.
+- "the displayed scale exceeds the preview's natural resolution": counted in DEVICE pixels (fitted width x zoom x
+  `devicePixelRatio` > the preview's natural width), so a retina screen asks earlier.
+- ctrl+wheel: `exp(-deltaY x 0.005)` per pixel (~1.65x per 100 px notch), Firefox's line/page deltas converted first.
+- "pause on hidden tab": a real PAUSE (state and button flip), not the poller's skip - the poller alone would advance the
+  moment the tab came back.
+- The slideshow stops ON the last item (not one interval later), so the last item's details load at once.
+
+**What the bites caught** (every new test was bitten; levers in the report): two tests that could not fail. (1) The
+"Enter on the toggle does not pause" check dispatched on an UNATTACHED mount, whose events never reach a `window`
+listener, and read the DOM before the re-render - green against a sabotaged exclusion; it now mounts `attachTo`, probes
+that the key reached the window, and flushes. (2) The 1x drag test could not tell the early return from the clamp; it now
+asserts no grab state at 1x.
+
+**A trap, now a comment at the line:** a Vue `@pointerdown.capture` on the lightbox root made the stage's own Vue
+pointer handlers DROP presses intermittently - Vue's invoker stamps an event (`e._vts`) at the first Vue handler and later
+Vue handlers drop an event stamped no later than they were attached. Measured: the zoom tests failed in 5 of 5 full-file
+runs with it, 0 of 6 without; why the stage's handler counted as attached that late is not established. The root's pause
+listeners are native (`addEventListener`, capture). First suspected was a scheduling stall splitting the double-click
+(load average 30+); a 300 000 ms double-tap window did not remove the flake, which ruled it out. The tests still freeze
+`performance.now` so the double-tap cannot depend on the machine.
+
+**happy-dom:** its `WheelEvent` is no `MouseEvent` and drops `ctrlKey` (the test sets it on the instance); it lays nothing
+out, so each zoom test sets the image's fitted and natural size by hand - the coverage gap says so.
+
+**Handed back** (not decided here): (a) an original whose preview is not downscaled (preview edge < 2048, so the original
+has no more pixels) is still fetched past the threshold - the CR's rule, literally; skipping it would save the fetch.
+(b) While zoomed the arrow keys are inert; panning with them would give the keyboard a pan path.
+
