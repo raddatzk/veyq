@@ -2222,21 +2222,7 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
     `503 mail_unavailable`. It is reached the way an operator reaches A2 — a restore told `--without-key` — not
     by editing the capture, so the two groups differ in exactly one restore flag.
     """
-    backup = group_dir / "backup"
-    kept_key = group_dir / "kept-apart" / instance_backup.KEY_NAME
-    backup_tool("capture", "--into", str(backup), "--key-into", str(kept_key), "--db-name", source.database,
-                "--store-bucket", source.bucket or STORE_BUCKET, "--config-secret-file", str(source.secret_file))
-    verify_capture(backup, kept_key)
-
-    destroy(source)
-
-    target = Instance(restore_database(index), group_dir / "restored-config-secret.key",
-                      f"veyq-e2e-dst-{index}")
-    fresh_database(target.database)
-    fresh_bucket(target.bucket)
-    install(target, group_dir / f"backend-install-{index}.log")
-    restore = ["restore", str(backup), "--domain", HOST, "--db-name", target.database,
-               "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file)]
+    backup, kept_key, target, restore = capture_destroy_install(index, source, group_dir)
     assert_unsupplied_key_is_refused(restore, target)
     if with_key:
         assert_newer_backup_is_refused(restore, backup, group_dir, target)
@@ -2253,6 +2239,43 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
         log("leg-3 rehearsal: restoring knowingly without the separately kept key")
         backup_tool(*restore, "--without-key")
     assert_populated_target_is_refused(restore)
+    return target
+
+
+def capture_destroy_install(index: int, source: Instance, group_dir: Path) -> tuple[Path, Path, Instance, list[str]]:
+    """The first half every hook shares: capture the stopped source (key kept apart), verify it, destroy the source, and
+    install the target the restore goes onto. Returns the capture, the kept key, the target and the restore command
+    without its key flag - each hook adds the flag its rehearsal is about."""
+    backup = group_dir / "backup"
+    kept_key = group_dir / "kept-apart" / instance_backup.KEY_NAME
+    backup_tool("capture", "--into", str(backup), "--key-into", str(kept_key), "--db-name", source.database,
+                "--store-bucket", source.bucket or STORE_BUCKET, "--config-secret-file", str(source.secret_file))
+    verify_capture(backup, kept_key)
+
+    destroy(source)
+
+    target = Instance(restore_database(index), group_dir / "restored-config-secret.key",
+                      f"veyq-e2e-dst-{index}")
+    fresh_database(target.database)
+    fresh_bucket(target.bucket)
+    install(target, group_dir / f"backend-install-{index}.log")
+    restore = ["restore", str(backup), "--domain", HOST, "--db-name", target.database,
+               "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file)]
+    return backup, kept_key, target, restore
+
+
+def upgrade_hook(index: int, source: Instance, group_dir: Path) -> Instance:
+    """The `upgrade` group's hook: the documented capture -> destroy -> install -> restore, and nothing else.
+
+    The seeder's instance is restored WITH its separately kept key onto a freshly installed target, and the reader then
+    boots on it - which migrates the restored schema up when the target's build is newer (ADR 0056 §7). The gates the
+    restore rehearsal proves around the same tool (the key gate, A5, the newer and older backup) are not repeated here:
+    this group's subject is the CONTENT surviving the restore and the upgrade, which only its reader can assert.
+    """
+    _backup, kept_key, target, restore = capture_destroy_install(index, source, group_dir)
+    result = backup_tool_result(*restore, "--key-from", str(kept_key))
+    if result.returncode != 0:
+        raise SystemExit(f"[e2e] instance_backup.py restore failed with exit {result.returncode}")
     return target
 
 
@@ -2451,6 +2474,7 @@ def assert_newer_backup_is_refused(restore: list[str], backup: Path, group_dir: 
 HOOKS = {
     "restore": lambda index, source, group_dir: restore_hook(index, source, group_dir, with_key=True),
     "legthree": lambda index, source, group_dir: restore_hook(index, source, group_dir, with_key=False),
+    "upgrade": upgrade_hook,
 }
 
 
