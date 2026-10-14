@@ -66,7 +66,9 @@ paths:
       description: >
         For every live `FILE` node whose parent is `parentId` (absent: the scope root), its `nodeId` and the blob
         its `FILE_CONTENT` slot holds (`fileBlob`) — or `fileBlob: null` for a file created whose upload has not completed yet —
-        and who uploaded that content (`uploaderKey`, members only: the guest's `listShareFiles` does not carry it).
+        and who uploaded that content (`uploaderKey`, members only: the guest's `listShareFiles` does not carry it) — for a
+        link's guest also that identity's sealed display name with its share (`uploaderName`, inbox #431), which the
+        member opens under the key chain it holds.
         Names and keys are not repeated here: the client has them from core's node listing and joins by `nodeId`;
         a file's type and modified time are its blob's `wrappedBlobMeta`, served on `fileBlob`. Trashed files are not listed (core's trash lists them). Ordered by `nodeId`. Guards: the
         caller holds a grant for the scope (READ); the parent, when named, is a live node of this scope
@@ -482,6 +484,38 @@ components:
             listing carries no such field.
           maxLength: 64
           example: "user:2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"
+        uploaderName:
+          description: >
+            For a `share:` uploader whose identity still exists — a deleted link's included (its identity is kept while
+            an attachment names it): that guest's sealed display name and the share it belongs to (inbox #431). Null for
+            a member's upload and for a file without content. Members only, as `uploaderKey`.
+          oneOf:
+            - $ref: "#/components/schemas/FileUploaderName"
+            - type: "null"
+
+    FileUploaderName:
+      type: object
+      description: >
+        A link guest's display name as the server holds it, sealed client-side bound to (scope, `shareId`, identity) —
+        under the share root's content key for a `READ_WRITE` guest, under the guest's own `K_up` for a `WRITE_ONLY`
+        one. The server relays the ciphertext it stored at `createShareIdentity`; a member opens a `READ_WRITE` guest's
+        under the nearest ancestor key it holds. Never served on a share path (inbox #190).
+      required: [sealedName, shareId]
+      properties:
+        sealedName:
+          type: string
+          description: The identity's display name, sealed (opaque base64) — `veyq_share_identity.sealed_display_name`.
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: The share the identity belongs to — the seal is bound to it (ADR 0072).
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          example: AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-AbCde
 
     ShareFileListItem:
       type: object
