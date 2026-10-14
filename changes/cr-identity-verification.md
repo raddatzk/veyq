@@ -85,11 +85,16 @@ key change is said as such and needs a new compare. Strict mode stays out. Owner
   - Tests: the member panels show "verified"; a verified contact with a moved directory key reads as such in the
     badge and the review; accepting leaves `pinned` and the profile offers the compare again. Bitten.
   - Done when `npm run check` is green.
-- [ ] 3 docs: both use cases (the ceremony's criteria move from `enforce-verified-identities`' planned coverage to
+- [x] 3 docs: both use cases (the ceremony's criteria move from `enforce-verified-identities`' planned coverage to
   refs, with strict mode left planned - split the file if the coverage rules require it), the enabler
   `en.account.identity-pinning` (its "descoped" reasoning replaced by the Addendum's), the stale "cr-0100" references,
   ADR 0028 Addendum's "not yet built", both wikis' safety page (`wiki/en/is-my-data-safe.md` and its DE twin).
   - Done when every `scripts/validate_*.py` is green.
+  - Split as the coverage rules require (a file is planned or every criterion has a ref, ADR 0040): the ceremony kept
+    the id `uc.spaces.enforce-verified-identities` (as this CR's `satisfies:` reads it) and strict mode moved verbatim
+    to the new planned `uc.spaces.require-verified-identities`. Also corrected, found by sweep: `security-model.md`
+    ("Not surfaced yet", the first-use gap), `uc.spaces.add-group-member` E2, the spaces index, and `styles/ui.css`'s
+    badge comment. 57/57 guards green on the working tree.
 
 ## Definition of done
 
@@ -100,4 +105,23 @@ key change is said as such and needs a new compare. Strict mode stays out. Owner
 
 ## Retrospective
 
-_(filled at implementation)_
+- **Planning - Decision 5 named a value no built function returned.** "The fingerprint (base64 of the hash)" while
+  Context listed only `safetyNumber` over `v1.fingerprint`, which returns digits; the digest was not exported, so the
+  conformance-pinned `@veyq/crypto` changed (`fingerprintHash`) and owed its mutation gate (100 %, a ~2 min run that
+  freezes every other test in the tree). Root cause: the refine checked that the payload was small, not where it came
+  from. Next time: a decision that names a value names the function that yields it, measured with a grep of exports.
+- **Planning - two sentences of the CR disagreed, and one test was not buildable as worded.** Decision 2 said
+  "pinned first (`checkAndPin`) and then verified", phase 1's test said "one sealed write"; one write was taken
+  (`markVerified(..., { pinIfUnpinned })`), because two leave a pinned-but-unverified state on a failure between them.
+  "A member whose *directory* key moved meanwhile throws `IdentityMovedError`": the guard is on the PIN, and a
+  directory move nobody pinned is invisible to the write - and harmless, since the compare against the other
+  member's own device proved the compared key. Built and tested as "a pin of another key appeared meanwhile".
+  "Split the file if the coverage rules require it" was measurable at refine (they always do), and left which half
+  keeps the id to the implementer: the ceremony now lives under an id that says "enforce".
+- **Process - the ADR's "Addendum" section contradicts `docs/ai`'s "durable state is edited in place - no
+  addendums".** Only its "not yet built" was updated, as the CR asked; folding it into Decisions 3-4 is the owner's
+  call. And the phase-1 browser pass could not run in a worktree (the CR's done-when assumed the main checkout); the
+  pass and its record in the use case are open for the merging session.
+- **Next time:** a refine whose done-when names a browser pass says which session clicks it, and a refine that
+  names a payload or a split runs the one command that shows whether the source exists and whether the split is
+  forced.

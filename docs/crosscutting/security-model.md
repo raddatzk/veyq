@@ -371,19 +371,19 @@ and read what is wrapped to it. The defense is **trust-on-first-use pinning + sa
   accepting there re-pins and clears that account's declines, so the next claim delivers.
 - **Verification** is the **identity fingerprint / safety number** — a deterministic digest of the identity
   public bundle. Two users compare it out-of-band; the ergonomic form is **QR** (scan the other device's
-  fingerprint → the app compares it against the pin → feedback). It elevates *pinned* → *verified*.
-  **Not surfaced yet:** the only safety-number comparison the UI offers is inside the changed-key review (expected
-  vs. current, then accept or refuse) — which is also how a legitimately rotated key is accepted today, without
-  verification. The proactive ceremony is
-  [uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md),
-  planned.
+  fingerprint → the app compares it against the pin → feedback). It elevates *pinned* → *verified*. **Built on
+  the member's profile** ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)):
+  each member shows their own number and a QR of its digest; another member scans it or compares the digits, and a
+  match marks them verified (pinning an unpinned member with the compared key). The changed-key review is still how a
+  legitimately rotated key is accepted — as `pinned`; *verified* returns only through a new compare.
 - **Opt-in strict mode** turns the change-notice into a **hard block** and requires *verified*-before-share;
   the worker then skips unverified members (they stay *awaiting access*) until a human verifies them. **Not
   built, and its shape is open:** a per-account flag cannot protect a shared scope, which any co-member can key
-  (same use-case, A2).
+  ([uc.spaces.require-verified-identities](../features/spaces/use-cases/uc.spaces.require-verified-identities.md)).
 - **The first-use gap (honest, unchanged):** if the operator substitutes Bob's key *before* Alice ever
-  pinned the real one — and re-wraps genuine content too — nothing looks wrong until **manual verification**
-  or **Key Transparency** (the eventual end-state). TOFU cannot detect a lie told before first sight.
+  pinned the real one — and re-wraps genuine content too — nothing looks wrong until the two **compare safety
+  numbers** on their profiles or **Key Transparency** exists (the eventual end-state). TOFU cannot detect a lie told
+  before first sight; the compare can, for those who make it.
 - **First-online-wins is a per-key-holder honesty measure (keyed on the declining account, so its other
   devices are excluded too), not a global veto:** a key-holder who pinned the old
   key refuses + flags, but a *different* key-holder who never saw Bob has no conflicting pin and TOFU-accepts.
@@ -456,7 +456,8 @@ operator lacks can.
 | makes every unlock derive near-forever | **Cannot** — a client derives only with the profile it writes | [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5 |
 
 **What stays open once every row reads *Cannot*** — each named where it is decided:
-- a key substituted before anyone pinned it (TOFU's first-use gap, ADR 0028), which also covers a device with
+- a key substituted before anyone pinned it, between members who never compared safety numbers (TOFU's first-use
+  gap, ADR 0028), which also covers a device with
   no trust-state mark yet (Decision 7), a genuine tenant invite redeemed with the operator's key (ADR 0020 move 6),
   and a shared grant signed by a granter identity the operator fabricated (ADR 0028 Decision 6);
 - a rotation withheld from members who never saw it (a fork), and rotations queued to another key-holder, which

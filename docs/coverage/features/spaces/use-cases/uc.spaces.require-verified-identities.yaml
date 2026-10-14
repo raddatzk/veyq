@@ -1,0 +1,14 @@
+useCase: uc.spaces.require-verified-identities
+feature: spaces
+title: Require verified identities before sharing (strict mode)
+status: planned
+# Split 2026-10-14 (cr-identity-verification) out of uc.spaces.enforce-verified-identities, whose verification
+# ceremony was built and covered while this criterion stays unbuilt - the coverage model has no partially built file
+# (ADR 0040; the same reason inbox #128 split that file out of uc.spaces.verify-identity). The criterion moved here
+# verbatim; nothing about strict mode changed.
+acceptanceCriteria:
+  - id: strict-mode
+    text: An account-global toggle "require verification before sharing" turns the change-notice into a hard block and makes the grant-delivery worker skip unverified members (they stay awaiting access) until verified. Off by default (advisory TOFU).
+gaps:
+  web: "No toggle and no worker gate exist; the verification it would gate on is built (uc.spaces.enforce-verified-identities)."
+  backend: "No endpoint or gate exists for strict mode. It cannot be built as a straightforward per-account flag: a per-account toggle cannot protect shared-scope content, since any co-member can key an unverified identity (ADR 0028 §4) — the scope-wide mechanism is an open design question."

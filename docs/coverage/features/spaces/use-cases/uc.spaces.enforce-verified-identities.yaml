@@ -1,27 +1,31 @@
 useCase: uc.spaces.enforce-verified-identities
 feature: spaces
-title: Actively verify a member and enforce it account-wide (strict mode)
-status: planned
-# Split 2026-08-25 (inbox #128) out of uc.spaces.verify-identity, which used to carry these two criteria
-# under one file-wide `status: planned` alongside two already-built, already-tested ones — a mixture the
-# coverage model has no room for (an area may not be both covered and a gap, ADR 0040). Nothing here moved
-# forward or backward in the split; both criteria were unbuilt before it and stay unbuilt after it.
-#
-# safety-number-verify: the pin-store primitives ship and are unit-tested (identityPins.test.ts:
-# markVerified, safetyNumber — fingerprint-vector-pinned, elevates pinned->verified only if the pinned key
-# still matches else IdentityMovedError, verified-wins on a 409). What is NOT built is the ceremony UI (QR
-# scan / read-aloud compare -> mark verified) — deliberately descoped in cr-0099: a per-member "verified"
-# state is advisory noise for the normal user, and it only pays off once strict mode exists to act on it.
-#
-# strict-mode: needs a redesign before it can be built at all, not just an implementation slot. A
-# *per-account* toggle cannot protect shared-scope content, because any co-member can key an unverified
-# identity regardless of the caller's own setting (ADR 0028 §4) — the mechanism has to be scope-wide, and
-# that design is not decided.
+title: Actively verify a member's identity (safety number)
+# Built by cr-identity-verification (ADR 0028 Addendum, owner decisions 2026-10-14). Strict mode, which this file
+# used to carry as a planned criterion beside the ceremony, moved to uc.spaces.require-verified-identities: the
+# coverage model has no partially built file (ADR 0040), so the split is what lets the ceremony's criteria carry refs.
+# Every web ref below was bitten (the CR's retrospective names each injection). The real-browser pass of the ceremony
+# is recorded in the use-case, not here: a browser run is no CI run.
 acceptanceCriteria:
+  - id: show-my-safety-number
+    text: A member's own profile shows their own safety number (6x5 digits over the vector-pinned fingerprint of their vault's identity key) and a QR of it whose payload is a versioned veyq marker plus the 32-byte fingerprint digest and nothing else - small enough to stay far below the jsqr bound.
+    coverage:
+      web: { unit: [src/core/people/PersonSafetyNumber.test.ts, src/core/people/PersonProfile.test.ts, src/features/account/safetyCode.test.ts] }
   - id: safety-number-verify
-    text: The caller compares a member's safety-number (fingerprint() digest, 6x5 digits) out-of-band — QR scan (compare scanned vs pinned key) or digits read aloud -> feedback matches (offer mark verified -> state verified) or differs (warn, do not trust). Verification elevates pinned -> verified and is the path to accept a legitimately rotated key.
-  - id: strict-mode
-    text: An account-global toggle "require verification before sharing" turns the change-notice into a hard block and makes the grant-delivery worker skip unverified members (they stay awaiting access) until verified. Off by default (advisory TOFU).
+    text: On another member's profile the caller compares the safety number of the key they would trust (the pin's, else the directory's) - by scanning the other's QR (the scanned digest against that key's digest) or reading the digits aloud. A match marks the member verified; a code of a different key or "they don't match" warns and writes nothing; a QR that is no safety code is said as such and never accepted.
+    coverage:
+      web: { unit: [src/core/people/PersonSafetyNumber.test.ts, src/features/account/safetyCode.test.ts, src/features/account/identityPins.test.ts] }
+  - id: verify-pins-an-unpinned-member
+    text: Verifying a member with no pin pins the compared key already verified in one sealed write (the store's merge on a 409); a pin of another key that appeared meanwhile throws IdentityMovedError, writes nothing, and the profile says so and shows the key the store now holds. Nothing else pins more than before - a profile view pins nothing.
+    coverage:
+      web: { unit: [src/features/account/identityPins.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
+  - id: verified-shows-in-member-lists
+    text: A verified member reads "Verified" on their profile and in the tenant's and groups' member lists, beside the existing "Key changed"; a pinned or unpinned member carries no trust badge.
+    coverage:
+      web: { unit: [src/features/spaces/MemberTrustBadge.test.ts, src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/GroupMembersPanel.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
+  - id: verified-contact-key-change-is-louder
+    text: A verified contact whose directory key differs from the pin reads as such - "Verified key changed" in the member lists and on the profile, and the changed-key review says the contact was verified and that accepting does not verify the new key. Accepting re-pins as pinned, and the profile then offers the compare again.
+    coverage:
+      web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/MemberTrustBadge.test.ts, src/features/spaces/ChangedKeyReviewDialog.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
 gaps:
-  web: "The ceremony UI (QR scan / read-aloud compare -> mark verified) is not surfaced; only the data-layer primitives exist (identityPins.test.ts: markVerified, safetyNumber — unit-tested, no user-facing path)."
-  backend: "No endpoint or gate exists for strict mode. It cannot be built as a straightforward per-account flag: a per-account toggle cannot protect shared-scope content, since any co-member can key an unverified identity (ADR 0028 §4) — the scope-wide mechanism is an open design question."
+  backend: "No backend surface: verification is client-only and its one write is the pin store's existing sealed PUT, whose wire shape uc.spaces.verify-identity covers (IdentityPinsSliceTest)."

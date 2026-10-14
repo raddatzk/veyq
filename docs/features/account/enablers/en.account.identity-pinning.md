@@ -11,7 +11,9 @@
 - **Serves (use-cases):** [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the
   passive half — pin on first sight, notice and review a changed key),
   [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md) (the
-  proactive ceremony that elevates a pin to *verified*, and strict mode) and
+  proactive ceremony that elevates a pin to *verified*),
+  [uc.spaces.require-verified-identities](../../spaces/use-cases/uc.spaces.require-verified-identities.md) (strict
+  mode, which would gate on *verified*; planned) and
   [uc.account.rotate-keys](../use-cases/uc.account.rotate-keys.md) (which produces the one legitimate key
   change this store exists to let a human accept).
 - **Depends on:** [en.account.key-model](en.account.key-model.md) — the Master Key that seals the pin store, so
@@ -52,16 +54,19 @@ you verified in one space is verified everywhere.
      `key := new`) or, on the **human-less grant-delivery worker**, **block the wrap + decline the job** back to
      the server + raise a human-review flag. A change is *attack or a legitimate identity rotation* — resolved by
      a human, never auto-trusted.
-3. **Verification** ([uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)) elevates a
-   pin `pinned → verified` and is the path to accept a legitimately rotated key. The pin-store primitives exist on
-   web (`markVerified`, `safetyNumber` — cr-0099, unit-tested), and `markVerified` stamps `verified` **only** if the
-   pinned key still equals the compared key (else it aborts). But the **proactive verify ceremony is intentionally
-   not surfaced in the UI** (cr-0099): a per-member "verified" state is advisory noise for the normal user, and it
-   only pays off under a **scope-wide strict mode** (verified-before-share), which is a deferred, still-to-be-designed
-   follow-up (cr-0100, ADR 0028 §4 — note that a *per-account* strict toggle can't protect shared-scope content,
-   since any co-member can key an unverified identity). Today's UI surfaces only the **change response**: a changed
-   key opens a side-by-side review; **accept** re-pins as `pinned` (`acceptKeyChange`), **refuse** leaves it blocked.
-   So `verified` is currently reachable only via the data layer, awaiting the strict-mode entry point.
+3. **Verification** ([uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md))
+   elevates a pin `pinned → verified` on a member's profile, after a safety-number compare (a scanned QR or the
+   digits read aloud). `markVerified` stamps `verified` **only** if the pinned key still equals the compared key
+   (else `IdentityMovedError`, nothing written); for a member with no pin it pins the compared key **already
+   verified** in the same one write (`pinIfUnpinned`, ADR 0028 Addendum 2) — so no profile view and no compare that
+   failed ever pins. It ships without strict mode on purpose (ADR 0028 Addendum): TOFU cannot see a key substituted
+   at first contact, and a compare out-of-band can. A **changed** key still opens the side-by-side review; **accept**
+   re-pins as `pinned` (`acceptKeyChange`) even for a contact that was `verified` — *verified* returns only through
+   a new compare — and **refuse** leaves it blocked. The badge read (`trustStates`) returns the folded state plus
+   whether the pin was `verified`, so a verified contact's change is said louder. Requiring *verified* before a share
+   is strict mode ([uc.spaces.require-verified-identities](../../spaces/use-cases/uc.spaces.require-verified-identities.md)),
+   whose shape is still open: a *per-account* toggle can't protect shared-scope content, since any co-member can key
+   an unverified identity (ADR 0028 Decision 4).
 
 ```mermaid
 ---
@@ -144,4 +149,5 @@ version reads the new store with no action; one whose mark sat above it is offer
   the group invite name-key ([ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md))
 - Use-cases: [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (pin on first sight,
   notice and review a changed key), [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)
-  (the human ceremony that elevates *pinned* → *verified*, and strict mode)
+  (the human ceremony that elevates *pinned* → *verified*), [uc.spaces.require-verified-identities](../../spaces/use-cases/uc.spaces.require-verified-identities.md)
+  (strict mode, planned)

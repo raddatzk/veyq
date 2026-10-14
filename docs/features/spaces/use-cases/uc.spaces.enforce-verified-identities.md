@@ -1,35 +1,44 @@
-# UC: Actively verify a member and enforce it account-wide (strict mode)
+# UC: Actively verify a member's identity (safety number)
 
 - **ID:** uc.spaces.enforce-verified-identities
-- **Primary actor:** **a scope member** proactively confirming another member's identity key, and — optionally —
-  an account holder who wants that confirmation *required* before sharing.
-- **Goal:** confirm out-of-band that a member's identity public key is really theirs — elevate the pin
-  **pinned → verified** — and, for those who want it, turn on **strict mode** so an unverified member is never
-  silently trusted with a share. This is the proactive half of
-  [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md); the passive half — pin on
-  first sight, notice and review a changed key — is [uc.spaces.verify-identity](uc.spaces.verify-identity.md),
-  which this use-case builds on rather than repeats.
-- **Preconditions:** an **authenticated, unlocked** caller; the target appears in a scope **member directory** the
-  caller can read. A pin is not required: verifying an unpinned member pins them with the confirmed key (owner
-  decision 2026-10-14, ADR 0028 Addendum).
-- **Status:** the ceremony (main flow, A1, A3) is **decided 2026-10-14, not yet built**; strict mode (A2) stays open.
-- **Postconditions (success):** the target's pin is **verified** (elevated from `pinned`); if strict mode was
-  turned on, the grant-delivery worker treats every **unverified** member of the scope as *awaiting access*
-  rather than delivering to them. Operator-blind throughout: the pin store is sealed under the Master Key, and
-  the strict-mode setting itself never leaves the client as anything a server could key on.
+- **Primary actor:** **a member** proactively confirming another member's identity key; the other member shows
+  their own safety number on their own device.
+- **Goal:** confirm out-of-band that a member's identity public key is really theirs — elevate the pin to
+  **verified** — and see who is verified wherever members are listed. This is the proactive half of
+  [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (Decision 3 and the Addendum); the
+  passive half — pin on first sight, notice and review a changed key — is
+  [uc.spaces.verify-identity](uc.spaces.verify-identity.md), which this use-case builds on rather than repeats.
+  *Requiring* verification before sharing (strict mode) is
+  [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md), still open. (The id predates
+  that split; it names this ceremony now.)
+- **Preconditions:** an **authenticated, unlocked** caller; the target is a current member of the tenant (the
+  tenant's member directory lists them and their identity key). A pin is not required: verifying an unpinned
+  member pins them with the confirmed key (ADR 0028 Addendum 2).
+- **Status:** **built** (cr-identity-verification, web). Real-browser pass: *to be recorded by the session that
+  merges it* (the implementer's worktree could not be served to a browser).
+- **Postconditions (success):** the target's pin is **verified**, on the key the compare confirmed; the profile and
+  the tenant's and groups' member lists say "Verified". Operator-blind throughout: the only server call is the pin
+  store's sealed write, so the operator never learns who verified whom.
 
 ## Main flow
 
-0. **Show mine.** On their own profile page every member sees **their own** safety number and a QR of it (a veyq
-   marker plus the fingerprint hash, never the key).
-1. **Open "Verify".** The caller opens a member's **profile** → the app shows its view of that member's **safety
-   number** (6×5 digits), the verification state, and **scan** / **compare the digits**.
-2. **Compare out-of-band.** The ergonomic path is **QR**: the other person's device shows a QR of *their* identity
-   fingerprint; the caller **scans it**, and the app **compares the scanned value against the pinned key**.
-3. **Feedback.** **Matches** → offer "mark verified" → `state = verified` (pinning first if there was no pin); the
-   profile and the tenant's and groups' member lists show "verified" from then on. **Differs** → warn *this is a different
-   key* — do **not** trust; likely a substituted key or an un-accepted rotation
-   ([uc.spaces.verify-identity](uc.spaces.verify-identity.md) handles the review from here).
+0. **Show mine.** On their own profile page (`#people/<own id>`) every member sees **their own** safety number
+   (6×5 digits, `safetyNumber`, the vector-pinned `fingerprint`) and a QR of it. The QR is `veyqid:1:` plus the
+   base64 of the 32-byte fingerprint digest the digits are rendered from (`v1.fingerprintHash`) — never the identity
+   bundle, which would void the `jsqr` exception in `web/CLAUDE.md` (53 characters, QR version 4). The number comes
+   from the caller's own vault, not from the directory.
+1. **Open their profile.** The caller opens a member's profile → the app shows the safety number of the key it
+   would **trust** — the pin's, or the directory's when there is no pin — the state (*Not verified*, *Verified*,
+   *Key changed*) and two ways to compare: **Scan their code** and **Compare digits**.
+2. **Compare out-of-band.** **Scan:** the caller scans the QR on the other member's own profile; the app compares
+   the scanned digest with the digest of the key it shows. **Compare digits** (A1): the number is shown large and
+   the two read it aloud, then the caller answers "They match" or "They don't match".
+3. **Feedback.** **Match** (a scanned code of that key, or "They match") → `markVerified` on the compared key in one
+   sealed write — pinning it first, in the same write, when there was no pin (E1); the state reads *Verified* on
+   the profile and in the tenant's and groups' member lists from then on. **Mismatch** (a code of a different key,
+   or "They don't match") → *these are different keys, do not mark them verified*; nothing is written, and where
+   the pin already differs from the directory the changed-key review is one click
+   ([uc.spaces.verify-identity](uc.spaces.verify-identity.md) handles the review from there).
 
 ```mermaid
 ---
@@ -40,44 +49,46 @@ sequenceDiagram
   participant CA as Caller's client<br>(pin store)
   actor B as Target<br>(member)
   participant CB as Target's device
-  A->>CA: open member → show MY safety-number(target) + scan
-  B->>CB: show QR of MY identity fingerprint
-  A->>CA: scan target's QR
-  CA->>CA: compare scanned vs pinned key
+  B->>CB: own profile → MY number + QR (marker + fingerprint digest)
+  A->>CA: open target's profile → number of the key I would trust + state
+  A->>CA: scan target's QR (or read the digits aloud)
+  CA->>CA: compare scanned digest vs digest of that key
   alt matches
-  CA->>CA: offer "mark verified" → state = verified
+  CA->>CA: markVerified (pin first if unpinned) — one sealed write
   else differs
-  CA->>CA: warn "different key" → do not trust
+  CA->>CA: "different keys" — nothing written
   end
-  Note right of CA: no server call — pin store is client-side, sealed under the Master Key
+  Note right of CA: the pin store's sealed write is the only server call
 ```
 
 ## Alternate / exception flows
 
-- **A1 — no camera / can't scan:** fall back to **reading the digit groups** aloud out-of-band and confirming they
-  match — the safety-number is language-neutral decimal digits by design.
-- **A2 — strict mode (account-global toggle):** with "require verification before sharing" on, an **unverified**
-  member is **skipped by the grant-delivery worker** (they stay *awaiting access*) until verified here; a changed
-  key is a **hard block**, not a notice (ADR 0028 §4). **Not yet buildable as a simple flag:** a per-account
-  toggle cannot protect shared-scope content, since any co-member can key an unverified identity regardless of
-  the caller's own setting — the mechanism has to be **scope-wide**, and that redesign is undecided. This use-case
-  states the intent; the shape is open.
-- **A3 — a verified contact's key changes:** the changed-key review ([uc.spaces.verify-identity](uc.spaces.verify-identity.md))
-  says that a **verified** contact's key changed; accepting re-pins as `pinned`, and "verified" returns only after a
-  new compare (ADR 0028 Decision 3 and Addendum).
-- **E1 — the target has no pin yet:** verifying pins them with the key the compare confirmed (ADR 0028 Addendum);
-  until a compare happens, nothing pins them.
+- **A1 — no camera / can't scan:** **compare the digits** read aloud or side by side — the safety number is
+  language-neutral decimal digits by design. A camera the browser refuses is said in the scanner, which points at
+  this path.
+- **A2 — a QR that is not a safety code** (another app's code, an Emergency Kit, a pairing code): said as such,
+  never compared and never accepted; nothing is written.
+- **A3 — a verified contact's key changes:** the member lists and the profile say "Verified key changed", and the
+  changed-key review ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)) says the contact was verified
+  and that accepting does not verify the new key. Accepting re-pins as `pinned`; *Verified* returns only through a
+  new compare on the profile, which then offers it again (ADR 0028 Addendum 3).
+- **E1 — the target has no pin yet:** the profile shows the directory's key; a match pins that key **already
+  verified** in the one write. Until a compare happens, a profile view pins nothing (ADR 0028 Addendum 2).
+- **E2 — the key moved under the compare:** a pin of a different key appeared between the read and the write (a
+  concurrent device, the delivery worker's first-use pin, an accepted change) → `IdentityMovedError`: nothing is
+  written, the profile says so and shows the key the store now holds, and the compare starts over.
+- **E3 — this device refuses its pin store** (ADR 0028 Decision 7): the profile says why, with the link to the
+  settings hub's reset, and offers no compare.
 
 ## Quality notes
 
-- **Operator-blind.** Verification is **client-only** — comparing a scanned/spoken safety-number against the
-  sealed pin; **no server call**, so the operator never learns who verified whom (the trust graph stays off the
-  server, [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)).
-- **Manual, so it protects those who do it.** In the default flow verification is **optional** trust elevation;
-  strict mode is for those who want it enforced. Stated, not oversold.
-- **Worth it without strict mode.** The ceremony was first held back as advisory noise until strict mode acts on
-  it; the owner reversed that on 2026-10-14 (ADR 0028 Addendum): TOFU cannot see a key substituted at first contact,
-  and a compare out-of-band can.
+- **Operator-blind.** Verification is **client-only** — the compare runs on the device against the sealed pin; the
+  write is the pin store's one opaque ciphertext, so the trust graph stays off the server
+  ([en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)).
+- **It closes the first-use gap for those who compare.** TOFU cannot see a key substituted at first contact; a
+  compare out-of-band can — which is why the ceremony ships without strict mode (ADR 0028 Addendum).
+- **Manual, so it protects those who do it.** Verification is optional trust elevation; requiring it is
+  [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md). Stated, not oversold.
 - **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Holds against an active
   operator only on a client it does not serve, once the pin store cannot be rolled back
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator on
@@ -85,30 +96,30 @@ sequenceDiagram
 
 ## What this means for you / Was das für dich bedeutet
 
-**EN —** **Planned — not in the app today.** The idea: to be extra sure someone really is who they claim, you
-would **verify** them ahead of time — scan a QR code on their phone, or read a short number aloud — and get a
-"verified" mark that holds in every shared space with them. A setting that refuses to share with anyone you
-haven't verified is wanted too, but how it could protect a space other members also share into is still open.
-Today you compare the number only when a key has **changed**: the app marks that person "Key changed" and shows
-both numbers for you to check before you accept.
+**EN —** To be sure someone really is who they say, open their profile and compare your **safety number** for them
+with the one they see on their own profile — scan the code on their screen, or read the digits to each other. If it
+matches, they are marked **"Verified"**, on their profile and in every member list. If it doesn't, the app tells
+you not to trust that key. If a verified person's key ever changes, the app says so more loudly, and you compare
+again before they are verified once more.
 
-**DE —** **Geplant — heute noch nicht in der App.** Die Idee: Um ganz sicher zu sein, dass jemand wirklich die
-Person ist, die sie vorgibt zu sein, würdest du sie vorab **verifizieren** — einen QR-Code auf ihrem Handy
-scannen oder eine kurze Zahl vorlesen — und bekämst eine Markierung „verifiziert", die in jedem geteilten Raum
-mit ihr gilt. Eine Einstellung, die das Teilen mit nicht verifizierten Personen verweigert, ist ebenfalls
-gewünscht; wie sie einen Raum schützen soll, in den auch andere Mitglieder teilen, ist aber noch offen. Heute
-vergleichst du die Nummer nur, wenn sich ein Schlüssel **geändert** hat: Die App markiert die Person mit
-„Schlüssel geändert" und zeigt dir beide Nummern, bevor du annimmst.
+**DE —** Um sicher zu sein, dass jemand wirklich die Person ist, die sie vorgibt zu sein, öffne ihr Profil und
+vergleiche deine **Sicherheitsnummer** für sie mit der, die sie in ihrem eigenen Profil sieht — scanne den Code auf
+ihrem Bildschirm oder lest euch die Ziffern vor. Stimmt sie überein, wird die Person als **„Verifiziert"** markiert,
+im Profil und in jeder Mitgliederliste. Stimmt sie nicht, sagt dir die App, dass du diesem Schlüssel nicht trauen
+sollst. Ändert sich der Schlüssel einer verifizierten Person einmal, sagt die App das deutlicher, und ihr vergleicht
+erneut, bevor sie wieder verifiziert ist.
 
 ## Related
 
 - Feature: [Spaces (scopes)](../_index.md)
 - Enablers: [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md) (the sealed pin
-  store + `markVerified`/`safetyNumber` primitives this ceremony drives)
+  store + `markVerified`/`safetyNumber` this ceremony drives)
 - Use-cases: [uc.spaces.verify-identity](uc.spaces.verify-identity.md) (the passive half this builds on — pin on
-  first sight, notice and review a changed key)
+  first sight, notice and review a changed key), [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md)
+  (strict mode, which would require this), [uc.memory.participants](../../memory/use-cases/uc.memory.participants.md)
+  (the profile page this lives on)
 - Decisions: [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (the authenticity
-  model, §4 = strict mode), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md)
-  (the fingerprint / safety-number), [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the trust tier
+  model, Decision 3 and the Addendum), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md)
+  (the fingerprint / safety number), [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the trust tier
   this rides on)
 - End-user view (wiki): [Is my data safe?](../../../../wiki/en/is-my-data-safe.md)

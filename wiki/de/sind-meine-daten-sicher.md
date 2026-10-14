@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md; pair: en/is-my-data-safe.md -->
+<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/spaces/use-cases/uc.spaces.require-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md; pair: en/is-my-data-safe.md -->
 # Sind meine Daten sicher?
 
 **In einem Satz:** veyq ist **Ende-zu-Ende-verschlüsselt** — deine Fotos, Videos, Tagebuchtexte und
@@ -128,12 +128,18 @@ gezeigten — jeder Schlüssel hat eine kurze **Sicherheitsnummer** —, damit i
 vergleichen könnt. Danach nimmst du den neuen Schlüssel an oder lehnst ihn ab. Oft ist so eine Änderung
 harmlos (die Person hat ihre Schlüssel ersetzt), sie kann aber auch heißen, dass sich jemand als sie ausgibt.
 
-**Der ehrliche Teil:** Ob ihr wirklich vergleicht, liegt bei dir. Annehmen ist ein einziger Klick, und die
-App kann nicht erkennen, ob ihr verglichen habt. Eine Nummer *vorab* prüfen, bevor sich etwas geändert hat,
-geht noch nicht — kein QR-Code zum Scannen, keine Markierung „verifiziert". Und das Merken schützt erst ab
-dem ersten Schlüssel, den deine App gesehen hat: Hat der Server dir von Anfang an einen falschen geliefert,
-sieht nichts verdächtig aus. Das stärkere System, bei dem der Server über Schlüssel gar nicht lügen kann,
-ist **geplant, aber nicht gebaut** — und das sagen wir lieber, als es vorzutäuschen.
+**Prüfen, bevor sich etwas ändert.** Das Merken schützt erst ab dem ersten Schlüssel, den deine App gesehen hat:
+Hätte der Server dir von Anfang an einen falschen geliefert, sähe nichts verdächtig aus. Deshalb kannst du selbst
+prüfen. Dein eigenes Profil zeigt *deine* Sicherheitsnummer und einen Code; öffne das Profil der anderen Person,
+scanne den Code auf ihrem Bildschirm oder lest euch die Ziffern vor, und stimmt sie überein, wird die Person als
+**„Verifiziert"** markiert — im Profil und in jeder Mitgliederliste. Ändert sich der Schlüssel einer verifizierten
+Person einmal, sagt die App das deutlicher, und ihr vergleicht erneut.
+
+**Der ehrliche Teil:** Ob ihr wirklich vergleicht, liegt bei dir. Einen geänderten Schlüssel anzunehmen ist ein
+einziger Klick, und die App kann nicht erkennen, ob ihr verglichen habt — Annehmen markiert niemanden als
+verifiziert, nur ein neuer Vergleich tut das. Nichts verlangt, dass du jemanden verifizierst, bevor du mit dieser
+Person teilst; eine Einstellung, die das verlangt, gibt es noch nicht. Das stärkere System, bei dem der Server über
+Schlüssel gar nicht lügen kann, ist **geplant, aber nicht gebaut** — und das sagen wir lieber, als es vorzutäuschen.
 
 ## Wenn etwas schiefgeht
 

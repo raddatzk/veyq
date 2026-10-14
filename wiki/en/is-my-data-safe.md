@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md; pair: de/sind-meine-daten-sicher.md -->
+<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/spaces/use-cases/uc.spaces.require-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md; pair: de/sind-meine-daten-sicher.md -->
 # Is my data safe?
 
 **In one sentence:** veyq is **end-to-end encrypted** — your photos, videos, journal text and the
@@ -119,11 +119,17 @@ the number you trusted next to the one shown now — every key has a short **saf
 you can compare them over a call, and then you accept the new key or refuse it. A change is often harmless
 (your friend replaced their keys), but it can also be someone posing as them.
 
-**The honest part:** the comparing is up to you. Accepting is a single tap, and the app cannot tell whether
-you really compared. There is no way yet to check someone's number *before* anything has changed — no QR
-code to scan, no "verified" mark. And remembering only helps from the first key your app saw: if the server
-handed you a wrong key from the very start, nothing looks wrong. The stronger system, where the server can't
-lie about keys at all, is **planned, not built** — and we'd rather tell you than imply otherwise.
+**Checking before anything changes.** Remembering only helps from the first key your app saw: if the server
+handed you a wrong key from the very start, nothing would look wrong. So you can check it yourself. Your own
+profile shows *your* safety number and a code; open a friend's profile, scan the code on their screen or read the
+digits to each other, and if it matches they are marked **"Verified"** — on their profile and in every member list.
+If a verified friend's key ever changes, the app says so more loudly, and you compare again.
+
+**The honest part:** the comparing is up to you. Accepting a changed key is a single tap, and the app cannot tell
+whether you really compared — accepting does not mark anyone verified, only a new compare does. Nothing requires
+you to verify anyone before you share with them; a setting that would does not exist yet. The stronger system,
+where the server can't lie about keys at all, is **planned, not built** — and we'd rather tell you than imply
+otherwise.
 
 ## If something goes wrong
 

@@ -112,11 +112,15 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   surfaces a notice + accept → re-pin, rotation excludes the member;
   [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md),
   [en.account.identity-pinning](../account/enablers/en.account.identity-pinning.md))
-- [Actively verify a member and enforce it (strict mode)](use-cases/uc.spaces.enforce-verified-identities.md) —
-  **planned** (split out of the use-case above, 2026-08-25, inbox #128 — the out-of-band **QR safety-number**
-  ceremony that elevates a pin to *verified*, plus an account-wide **strict mode**; the pin-store primitives
-  ship and are unit-tested, but the ceremony UI was deliberately not surfaced (cr-0099) and strict mode needs a
-  scope-wide redesign before it is buildable at all — a per-account toggle can't protect shared-scope content)
+- [Actively verify a member's identity (safety number)](use-cases/uc.spaces.enforce-verified-identities.md) —
+  **built (web, cr-identity-verification)** (a member's own profile shows their safety number and its QR; on another
+  member's profile you scan their QR or compare the digits, and a match marks them *verified* — pinning an unpinned
+  member with the compared key; "Verified" shows on the profile and in the member lists, and a verified contact's
+  key change is said louder; [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md) Addendum)
+- [Require verified identities before sharing (strict mode)](use-cases/uc.spaces.require-verified-identities.md) —
+  **planned** (split out of the use-case above when its ceremony was built — the worker skips unverified members and
+  a changed key is a hard block; needs a scope-wide redesign before it is buildable at all, a per-account toggle
+  can't protect shared-scope content)
 - Person / profile view — planned (`~username`, [ADR 0015](../../decisions/0015-operator-blind-readable-urls.md)):
   open a member and see the Memories **you can see** that tag them; client-side (never a server query), depends
   on a future per-Memory **participants** tag (sealed `userId`s)
