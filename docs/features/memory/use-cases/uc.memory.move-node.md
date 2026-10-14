@@ -41,6 +41,17 @@
 7. The tree is re-read; a node on screen is followed to its new path. A toast says where it went, with **Undo**, which
    moves it back the same way — not after a guest's folder left a drop box.
 
+### Several at once (owner decisions 2026-10-14, inbox #421; decided, not yet built)
+
+A selection of the level (uc.memory.browse step 6) moves through the same browser: it shows the places that take
+**every** selected kind and blocks a place that blocks any selected node, with that node's reason. Before anything is
+sent, each node is checked as one is (the place, a name that folds to a sibling's there); a node that fails is named
+and left out, and the rest is sent. There is **no batch request**: each node is the one placement write above, sent
+one after the other, and the tree is re-read **once** at the end. Afterwards one summary says how many moved and
+names each one refused with its reason (A1-E4), and one toast with **Undo** moves back exactly the nodes that moved -
+a guest's folder that left a drop box excepted, as for one. Not atomic by design: a refusal part-way leaves what was
+already moved where it went, and says so.
+
 ## Alternate / exception flows
 
 - **A1 — the name is taken there** (`409 slug_taken`): a sibling the client could not see (another member's race, one a
@@ -64,6 +75,9 @@
   re-wraps only the moved node's, so a subtree of any size moves in one request and every key below keeps opening.
 - **One picker for one node and for many.** The browser takes the node's kind and place as input, so the selection of
   inbox #421 moves through the same dialog: the places shown are those that take every selected kind.
+- **N writes, not a batch.** A move is already one request that re-wraps one key, and node writes are not
+  rate-limited, so several nodes are several writes; a batch endpoint would add a contract for no atomicity the
+  user needs (owner decision 2026-10-14).
 - **The picker is a hint, the server the authority.** The client mirrors `NodeKindRules` and the guest rules so it
   offers only what would be taken; a disagreement surfaces as the server's refusal, explained by its code — never a
   silently different result.

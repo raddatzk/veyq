@@ -34,7 +34,11 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
 ## Main flow
 
 1. In the tree the user deletes a node — the existing delete affordance, with its confirmation naming what goes
-   with it (a Memory takes its Chapters and all their photos).
+   with it (a Memory takes its Chapters and all their photos). **Several at once** (owner decisions 2026-10-14, inbox
+   #421; decided, not yet built): a selection of the level (uc.memory.browse step 6) is deleted after **one** question
+   naming how many nodes of which kinds go; each is its own delete below, one after the other, the tree re-read once;
+   one summary names any that failed with its reason, and one toast with **Undo** restores exactly those that went.
+   A `READ_WRITE` guest is offered no delete.
 2. The client calls **delete** → the server marks the node **and its whole subtree** soft-deleted (`deleted_at =
    now`) in one transaction. Nothing else is touched: media, derivatives, buckets and every blob stay exactly as
    they were, which is what makes the restore cheap and complete.

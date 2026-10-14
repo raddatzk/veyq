@@ -38,6 +38,16 @@
    the scope root, the folder's key inside one) and POST only ciphertext (every node, a folder too, births its random
    key wrapped under the same parent key — ADR 0080); *rename* re-seals the name + recomputes the slug under it; *delete* takes the node and its whole subtree into the space's recoverable trash
    ([uc.memory.delete-node](uc.memory.delete-node.md)). All via [en.memory.tree](../enablers/en.memory.tree.md).
+6. **Select** (owner decisions 2026-10-14, inbox #421; **decided, not yet built**): **Select** in the level's toolbar,
+   beside "New" and the trash, turns on a selection mode: each row gets a labelled checkbox, the bar offers **All** /
+   **None**, a count (announced to a screen reader) and the actions **Move to…** and **Delete**, and leaving the mode
+   or the level clears it. The selection belongs to the level, not to a tab: switching tabs keeps it, and the count
+   says when part of it is hidden by the tab on screen. Every row is selectable; each action works on the part of the
+   selection the session may act on (the applications' capability functions per node) and says "n of m cannot be
+   moved / deleted" for the rest - a `READ_WRITE` guest selects and moves, and is offered no delete. The map
+   presentation has no rows and offers no Select. Moving several: [uc.memory.move-node](uc.memory.move-node.md) §
+   Several at once; deleting several: [uc.memory.delete-node](uc.memory.delete-node.md) step 1. Drag and drop of a
+   selection is a later, separate step (inbox #421).
 
 ## Alternate / exception flows
 
