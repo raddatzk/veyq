@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/platform/use-cases/uc.platform.node-cover.md, docs/features/files/use-cases/uc.files.member-files.md, docs/features/files/use-cases/uc.files.view-file.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md; pair: de/dateien.md -->
+<!-- speaks-for: docs/features/platform/use-cases/uc.platform.node-cover.md, docs/features/files/use-cases/uc.files.member-files.md, docs/features/files/use-cases/uc.files.view-file.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md, docs/features/platform/use-cases/uc.platform.copy-node.md; pair: de/dateien.md -->
 # Files — and finding your way around
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md). veyq is a platform for sealed, shareable
@@ -61,14 +61,27 @@ goes into a Memory), and **Move here** is greyed out, with the reason, where the
 already is. Everything inside comes along and stays readable. If somebody shared a folder with you and lets you
 contribute, you can move things around **inside** that folder — but not out of it.
 
+## Copying things
+
+**Copy to…** sits right next to **Move to…** on a folder, a file or a drop box, and opens the same folder view. Here the
+place the item is in now is allowed too: the copy is then called "Name (2)". Before anything is copied, veyq says how
+many items and how much data it will copy, what does not come along — shares, favourites, the trash and a folder's
+cover; a copied drop box is an ordinary folder that nobody can drop files into — and whether your space still has room
+for it. Everything is copied on your device and stored again under new keys, so a big folder takes as long as uploading
+it and uses its space twice; the server only sees new things being stored, not that they are a copy. If the copy stops
+part-way, what it had made goes to the trash and veyq says how far it got. **A Memory cannot be copied yet:** a copy of a
+folder leaves it out and tells you so. Copying is for members of the space only; somebody you shared a folder with
+cannot copy.
+
 ## Several at once
 
 Choose **Select** next to **New** and the trash, and every entry of the folder gets a tick box. Tick what you want —
-or choose **All** — and then **Move to…** or **Delete**. The bar says how many you have ticked, and if a tab hides some
+or choose **All** — and then **Move to…**, **Copy to…** or **Delete**. The bar says how many you have ticked, and if a tab hides some
 of them it says that too: your ticks stay when you switch tabs. If some of the ticked things cannot be moved or
 deleted, veyq says how many, and does it with the rest. **Delete** asks once for all of them, and one **Undo** brings
 all of them back. **Move to…** opens the same folder view as for one item; anything that cannot go there — something
 with the same name already there, for example — is named and stays where it is, and one **Undo** moves back what moved.
+**Copy to…** copies everything you ticked in one go and names what it cannot copy.
 If somebody shared a folder with you and lets you contribute, you can select and move there too, but not delete.
 
 ## One list for everything in a folder

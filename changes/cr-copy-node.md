@@ -1,7 +1,7 @@
 ---
 id: cr-copy-node
 title: Copy a node and its subtree within a space - the export/import walk without the archive
-status: planned
+status: in-progress
 satisfies: [uc.platform.copy-node]
 adrs: ["0082", "0080", "0079", "0062"]
 invariants: [operator-blind E2EE everywhere]
@@ -71,9 +71,14 @@ server sees only ordinary creates and uploads. Members only. Owner decisions 202
     "Copy to…" for any guest. Bitten.
   - Done when `npm run check` is green and a real browser on the dev instance copied a folder holding a Memory, a file
     and a drop box, and the copy opens.
-- [ ] 2 web: "Copy to…" in the selection bar of cr-select-nodes (several nodes, one dialog, one summary).
+  - **Built for folders, files and drop boxes (ecc26e58); the Memory half is handed back.** Decision 3's premise held for
+    the upload pump (it reads only frame-sized `slice`s) but not for Memories' import: `addMedia` → `deriveTiers` decodes
+    each original whole (`createImageBitmap`, a `<video>` on an object URL), and so does the cover upload. Until that is
+    decided, Memories' kinds declare no `importStreams` and a copy leaves a Memory or chapter out and names it (E3). The
+    Memory-with-a-chapter test and the browser's Memory copy wait on the answer.
+- [x] 2 web: "Copy to…" in the selection bar of cr-select-nodes (several nodes, one dialog, one summary).
   - Done when `npm run check` is green and a selection was copied in a real browser.
-- [ ] 3 docs: the use case's status and what was seen; its coverage from `planned` to refs; `docs/apps/*.md` matrices;
+- [x] 3 docs: the use case's status and what was seen; its coverage from `planned` to refs; `docs/apps/*.md` matrices;
   both wikis.
   - Done when every `scripts/validate_*.py` is green.
 
@@ -86,4 +91,18 @@ server sees only ordinary creates and uploads. Members only. Owner decisions 202
 
 ## Retrospective
 
-_(filled at implementation)_
+- **Planning: Decision 3 named the wrong consumer.** It asked whether the *upload pump's* `slice` could be served by
+  chunk - it can - but the payload's other consumer is the kind's import hook, and Memories' hook decodes the whole
+  original to derive its tiers. The escape hatch was there and worked (handed back, not buffered), but phase 1's
+  done-when ("a folder holding a Memory") could not be met. Root cause: the refinement traced the bytes to the pump and
+  stopped; `deriveTiers` is one call further. **Next time:** when a CR changes what a hook is handed, list every reader
+  of that value down to the native API (`createImageBitmap`, `URL.createObjectURL`, `fetch`), not just the first one.
+- **Execution: a shared provider met concurrency it never had.** The download's chunk provider presigned once per
+  reader; the stream reader warmed it with one chunk first, the pump's four workers did not, so the first copy presigned
+  the same blob twice. Caught only because the wire test pinned the read list; fixed in the provider (one presign in
+  flight). **Next time:** a new caller of a stateful helper gets a wire test that counts its requests.
+- **Execution: a bite found a test that could not tell two reasons apart.** "Not copyable" had two levers
+  (`importStreams`, payload `frames`) and the Memory-like test kind lacked both, so removing either gate stayed green.
+  Each lever now has its own kind. Process held otherwise: staged by path, unsigned commits as allowed, the dev instance
+  restored (the copies are in the space's trash).
+- **Handed back:** how Memories copy - see phase 1's note and the implementer's report.

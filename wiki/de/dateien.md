@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/platform/use-cases/uc.platform.node-cover.md, docs/features/files/use-cases/uc.files.member-files.md, docs/features/files/use-cases/uc.files.view-file.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md; pair: en/files.md -->
+<!-- speaks-for: docs/features/platform/use-cases/uc.platform.node-cover.md, docs/features/files/use-cases/uc.files.member-files.md, docs/features/files/use-cases/uc.files.view-file.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md, docs/features/platform/use-cases/uc.platform.copy-node.md; pair: en/files.md -->
 # Dateien — und wie du dich zurechtfindest
 
 Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). veyq ist eine Plattform
@@ -68,16 +68,29 @@ nur in eine Erinnerung), und **Hierher verschieben** ist ausgegraut, mit dem Gru
 er schon liegt. Alles darin kommt mit und bleibt lesbar. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken
 darfst, kannst du Dinge **darin** verschieben — aber nicht hinaus.
 
+## Dinge kopieren
+
+**Kopieren nach …** steht gleich neben **Verschieben nach …** bei einem Ordner, einer Datei oder einem Briefkasten und
+öffnet dieselbe Ordneransicht. Hier ist auch der Ort erlaubt, an dem der Eintrag gerade liegt: Die Kopie heißt dann
+„Name (2)“. Bevor etwas kopiert wird, sagt veyq, wie viele Einträge und wie viele Daten es kopiert, was nicht mitkommt —
+Freigaben, Favoriten, der Papierkorb und das Titelbild eines Ordners; ein kopierter Briefkasten ist ein gewöhnlicher
+Ordner, in den niemand mehr etwas einwerfen kann — und ob in deinem Bereich noch Platz dafür ist. Alles wird auf deinem
+Gerät kopiert und unter neuen Schlüsseln neu gespeichert: Ein großer Ordner braucht so lange wie sein Hochladen und
+belegt seinen Platz doppelt; der Server sieht nur, dass Neues gespeichert wird, nicht, dass es eine Kopie ist. Hört das
+Kopieren mittendrin auf, kommt, was schon angelegt war, in den Papierkorb, und veyq sagt, wie weit es gekommen ist.
+**Eine Erinnerung lässt sich noch nicht kopieren:** Die Kopie eines Ordners lässt sie aus und sagt es dir. Kopieren
+können nur Mitglieder des Bereichs; wem du einen Ordner freigegeben hast, kann nicht kopieren.
+
 ## Mehreres auf einmal
 
 Wähle **Auswählen** neben **Neu** und dem Papierkorb, und jeder Eintrag des Ordners bekommt ein Kästchen zum Anhaken.
-Hake an, was du möchtest — oder wähle **Alle** — und dann **Verschieben nach …** oder **Löschen**. Die Leiste zeigt, wie
+Hake an, was du möchtest — oder wähle **Alle** — und dann **Verschieben nach …**, **Kopieren nach …** oder **Löschen**. Die Leiste zeigt, wie
 viele du angehakt hast, und wenn ein Tab einige davon ausblendet, sagt sie auch das: Deine Haken bleiben, wenn du den
 Tab wechselst. Lässt sich ein Teil des Angehakten nicht verschieben oder löschen, sagt veyq, wie viele, und erledigt
 den Rest. **Löschen** fragt einmal für alle, und ein **Rückgängig** holt alle zurück. **Verschieben nach …** öffnet
 dieselbe Ordneransicht wie für einen Eintrag; was dort nicht hinkann — weil dort zum Beispiel schon etwas mit
 demselben Namen liegt —, wird genannt und bleibt, wo es ist, und ein **Rückgängig** verschiebt zurück, was verschoben
-wurde. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken darfst, kannst du dort auch auswählen und
+wurde. **Kopieren nach …** kopiert alles Angehakte in einem Zug und nennt, was es nicht kopieren kann. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken darfst, kannst du dort auch auswählen und
 verschieben, aber nicht löschen.
 
 ## Eine Liste für alles in einem Ordner

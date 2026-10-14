@@ -1,21 +1,36 @@
 useCase: uc.platform.copy-node
 feature: platform
 title: Copy a node and everything under it to another place
-status: planned
-# Refined 2026-10-14 (inbox #423); cr-copy-node builds it. Web only: a copy is ordinary node creates and uploads, so the
-# backend part is the existing endpoints' slice tests, named in the gap below.
+# cr-copy-node built it in the web: a copy is ordinary node creates and uploads, so the backend part is the existing endpoints'
+# slice tests, named in the gap below. A Memory and a chapter are left out of a copy until their import takes an original
+# read by chunk (cr-copy-node Decision 3, handed back): the criterion gap on re-created-under-fresh-keys says so.
 acceptanceCriteria:
   - id: copy-here-in-the-browser
     text: >-
       "Copy to…" on a node and on a level's selection opens core's folder browser with "Copy here", which shows the places that take every copied kind, allows the node's current place, and blocks the node itself and anything inside it.
+    coverage:
+      web:
+        unit: [src/core/node/move.test.ts, src/core/export/CopyNodesDialog.test.ts, src/core/node/LevelView.copy.test.ts, src/core/export/copyActions.test.ts]
   - id: re-created-under-fresh-keys
     text: The copy re-creates the subtree through each kind's export and import hooks without a ZIP - every node under a fresh key, every file decrypted by chunk and uploaded again under a fresh K_blob, owned by the copier - and a name taken among the destination's children becomes `Name (2)`.
+    coverage:
+      web:
+        unit: [src/core/export/copySubtree.test.ts, src/core/export/copySource.test.ts, src/features/files/copy.wire.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          Proven for folders, files and drop boxes only. A Memory and a chapter are left out and named (their import decodes each original whole to derive its tiers, so it takes no payload read by chunk - cr-copy-node Decision 3, handed back); copySubtree.test.ts pins that they are left out, not that they copy.
   - id: losses-named-and-quota-asked
     text: >-
       Before anything is written the dialog names what the copy will create, its bytes and what does not come along, and asks the quota question; a "no" writes nothing.
+    coverage:
+      web:
+        unit: [src/core/export/CopyNodesDialog.test.ts, src/core/export/copySubtree.test.ts]
   - id: rollback-on-a-stop
     text: >-
       A stop part-way moves what was created to the trash and says "N of M"; the original is never touched.
+    coverage:
+      web:
+        unit: [src/core/export/copySubtree.test.ts, src/core/export/CopyNodesDialog.test.ts, src/features/files/copy.wire.test.ts]
 gaps:
-  web: Not built yet - cr-copy-node phases 1-2 add the unit and wire tests (src/core/export, src/core/node).
   backend: No backend change - a copy uses the node create and blob upload endpoints, whose slice tests stand.

@@ -138,6 +138,7 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
 | participants (opaque user ids in the node's sealed meta, [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md); a Memory in a tenant or group scope) | ✓ shown and edited; the profile at `#/people/<id>` (its Memories as tiles, rows or the level's map) | ✓ shown, not edited | ✗ not shown | ✗ not shown | ✗ not shown |
 | move the node (core's move dialog, inbox #358) | ✓ a Memory to the root or a folder, a chapter into another Memory | ✗ | ✗ | ✓ a Memory a folder of the subtree holds, between the subtree's folders; ✗ a chapter, the link's root | ✗ |
+| copy the node (core's "Copy to…", [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)) | ✗ not yet: the import decodes each original whole, so a copy leaves a Memory or chapter out and names it (no `importStreams`, cr-copy-node Decision 3) | ✗ | ✗ | ✗ | ✗ |
 | item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
 | share (and the uploader link) | the instance's public (and uploader) links | the same | ✗ | ✗ | ✗ |
 

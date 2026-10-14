@@ -310,6 +310,7 @@ shows is `filesCapabilities(access, target)` (`web/src/features/files/capabiliti
 | move a file (core's move dialog, inbox #358) | ✓ | ✗ | ✓ out of it (inbox #377 (a)) | ✗ | ✓ between the subtree's folders (not in an identity folder) | ✗ |
 | move a guest's folder out of a drop box, move the drop box | ✓ | ✗ | — | ✗ | ✗ (a drop box below the link is read-only, #380) | ✗ |
 | delete a file, a guest's folder | ✓ | ✗ | ✓ (inbox #391) | ✗ | ✗ | ✗ |
+| copy a file, a drop box, a guest's folder elsewhere in the space (core's "Copy to…", `canCopy`, [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md); a drop box's copy is a plain folder) | ✓ | ✗ | ✓ out of it | ✗ | ✗ | ✗ |
 | the **opened file** (`FileDetail`): replace, a header action | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder) | ✗ |
 | the opened file: rename, share, delete, move | all ✓ (share with the instance's public links; not in an identity folder) | share only (links are a read) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
 | create a drop box | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
@@ -325,7 +326,10 @@ here") lists only places that take what `FilesNodeKindRules` takes — a file or
 reads the same answers per node (`LevelRow.selection`): a file moves with it where `moveFile` says yes and is deleted with
 it where `deleteFile` does - through the source's own delete (`deleteFile(id, { reload: false })`: the selection re-reads
 the tree once, after the last) -, a drop box where `moveNode` / `deleteNode` do (core's delete); a guest's selection
-deletes nothing.
+deletes nothing. A copy is core's too (`core/export/CopyNodesDialog.vue`, a member's only): core's own row and header
+action beside "Move to…" and the selection's "Copy to…" - not a right of this matrix - over the same browser, "Copy here"
+allowed where the nodes are; a file copies through `exportFile` / `importFile`, its original read by frame
+(`importStreams`), and a drop box imports as a plain folder.
 
 - **The contract** (tag `share-files` in `files.openapi.yaml`, no auth, behind core's `ShareGuestGate`):
   `listShareFiles` — `GET /api/shares/{shareId}/files`: `{items: [{nodeId, fileBlob|null}]}` for every live `FILE` of

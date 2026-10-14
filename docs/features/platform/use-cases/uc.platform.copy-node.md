@@ -1,7 +1,16 @@
 # UC: Copy a node and everything under it to another place
 
 - **ID:** uc.platform.copy-node
-- **Status:** refined 2026-10-14 (owner decisions, inbox #423); not yet built.
+- **Status:** built 2026-10-14 for folders, files and drop boxes (cr-copy-node), web only. **A Memory and a chapter are not
+  copied yet:** their import derives each photo's tiers by decoding the original whole, which a copy reading the original
+  by chunk cannot hand it without holding the file, so a copy leaves them out and names them (E3, `importStreams` absent)
+  until that is decided. Seen in a real browser on 2026-10-14: "Reisen (2)" (sub-folders, files, the Memory "Lissabon"
+  and the drop box "Postfach" with two guests' folders both named "Dr. Anna") copied into "Archiv (4)" - the dialog named
+  "Lissabon" as left out and listed the losses of a folder and a drop box; the copy opened with its files readable
+  (`a_b.txt` showed its text), "Postfach" a plain folder holding "Dr. Anna" and "Dr. Anna (2)"; every request answered
+  2xx. A file copied into its own folder became `a_b.txt (2)`; a selection of a folder and a file copied as one
+  ("2 copied to ..."). **Not yet seen:** a stop part-way and the quota's "no" (unit-tested), a multi-MB file (the frame
+  reads are unit- and wire-tested), and the progress bar on a long copy.
 - **Primary actor:** A member whose keys are unlocked.
 - **Goal:** Put a copy of a folder, a file, a Memory with its chapters or a drop box at another place in the same space,
   without the server learning a name or that the copy is one.
@@ -71,3 +80,4 @@ Neues gespeichert wird - nicht, dass es eine Kopie ist.
 - Decisions: [ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
   Addendum 2, [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md) (one reference per blob)
+- End-user view (wiki): [Files — and finding your way around](../../../../wiki/en/files.md)
