@@ -6,8 +6,8 @@
 // the level's order (`orderLevel`), with no actions. The place on screen is the `place` model; the dialog around it says
 // whether "Move here" may be chosen there (`moveHereBlock`) and does the write.
 //
-// It takes the moved nodes as a LIST (inbox #421 will hand it a selection): a place is offered only where it takes every
-// one of them, and each of them is listed blocked - with the reason - and cannot be opened.
+// It takes the moved nodes as a LIST (a level's selection, inbox #421, through `MoveNodesDialog`): a place is offered only
+// where it takes every one of them, and each of them is listed blocked - with the reason - and cannot be opened.
 //
 // Keyboard and screen reader: every place and every crumb is a real `<button>` (a crumb is never a link: nothing here
 // navigates the page, so a guest's `#k=` fragment is never touched - web/CLAUDE.md, the breadcrumb trap), and focus goes
@@ -28,7 +28,7 @@ import NodeCoverImage from './cover/components/NodeCoverImage.vue'
 import { useCovers } from './cover/coverStore'
 
 const props = defineProps<{
-  /** What is being moved: one node today, a selection with inbox #421. */
+  /** What is being moved: one node (`MoveNodeDialog`) or a level's selection (`MoveNodesDialog`, inbox #421). */
   nodes: readonly TreeNode[]
   access: Access
   tree: TreeSource<TreeNode>
@@ -131,7 +131,7 @@ watch(place, async () => {
           :folder="p.node.kind === FOLDER_KIND"
         />
       </ul>
-      <p v-else class="veyq-empty veyq-empty-inline">{{ t('node.move.empty', { name: movedName }) }}</p>
+      <p v-else class="veyq-empty veyq-empty-inline">{{ nodes.length === 1 ? t('node.move.empty', { name: movedName }) : t('node.move.many.empty') }}</p>
     </div>
   </div>
 </template>

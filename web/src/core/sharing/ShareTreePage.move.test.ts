@@ -43,6 +43,7 @@ import { authenticatedCalls } from '../../test/guestMode'
 import { actionIdsOf, clickAction } from '../../test/levelRows'
 import type { LevelRowsFactory } from '../node/levelRow'
 import { crumbs, goTo, moveHere, moveHereButton, places, whyNotHere } from '../../test/moveBrowser'
+import { moveSelection, selectRows, startSelecting } from '../../test/levelSelection'
 
 const SCOPE_ID = '55555555-5555-4555-8555-555555555555'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_2'
@@ -50,8 +51,9 @@ const ROOT = '6e5a0000-0000-4000-8000-0000000000e0'
 const LETTERS = '6e5a0000-0000-4000-8000-0000000000e1'
 const NESTED = '6e5a0000-0000-4000-8000-0000000000e2'
 const NOTE = '6e5a0000-0000-4000-8000-0000000000e3'
+const SLIP = '6e5a0000-0000-4000-8000-0000000000e4'
 const K_SHARE = v1.randomBytes(32)
-const keys = { root: v1.randomBytes(32), letters: v1.randomBytes(32), nested: v1.randomBytes(32), note: v1.randomBytes(32) }
+const keys = { root: v1.randomBytes(32), letters: v1.randomBytes(32), nested: v1.randomBytes(32), note: v1.randomBytes(32), slip: v1.randomBytes(32) }
 const HASH = `#k=${b64url(K_SHARE)}`
 const NOTE_KIND = 'NOTE'
 
@@ -59,7 +61,7 @@ function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Ar
   const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion }
   return { id, parentId, kind, epoch: 0, placementVersion, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
-// Familie/ ─ Briefe/ ─ Feldpost/ (version 2)    Notizen (NOTE, a node a contributor added)
+// Familie/ ─ Briefe/ ─ Feldpost/ (version 2)    Notizen, Zettel (NOTE, nodes a contributor added)
 function head(role: ShareRole): PublicShareHead {
   return {
     shareId: SHARE_ID, kShare: K_SHARE, scopeId: SCOPE_ID, name: 'Familie', noteByLocale: {}, role, rootKind: FOLDER_KIND,
@@ -70,18 +72,24 @@ function head(role: ShareRole): PublicShareHead {
         child(LETTERS, ROOT, keys.root, keys.letters, 'Briefe', FOLDER_KIND),
         child(NESTED, LETTERS, keys.letters, keys.nested, 'Feldpost', FOLDER_KIND, 2),
         child(NOTE, ROOT, keys.root, keys.note, 'Notizen', NOTE_KIND),
+        child(SLIP, ROOT, keys.root, keys.slip, 'Zettel', NOTE_KIND, 1),
       ],
     } as PublicShare,
   }
 }
 
-/** An application's row factory: a move action per node, shown where its capability says (here: a READ_WRITE guest). */
-const moveRows: LevelRowsFactory = (ctx, host) => ({
-  row: (node) => ({
-    icon: 'pi pi-file', title: node.name, meta: 'note', primary: { label: node.name, onClick: () => host.open(node) },
-    actions: [{ id: 'move', label: 'Move', icon: 'pi pi-arrows-alt', shown: ctx.value.access.mode === 'guest' && ctx.value.access.role === ShareRole.ReadWrite, onClick: () => host.move(node) }],
-  }),
-})
+/** An application's row factory: a move action per node, shown where its capability says (here: a READ_WRITE guest), and
+ *  the same answer for a selection of the level (inbox #421) - no delete, as no guest deletes a node. */
+const moveRows: LevelRowsFactory = (ctx, host) => {
+  const contributes = () => ctx.value.access.mode === 'guest' && ctx.value.access.role === ShareRole.ReadWrite
+  return {
+    row: (node) => ({
+      icon: 'pi pi-file', title: node.name, meta: 'note', primary: { label: node.name, onClick: () => host.open(node) },
+      actions: [{ id: 'move', label: 'Move', icon: 'pi pi-arrows-alt', shown: contributes(), onClick: () => host.move(node) }],
+      selection: { move: contributes(), delete: false },
+    }),
+  }
+}
 
 let router: Router
 async function mountAt(role: ShareRole, node?: string, o: { requestGuest?: () => Promise<GuestIdentity | null>; reload?: () => Promise<void> } = {}) {
@@ -170,6 +178,33 @@ describe('a READ_WRITE guest moves inside its share', () => {
     await mountAt(ShareRole.ReadWrite)
     expect(document.body.querySelector('.veyq-node-header-title')!.textContent).toBe('Familie')
     expect(moveCardButton()).toBeNull()
+  })
+})
+
+// inbox #421: the guest's level has the member's Select; a selection moves through the guest's door, named once, one re-read.
+describe('a READ_WRITE guest moves a selection of its level', () => {
+  it('Select, tick two notes, Move to…: each placed through its link, named once, re-resolved once; no Delete', async () => {
+    const updateShareNode = stubApi(publicSharesApi, { updateShareNode: undefined }).updateShareNode
+    const requestGuest = vi.fn(async () => guest)
+    const reload = vi.fn(async () => {})
+    const w = await mountAt(ShareRole.ReadWrite, undefined, { requestGuest, reload })
+    await startSelecting()
+    expect(document.body.querySelector('.veyq-select-delete'), 'a guest deletes no node').toBeNull()
+    await selectRows('Notizen', 'Zettel')
+    await moveSelection()
+    expect(crumbs()).toEqual(['Familie'])
+    await moveHere('Briefe')
+    expect(requestGuest, 'named once for both').toHaveBeenCalledTimes(1)
+    expect(updateShareNode).toHaveBeenCalledTimes(2)
+    expect(updateShareNode.mock.calls.map((c) => c[0].nodeId).sort()).toEqual([NOTE, SLIP].sort())
+    for (const [call] of updateShareNode.mock.calls) {
+      expect(call).toMatchObject({ shareId: SHARE_ID, xContributorToken: 'contributor-token' })
+      expect(call.updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementVersion: call.nodeId === SLIP ? 1 : 0 })
+    }
+    expect(reload, 're-resolved once, after the last').toHaveBeenCalledTimes(1)
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.many.moved', { count: 2, to: 'Briefe' }) }))
+    expect(authenticatedCalls).toEqual([])
+    w.unmount()
   })
 })
 

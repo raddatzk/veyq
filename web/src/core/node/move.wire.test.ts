@@ -102,6 +102,48 @@ describe('a member\'s move between folders', () => {
   })
 })
 
+// inbox #421: a selection of several is N of the single node's writes - no batch request - and ONE re-read at the end.
+describe('a member moves a selection of several', () => {
+  const X = '5c09e000-0000-4000-8000-0000000000c2'
+  const scopeKey = v1.randomBytes(32)
+  const keys = { a: v1.randomBytes(32), b: v1.randomBytes(32), m: v1.randomBytes(32), c: v1.randomBytes(32), x: v1.randomBytes(32) }
+  const tree = () => [
+    row(A, null, 'FOLDER', scopeKey, keys.a, 'Reisen', 0, 0),
+    row(B, null, 'FOLDER', scopeKey, keys.b, 'Archiv', 0, 0),
+    row(M, A, 'FOLDER', keys.a, keys.m, 'Italien', 0, 3),
+    row(C, M, 'FOLDER', keys.m, keys.c, 'Rom', 0, 0),
+    row(X, A, 'FOLDER', keys.a, keys.x, 'Spanien', 0, 1),
+  ]
+
+  it('sends one PATCH per node, each exactly the single node\'s write, and re-reads the tree once', async () => {
+    const epochs = epochsOf(scopeKey)
+    // the single node's write of each, as the reference
+    const single = new Map<string, Record<string, unknown>>()
+    for (const id of [M, X]) {
+      vi.mocked(loadTree).mockClear()
+      single.set(id, await moveAsMember(epochs, tree(), id, B))
+    }
+    vi.mocked(loadTree).mockClear()
+    treeStore.nodes = tree()
+    const bodies = recordFetch()
+    const out = await nodeMover(() => memberAccessOf({ scopeId: SCOPE, epochs }))!.moveMany([{ nodeId: M, to: B }, { nodeId: X, to: B }])
+    expect(out).toEqual([{ nodeId: M, error: null }, { nodeId: X, error: null }])
+    expect(bodies.map((b) => [b.method, b.url.replace(/.*\/nodes\//, '')])).toEqual([['PATCH', M], ['PATCH', X]])
+    expect(loadTree).toHaveBeenCalledTimes(1)
+    for (const [i, id] of [M, X].entries()) {
+      const json = bodies[i].json
+      // the same fields and the same placement as the single write; a fresh seal, so the ciphertexts differ and both open
+      expect(Object.keys(json).sort()).toEqual(Object.keys(single.get(id)!).sort())
+      expect({ parentId: json.parentId, epoch: json.epoch, placementVersion: json.placementVersion, slugToken: json.slugToken })
+        .toEqual({ parentId: single.get(id)!.parentId, epoch: single.get(id)!.epoch, placementVersion: single.get(id)!.placementVersion, slugToken: single.get(id)!.slugToken })
+    }
+    const after = tree().map((x) => (x.id === M ? applied(x, bodies[0].json) : x.id === X ? applied(x, bodies[1].json) : x))
+    same(nodeContentKey(SCOPE, epochs, after, M), keys.m)
+    same(nodeContentKey(SCOPE, epochs, after, C), keys.c)
+    same(nodeContentKey(SCOPE, epochs, after, X), keys.x)
+  })
+})
+
 describe('a member\'s move and the scope\'s epochs (ADR 0080 decision 4)', () => {
   // A scope rotated once: E_0 and E_1, the write key E_1. A and B were created at epoch 0 (their entries under E_0).
   const e0 = v1.randomBytes(32)

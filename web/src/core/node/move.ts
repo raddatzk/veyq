@@ -23,9 +23,17 @@
 // destination of the scope, the root included), a `READ_WRITE` guest through `placeShareNodeAsGuest` after the page's
 // one naming flow (`access.requestGuest`) — never to the scope root, which no guest holds a key of. Any other session has
 // no door, so no move control can fall through to a call.
+//
+// **Several at once** (inbox #421, owner decisions 2026-10-14): a selection moves through the same browser and the same
+// door. A place is blocked where it blocks ANY of the nodes, named by that node ({@link moveHereBlockOf}); before anything
+// is sent each node is checked as one is ({@link planMove}: already there, or a name that folds to a sibling's there) and
+// a node that fails is left out and named; the rest is written ONE NODE AFTER THE OTHER, each the single node's own
+// placement write - no batch request - and the tree is re-read ONCE at the end ({@link NodeMover.moveMany}). A refusal
+// part-way stops nothing: what moved stays moved, and the outcome says per node how it ended.
 import type { Access, GuestAccess, MemberAccess, SourceNode, TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { moveNode, PlacementConflictError } from './tree'
+import { collidingSibling } from './siblingCollision'
 import { loadTree, treeStore } from './treeStore'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import { registry } from '../applications/registry'
@@ -61,6 +69,39 @@ export function moveHereBlock(tree: TreeSource, nodes: readonly MovedNode[], mod
   if (!nodes.every((n) => registry.placementAllows(n.kind, kind))) return 'kind'
   if (mode === 'guest' && kind !== FOLDER_KIND) return 'kind' // only a folder lets a guest's child in
   return null
+}
+
+/** Why several `nodes` cannot be moved to `at`, and the node that blocks it (null where all of them are already there);
+ *  null where the place takes them. A node that is already there blocks nothing: {@link planMove} leaves it out. */
+export function moveHereBlockOf<N extends MovedNode>(
+  tree: TreeSource, nodes: readonly N[], mode: Access['mode'], at: string | null,
+): { block: MoveBlock; node: N | null } | null {
+  if (nodes.length > 0 && nodes.every((n) => (n.parentId ?? null) === at)) return { block: 'current', node: null }
+  for (const node of nodes) {
+    const block = moveHereBlock(tree, [node], mode, at)
+    if (block && block !== 'current') return { block, node }
+  }
+  return null
+}
+
+/** Why one node of a selection is left out before anything is sent: it is already there, or a sibling there takes its
+ *  name (`sibling`, folded by each node's own kind - core's `collidingSibling`). */
+export type MoveLeftOut<N> = { node: N; reason: 'current' } | { node: N; reason: 'nameTaken'; sibling: TreeNode }
+
+/** The pre-check of a selection's move to `to` (see the header): what is sent, in the given order, and what is left out. */
+export function planMove<N extends TreeNode>(tree: TreeSource<TreeNode>, nodes: readonly N[], to: string | null): { send: N[]; leftOut: MoveLeftOut<N>[] } {
+  const send: N[] = []
+  const leftOut: MoveLeftOut<N>[] = []
+  for (const node of nodes) {
+    if ((node.parentId ?? null) === to) {
+      leftOut.push({ node, reason: 'current' })
+      continue
+    }
+    const sibling = collidingSibling(tree.children(to), to, node.kind, node.name, node.id)
+    if (sibling) leftOut.push({ node, reason: 'nameTaken', sibling })
+    else send.push(node)
+  }
+  return { send, leftOut }
 }
 
 /** The top of what the session may browse: a guest's link root, a member's scope root (null). */
@@ -117,8 +158,32 @@ export interface NodeMover {
   /** Move `nodeId` under `to` (null: the scope root — a member's only), then re-read the tree. Throws what the
    *  placement throws ({@link moveRefusalOf} names it); {@link MoveDeclined} when a guest declined to name itself. */
   move(nodeId: string, to: string | null): Promise<void>
+  /** Move each of `moves` in order, each the one placement write {@link move} sends, and re-read the tree ONCE after the
+   *  last (inbox #421: N writes, not a batch). A refusal does not stop the rest: resolves every move's outcome (`error`
+   *  null: it moved). Rejects {@link MoveDeclined} when a guest declined to name itself (nothing sent). */
+  moveMany(moves: readonly { nodeId: string; to: string | null }[]): Promise<MoveOutcome[]>
   /** Re-read the tree (after a lost race, so the next attempt builds on the node as it now is). */
   refresh(): Promise<void>
+}
+
+/** How one move of several ended: `error` null where it moved, else what the placement threw ({@link moveRefusalOf}). */
+export interface MoveOutcome {
+  nodeId: string
+  error: unknown
+}
+
+/** Send `moves` one after the other through `place`, collecting each outcome; nothing stops the rest. */
+async function eachMove(moves: readonly { nodeId: string; to: string | null }[], place: (nodeId: string, to: string | null) => Promise<void>): Promise<MoveOutcome[]> {
+  const outcomes: MoveOutcome[] = []
+  for (const { nodeId, to } of moves) {
+    try {
+      await place(nodeId, to)
+      outcomes.push({ nodeId, error: null })
+    } catch (error) {
+      outcomes.push({ nodeId, error })
+    }
+  }
+  return outcomes
 }
 
 /** A guest declined the naming the move needs: nothing was sent, nothing is said. */
@@ -147,6 +212,17 @@ function memberMover(access: () => MemberAccess): NodeMover {
       await moveNode(scopeId, epochs, treeStore.nodes, nodeId, to)
       await loadTree()
     },
+    async moveMany(moves) {
+      const { scopeId, epochs } = access()
+      if (!scopeId || !epochs) throw new Error('scope_locked')
+      // Each against the tree loaded before the first: the nodes of one level are siblings, so a move changes nothing another
+      // builds on (a lost race is still re-read once inside `moveNode`).
+      try {
+        return await eachMove(moves, (nodeId, to) => moveNode(scopeId, epochs, treeStore.nodes, nodeId, to))
+      } finally {
+        await loadTree()
+      }
+    },
     refresh: loadTree,
   }
 }
@@ -161,6 +237,20 @@ function guestMover(access: () => GuestAccess): NodeMover {
       const ctx = guestTreeContext(a.head, { contributorToken: guest.contributorToken, fragmentKey: a.fragmentKey, pwToken: a.pwToken })
       await placeShareNodeAsGuest(ctx, { nodeId, newParentId: to })
       await a.reload() // the node lists at its new place, under its new wrap
+    },
+    async moveMany(moves) {
+      const a = access()
+      const guest = await a.requestGuest() // named once, for all of them
+      if (!guest) throw new MoveDeclined()
+      const ctx = guestTreeContext(a.head, { contributorToken: guest.contributorToken, fragmentKey: a.fragmentKey, pwToken: a.pwToken })
+      try {
+        return await eachMove(moves, async (nodeId, to) => {
+          if (to === null) throw new GuestTreeError('illegal_structure') // no guest holds the scope root's key
+          await placeShareNodeAsGuest(ctx, { nodeId, newParentId: to })
+        })
+      } finally {
+        await a.reload() // once: every moved node lists at its new place, under its new wrap
+      }
     },
     refresh: () => access().reload(),
   }

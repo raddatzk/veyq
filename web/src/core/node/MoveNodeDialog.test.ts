@@ -43,7 +43,7 @@ const NODES = [
 const byId = (id: string) => NODES.find((x) => x.id === id)!
 
 function recorder(): NodeMover & { move: ReturnType<typeof vi.fn>; refresh: ReturnType<typeof vi.fn> } {
-  return { move: vi.fn(async () => {}), refresh: vi.fn(async () => {}) }
+  return { move: vi.fn(async () => {}), moveMany: vi.fn(async () => []), refresh: vi.fn(async () => {}) }
 }
 
 function mountDialog(

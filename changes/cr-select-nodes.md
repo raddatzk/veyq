@@ -76,7 +76,7 @@ happened. Owner decisions 2026-10-14 (inbox #421). Drag and drop is **not** part
     its hidden part; checkboxes labelled; no Select in map mode; a guest's bar has Move and no Delete; an action
     disabled when no selected node allows it. Bitten.
   - Done when `npm run check` is green.
-- [ ] 2 web: move a selection (Decision 3).
+- [x] 2 web: move a selection (Decision 3).
   - Tests: the browser blocks a place any selected node cannot take; the pre-check leaves out and names a node; N
     writes, one tree re-read (count the `loadTree` calls); a server refusal mid-way leaves the earlier moves and still
     sends the rest; the summary; Undo moves back only what moved; a guest's selection moves through the guest door; the

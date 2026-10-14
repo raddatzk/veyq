@@ -7,8 +7,8 @@
 // The browser is core's `MoveBrowser` (over the tree the session reads: the member's whole scope with its root, a guest's
 // share subtree only). It opens where the node is; the user opens the place it should go to and chooses **Move here**,
 // disabled with the reason where the node cannot go (`moveHereBlock`: where it is now, itself or inside it, a guest's
-// folder, a place that does not hold its kind), or **Cancel**. The browser takes a node LIST (inbox #421's selection);
-// this dialog's write moves the one node it is handed — what a write of several says and undoes is #421's to decide.
+// folder, a place that does not hold its kind), or **Cancel**. The browser takes a node LIST; this dialog moves the one
+// node it is handed, and a level's selection of several moves through `MoveNodesDialog` (inbox #421).
 //
 // Before sending, a sibling at the destination whose name folds to the same slug is named (core's `collidingSibling`,
 // inbox #389); the server's refusals are explained by their code (`moveRefusalOf`): `slug_taken`, `illegal_structure`,

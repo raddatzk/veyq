@@ -30,8 +30,9 @@
 // own identity, so no create is offered there (the server refuses it: `illegal_structure`), nor any section's write.
 // A MOVE (inbox #358) is core's `MoveNodeDialog` through the guest's door (`nodeMover`: `placeShareNodeAsGuest` after the
 // naming flow), offered where the capability functions grant it — a node a `FOLDER` of the subtree holds, never the
-// link's root, never in or of an identity folder — and its destinations are the subtree's folders only. A `READ` link has
-// no door, so nothing it renders can move anything. A DOWNLOAD (ADR 0082 decision 5) is core's `ExportSubtreeDialog` over the
+// link's root, never in or of an identity folder — and its destinations are the subtree's folders only; the level's
+// selection of several (inbox #421) moves through core's `MoveNodesDialog` by the same door, and a guest is offered no
+// delete of a selection (it deletes no node). A `READ` link has no door, so nothing it renders can move anything. A DOWNLOAD (ADR 0082 decision 5) is core's `ExportSubtreeDialog` over the
 // guest's tree and the applications' guest reads, for a folder, a Memory or a chapter of a `READ` / `READ_WRITE` link.
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -51,6 +52,7 @@ import { useGuestSession } from './guestIdentity'
 import { renderMarkdown } from '../../shared/markdown'
 import ShareNameDialog from './ShareNameDialog.vue'
 import MoveNodeDialog from '../node/MoveNodeDialog.vue'
+import MoveNodesDialog from '../node/MoveNodesDialog.vue'
 import ExportSubtreeDialog from '../export/ExportSubtreeDialog.vue'
 import { nodeMover } from '../node/move'
 import { useLevelLive } from '../node/useLevelLive'
@@ -170,6 +172,7 @@ async function createNode(name: string) {
 // --- a move (READ_WRITE): core's dialog, the guest's door ----------------------------------------------------------
 const mover = nodeMover(() => props.access)
 const moving = ref<TreeNode | null>(null)
+const movingMany = ref<TreeNode[] | null>(null)
 // --- a download as a ZIP (READ / READ_WRITE, ADR 0082 decision 5): core's dialog over the guest's own tree and reads ------
 const downloading = ref<TreeNode | null>(null)
 
@@ -177,7 +180,7 @@ const downloading = ref<TreeNode | null>(null)
 // Paused while a dialog of this page is open; the shell's `poll` swaps `head` (and with it the tree) only on a change.
 const { ticks: liveTick } = useLevelLive({
   active: () => atFolder.value && !!props.access.poll,
-  paused: () => !!creating.value || !!moving.value || !!downloading.value,
+  paused: () => !!creating.value || !!moving.value || !!movingMany.value || !!downloading.value,
   read: (signal) => props.access.poll?.(signal) ?? Promise.resolve(false),
 })
 
@@ -212,6 +215,7 @@ function createError(e: unknown): string {
       @open-node="go($event.id)"
       @create="startCreate"
       @move-node="moving = $event"
+      @move-nodes="movingMany = $event"
       @download-node="downloading = $event"
     />
     <!-- The member's detail of the node's kind, for a guest: what it offers is its capabilities and its data source. -->
@@ -242,6 +246,7 @@ function createError(e: unknown): string {
     :node-name="tree.nameOf(moving.id)"
     @close="moving = null"
   />
+  <MoveNodesDialog v-if="movingMany && mover && tree" :nodes="movingMany" :access="access" :tree="tree" :mover="mover" @close="movingMany = null" />
   <ExportSubtreeDialog
     v-if="downloading && tree"
     :node="downloading"

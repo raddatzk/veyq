@@ -66,6 +66,7 @@ import { stubApi } from '../test/apiMock'
 import { filesApi } from '../features/files/api'
 import { clickAction } from '../test/levelRows'
 import { browserOpen as dialogOpen, crumbs, goTo, moveHere, placeNames } from '../test/moveBrowser'
+import { moveSelection, selectRows, startSelecting } from '../test/levelSelection'
 
 const node = (id: string, kind: string, parentId: string | null, name: string, over: Partial<TreeNode> = {}): TreeNode =>
   treeNode({ id, kind, name, parentId, ...over })
@@ -147,6 +148,30 @@ describe('a member moves a folder from its card', () => {
     expect(document.body.textContent).toContain(t('node.move.title', { name: 'Italy' }))
     await moveHere(t('shell.personal'))
     expect(moveNode).toHaveBeenLastCalledWith('scope-1', expect.anything(), expect.any(Array), 'italy', null)
+  })
+})
+
+// inbox #421: a member moves a mixed selection of a level - a folder, a Memory, a file - through core's dialog for several.
+describe('a member moves a selection of the level', () => {
+  it('Select, tick a folder, a Memory and a file, Move to…: one write each through moveNode, the tree re-read once, one Undo', async () => {
+    await mountAt('#~me/trips/')
+    await startSelecting()
+    await selectRows('Rome', 'Italy', 'notes.txt')
+    await moveSelection()
+    expect(document.body.textContent).toContain(t('node.move.many.title', { count: 3 }))
+    expect(crumbs()).toEqual([t('shell.personal'), 'Trips'])
+    await moveHere(t('shell.personal'), 'Archive')
+    expect(vi.mocked(moveNode).mock.calls.map((c) => [c[3], c[4]]).sort()).toEqual([['italy', 'archive'], ['notes', 'archive'], ['rome', 'archive']])
+    expect(loadTree, 'one re-read for the three').toHaveBeenCalledTimes(1)
+    expect(dialogOpen(), 'closed: all of them moved').toBe(false)
+    expect(router.currentRoute.value.hash, 'the level on screen stays').toBe('#~me/trips/')
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.many.moved', { count: 3, to: 'Archive' }) }))
+    vi.mocked(moveNode).mockClear()
+    vi.mocked(loadTree).mockClear()
+    toast.showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+    expect(vi.mocked(moveNode).mock.calls.map((c) => [c[3], c[4]]).sort()).toEqual([['italy', 'trips'], ['notes', 'trips'], ['rome', 'trips']])
+    expect(loadTree).toHaveBeenCalledTimes(1)
   })
 })
 

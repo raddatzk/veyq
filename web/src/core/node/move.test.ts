@@ -28,7 +28,7 @@ vi.mock('../sharing/guestTree', async (o) => ({
   guestTreeContext: (head: unknown, ids: unknown) => ({ head, ids }),
 }))
 
-import { moveHereBlock, movePlaces, moveRefusalOf, moveStart, moveTrail, nodeMover, MoveDeclined, type MovePlace } from './move'
+import { moveHereBlock, moveHereBlockOf, movePlaces, moveRefusalOf, moveStart, moveTrail, nodeMover, planMove, MoveDeclined, type MovePlace } from './move'
 import { createRegistry } from '../applications/registry'
 import { FOLDER_KIND } from './kind'
 import { PlacementConflictError, type TreeNode } from './tree'
@@ -211,6 +211,77 @@ describe('nodeMover: the door per session', () => {
   it('a READ or WRITE_ONLY guest, an unknown role or mode has no door', () => {
     for (const role of ['READ', 'WRITE_ONLY', 'OWNER']) expect(nodeMover(() => guestAccessOf(role)), role).toBeNull()
     expect(nodeMover(() => ({ mode: 'operator' }) as unknown as Access)).toBeNull()
+  })
+})
+
+// inbox #421: a level's selection moves through the same browser and door - N single-node writes, ONE re-read.
+describe('several at once: the place, the pre-check, the writes', () => {
+  it('a place is blocked where ANY node cannot go, naming that node; "already here" only when all of them are', () => {
+    const [a, b, item] = [byId('a'), byId('b'), byId('item')]
+    expect(moveHereBlockOf(member, [a, b], 'member', 'home')).toEqual({ block: 'current', node: null })
+    expect(moveHereBlockOf(member, [a, b], 'member', 'a1'), 'a holds the place').toEqual({ block: 'inside', node: a })
+    expect(moveHereBlockOf(member, [a, b], 'member', 'b'), 'b is the place').toEqual({ block: 'self', node: b })
+    expect(moveHereBlockOf(member, [a, byId('part')], 'member', 'item2'), 'an ITEM takes the PART, not the folder').toEqual({ block: 'kind', node: a })
+    expect(moveHereBlockOf(member, [a, byId('a1')], 'member', 'inner'), 'nothing goes into a guest\'s folder').toMatchObject({ block: 'identityFolder' })
+    // a node already there blocks nothing: the pre-check leaves it out
+    expect(moveHereBlockOf(member, [a, item], 'member', 'b'), 'item is in b already, a may go there').toBeNull()
+  })
+
+  it('the pre-check leaves out a node already there and one whose name folds to a sibling\'s there, naming the sibling', () => {
+    const tree = [...NODES, n('dest', FOLDER_KIND, 'home'), n('taken', ITEM, 'dest', { name: 'ITEM2' })]
+    const t2 = memberTreeOf(() => tree)
+    const at = (id: string) => tree.find((x) => x.id === id)!
+    const plan = planMove(t2, [at('a'), at('item2'), at('b')], 'dest')
+    expect(plan.send.map((x) => x.id)).toEqual(['a', 'b'])
+    expect(plan.leftOut).toEqual([{ node: at('item2'), reason: 'nameTaken', sibling: at('taken') }])
+    const here = planMove(t2, [at('a'), at('item2')], 'home')
+    expect(here.send.map((x) => x.id)).toEqual(['item2'])
+    expect(here.leftOut).toEqual([{ node: at('a'), reason: 'current' }])
+  })
+
+  it('a member: one placement write per node, in order, and the tree re-read ONCE after the last', async () => {
+    const epochs: EpochKeys = { current: 0, keys: new Map() }
+    const out = await nodeMover(() => memberAccessOf({ epochs }))!.moveMany([{ nodeId: 'a', to: 'b' }, { nodeId: 'item2', to: 'b' }, { nodeId: 'box', to: 'b' }])
+    expect((calls.moveNode.mock.calls as unknown[][]).map((c) => [c[3], c[4]])).toEqual([['a', 'b'], ['item2', 'b'], ['box', 'b']])
+    expect(calls.moveNode).toHaveBeenCalledWith('scope-1', epochs, expect.any(Array), 'a', 'b')
+    expect(calls.loadTree).toHaveBeenCalledTimes(1)
+    expect(out).toEqual([{ nodeId: 'a', error: null }, { nodeId: 'item2', error: null }, { nodeId: 'box', error: null }])
+  })
+
+  it('a refusal mid-way leaves the earlier moves, still sends the rest, and says per node how it ended', async () => {
+    const refused = new GuestTreeError('slug_taken')
+    calls.moveNode.mockImplementationOnce(async () => {}).mockRejectedValueOnce(refused)
+    const out = await nodeMover(() => memberAccessOf({ epochs: { current: 0, keys: new Map() } }))!.moveMany([
+      { nodeId: 'a', to: 'b' }, { nodeId: 'item2', to: 'b' }, { nodeId: 'box', to: 'b' },
+    ])
+    expect(calls.moveNode).toHaveBeenCalledTimes(3)
+    expect(out).toEqual([{ nodeId: 'a', error: null }, { nodeId: 'item2', error: refused }, { nodeId: 'box', error: null }])
+    expect(calls.loadTree, 'still once').toHaveBeenCalledTimes(1)
+  })
+
+  it('a member whose scope is locked sends nothing', async () => {
+    await expect(nodeMover(() => memberAccessOf({ epochs: null }))!.moveMany([{ nodeId: 'a', to: 'b' }])).rejects.toThrow('scope_locked')
+    expect(calls.moveNode).not.toHaveBeenCalled()
+  })
+
+  it('a READ_WRITE guest: named ONCE, each node placed through its link, the link re-resolved once', async () => {
+    const reload = vi.fn(async () => {})
+    const head = { shareId: 's1' } as PublicShareHead
+    const requestGuest = vi.fn(async (): Promise<GuestIdentity> => ({ identityId: 'g', contributorToken: 'tok' }))
+    const out = await nodeMover(() => guestAccessOf('READ_WRITE', { head, requestGuest, reload }))!.moveMany([
+      { nodeId: 'item', to: 'a' }, { nodeId: 'b', to: 'a' }, { nodeId: 'x', to: null },
+    ])
+    expect(requestGuest).toHaveBeenCalledTimes(1)
+    expect(calls.place.mock.calls.map((c) => (c as unknown[])[1])).toEqual([{ nodeId: 'item', newParentId: 'a' }, { nodeId: 'b', newParentId: 'a' }])
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(out[2]).toMatchObject({ nodeId: 'x', error: { code: 'illegal_structure' } })
+    expect(calls.moveNode, 'never the member\'s write').not.toHaveBeenCalled()
+  })
+
+  it('a guest who declines to name itself sends nothing', async () => {
+    const m = nodeMover(() => guestAccessOf('READ_WRITE', { requestGuest: async () => null }))!
+    await expect(m.moveMany([{ nodeId: 'item', to: 'a' }])).rejects.toBeInstanceOf(MoveDeclined)
+    expect(calls.place).not.toHaveBeenCalled()
   })
 })
 

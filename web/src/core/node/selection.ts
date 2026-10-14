@@ -66,3 +66,9 @@ export function useSelection(): Selection {
     },
   }
 }
+
+/** Several names or nouns as one phrase of `locale` ("“a”, “b” and “c”" / "„a“, „b“ und „c“"), for the selection's
+ *  questions and summaries. */
+export function joinList(locale: string, items: readonly string[]): string {
+  return new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(items)
+}

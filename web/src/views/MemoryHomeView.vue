@@ -9,7 +9,8 @@
 // `core/sharing/FolderShareDialog.vue`, which the registry pre-registers. The folder level is core's
 // (`core/node/LevelView.vue`), which asks the registry for each application's rows. A move of any node — the folder
 // on screen, an application's row, an opened node, a drop box's guest folder — is core's `core/node/MoveNodeDialog.vue`
-// through the member's door (`nodeMover`, inbox #358). The fragment is a slug path derived from the names (ADR 0015), so
+// through the member's door (`nodeMover`, inbox #358); a level's selection of several moves through core's
+// `core/node/MoveNodesDialog.vue` by the same door (inbox #421). The fragment is a slug path derived from the names (ADR 0015), so
 // after every write that re-reads the tree the node on screen is followed to its path in the new tree (`stayOn`): a
 // move or a rename of it or of a folder above it, and an older equal-segment sibling restored or moved in, change it.
 //
@@ -46,6 +47,7 @@ import ExportSubtreeDialog from '../core/export/ExportSubtreeDialog.vue'
 import ImportSubtreeDialog from '../core/export/ImportSubtreeDialog.vue'
 import type { ImportOffer } from '../core/export/importSource'
 import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
+import MoveNodesDialog from '../core/node/MoveNodesDialog.vue'
 import { nodeMover } from '../core/node/move'
 import { registry } from '../core/applications/registry'
 import { favoritesStore, loadFavoritesFor } from '../core/favorites/favoritesStore'
@@ -157,6 +159,8 @@ const createDialog = computed(() => {
 })
 // The node being moved (core's `MoveNodeDialog`); the member's door, read against the current access on every call.
 const moving = ref<{ node: TreeNode; shown: string | null } | null>(null)
+// A level's selection being moved (inbox #421), and what was on screen.
+const movingMany = ref<{ nodes: TreeNode[]; shown: string | null } | null>(null)
 const mover = nodeMover(() => access.value)
 // ADR 0082: the node being downloaded as a ZIP (core's `ExportSubtreeDialog`), and the download being imported under the folder on screen.
 const exporting = ref<TreeNode | null>(null)
@@ -170,7 +174,7 @@ const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node
 const { ticks: liveTick } = useLevelLive({
   active: () => activeSpace.status === 'ready' && !treeStore.error && !kindDetail.value && !isOpenable.value && !place.value.person,
   paused: () =>
-    !!nameDialog.value || !!createKind.value || !!moving.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
+    !!nameDialog.value || !!createKind.value || !!moving.value || !!movingMany.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
   read: (signal) => pollTree(signal),
 })
 const deleteTarget = ref<TreeNode | null>(null)
@@ -267,6 +271,9 @@ function startMove(node: TreeNode) {
 /** The move re-read the tree: the node on screen keeps its place on screen, under its new path if the move changed it. */
 function onMoved() {
   stayOn(moving.value?.shown ?? null)
+}
+function startMoveMany(nodes: TreeNode[]) {
+  movingMany.value = { nodes, shown: currentNodeId.value }
 }
 /** The undo moved it back (after the dialog closed): follow it back the same way. */
 function afterUndo(shown: string | null) {
@@ -379,6 +386,7 @@ async function onDeleteDone() {
         @rename-node="startRename"
         @delete-folder="currentFolder && startDelete(currentFolder)"
         @move-node="startMove"
+        @move-nodes="startMoveMany"
         @download-node="exporting = $event"
         @import-archive="importing = $event"
         @open-trash="trashVisible = true"
@@ -444,6 +452,17 @@ async function onDeleteDone() {
       :after-undo="afterUndo(moving.shown)"
       @moved="onMoved"
       @close="moving = null"
+    />
+    <MoveNodesDialog
+      v-if="movingMany && mover"
+      :nodes="movingMany.nodes"
+      :access="access"
+      :tree="tree"
+      :mover="mover"
+      :root-label="rootLabel"
+      :after-undo="afterUndo(movingMany.shown)"
+      @moved="stayOn(movingMany?.shown ?? null)"
+      @close="movingMany = null"
     />
     <SpaceTrashDialog
       v-if="trashVisible && epochs && activeSpace.scopeId"
