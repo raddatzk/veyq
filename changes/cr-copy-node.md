@@ -18,7 +18,7 @@ server sees only ordinary creates and uploads. Members only. Owner decisions 202
 - [uc.platform.copy-node](../docs/features/platform/use-cases/uc.platform.copy-node.md) (flow, losses, quality notes) and
   [ADR 0082](../docs/decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
   Addendum 2 (copy = the walk without the archive; server copy and dedup rejected).
-- **Depends on [cr-select-nodes](cr-select-nodes.md)** for the selection bar's "Copy to…" (phase 2 here); build that CR
+- **Depends on cr-select-nodes** (built and closed 2026-10-14: the level's Select mode, `core/node/selection.ts`, `LevelRow.selection`) for the selection bar's "Copy to…" (phase 2 here); build that CR
   first. Phase 1 here does not depend on it.
 - **No contract or backend change.** Nodes are created and files uploaded through the endpoints the import uses;
   `checkTenantStorageFit` is the quota question. One reference per blob ([ADR 0062](../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md),
