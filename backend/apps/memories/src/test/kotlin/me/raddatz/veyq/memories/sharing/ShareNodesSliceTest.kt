@@ -19,7 +19,8 @@ import me.raddatz.veyq.core.sharing.GuestTreeShare
 
 /**
  * A guest's tree operations with Memories present (ADR 0080 decisions 6 and 10): whoever owns the container decides.
- * Between folders core decides — a `READ_WRITE` guest moves a Memory from one subfolder to another; inside a Memory
+ * Between folders core decides — a `READ_WRITE` guest moves a Memory from one subfolder to another, and creates none
+ * (Memories declares no kind guest-creatable); inside a Memory
  * Memories decides, and it declares nothing ([GuestNodeRules]), so a guest creates, moves and renames nothing there
  * (bite test 18: a write refused, the read served). A Memory-rooted link gains no tree operation; its media
  * operations are its own (`ShareMediaRouteSliceTest`, the share media suites).
@@ -41,12 +42,29 @@ class ShareNodesSliceTest {
     }
 
     @Test
-    fun aGuestMovesAMemoryBetweenTwoSubfoldersOfASharedFolder() {
+    fun aGuestMovesAndRenamesAMemoryBetweenTwoSubfoldersOfASharedFolder() {
         val (t, link) = tree()
         place(link, t.memory, t.right).statusCode(204)
         assertEquals(t.right, parentOf(t.memory))
-        // …and creates one beside it: a MEMORY under a folder is core's container and Memories' placement rule
-        create(link, t.right, MemoriesNodeKinds.MEMORY).statusCode(201)
+        // a rename: the same parent, the next placement version
+        place(link, t.memory, t.right, placementVersion = 1).statusCode(204)
+        assertEquals(2L, versionOf(t.memory))
+    }
+
+    /**
+     * Owner decision 2026-10-14: a guest creates no Memory — not under a folder either, where core decides and Memories,
+     * which declares no kind guest-creatable (core's `GuestCreatableKinds`), lets it create none. A chapter neither (no
+     * rule would place one there anyway). `illegal_scope`, decided before the placement rule, and nothing stored; a
+     * folder in the same place is the control. Moving and renaming an existing Memory stay (the test above).
+     */
+    @Test
+    fun aGuestCreatesNoMemoryInAFolder() {
+        val (t, link) = tree()
+        for (kind in listOf(MemoriesNodeKinds.MEMORY, MemoriesNodeKinds.CHAPTER)) {
+            create(link, t.right, kind).statusCode(422).body("code", equalTo("illegal_scope"))
+        }
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { NodeEntity.count("parentId", t.right) }, "a refused create stores nothing")
+        create(link, t.right, NodeEntity.FOLDER).statusCode(201) // control
     }
 
     @Test

@@ -4,8 +4,14 @@ import me.raddatz.veyq.core.node.FolderNodeRules
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.sharing.FolderGuestNodeRules
+import me.raddatz.veyq.core.sharing.GuestCreatableKinds
+import me.raddatz.veyq.core.sharing.GuestNodeOp
 import me.raddatz.veyq.core.sharing.WriteOnlyGuestKinds
+import io.quarkus.runtime.StartupEvent
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -88,5 +94,34 @@ class FilesNodeKindRulesTest {
         for (child in listOf(NodeEntity.FOLDER, file)) {
             assertTrue(NodeKindRules.parentAllows(composed, child, ParentSlot.Node(NodeEntity.FOLDER)), "a $child in a folder")
         }
+    }
+
+    /** Owner decision 2026-10-14: a folder's contributor creates a `FILE` and no drop box — Files' declaration, read by
+     *  core's folder rule (`GuestCreatableKinds`). */
+    @Test
+    fun aFolderGuestCreatesFilesAndNoDropBox() {
+        val folder = FolderGuestNodeRules(mutableListOf(FilesGuestCreatableKinds()))
+        assertTrue(folder.readWriteAllows(NodeEntity.FOLDER, GuestNodeOp.CreateChild(file)), "a file")
+        for (kind in listOf(FilesNodeKinds.DROPBOX, "MEMORY", "CHAPTER", "NOT_A_KIND")) {
+            assertFalse(folder.readWriteAllows(NodeEntity.FOLDER, GuestNodeOp.CreateChild(kind)), "a guest creates a $kind")
+        }
+    }
+
+    /**
+     * A second application claiming `FILE` fails startup (the declarations are a partition): core's folder rule throws
+     * from its `StartupEvent` observer, naming the kind and both declarers. Plain JUnit, as a failed boot cannot be
+     * asserted from inside the application it failed to be; Files alone is the control.
+     */
+    @Test
+    fun aSecondClaimOfFileFailsStartup() {
+        class SecondClaim : GuestCreatableKinds {
+            override fun kinds() = setOf(FilesNodeKinds.FILE)
+        }
+        val twice = FolderGuestNodeRules(mutableListOf(FilesGuestCreatableKinds(), SecondClaim()))
+        val e = assertThrows(IllegalStateException::class.java) { twice.onStart(StartupEvent()) }
+        assertTrue(e.message!!.contains("FILE by "), e.message)
+        assertTrue(e.message!!.contains(FilesGuestCreatableKinds::class.java.name) && e.message!!.contains(SecondClaim::class.java.name), e.message)
+        assertFalse(twice.readWriteAllows(NodeEntity.FOLDER, GuestNodeOp.CreateChild(file)), "a kind claimed twice is created by nobody")
+        assertDoesNotThrow { FolderGuestNodeRules(mutableListOf(FilesGuestCreatableKinds())).onStart(StartupEvent()) }
     }
 }

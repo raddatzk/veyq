@@ -295,8 +295,8 @@ root). The role matrix (ADR 0080 decision 6):
 | A guest of a … link | may |
 |---|---|
 | `READ` | list the files of the shared subtree, download them |
-| `READ_WRITE` | the above; create a `FILE` under a folder of the subtree (core's `createShareNode`; core's `FolderGuestNodeRules` lets any kind `NodeKindRules` admits into a folder); upload into a file below the root, first or replacing its blob (any file below the root, a member's too); rename or move it (core's `updateShareNode`) |
-| any | **not** delete a file (nodes store no authorship), **not** upload into a `FOLDER` |
+| `READ_WRITE` | the above; create a `FILE` under a folder of the subtree (core's `createShareNode`: core's `FolderGuestNodeRules` lets a guest create a `FOLDER` and the kinds their application declares guest-creatable, and Files declares `FILE`, `FilesGuestCreatableKinds`); upload into a file below the root, first or replacing its blob (any file below the root, a member's too); rename or move it (core's `updateShareNode`) |
+| any | **not** delete a file (nodes store no authorship), **not** upload into a `FOLDER`, **not** create a drop box (owner decision 2026-10-14: Files declares only `FILE`, so a `FILES_DROPBOX` is `422 illegal_scope`, `ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox`) |
 
 **What the web offers.** One view per kind serves a member and a guest (ADR 0079 Consequences, inbox #401): what it
 shows is `filesCapabilities(access, target)` (`web/src/features/files/capabilities.ts`, pinned row by row in

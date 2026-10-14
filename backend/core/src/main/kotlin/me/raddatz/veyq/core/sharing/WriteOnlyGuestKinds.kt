@@ -5,7 +5,8 @@ package me.raddatz.veyq.core.sharing
  * **the application that owns the link's root kind** — the same owner that decides whether that root takes identity
  * folders at all (Files: a `FILES_DROPBOX`, whose guests create only `FILE`s; owner decision 2026-10-08, inbox #377 (c)).
  * Core's `ShareNodesHandler` asks it for every `WRITE_ONLY` create, in addition to [GuestNodeRules] (the identity
- * folder is a core `FOLDER`, whose owner allows any kind) and `NodeKindRules` (where a kind may live at all), never
+ * folder is a core `FOLDER`, whose owner lets a guest create a folder or a kind its application declares,
+ * [GuestCreatableKinds]) and `NodeKindRules` (where a kind may live at all), never
  * instead of them. Keyed on the root kind, not on the container: the container is always core's own `FOLDER`, which
  * cannot name an application's kind, and what a drop box takes is the drop box's question.
  *

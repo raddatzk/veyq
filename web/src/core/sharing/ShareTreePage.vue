@@ -19,9 +19,13 @@
 // from it on every re-resolve), and every breadcrumb a real link (web/CLAUDE.md, the breadcrumb trap). An id the walk
 // did not open falls back to the root.
 //
-// **Writes (READ_WRITE only)** are what the capabilities grant on screen: at a folder a new folder or a node of a
-// section's kind (a Memory), created as the guest under the current folder (`createShareNodeAsGuest`) after the shell
-// named it (`access.requestGuest`); inside a detail what its application offers (Memories: an upload into the Memory or
+// **Writes (READ_WRITE only)** are what the capabilities grant on screen: at a folder a new folder, created as the guest
+// under the current folder (`createShareNodeAsGuest`) after the shell named it (`access.requestGuest`), and what an
+// application's own level action offers (Files: an upload, whose files it creates itself). A guest creates no Memory, no
+// drop box and no other application's node (owner decision 2026-10-14: the server admits a folder and the kinds their
+// application declares guest-creatable, `GuestCreatableKinds`), so no such "New" entry is shown - hidden, not greyed; a
+// section kind whose entry did allow it would be created through this page's name dialog the same way. Inside a detail
+// what its application offers (Memories: an upload into the Memory or
 // chapter on screen, the delete of the guest's own media). Inside a guest's identity folder nothing is placed but by its
 // own identity, so no create is offered there (the server refuses it: `illegal_structure`), nor any section's write.
 // A MOVE (inbox #358) is core's `MoveNodeDialog` through the guest's door (`nodeMover`: `placeShareNodeAsGuest` after the

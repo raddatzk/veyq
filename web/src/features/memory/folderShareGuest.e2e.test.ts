@@ -132,14 +132,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     expect(Array.from(pageTree.keyOf(memory.nodeId) ?? []), "the Memory's key, as the member's").toEqual(Array.from(memory.memoryKey))
     expect(pageTree.nameOf(createdId)).toBe(CREATED_NAME)
     expect(pageTree.linkTo(memory.nodeId), 'a link keeps the share key').toEqual({ query: { node: memory.nodeId }, hash })
-    // The level's Memories section offers a READ_WRITE guest a new Memory in a folder (`memoryCapabilities`): core
-    // creates it as the guest, and the server takes it (core's `FolderGuestNodeRules`).
-    const guestMemoryId = (await createShareNodeAsGuest(await contextNow(), { parentId: createdId, kind: MEMORY_KIND, name: GUEST_MEMORY_NAME })).nodeId
-    const guestMemory = (await listTree(scopeId, epochs)).find((n) => n.id === guestMemoryId)
-    expect(guestMemory, "the guest's Memory, in its folder").toMatchObject({ parentId: createdId, kind: MEMORY_KIND, name: GUEST_MEMORY_NAME })
-
     // --- (c) refusals, by code -------------------------------------------------------------------------------------
     const ctx = await contextNow()
+    // A guest creates no Memory, not in a folder either (owner decision 2026-10-14: Memories declares no kind
+    // guest-creatable, core's `GuestCreatableKinds`), and the level offers none (`memoryCapabilities`).
+    const guestMemory = await failure(createShareNodeAsGuest(ctx, { parentId: createdId, kind: MEMORY_KIND, name: GUEST_MEMORY_NAME }))
+    expect(guestMemory instanceof GuestTreeError && guestMemory.code, 'a Memory created in a folder').toBe('illegal_scope')
+    expect((await listTree(scopeId, epochs)).some((n) => n.parentId === createdId && n.kind === MEMORY_KIND), 'nothing stored').toBe(false)
     // Inside a Memory, Memories decides, and it declares nothing for a guest: a create there is illegal_scope.
     const intoMemory = await failure(createShareNodeAsGuest(ctx, { parentId: memory.nodeId, kind: FOLDER_KIND, name: 'Abgelehnt' }))
     expect(intoMemory instanceof GuestTreeError && intoMemory.code, 'a create inside a Memory').toBe('illegal_scope')
@@ -185,6 +184,6 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     expect(onRead instanceof GuestTreeError && onRead.code, 'a READ link').toBe('share_not_contributable')
 
     // Every value recovered by UNSEALING what the server returned (ADR 0053).
-    recordCanaries(byId(afterCreate, createdId)?.name, byId(afterCreate, nestedId)?.name, byId(afterMove, memory.nodeId)?.name, guestMemory?.name)
+    recordCanaries(byId(afterCreate, createdId)?.name, byId(afterCreate, nestedId)?.name, byId(afterMove, memory.nodeId)?.name)
   }, 240_000)
 })

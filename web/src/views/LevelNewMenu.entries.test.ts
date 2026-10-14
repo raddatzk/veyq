@@ -10,7 +10,7 @@ import { ShareRole } from '../api/generated/sharing'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../test/models'
 import { epochsOf } from '../features/spaces/epochsTestUtil'
 import { FOLDER_KIND } from '../core/node/kind'
-import type { Access } from '../core/access'
+import { folderCapabilities, targetOf, type Access } from '../core/access'
 import * as v1 from '@veyq/crypto/v1'
 
 const registry = createRegistry()
@@ -57,8 +57,12 @@ describe('the applications\' "New" menu entries', () => {
     expect(shown(ctx(guestAccessOf('SOMETHING_NEW')))).toEqual([])
   })
 
-  it('a READ_WRITE guest sees what its role creates, and both uploads (share view = member view)', () => {
-    expect(shown(ctx(guestAccessOf(ShareRole.ReadWrite)))).toEqual(['create:MEMORY', 'files.upload', 'files.uploadFolder'])
+  // Owner decision 2026-10-14: a guest creates folders and uploads files, never a Memory or a drop box — the server
+  // refuses those (`GuestCreatableKinds`), so the menu does not offer them at all: hidden, not greyed out.
+  it('a READ_WRITE guest sees core\'s folder entry and both uploads, no Memory and no drop box', () => {
+    const c = ctx(guestAccessOf(ShareRole.ReadWrite))
+    expect(folderCapabilities(c.access, targetOf(c.tree, c.folder)).createFolder, "core's folder entry").toBe(true)
+    expect(shown(c)).toEqual(['files.upload', 'files.uploadFolder'])
   })
 
   it('the create entries are greyed out while the member\'s epoch keys are locked; the upload is the section\'s to enable', () => {

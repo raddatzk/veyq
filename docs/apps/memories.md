@@ -63,7 +63,7 @@ no declaration allows nothing. This is Memories' answer, measured from the code 
 | Edit a medium's meta | ✗ (no guest operation) | ✗ (no guest operation) | ✗ | ✗ |
 | Rename a node | ✗ (`share_not_contributable`) | ✗: the root never (`illegal_structure`), a chapter inside a Memory `illegal_scope` | ✓ a child of a `FOLDER`; ✗ the root, a chapter (`illegal_scope`) | ✗ (`share_not_contributable`) |
 | Cover, date, place of a node (`wrappedMeta`, cover blob) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ |
-| Create a chapter or a Memory | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`: Memories declares no `GuestNodeRules`) | ✗ a `MEMORY` (owner decision 2026-10-14: a guest creates no application's node; core lets a guest create a `FOLDER` and a kind its application declares guest-creatable, and Memories declares none); ✗ a chapter (`illegal_scope` inside a Memory, `illegal_structure` under a folder) | ✗ (`share_not_contributable`) |
+| Create a chapter or a Memory | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`: Memories declares no `GuestNodeRules`) | ✗ a `MEMORY` or a chapter (`illegal_scope`; owner decision 2026-10-14: a guest creates no application's node; core lets a guest create a `FOLDER` and a kind its application declares guest-creatable, `GuestCreatableKinds`, and Memories declares none) | ✗ (`share_not_contributable`) |
 | Move a node | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`; the root `illegal_structure`) | ✓ a `FOLDER` or `MEMORY` between folders of the subtree; ✗ a chapter out of or into a Memory (`illegal_scope`), anything out of the subtree | ✗ (`share_not_contributable`) |
 | Delete a node | ✗ (no guest operation) | ✗ (no guest operation) | ✗ (no guest operation, ADR 0080 decision 6) | ✗ |
 
@@ -100,9 +100,11 @@ What the cells rest on:
   link's into a chapter, therefore names itself under a key ABOVE the node its bucket is on: a member opens it with
   the node's key or an ancestor's, through the chain (`openBucketName`'s `ancestorKeys`, `contentKeyChain`; web,
   cr-node-key-hierarchy 5b.4b).
-- **Tree operations are core's** (`ShareNodesHandler`, `READ_WRITE` only): inside a `FOLDER` core allows them
-  (`FolderGuestNodeRules`) and `NodeKindRules` decides where a kind may live; inside a `MEMORY` or a `CHAPTER`
-  Memories declares nothing, so `GuestNodeRules` fails closed. The root is never a guest's to move or rename.
+- **Tree operations are core's** (`ShareNodesHandler`, `READ_WRITE` only): inside a `FOLDER` core decides
+  (`FolderGuestNodeRules`) — a move or a rename of any kind, a create of a `FOLDER` or of a kind its application declares
+  guest-creatable (`GuestCreatableKinds`; Memories declares none, so no `MEMORY` or `CHAPTER` is `illegal_scope`) — and
+  `NodeKindRules` decides where a kind may live; inside a `MEMORY` or a `CHAPTER` Memories declares nothing, so
+  `GuestNodeRules` fails closed. The root is never a guest's to move or rename.
 - **No guest route exists** for a medium's meta (`updateMediaMeta`), a node's `wrappedMeta` or cover, or a node
   delete: `share-media.openapi.yaml` holds list, complete and delete-own; `sharing.openapi.yaml`'s guest node schemas
   carry no `wrappedMeta`.
@@ -115,8 +117,9 @@ What the cells rest on:
 for an upload into a chapter below a Memory link and the `WRITE_ONLY` root-only rule). The `FOLDER` column's
 upload, delete-own, rename, create and move cells are tested (`SubtreeUploadSliceTest`, `ShareRootsSliceTest`,
 `ShareNodesSliceTest`, `ShareNodesCoreSliceTest`). A `READ` folder guest is served the media of a Memory below the folder (e2e `folderShare.e2e.test.ts`,
-2026-10-07). **UNVERIFIED by a test** (read from the code only): a folder guest's create of a chapter directly under a folder answering `illegal_structure`
-(`FolderGuestNodeRules` allows, `MemoryNodeKindRules` refuses); a `READ` ↔ `READ_WRITE` flip on a folder link.
+2026-10-07). A folder guest's create of a `MEMORY` or a chapter under a folder answering `illegal_scope` is
+`ShareNodesSliceTest.aGuestCreatesNoMemoryInAFolder`. **UNVERIFIED by a test** (read from the code only): a `READ` ↔
+`READ_WRITE` flip on a folder link.
 
 ### What the web offers — the capability matrix
 

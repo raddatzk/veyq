@@ -21,7 +21,8 @@ import org.junit.jupiter.api.Test
 /**
  * A `READ_WRITE` guest's tree operations on a `FOLDER` share, with core alone (ADR 0080 decisions 6, 9, 10; sub-slice
  * 5a.3 of cr-node-key-hierarchy): `createShareNode` and `updateShareNode`, behind the guest gate, structure only.
- * Bite tests 13 (out of the subtree, the root, a cycle, a WRITE_ONLY guest), 17 (a kind `NodeKindRules` refuses),
+ * Bite tests 13 (out of the subtree, the root, a cycle, a WRITE_ONLY guest), 17 (a kind `NodeKindRules` refuses, and
+ * before it a kind no application declares guest-creatable),
  * 19 (the root's rename) and 20 (a READ folder share exists although no application writes under it), plus what the
  * slice promises: a guest's tree is a member's tree, a create's epoch is the one it sealed with (at or below the
  * current one), a placement is compare-and-set.
@@ -192,11 +193,19 @@ class ShareNodesCoreSliceTest {
 
     // --- bite 17: placement by NodeKindRules ---
 
+    /**
+     * Two layers refuse a guest's create under a folder, each tested with the other held open. Core's own (owner decision
+     * 2026-10-14, [FolderGuestNodeRules]): a kind no application declares guest-creatable is `illegal_scope`, before
+     * any placement rule is asked — a `MEMORY` here, which no rule of core alone places either. And `NodeKindRules`
+     * behind it (bite test 17): a kind declared guest-creatable ([CoreTestGuestCreatableKinds]) that no rule places is
+     * still `illegal_structure`. Neither stores anything.
+     */
     @Test
     fun aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused() {
         val t = tree()
-        // core alone: no rule places a MEMORY, under a folder or anywhere
-        create(t.link, t.a, "MEMORY").statusCode(422).body("code", equalTo("illegal_structure"))
+        create(t.link, t.a, "MEMORY").statusCode(422).body("code", equalTo("illegal_scope"))
+        create(t.link, t.a, CoreTestGuestCreatableKinds.KIND).statusCode(422).body("code", equalTo("illegal_structure"))
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { NodeEntity.count("parentId", t.a) }, "a refused create stores nothing")
         create(t.link, t.a, NodeEntity.FOLDER).statusCode(201) // control
     }
 

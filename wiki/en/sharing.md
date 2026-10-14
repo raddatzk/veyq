@@ -22,7 +22,7 @@ When you create a link you decide **what people may do** — in the dialog, the 
 | Choice | What it means |
 |---|---|
 | **View only** | They can look and download. They can change nothing. |
-| **View + add** (for a folder: *View + contribute*; for a Memory: *View + add photos*) | They can look **and** add their own things. In a folder they can also move things around inside it and put a newer version over a file. |
+| **View + add** (for a folder: *View + contribute*; for a Memory: *View + add photos*) | They can look **and** add their own things. In a folder that means new folders and uploaded files — not a new Memory or drop box; they can also move things around inside it and put a newer version over a file. |
 | **Add only** (Memories: *Add photos only*) | A **drop box**: they can hand things in but **cannot see** what is there or what anyone else added. |
 
 A person with a "view + add" or drop-box link types their name **once**, so you can see who added what. Other
