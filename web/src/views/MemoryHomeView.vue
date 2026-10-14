@@ -10,7 +10,8 @@
 // (`core/node/LevelView.vue`), which asks the registry for each application's rows. A move of any node — the folder
 // on screen, an application's row, an opened node, a drop box's guest folder — is core's `core/node/MoveNodeDialog.vue`
 // through the member's door (`nodeMover`, inbox #358); a level's selection of several moves through core's
-// `core/node/MoveNodesDialog.vue` by the same door (inbox #421). The fragment is a slug path derived from the names (ADR 0015), so
+// `core/node/MoveNodesDialog.vue` by the same door, and is deleted after one question (`DeleteNodesDialog`, inbox #421).
+// The fragment is a slug path derived from the names (ADR 0015), so
 // after every write that re-reads the tree the node on screen is followed to its path in the new tree (`stayOn`): a
 // move or a rename of it or of a folder above it, and an older equal-segment sibling restored or moved in, change it.
 //
@@ -38,6 +39,8 @@ import { SHARING_PUBLIC_LINKS, SHARING_UPLOADER_LINKS } from '../features/platfo
 import type { TreeNode } from '../core/node/tree'
 import Message from 'primevue/message'
 import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
+import DeleteNodesDialog from '../core/node/components/DeleteNodesDialog.vue'
+import type { SelectedForDelete } from '../core/node/selection'
 import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
 import FolderNameDialog from '../core/node/FolderNameDialog.vue'
 import LevelView from '../core/node/LevelView.vue'
@@ -161,6 +164,8 @@ const createDialog = computed(() => {
 const moving = ref<{ node: TreeNode; shown: string | null } | null>(null)
 // A level's selection being moved (inbox #421), and what was on screen.
 const movingMany = ref<{ nodes: TreeNode[]; shown: string | null } | null>(null)
+// A level's selection being deleted (inbox #421): one question, core's `DeleteNodesDialog`.
+const deletingMany = ref<{ items: SelectedForDelete[]; shown: string | null } | null>(null)
 const mover = nodeMover(() => access.value)
 // ADR 0082: the node being downloaded as a ZIP (core's `ExportSubtreeDialog`), and the download being imported under the folder on screen.
 const exporting = ref<TreeNode | null>(null)
@@ -174,7 +179,7 @@ const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node
 const { ticks: liveTick } = useLevelLive({
   active: () => activeSpace.status === 'ready' && !treeStore.error && !kindDetail.value && !isOpenable.value && !place.value.person,
   paused: () =>
-    !!nameDialog.value || !!createKind.value || !!moving.value || !!movingMany.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
+    !!nameDialog.value || !!createKind.value || !!moving.value || !!movingMany.value || !!deletingMany.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
   read: (signal) => pollTree(signal),
 })
 const deleteTarget = ref<TreeNode | null>(null)
@@ -274,6 +279,9 @@ function onMoved() {
 }
 function startMoveMany(nodes: TreeNode[]) {
   movingMany.value = { nodes, shown: currentNodeId.value }
+}
+function startDeleteMany(items: SelectedForDelete[]) {
+  deletingMany.value = { items, shown: currentNodeId.value }
 }
 /** The undo moved it back (after the dialog closed): follow it back the same way. */
 function afterUndo(shown: string | null) {
@@ -387,6 +395,7 @@ async function onDeleteDone() {
         @delete-folder="currentFolder && startDelete(currentFolder)"
         @move-node="startMove"
         @move-nodes="startMoveMany"
+        @delete-nodes="startDeleteMany"
         @download-node="exporting = $event"
         @import-archive="importing = $event"
         @open-trash="trashVisible = true"
@@ -422,6 +431,16 @@ async function onDeleteDone() {
       :node="deleteTarget"
       @done="onDeleteDone"
       @close="deleteVisible = false"
+    />
+    <DeleteNodesDialog
+      v-if="deletingMany && epochs && activeSpace.scopeId"
+      :scope-id="activeSpace.scopeId"
+      :epochs="epochs"
+      :items="deletingMany.items"
+      :name-of="(n: TreeNode) => displayNameOf(treeStore.nodes, n)"
+      :after-undo="afterUndo(deletingMany.shown)"
+      @done="stayOn(deletingMany?.shown ?? null)"
+      @close="deletingMany = null"
     />
     <ExportSubtreeDialog
       v-if="exporting"

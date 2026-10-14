@@ -348,12 +348,12 @@ const countText = computed(() =>
 const cannotMoveText = computed(() => {
   const m = selectedIds.value.length
   const n = m - movable.value.length
-  return n > 0 ? t('node.select.cannotMove', { n, m }) : ''
+  return n > 0 ? t('node.select.cannotMove', { n, m }, n) : ''
 })
 const cannotDeleteText = computed(() => {
   const m = selectedIds.value.length
   const n = m - deletable.value.length
-  return anyDelete.value && n > 0 ? t('node.select.cannotDelete', { n, m }) : ''
+  return anyDelete.value && n > 0 ? t('node.select.cannotDelete', { n, m }, n) : ''
 })
 function toggleSelecting(): void {
   selecting.value = !selecting.value

@@ -38,6 +38,7 @@ export function realI18n(): typeof i18n {
 
 /** Resolve a key through the real catalog, for an assertion that follows whatever the catalog says. A key the
  *  catalog lacks fails the test like a rendered one. */
-export function t(key: string, named?: Record<string, unknown>): string {
+export function t(key: string, named?: Record<string, unknown>, plural?: number): string {
+  if (plural !== undefined) return i18n.global.t(key, named ?? {}, plural) // a `one | many` entry, chosen by `plural`
   return named ? i18n.global.t(key, named) : i18n.global.t(key)
 }

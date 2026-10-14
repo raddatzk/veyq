@@ -83,7 +83,7 @@ happened. Owner decisions 2026-10-14 (inbox #421). Drag and drop is **not** part
     wire test shows each write is the single-node write (`move.wire.test.ts` pattern). Bitten.
   - Done when `npm run check` is green and a real browser on the dev instance moved a mixed selection (folder, Memory,
     file) as a member and a selection as a `READ_WRITE` guest.
-- [ ] 3 web: delete a selection (Decision 4).
+- [x] 3 web: delete a selection (Decision 4).
   - Tests: one question naming count and kinds; each node through its kind's door; a failure is named and the rest
     deleted; Undo restores exactly what went; no Delete for a guest. Bitten.
   - Done when `npm run check` is green and a real browser deleted and restored a mixed selection.

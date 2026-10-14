@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// A member's move through the personal-space host (inbox #358), over the REAL registry (Memories and Files, as `main.ts`
+// A member's move through the personal-space host (inbox #358) - and a level's selection moved and deleted (inbox #421) - over the REAL registry (Memories and Files, as `main.ts`
 // fills it), the real router, PrimeVue, core's real level view, move dialog and confirmation dialog, Files' real drop-box
 // detail and Memories' real detail adapter — every step a DOM click. The placement write is a recorder (`moveNode`): its
 // wire is `core/node/move.wire.test.ts`'s. Only the heavy Memories detail view is a stub that exposes the events the host
@@ -34,6 +34,8 @@ vi.mock('../core/node/treeStore', async () => {
 vi.mock('../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/node/tree')>()),
   moveNode: vi.fn(async () => {}),
+  deleteNode: vi.fn(async () => {}),
+  restoreNode: vi.fn(async () => {}),
   nodeContentKey: () => new Uint8Array(32).fill(9),
   parentContentKey: () => new Uint8Array(32).fill(9), // the key a Memory row opens its meta under
 }))
@@ -52,7 +54,7 @@ vi.mock('../features/files/api', () => ({ filesApi: vi.fn() }))
 
 import MemoryHomeView from './MemoryHomeView.vue'
 import { treeStore, loadTree } from '../core/node/treeStore'
-import { moveNode, type TreeNode } from '../core/node/tree'
+import { deleteNode, moveNode, restoreNode, type TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND } from '../features/memory/kinds'
 import { DROPBOX_KIND, FILE_KIND } from '../features/files/kinds'
@@ -66,7 +68,7 @@ import { stubApi } from '../test/apiMock'
 import { filesApi } from '../features/files/api'
 import { clickAction } from '../test/levelRows'
 import { browserOpen as dialogOpen, crumbs, goTo, moveHere, placeNames } from '../test/moveBrowser'
-import { moveSelection, selectRows, startSelecting } from '../test/levelSelection'
+import { deleteSelection, moveSelection, selectRows, startSelecting } from '../test/levelSelection'
 
 const node = (id: string, kind: string, parentId: string | null, name: string, over: Partial<TreeNode> = {}): TreeNode =>
   treeNode({ id, kind, name, parentId, ...over })
@@ -171,6 +173,33 @@ describe('a member moves a selection of the level', () => {
     toast.showUndo.mock.calls[0][0].onUndo()
     await flushPromises()
     expect(vi.mocked(moveNode).mock.calls.map((c) => [c[3], c[4]]).sort()).toEqual([['italy', 'trips'], ['notes', 'trips'], ['rome', 'trips']])
+    expect(loadTree).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a member deletes a selection of the level', () => {
+  it('Select, tick a folder, a Memory and a file, Delete: one question, each through its door, one re-read, one Undo', async () => {
+    vi.mocked(deleteNode).mockClear()
+    vi.mocked(restoreNode).mockClear()
+    await mountAt('#~me/trips/')
+    await startSelecting()
+    await selectRows('Rome', 'Italy', 'notes.txt')
+    await deleteSelection()
+    const dialog = () => document.body.querySelector('.delete-nodes-dialog')
+    expect(dialog()!.textContent).toContain(t('node.deleteMany.title', { count: 3 }))
+    expect(deleteNode, 'nothing before the answer').not.toHaveBeenCalled()
+    const confirm = [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('node.delete'))!
+    await click(confirm)
+    // the folder and the Memory through core's delete, the file through Files' source (which writes core's delete too)
+    expect(vi.mocked(deleteNode).mock.calls.map((c) => c[1]).sort()).toEqual(['italy', 'notes', 'rome'])
+    expect(loadTree, 'one re-read for the three').toHaveBeenCalledTimes(1)
+    expect(dialog(), 'closed').toBeNull()
+    expect(router.currentRoute.value.hash, 'the level on screen stays').toBe('#~me/trips/')
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.deleteMany.moved', { count: 3 }, 3) }))
+    vi.mocked(loadTree).mockClear()
+    toast.showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+    expect(vi.mocked(restoreNode).mock.calls.map((c) => c[3].id).sort()).toEqual(['italy', 'notes', 'rome'])
     expect(loadTree).toHaveBeenCalledTimes(1)
   })
 })

@@ -905,6 +905,23 @@ const en = {
     deleteFolderCopy: '“{name}” and everything inside it move to the trash. You can restore them from there until they are removed for good.',
     deleteCopy: '“{name}” moves to the trash. You can restore it from there until it is removed for good.',
     deleteFailed: 'Could not delete it. Please try again.',
+    // Deleting a level's selection (`core/node/components/DeleteNodesDialog.vue`, inbox #421): ONE question naming how many and
+    // of which kinds (`{kinds}`: the kinds' `nounWithArticle`, joined), one summary naming each node that was not deleted.
+    deleteMany: {
+      title: 'Delete {count} items',
+      copy: '{count} selected items move to the trash, with everything inside them. The selection includes {kinds}. You can restore them from there until they are removed for good.',
+      moved: '{count} item moved to the trash. | {count} items moved to the trash.',
+      noneDeleted: 'Nothing was deleted.',
+      notDeleted: 'Not deleted:',
+      reason: '“{name}”: {reason}',
+      quoted: '“{name}”',
+      refused: {
+        gone: 'It is no longer there.',
+        scope_deleting: 'This space is being deleted.',
+        failed: 'Deleting didn’t work. Please try again.',
+      },
+      undoFailed: 'Could not be restored: {names}. You can restore them from the trash.',
+    },
     // The level's Select mode (`core/node/LevelView.vue`, inbox #421): the toolbar button, the bar's All / None, its count
     // (`{hidden}`: how many of the selected the tab on screen does not show) and what part of it an action cannot reach.
     select: {
@@ -2465,6 +2482,21 @@ const de: typeof en = {
     deleteFolderCopy: '„{name}“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
     deleteCopy: '„{name}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.',
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
+    deleteMany: {
+      title: '{count} Einträge löschen',
+      copy: '{count} ausgewählte Einträge kommen mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
+      moved: '{count} Eintrag liegt jetzt im Papierkorb. | {count} Einträge liegen jetzt im Papierkorb.',
+      noneDeleted: 'Nichts wurde gelöscht.',
+      notDeleted: 'Nicht gelöscht:',
+      reason: '„{name}“: {reason}',
+      quoted: '„{name}“',
+      refused: {
+        gone: 'Es ist nicht mehr da.',
+        scope_deleting: 'Dieser Bereich wird gelöscht.',
+        failed: 'Das Löschen hat nicht geklappt. Bitte versuche es erneut.',
+      },
+      undoFailed: 'Konnte nicht wiederhergestellt werden: {names}. Du kannst sie aus dem Papierkorb wiederherstellen.',
+    },
     select: {
       action: 'Auswählen',
       bar: 'Auswahl',
@@ -2472,8 +2504,8 @@ const de: typeof en = {
       none: 'Keine',
       count: '{count} ausgewählt',
       countHidden: '{count} ausgewählt, davon {hidden} in diesem Tab nicht sichtbar',
-      cannotMove: '{n} von {m} können nicht verschoben werden.',
-      cannotDelete: '{n} von {m} können nicht gelöscht werden.',
+      cannotMove: '{n} von {m} kann nicht verschoben werden. | {n} von {m} können nicht verschoben werden.',
+      cannotDelete: '{n} von {m} kann nicht gelöscht werden. | {n} von {m} können nicht gelöscht werden.',
     },
     move: {
       action: 'Verschieben nach …',
