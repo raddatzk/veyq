@@ -246,6 +246,12 @@ list every key a template actually reads and check it against **both** locale bl
 grep -rho "t('members\.\w*'" web/src --include="*.vue" --include="*.ts" | sort -u
 ```
 
+**PrimeVue's own texts come from the catalog too, set in one place.** A PrimeVue component reads some strings from
+its config's `locale` - a Dialog's close button, every `<Password>`'s hidden "Enter a password", the DatePicker's
+month names - and `src/app/primeVueLocale.ts` (one per package, `web/` and `admin-web/`) writes them from the
+catalog's `primevue` block at start and on every language change; no component sets PrimeVue's locale itself, and
+a newly used PrimeVue component or prop brings the keys it reads into that file and both locale blocks (inbox #434).
+
 ## Accessibility & responsiveness
 
 Visible focus states, accessible names, predictable keyboard behaviour. No hover-only affordances for

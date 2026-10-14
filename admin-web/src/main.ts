@@ -7,6 +7,7 @@ import router from './router'
 import { i18n } from './i18n'
 import { boot } from './app/boot'
 import { initializeTheme } from './shared/state/systemTheme'
+import { syncPrimeVueLocale } from './app/primeVueLocale'
 import './style.css'
 import 'primeicons/primeicons.css'
 
@@ -22,6 +23,7 @@ async function bootstrap() {
     .use(ToastService)
     .use(i18n)
     .use(router)
+  syncPrimeVueLocale(app)
 
   router.isReady().then(() => app.mount('#app'))
 }
