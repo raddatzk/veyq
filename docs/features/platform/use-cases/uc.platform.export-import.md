@@ -1,10 +1,10 @@
 # UC: Take a node and everything under it out as a file, and bring such a file back in
 
 - **ID:** uc.platform.export-import
-- **Status:** built 2026-10-13, Download and the tree layout 2026-10-14 ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)), web, plus one small backend operation, the quota preflight (`checkTenantStorageFit`); the file format is [`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json). The quota preflight was tried against the real backend with a real quota: at 20 000 bytes the dialog said there was no room and kept Import shut, at 100 MB it let the import start, and past ten questions in a short time the server answered `429`. Download and import (format version 2) were seen in a real browser on 2026-10-14: a folder holding a Memory of six photos and a file downloaded as a ZIP that `unzip` unpacks as the tree with every SHA-256 matching; that ZIP dropped back offered Import / Upload as a file and imported as "Archiv (2)", the unpacked directory dropped back imported as "Archiv (3)" with the same tree, Cancel wrote nothing, "Upload as a file" uploaded it as a file, a ZIP with an unknown application imported the rest and named what it left out, and a tampered one was refused with its reason. **Not yet seen:** a guest's download in a browser, a directory picker (none is offered: a directory is dropped), a multi-GB export, a Memory with GPS-tagged photos, a Files folder tree, an uploaded cover, the failure messages and the progress bar, and the dialog's own look while a `429` leaves the question unanswered (unit-tested, not read in the browser).
+- **Status:** built 2026-10-13, Download and the tree layout, Upload folder and the drop box's download 2026-10-14 ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)), web, plus one small backend operation, the quota preflight (`checkTenantStorageFit`); the file format is [`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json). The quota preflight was tried against the real backend with a real quota: at 20 000 bytes the dialog said there was no room and kept Import shut, at 100 MB it let the import start, and past ten questions in a short time the server answered `429`. Download and import (format version 2) were seen in a real browser on 2026-10-14: a folder holding a Memory of six photos and a file downloaded as a ZIP that `unzip` unpacks as the tree with every SHA-256 matching; that ZIP dropped back offered Import / Upload as a file and imported as "Archiv (2)", the unpacked directory dropped back imported as "Archiv (3)" with the same tree, Cancel wrote nothing, "Upload as a file" uploaded it as a file, a ZIP with an unknown application imported the rest and named what it left out, and a tampered one was refused with its reason. Upload folder and the drop box were seen in a real browser on 2026-10-14: a directory picked through **New → Upload folder…** (the picker driven with `File`s carrying `webkitRelativePath`) was uploaded as its tree with safe names (`a:b.txt` as `a_b.txt`, `img.TXT` beside `IMG.txt` as `img (2).TXT`) and its top folder numbered among the siblings (`Reisen (2)`), after the quota preflight; a picked unpacked download opened the import (Import only) and imported; a dropped directory without the manifest was uploaded as its tree; a `READ_WRITE` guest's picked directory holding `.veyq/manifest.json` was uploaded as folders and files, never imported; a drop box with two guests both named "Dr. Anna" downloaded as `Postfach/Dr. Anna/` and `Postfach/Dr. Anna (2)/` and re-imported as plain folders of those names; and a `READ` guest of a folder link holding a Memory, files and that drop box downloaded a ZIP that `unzip` unpacks as the tree (downloaded again once the Memory held a photo, its listing showed it under `Lissabon/`). **Not yet seen:** a directory chosen in the operating system's own picker (the browser pane cannot drive it), a multi-GB export, a Memory with GPS-tagged photos, an uploaded cover, a folder upload refused by the preflight (unit-tested), the failure messages and the progress bar, and the dialog's own look while a `429` leaves the question unanswered (unit-tested, not read in the browser).
 - **Primary actor:** A member whose keys are unlocked; for the download also a `READ` / `READ_WRITE` share guest (E6).
 - **Goal:** Get a folder tree, a file, a Memory with its chapters out as one ZIP that outlives veyq and can be handed to someone, and get such a file back in, as new content that belongs to the importer.
-- **Preconditions:** Signed in and unlocked. Download: a folder, a Memory or a chapter as a ZIP; a file downloads as itself. Import: a place where the member may create (not a read-only scope, not a guest's view).
+- **Preconditions:** Signed in and unlocked. Download: a folder, a Memory, a chapter or a drop box as a ZIP; a file downloads as itself. Import: a place where the member may create (not a read-only scope, not a guest's view).
 - **Postconditions (success):** Download: one ZIP on the member's disk, written by the browser while the content was decrypted on the device. Import: a new node tree under the folder on screen, sealed under the importer's keys, uploaded by the importer.
 
 ## Main flow — download (formerly "export")
@@ -26,8 +26,10 @@
    `manifest.json`), or a directory holding `.veyq/manifest.json` at its root — never by its name. A ZIP offers **Import** or
    **Upload as a file**, a directory **Import**; one import per pick or drop, every other file is uploaded at once. Anything
    else is an ordinary upload; a directory without the manifest is uploaded as its tree, a folder per directory and a file
-   per file (inbox #424). There is no separate "Import…" entry: upload recognises an archive itself (owner decision
-   2026-10-14).
+   per file, every name made safe as an archive's paths are and a taken one numbered `Name (2)`, after the same quota
+   preflight for the tree's bytes (inbox #424; a folder that cannot be created is named and nothing below it is sent, a
+   file that fails is the upload's per-file failure). There is no separate "Import…" entry: upload recognises an archive
+   itself (owner decision 2026-10-14).
 2. The dialog reads the manifest and says what would be created, how big it is and where it goes; what this version cannot
    import is listed — a kind of an application this instance does not have, or newer data of one it has — with **Import the
    rest** or **Cancel** (ADR 0082 decision 9).
@@ -40,11 +42,13 @@
 - **E2 — a damaged archive** (a checksum does not match, a payload is missing): the import stops, what it created is moved to the trash, and the dialog says how far it got.
 - **E3 — storage or any other stop part-way:** the same: the top-level node created is moved to the trash (its subtree with it), the message says "N of M".
 - **E4 — a browser that cannot save a file this large** (no file picker, no download route): the dialog says so before anything is written; use a Chromium-based browser on a computer.
-- **E5 — a drop box:** downloads as a directory with each guest's folder under it, and imports as a **plain folder** with
-  plain folders inside: no drop key, no links, no guest identities (nothing can rebuild a guest's folder or identity;
-  owner decision 2026-10-14). A node a kind leaves out of its download is listed in the dialog.
-- **E6 — a share guest:** a `READ` or `READ_WRITE` guest **downloads** what it sees, a ZIP for a folder or a Memory, as a
-  member does (ADR 0082 decision 5); no guest imports, and a recognised archive is an ordinary upload for a guest.
+- **E5 — a drop box:** downloads as a directory with each guest's folder under it, under the name the drop box shows it by
+  (a repeated name numbered, `Anna (2)`), and imports as a **plain folder** with plain folders inside: no drop key, no
+  links, no guest identities (nothing can rebuild a guest's folder or identity; owner decision 2026-10-14). Its own guest
+  (`WRITE_ONLY`) downloads nothing. A node a kind leaves out of its download is listed in the dialog.
+- **E6 — a share guest:** a `READ` or `READ_WRITE` guest **downloads** what it sees, a ZIP for a folder, a Memory or a drop
+  box, as a member does (ADR 0082 decision 5); no guest imports: a recognised archive is an ordinary upload for a guest,
+  and a `READ_WRITE` guest's directory is always uploaded as its tree, its `.veyq/` included as files.
 - **E8 — a tampered or malformed archive:** a manifest that fails its schema, a path or name outside the rules, an offset
   outside the file, overlapping entries, a declared size that is not the actual one, a field over the API's limit: refused
   before anything is written, with the reason (ADR 0082 decision 10).

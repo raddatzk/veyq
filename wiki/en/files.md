@@ -11,6 +11,10 @@ space, side by side.
 - **Upload** — choose **New → Upload files**, or drop files onto the folder. Uploads run in the background, and the
   status menu in the top bar shows how far they are, one list for each place you upload into (a second upload
   into the same folder joins its list).
+- **Upload a folder** — choose **New → Upload folder…**, or drop a folder onto the folder: it arrives as folders and files,
+  just as it is on your computer (empty folders inside it are left out). A name some computers do not allow is changed
+  slightly, and a name that is already taken becomes "Name (2)". A folder that is an unpacked veyq download is offered as an
+  import instead ([Download and import](download-and-import.md)).
 - **Download** — the download button on the file's row (or at the top of its page) gives you the file back exactly as
   you put it in, under the name it has in veyq. Clicking the row itself opens the file's own page.
 - **Look at it** — click the file's row and its page opens with the file itself on it: a **picture** is shown, a

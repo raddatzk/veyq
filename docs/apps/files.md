@@ -107,12 +107,21 @@ reads).
   lists its files in the grid, inbox #404). An empty Files tab says so in Files' words (`files.empty` where an upload is
   possible, `files.emptyReadOnly`, `files.guest.empty`). Read-only during a pending deletion: download only. The same
   rows are a share guest's (§ Guests).
-- **Upload folder** (owner decision 2026-10-14, inbox #424; **decided, not yet built**): a second level action, the "New"
-  menu's "Upload folder…", offered where "Upload files" is, taking a picked or a dropped directory. A directory holding
-  `.veyq/manifest.json` at its root is an unpacked download and goes to core's import (members only); any other is
-  uploaded as its tree, a `FOLDER` per directory and a `FILE` per file, names made safe by core's `archiveName` with its
-  clash suffix, after the quota preflight for the whole tree. A `READ_WRITE` guest gets the folder upload, never the
-  import. Core's "New → Import…" is gone: upload recognises an archive itself.
+- **Upload folder** (owner decision 2026-10-14, inbox #424): a second level action (`files.uploadFolder`, the "New" menu's
+  "Upload folder…"), shown by `canUploadFolder` - Files' `upload` AND core's `createFolder` at the level, so a member and a
+  `READ_WRITE` guest alike, never in an identity folder. Its picker picks a directory (`webkitdirectory`), and its handler
+  takes a dropped one (`dropDirectory`). Core looks first (`host.screenDirectory`; a drop is read by core): a directory with
+  `.veyq/manifest.json` at its root is an unpacked download and goes to core's import, for a member only and one per pick
+  or drop; any other - a guest's always, its `.veyq/` included as files - is uploaded as its tree (`uploadFolder.ts`):
+  `planFolderUpload` makes a `FOLDER` per directory and a `FILE` per file, every name through core's `archiveName` with its
+  clash suffix and numbered further where a sibling's slug (each kind's own folding) holds it, the top folder numbered among
+  the level's siblings; then a member's quota preflight for the tree's bytes (core's `tenantStorageFits`: a "no" is a
+  notice and writes nothing, an unanswered question never blocks; a guest asks none, its link has its own limit); then
+  `createFolders` creates the folders top-down through the session's `FilesUpload.beginTree` (a guest is named first, and
+  each folder it creates joins its key chain) and hands one queue job per file to core's queue. A folder that cannot be
+  created is named in a notice and nothing below it is sent; a file that fails is the queue's per-file failure. A directory
+  lists only files, so an empty directory is not created. Core's "New → Import…" is gone: upload recognises an archive
+  itself.
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
   FILE sibling already holds by `fileNameSlug`, replace that file after the uploader confirmed (`files.replaceConfirm`,
   for a member and a contributor guest alike — the one way a row's file is replaced, owner decision 2026-10-14); the
@@ -402,11 +411,15 @@ A **`FILES_DROPBOX`** is a Files node at the root or in a `FOLDER` (no placement
 **`WRITE_ONLY` only** (`FilesShareRoots`). Its guests hold no key of it; what they send lands in **identity folders**,
 one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_identity_id` (ADR 0080 decision 11).
 
-**A drop box downloads as a ZIP** like any other container (owner decision 2026-10-14, **decided, not yet built**;
+**A drop box downloads as a ZIP** like any other container (owner decision 2026-10-14;
 [ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
-decision 4): a directory for the drop box with each guest's folder under it by its shown name. It **imports as a plain
-folder** with plain folders inside - no drop key, no links, no identities, because nothing can rebuild a guest's folder
-or identity ([uc.platform.export-import](../features/platform/use-cases/uc.platform.export-import.md) E5).
+decision 4): core's Download in its row's menu and its header (`DropBoxDetail`), for a member and a `READ` / `READ_WRITE`
+guest of a folder link above it, never its own `WRITE_ONLY` guest (core's `canDownload`). Its content is only what it was
+(`exportDropBox`, `files.drop-box`, no payload); the ZIP holds it as a directory with each guest's folder under the name the
+detail shows it by (`Dr. Anna (2)`: core's walker takes every segment from the session's `nameOf` and lists equal names in
+that order). It **imports as a plain folder** with plain folders inside (`importsAsFolder` on its descriptor; core names no
+Files kind) - no drop key, no links, no identities, because nothing can rebuild a guest's folder or identity
+([uc.platform.export-import](../features/platform/use-cases/uc.platform.export-import.md) E5).
 
 **A drop box carries a cover** (inbox #411, core's feature - [uc.platform.node-cover](../features/platform/use-cases/uc.platform.node-cover.md)):
 Files opts it in (`FilesNodeKindRules.takesCover`, `register.ts` `cover: {}`), nothing else - the action, the dialog (choose, crop, remove), the upload, the
@@ -450,7 +463,7 @@ write and the display are core's, the image is the box's own blob in the `COVER`
   drop box's name, its share and delete; inbox #385 (b)) — (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
   creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's
   `compareByCreation`, by core's `displayNamesOf`, which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
-  core's `segmentsOf` in `core/node/location.ts`; a download's ZIP names its directories by core's `archiveName` instead), opens a folder
+  core's `segmentsOf` in `core/node/location.ts`; a download's ZIP names them so too, made safe by core's `archiveName`), opens a folder
   (core's level view, read-only there: download and a delete per file — a content-less one too — through the level's
   `deletable`, no share, and no tab that has nothing to show — core's `hideEmptyTabs`) and deletes a folder. **Members place nothing** in a drop box or
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is

@@ -39,7 +39,8 @@ walks the tree with the keys the member already holds, decrypts, and writes the 
 
 **3. The format.** A **store-only** (no compression — media is already compressed, and it keeps the writer trivial and
 streamable) ZIP that **reads as the tree when unpacked** (owner decision 2026-10-14): each node is a directory named after
-the node, its files under their own names (`Trip 2025/Lisbon/IMG_1.jpg`), and the manifest beside them at
+the node as the downloading session shows it among its siblings (two drop-box guests named Anna: `Anna`, `Anna (2)`; equal
+names are listed in that order, so an import numbers each as its directory is named), its files under their own names (`Trip 2025/Lisbon/IMG_1.jpg`), and the manifest beside them at
 **`.veyq/manifest.json`**, so the same archive is an ordinary download and an importable export. Names are made safe for
 every file system before they become paths: no `/` or `\`, no `.`/`..`, no control characters, none of Windows'
 reserved names (`CON`, `NUL`, …) or trailing dots and spaces, a bounded length, and a numeric suffix where two names of
@@ -60,7 +61,8 @@ a reader reads both while a writer writes only 2.
 **4. It is a download, and is called one** (owner decision 2026-10-14). There is no "Export": a node offers
 **Download** — a file as itself, a folder, a Memory, a chapter or a drop box as this ZIP (a drop box as a directory
 with each guest's folder under it; it imports as a plain folder, because nothing can rebuild a guest's folder or
-identity — owner decision 2026-10-14). No plaintext warning and no
+identity — owner decision 2026-10-14: the manifest keeps the kind it was, and that kind declares that it imports as a
+folder, so core names no application's kind). No plaintext warning and no
 location option: a downloaded file is as plaintext as a downloaded archive, and a photo's coordinates sit in its own
 EXIF, which the archive keeps byte for byte (Addendum 2), so an option that dropped only the manifest's copies promised
 more than it did.

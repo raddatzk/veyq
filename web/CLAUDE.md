@@ -264,11 +264,13 @@ here; the server is blind.
   without a `list`, or not registered at all, is an unsupported row. For the level's "New" menu (inbox #406) a kind brings
   `createEntry` (`{ label, icon, order, allowed(ctx), enabled?(ctx) }`: the kind's menu entry, its label an i18n key of the
   application's own namespace, `allowed` its fail-closed capability function, and it needs a `createDialog`, which
-  `registerKind` checks) and `levelActions` (entries that are no create dialog - Files' "Upload files"; ids write-once,
-  `create:` reserved; `acceptsDrop` makes the level hand it the files dropped onto it). The factory registers the action's
-  handler with `host.registerAction(id, { enabled, run, drop? })` (`core/node/levelActions.ts`) for the level's life; an entry
-  whose handler is not `enabled` is disabled, and a DROP reaches `drop` only while the entry is `allowed` AND its handler
-  `enabled` (a drop is never more than the menu entry). The level's toolbar is core's: the "New" menu
+  `registerKind` checks) and `levelActions` (entries that are no create dialog - Files' "Upload files" and "Upload folder…";
+  ids write-once, `create:` reserved; `acceptsDrop` makes the level hand it what is dropped onto it). The factory registers
+  the action's handler with `host.registerAction(id, { enabled, run, drop?, dropDirectory? })` (`core/node/levelActions.ts`)
+  for the level's life; an entry whose handler is not `enabled` is disabled, and a DROP reaches `drop` (files) or
+  `dropDirectory` (a directory that is no download) only while the entry is `allowed` AND its handler `enabled` (a drop is
+  never more than the menu entry). There is no import entry: core recognises a download in what an upload picks or drops
+  (`host.screenUpload`, `host.screenDirectory`) and offers the member its import. The level's toolbar is core's: the "New" menu
   (`registry.levelMenu()` plus core's own folder entry, one PrimeVue button + popup `Menu`, each entry only where its own
   capability function says yes, so a READ guest has none; a create entry emits `create(kind)` and the host mounts the
   `createDialog`), the space's trash, and the view switch over the union of the presentations on screen - core's grid and

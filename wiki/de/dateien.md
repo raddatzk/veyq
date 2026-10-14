@@ -11,6 +11,11 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
 - **Hochladen** — wähle **Neu → Dateien hochladen** oder lege Dateien auf den Ordner. Das Hochladen läuft im
   Hintergrund; das Status-Menü in der oberen Leiste zeigt, wie weit es ist, mit einer Liste für jeden Ort, an den du
   hochlädst (ein zweites Hochladen in denselben Ordner kommt zu seiner Liste dazu).
+- **Einen Ordner hochladen** — wähle **Neu → Ordner hochladen…** oder lege einen Ordner auf den Ordner: Er kommt als
+  Ordner und Dateien an, genau wie auf deinem Computer (leere Ordner darin werden ausgelassen). Ein Name, den manche Computer
+  nicht erlauben, wird leicht geändert, und ein schon vergebener Name heißt dann „Name (2)“. Ein Ordner, der ein
+  ausgepackter veyq-Download ist, wird dir stattdessen zum Importieren angeboten ([Herunterladen und
+  Importieren](herunterladen-und-importieren.md)).
 - **Herunterladen** — die Herunterladen-Schaltfläche in der Zeile der Datei (oder oben auf ihrer Seite) gibt dir die
   Datei genau so zurück, wie du sie abgelegt hast, unter dem Namen, den sie in veyq hat. Ein Klick auf die Zeile selbst öffnet die Seite der Datei.
 - **Ansehen** — klicke auf die Zeile der Datei, und ihre Seite öffnet sich mit der Datei selbst darauf: ein **Bild**

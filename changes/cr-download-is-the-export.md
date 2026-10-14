@@ -143,9 +143,9 @@ and imports as a plain folder.
     no share); the Download action is offered on a drop box to a member and to a guest of a folder link above it,
     never to its `WRITE_ONLY` guest. Bitten.
   - Done when `npm run check` is green and a drop box was downloaded and re-imported in a real browser.
-- [ ] 7 live: a guest's download in a real browser - a `READ` folder link holding a Memory and a file (and a drop
+- [x] 7 live: a guest's download in a real browser - a `READ` folder link holding a Memory and a file (and a drop
   box) downloads its ZIP, which unpacks as the tree.
-- [ ] 8 docs: uc E5, E6 and import step 1 (no "not available yet", no "Import…", the picker), `docs/apps/files.md`
+- [x] 8 docs: uc E5, E6 and import step 1 (no "not available yet", no "Import…", the picker), `docs/apps/files.md`
   (Upload folder; the drop box's download), both wikis, coverage, inbox #424 closed into this CR.
   - Done when the trust-chain guards are green.
 
@@ -159,23 +159,20 @@ and imports as a plain folder.
 
 ## Where it stands
 
-Phases 1-4 are built; the two open questions below were answered by the owner on 2026-10-14 (Decisions 6 and 7) and
-became phases 5-8.
+All eight phases are built and committed; the CR waits only for the closing retro with the owner (the main session deletes it).
 
-All four phases are built and committed (568c902a contracts, 41fb175d + a83902e7 web, and the docs commit). Two product
-questions the CR does not settle keep it open; both are the owner's:
+- Phases 1-4: 568c902a (contracts), 41fb175d + a83902e7 (web), 08665b74 (docs).
+- Phase 5 (Decision 6, inbox #424): 08bd63ee - "New → Upload folder…", the folder upload, the manifest routing, the preflight;
+  core's "New → Import…" gone.
+- Phase 6 (Decision 7): c8196786 (contracts: `files.drop-box`) and 87ba7f5e (web: the drop box's Download, its ZIP under the
+  shown names, its import as plain folders).
+- Phase 7 (live, no code): a `READ` folder link holding a Memory (empty, then with a photo), files and a drop box with two
+  guests named "Dr. Anna"; the guest's ZIP unpacks as the tree (`unzip -l`).
+- Phase 8 (docs): the use case, ADR 0082 decisions 3 and 4, `docs/apps/files.md`, both wikis, coverage, `web/CLAUDE.md`, inbox
+  #424 closed - in the docs commit that carries this section.
 
-1. **Where a member PICKS a directory.** Decision 3 names a `webkitdirectory` pick and the use case "picks a directory", but
-   no control names where. Built: a DROPPED directory (with `.veyq/manifest.json` imported, without it "Folder upload is not
-   available yet"), and `pickedDirectory` (`core/export/importSource.ts`, tested) that maps a picked `FileList` to the same
-   import input. Recommendation: the picker arrives with inbox #424 as a "New → Upload folder…" entry whose pick goes to the
-   import when the manifest is there - no import-only picker now. Related: core's **New → Import…** (ZIP only) still exists
-   beside the recognition on upload; keep it (one explicit door) or drop it with #424.
-2. **A drop box as a ZIP.** The Goal and ADR 0082 decision 4 say a drop box downloads as a ZIP; uc E5 and Files' hooks say a
-   drop box is not exported (it is a share object with guest identities, and nothing can place a guest's folder on import).
-   Built: no Download on a drop box (unchanged). Recommendation: download-only - the drop box as a directory with its
-   guests' folders as folders - and on import create it as a plain folder (no identities, no links), stated in E5; or strike
-   "drop box" from decision 4.
+No question is handed back. What the build settled on its own is in the retrospective (each mechanical, none a product
+choice the CR left open).
 
 ## Retrospective
 
@@ -206,3 +203,37 @@ questions the CR does not settle keep it open; both are the owner's:
   range; LIMITS vs schema pin; guest upload not screened; folder-upload message; directory not uploaded as a file; one import
   per drop; Upload-as-a-file only when offered; Import hidden with nothing importable; Memories participant cap and medium
   without file; Files' picker through the screen.
+- **Phases 5-8: the CR's two late decisions were complete enough to build without a question.** Decision 6 and 7 named the
+  control per surface (the lesson of phase 1-4's retro, applied by the refinement), and the brief needed none of its machine
+  hints beyond the dev instance's. What the build still had to settle, each mechanical and written where it binds:
+  - a guest asks no quota preflight (the endpoint is a member's; "an unanswered question never blocks" already covers it);
+  - a folder that cannot be created is named in a notice and its subtree is not sent (the CR named only a FILE's failure);
+  - names are numbered by slug too, not only by `archiveName`'s case fold (`a.b` and `a b` fold to one folder slug);
+  - the manifest's content type is `files.drop-box`: the schema's `content.type` pattern refuses `files.dropBox`;
+  - an empty directory is not created (a pick or a drop lists only files) - stated in `docs/apps/files.md` and #424.
+- **The CR's "numbered as the detail numbers it" was half the rule (planning).** Taking each archive segment from the shown
+  name was not enough: the import numbers a clash in the order it meets the nodes, and the walker listed two equal names in
+  served order - so the second Anna's files would have come back in the folder named "Anna". The drop box's import test
+  showed it; the walker now lists equal names in their shown order, numerically (`G (2)` before `G (10)`), bitten by an
+  eleven-name test. Next time: a rule about names in an archive is stated for BOTH directions - the path written and the
+  name an import gives it back.
+- **One guard half cannot be bitten.** `canUploadFolder` is Files' `upload` AND core's `createFolder`; in every row of today's
+  two matrices they agree, so removing the `upload` half stays green. Kept as the statement of the rule; it bites the day
+  the matrices differ.
+- **Live verification without the OS dialogs (tooling).** The browser pane drives neither a directory picker nor a save
+  picker. Used instead: `HTMLInputElement.prototype.click` hooked to capture the detached picker, its `files` set to `File`s
+  carrying `webkitRelativePath`, then `change`; a drop as a synthetic `drop` event with `webkitGetAsEntry` entries; and
+  `window.showSaveFilePicker` stubbed to collect the archive, read back as base64 into a fresh scratch directory for
+  `unzip -l`. A PrimeVue popup left open by a JS click covered the header and swallowed a ref click; a `ref` taken before
+  the menu re-rendered clicked the wrong place. Next time: open menus by a real click, and `find` the ref again right
+  before the click.
+- **Bitten (each red, then restored byte for byte by a script):** phase 5 - the directory screen ignoring who looks or the
+  manifest, a manifest below the root counted (after a first bite missed and the test gained that case), a dropped
+  directory not handed on, two imports per drop, a drop ignoring `enabled()`, the Import entry back in the menu, no
+  preflight, a preflight blocking on no answer, a guest reading `activeSpace`, a picked directory not screened, no
+  `webkitdirectory`, a dropped directory screened twice, no notice for a folder that failed, a guest's new folder not joining
+  its key chain, the plan ignoring slugs, the top folder not numbered among siblings, no `archiveName`, no next suffix on
+  `slug_taken`, a failed sub-folder aborting all, paths not NFC, `canUploadFolder` without core's `createFolder`; phase 6 -
+  `importsAsFolder` ignored by the dry run or by the create, segments from the own name, no shown-name order, a
+  non-numeric order, the drop box not exported, not imported as a folder, its content's extras or type unchecked, no
+  Download in its header, a `WRITE_ONLY` guest allowed to download.
