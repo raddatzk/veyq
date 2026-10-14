@@ -138,10 +138,13 @@ components:
           x-veyq-visibility: public
           type: [string, "null"]
           description: >
-            The release version the running image was stamped with at publish: `<major>.<minor>`, the value
-            this repository's VERSION file held at the commit that published it, and the tag the image carries
-            in the registry (ADR 0057 §1). A publish onto an existing tag fails rather than replacing it, which
-            is what makes this value a rollback target rather than a label on a moving artifact.
+            The release version the running image was stamped with at publish, and the tag the image carries
+            in the registry (ADR 0057 §1): `<major>.<minor>` for a release, or `<major>.<minor>-SNAPSHOT` for a
+            snapshot. The major is this repository's VERSION file at the commit that published it, the minor the
+            number of commits since VERSION last changed. A release onto an existing tag fails rather than
+            replacing it, which is what makes `<major>.<minor>` a rollback target rather than a label on a moving
+            artifact. A snapshot's name is the one that moves: publishing that commit again replaces it, so it is
+            never a rollback target.
 
             `null` when the running build was never published — a locally built image or a `quarkusDev` run.
             That is reported as the absence it is, never as a placeholder.

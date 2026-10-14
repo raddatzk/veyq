@@ -23,6 +23,9 @@ import jakarta.enterprise.context.ApplicationScoped
 class ReleaseIdentity(
     config: VeyqConfig,
 ) {
-    /** `<major>.<minor>` for a published image; `null` for a build that carries no release stamp. */
+    /**
+     * `<major>.<minor>` for a release, `<major>.<minor>-SNAPSHOT` for a snapshot (the one name that moves, ADR 0057
+     * §1), reported exactly as stamped; `null` for a build that carries no release stamp.
+     */
     val version: String? = config.release().version().orElse(null)?.trim()?.takeIf { it.isNotEmpty() }
 }
