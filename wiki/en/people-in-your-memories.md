@@ -7,8 +7,11 @@ took part in.
 
 ## What you can do
 
-- **Name the people.** Open a Memory and choose **Add participants** under its title. You pick from the members of the
-  space the Memory lives in. They appear as a row of small avatars in the Memory's header (up to three; with more, the last one shows "+2", "+3" and so on) — hover over them, or tap them, to see everyone by name. In the picker you can search the members by name. A Memory can name up to 100 people.
+- **Name the people.** Open a Memory and choose **Participants** — the button with a person and a plus sign in the row of
+  buttons at the top of the Memory. You pick from the members of the space the Memory lives in. They appear as a row of small avatars in the Memory's header (up to three; with more, the last one shows "+2", "+3" and so on) — hover over them, or tap them, to see everyone by name. In the picker you can search the members by name. A Memory can name up to 100 people.
+- **"I was there" when you create a Memory.** In a shared space (not in your personal one) the dialog for a new Memory
+  has **I was there**, ticked unless you untick it. Ticked, you are the Memory's first participant from the start;
+  unticked, it starts with nobody. It means "I was there", not "I made this" — so it is your choice each time.
 - **Open a person.** Click a name and you land on that person's profile: their name, their picture (or a letter), and below them
   the Memories they took part in — only the ones **you** are allowed to open. A Memory you can't see is simply not
   in the list. Each one shows its cover, name, date and place (when it has them) — as tiles or as rows: use the

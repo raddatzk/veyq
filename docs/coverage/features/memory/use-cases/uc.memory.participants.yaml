@@ -6,7 +6,8 @@ title: Memory participants — opaque ids in the sealed meta, a profile that lis
 # guest exclusion is an INTERFACE boundary, not a cryptographic one - a share serves the node's meta unchanged and the guest
 # holds K_mem; the list holds opaque ids only, so the accepted residual is the count and the ids, never a name (ADR 0083
 # decision 4, comparable to ADR 0030 point 8). Not built: a user avatar (inbox #414), the uploader on Files (inbox #415).
-# Unverified in a real browser (the dev stack was not run for this change); the profile's covers load per visit only.
+# The header action and "I was there" were clicked through on the dev instance (2026-10-14); the rest of the first build was
+# not verified in a real browser. The profile's covers load per visit only.
 acceptanceCriteria:
   - id: participants-sealed-in-node-meta
     text: A Memory's participants are a `participants` sub-object of opaque user ids (`{ userIds }`, unique, at most 100) inside its `wrappedMeta` under K_mem, written read-modify-write with the metaVersion compare-and-set; nothing but ids is stored (no name, no snapshot), unknown siblings are kept, an empty list drops the sub-object, and the server stores one opaque blob and no participant relation.
@@ -22,7 +23,7 @@ acceptanceCriteria:
         unit:
           - src/features/memory/memoryParticipants.test.ts
   - id: guest-sees-no-participants
-    text: The interface shows a guest no participants in any share view - the `participants` capability is false for every share role, so there is no section, avatar, control or profile link, and the header reads and requests nothing for it - while the sealed meta a share serves still lists the opaque ids (the accepted residual, pinned by a test); no name snapshot is ever stored.
+    text: The interface shows a guest no participants in any share view - the `participants` capability is false for every share role, so there is no section, avatar, header action or profile link, and the header reads and requests nothing for it - while the sealed meta a share serves still lists the opaque ids (the accepted residual, pinned by a test); no name snapshot is ever stored.
     coverage:
       web:
         unit:
@@ -30,13 +31,23 @@ acceptanceCriteria:
           - src/features/memory/components/MemoryDetail.guest.test.ts
           - src/views/ShareView.memory.test.ts
           - src/features/memory/components/MemoryParticipants.test.ts
+          - src/features/memory/components/MemoryDetail.caps.test.ts
   - id: header-chips-and-picker
-    text: A member sees the participants as overlapping letter avatars (up to three; past three the third slot is a "+N") and, in a popover opened by hover, focus or tap, every participant by name (real name, else username, read from the tenant's member list) linking to the profile - a former member greyed without a link - and - where the meta may be written, never during a pending scope deletion or in a personal scope - an add/edit control that opens a picker (checkboxes with a name search) over the scope's current members.
+    text: A member sees the participants as overlapping letter avatars (up to three; past three the third slot is a "+N") and, in a popover opened by hover, focus or tap, every participant by name (real name, else username, read from the tenant's member list) linking to the profile - a former member greyed without a link - and - where the meta may be written, never during a pending scope deletion, in a personal scope or on a chapter - a "Participants" action (`pi-user-plus`) in the header's action bar that opens a picker (checkboxes with a name search) over the scope's current members; with no participant the line under the title renders nothing (no text, no link).
     coverage:
       web:
         unit:
           - src/features/memory/components/MemoryParticipants.test.ts
+          - src/features/memory/components/MemoryDetail.caps.test.ts
           - src/core/people/directory.test.ts
+  - id: participants-at-creation
+    text: In a tenant or group scope a member's create dialog of a Memory offers "I was there", ticked by default and not remembered between creations; ticked, the Memory's first `wrappedMeta` - in the one create call, no second write - carries `participants` with the creator's own user id only; unticked it carries no `participants` key (absent, not an empty list). It is never offered in a personal scope, on a chapter, without the member's own id, or on a share guest's create (core's name dialog, which sends no meta).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/memoryNodes.test.ts
+          - src/features/memory/components/MemoryNodeDialog.test.ts
+          - src/core/sharing/ShareTreePage.test.ts
   - id: former-member-greyed
     text: A participant who left the scope stays as an id and renders greyed as "Former member" without a link; nothing prunes it, and the picker keeps it ticked until the person unticks it.
     coverage:

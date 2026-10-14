@@ -118,7 +118,10 @@ welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
 - Model and write: `web/src/features/memory/memoryParticipants.ts` (`participants: { userIds }`, cap 100, the merging edit);
   `editParticipantsOf` in `core/node/nodeMeta.ts`; the capability `participants` in `capabilities.ts`; the door
   `NodeMetaDoor.setParticipants` in `source.ts`.
-- Header and picker: `components/MemoryParticipants.vue`, `MemoryParticipantsDialog.vue`, `useMemoryParticipants.ts`; names
+- At creation: "I was there" in Memories' create dialog `components/MemoryNodeDialog.vue`, sealed at birth by `createMemory`'s
+  `participants` (`memoryNodes.ts`).
+- Header and picker: the `participants` action in `components/MemoryDetail.vue`'s header list, which opens the picker the row
+  `components/MemoryParticipants.vue` exposes; `MemoryParticipantsDialog.vue`, `useMemoryParticipants.ts`; names
   from `core/people/directory.ts` (real name, else username; read from the tenant's member list).
 - Profile: `core/people/PersonProfile.vue` (core's frame, sections claimed through `registry.claimPersonSection`), Memories'
   section `components/PersonMemories.vue` over `participantIndex.ts`; the route in `core/node/location.ts` and `views/MemoryHomeView.vue`.
