@@ -111,10 +111,21 @@ export function collectLocatedPinsBy(
     } catch {
       continue // locked node — silently skipped
     }
-    if (!location?.derived) continue // no location, or a pending auto place with no position yet
-    pins.push({ node, location: { ...location, derived: location.derived }, date })
+    const pin = locatedPin(node, location, date)
+    if (pin) pins.push(pin)
   }
   return pins
+}
+
+/**
+ * The pin of one node from its already-unsealed facts, or `null` when it has no place to stand on: no location, or a
+ * pending `auto` place with no `derived` position yet. The ONE rule for "a Memory without a place" - the level's map
+ * ({@link collectLocatedPinsBy}) and a person's profile map (`components/PersonMemories.vue`, inbox #417) both leave such a
+ * Memory out, and say "No places yet" when none is left.
+ */
+export function locatedPin(node: TreeNode, location: MemoryLocation | null, date: MemoryDate | null): LocatedPin | null {
+  if (!location?.derived) return null
+  return { node, location: { ...location, derived: location.derived }, date }
 }
 
 /**

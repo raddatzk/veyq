@@ -21,7 +21,7 @@ import { ScopeKind } from '../../api/generated/scopes'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import { normalizeParticipants } from './memoryParticipants'
 import { normalizeDate, type MemoryDate } from './memoryDate'
-import { normalizeLocation } from './memoryLocation'
+import { normalizeLocation, type MemoryLocation } from './memoryLocation'
 import { MEMORY_KIND } from './kinds'
 
 /** Memories opened per scope before the walk stops and the result is partial. */
@@ -42,6 +42,9 @@ export interface ParticipatedMemory {
   /** The Memory's content key (its cover opens under it). Dropped with the cache. */
   key: Uint8Array
   date: MemoryDate | null
+  /** The Memory's place as sealed (the profile's map pins it where it has a `derived` position, inbox #417). */
+  location: MemoryLocation | null
+  /** The place's name, '' without one (the row's place detail). */
   placeName: string
   userIds: string[]
 }
@@ -115,6 +118,7 @@ function readScope(scopeId: string, scopeToken: string, label: string, epochs: E
     const userIds = normalizeParticipants(meta.participants)
     if (userIds.length === 0) continue
     // The key outlives the scope's epoch keys (zeroed by the caller): copy, the chain's arrays are not ours.
+    const location = normalizeLocation(meta.location)
     memories.push({
       ref: `${scopeId}/${node.id}`,
       scopeId,
@@ -124,7 +128,8 @@ function readScope(scopeId: string, scopeToken: string, label: string, epochs: E
       tree: nodes,
       key: key.slice(),
       date: normalizeDate(meta.date),
-      placeName: normalizeLocation(meta.location)?.name ?? '',
+      location,
+      placeName: location?.name ?? '',
       userIds,
     })
   }

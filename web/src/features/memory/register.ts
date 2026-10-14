@@ -13,7 +13,7 @@
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, Registry } from '../../core/applications/registry'
-import { GRID_VIEW, LIST_VIEW, type LevelViewOption } from '../../core/node/levelViews'
+import { MEMORY_VIEWS } from './memoryViews'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import { memoryRows } from './levelRows'
 import { loadMemoryPhotoCover } from './coverLoad'
@@ -26,9 +26,6 @@ import { memoriesLifecycle } from './lifecycle'
 import { memoryCapabilities } from './capabilities'
 import { targetOf } from '../../core/access'
 import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_CONTENT_SCHEMA } from './exportImport'
-
-/** The places map of a level (cr-0071): Memories' own presentation — its pins span the level's whole subtree. */
-const MAP_VIEW: LevelViewOption = { mode: 'map', icon: 'pi pi-map', label: 'memory.viewMap' }
 
 /** Memories' URL route slug (inbox #328): the segment before the name of a Memory in the fragment path. */
 export const MEMORIES_ROUTE_SLUG = 'memories'
@@ -43,9 +40,10 @@ export function registerMemories(registry: Registry): void {
   // share dialog reads `nodeKind` for its wording. Core's delete dialog titles each by its own noun (`deleteTitle`):
   // "Delete Memory", "Delete chapter".
   // Its `views`: the card grid, its list variant and the places map (inbox #370) - core's level toolbar offers them; the grid
-  // and list are core's, the map is Memories' own, drawn by the factory. The same list names its tab and the plain text of
-  // that tab while it has nothing.
-  const list = { rows: memoryRows, tabLabel: 'memory.memories', views: [GRID_VIEW, LIST_VIEW, MAP_VIEW], emptyText: () => 'memory.memoryEmpty' }
+  // and list are core's, the map is Memories' own, drawn by the factory (its pins span the level's whole subtree); the person's
+  // profile offers the very same list (`memoryViews.ts`, inbox #417). The same list names its tab and the plain text of that
+  // tab while it has nothing.
+  const list = { rows: memoryRows, tabLabel: 'memory.memories', views: MEMORY_VIEWS, emptyText: () => 'memory.memoryEmpty' }
   const memories = {
     detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
     // Both carry a cover (inbox #411: core's action, dialog, upload and display). Core reads an uploaded cover itself; the

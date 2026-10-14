@@ -26,7 +26,7 @@ const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
 const BEN = 'bbbbbbbb-0000-4000-8000-000000000002'
 
 /** One scope's sealed rows: a root folder `Trips` holding the given Memories (name, participants, date). */
-function scopeRows(scopeId: string, epochKey: Uint8Array, memories: { id: string; name: string; users?: string[]; date?: unknown; place?: string }[]) {
+function scopeRows(scopeId: string, epochKey: Uint8Array, memories: { id: string; name: string; users?: string[]; date?: unknown; place?: string; at?: { lat: number; lng: number } }[]) {
   const addr = (nodeId: string) => ({ scopeId, nodeId, epoch: 0, placementVersion: 1 })
   const folderKey = v1.randomBytes(32)
   const base = { createdAt: new Date(0), placementVersion: 1, epoch: 0, slugToken: 's', orderIndex: 0, metaVersion: 0 }
@@ -38,7 +38,7 @@ function scopeRows(scopeId: string, epochKey: Uint8Array, memories: { id: string
   for (const m of memories) {
     const key = v1.randomBytes(32)
     keys.set(m.id, key)
-    const meta = { v: 1 as const, ...(m.users ? { participants: { userIds: m.users } } : {}), ...(m.date ? { date: m.date } : {}), ...(m.place ? { location: { name: m.place, nameSource: 'manual', derivedMode: 'fixed' } } : {}) }
+    const meta = { v: 1 as const, ...(m.users ? { participants: { userIds: m.users } } : {}), ...(m.date ? { date: m.date } : {}), ...(m.place ? { location: { name: m.place, nameSource: 'manual', derivedMode: 'fixed', ...(m.at ? { derived: m.at } : {}) } } : {}) }
     rows.push({
       ...base, id: m.id, parentId: FOLDER, kind: MEMORY_KIND,
       encryptedName: sealName(folderKey, addr(m.id), m.name), wrappedContentKey: wrapContentKey(folderKey, addr(m.id), key),
@@ -64,7 +64,7 @@ describe('loadParticipantIndex', () => {
       scopeSummary({ id: T1, kind: ScopeKind.Tenant }), scopeSummary({ id: G1, kind: ScopeKind.Group }), scopeSummary({ id: P1, kind: ScopeKind.Personal }),
     ])
     const t1 = scopeRows(T1, epochKey, [
-      { id: M1, name: 'Rome', users: [ANNA, BEN], date: { mode: 'single', from: '2026-05-01', to: '2026-05-01' }, place: 'Roma' },
+      { id: M1, name: 'Rome', users: [ANNA, BEN], date: { mode: 'single', from: '2026-05-01', to: '2026-05-01' }, place: 'Roma', at: { lat: 41.9, lng: 12.5 } },
       { id: M2, name: 'Nobody listed' },
     ])
     const g1 = scopeRows(G1, epochKey, [{ id: M3, name: 'Camping', users: [ANNA] }])
@@ -78,10 +78,12 @@ describe('loadParticipantIndex', () => {
     expect(rome.node.name).toBe('Rome')
     expect(rome.date?.from).toBe('2026-05-01')
     expect(rome.placeName).toBe('Roma')
+    expect(rome.location?.derived).toEqual({ lat: 41.9, lng: 12.5 }) // the profile's map pins it (inbox #417)
     expect(rome.scopeToken).toBe('')
     const camping = index.memories.get(`${G1}/${M3}`)!
     expect(camping.scopeToken).toBe(`@${G1}`)
     expect(camping.scopeLabel).toBe('Family group')
+    expect(camping.location).toBeNull() // no place sealed: no pin
     expect(index.memories.has(`${T1}/${M2}`)).toBe(false) // no participants, not indexed
     expect(index.partial).toBe(false)
     expect(mocked.fetchTree.mock.calls.map((c) => c[0]).sort()).toEqual([T1, G1]) // the personal scope was never read
