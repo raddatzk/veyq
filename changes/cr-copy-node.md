@@ -63,7 +63,7 @@ server sees only ordinary creates and uploads. Members only. Owner decisions 202
 
 ## Phases
 
-- [ ] 1 web: Decisions 1-5 for one node ("Copy to…" in the row menu and the header).
+- [x] 1 web: Decisions 1-5 for one node ("Copy to…" in the row menu and the header).
   - Tests: the browser in copy mode allows the current place and blocks the node and its inside; a folder with a file
     and a Memory with a chapter and photos copies to the same tree under fresh keys (the wire: new ids, new wraps, no
     request names the original's ids except reads); `Name (2)`; the losses listed per kind; a quota "no" writes
@@ -85,6 +85,10 @@ server sees only ordinary creates and uploads. Members only. Owner decisions 202
     Addendum 2 and the use case already say so. Done when the Memory-with-a-chapter copy test (fresh keys on the wire, no
     whole-file read, the facts and the cover kept) is green and bitten, `npm run check` is green, and a real browser
     copied a folder holding a Memory.
+  - **Built (a27103eb):** both hooks learn the walk's `purpose` (`download` | `copy`); Memories' copy hands over each
+    medium's tiers by frame, its blobs' declared meta and the listed tier verbatim, and `addCopiedMedia` uploads them
+    without `deriveTiers` or an EXIF read; an uploaded cover goes through `uploadCoverBlob` (no re-encode). Proven by
+    `features/memory/copy.wire.test.ts` (13 bites across it and `exportImport.test.ts`) and the browser run in the use case.
 - [x] 2 web: "Copy to…" in the selection bar of cr-select-nodes (several nodes, one dialog, one summary).
   - Done when `npm run check` is green and a selection was copied in a real browser.
 - [x] 3 docs: the use case's status and what was seen; its coverage from `planned` to refs; `docs/apps/*.md` matrices;
@@ -114,4 +118,20 @@ server sees only ordinary creates and uploads. Members only. Owner decisions 202
   (`importStreams`, payload `frames`) and the Memory-like test kind lacked both, so removing either gate stayed green.
   Each lever now has its own kind. Process held otherwise: staged by path, unsigned commits as allowed, the dev instance
   restored (the copies are in the space's trash).
-- **Handed back:** how Memories copy - see phase 1's note and the implementer's report.
+- **Handed back, then answered the same day (option b):** how Memories copy.
+- **Memory half - planning: the owner's answer named the facts but not every sealed tier.** "Capture time + correction,
+  coordinates, place name" left the EXIF bundle and the geometry (`w`/`h`, which the grid's layout needs) unnamed. Both are
+  sealed per-medium facts an import of the same file would restore, so the copy re-seals them; reading them as "not named,
+  so dropped" would have made a copy carry less than an import. **Next time:** when an answer lists fields of a sealed
+  record, ask (or state in the CR) whether the list is exhaustive or illustrative - a record copied verbatim is the safer
+  default and also keeps fields a newer client wrote (ADR 0077 point 4's lesson).
+- **Memory half - execution: the archive's content shape had to stay untrusted.** The copy's extras ride the same
+  `content` an archive carries, so a forged archive could carry them too. The import reads them only under
+  `purpose: 'copy'`, which core sets from `prepareCopy` alone, and a test pins that an import ignores a `copy` it finds.
+  **Next time:** a mode flag that widens what a hook trusts comes from the caller, never from the data.
+- **Memory half - execution: bites first went red for the wrong reason.** Several of the new unit tests went red on a
+  missing mock (`TypeError`), not on their assertion - the previous retro's "a test that could not tell two reasons apart"
+  in a new form. Defaulting every new door's mock in `beforeEach` made each bite fail on its own assertion. Process held:
+  staged by path, unsigned commits, `addMedia`'s characterisation snapshots unchanged, the dev copies in the trash (the
+  original "Lissabon" keeps the correction, cover and empty chapter the run gave it); the `npm run check` run under a load
+  of ~22 lost four suites to setup-hook timeouts that passed on a re-run, and its build and verify steps ran green after.
