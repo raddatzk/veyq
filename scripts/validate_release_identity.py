@@ -4,19 +4,27 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
 
 **What it asserts.** Seven things, in the order a release happens:
 
-  1. **`VERSION` exists at the repository root and holds `<major>.<minor>`.** That file *is* the release
-     identity (ADR 0057 §1) — a checkout answers what it is, with no network call and no registry.
-  2. **The publish workflow derives the version from that file, offline.** The `version` job's compute step is
-     *executed* here, in a throwaway directory holding a copy of `VERSION`, under four scenarios — a `main`
-     push, a pull request, a matching `v<major>.<minor>` tag, and a tag that disagrees with the tree (which
-     must FAIL). Executing it is the only honest way to assert what a publish *would* stamp; reading it would
-     only assert what it looks like. The step is also held to declaring no network tool at all, because a
-     version a registry decides is not an identity (ADR 0057 § Rejected).
-  3. **A publish refuses to replace a release, and leaves exactly one git ref.** The `publish` job carries a
-     step that fails when the image tag or `v<major>.<minor>` already exists, and a step that creates that ref
-     — neither with `--force`, and both keyed on the *tree-derived* version rather than on anything else. The
-     `build` job stamps the same value into the image as `VEYQ_VERSION`, which is what the running instance
-     later reports.
+  1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
+     identity (ADR 0057 §1): the minor is the number of commits since `VERSION` last changed, so a checkout
+     answers what it is, with no network call and no registry — and no tree can hold the minor.
+  2. **The publish workflow derives the version from the tree, offline.** The `version` job's compute step is
+     *executed* here, inside a throwaway git repository this guard builds — `VERSION` changed twice, then a
+     known number of commits, plus a shallow clone of it — so the minor is asserted against a known count, never
+     against this repository's own history, which moves. Scenarios: a snapshot and a release dispatch on `main`,
+     both on `release/<major>.x`, a push and a pull request (kind `none`, the dry run), and — each must FAIL —
+     a dispatch of either kind on a branch that disagrees with the tree or is not a release branch, and a shallow
+     checkout. Executing it is the only honest way to assert what a publish *would* stamp; reading it would only
+     assert what it looks like. The step is also held to declaring no network tool at all (a `git` that talks to
+     a remote included), because a version a registry decides is not an identity (ADR 0057 § Rejected), and to
+     receiving each input the scenarios set from the expression a run sets it from.
+  3. **Only a dispatch writes to a registry; a release refuses to replace itself and leaves exactly one git ref.**
+     `workflow_dispatch` takes a boolean `release` input defaulting to false. Every registry write in the file —
+     found by what a step does (a login or build-push action, or a `run:` that pushes, logs in or signs), never
+     listed — is gated on `workflow_dispatch` by its step, its job or its push input, and the `publish` job as a
+     whole is. The `publish` job carries a step that fails when an artifact's tag or `v<major>.<minor>` already
+     exists, and a step that creates that ref — both run for `kind == release` only, neither with `--force`, and
+     both keyed on the *tree-derived* version rather than on anything else. The `build` job stamps the same value
+     into the image as `VEYQ_VERSION`, which is what the running instance later reports.
   4. **The deployment recipe travels in the image, in every runtime target.** Every `runtime-*` stage of the
      `Dockerfile` (one today, `runtime-jvm`) copies `infra/docker-compose.prod.yml` and `infra/.env.example`
      from their real in-tree paths, to the same destination, and that destination is neither `/work` (it holds
@@ -76,13 +84,20 @@ publish workflow whose pattern, `^https://github.com/<repo>/`, accepts a signatu
 repository on any ref, a pull request's included; `infra/README.md` never told an operator to verify at all;
 and the version step still published — and so signed — from a `master` branch nothing else knew about.
 
+Assertions 2 and 3 were reshaped by a defect of the pipeline's own design (cr-release-pipeline-and-chart-oci,
+2026-10-14), found when the first push was planned rather than by a run: every push to `main` published the
+version in `VERSION`, so every push after the first would have been a red run at the refusal until someone
+committed a bump, and there was no way to try the publish path before it named something for good. Publishing
+moved behind a dispatch, and the minor into the history; this guard holds both.
+
 **A note for whoever edits this next, because the first run of assertion 5 tripped on it:** this guard scans
 durable state for a literal, and its own file is durable state, so spelling that literal here makes the guard
 flag itself. Describe the flag, do not write it. The repair that suggests itself — excluding this file from the
 scan — puts a hole in exactly the place a future instruction would hide.
 
 **Its limit — what a green run does NOT prove.** It reads **files**, and executes exactly one of them (the
-version step's shell). It cannot prove a publish ever ran, that a tag was created, that a republish was
+version step's shell, against a history it built — so `fetch-depth: 0` on the real checkout is proven only by a
+run, where its absence is a loud red at the shallow refusal). It cannot prove a publish ever ran, that a tag was created, that a republish was
 refused, or that the registry holds what the workflow says it would push — this repository has **no remote**
 and no workflow has ever executed, so the publish path stays an explicitly stated ADR 0040 gap. The trust chain
 is also **buildless**: nothing here can inspect a *built* image, so assertion 4 proves the `Dockerfile`
@@ -91,6 +106,12 @@ back out, which is cr-release-identity's phase-2 done-when and not a guard. It s
 manifest's `app.version` (its observable is a capture run against a live instance, not a file), and its scan
 for written-down image tags covers `infra/` only: `docs/` quotes the *old, wrong* shapes on purpose, as the
 defect being described.
+
+Assertion 3's gating is read as a conservative model of GitHub's expression language: an `if:` counts as gated
+only if it is a pure `&&` chain with the dispatch (or release) test as one term, so an equivalent condition
+spelled any other way is a false red, never a false green. A registry write it does not recognise — a new tool,
+or an action other than the login and build-push ones — is not held; the recognised set is the regex and the two
+action names in the code.
 
 **Assertion 5's own limit, and it is deliberate: it is scoped to the RELEASE RECIPE and says nothing about
 `infra/docker-compose.yml`.** A chart deploys the recipe, not the dev stack, and a dev-only `build:` is a
@@ -139,8 +160,10 @@ WORKFLOW = ROOT / ".github/workflows/container.yml"
 DOCKERFILE = ROOT / "Dockerfile"
 INFRA = ROOT / "infra"
 
-# `<major>.<minor>` — the whole release identity. Not three parts: the pipeline emits `<major>`,
-# `<major>.<minor>`, `sha-<sha>` and `latest`, and a patch component would name an artifact with no producer.
+# `VERSION` holds the major alone; the minor is a commit count, so no tree can hold it (ADR 0057 §1).
+MAJOR = re.compile(r"^([0-9]+)$")
+# `<major>.<minor>` — a release's whole identity. Not three parts: the pipeline emits `<major>`, `<major>.<minor>`,
+# `<major>.<minor>-SNAPSHOT`, `sha-<sha>` and `latest`, and a patch component would name an artifact with no producer.
 RELEASE_VERSION = re.compile(r"^([0-9]+)\.([0-9]+)$")
 
 # Step ids this guard anchors on. A rename makes it say "step not found" rather than pass vacuously.
@@ -174,8 +197,25 @@ FORBIDDEN_DESTS = {
 # (the same discrimination validate_config_secret_persistence.py's APP_IMAGE makes, and for the same reason).
 IMAGE_TAG = re.compile(r"(?:^|[\s/=\"'`])veyq:([^\s\"'`,;)}\]]+)")
 
-# Anything that would make the version a function of the network rather than of the tree.
-NETWORK_TOOLS = re.compile(r"(?:^|[\s|(&;])(gh|curl|wget|nc)\s", re.MULTILINE)
+# Anything that would make the version a function of the network rather than of the tree — a `git` that talks to
+# a remote included, because deepening a shallow clone is the obvious wrong repair for the shallow refusal.
+NETWORK_TOOLS = re.compile(r"(?:^|[\s|(&;])(gh|curl|wget|nc|git\s+(?:fetch|pull|clone|ls-remote))\s", re.MULTILINE)
+
+# The step's inputs, each from the expression a run actually hands it. The scenarios below set exactly these, so a
+# workflow that stopped passing one would be executed here with a value it never receives.
+STEP_ENV = {
+    "EVENT_NAME": "${{ github.event_name }}",
+    "REF_NAME": "${{ github.ref_name }}",
+    "RELEASE": "${{ inputs.release }}",
+}
+
+# What a publish is gated on, and what a release-only step is gated on (ADR 0057 §1–2).
+DISPATCH = "github.event_name == 'workflow_dispatch'"
+RELEASE_KIND = "needs.version.outputs.kind == 'release'"
+# A `run:` that writes to a registry or to the remote. `uses:` writers are recognised by action below.
+REGISTRY_WRITE_RUN = re.compile(
+    r"\b(?:helm\s+push|helm\s+registry\s+login|cosign\s+sign|imagetools\s+create|docker\s+push|docker\s+login|git\s+push|oras\s+push)\b"
+)
 
 
 def non_release_branches(major: str) -> list[str]:
@@ -200,7 +240,7 @@ def fail(message: str) -> None:
 
 version_text = VERSION_FILE.read_text() if VERSION_FILE.is_file() else None
 version_value = version_text.strip() if version_text is not None else None
-version_match = RELEASE_VERSION.match(version_value) if version_value else None
+version_match = MAJOR.match(version_value) if version_value else None
 
 if version_text is None:
     fail(
@@ -210,8 +250,9 @@ if version_text is None:
     )
 elif not version_match:
     fail(
-        f"VERSION holds {version_value!r}, which is not `<major>.<minor>`. The pipeline emits `<major>`, "
-        f"`<major>.<minor>`, `sha-<sha>` and `latest` — any other shape names an artifact with no producer."
+        f"VERSION holds {version_value!r}, which is not the major alone. The minor is the number of commits since "
+        f"VERSION last changed (ADR 0057 §1), so a tree cannot hold it — a minor written here is one the "
+        f"publish would ignore or contradict."
     )
 elif version_text != f"{version_value}\n":
     fail(
@@ -231,26 +272,76 @@ def step_by_id(doc: dict, job: str, step_id: str) -> dict | None:
     return next((s for s in job_steps(doc, job) if s.get("id") == step_id), None)
 
 
-def run_scenario(script: str, env: dict[str, str]) -> tuple[int, dict[str, str], str]:
+def git(cwd: pathlib.Path, *args: str) -> str:
+    """git with no user or system config, so a signing hook or alias on this machine cannot shape the history."""
+    proc = subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", *args],
+        cwd=cwd,
+        env={
+            "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+            "HOME": str(cwd),
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_AUTHOR_NAME": "release-identity",
+            "GIT_AUTHOR_EMAIL": "guard@invalid",
+            "GIT_COMMITTER_NAME": "release-identity",
+            "GIT_COMMITTER_EMAIL": "guard@invalid",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)}: {proc.stderr.strip()}")
+    return proc.stdout
+
+
+# The throwaway history the version step is executed against: a known count, never this repository's own
+# history, which moves with every commit. VERSION changes TWICE, so a step that counted from the first change
+# (5) or counted every commit (6) is told apart from one that counts from the last change (3).
+EXPECTED_MINOR = 3
+
+
+def build_history(tmp: pathlib.Path, major: str) -> tuple[pathlib.Path, pathlib.Path]:
+    """A full clone and a shallow clone of a history whose VERSION last changed EXPECTED_MINOR commits ago."""
+    origin = tmp / "origin"
+    origin.mkdir()
+    git(origin, "init", "-q", "-b", "main")
+
+    def commit(message: str, **files: str) -> None:
+        for name, body in files.items():
+            (origin / name).write_text(body)
+        git(origin, "add", "-A")
+        git(origin, "commit", "-q", "-m", message)
+
+    commit("an older major", VERSION=f"{int(major) + 41}\n", notes="1\n")
+    commit("work under it", notes="2\n")
+    commit("the major this tree holds", VERSION=version_text or "")
+    for n in range(EXPECTED_MINOR):
+        commit(f"work {n}", notes=f"{n + 3}\n")
+    full = tmp / "full"
+    shallow = tmp / "shallow"
+    git(tmp, "clone", "-q", "--no-local", str(origin), str(full))
+    git(tmp, "clone", "-q", "--depth", "1", f"file://{origin}", str(shallow))
+    return full, shallow
+
+
+def run_scenario(script: str, checkout: pathlib.Path, env: dict[str, str]) -> tuple[int, dict[str, str], str]:
     """Execute the workflow's own version script offline and read back what it wrote to $GITHUB_OUTPUT."""
-    with tempfile.TemporaryDirectory(prefix="release_identity_") as tmp:
-        work = pathlib.Path(tmp)
-        (work / "VERSION").write_text(version_text or "")
-        out = work / "github_output"
-        out.touch()
-        proc = subprocess.run(
-            ["bash", "-c", script],
-            cwd=work,
-            env={"PATH": "/usr/bin:/bin", "GITHUB_OUTPUT": str(out), **env},
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        written = {}
-        for line in out.read_text().splitlines():
-            key, _, value = line.partition("=")
-            written[key] = value
-        return proc.returncode, written, (proc.stderr or proc.stdout).strip()
+    out = checkout.parent / f"github_output_{checkout.name}"
+    out.write_text("")
+    proc = subprocess.run(
+        ["bash", "-c", script],
+        cwd=checkout,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(checkout), "GITHUB_OUTPUT": str(out), **env},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    written = {}
+    for line in out.read_text().splitlines():
+        key, _, value = line.partition("=")
+        written[key] = value
+    return proc.returncode, written, (proc.stderr or proc.stdout).strip()
 
 
 workflow_doc: dict = {}
@@ -270,6 +361,14 @@ if workflow_doc and compute is None:
     )
 elif compute is not None and version_match:
     script = str(compute.get("run") or "")
+    step_env = {str(k): str(v) for k, v in (compute.get("env") or {}).items()}
+    for key, expression in STEP_ENV.items():
+        if step_env.get(key) != expression:
+            fail(
+                f"the `{VERSION_STEP}` step's env sets `{key}` to `{step_env.get(key)}`, not `{expression}` — this "
+                f"guard executes the step with `{key}` set the way a run sets it, so a step that no longer receives "
+                f"it would be proven here on an input it never gets"
+            )
     if "${{" in script:
         fail(
             f"the `{VERSION_STEP}` step's script interpolates a `${{{{ }}}}` expression, so it cannot be run "
@@ -284,70 +383,103 @@ elif compute is not None and version_match:
         )
     else:
         major = version_match.group(1)
+        release = f"{major}.{EXPECTED_MINOR}"
+        snapshot = f"{release}-SNAPSHOT"
+
+        def dispatch(branch: str, release_input: bool) -> dict[str, str]:
+            return {"EVENT_NAME": "workflow_dispatch", "REF_NAME": branch, "RELEASE": str(release_input).lower()}
+
+        quiet = {"publish_branch_tags": "false", "publish_latest": "false"}
+        # (label, shallow?, env, expected exit, expected outputs)
         scenarios = [
             (
+                "a snapshot dispatch on main",
+                False, dispatch("main", False), 0,
+                {"kind": "snapshot", "version": snapshot, "major": major, **quiet},
+            ),
+            (
+                "a release dispatch on main",
+                False, dispatch("main", True), 0,
+                {"kind": "release", "version": release, "major": major, "publish_branch_tags": "true",
+                 "publish_latest": "true"},
+            ),
+            (
+                f"a release dispatch on release/{major}.x",
+                False, dispatch(f"release/{major}.x", True), 0,
+                {"kind": "release", "version": release, "publish_branch_tags": "true", "publish_latest": "false"},
+            ),
+            (
+                f"a snapshot dispatch on release/{major}.x",
+                False, dispatch(f"release/{major}.x", False), 0,
+                {"kind": "snapshot", "version": snapshot, **quiet},
+            ),
+            (
+                # A push is the dry run: it builds and publishes nothing, whatever the branch.
                 "a push to main",
-                {"EVENT_NAME": "push", "REF_TYPE": "branch", "REF_NAME": "main"},
-                0,
-                {"version": version_value, "major": major, "publish_branch_tags": "true", "publish_latest": "true"},
+                False, {"EVENT_NAME": "push", "REF_NAME": "main", "RELEASE": ""}, 0,
+                {"kind": "none", "version": snapshot, **quiet},
             ),
             (
                 "a pull request",
-                {"EVENT_NAME": "pull_request", "REF_TYPE": "branch", "REF_NAME": "main"},
-                0,
-                {"version": version_value, "publish_branch_tags": "false", "publish_latest": "false"},
+                False, {"EVENT_NAME": "pull_request", "REF_NAME": "12/merge", "RELEASE": ""}, 0,
+                {"kind": "none", "version": snapshot, **quiet},
             ),
             (
-                f"a push to release/{major}.x",
-                {"EVENT_NAME": "push", "REF_TYPE": "branch", "REF_NAME": f"release/{major}.x"},
-                0,
-                {"version": version_value, "publish_branch_tags": "true", "publish_latest": "false"},
+                # A shallow clone counts 1: the step must refuse it rather than stamp a wrong minor that looks right.
+                "a release dispatch on main from a shallow checkout",
+                True, dispatch("main", True), 1, {},
             ),
             (
-                # The built-in bite: a ref that disagrees with the tree must not produce a version at all.
-                f"a push to release/{int(major) + 7}.x, which disagrees with the tree",
-                {"EVENT_NAME": "push", "REF_TYPE": "branch", "REF_NAME": f"release/{int(major) + 7}.x"},
-                1,
-                {},
+                "a push to main from a shallow checkout",
+                True, {"EVENT_NAME": "push", "REF_NAME": "main", "RELEASE": ""}, 1, {},
             ),
         ] + [
-            # Branches that are not release branches must publish nothing, because whatever publishes also
-            # signs, and assertion 7 holds the documented verify to rejecting exactly these (ADR 0057 §3: what
-            # signs and what verifies agree). `master` is the one a publish accepted until cr-image-provenance.
+            # A ref that disagrees with the tree, and branches that are not release branches, must publish nothing
+            # of EITHER kind: whatever publishes also signs, and assertion 7 holds the documented verify to
+            # rejecting exactly these (ADR 0057 §3: what signs and what verifies agree). `master` is the one a
+            # publish accepted until cr-image-provenance.
             (
-                f"a push to {branch}, which is not a release branch",
-                {"EVENT_NAME": "push", "REF_TYPE": "branch", "REF_NAME": branch},
-                1,
-                {},
+                f"a {'release' if as_release else 'snapshot'} dispatch on {branch}, which is not a release branch "
+                f"of this tree",
+                False, dispatch(branch, as_release), 1, {},
             )
-            for branch in non_release_branches(major)
+            for branch in [f"release/{int(major) + 7}.x", *non_release_branches(major)]
+            for as_release in (True, False)
         ]
-        for label, env, expect_rc, expect in scenarios:
-            try:
-                rc, written, message = run_scenario(script, env)
-            except subprocess.TimeoutExpired:
-                fail(f"the `{VERSION_STEP}` step hung for {label} — a version derivation that waits is waiting on a network")
-                continue
-            if env["EVENT_NAME"] == "push" and rc == 0 and written.get("publish_branch_tags") == "true":
-                publishing_branches.append(env["REF_NAME"])
-            if expect_rc == 0 and rc != 0:
-                fail(f"the `{VERSION_STEP}` step fails for {label}: {message or f'exit {rc}'}")
-                continue
-            if expect_rc != 0:
-                if rc == 0:
-                    fail(
-                        f"the `{VERSION_STEP}` step accepts {label} and would stamp "
-                        f"`{written.get('version')}` — a release names itself from the tree and publishes only "
-                        f"from main or release/<major>.x, so a ref that disagrees with VERSION must fail rather "
-                        f"than pick a side, and any other branch must fail rather than publish a signed image"
-                    )
-                continue
-            for key, want in expect.items():
-                if written.get(key) != want:
-                    fail(
-                        f"for {label} the `{VERSION_STEP}` step wrote `{key}={written.get(key)}`, expected "
-                        f"`{key}={want}` (VERSION says {version_value})"
-                    )
+        try:
+            with tempfile.TemporaryDirectory(prefix="release_identity_") as tmp:
+                full, shallow = build_history(pathlib.Path(tmp), major)
+                for label, use_shallow, env, expect_rc, expect in scenarios:
+                    try:
+                        rc, written, message = run_scenario(script, shallow if use_shallow else full, env)
+                    except subprocess.TimeoutExpired:
+                        fail(f"the `{VERSION_STEP}` step hung for {label} — a version derivation that waits is waiting on a network")
+                        continue
+                    if env["EVENT_NAME"] == "workflow_dispatch" and rc == 0:
+                        publishing_branches.append(env["REF_NAME"])
+                    if expect_rc == 0 and rc != 0:
+                        fail(f"the `{VERSION_STEP}` step fails for {label}: {message or f'exit {rc}'}")
+                        continue
+                    if expect_rc != 0:
+                        if rc == 0:
+                            fail(
+                                f"the `{VERSION_STEP}` step accepts {label} and would stamp "
+                                f"`{written.get('version')}` (kind `{written.get('kind')}`) — a publish names "
+                                f"itself from the full history and runs only from main or release/<major>.x, so "
+                                f"a ref that disagrees with VERSION, any other branch, and a shallow checkout "
+                                f"must fail rather than publish a signed artifact under a wrong name"
+                            )
+                        continue
+                    for key, want in expect.items():
+                        if written.get(key) != want:
+                            fail(
+                                f"for {label} the `{VERSION_STEP}` step wrote `{key}={written.get(key)}`, expected "
+                                f"`{key}={want}` (VERSION says {version_value}, and it last changed "
+                                f"{EXPECTED_MINOR} commits before HEAD)"
+                            )
+        except (RuntimeError, subprocess.TimeoutExpired) as e:
+            fail(f"could not build the throwaway history the version step is executed against, so it checked NOTHING: {e}")
+        publishing_branches[:] = sorted(set(publishing_branches))
 
 # The value the workflow derives must be the value stamped into the image, or the instance reports a version
 # that is not the one it was published under.
@@ -380,11 +512,35 @@ if workflow_doc:
             f"`permissions: contents: write` (ADR 0057 §2 — one release, one name, one tree)"
         )
 
+    # The dispatch input that chooses the kind. A boolean that defaults to false is what makes a snapshot the
+    # default and a release something asked for — a string input, or a default of true, inverts that.
+    release_input = ((triggers.get("workflow_dispatch") or {}).get("inputs") or {}).get("release") or {}
+    if release_input.get("type") != "boolean" or release_input.get("default") is not False:
+        fail(
+            f"{WORKFLOW.relative_to(ROOT)}: `workflow_dispatch` must take a boolean input `release` that defaults "
+            f"to false (found {release_input or 'none'}) — a publish is a snapshot unless a release is asked for "
+            f"explicitly (ADR 0057 §1)"
+        )
+
+    def gated_on(condition: object, conjunct: str) -> bool:
+        """Whether a GitHub `if:` (or an expression input) cannot be true unless `conjunct` is.
+
+        Deliberately conservative: the expression must be a pure `&&` chain with the conjunct as one of its
+        terms. Any `||` or a negation could reach the step without it, and is read as NOT gated — a false red,
+        never a false green.
+        """
+        text = str(condition if condition is not None else "").strip()
+        if text.startswith("${{") and text.endswith("}}"):
+            text = text[3:-2].strip()
+        if not text or "||" in text or re.search(r"!(?!=)", text):
+            return False
+        return any(term.strip() == conjunct for term in text.split("&&"))
+
     for step_id, must_contain, why in (
         (
             REFUSE_STEP,
             ("exit 1",),
-            "a publish whose tag already exists must FAIL rather than replace it: a transient registry error "
+            "a release whose tag already exists must FAIL rather than replace it: a transient registry error "
             "would otherwise be indistinguishable from `nothing published yet`, and an operator who pinned "
             "that tag receives different bits with no signal (ADR 0057 §1)",
         ),
@@ -413,6 +569,56 @@ if workflow_doc:
                 f"the `{step_id}` step forces: a release that can be overwritten names a moving artifact, and "
                 f"reporting it accurately would still mislead (uc.admin.identify-instance-release § Quality)"
             )
+        if not gated_on(step.get("if"), RELEASE_KIND):
+            fail(
+                f"the `{step_id}` step runs when `{RELEASE_KIND}` is not true (if: `{step.get('if')}`) — only a "
+                f"release refuses a republish and gets a git ref; a snapshot is the one name that moves and names "
+                f"a build, not a release (ADR 0057 §1–2)"
+            )
+
+    # Every registry write is reachable only from a dispatch (ADR 0057 §1: nothing is published by a push). The
+    # set is derived from what the steps DO — a login or build-push action, or a `run:` that pushes, logs in or
+    # signs — never listed, so a write added to any job is held without anyone remembering to add it here.
+    jobs = workflow_doc.get("jobs") or {}
+    publish_job = jobs.get(PUBLISH_JOB) or {}
+    if not gated_on(publish_job.get("if"), DISPATCH):
+        fail(
+            f"the `{PUBLISH_JOB}` job runs when `{DISPATCH}` is not true (if: `{publish_job.get('if')}`) — a push "
+            f"or a pull request would then publish, which is the red run on every commit this pipeline exists to "
+            f"end (ADR 0057 §1)"
+        )
+    registry_writes = 0
+    for job_name, job in sorted(jobs.items()):
+        if not isinstance(job, dict):
+            continue
+        job_gated = gated_on(job.get("if"), DISPATCH)
+        for step in job_steps(workflow_doc, job_name):
+            uses = str(step.get("uses") or "")
+            writes = []
+            if uses.startswith("docker/login-action@"):
+                writes.append("logs in to a registry")
+            if uses.startswith("docker/build-push-action@"):
+                push = (step.get("with") or {}).get("push")
+                if push is not False and str(push).lower() != "false":
+                    writes.append("pushes an image")
+                    if gated_on(push, DISPATCH):
+                        registry_writes += 1
+                        writes.pop()
+            match = REGISTRY_WRITE_RUN.search(str(step.get("run") or ""))
+            if match:
+                writes.append(f"runs `{match.group(0)}`")
+            registry_writes += len(writes)
+            if writes and not (job_gated or gated_on(step.get("if"), DISPATCH)):
+                fail(
+                    f"job `{job_name}`, step `{step.get('name') or step.get('id')}` {' and '.join(writes)} on an "
+                    f"event other than `workflow_dispatch` — a push and a pull request are dry runs that write to "
+                    f"no registry (ADR 0057 §1). Gate the step, its job, or the push input on `{DISPATCH}`."
+                )
+    if registry_writes == 0:
+        fail(
+            f"{WORKFLOW.relative_to(ROOT)} has no registry write at all that this guard recognises — the gating "
+            f"assertion would then hold NOTHING and report green"
+        )
 
 
 # ---- 4. the recipe travels in the image, and written-down tags name a shape the pipeline emits ---------------
@@ -484,8 +690,8 @@ for path in sorted(p for p in INFRA.rglob("*") if p.is_file()):
         if not RELEASE_VERSION.match(tag):
             fail(
                 f"{path.relative_to(ROOT)}: `veyq:{tag}` is not a tag this pipeline emits. A publish produces "
-                f"`<major>`, `<major>.<minor>`, `sha-<sha>` and `latest`; of those only `<major>.<minor>` "
-                f"names a fixed set of bits, which is the only kind of tag worth writing down as the one an "
+                f"`<major>`, `<major>.<minor>`, `<major>.<minor>-SNAPSHOT`, `sha-<sha>` and `latest`; of those only "
+                f"a release's `<major>.<minor>` names a fixed set of bits, which is the only kind of tag worth writing down as the one an "
                 f"operator pins and rolls back to (ADR 0056 §6)."
             )
 
@@ -667,7 +873,7 @@ else:
         """The certificate identity keyless signing from a GitHub workflow produces."""
         return f"https://github.com/{slug}/{workflow}@{ref}"
 
-    accepted = {f"a publish from `{b}`": san(f"refs/heads/{b}") for b in publishing_branches}
+    accepted = {f"a publish dispatched on `{b}`": san(f"refs/heads/{b}") for b in publishing_branches}
     rejected = {
         **{
             f"`{w.relative_to(ROOT).as_posix()}` (another workflow) on main": san(
@@ -679,7 +885,7 @@ else:
         **{f"a push to `{b}`, not a release branch": san(f"refs/heads/{b}") for b in
            non_release_branches(version_match.group(1) if version_match else "1")},
         "a pull request ref": san("refs/pull/1/merge"),
-        "a tag ref": san(f"refs/tags/v{version_value}"),
+        "a tag ref": san(f"refs/tags/v{version_value}.0"),
         "another owner's repository": san("refs/heads/main", slug=f"not-{owner}/{repo}"),
         "an owner whose name only starts with ours": san("refs/heads/main", slug=f"{owner}x/{repo}"),
         f"a repository whose name only starts with `{repo}`": san("refs/heads/main", slug=f"{owner}/{repo}-fork"),
@@ -783,8 +989,9 @@ if errors:
     sys.exit(1)
 
 print(
-    f"release identity OK: VERSION {version_value} is derived offline by the publish workflow, a republish is "
-    f"refused, ref v{version_value} is created, the recipe is declared in "
+    f"release identity OK: VERSION {version_value} is the major, the minor is counted offline from the history "
+    f"({len(publishing_branches)} publishing branch(es), a shallow checkout refused), every registry write waits for "
+    f"a dispatch, a release refuses a republish and creates its v{version_value}.<minor> ref, the recipe is declared in "
     f"{len(runtime_stages(DOCKERFILE.read_text()))} runtime target(s), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
