@@ -41,6 +41,11 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/memory/components/MemoryBuckets.test.ts]
+  - id: undo-restore-names-refusals
+    text: An Undo's restore names its refusals as the selection's delete does (E7, inbox #429) — in the organizer (one restore per medium, a refusal does not stop the rest) and in the lightbox (its one photo) every medium whose restore is refused is named by the name it had when it went (its sealed file name, else its place in the grid) with its reason (404 gone, 409 scope_deleting, anything else try again), one error per reason; what was restored reappears without a word, and an Undo whose restores all succeed says nothing.
+    coverage:
+      web:
+        unit: [src/features/memory/components/MemoryBuckets.test.ts, src/features/memory/useMediaGalleryLive.test.ts]
   - id: trashed-media-leaves-the-share
     text: A trashed media leaves a public share on BOTH guest paths at once (E6) — the anonymous resolve stops listing it AND its blobs stop being authorized for a presign (a non-enumerable 404); a restore brings it back on both. Filtering only the listing would leave a medium invisible in the share yet fully downloadable by anyone holding its blobId, for the whole retention window. Two independent server-side predicates carry it (SharingStore.subtree and SharingStore.subtreeBlobIds), which is why each is proven separately rather than as one assertion.
     coverage:
