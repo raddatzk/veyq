@@ -2,8 +2,7 @@ useCase: uc.platform.copy-node
 feature: platform
 title: Copy a node and everything under it to another place
 # cr-copy-node built it in the web: a copy is ordinary node creates and uploads, so the backend part is the existing endpoints'
-# slice tests, named in the gap below. A Memory and a chapter are left out of a copy until their import takes an original
-# read by chunk (cr-copy-node Decision 3, handed back): the criterion gap on re-created-under-fresh-keys says so.
+# slice tests, named in the gap below. A Memory copies its media's existing tiers and sealed facts (ADR 0082 Addendum 2).
 acceptanceCriteria:
   - id: copy-here-in-the-browser
     text: >-
@@ -15,11 +14,7 @@ acceptanceCriteria:
     text: The copy re-creates the subtree through each kind's export and import hooks without a ZIP - every node under a fresh key, every file decrypted by chunk and uploaded again under a fresh K_blob, owned by the copier - and a name taken among the destination's children becomes `Name (2)`.
     coverage:
       web:
-        unit: [src/core/export/copySubtree.test.ts, src/core/export/copySource.test.ts, src/features/files/copy.wire.test.ts]
-    gaps:
-      - surface: web
-        reason: >-
-          Proven for folders, files and drop boxes only. A Memory and a chapter are left out and named (their import decodes each original whole to derive its tiers, so it takes no payload read by chunk - cr-copy-node Decision 3, handed back); copySubtree.test.ts pins that they are left out, not that they copy.
+        unit: [src/core/export/copySubtree.test.ts, src/core/export/copySource.test.ts, src/features/files/copy.wire.test.ts, src/features/memory/copy.wire.test.ts, src/features/memory/exportImport.test.ts]
   - id: losses-named-and-quota-asked
     text: >-
       Before anything is written the dialog names what the copy will create, its bytes and what does not come along, and asks the quota question; a "no" writes nothing.

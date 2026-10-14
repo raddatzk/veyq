@@ -1,16 +1,19 @@
 # UC: Copy a node and everything under it to another place
 
 - **ID:** uc.platform.copy-node
-- **Status:** built 2026-10-14 for folders, files and drop boxes (cr-copy-node), web only. **A Memory and a chapter are not
-  copied yet:** their import derives each photo's tiers by decoding the original whole, which a copy reading the original
-  by chunk cannot hand it without holding the file, so a copy leaves them out and names them (E3, `importStreams` absent)
-  until that is decided. Seen in a real browser on 2026-10-14: "Reisen (2)" (sub-folders, files, the Memory "Lissabon"
-  and the drop box "Postfach" with two guests' folders both named "Dr. Anna") copied into "Archiv (4)" - the dialog named
-  "Lissabon" as left out and listed the losses of a folder and a drop box; the copy opened with its files readable
-  (`a_b.txt` showed its text), "Postfach" a plain folder holding "Dr. Anna" and "Dr. Anna (2)"; every request answered
-  2xx. A file copied into its own folder became `a_b.txt (2)`; a selection of a folder and a file copied as one
-  ("2 copied to ..."). **Not yet seen:** a stop part-way and the quota's "no" (unit-tested), a multi-MB file (the frame
-  reads are unit- and wire-tested), and the progress bar on a long copy.
+- **Status:** built 2026-10-14 (cr-copy-node), web only, for folders, files, drop boxes, Memories and chapters. A Memory's
+  media copy with their existing tiers and sealed facts, nothing decoded (ADR 0082 Addendum 2). Seen in a real browser on
+  2026-10-14: "Reisen (2)" (sub-folders, files, the Memory "Lissabon" and the drop box "Postfach" with two guests' folders
+  both named "Dr. Anna") copied into "Archiv (4)" - the copy opened with its files readable (`a_b.txt` showed its text),
+  "Postfach" a plain folder holding "Dr. Anna" and "Dr. Anna (2)"; a file copied into its own folder became `a_b.txt (2)`;
+  a selection of a folder and a file copied as one ("2 copied to ..."). Then, with "Lissabon"'s photo given a corrected
+  capture time and made its cover, and an empty chapter "Alfama" added, "Reisen (2)" copied into a fresh folder (30 nodes,
+  the dialog leaving nothing out and listing the Memory's loss): the copied "Lissabon" showed the date, its cover and the
+  chapter, its photo's thumbnail and preview decoded, and the lightbox named "tram.jpg", image/jpeg, 1.1 kB, captured
+  14.09.2025 16:02, "Korrigiert"; every request answered 2xx (one media completion, three blobs - the original and two
+  tiers - presigned and uploaded once each, the cover written as a photo of the copy). **Not yet seen:** a stop part-way
+  and the quota's "no" (unit-tested), a multi-MB file or a video (the frame reads are unit- and wire-tested), a copied
+  uploaded cover image and a place name (wire-tested), and the progress bar on a long copy.
 - **Primary actor:** A member whose keys are unlocked.
 - **Goal:** Put a copy of a folder, a file, a Memory with its chapters or a drop box at another place in the same space,
   without the server learning a name or that the copy is one.

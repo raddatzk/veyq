@@ -70,7 +70,7 @@ darfst, kannst du Dinge **darin** verschieben — aber nicht hinaus.
 
 ## Dinge kopieren
 
-**Kopieren nach …** steht gleich neben **Verschieben nach …** bei einem Ordner, einer Datei oder einem Briefkasten und
+**Kopieren nach …** steht gleich neben **Verschieben nach …** bei einem Ordner, einer Datei, einer Erinnerung oder einem Briefkasten und
 öffnet dieselbe Ordneransicht. Hier ist auch der Ort erlaubt, an dem der Eintrag gerade liegt: Die Kopie heißt dann
 „Name (2)“. Bevor etwas kopiert wird, sagt veyq, wie viele Einträge und wie viele Daten es kopiert, was nicht mitkommt —
 Freigaben, Favoriten, der Papierkorb und das Titelbild eines Ordners; ein kopierter Briefkasten ist ein gewöhnlicher
@@ -78,8 +78,9 @@ Ordner, in den niemand mehr etwas einwerfen kann — und ob in deinem Bereich no
 Gerät kopiert und unter neuen Schlüsseln neu gespeichert: Ein großer Ordner braucht so lange wie sein Hochladen und
 belegt seinen Platz doppelt; der Server sieht nur, dass Neues gespeichert wird, nicht, dass es eine Kopie ist. Hört das
 Kopieren mittendrin auf, kommt, was schon angelegt war, in den Papierkorb, und veyq sagt, wie weit es gekommen ist.
-**Eine Erinnerung lässt sich noch nicht kopieren:** Die Kopie eines Ordners lässt sie aus und sagt es dir. Kopieren
-können nur Mitglieder des Bereichs; wem du einen Ordner freigegeben hast, kann nicht kopieren.
+Eine kopierte Erinnerung behält ihre Fotos und Videos mit Aufnahmezeit (auch korrigierter), Ort und Kameradaten, ihre
+Kapitel, ihr Datum, ihren Ort und ihr Titelbild; wer dabei war und wer welches Foto hinzugefügt hat, kommt nicht mit.
+Kopieren können nur Mitglieder des Bereichs; wem du einen Ordner freigegeben hast, kann nicht kopieren.
 
 ## Mehreres auf einmal
 

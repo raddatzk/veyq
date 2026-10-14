@@ -63,14 +63,15 @@ contribute, you can move things around **inside** that folder — but not out of
 
 ## Copying things
 
-**Copy to…** sits right next to **Move to…** on a folder, a file or a drop box, and opens the same folder view. Here the
+**Copy to…** sits right next to **Move to…** on a folder, a file, a Memory or a drop box, and opens the same folder view. Here the
 place the item is in now is allowed too: the copy is then called "Name (2)". Before anything is copied, veyq says how
 many items and how much data it will copy, what does not come along — shares, favourites, the trash and a folder's
 cover; a copied drop box is an ordinary folder that nobody can drop files into — and whether your space still has room
 for it. Everything is copied on your device and stored again under new keys, so a big folder takes as long as uploading
 it and uses its space twice; the server only sees new things being stored, not that they are a copy. If the copy stops
-part-way, what it had made goes to the trash and veyq says how far it got. **A Memory cannot be copied yet:** a copy of a
-folder leaves it out and tells you so. Copying is for members of the space only; somebody you shared a folder with
+part-way, what it had made goes to the trash and veyq says how far it got. A copied Memory keeps its photos and videos
+with their dates (corrected ones too), places and camera details, its chapters, date, place and cover; who was there and
+who added each photo do not come along. Copying is for members of the space only; somebody you shared a folder with
 cannot copy.
 
 ## Several at once
