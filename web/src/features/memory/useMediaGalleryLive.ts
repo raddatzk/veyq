@@ -9,6 +9,7 @@ import { useUndo } from '../../shared/state/useUndo'
 import type { TreeNode } from '../../core/node/tree'
 import { hasDerivatives, unsealMeta, effectiveCapturedAt, newestCursor, type MediaItem } from './media'
 import type { MemorySource } from './source'
+import { mediaRefusalOf, sealedMediaName } from './mediaRefusal'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
 import { itemsPollTick, reconcileItems } from '../../core/items/itemsLive'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
@@ -71,7 +72,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // trash undo (cr-0110): a lightbox-only delete soft-deletes into a per-Memory trash; an undo-toast offers restore
   // (cr-0157/ADR 0039). The soft-delete is eager, so the window elapsing commits nothing — it just lets the trash
   // stand; only `onUndoDelete` (restore) is a real action, hence no `onExpire`.
-  const undo = useUndo<{ mediaId: string }>({ timeoutMs: 6000 })
+  const undo = useUndo<{ mediaId: string; name: string }>({ timeoutMs: 6000 })
   // Tombstone of mediaIds optimistically removed by a trash but not yet confirmed gone (cr-0111): filtered out of
   // the merge/poll paths so a stale live read (a poll firing before the delete commits) can't re-add them.
   const pendingDelete = new Set<string>()
@@ -138,8 +139,9 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   async function onDeleteFromLightbox(payload: { mediaId: string }) {
     const del = ctx.source.deleteMedia
     if (!ctx.memoryKey() || del?.reach !== 'any') return // only a trash has an undo; a guest's purge is asked first
+    const name = mediaNameOf(payload.mediaId) // before the removal: the Undo names a refused restore by it (inbox #429)
     removeFromGrid(payload.mediaId)
-    undo.arm({ mediaId: payload.mediaId })
+    undo.arm({ mediaId: payload.mediaId, name })
     toast.showUndo({ summary: t('memory.trash.movedToTrash'), onUndo: onUndoDelete, life: 6000 })
     try {
       await del.trash(payload.mediaId)
@@ -158,7 +160,18 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     lightboxItems.value = lightboxItems.value.filter((it) => it.mediaId !== mediaId)
   }
 
-  /** Undo the just-trashed media: restore it server-side, then re-list so it re-appears in the grid. */
+  /** A medium's name for a refusal: the file name sealed in its original's blob meta, else its place in the grid the
+   *  lightbox was opened on (the organizer's wording, `memory.buckets.unnamedMedia`). */
+  function mediaNameOf(mediaId: string): string {
+    const opened = lightboxItems.value.findIndex((it) => it.mediaId === mediaId)
+    const list = opened >= 0 ? lightboxItems.value : sortedItems.value
+    const at = list.findIndex((it) => it.mediaId === mediaId)
+    const item = at >= 0 ? list[at] : items.value.find((it) => it.mediaId === mediaId)
+    return sealedMediaName(ctx.scopeId(), ctx.memoryKey(), item) || t('memory.buckets.unnamedMedia', { n: at >= 0 ? at + 1 : 1 })
+  }
+
+  /** Undo the just-trashed media: restore it server-side, then re-list so it re-appears in the grid. A refused restore
+   *  is named with its reason, as the organizer's Undo names one (inbox #429); a restore that went says nothing. */
   async function onUndoDelete() {
     const u = undo.cancel()
     const del = ctx.source.deleteMedia
@@ -166,6 +179,9 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     pendingDelete.delete(u.mediaId) // cr-0111: a genuine restore lifts the tombstone so the media can re-list
     try {
       await del.restore(u.mediaId)
+    } catch (e) {
+      const reason = t(`memory.buckets.deleteRefusedReason.${await mediaRefusalOf(e)}`)
+      toast.error(t('memory.buckets.restoreRefused', { names: u.name, reason }))
     } finally {
       void load()
     }

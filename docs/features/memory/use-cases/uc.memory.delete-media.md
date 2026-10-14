@@ -84,6 +84,12 @@ delete *whose* — is deferred to a later groups/moderation refine.)
   (`404`), the space is being deleted (`409 scope_deleting`), or anything else (try again) — one error per reason.
   When nothing went there is no undo toast. A selection where every delete succeeds shows only the count with its
   undo (inbox #427).
+  **The Undo's restore names its refusals the same way** (inbox #429) — the organizer's *Restore* (one restore per
+  medium; a refusal does not stop the rest) and the lightbox's (its one photo) alike: every medium whose restore is
+  refused is named by the name it had when it went (the sealed file name, else its place in the grid the delete
+  came from) with its reason — purged meanwhile or no longer reachable (`404 media_not_found`), the space is being
+  deleted (`409 scope_deleting`), anything else (try again) — one error per reason. What was restored simply
+  reappears in the grid, as before; an Undo whose restores all succeed says nothing.
 
 ## Quality notes
 

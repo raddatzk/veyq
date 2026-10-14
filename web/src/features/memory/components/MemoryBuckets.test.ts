@@ -193,6 +193,72 @@ describe('MemoryBuckets — a selection whose delete is partly refused (inbox #4
   })
 })
 
+describe('MemoryBuckets — an Undo whose restore is partly refused (inbox #429)', () => {
+  /** Trash all of `ids` (every delete goes), then hit the undo toast's Undo. */
+  async function deleteAndUndo(ids: string[]) {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', ids.length)])
+    const wrapper = mountBuckets(ids.map((id) => media(id, 'user:me', 'b-own')))
+    await flushPromises()
+    await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
+    await wrapper.find('.bucket-selection-bar .bucket-action-danger').trigger('click')
+    await flushPromises()
+    expect(toastError).not.toHaveBeenCalled() // every delete went
+    showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+  }
+  const restoredOk = async () =>
+    (await Promise.allSettled(vi.mocked(restoreMedia).mock.results.map((r) => r.value))).filter((r) => r.status === 'fulfilled').length
+
+  it('names the one restore of three that was refused, with its reason; the two others are restored', async () => {
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, item) => ({ v: 1, type: 'image/jpeg', name: `${item.mediaId}.jpg` }))
+    vi.mocked(restoreMedia).mockImplementation(async (_scope, id) => {
+      if (id === 'm2') throw refusal(409, 'scope_deleting')
+    })
+    await deleteAndUndo(['m1', 'm2', 'm3'])
+
+    expect(restoreMedia).toHaveBeenCalledTimes(3) // the refusal did not stop the rest
+    expect(await restoredOk()).toBe(2)
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual(['Not restored: m2.jpg. This space is being deleted.'])
+  })
+
+  it('names a refused restore without a sealed file name by the place it had in the grid, one line per reason', async () => {
+    vi.mocked(restoreMedia).mockImplementation(async (_scope, id) => {
+      if (id === 'm1') throw refusal(404, 'media_not_found') // purged meanwhile
+      if (id === 'm3') throw new TypeError('Failed to fetch')
+    })
+    await deleteAndUndo(['m1', 'm2', 'm3'])
+
+    expect(await restoredOk()).toBe(1)
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual([
+      'Not restored: Item 1. Already gone from this Memory, or you no longer have access.',
+      'Not restored: Item 3. Please try again.',
+    ])
+  })
+
+  it('after a partly refused delete, names the refused restore by its own name, not its neighbour\'s', async () => {
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, item) => ({ v: 1, type: 'image/jpeg', name: `${item.mediaId}.jpg` }))
+    vi.mocked(deleteMedia).mockImplementation(async (_scope, id) => {
+      if (id === 'm2') throw refusal(409, 'scope_deleting')
+    })
+    vi.mocked(restoreMedia).mockImplementation(async (_scope, id) => {
+      if (id === 'm3') throw refusal(404, 'media_not_found')
+    })
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 3)])
+    const wrapper = mountBuckets(['m1', 'm2', 'm3'].map((id) => media(id, 'user:me', 'b-own')))
+    await flushPromises()
+    await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
+    await wrapper.find('.bucket-selection-bar .bucket-action-danger').trigger('click')
+    await flushPromises()
+    toastError.mockClear() // the delete's own refusal (m2) is #427's
+    showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual([
+      'Not restored: m3.jpg. Already gone from this Memory, or you no longer have access.',
+    ])
+  })
+})
+
 describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () => {
   it('own bucket: select-all selects every tile, then delete soft-deletes each and offers undo → restore', async () => {
     vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 2)])

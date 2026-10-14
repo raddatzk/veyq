@@ -1213,8 +1213,10 @@ const en = {
       selected: '{selected} of {visible} selected',
       deletedToTrash: '{count} item moved to trash | {count} items moved to trash',
       // A selection's trash names what the server refused, one line per reason (inbox #427); `unnamedMedia` names a
-      // medium whose original carries no sealed file name, by its place in the bucket's grid.
+      // medium whose original carries no sealed file name, by its place in the bucket's grid. An Undo's restore names
+      // its refusals with the same reasons (inbox #429), the organizer's and the lightbox's alike.
       deleteRefused: 'Not moved to trash: {names}. {reason}',
+      restoreRefused: 'Not restored: {names}. {reason}',
       deleteRefusedReason: {
         gone: 'Already gone from this Memory, or you no longer have access.',
         scope_deleting: 'This space is being deleted.',
@@ -2827,6 +2829,7 @@ const de: typeof en = {
       selected: '{selected} von {visible} ausgewählt',
       deletedToTrash: '{count} Medium in den Papierkorb | {count} Medien in den Papierkorb',
       deleteRefused: 'Nicht in den Papierkorb verschoben: {names}. {reason}',
+      restoreRefused: 'Nicht wiederhergestellt: {names}. {reason}',
       deleteRefusedReason: {
         gone: 'Nicht mehr in dieser Erinnerung, oder du hast keinen Zugriff mehr.',
         scope_deleting: 'Dieser Bereich wird gelöscht.',
