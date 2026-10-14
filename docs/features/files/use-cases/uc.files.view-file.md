@@ -14,6 +14,9 @@
 
 ## Main flow
 
+0. **Who uploaded it** (decided 2026-10-14, not yet built; ADR 0083 Addendum): a member sees the uploader of the file's
+   current content in the header - a member by name, linking to the profile, a guest as "a guest"; a share guest sees
+   none.
 1. The page opens. Only now does the client read the file (not for a row in a list): it opens the first chunk under the
    file's key and **sniffs the bytes** (magic numbers) — the sealed type and the name only narrow, never decide.
 2. **Image** (JPEG, PNG, GIF, WebP, AVIF, BMP, SVG; HEIC is tried and falls back where the browser cannot decode it):
