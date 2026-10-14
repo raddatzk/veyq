@@ -1,6 +1,6 @@
 ---
 id: cr-download-is-the-export
-title: "Download" replaces "Export": a readable ZIP with a hidden manifest, recognised on upload, with unknown applications reported
+title: Download replaces Export - a readable ZIP with a hidden manifest, recognised on upload, unknown applications reported
 status: planned
 satisfies: [uc.platform.export-import]
 adrs: ["0082", "0079"]
