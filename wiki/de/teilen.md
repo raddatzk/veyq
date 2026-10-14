@@ -22,7 +22,7 @@ Beim Erstellen eines Links legst du fest, **was andere dürfen** — im Dialog s
 | Auswahl | Was sie bedeutet |
 |---|---|
 | **Nur ansehen** | Sie können ansehen und herunterladen. Ändern können sie nichts. |
-| **Ansehen + mitmachen** (bei einem Ordner: *Ansehen + mitwirken*; bei einer Erinnerung: *Ansehen + Fotos hinzufügen*) | Sie können ansehen **und** eigene Dinge hinzufügen. In einem Ordner können sie außerdem darin verschieben und eine Datei durch eine neuere Fassung ersetzen. |
+| **Ansehen + mitmachen** (bei einem Ordner: *Ansehen + mitwirken*; bei einer Erinnerung: *Ansehen + Fotos hinzufügen*) | Sie können ansehen **und** eigene Dinge hinzufügen. In einem Ordner heißt das: neue Ordner und hochgeladene Dateien — keine neue Erinnerung und keinen Briefkasten; außerdem können sie darin verschieben und eine Datei durch eine neuere Fassung ersetzen. |
 | **Nur hinzufügen** (Erinnerungen: *Nur Fotos hinzufügen*) | Ein **Briefkasten**: Sie können etwas abgeben, aber **nicht sehen**, was darin liegt oder was andere hinzugefügt haben. |
 
 Wer einen „Ansehen + mitmachen"- oder Briefkasten-Link nutzt, tippt **einmal** seinen Namen ein, damit du siehst, wer

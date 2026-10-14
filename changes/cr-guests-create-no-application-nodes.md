@@ -54,19 +54,19 @@ refuses such a create. Core admits a `FOLDER`, plus any kind whose application d
 
 ## Phases
 
-- [ ] 1 backend: Decision 1.
+- [x] 1 backend: Decision 1.
   - Slice tests: a guest's create of `FOLDER` and `FILE` under a folder succeeds; `MEMORY` and `FILES_DROPBOX` are
     `422 illegal_scope`; move and rename of an existing Memory by a guest are unchanged; a second bean claiming
     `FILE` fails startup.
   - Bite the narrowing, by restoring `true`.
   - Done when `./gradlew check` is green.
-- [ ] 2 web: Decision 2.
+- [ ] 2 web: Decision 2. (Unit part done, `npm run check` green; the real-browser check is the main session's, after the merge.)
   - Tests: a `READ_WRITE` guest's "New" menu lists the folder entry only, and the upload action stays. A member's menu
     is unchanged.
   - Done when `npm run check` is green, and the guest's menu has been seen in a real browser on the dev instance
     (`veyq-web` on 8089, `?devlogin`, a folder link opened as a guest). Note: a backend change needs the shared CLI
     `quarkusDev` to pick it up. The main session restarts it, so ask in the hand-back if hot reload does not take.
-- [ ] 3 docs: `docs/apps/files.md` § Guests names the declaration; the sharing use-case and coverage for the
+- [x] 3 docs: `docs/apps/files.md` § Guests names the declaration; the sharing use-case and coverage for the
   contributor; both wikis' contributor text.
   - Done when the trust-chain guards are green.
 
@@ -79,4 +79,22 @@ refuses such a create. Core admits a `FOLDER`, plus any kind whose application d
 
 ## Retrospective
 
-_(filled at implementation)_
+- **Planning: one decision rested on a false premise.** Decision 1 says a kind claimed by two applications "is a startup
+  failure, as the other seams handle it". No other seam fails startup: `ShareRoots`, `GuestNodeRules`,
+  `WriteOnlyGuestKinds` and `NodeKindRules` fail closed at request time (`singleOrNull`), and `MemberBlobRoles` is a
+  union that tolerates overlap. The decision itself was explicit (and its slice test named it), so it was built as
+  written, both ways: a double declaration is created by nobody at request time AND `FolderGuestNodeRules`' `StartupEvent`
+  observer throws. Root cause: the refine described the neighbouring seams from memory, not from the code. **Next time:**
+  a CR sentence that says "as X does" cites the line of X it means.
+- **Planning: the CR's test list missed two tests the change flips.** `ShareNodesSliceTest` created a guest `MEMORY`
+  under a folder expecting `201`, and core's bite-17 test (`aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused`) used
+  a `MEMORY` to reach `NodeKindRules` - now refused earlier, as `illegal_scope`. Keeping bite 17 alive needed a `:core`
+  test stand-in that declares a kind no rule places (`CoreTestGuestCreatableKinds`, excluded by `CoreAloneSliceTest` like
+  `CoreTestMemberBlobRoles`). The live e2e `folderShareGuest.e2e.test.ts` also created a guest Memory and had to flip.
+  The CR's inventory grep (`CreateChild\|createShareNode`) would have found the slice test but not the e2e, which goes
+  through `createShareNodeAsGuest`. **Next time:** a refine that narrows a refusal greps the callers' *tests* for the
+  newly refused input (here `MEMORY` beside `create(`), web e2e included.
+- **Execution:** clean. The worktree needed `npm ci` and `generate:api` first, as the brief warned; the sandbox refused a
+  heredoc'd Python edit, so edits went through the edit tools and Gradle `--tests` runs through a scratch runner script.
+  Bites: restoring `true` for `CreateChild` turned 8 tests red across all four projects; neutering the startup observer
+  turned both startup tests red; the web capability restored turned 3 web tests red.

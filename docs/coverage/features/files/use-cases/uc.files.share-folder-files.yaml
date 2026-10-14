@@ -21,9 +21,11 @@ acceptanceCriteria:
         unit: [src/features/files/levelRows.guest.test.ts]
         e2e: [src/features/files/filesShare.e2e.test.ts]
   - id: a-contributor-adds-and-replaces-files
-    text: A READ_WRITE guest creates a FILE under a folder of the subtree, uploads into it and replaces any file of the subtree (a member's too) with the blob it saw; its metadata is the uploaded blob's own (sealed under its K_blob, declared at the guest start), so it lands with the bytes and only with them; completeShareFile writes no node payload; a stale replace is 409 stale_file and the slot keeps its blob and that blob's metadata.
+    text: A READ_WRITE guest creates a FILE under a folder of the subtree (Files declares FILE guest-creatable, core's GuestCreatableKinds; a drop box is 422 illegal_scope, owner decision 2026-10-14), uploads into it and replaces any file of the subtree (a member's too) with the blob it saw; its metadata is the uploaded blob's own (sealed under its K_blob, declared at the guest start), so it lands with the bytes and only with them; completeShareFile writes no node payload; a stale replace is 409 stale_file and the slot keeps its blob and that blob's metadata.
     coverage:
-      backend: { integration: [ShareFilesSliceTest.aContributorCreatesAFileUploadsReplacesAndRenamesIt, ShareFilesSliceTest.aGuestsAndAMembersBlobMetaAreServedToTheGuestUnchanged] }
+      backend:
+        integration: [ShareFilesSliceTest.aContributorCreatesAFileUploadsReplacesAndRenamesIt, ShareFilesSliceTest.aGuestsAndAMembersBlobMetaAreServedToTheGuestUnchanged, ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox]
+        unit: [FilesNodeKindRulesTest.aFolderGuestCreatesFilesAndNoDropBox, FilesNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
       web:
         unit: [src/features/files/shareUpload.wire.test.ts, src/features/files/dropBox.wire.test.ts, src/features/files/levelRows.guest.test.ts]
         e2e: [src/features/files/filesShare.e2e.test.ts]

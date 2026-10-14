@@ -167,7 +167,7 @@ acceptanceCriteria:
         e2e: [src/features/memory/folderShareUpload.e2e.test.ts]
   - id: folder-guest-tree-operations
     text: >-
-      A READ_WRITE folder link's guest creates folders (and Memories) inside the shared subtree and moves or renames
+      A READ_WRITE folder link's guest creates folders (and, through Files, files) inside the shared subtree and moves or renames
       a node between folders of it, as one placement write re-wrapped under the destination's key and stated against
       the node's placementVersion (409 stale_placement, nothing written). A create states the epoch the guest sealed
       with: above the scope's current one is 409 stale_epoch, at or below it is stored as sent. Never the share root,
@@ -182,26 +182,26 @@ acceptanceCriteria:
     gaps:
       - surface: web
         reason: >-
-          The guest page offers "New folder", "New Memory" and "Upload files" in the level toolbar's "New" menu (each
-          entry only where its capability function grants it, inbox #401 S2, #406), and core's move dialog (inbox #358, uc.memory.move-node, ShareTreePage.move.test.ts); no rename
+          The guest page offers "New folder" and "Upload files" in the level toolbar's "New" menu (each entry only where
+          its capability function grants it, inbox #401 S2, #406; no "New Memory" or "New drop box" for any guest,
+          LevelNewMenu.entries.test.ts), and core's move dialog (inbox #358, uc.memory.move-node, ShareTreePage.move.test.ts); no rename
           control exists, so a guest's rename is proven through placeShareNodeAsGuest by the wire test and the e2e, not
           through a screen.
   - id: guest-tree-refusals
     text: >-
       Inside an application's container the application decides, and Memories declares nothing: a guest's create
       inside a Memory, a chapter moved out of or into a Memory, and a chapter renamed are 422 illegal_scope, while
-      the guest still reads all of it; a Memory- or chapter-rooted link gains no tree operation; a kind
-      NodeKindRules does not place under a folder is 422 illegal_structure; a READ or WRITE_ONLY link does none
+      the guest still reads all of it; a Memory- or chapter-rooted link gains no tree operation. Under a folder a
+      guest creates a FOLDER or a kind its own application declares guest-creatable (core's GuestCreatableKinds:
+      Files' FILE) and nothing else - a Memory, a chapter, a drop box or an unknown kind is 422 illegal_scope, before
+      the placement rule (owner decision 2026-10-14); a declared kind NodeKindRules does not place there is still
+      422 illegal_structure; a kind two applications declare is created by nobody and fails startup. The web offers
+      no guest a "New Memory" or "New drop box" entry (hidden, not greyed). A READ or WRITE_ONLY link does none
       (403 share_not_contributable).
     coverage:
       backend:
-        integration: [ShareNodesSliceTest.insideAMemoryAGuestWritesNothingAndReadsEverything, ShareNodesSliceTest.aGuestCannotMoveAChapterOutOfAMemory, ShareNodesSliceTest.aMemoryRootedLinkGainsNoTreeOperation, ChapterShareSliceTest.aChapterGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused, ShareNodesCoreSliceTest.aWriteOnlyOrAReadGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.theGateRefusesAsTheOtherGuestWritesDo]
+        integration: [ShareNodesSliceTest.insideAMemoryAGuestWritesNothingAndReadsEverything, ShareNodesSliceTest.aGuestCannotMoveAChapterOutOfAMemory, ShareNodesSliceTest.aMemoryRootedLinkGainsNoTreeOperation, ShareNodesSliceTest.aGuestCreatesNoMemoryInAFolder, ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox, ChapterShareSliceTest.aChapterGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused, CoreAloneSliceTest.aFolderGuestCreatesFoldersOnly, ModuleCompositionTest.aFolderGuestCreatesFoldersAndTheDeclaredKindsOnly, ShareNodesCoreSliceTest.aWriteOnlyOrAReadGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.theGateRefusesAsTheOtherGuestWritesDo]
+        unit: [GuestNodeRulesPartitionTest.inAFolderAGuestCreatesAFolderOrADeclaredKindAndMovesAnyKind, GuestCreatableKindsTest.twoDeclarationsOfOneKindFailStartupNamingTheKindAndBoth, FilesNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
       web:
-        unit: [src/core/sharing/guestTree.wire.test.ts]
+        unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memory/capabilities.test.ts]
         e2e: [src/features/memory/folderShareGuest.e2e.test.ts]
-    gaps:
-      - surface: backend
-        reason: >-
-          The illegal_structure case is proven in core alone, with a MEMORY no rule places; a CHAPTER created
-          directly under a folder with Memories registered (FolderGuestNodeRules allows, MemoryNodeKindRules
-          refuses) is read from the code, not asserted by a test.
