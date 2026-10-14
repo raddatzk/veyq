@@ -43,9 +43,9 @@ strategy; they do not choose it.
    seals, so for them it is a single-implementation **regression pin** — it stops a refactor from silently
    moving a suite's bytes, not a cross-stack parity proof. The backend performs no content crypto
    (`backend/CLAUDE.md`). Its Ed25519 login-auth check runs against the stored `authPublicKey` and never against
-   this file. The one statement it asserts too is the **Secret-Key proof** over a cold-credential request
-   ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2): both stacks build its signed bytes, so a
-   vector pins them. Pinning a new primitive still means **adding a vector first, then making the
+   this file. The statements it asserts too are the **Secret-Key proof** over a cold-credential request
+   ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2) and the change-email **auth attestation**
+   (`auth_attestation`, ADR 0074 Addendum): both stacks build their signed bytes, so a vector pins them. Pinning a new primitive still means **adding a vector first, then making the
    implementation green** — never the reverse.
 5. **The server never chooses a cost parameter.** A key-derivation profile travels with each wrap so that a
    later profile stays readable (rule 3), but a client derives only with a profile it would itself write — today
@@ -71,7 +71,7 @@ strategy; they do not choose it.
   the bytes behind a version cannot quietly move. The vector file is that pin: a refactor that shifts them
   fails a red test instead of silently orphaning stored ciphertext. It was also meant as the seam between two
   stacks that must agree on those bytes; since the native drop the backend asserts against it only for the
-  Secret-Key proof statement (rule 4), so for everything else that cross-stack-parity role is dormant until a
+  Secret-Key proof statements and the change-email attestation (rule 4), so for everything else that cross-stack-parity role is dormant until a
   second independent implementation exists.
 - **Rejected — home-grown crypto:** unreviewed constructions are a foot-gun; rejected outright.
 - **Rejected — classical-only / defer PQ entirely:** rejected for *encryption*, because decade-lived memories

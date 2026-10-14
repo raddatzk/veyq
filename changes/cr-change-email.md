@@ -1,7 +1,7 @@
 ---
 id: cr-change-email
 title: An account changes its sign-in address - a re-derived auth key, installed when the new address is proven
-status: planned
+status: done
 satisfies: [uc.account.change-email]
 adrs: ["0074", "0003", "0049", "0055"]
 invariants: [operator-blind E2EE everywhere]
@@ -64,20 +64,20 @@ revokes other sessions and notifies the old address. Decided by the coordinator 
 
 ## Phases
 
-- [ ] 1 contracts + crypto: Decisions 1-2's shapes; the proof's purpose and its vector if a new one is needed.
+- [x] 1 contracts + crypto: Decisions 1-2's shapes; the proof's purpose and its vector if a new one is needed.
   - Done when the trust-chain guards and `packages/crypto`'s check are green.
-- [ ] 2 backend: Decisions 1, 2, 4.
+- [x] 2 backend: Decisions 1, 2, 4.
   - Tests: request stores pending and mails; wrong proof; 503; identical response for a taken address; confirm swaps
     in one transaction and the old key no longer signs in while the new one does; other sessions revoked; old-address
     mail sent with the fixed copy; a race of two confirms for one address leaves one winner; expired/used/foreign link.
     Bitten.
   - Done when `./gradlew check` is green.
-- [ ] 3 web: Decision 3.
+- [x] 3 web: Decision 3.
   - Tests: the form derives the key under the new salt (vector-backed) and sends the proof; the states; the kit offer.
     Bitten. An e2e suite: change, confirm (the mail read from the e2e mailbox), sign in with the new address, unlock,
     open content.
   - Done when `npm run check` is green and the e2e suite ran green through `scripts/run_web_e2e.py`.
-- [ ] 4 docs: the use case's status and coverage (`planned` → refs), ADR 0074 Addendum built, `docs/features/account/_index.md`,
+- [x] 4 docs: the use case's status and coverage (`planned` → refs), ADR 0074 Addendum built, `docs/features/account/_index.md`,
   both wikis' account page, inbox #197 done.
   - Done when every `scripts/validate_*.py` is green, run on a detached worktree.
 
@@ -89,4 +89,42 @@ revokes other sessions and notifies the old address. Decided by the coordinator 
 
 ## Retrospective
 
-_(filled at implementation)_
+**What was built** (commits `6d16d217` contracts+crypto, `70640781` backend, `0d63d257` web, then docs): the CR as
+written, phase by phase. Two choices the CR left to implementation, made in place because they mirror an existing
+mechanism rather than decide anything new:
+- **The proof could not reuse the password change's statement** — that one binds the new `PASSWORD` wrap, and this
+  flow installs no wrap. So: its statement *shape* under a new purpose `veyq/v1/secret-key-proof/change-email`
+  (current key, new key, normalized address in the wrap digest's place), and a domain-separated attestation
+  `veyq/v1/auth-attestation/change-email` over (user id, normalized address, new key). Both normalize the address
+  inside the statement builder on both stacks, and the vectors carry an un-normalized input to pin that.
+- **The mail budget is the confirmation's, shared** (`EmailConfirmationRateLimiter`): a change mails an address of the
+  caller's choosing, so it could not go unbudgeted, and a second bucket would double what one account can aim at its
+  relay.
+
+**What the CR did not see, found in implementation:**
+- **The confirmation needs the relay too** — the notice to the old address must be able to leave — so `confirmEmailChange`
+  carries the request's tenant gates (`404 tenant_not_found`, `503 mail_unavailable`, nothing changed); the notice
+  itself is sent after the commit, and a send that fails then is logged, not answered (nothing left to undo).
+- **The swap's uniqueness is an UPDATE, not an insert,** yet the styleguide's insert-half rule fits it exactly: a fast-path
+  read under the account lock, and `createOrConflict` re-asking "taken?" for the loser of two accounts racing for one
+  address. Bitten: with the replay question removed the loser is a 500. Green on MariaDB (`run_backend_races_on_mariadb.py`).
+- **`EveryStoredTimeHasAReaderTest`** refused the reflexive `created_at`: the pending row has none; `expires_at` is its one time.
+- **The client names the account by its address in two LOCAL records** (the remember-me record in IndexedDB and the
+  session vault in sessionStorage). Left stale, a reload would derive every later proof (a password change's
+  attestation) under the old address's salt. The confirmation page moves both to the new address
+  (`readdressRemembered`, `readdressSessionVault`) and this session's `account.email`. Other devices are signed out
+  and pick up the new address at their next sign-in.
+- **"Settings → Account" does not exist**; the address already lives in Settings → Security (`EmailAddressSection`), so
+  the change is offered there, and the use case now says so.
+
+**Residuals, stated:**
+- The new kit on the landing page takes the Secret Key as typed/pasted/imported and **does not verify it** (the page is
+  not unlock-gated, and nothing a session alone can read checks a Secret Key). Importing or scanning the old kit carries
+  the exact key; a mistyped one would print a wrong kit.
+- A recovery token mailed to the OLD address before the change stays live until it expires; completing it still needs
+  the Secret Key, so it buys nobody without the kit anything.
+- The UI was proven by unit tests and the live e2e (through the API, not a browser); it was not clicked in a browser.
+
+**Process:** the CR's inventory and decisions were enough to build without a question; the gaps above are the kind a
+refine finds only by tracing the address through every place that keys on it — the client-side records were the one
+the inventory's greps (server-side `email` uses) could not have shown.

@@ -1,26 +1,62 @@
 useCase: uc.account.change-email
 feature: account
 title: Change the address an account signs in with
-status: planned
-# Decided 2026-10-14 (inbox #197, ADR 0074 Addendum); cr-change-email builds it and replaces the gaps with refs.
+# Built by cr-change-email (ADR 0074 Addendum). Every refusal is asserted against a live control on the same predicate,
+# and each was bitten by injection: removing the check it names turned its test red (the race by dropping the replay
+# question of createOrConflict, which turned the loser into a 500).
 acceptanceCriteria:
   - id: request-needs-password-and-secret-key
     text: >-
       A change is requested with the new address, the auth public key derived under its salt, an attestation by the current
       auth key and a Secret-Key proof; a wrong proof stores nothing, and no relay answers 503 mail_unavailable before
       anything is stored.
+    coverage:
+      backend:
+        integration:
+          - EmailChangeSliceTest.eachHalfOfTheColdCredentialIsCheckedAndARefusalStoresNothing
+          - EmailChangeSliceTest.aRequestStoresThePendingChangeHashedAndMailsTheNewAddress
+          - EmailChangeSliceTest.noRelayAnswers503BeforeAnythingIsStored
+          - EmailChangeSliceTest.aSendThatFailsWithdrawsTheChangeAndAnswers503
+          - EmailChangeSliceTest.aNonMemberIsRefusedAndNothingIsStored
+          - EmailChangeSliceTest.theMailBudgetIsSharedWithTheConfirmation
+        unit:
+          - AuthAttestationTest.theStatementIsTheVectorsAndTheCurrentKeysSignatureVerifies
+          - SecretKeyProofTest.theChangeEmailStatementIsTheVectorsAndItsSignatureVerifies
+      web:
+        unit:
+          - src/features/account/email/emailChange.test.ts
+          - src/features/account/email/ChangeEmailForm.test.ts
+          - src/features/account/email/EmailAddressSection.test.ts
   - id: request-does-not-enumerate
     text: >-
       The request's response is the same whether the new address is free or taken by any account of the instance.
+    coverage:
+      backend: { integration: [EmailChangeSliceTest.aTakenAddressGetsTheSameAnswerAsAFreeOne] }
   - id: confirm-swaps-in-one-step
     text: >-
       Opening the mailed link in a session of the same account swaps the email and the auth public key in one
       transaction, records the address as confirmed, revokes every other session and mails the old address a fixed
       notice; a taken address, an expired, used or foreign link changes nothing.
+    coverage:
+      backend:
+        integration:
+          - EmailChangeSliceTest.theConfirmationSwapsAddressAndKeyRecordsItConfirmedAndRevokesOtherSessions
+          - EmailChangeSliceTest.theOldAddressGetsTheFixedNoticeAndNeverTheNewAddress
+          - EmailChangeSliceTest.aLinkOpenedInAnotherAccountsSessionChangesNothing
+          - EmailChangeSliceTest.aUsedOrExpiredLinkChangesNothing
+          - EmailChangeSliceTest.aNewerRequestReplacesTheOlderOne
+          - EmailChangeSliceTest.aRelayThatCannotSendTheNoticeChangesNothing
+          - EmailChangeSliceTest.twoAccountsConfirmingOneAddressLeaveOneWinner
+          - EmailChangeSliceTest.thePurgeDeletesExpiredChangesAndKeepsLiveOnes
+      web:
+        unit:
+          - src/views/ConfirmEmailChangeView.test.ts
+          - src/features/account/rememberMe/deviceKeyWrap.test.ts
+          - src/features/account/rememberMe/sessionVault.test.ts
   - id: keys-and-content-untouched
     text: >-
       After the change the account signs in with the new address and its password, unlocks with the same Secret Key,
       and opens the same content; the Master Key and every wrap are unchanged.
-gaps:
-  backend: Not built yet - cr-change-email adds the slice tests (request, confirm, uniqueness race, enumeration, 503, revocation, the old-address mail).
-  web: Not built yet - cr-change-email adds the unit tests and an e2e sign-in with the new address.
+    coverage:
+      backend: { integration: [EmailChangeSliceTest.theConfirmationSwapsAddressAndKeyRecordsItConfirmedAndRevokesOtherSessions] }
+      web: { e2e: [src/features/account/email/emailChange.e2e.test.ts] }
