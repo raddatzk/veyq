@@ -222,7 +222,14 @@ A refined CR nails **decisions, not keystrokes**:
   would have closed instead of the build. **And it greps the *flow* surfaces — `docs/inbox.md` + `changes/` —
   whenever the CR deletes or renames a symbol**: `cr-token-bucket-rate-limit-core`'s locator covered code,
   contracts and `docs/`, and the row left naming the deleted class was inbox #114's inventory line — a *live*
-  finding made unreadable by a rename nobody pointed at it.
+  finding made unreadable by a rename nobody pointed at it. **And a CR that narrows what is accepted greps the tests
+  — web e2e included — for the input it newly refuses**: cr-guests-create-no-application-nodes refused a guest's
+  Memory, and its locator (the rule's own names) missed a slice test and an e2e that created one through a helper.
+- **Name the control an input arrives through, per surface, and cite the line behind "as X does".** A refine that
+  adds an input names where the user gives it: cr-download-is-the-export decided a picked directory and a drop box's
+  ZIP without saying where the picker sits or reconciling the use case's E5, and both came back as owner questions.
+  A sentence that leans on a neighbour ("a startup failure, as the other seams handle it") cites the line it means:
+  in cr-guests-create-no-application-nodes no other seam did, the refine had described them from memory.
 - **Run the locator here — from two angles, and read the output as a list.** Handing one over unrun is the
   estimate wearing a command's clothes. And the first command you reach for is a paraphrase of what you already
   believe, so it fails silently wherever that belief is wrong: cr-0171's refine measured "246 scalars" with a
@@ -242,7 +249,8 @@ A refined CR nails **decisions, not keystrokes**:
   **every negative assertion owes a positive control on the same predicate**, and **a negative anchors on the
   specific observable** (`isHttpStatus(e, notFound)`), never on "it threw" — a bare rejection is equally produced
   by a network error, a boot failure, or a crypto failure. All three gaps were sitting in the file the CR already
-  pointed at.
+  pointed at. And **a crafted negative input fails exactly one check**: in cr-download-is-the-export four refusal
+  tests stayed green with their named check removed, because an earlier check refused the same input first.
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest
   names — an attacker who, with that same link and dump, decrypts every photo of the Memory. The owner took the
