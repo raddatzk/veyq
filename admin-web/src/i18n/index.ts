@@ -15,6 +15,12 @@ const en = {
     "create": "Create",
     "done": "Done"
   },
+  "primevue": {
+    "passwordPrompt": "Enter a password",
+    "aria": {
+      "close": "Close"
+    }
+  },
   "tenant": {
     "create": "Create tenant",
     "name": "Tenant name",
@@ -151,6 +157,12 @@ const de: typeof en = {
     "cancel": "Abbrechen",
     "create": "Erstellen",
     "done": "Fertig"
+  },
+  "primevue": {
+    "passwordPrompt": "Passwort eingeben",
+    "aria": {
+      "close": "Schließen"
+    }
   },
   "tenant": {
     "create": "Tenant anlegen",
