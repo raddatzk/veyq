@@ -33,6 +33,11 @@ info:
     `/api/account/email` shows the caller the address a password reset would mail and whether they have
     confirmed reading it, and runs that confirmation (uc.account.confirm-email-address, ADR 0074). The record
     is a fact, not a gate: no request anywhere is refused because an account is unconfirmed.
+
+    `/api/account/email-change` changes the address an account signs in with (uc.account.change-email, ADR 0074
+    Addendum). The address is the auth salt's input (ADR 0003), so the client derives the auth keypair under the new
+    address and sends its public half; the server keeps it pending and installs it together with the address when
+    the link mailed to the new address is opened in the same account's session.
 tags:
   - name: account
     description: Authenticated account key material (for client-side unlock).
@@ -60,6 +65,9 @@ tags:
   - name: account-email
     description: The caller's own address as the server holds it, whether it is confirmed, and the
       confirmation mail — uc.account.confirm-email-address (ADR 0074). Separate tag → its own resource interface.
+  - name: account-email-change
+    description: Change the address an account signs in with — uc.account.change-email (ADR 0074 Addendum).
+      Separate tag → its own resource interface.
 
 paths:
   /api/account/key-material:
@@ -775,6 +783,145 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: email_confirmation_invalid }
 
+  /api/account/email-change:
+    post:
+      tags: [account-email-change]
+      operationId: requestEmailChange
+      summary: Ask to change the address this account signs in with; a link goes to the new address.
+      description: >
+        The first half of uc.account.change-email (ADR 0074 Addendum). The body carries the new address, the auth
+        public key the client derived under that address's salt (ADR 0003 — the address is the salt's input), and
+        the two halves of the cold credential, as `POST /api/account/password` does: an attestation signed with the
+        CURRENT auth key over the account, the new address and the new key (the password), and a Secret-Key proof
+        over the current key, the new key and the new address (the Secret Key, ADR 0060 Decision 2). A session
+        alone therefore cannot move the address a password reset is sent to.
+
+        Checked in this order: no tenant answers the `Host` (`404`); the tenant cannot send mail (`503`, before
+        anything is stored, ADR 0055); the caller is not its member (`404`); the attestation (`403`); the
+        Secret-Key proof (`403`); the per-account mail budget, shared with the address confirmation (`429`).
+        Then the change is stored **pending** (the new address, the new key, the SHA-256 of a one-time token and
+        a `PT24H` expiry; a newer request replaces an older one) and the link is mailed to the new address through
+        the tenant's relay; a send that fails withdraws the pending change and answers `503`.
+
+        **The answer does not say whether the address is free.** A taken address is stored and mailed like a
+        free one, and refused only when the link is opened (`POST /api/account/email-change/confirm`): the
+        uniqueness of an address is enforced at the swap, under the account's lock and the address's unique
+        index, never announced here.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailChangeRequest" }
+      responses:
+        "202":
+          description: >
+            If the address can be used, a link was sent to it. The same answer for a free and a taken address.
+        "400":
+          description: The request was malformed (a missing, oversized or non-base64 field, or no email address).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: >
+            One of the two cold-credential proofs failed, as for a password change: `attestation_failed` (the
+            current password) or `secret_key_proof_failed` (the Secret Key). Nothing was stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: secret_key_proof_failed }
+        "404":
+          description: >
+            `tenant_not_found` — no tenant answers this `Host`, or the caller is not a member of it. A relay
+            carries a link only for its own tenant's members (ADR 0054 §4). Nothing was stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "429":
+          description: The per-account mail budget is spent; retry after the indicated delay. Nothing was stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+        "503":
+          description: >
+            `mail_unavailable` — this tenant cannot send mail, or the send failed. No pending change is left
+            behind (ADR 0055 §4, §6).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_unavailable }
+
+  /api/account/email-change/confirm:
+    post:
+      tags: [account-email-change]
+      operationId: confirmEmailChange
+      summary: Install the new address and auth key with the token from the change mail.
+      description: >
+        The second half of uc.account.change-email. Only a caller signed in as the account that asked can confirm:
+        the proof is that **the account holder** reads the new mailbox. Under the account's lock the pending change
+        is spent (single use) and, if the address is still free, the account's email and auth public key are
+        swapped in one transaction, the address is recorded as confirmed (ADR 0074 Addendum 2 — the link proved
+        it), and every session but the caller's is revoked. Then the OLD address is mailed a fixed notice that the
+        sign-in address changed (link, domain, expiry only — never the new address, ADR 0049).
+
+        The tenant gates are the request's: no tenant or not its member (`404 tenant_not_found`), a tenant that
+        cannot send (`503`, nothing changed). Every other refusal — an unknown, expired, replaced or spent token,
+        one minted for another account, or an address another account holds by now — is the one neutral `404
+        email_change_invalid`, and changes nothing.
+
+        Open tenant invitations addressed to the old address can no longer be accepted by this account: an invite
+        is matched by address.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailChangeConfirmRequest" }
+      responses:
+        "204":
+          description: >
+            The address and the auth key are changed. The caller's own session survives; every other session is
+            gone.
+        "400":
+          description: The request was malformed (a missing or oversized token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            `email_change_invalid` — the token is unknown, expired, replaced or spent, was minted for another
+            account, or the address is no longer free. Deliberately one answer. `tenant_not_found` — no tenant
+            answers this `Host`, or the caller is not a member of it. Nothing was changed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: email_change_invalid }
+        "503":
+          description: >
+            `mail_unavailable` — this tenant cannot send the notice to the old address. Nothing was changed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_unavailable }
+
   /api/account/password:
     post:
       tags: [account-password]
@@ -1381,6 +1528,71 @@ components:
             server recognises it at use and can never reproduce it.
           maxLength: 512
           example: Y29uZmlybWF0aW9uLXRva2Vu
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+
+    EmailChangeRequest:
+      type: object
+      description: >
+        Everything `POST /api/account/email-change` needs: the new address, the auth key derived under it, and the
+        two halves of the cold credential (see the operation description).
+      required: [newEmail, authPublicKey, attestationSignature, secretKeyProofSignature]
+      properties:
+        newEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The address the account will sign in with — its login identifier and the source of its auth salt (ADR
+            0003), and the mailbox the confirmation link must reach; login, recovery and the link cannot work
+            without the plaintext.
+          type: string
+          format: email
+          description: The new sign-in address. Normalized (trimmed, lower-cased) as every stored address is.
+          maxLength: 254
+          example: kevin.new@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        authPublicKey:
+          type: string
+          description: >
+            The Ed25519 auth public key derived from the (unchanged) password under the NEW address's auth salt
+            (ADR 0003). Installed together with the address when the link is confirmed, so login and the address
+            can never disagree.
+          contentEncoding: base64
+          maxLength: 8192
+          example: bmV3LWF1dGgtcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        attestationSignature:
+          type: string
+          description: >
+            Ed25519 signature with the CURRENT auth private key over `veyq/v1/auth-attestation/change-email`: the
+            account's id, the normalized new address and `authPublicKey`. The encoding is pinned by the
+            `auth_attestation` crypto vector.
+          contentEncoding: base64
+          maxLength: 256
+          example: YXR0ZXN0YXRpb24tc2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        secretKeyProofSignature:
+          type: string
+          description: >
+            Ed25519 signature under the account's Secret-Key proof key (ADR 0060 Decision 2) over
+            `veyq/v1/secret-key-proof/change-email`: the **current** auth public key, `authPublicKey`, and the
+            normalized new address. The encoding is pinned by the `secret_key_proof` crypto vector.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2VjcmV0LWtleS1wcm9vZi1zaWduYXR1cmU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    EmailChangeConfirmRequest:
+      type: object
+      description: The one-time token from an address-change mail.
+      required: [token]
+      properties:
+        token:
+          x-veyq-visibility: token
+          type: string
+          description: >
+            The one-time token from the change link's URL fragment. Only its SHA-256 hash is stored, so the server
+            recognises it at use and can never reproduce it.
+          maxLength: 512
+          example: Y2hhbmdlLXRva2Vu
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
 
     ErrorResponse:

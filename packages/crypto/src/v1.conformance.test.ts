@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as v1 from './v1'
+import { ed25519 } from '@noble/curves/ed25519.js'
 // The raw primitives are not in the package's exports (ADR 0072 Decision 6); only this suite reaches them.
 import * as raw from './primitives'
 import { SEAL_PURPOSES, SEAL_TO_PURPOSES } from './seal'
@@ -505,6 +506,15 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
         }),
         p.recovery,
       ],
+      [
+        'change-email',
+        () => v1.emailChangeProofStatement({
+          currentAuthPublicKey: unhex(p.change_email.current_auth_public_key),
+          authPublicKey: unhex(p.change_email.auth_public_key),
+          email: p.change_email.email_utf8,
+        }),
+        p.change_email,
+      ],
     ]
     it.each(cases)('%s statement and signature', (_name, build, v) => {
       const stmt = build()
@@ -513,12 +523,48 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       expect(v1.authVerify(key.publicKey, stmt, unhex(v.signature))).toBe(true)
     })
 
-    it('the three domains differ, so no statement answers for another flow', () => {
-      const domains = new Set([p.rotation.domain, p.change_password.domain, p.recovery.domain])
-      expect(domains.size).toBe(3)
+    it('the four domains differ, so no statement answers for another flow', () => {
+      const domains = new Set([p.rotation.domain, p.change_password.domain, p.recovery.domain, p.change_email.domain])
+      expect(domains.size).toBe(4)
       for (const [, build, v] of cases) {
         expect(new TextDecoder().decode(build().slice(4, 4 + v.domain.length))).toBe(v.domain)
       }
+    })
+  })
+
+  describe('change-email attestation (uc.account.change-email)', () => {
+    const a = vectors.auth_attestation.change_email
+    const build = (over: Partial<{ userId: string; email: string; authPublicKey: Uint8Array }> = {}) =>
+      v1.emailChangeAttestationStatement({
+        userId: a.user_id,
+        email: a.email_utf8,
+        authPublicKey: unhex(a.auth_public_key),
+        ...over,
+      })
+
+    it('statement bytes and the current auth key\'s signature', () => {
+      expect(hex(build())).toBe(a.statement)
+      expect(hex(ed25519.getPublicKey(unhex(a.current_auth_private_key)))).toBe(a.current_auth_public_key)
+      expect(hex(v1.authSign(unhex(a.current_auth_private_key), build()))).toBe(a.signature)
+      expect(v1.authVerify(unhex(a.current_auth_public_key), build(), unhex(a.signature))).toBe(true)
+    })
+
+    it('binds the normalized address, so a spelling of the same address is the same statement', () => {
+      expect(hex(build({ email: a.email_utf8.trim().toLowerCase() }))).toBe(a.statement)
+    })
+
+    // Each bound value, moved: the signature must stop verifying, so a captured attestation installs nothing else.
+    it('answers for no other account, address or key', () => {
+      const sig = unhex(a.signature)
+      const pub = unhex(a.current_auth_public_key)
+      expect(v1.authVerify(pub, build({ userId: 'c0ffee00-0000-4000-8000-0000000000ab' }), sig)).toBe(false)
+      expect(v1.authVerify(pub, build({ email: 'other@example.com' }), sig)).toBe(false)
+      expect(v1.authVerify(pub, build({ authPublicKey: unhex('41'.repeat(32)) }), sig)).toBe(false)
+    })
+
+    it('is not the password change\'s attestation (the new key\'s raw bytes)', () => {
+      expect(v1.authVerify(unhex(a.current_auth_public_key), unhex(a.auth_public_key), unhex(a.signature))).toBe(false)
+      expect(new TextDecoder().decode(build().slice(4, 4 + a.domain.length))).toBe(a.domain)
     })
   })
 
