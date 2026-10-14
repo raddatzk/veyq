@@ -1109,6 +1109,15 @@ const en = {
       deselectAll: 'Deselect all',
       selected: '{selected} of {visible} selected',
       deletedToTrash: '{count} item moved to trash | {count} items moved to trash',
+      // A selection's trash names what the server refused, one line per reason (inbox #427); `unnamedMedia` names a
+      // medium whose original carries no sealed file name, by its place in the bucket's grid.
+      deleteRefused: 'Not moved to trash: {names}. {reason}',
+      deleteRefusedReason: {
+        gone: 'Already gone from this Memory, or you no longer have access.',
+        scope_deleting: 'This space is being deleted.',
+        failed: 'Please try again.',
+      },
+      unnamedMedia: 'Item {n}',
       dropTitle: 'Upload into “{bucket}”',
       dropCopy: 'Drop photos or videos here',
       saveFailed: 'Could not save the bucket.',
@@ -2619,6 +2628,13 @@ const de: typeof en = {
       deselectAll: 'Alle abwählen',
       selected: '{selected} von {visible} ausgewählt',
       deletedToTrash: '{count} Medium in den Papierkorb | {count} Medien in den Papierkorb',
+      deleteRefused: 'Nicht in den Papierkorb verschoben: {names}. {reason}',
+      deleteRefusedReason: {
+        gone: 'Nicht mehr in dieser Erinnerung, oder du hast keinen Zugriff mehr.',
+        scope_deleting: 'Dieser Bereich wird gelöscht.',
+        failed: 'Bitte versuche es erneut.',
+      },
+      unnamedMedia: 'Medium {n}',
       dropTitle: 'In „{bucket}“ hochladen',
       dropCopy: 'Fotos oder Videos hier ablegen',
       saveFailed: 'Bucket konnte nicht gespeichert werden.',
