@@ -1251,7 +1251,8 @@ const en = {
       deletedToTrash: '{count} item moved to trash | {count} items moved to trash',
       // A selection's trash names what the server refused, one line per reason (inbox #427); `unnamedMedia` names a
       // medium whose original carries no sealed file name, by its place in the bucket's grid. An Undo's restore names
-      // its refusals with the same reasons (inbox #429), the organizer's and the lightbox's alike.
+      // its refusals with the same reasons (inbox #429), the organizer's and the lightbox's alike, and so does the
+      // Trash tab's restore (inbox #432), naming an unnamed medium by its place in the trash grid.
       deleteRefused: 'Not moved to trash: {names}. {reason}',
       restoreRefused: 'Not restored: {names}. {reason}',
       deleteRefusedReason: {
