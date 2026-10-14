@@ -1,7 +1,7 @@
 ---
 id: cr-share-note-acceptance-gate
 title: A share's note can ask to be accepted before the share opens, remembered on the visitor's device only
-status: planned
+status: done
 satisfies: [uc.sharing.share-note]
 adrs: ["0036", "0035"]
 invariants: [operator-blind E2EE everywhere]
@@ -63,7 +63,7 @@ decision 2026-10-14 (inbox #422). Web only, because the note is already an opaqu
 
 ## Phases
 
-- [ ] 1 web: Decisions 1–4.
+- [x] 1 web: Decisions 1–4.
   - Unit tests cover:
     - both plaintext shapes round-trip;
     - an old flat note never gates;
@@ -76,7 +76,7 @@ decision 2026-10-14 (inbox #422). Web only, because the note is already an opaqu
   - Done when `npm run check` is green in `web/` and a link with the switch on has been opened in a real browser,
     gated, accepted and reloaded (the web e2e suite, which runs its own stack; the owner's dev database is not to be
     touched).
-- [ ] 2 docs + coverage: `uc.sharing.share-note`'s coverage YAML gains the gate's criteria, and the wiki's sharing
+- [x] 2 docs + coverage: `uc.sharing.share-note`'s coverage YAML gains the gate's criteria, and the wiki's sharing
   pages (EN and DE) say what the switch does and that acceptance stays on the visitor's device. Inbox #422 is marked
   done.
   - Done when `python3 scripts/validate_coverage.py` and the trust-chain guards are green.
@@ -90,4 +90,38 @@ decision 2026-10-14 (inbox #422). Web only, because the note is already an opaqu
 
 ## Retrospective
 
-_(filled at implementation)_
+**Gaps the CR left, resolved mechanically.**
+- The guest head carries the switch as an optional `noteAcceptance: { digest }` beside the unchanged `noteByLocale`,
+  instead of reshaping the head (two dozen suites build head literals). The curator side moved to a `ShareNote` value
+  (`core/sharing/shareNote.ts`; `readShareNoteMap` became `readShareNote`, `NO_NOTE`), because the switch has to travel
+  with the texts through mint, edit and renew.
+- A switch on a note with no text gates nothing (the head asks only with text to accept).
+- The flat map is read stricter than before: a non-string value is "a note that does not open". Before, any object
+  passed, and `pickLocaleText` would have thrown on `.trim()` of a non-string.
+- The gate is decided on each full resolve (`load`), like the terms gate, never by the live poll: an edit made while a
+  visitor is inside does not yank the page; it asks at the next load. An accepted note is not repeated as a banner;
+  the shell strips it once (`bodyHead`) rather than each body.
+- Storage that refuses still lets the visitor through for this visit (an in-memory set, so a re-resolve after a guest's
+  write does not ask again) and asks again on the next load.
+
+**What went wrong.**
+- Planning: the done-when asked for "a real browser … (the web e2e suite, which runs its own stack; the owner's dev
+  database is not to be touched)". The web e2e suite is node-side vitest with no browser, so the two halves cannot both
+  hold, and the implement brief then prescribed a browser pass on the owner's dev instance. The browser pass followed the
+  brief (folder `note-gate-test` + one link left in "Familie Raddatz"); the e2e suite gained the wire half
+  (`folderShare.e2e.test.ts`) but was not run locally. Next time: a UI phase's done-when names ONE substrate for its
+  browser pass, and says whether test data on the owner's instance is acceptable.
+- Execution: the first bite of "nothing of the share is drawn before Accept" mutated the template into something that
+  did not compile, so the suite went red with no test named — "nothing ran", not "the guard held". The missing
+  failing-test names gave it away; it was redone as a behavioural mutation (the gate decided after `ready`). Next time:
+  a bite counts only when its red names the test it was aimed at.
+- Harness trap (kept as a comment at `reload` in `ShareView.memory.test.ts`): after an unmount the suite's router sits
+  on `/`, so a remount read an empty share id and "asked again" for the wrong reason. A "reload" there re-pushes the
+  link first.
+
+**Bites** (snapshot, mutate, run, restore; each red named its test): non-boolean `mustAccept` gates; a flat note gates;
+an empty note gates; the gate decided after `ready` (content flashes; caught for READ/READ_WRITE through the media read,
+not for WRITE_ONLY, whose drop page fetches nothing); the note gate before the terms; an accepted note repeated as
+banner; the memory keyed without the digest; a throwing storage read as accepted; page text written to storage; Accept
+calling an authenticated client; an unknown key accepted; the switch enabled without text; a flat note gating on the
+page; the switch leaking as a plaintext field of the create request.
