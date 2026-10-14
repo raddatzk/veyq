@@ -74,8 +74,12 @@ per-boot config-secret file, its canary file, its HTTP recording and the dump it
 has read them — every container's log over the run's window (`container-<service>.log`), the database's
 statement log (`mariadb-general.log`) and every mail of the run (`mailbox/<id>.eml`). It used to be a `tempfile.TemporaryDirectory` discarded on
 exit, which left the boot log — the surface where an error `message` or a stack trace would carry plaintext —
-not merely unswept but unavailable (ADR 0053 § Decision 4). Nothing prunes it; it is a developer artifact and
-CI throws the runner away.
+not merely unswept but unavailable (ADR 0053 § Decision 4). It is a developer artifact and CI throws the runner away, but a
+developer's disk does not: a run left ~15 GB behind - almost all of it one full mirror of the object store per suite
+([sweep_store]) - and 28 runs filled a laptop (170 GB, found 2026-10-14). So two things now bound it: a mirror whose
+sweep came back clean is deleted at once (it is only ever read BY that sweep; one that found something is kept, because
+that is the one a reader must open to explain the hit), and a new run first prunes the older run directories down to
+`VEYQ_E2E_KEEP_RUNS` (default 2, counting the new one).
 
 Environment (all optional):
     VEYQ_JAR              Backend fast-jar. Default: backend/build/quarkus-app/quarkus-run.jar
@@ -85,6 +89,7 @@ Environment (all optional):
     VEYQ_HOST             Tenant domain + fetch Host. Default: veyq.localhost
     VEYQ_BOOT_SECS        Readiness timeout per boot. Default: 120
     VEYQ_TEST_MS          Default per-test timeout passed to vitest. Default: 120000
+    VEYQ_E2E_KEEP_RUNS    How many run directories `.e2e-out/` keeps, the new one included (at least 1). Default: 2
     VEYQ_DB_ROOT_PASSWORD MariaDB root password. Default: the documented compose throwaway.
 """
 from __future__ import annotations
@@ -889,6 +894,7 @@ def sweep_store(bucket: str, database: str, canary_file: Path, rel: str, workdir
                     f"missing, or this sweep is pointed at the wrong bucket. Either way it proves nothing.")
         log(f"store sweep skipped for {rel}: it stored no object ({database}.veyq_blob is empty), so there is "
             f"nothing on this surface to prove absent")
+        shutil.rmtree(mirror, ignore_errors=True)
         return None
 
     hits: list[tuple[str, str, str]] = []
@@ -914,6 +920,9 @@ def sweep_store(bucket: str, database: str, canary_file: Path, rel: str, workdir
 
     log(f"wire assertion: {len(canaries)} canary/canaries and {len(tokens or {})} capability token(s) from {rel} "
         f"appear in none of {len(objects)} object(s) of {bucket}, key or bytes")
+    # Clean: the mirror has served its one purpose (this sweep). Left behind it is ~900 MB per suite; a failing sweep
+    # keeps its mirror above, because that is the one a reader needs.
+    shutil.rmtree(mirror, ignore_errors=True)
     return None
 
 
@@ -2582,6 +2591,33 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
         kill(proc)
 
 
+def prune_old_runs(keep: int) -> list[str]:
+    """Delete the oldest `.e2e-out/<stamp>/` directories until `keep` remain (the new run's own, made right after, is one of
+    them, so call this with `keep - 1` kept here). Only directories named by a unix-time stamp are touched - never a file or
+    anything else a developer put in `.e2e-out/` - and an undeletable one is reported, not fatal. Returns the names removed."""
+    if not RUN_ROOT.is_dir():
+        return []
+    runs = sorted((d for d in RUN_ROOT.iterdir() if d.is_dir() and d.name.isdigit()), key=lambda d: int(d.name))
+    doomed = runs[: max(0, len(runs) - keep)]
+    removed: list[str] = []
+    for d in doomed:
+        try:
+            shutil.rmtree(d)
+            removed.append(d.name)
+        except OSError as e:
+            log(f"could not prune old run {d.name}: {e}")
+    return removed
+
+
+def keep_runs() -> int:
+    """`VEYQ_E2E_KEEP_RUNS` (default 2, at least 1): how many run directories survive, the new one included."""
+    raw = os.environ.get("VEYQ_E2E_KEEP_RUNS", "2")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        raise SystemExit(f"[e2e] VEYQ_E2E_KEEP_RUNS must be a whole number, got {raw!r}")
+
+
 def main(argv: list[str]) -> int:
     if not shutil.which("docker"):
         raise SystemExit("[e2e] docker is required (the bundled stack supplies the DB + object store)")
@@ -2606,6 +2642,10 @@ def main(argv: list[str]) -> int:
     # Retained, not a tempdir: the boot log is itself a sweep surface (ADR 0053 § Decision 4), and a canary file
     # discarded on exit cannot be re-read when a sweep hit needs explaining. It is created BEFORE the stack comes
     # up because the run's first backend boot ([provision_store]) writes its log here with the rest.
+    pruned = prune_old_runs(keep_runs() - 1)
+    if pruned:
+        log(f"pruned {len(pruned)} older run director{'y' if len(pruned) == 1 else 'ies'} from {RUN_ROOT.relative_to(REPO)}/ "
+            f"(keeping {keep_runs()}, VEYQ_E2E_KEEP_RUNS)")
     workdir = RUN_ROOT / stamp
     workdir.mkdir(parents=True, exist_ok=True)
     log(f"run artifacts (boot logs, canary files) land in {workdir.relative_to(REPO)}/")
