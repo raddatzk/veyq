@@ -37,7 +37,10 @@ the gate's own docstring said so as its limit. The two Dockerfiles' `npm ci` wer
 **Its limits — what a green run does NOT prove.**
   - **Spellings it does not parse.** An install reached through `npx`, `yarn`/`pnpm`, a shell variable or alias, a
     nested `sh -c '…'` string, a heredoc `RUN`, or a third-party `uses:` action that installs on its own is
-    invisible; so is one in a script a step calls (no tracked script but the gate runs npm's install today).
+    invisible; so is one in a script a step calls. Two tracked scripts run npm's install: the gate, and
+    `run_web_e2e.py --upgrade`, which installs a PREDECESSOR's lockfile in a worktree of that older commit - one the
+    gate passed when it was the candidate, deliberately not gated again (a package deprecated since would turn the
+    upgrade proof red for a reason that is not the upgrade; its `prepare_predecessor` says so).
   - **Declarations, not runs.** Premise (b) is the `needs:` graph as written: a gating step or job whose `if:` is
     an expression is counted as running (only a literal `false` is not), and a build job that checks out a
     different ref than the gating job is not detected. There is no remote, so no CI run has executed either.
