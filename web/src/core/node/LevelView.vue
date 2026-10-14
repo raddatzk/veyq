@@ -54,14 +54,15 @@
 //
 // **Select** (inbox #421, owner decisions 2026-10-14): a toolbar button beside "New" and the trash turns on the level's
 // selection mode (`selection.ts`): a labelled checkbox on every row, and a bar with All / None, the count (announced) and the
-// selection's **Move to…** and **Delete**. The selection is the LEVEL's: switching tabs keeps it ("All" adds what the tab on
+// selection's **Move to…**, **Copy to…** (core's, a member's: uc.platform.copy-node) and **Delete**. The selection is the LEVEL's: switching tabs keeps it ("All" adds what the tab on
 // screen shows, "None" takes that away, the count says how many of the selected the tab hides), leaving the mode or the
 // folder clears it, and a node no longer here drops out. What each selected node allows is its application's capability
 // answer (`LevelRow.selection`; a folder's is core's `folderCapabilities`): an action is shown where some node of the level
 // allows it, enabled where some SELECTED node does, and its hint says how many of the selected it cannot reach. Select is
 // offered only where some node here allows an action (a `READ` guest has none) and never in an application's own
 // presentation (Memories' map has no rows). The level writes nothing itself: it hands the movable part to the host
-// (`moveNodes`, core's move dialog) and the deletable part (`deleteNodes`, core's delete question).
+// (`moveNodes`, core's move dialog), the copyable part (`copyNodes`, core's copy dialog) and the deletable part
+// (`deleteNodes`, core's delete question).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -94,7 +95,7 @@ import LevelRowItem from './components/LevelRowItem.vue'
 import LevelNotices from './components/LevelNotices.vue'
 import { standardNodeActions } from './nodeHeader'
 import { downloadHeaderActions, downloadRowActions } from '../export/downloadActions'
-import { copyHeaderActions, copyRowActions } from '../export/copyActions'
+import { canCopy, copyHeaderActions, copyRowActions } from '../export/copyActions'
 import { isDownloadArchive } from '../export/importSubtree'
 import {
   directoryHoldsManifest, holdsManifest, readDroppedDirectory, type DirectoryInput, type DroppedDirectory, type DroppedEntry, type ImportOffer,
@@ -335,10 +336,17 @@ const allowsOf = (id: string): LevelRowSelection | undefined => levelItems.value
 // Offered where something here allows an action, and only while core draws the rows (no application presentation).
 const anyMove = computed(() => [...levelItems.value.values()].some((i) => i.row.selection?.move === true))
 const anyDelete = computed(() => [...levelItems.value.values()].some((i) => i.row.selection?.delete === true))
-const canSelect = computed(() => (mode.value === 'grid' || mode.value === 'list') && (anyMove.value || anyDelete.value))
+// "Copy to…" is core's (uc.platform.copy-node): a member's, for every node whose kind this build copies (`canCopy`).
+const copiesNode = (id: string): boolean => {
+  const item = levelItems.value.get(id)
+  return !!item && !item.unsupported && canCopy(props.access, item.node)
+}
+const anyCopy = computed(() => [...levelItems.value.keys()].some(copiesNode))
+const canSelect = computed(() => (mode.value === 'grid' || mode.value === 'list') && (anyMove.value || anyDelete.value || anyCopy.value))
 const selectedIds = computed(() => [...selection.ids.value].filter((id) => levelItems.value.has(id)))
 const movable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.move === true))
 const deletable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.delete === true))
+const copyable = computed(() => selectedIds.value.filter(copiesNode))
 const shownIds = computed(() => items.value.map((i) => i.key))
 const hiddenCount = computed(() => {
   const shown = new Set(shownIds.value)
@@ -354,6 +362,11 @@ const cannotMoveText = computed(() => {
   const n = m - movable.value.length
   return n > 0 ? t('node.select.cannotMove', { n, m }, n) : ''
 })
+const cannotCopyText = computed(() => {
+  const m = selectedIds.value.length
+  const n = m - copyable.value.length
+  return anyCopy.value && n > 0 ? t('node.select.cannotCopy', { n, m }, n) : ''
+})
 const cannotDeleteText = computed(() => {
   const m = selectedIds.value.length
   const n = m - deletable.value.length
@@ -365,6 +378,10 @@ function toggleSelecting(): void {
 function moveSelected(): void {
   const nodes = movable.value.map((id) => levelItems.value.get(id)!.node)
   if (nodes.length) emit('moveNodes', nodes)
+}
+function copySelected(): void {
+  const nodes = copyable.value.map((id) => levelItems.value.get(id)!.node)
+  if (nodes.length) emit('copyNodes', nodes)
 }
 function deleteSelected(): void {
   const chosen = deletable.value.map((id) => {
@@ -588,6 +605,18 @@ async function onDrop(e: DragEvent): Promise<void> {
           @click="moveSelected"
         />
         <Button
+          v-if="anyCopy"
+          type="button"
+          class="veyq-select-copy"
+          :label="t('node.copy.action')"
+          icon="pi pi-copy"
+          size="small"
+          outlined
+          :disabled="copyable.length === 0"
+          :aria-describedby="cannotCopyText ? 'veyq-select-cannot-copy' : undefined"
+          @click="copySelected"
+        />
+        <Button
           v-if="anyDelete"
           type="button"
           class="veyq-select-delete"
@@ -602,6 +631,7 @@ async function onDrop(e: DragEvent): Promise<void> {
         />
       </span>
       <p v-if="anyMove && cannotMoveText" id="veyq-select-cannot-move" class="veyq-level-selection-hint">{{ cannotMoveText }}</p>
+      <p v-if="cannotCopyText" id="veyq-select-cannot-copy" class="veyq-level-selection-hint">{{ cannotCopyText }}</p>
       <p v-if="cannotDeleteText" id="veyq-select-cannot-delete" class="veyq-level-selection-hint">{{ cannotDeleteText }}</p>
     </div>
 

@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// "Copy to…" on the level (uc.platform.copy-node, cr-copy-node phase 1) against a STUBBED registry (as `LevelView.test.ts`):
-// core's own action in every copyable row's menu and in the folder's header, beside the move, handing the host the node to
-// copy (`copyNodes`) - for a member whose keys are open, never for a share guest of any role. Every control is clicked for
-// real; the dialog is the host's (`CopyNodesDialog`).
+// "Copy to…" on the level (uc.platform.copy-node, cr-copy-node phases 1 and 2) against a STUBBED registry (as
+// `LevelView.test.ts`): core's own action in every copyable row's menu, in the folder's header beside the move, and in the
+// selection's bar, handing the host the nodes to copy (`copyNodes`) - for a member whose keys are open, never for a share
+// guest of any role. Every control is clicked for real; the dialog is the host's (`CopyNodesDialog`).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
@@ -38,7 +38,7 @@ function node(id: string, kind: NodeKind, parentId: string | null = 'Trips'): Tr
   return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
 }
 const TRIPS = node('Trips', FOLDER_KIND, null)
-const TREE = [TRIPS, node('Sub', FOLDER_KIND), node('a1', 'ALPHA'), node('b1', 'BETA')]
+const TREE = [TRIPS, node('Sub', FOLDER_KIND), node('a1', 'ALPHA'), node('a2', 'ALPHA'), node('b1', 'BETA')]
 const unlocked = memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) })
 
 beforeEach(() => {
@@ -52,7 +52,8 @@ beforeEach(() => {
     kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: stubRows('a').factory, tabLabel: 'memory.memories' },
     exportContent: async () => null, importContent: async () => ({ nodeId: 'x', nodeKey: new Uint8Array(0) }), importStreams: true,
   })
-  holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: stubRows('b').factory, tabLabel: 'files.title' } })
+  // BETA moves (its application's selection answer) but cannot be copied
+  holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: stubRows('b', { selection: () => ({ move: true, delete: false }) }).factory, tabLabel: 'files.title' } })
 })
 
 function mountLevel(access: Access) {
@@ -90,5 +91,41 @@ describe('LevelView: Copy to…', () => {
       for (const title of ['Sub', 'a1']) expect(await actionIdsOf(w, title), `${access.mode} ${title}`).not.toContain('copy')
       w.unmount()
     }
+  })
+})
+
+describe('LevelView: Copy to… for a selection (phase 2)', () => {
+  const copyButton = (w: ReturnType<typeof mountLevel>) => w.find('.veyq-level-selection-bar .veyq-select-copy')
+  async function select(w: ReturnType<typeof mountLevel>, ...names: string[]) {
+    if (!w.find('.veyq-level-selection-bar').exists()) await w.find('.veyq-level-toolbar .veyq-select-button').trigger('click')
+    for (const name of names) await w.find(`input[type="checkbox"][aria-label="${name}"]`).setValue(true)
+  }
+
+  it('the bar offers it; it hands the host the copyable part, in the order chosen, and says how many it cannot reach', async () => {
+    const w = mountLevel(unlocked)
+    await select(w)
+    expect(copyButton(w).text()).toBe(t('node.copy.action'))
+    expect(copyButton(w).attributes('disabled'), 'nothing chosen yet').toBeDefined()
+    await select(w, 'a2', 'b1', 'Sub')
+    expect(copyButton(w).attributes('disabled')).toBeUndefined()
+    expect(w.find('#veyq-select-cannot-copy').text()).toBe(t('node.select.cannotCopy', { n: 1, m: 3 }, 1))
+    expect(copyButton(w).attributes('aria-describedby')).toBe('veyq-select-cannot-copy')
+    await copyButton(w).trigger('click')
+    expect(w.emitted('copyNodes')).toEqual([[[expect.objectContaining({ id: 'a2' }), expect.objectContaining({ id: 'Sub' })]]])
+  })
+
+  it('a selection of nothing copyable keeps it disabled', async () => {
+    const w = mountLevel(unlocked)
+    await select(w, 'b1')
+    expect(copyButton(w).attributes('disabled')).toBeDefined()
+    expect(w.find('#veyq-select-cannot-copy').text()).toBe(t('node.select.cannotCopy', { n: 1, m: 1 }, 1))
+  })
+
+  it('a READ_WRITE guest selects to move, never to copy', async () => {
+    const w = mountLevel(guestAccessOf('READ_WRITE'))
+    await select(w, 'b1')
+    expect(w.find('.veyq-level-selection-bar').exists()).toBe(true)
+    expect(copyButton(w).exists()).toBe(false)
+    expect(w.find('#veyq-select-cannot-copy').exists()).toBe(false)
   })
 })

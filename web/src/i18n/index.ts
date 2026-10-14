@@ -932,6 +932,7 @@ const en = {
       count: '{count} selected',
       countHidden: '{count} selected, {hidden} of them not shown in this tab',
       cannotMove: '{n} of {m} cannot be moved.',
+      cannotCopy: '{n} of {m} cannot be copied.',
       cannotDelete: '{n} of {m} cannot be deleted.',
     },
     // Core's move dialog (`core/node/MoveNodeDialog.vue`, inbox #358): pick a destination, then the placement write.
@@ -2567,6 +2568,7 @@ const de: typeof en = {
       count: '{count} ausgewählt',
       countHidden: '{count} ausgewählt, davon {hidden} in diesem Tab nicht sichtbar',
       cannotMove: '{n} von {m} kann nicht verschoben werden. | {n} von {m} können nicht verschoben werden.',
+      cannotCopy: '{n} von {m} kann nicht kopiert werden. | {n} von {m} können nicht kopiert werden.',
       cannotDelete: '{n} von {m} kann nicht gelöscht werden. | {n} von {m} können nicht gelöscht werden.',
     },
     copy: {
