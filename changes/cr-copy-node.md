@@ -76,6 +76,15 @@ server sees only ordinary creates and uploads. Members only. Owner decisions 202
     each original whole (`createImageBitmap`, a `<video>` on an object URL), and so does the cover upload. Until that is
     decided, Memories' kinds declare no `importStreams` and a copy leaves a Memory or chapter out and names it (E3). The
     Memory-with-a-chapter test and the browser's Memory copy wait on the answer.
+  - **Owner answer 2026-10-14 (option b):** for a copy only, Memories' `exportContent` also hands over each medium's
+    existing THUMBNAIL/PREVIEW tiers as payloads read by frame and its sealed per-medium facts (capture time + correction,
+    coordinates, place name) as plaintext content; `importContent` in copy mode uploads those tiers under fresh `K_blob`s
+    sealed under the new Memory key and medium id instead of calling `deriveTiers`, and seals the facts anew. The
+    archive path is unchanged (no tiers in a ZIP). The cover: a photo-of-the-Memory cover follows its medium; an uploaded
+    cover image is copied as its blob by frame (no re-encode). Memories' kinds then declare `importStreams`. ADR 0082
+    Addendum 2 and the use case already say so. Done when the Memory-with-a-chapter copy test (fresh keys on the wire, no
+    whole-file read, the facts and the cover kept) is green and bitten, `npm run check` is green, and a real browser
+    copied a folder holding a Memory.
 - [x] 2 web: "Copy to…" in the selection bar of cr-select-nodes (several nodes, one dialog, one summary).
   - Done when `npm run check` is green and a selection was copied in a real browser.
 - [x] 3 docs: the use case's status and what was seen; its coverage from `planned` to refs; `docs/apps/*.md` matrices;

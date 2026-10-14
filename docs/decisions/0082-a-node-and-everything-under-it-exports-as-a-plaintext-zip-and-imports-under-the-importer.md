@@ -201,6 +201,12 @@ rollback (decision 8). **Rejected:** a server-side object copy (a new store oper
 the operator learns which blob copies which) and a deduplicated blob shared by two nodes (it breaks one reference per
 blob, on which [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)'s reclaim relies, and needs counting).
 Copying across spaces is left for later: the browser and the tree are one space's.
+**A Memory copies its derived tiers, not a re-derivation** (owner decision 2026-10-14, when the build found that
+Memories' import decodes each original whole to derive its tiers - a video held whole in memory): for a copy only, never in
+an archive, Memories' hooks hand over each medium's existing thumbnail and preview tiers as payloads read by frame, and its
+sealed per-medium facts (capture time and its correction, coordinates, place name) as plaintext content; the copy uploads
+those tiers under fresh keys bound to the new Memory and medium instead of decoding. A copied Memory therefore keeps
+corrections an archive's import loses.
 
 ## Consequences
 
