@@ -1,7 +1,7 @@
 ---
 id: cr-breach-check-automatic-on-blur
 title: The breached-password check runs by itself when the password field is left, and a hit needs "Use it anyway"
-status: planned
+status: done
 satisfies: [uc.account.change-password, uc.account.recover-access, uc.admin.setup-server]
 adrs: ["0003"]
 invariants: [operator-blind E2EE everywhere]
@@ -60,7 +60,7 @@ The four dialogs are server setup (admin-web), tenant join, password change and 
 
 ## Phases
 
-- [ ] 1 web + admin-web: Decisions 1–5 in the composable and the four dialogs.
+- [x] 1 web + admin-web: Decisions 1–5 in the composable and the four dialogs.
   - Tests in both packages (on the request itself, as today) cover:
     - nothing while typing;
     - one prefix of the finished password on blur;
@@ -74,7 +74,7 @@ The four dialogs are server setup (admin-web), tenant join, password change and 
   - Done when `npm run check` is green in `web/` and `admin-web/` and the join or change dialog has been tried in a
     real browser (the web e2e suite, or the Browser pane on a stack of its own; the owner's dev database is not to be
     touched).
-- [ ] 2 docs: security-model's **Verification** paragraph names the new tests, and the wiki's privacy and password
+- [x] 2 docs: security-model's **Verification** paragraph names the new tests, and the wiki's privacy and password
   pages (EN and DE) say the check is automatic, what it sends, and the `Origin` disclosure.
   - Done when the trust-chain guards are green.
 
@@ -86,4 +86,35 @@ The four dialogs are server setup (admin-web), tenant join, password change and 
 
 ## Retrospective
 
-_(filled at implementation)_
+- **Mechanical gaps, resolved in place (none needed the owner).** (1) "The dialog's own policy check" is the one
+  `MIN_PASSWORD_LENGTH` floor in all four dialogs, so the composable imports each package's `passwordPolicy` instead of
+  taking a predicate. (2) "A button or a checkbox": a checkbox, because the acceptance is then reversible and maps 1:1
+  onto `hit`/`accepted`. (3) The note, the warning and "Use it anyway" became one component per package
+  (`PasswordBreachNotice.vue`, built from the existing `Message`, `Checkbox`, `field-hint`), so four dialogs cannot drift
+  in wording. The could-not-run line is an `info` message. (4) Two stale sentences the inventory did not name:
+  `cc.security.csp.md` still said "opt-in per dialog, once on submit", and security-model's third-party intro called
+  the check "opt-in". (5) The wiki password page now restates the check, so its `speaks-for` gained
+  `security-model.md`, which links both pages back.
+- **The old test oracle could not survive the new rule.** `"password"` is 8 characters, under the floor of 10, so
+  the composable correctly never sends it. The refine could have seen that the policy fence invalidates every
+  existing fixture below 10 characters. Next time: when a CR adds a precondition to a request, grep the fixtures that
+  feed that request for values the precondition now refuses.
+- **A test trap I hit once, now a comment at its line.** `mockResolvedValue(new Response(...))` hands the SAME
+  Response to every call. Its body reads once, so a second query throws, the code reads "could not run", and
+  "could not run goes ahead". A wrong verdict went green (`passwordWarning.test.ts`, `answers()`).
+- **Turning opt-in into automatic touches every mount.** Every dialog test that submits now passes through the
+  check, and a bare `vi.fn()` lookup resolves `undefined`. The `undefined` read as a hit and blocked the submit, so
+  three unrelated `TenantJoinView.avatar` cases went red. The CR's locator listed the file, but nothing said why it
+  mattered. Next time: a refine that makes an opt-in path automatic names the tests that mount it as affected, not
+  only the ones that test it.
+- **Bite tests.** All were mutated, seen red, and restored by a snapshot harness. Composable, both packages: a
+  typing watcher, the unchanged-blur dedupe removed, the floor reduced to "non-empty", a hit that proceeds, an edit
+  that keeps the acceptance, unavailable that stops, and a submit that skips the re-check. Dialogs: blur swapped for
+  `update:model-value` (Change, Recover, Join, Setup), the submit guard removed (all four), and a blur check added to
+  Join's sign-in field. One assertion could not be bitten and was deleted rather than kept: the confirm field's blur
+  re-checks the same `newPassword`, so a blur bound there sends nothing new.
+- **Browser try** (Browser pane on `veyq.localhost:8091`, Settings > Change password; nothing submitted): typing
+  `password123` sent no request. Tab out sent one, `range/CBFDA`, and showed the warning with its count and "Use it
+  anyway". A second blur sent nothing. Ticking it worked. One more keystroke cleared both the warning and the
+  acceptance. The console showed no errors.
+- **Next time:** the refine reads the fixtures, not only the call sites, of a request whose preconditions it changes.

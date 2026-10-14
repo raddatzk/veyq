@@ -1621,6 +1621,16 @@ the rows the gated write adds. Keyed on the cleanups (`grep` the bulk deletes an
 `@Scheduled` purges), cr-a-gate-holds-until-its-write-commits found thirteen real ones in five clusters and could
 name every other gate safe in one line each.
 
+### A refine that adds a precondition to a call, or makes it automatic, reads that call's FIXTURES
+
+**The call sites are only half the inventory.** `cr-breach-check-automatic-on-blur` turned an opt-in lookup into an
+automatic one with a policy floor. Its locator found every caller and every test that named the lookup, and two kinds
+of red still came only at implement time. The composable's own oracle password was 8 characters, under the floor of
+10, so it would never be sent again. And every dialog test that submits now passed through the lookup, so a bare
+`vi.fn()` resolving `undefined` blocked unrelated cases. So when a CR adds a precondition to a call, or puts a call
+on a path that used to skip it, grep the values that feed it in the tests and the mocks that stand in for it. Name
+them in the inventory as affected.
+
 ### A refine that removes a control lists every role and share root that reaches it
 
 `cr-move-browser-and-replace-by-upload` removed the replace from every surface, the opened file's included, after
