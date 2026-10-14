@@ -91,6 +91,20 @@ export async function loadSessionVault(): Promise<{ email: string; masterKey: Ui
   }
 }
 
+/** Carry the session vault over to the account's new sign-in address (uc.account.change-email), iff it is
+ *  [oldEmail]'s — the twin of `readdressRemembered`, for the same reason. Best-effort, like the cache itself. */
+export function readdressSessionVault(oldEmail: string, newEmail: string): void {
+  try {
+    const raw = sessionStorage.getItem(SS_KEY)
+    if (!raw) return
+    const v = JSON.parse(raw) as StoredVault
+    if (v?.email !== oldEmail.trim().toLowerCase()) return
+    sessionStorage.setItem(SS_KEY, JSON.stringify({ ...v, email: newEmail.trim().toLowerCase() }))
+  } catch {
+    /* storage unavailable — best-effort */
+  }
+}
+
 /** Drop the session vault (logout, switching to the persistent tier, or a no-session boot): both the
  *  sessionStorage ciphertext and the IndexedDB key. */
 export async function clearSessionVault(): Promise<void> {

@@ -109,6 +109,18 @@ export async function rememberedWrapId(email: string): Promise<string | null> {
 }
 
 /**
+ * Carry this device's remember-me record over to the account's new sign-in address (uc.account.change-email), iff
+ * it is the record of [oldEmail]. The email is the record's only plaintext and the one thing boot cannot learn
+ * elsewhere; left stale, a restored session would name itself by an address that no longer signs in, and every
+ * later proof derived from it (a password change's attestation) would fail. The key and the wrap are unchanged.
+ */
+export async function readdressRemembered(oldEmail: string, newEmail: string): Promise<void> {
+  const record = await loadRecord()
+  if (!record || record.email !== oldEmail.trim().toLowerCase()) return
+  await run('readwrite', (s) => s.put({ ...record, email: newEmail.trim().toLowerCase() }, RECORD_KEY))
+}
+
+/**
  * Boot restore (no prompt): given the already-fetched key material, decrypt the Master Key from this device's
  * DEVICE_KEY wrap with the local key. Returns null when this device isn't enrolled. A wrap that is missing, or
  * served under this device's id but does not open, falls back to the floor and keeps the local key
