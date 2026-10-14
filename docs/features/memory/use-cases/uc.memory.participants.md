@@ -19,17 +19,30 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 ## Main flow — name the participants
 
-1. With a Memory open, a member chooses **Participants** in the header (a capability, `memoryCapabilities`
-   `participants`, true for a member only and fail-closed).
+1. With a Memory open, a member chooses **Participants**, an action button in the header's action bar beside share,
+   rename, move and delete (core's `NodeHeader`, a `NodeHeaderAction` with `pi-user-plus`; owner decision 2026-10-14 —
+   it used to be a link in the line under the title). Its capability is `memoryCapabilities` `participants`, true for a
+   member only and fail-closed, so a guest gets the same header without it.
 2. The dialog lists the members of the Memory's scope — tenant members for a tenant Memory, group members for a group
    Memory — from `listScopeMembers`, each by display name (real name when it opens, else username).
 3. The member ticks and unticks; the client accepts only ids the directory returned (the server cannot check: the list
    is sealed).
 4. On save the client writes the `participants` sub-object (user ids only) into the Memory's `wrappedMeta` under `K_mem`
    with the node-meta compare-and-set, stating the `metaVersion` it read.
-5. The header re-renders with the participants as overlapping avatars (the member's profile picture, else the letter): up to three, and past three the third slot is a "+N" (two avatars and "+2" for four people). Hovering the
+5. The line under the title shows the participants as overlapping avatars; **with no participant it shows nothing** —
+   no "nobody yet" text, the action button is the way in. The header re-renders with the participants as overlapping avatars (the member's profile picture, else the letter): up to three, and past three the third slot is a "+N" (two avatars and "+2" for four people). Hovering the
    group, focusing it by keyboard or tapping it opens a popover with everyone — avatar and display name — and Escape
    closes it.
+
+## Main flow — at creation
+
+1. A member creating a Memory in a tenant or group scope sees **"I was there"** in the create dialog, ticked by
+   default (owner decision 2026-10-14). Ticked, the Memory's first `wrappedMeta` already carries
+   `participants: { userIds: [<own id>] }`: no second write, no version bump. Unticked, it carries no participants.
+2. It is offered only where the participants are: not in a personal scope (no participants there), never to a share
+   guest (no user id to record, and the capability is false for every share role). It means "who was there", like
+   every participant — not "who created it" — which is why it is a choice and not automatic.
+3. Existing Memories are left as they are.
 
 ## Main flow — open a person
 

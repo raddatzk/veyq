@@ -30,11 +30,16 @@
    **Each tile names the stage its file is actually in** — *queued*, *preparing*, *uploading* — because they are
    three different waits and in two of them no byte has left the device yet. A tile that said *"uploading"*
    while the device was still decoding is what made a large batch read as hung.
-4. Opening the uploads popup shows each batch's files with the same status (queued / preparing / uploading /
-   done / failed / cancelled), a progress bar, and a **cancel** control while a file is queued/uploading.
+4. Opening the uploads popup shows **one list per destination** (owner decision 2026-10-14): every batch enqueued
+   for the same target (the batch's `key`) whose list is still open is drawn as ONE list, under one title, with ONE
+   progress bar over all its files. A batch enqueued later for that target joins the open list and the bar recomputes
+   over the larger set (so it can go down); a list the user closed is not reopened, a later batch starts a new one.
+   Different targets stay separate lists. Each file shows the same status (queued / preparing / uploading / done /
+   failed / cancelled) and a **cancel** control while it is queued/uploading. The grouping is the tray's: the queue
+   keeps its batches, with their own completion hooks and their own "a hard failure cancels the rest of this batch".
 5. As each file finishes, its optimistic tile **reconciles into the real decrypted thumbnail** (matched by the
    returned `mediaId`) with no empty-flash and no duplicate: the tile's **content** changes, its **position**
-   does not. The user can **close** (acknowledge) the finished batch in the tray.
+   does not. The user can **close** (acknowledge) a finished list in the tray, which closes every batch in it.
 
 ## Alternate / exception flows
 
