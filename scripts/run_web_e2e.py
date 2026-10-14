@@ -2949,17 +2949,24 @@ class Predecessor(NamedTuple):
     build: Build
 
 
+def default_predecessor_ref() -> tuple[str, str]:
+    """(the default predecessor's ref, how it was chosen): [default_predecessor] fed with this checkout's pin file and
+    the release tags `HEAD^1` contains. Raises ValueError where that refuses. `chart_upgrade_check.py` resolves its
+    predecessor here too, so the chart's upgrade check and this proof never compare against different builds."""
+    release = read_release((REPO / PIN_FILE).read_text())
+    tags = git("tag", "--merged", "HEAD^1", "--list", "v*").splitlines() if release != "none" else []
+    ref = default_predecessor(release, tags)
+    return ref, f"{ref} (the default while `release: {release}`)"
+
+
 def resolve_predecessor(ref: str | None) -> tuple[str, str]:
     """(how the predecessor was chosen, its commit). Refuses a ref that is no commit, and one WITHOUT the seeder — a
     predecessor older than the seeder cannot seed anything (Decision 2 of cr-upgrade-proof)."""
     if ref is None:
-        release = read_release((REPO / PIN_FILE).read_text())
-        tags = git("tag", "--merged", "HEAD^1", "--list", "v*").splitlines() if release != "none" else []
         try:
-            ref = default_predecessor(release, tags)
+            ref, asked = default_predecessor_ref()
         except ValueError as e:
             raise SystemExit(f"[e2e] UPGRADE PROOF: {e}") from e
-        asked = f"{ref} (the default while `release: {release}`)"
     else:
         asked = ref
     found = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=str(REPO),

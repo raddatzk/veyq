@@ -1,7 +1,7 @@
 ---
 id: cr-helm-upgrade-check
 title: A chart upgrade is checked by rendering the predecessor's chart and the candidate's and comparing the immutable fields
-status: planned
+status: done
 satisfies: []
 adrs: ["0064", "0057"]
 invariants: [self-hostable by default]
@@ -59,13 +59,13 @@ the coordinator on the owner's behalf, 2026-10-14 (inbox #428). `satisfies: []`:
 
 ## Phases
 
-- [ ] 1 scripts + CI: Decisions 1-4.
+- [x] 1 scripts + CI: Decisions 1-4.
   - Tests: the selftest covers every refusal of Decision 1 on a crafted pair and one "allowed change" control (an
     image tag or a label changes: no refusal); the verdict function for `release: none` and for a set release.
   - Bites: each refusal's check removed turns its selftest red; a real local run against `HEAD^1` is green; a chart
     edit that changes `veyq.selector` (or a claim template's size) makes the real run report it - restored after.
   - Done when the selftest and a local run are green and every `scripts/validate_*.py` is green.
-- [ ] 2 docs: `infra/README.md` (what the check covers and does not), ADR 0064 Addendum (built), `docs/inbox.md` #428
+- [x] 2 docs: `infra/README.md` (what the check covers and does not), ADR 0064 Addendum (built), `docs/inbox.md` #428
   done.
   - Done when every `scripts/validate_*.py` is green, run on a detached worktree.
 
@@ -76,4 +76,25 @@ the coordinator on the owner's behalf, 2026-10-14 (inbox #428). `satisfies: []`:
 
 ## Retrospective
 
-_(filled at implementation)_
+- **Planning: Decision 1's field list is narrower than the rule it stands for.** The API server refuses an update to
+  ANY StatefulSet spec field outside its mutable set (replicas, template, updateStrategy, minReadySeconds, ordinals,
+  the PVC retention policy), so a label added to a claim template's `metadata` - or any claim-template field beyond
+  name, modes, class and size - rendered green and would fail the upgrade. Built first as decided ("anything else may
+  change"), handed back with a recommendation, and **decided by the coordinator on the owner's behalf, 2026-10-14:
+  compare the whole StatefulSet spec minus the mutable set**, claim templates whole (metadata included, order
+  included, quantities compared by value so `1Gi` = `1024Mi`), absent fields equal to the server's defaults
+  (`podManagementPolicy`, `revisionHistoryLimit`). Built in a third commit; Decision 1's list above is superseded by
+  it, and the mutable set is the API server's refusal message as remembered, not measured on a cluster (a field it
+  wrongly omits is a false red, never a false green). Root cause: the refine enumerated the
+  fields today's templates set, not the API's own rule. Next time: when a CR lists "what is immutable", derive the list
+  from the API server's validation and cite it, then narrow on purpose.
+- **Execution: two controls were not bitten until their levers were.** "The same size in another unit finds nothing"
+  sat on a standalone claim, where growth is allowed, so a unit misread that INFLATES (`Mi` read as 10^6) was
+  invisible; the first lever's run reported it green and it moved to a claim template, where any size change is a
+  finding. And the default-policy lever, applied to one side only, reddened every case instead of its own. Both were
+  found only because the controls got levers of their own (`changes/README.md` § A control's LEVER must itself be
+  bitten). Next time: place a control where the predicate is two-sided before writing it.
+- **Process.** The CR reused `default_predecessor`, whose refusal names `--upgrade-from`; the chart check took that
+  flag name rather than a `--from` of its own, so the message is true for both. The selection of the default ref moved
+  into `run_web_e2e.default_predecessor_ref()` so the two callers cannot drift. The CI step is unexercised: no remote,
+  no run (the `test` job's `fetch-depth: 0` included).
