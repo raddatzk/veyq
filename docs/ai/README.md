@@ -128,7 +128,7 @@ Five rules follow:
 
    **And the rule reaches a *delegated* read, where nobody can apply it from inside.** A subagent measures
    whatever tree it is pointed at and cannot know which parts of it this session already moved. A `web/`
-   mapping spawned just after an implement session's first `npm run generate:api` reported the work order's
+   mapping spawned just after an implementer's first `npm run generate:api` reported the work order's
    own — correct, when written — *"the generated client does not carry this verb"* as **stale**: which reads
    as a fault in the work order and is in fact the effect of the step above it. So **name in the subagent's
    prompt what you have already changed**, or its report hands back a contradiction only you can resolve.
@@ -149,48 +149,60 @@ Five rules follow:
 > decided in refinement (step 2, with the user); the CR only turns it into a work-order. And a CR grants no
 > licence to build: **implementation waits for the user's explicit go-ahead on that CR.**
 
-## Session topology — one phase per session
+## Context topology: refine with the user, implement in a subagent
 
-Refine and implement are **separate sessions**, and **refine runs in its own fresh session, up front** — never
-tacked onto the tail of an implementation session. Refinement is the highest-leverage, cheapest-to-catch phase (a
-design fault caught here is a doc edit; the same fault caught after multi-surface implementation is expensive), so
-it must not run in the polluted, compressed context left over from implementing — its best conditions, not its
-worst.
+Refinement runs **in the conversation with the user**. Implementation runs in a **subagent** started from that
+conversation. The subagent is the fresh context that the earlier rule ("one phase per session") got by opening
+a new session. It gives the same clean room without the user having to open one, and the main conversation stays
+free of implementation context.
 
-- **Refine session** — fresh context, one CR. Ground it by reading recent **retrospectives** + targeted subagent
-  spikes over the surface; produce a tight CR (decisions + inventory + a Definition of done that carries the
-  enforcement guard). Delegate broad reading to subagents so the main context stays lean.
-- **Implement session** — fresh context; reads the refined CR + only what it points at. If a fresh session
-  **cannot** proceed from the doc alone, the CR was under-refined — a cheap signal, fed straight back into the
-  CR. Produce code + proof + a filled retrospective, and **close with an active process retro** (below).
+- **Refine (the conversation).** One CR. Ground it in recent **retrospectives** and in targeted subagent spikes
+  over the surface. Produce a tight CR: decisions, inventory, and a Definition of done that names the guard which
+  enforces it. Delegate broad reading to subagents so the main context stays lean. If the conversation is already
+  long, or carries unrelated work, start a fresh one for the refinement: it is the highest-leverage phase, and it
+  deserves its best conditions.
+- **Implement (a subagent), after the user's explicit go.**
+  - **Brief.** The subagent starts with fresh context. Its brief is **the CR's path, the working rules, and
+    machine hints marked as such**. A machine hint can hold only for the CR's planned
+    form, so the implementer re-derives it against what it actually builds. Nothing else. Anything the implementer needs that the brief would have to explain belongs
+    in the CR, so write it there and not into the prompt. A brief that carries knowledge the CR lacks voids the
+    clean-room proof, exactly as a warm session did.
+  - **Questions.** The subagent cannot ask the user. A decision the CR does not settle is **handed back**, never
+    decided in place: commit what is finished, then return the question with a recommendation.
+  - **Output.** Code, proof, a filled retrospective, and a report back to the conversation.
+- **The conversation does not implement a CR itself.** So it never carries implementation context into the next
+  refinement. The old rule that refinement never runs on an implementation's tail is now true by construction.
 
-**Same-session refine+implement is a named, risk-based exception — not the norm.** A **tightly-scoped, mechanical,
-behaviour-preserving** CR backed by a **strong automatic gate** (e.g. `./gradlew check` over a broad slice-test
-suite that pins the behaviour, as in cr-0161) may be refined and implemented in one session: the gate stands in
-for the clean-room completeness proof (the fresh implementer would only have re-derived what the suite already
-verifies). **Design-heavy, multi-surface, or novel-abstraction CRs — anything whose own doc is the main safety
-net — stay split.** The warm refine context is precisely what the clean-room gate distrusts, so leaning on it is a
-deliberate trade, not a free win; when in doubt, split. The exception never applies to the *other* direction —
-**refine always runs fresh, never tacked onto an implementation's tail.** The buffer below keeps "split" from
-meaning "wait": a CR refined 1–2 ahead starts the next session warm *from the doc*, not from zero.
+**Implementing in the conversation itself is a named, risk-based exception, not the norm.** It is allowed for a
+CR that is **tightly scoped, mechanical and behaviour-preserving**, and that is backed by a **strong automatic
+gate**: for example `./gradlew check` over a broad slice-test suite that pins the behaviour, as in cr-0161. The
+gate then stands in for the clean-room completeness proof, because a fresh implementer would only re-derive what
+the suite already verifies. **Design-heavy, multi-surface, or novel-abstraction CRs, where the CR is the main
+safety net, go to a subagent.** When in doubt, delegate.
 
-**The closing process retro is mandatory and spoken, not just filed.** When implementation is done, before the
-session ends, I proactively tell the user — in the conversation, not only in the CR's `## Retrospective` — **what
-could improve about *how we work together*** (the Arbeitsweise): the process, the collaboration, the tooling, the
-conventions we did or didn't honor. It runs **both directions** (my misses *and* the user's — a premature
-instruction, a missing constraint, an internally-inconsistent CR) and **every time, even when the technical work
-went cleanly** — a clean run still teaches process. Keep it 2–4 concrete, actionable points, and invite the
-user's side. This is the compounding channel that makes the *next* refinement better; the filed retro is its
-durable record, the spoken hand-off is what actually reaches the user.
+**Parallel implementers share one working tree.** Two subagents that edit the same files (a CR, a README both
+touch) run one after the other, not side by side. Every implementer stages by explicit path, as § The pipeline
+step 3 says.
+
+**The closing process retro is mandatory and spoken, not just filed.** When the implementer's report arrives, I
+proactively tell the user, in the conversation and not only in the CR's `## Retrospective`, **what could improve
+about *how we work together*** (the Arbeitsweise): the process, the collaboration, the tooling, and the
+conventions we did or didn't honour. It draws on the subagent's process observations and on my own from the
+refinement. It runs **both directions**: my misses *and* the user's (a premature instruction, a missing
+constraint, an internally inconsistent CR). It happens **every time, even when the technical work went
+cleanly**, because a clean run still teaches process. Keep it to 2–4 concrete, actionable points, and invite the
+user's side. This is the compounding channel that makes the *next* refinement better. The filed retro is its
+durable record; the spoken hand-off is what actually reaches the user.
 
 Why the split holds:
-- **The retrospective is the channel from implementation to the next refinement** — not a warm context window.
+- **The retrospective is the channel from implementation to the next refinement**, not a warm context window.
   Lessons an implementation surfaces (e.g. "an entity relocation touches every referencing unit *and* its tests")
-  land in the CR's retro and are read by the next refine session, across the session boundary, in durable state.
-- **Clean-room implementation is a quality gate.** "Always a new session" earns its keep because a fresh
-  implementer *proves* the CR is complete; that proof is void if the same session refined it.
+  land in the CR's retro. The next refinement reads them there, in durable state.
+- **Clean-room implementation is a quality gate.** A fresh implementer *proves* the CR is complete, and a
+  question it has to hand back is the cheap signal that it was not. That proof is void if the implementer was
+  told what the CR leaves out, whether through a warm session or a fat brief.
 - **Keep a shallow buffer (1–2 refined CRs ahead), not a deep queue.** A CR refined far ahead goes stale as
-  neighbouring code drifts; refine just ahead of need.
+  neighbouring code drifts. Refine just ahead of need.
 
 ## Refinement checklist
 
@@ -321,9 +333,9 @@ this section only points at it (rule 2) — assembling this picture by hand each
 - **The skills layer** — [ADR 0046](../decisions/0046-operative-lore-in-skills-and-agents.md): conditional
   lore loads **on a trigger** from `.claude/skills/` rather than taxing every turn from CLAUDE.md, and it
   **points instead of restating** — with `validate_skill_links.py` keeping those pointers honest. It also
-  records why there are **no** `.claude/agents/` role files: *a subagent is a child of a session, but the
-  clean-room refine/implement split is a top-level-session property*, so a write-boundary on a `refine`
-  subagent would be a false guarantee. § Session topology above is what actually enforces it.
+  records why there are **no** `.claude/agents/` role files: *a subagent is a child of the conversation that
+  starts it*, so a write-boundary on a `refine` subagent would be a false guarantee. The implementer is an
+  ordinary subagent whose brief is the CR. § Context topology above is what actually enforces the split.
 - **Claim-provenance** — every claim in a report, CR or handoff is marked **measured** (naming the command
   that proves it) or **remembered**. Carried by the
   [`trust-chain` skill](../../.claude/skills/trust-chain/SKILL.md); rationale in

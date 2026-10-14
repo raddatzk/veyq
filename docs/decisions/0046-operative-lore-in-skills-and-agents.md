@@ -145,13 +145,14 @@ observed.
 The rollout also proposed four agent roles (`refine`, `implement`, `verify`, `measure`) as `.claude/agents/`
 files. The measurement collapsed them, and the reason is the single most reusable finding of this whole exercise:
 
-> **A subagent is a *child* of a session; the clean-room refine/implement split is a *top-level session*
-> property. A write-boundary on a `refine` subagent stops that subagent from writing — but not its parent
-> session from implementing. So the boundary the role exists to enforce would be a *false guarantee*: the split
-> is enforced by separate fresh top-level sessions + owner review ([`ai/README.md`](../ai/README.md) §
-> session-topology), which no agent file can replace.**
+> **A subagent is a *child* of the conversation that starts it. A write-boundary on a `refine` subagent stops
+> that subagent from writing, but not its parent from implementing. So the boundary the role exists to enforce
+> would be a *false guarantee*. The split is enforced by where the work runs ([`ai/README.md`](../ai/README.md) §
+> Context topology) and by owner review, and no agent file can replace either.**
 
-That reframes the whole idea. `refine`/`implement` are **session-shaped, not subagent-shaped** — to make a
+That reframes the whole idea. Refinement is **conversation-shaped**: it runs with the owner. Implementation
+does run in a subagent, an ordinary general-purpose one whose brief is the CR's path. That is the clean room
+(§ Context topology), and a role file would add nothing the brief does not already carry. To make a
 *top-level* session read-only you set session config (permissions / `permissionMode`), not a `.claude/agents/`
 file, which only ever governs a *delegated* child. The one genuinely subagent-shaped, read-only piece is the
 delegated reader (`measure`), and that is already the built-in `Explore` agent (all tools except Edit/Write/
@@ -179,5 +180,5 @@ re-derived): a write-boundary on a child subagent cannot enforce a top-level-ses
 recorded pain and duplicates review tooling, and the read-only-`refine`-returns-text option — though the *only*
 zero-mechanism form — mis-sizes the handoff: `refine`'s real job reshapes durable state (an ADR + use-case edits
 + the CR), and handing multi-file *edits* back as text for a caller to apply is a faithful-copy cost that lands on
-the common case. Kept: the `measure`-as-`Explore` convention in `trust-chain`. The session-topology + owner review
-already carried the split; that is the result, not a failure to build.
+the common case. Kept: the `measure`-as-`Explore` convention in `trust-chain`. The context topology + owner review
+carry the split; that is the result, not a failure to build.
