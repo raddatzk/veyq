@@ -52,9 +52,13 @@ Memory, an expense and a file side by side).
    application's.** Create, move, rename and delete of nodes carry no application semantics, so core serves them
    (a guest variant of the node operations, authorised by the gate instead of a member session) and checks the
    structure only: inside the share's subtree, placement by `NodeKindRules`, wraps under keys the guest holds.
-   **Whoever owns the container decides what may be created in it:** under a `FOLDER`, core (a `READ_WRITE` guest
-   may create any kind `NodeKindRules` admits there); inside an application's container (a Memory), that
-   application. Reading needs no server decision (reading is holding keys, and the keys flow down the tree).
+   **Whoever owns the container decides what may be created in it:** under a `FOLDER`, core — and core lets a
+   `READ_WRITE` guest create **only a `FOLDER`, or a kind whose own application declares it guest-creatable** (today
+   Files' `FILE`, which is how a contributor's upload lands); **never a Memory, a drop box or any other application's
+   node** (owner decision 2026-10-14; it used to be "any kind `NodeKindRules` admits there"). The declaration is the
+   kind's application's, fail closed like every seam here, so a new application never hands guests a create by
+   accident. Moving and renaming what is already there are unchanged. Inside an application's container (a Memory),
+   that application decides. Reading needs no server decision (reading is holding keys, and the keys flow down the tree).
    **`READ_WRITE` is interpreted by each application for its kinds** (what a contributor may do in a Memory, in a
    file tree, in an expense list), written down as a small role matrix in its `docs/apps/<app>.md`; **a kind with no
    declaration allows nothing** (fail closed, like the other seams), so a new application can never inherit write

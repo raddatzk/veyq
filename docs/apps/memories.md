@@ -63,7 +63,7 @@ no declaration allows nothing. This is Memories' answer, measured from the code 
 | Edit a medium's meta | ✗ (no guest operation) | ✗ (no guest operation) | ✗ | ✗ |
 | Rename a node | ✗ (`share_not_contributable`) | ✗: the root never (`illegal_structure`), a chapter inside a Memory `illegal_scope` | ✓ a child of a `FOLDER`; ✗ the root, a chapter (`illegal_scope`) | ✗ (`share_not_contributable`) |
 | Cover, date, place of a node (`wrappedMeta`, cover blob) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ |
-| Create a chapter or a Memory | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`: Memories declares no `GuestNodeRules`) | ✓ a `MEMORY` or `FOLDER` under a `FOLDER`; ✗ a chapter (`illegal_scope` inside a Memory, `illegal_structure` under a folder) | ✗ (`share_not_contributable`) |
+| Create a chapter or a Memory | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`: Memories declares no `GuestNodeRules`) | ✗ a `MEMORY` (owner decision 2026-10-14: a guest creates no application's node; core lets a guest create a `FOLDER` and a kind its application declares guest-creatable, and Memories declares none); ✗ a chapter (`illegal_scope` inside a Memory, `illegal_structure` under a folder) | ✗ (`share_not_contributable`) |
 | Move a node | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`; the root `illegal_structure`) | ✓ a `FOLDER` or `MEMORY` between folders of the subtree; ✗ a chapter out of or into a Memory (`illegal_scope`), anything out of the subtree | ✗ (`share_not_contributable`) |
 | Delete a node | ✗ (no guest operation) | ✗ (no guest operation) | ✗ (no guest operation, ADR 0080 decision 6) | ✗ |
 
@@ -139,7 +139,7 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | share (and the uploader link) | the instance's public (and uploader) links | the same | ✗ | ✗ | ✗ |
 
 At a folder level (Memories' rows in core's one list): a member creates a Memory (not during a pending deletion, never in a guest's
-identity folder); a `READ_WRITE` guest of a folder link creates a Memory there; every role that reads opens
+identity folder); a share guest creates none — the "New" menu offers a guest no Memory (owner decision 2026-10-14, ADR 0080 decision 6); every role that reads opens
 one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's), and a guest's move
 the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unknown at the link's root). These are the matrix
 half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
