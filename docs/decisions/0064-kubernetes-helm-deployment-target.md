@@ -154,7 +154,11 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   three-part SemVer. (A three-part control, `0.5.0` beside `0.6.0-SNAPSHOT`, resolves `0.5.0`, and `--devel`
   the snapshot.) So the chart needs no patch level to be installed the way the operator page installs it — by
   the verified digest, or by its exact version — and in exchange a version range or "the latest chart" selects
-  nothing, a snapshot included. The image repositories
+  nothing, a snapshot included. **That trade is taken on purpose.** One name for the release, its images and its
+  chart is worth more here than resolution by range: veyq tells an operator to pin by digest, never to follow a
+  range, and a chart that silently tracks "the latest" is exactly the moving name the pins exist to avoid.
+  *Rejected:* a chart `version` of `<major>.<minor>.0` beside an `appVersion` of `<major>.<minor>`. It buys ranges
+  and the tools that resolve charts by them, and costs the one name the release and its chart share. The image repositories
   default to the upstream's own (`ghcr.io/raddatzk/veyq`, `ghcr.io/raddatzk/veyq-admin`), written out for the
   same reason the verify identity is: a fork that deploys its own images overrides them, knowingly. A release
   refuses to republish the chart as it does the images; a release with two images and no chart is a partial
