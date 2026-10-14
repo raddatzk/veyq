@@ -66,7 +66,7 @@
   scope's), `404 upload_not_found`, `422 illegal_target` (not a `FILE`), `422 upload_mismatch` (started for another
   node or role), `400 budget_exceeded`.
 - `listFiles` — `GET /api/scopes/{scopeId}/files?parentId=` (absent: the scope root): `{items: [{nodeId, fileBlob|null,
-  uploaderKey|null}]}` for every live `FILE` directly under the parent, ordered by node id, each `fileBlob` with its
+  uploaderKey|null, uploaderName|null}]}` for every live `FILE` directly under the parent, ordered by node id, each `fileBlob` with its
   `wrappedBlobMeta`, `uploaderKey` the uploader of that blob (`user:{id}` | `share:{identityId}`, null with no blob). The
   guest's `listShareFiles` has an item of its own (`ShareFileListItem`) with no uploader (inbox #190). Names
   and keys come from core's node listing; the client joins by `nodeId`. `404 node_not_found` for a parent that is no live node of the scope.
