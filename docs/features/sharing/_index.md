@@ -76,7 +76,8 @@ member renames a shared node, their client re-seals the name of every share on i
   **client-side** (localStorage, per tenant + version) — the server records nothing, anonymity preserved. The terms
   reach the accountless client from the **share** (not the member endpoint, not the Host — a share is
   Host-independent): a guest **`GET /api/shares/{shareId}/terms`** keyed on the non-enumerable `shareId`, so **no
-  `tenantId` existence oracle**. On the share page the gate sits **password → terms → name → content**, and it
+  `tenantId` existence oracle**. On the share page the gate sits **password → terms → note → name → content** (the note's gate only where the
+  curator asked for it, [uc.sharing.share-note](use-cases/uc.sharing.share-note.md)), and it
   **fails open** on a fetch error — an operational gate, not enforcement, honest about being bypassable)
 
 ## Deferred (later slices, each with its own dependency)

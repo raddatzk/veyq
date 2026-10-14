@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/files/use-cases/uc.files.share-folder-files.md, docs/features/files/use-cases/uc.files.share-file.md, docs/features/files/use-cases/uc.files.drop-box.md, docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md, docs/features/sharing/use-cases/uc.sharing.share-password.md; pair: en/sharing.md -->
+<!-- speaks-for: docs/features/files/use-cases/uc.files.share-folder-files.md, docs/features/files/use-cases/uc.files.share-file.md, docs/features/files/use-cases/uc.files.drop-box.md, docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md, docs/features/sharing/use-cases/uc.sharing.share-password.md, docs/features/sharing/use-cases/uc.sharing.share-note.md; pair: en/sharing.md -->
 # Teilen mit Menschen ohne Konto
 
 Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md) und [Dateien](dateien.md). Du
@@ -35,6 +35,21 @@ Zwei ehrliche Einzelheiten:
   vorher, und es gibt **keinen Versionsverlauf** — der alte Inhalt ist weg. Dateien **löschen** können Gäste nicht.
 - Wer etwas über einen Briefkasten abgibt, sieht das gerade Hinzugefügte nur in diesem Browser-Tab. Es geht ums
   *Abgeben*, nicht ums Verwalten einer Galerie. Du siehst alles.
+
+## Ein Hinweis zum Link
+
+Du kannst einem Link einen kurzen **Hinweis** mitgeben — einen Gruß oder das, was man vor dem Ansehen wissen sollte.
+Alle, die den Link öffnen, sehen ihn, und du kannst ihn später ändern, ohne einen neuen Link zu erzeugen.
+
+Ist dir der Hinweis wichtig, setz das Häkchen bei **Muss vor dem Öffnen akzeptiert werden**. Dann kommt der Hinweis
+zuerst: Wer den Link öffnet, liest ihn und tippt auf **Akzeptieren und fortfahren**, bevor irgendetwas von dem
+Geteilten erscheint. Änderst du den Hinweis später, wird erneut gefragt. Die Zustimmung wird **nur auf dem eigenen
+Gerät** gespeichert — sie geht nie an den Server, also bekommt niemand, auch nicht die Person, die ihn betreibt, eine
+Liste, wer zugestimmt hat. Das heißt auch: Es ist eine Bitte, kein Schloss. Wer es darauf anlegt, kommt daran vorbei,
+und wer das tut, hat eben nicht zugestimmt.
+
+Der Hinweis ist wie alles andere verschlossen: Nur wer den Link hat, kann ihn lesen, und der Server kann nicht einmal
+erkennen, ob ein Link eine Zustimmung verlangt.
 
 ## Ein Briefkasten für Dateien
 

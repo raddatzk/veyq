@@ -74,8 +74,8 @@ blip is worse than none, and it is not enforcement anyway) — mirroring the mem
   not re-prompt).
 - **Operator bumped the version** → stored `<` current → the gate re-fires; the visitor re-reads and re-accepts.
 - **Password-protected share** → the password shell ([uc.sharing.share-password](uc.sharing.share-password.md))
-  comes **first**; the terms gate only appears once the share is unlocked. Order: **password → terms → name →
-  content**.
+  comes **first**; the terms gate only appears once the share is unlocked. Order: **password → terms → note → name →
+  content**, the note's gate only where the curator asked for it ([uc.sharing.share-note](uc.sharing.share-note.md)).
 - **Transient terms-fetch error** → **fail open**: treat as no gate (version 0) and let the visitor view; a later
   reload retries.
 - **Revoked / expired / unknown share** → `GET …/terms` is the same non-enumerable `404` as `resolveShare`; there
