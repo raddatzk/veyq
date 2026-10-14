@@ -90,6 +90,12 @@ delete *whose* — is deferred to a later groups/moderation refine.)
   came from) with its reason — purged meanwhile or no longer reachable (`404 media_not_found`), the space is being
   deleted (`409 scope_deleting`), anything else (try again) — one error per reason. What was restored simply
   reappears in the grid, as before; an Undo whose restores all succeed says nothing.
+  **So does the Trash tab's restore** (inbox #432) — a tile's *Restore* (its one medium) and the toolbar's restore of
+  the selection (one restore per medium; a refusal does not stop the rest): every medium whose restore is refused is
+  named by the name it had in the tab (the sealed file name, else its place in the trash grid) with the same reasons,
+  one error per reason, and the tab re-lists, so a medium still in the trash shows there again (as a refused purge
+  re-lists it). What was restored leaves the tab and reappears in the gallery, as before; a restore where every
+  medium went says nothing.
 
 ## Quality notes
 
