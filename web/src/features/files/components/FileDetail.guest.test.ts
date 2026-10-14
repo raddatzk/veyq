@@ -194,6 +194,20 @@ describe.each([ShareRole.Read, ShareRole.ReadWrite])('the viewer for a %s guest 
   })
 })
 
+// ADR 0083 Addendum, inbox #190: the uploader is a member's to see. The guest's source has no uploader door and the link's
+// listing serves none, so the page names nobody - and asks no member directory for a name (every authenticated client
+// would be recorded). The control is the rest of the header: the page is there, with its title and facts.
+describe.each([ShareRole.Read, ShareRole.ReadWrite])('a %s guest of a single-file link is shown no uploader', (role) => {
+  it('the header names nobody and the member directory is never asked', async () => {
+    const w = await mountPage(role)
+    expect(w.find('.veyq-node-header h1').text()).toBe('Report.pdf') // control: the header is drawn
+    expect(w.find('.file-detail-facts').exists()).toBe(true)
+    expect(w.find('[data-testid="file-uploader"]').exists()).toBe(false)
+    expect(w.text()).not.toContain(t('files.detail.uploadedBy'))
+    expectNoMemberWorld()
+  })
+})
+
 describe('the guest of a single-file link sees the member\'s file view', () => {
   it('renders FILE\'s detail at the link\'s root: the file\'s name, size, type and date opened under its key, read through the link only', async () => {
     const w = await mountPage(ShareRole.Read)

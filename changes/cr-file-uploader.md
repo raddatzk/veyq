@@ -71,6 +71,9 @@ no such field. Decided by the coordinator on the owner's behalf, 2026-10-14 (inb
 - [ ] 3 web: Decision 3 and the web tests (member sees name/link/former, guest key reads "a guest", a guest session shows
   nothing - a guest-mode mount through `guardedClients`).
   - Done when `npm run check` is green and a real browser showed the uploader on a file page on the dev instance.
+  - _Open (implementer, 2026-10-14):_ `npm run check` green and every web test bitten; the browser pass is NOT done - a
+    worktree subagent cannot serve its tree to the browser pane. The main session runs it after the merge (the baseline
+    changed: recreate the dev database first), then ticks this box.
 - [ ] 4 docs: ADR 0083 Addendum and the security model's "not yet built" removed; `docs/apps/files.md`; the use case and
   its coverage; both wikis' files page; inbox #415 done.
   - Done when every `scripts/validate_*.py` is green, run on a detached worktree.

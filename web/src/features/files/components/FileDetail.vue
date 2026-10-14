@@ -27,9 +27,16 @@
 // through the source's `chunks` (a member's scope READ gate, a guest's link), so a guest of either role sees the member's
 // viewer; nothing about it is a capability of its own beyond the download it offers where the matrix grants one.
 //
+// **Who uploaded the current content** (ADR 0083 Addendum, `../uploader.ts`): a member's page names them in the header's meta
+// line - a member by core's display rule with a link to the profile, one who left as a greyed "former member", a guest's
+// upload as "a guest". It comes from the member listing's `uploaderKey`, a door only the member's source carries
+// (`listWithUploaders`): a share guest's source has none and its link listing serves no uploader, so a guest's page names
+// nobody and asks no directory.
+//
 // Operator-blind as the section: every name, size and date is opened here under keys the tree holds.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
@@ -51,6 +58,10 @@ import { fileFacts } from '../download'
 import { extensionOf } from '../../../core/blob/sniff'
 import type { ViewerTarget } from '../useFileViewer'
 import FileViewer from './FileViewer.vue'
+import PersonAvatar from '../../../core/people/PersonAvatar.vue'
+import { personHash } from '../../../core/node/location'
+import { loadScopePeople } from '../../../core/people/directory'
+import { needsPeople, uploaderOf, type FileUploader } from '../uploader'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
@@ -89,18 +100,44 @@ const writeReady = computed(() => source.upload?.ready() ?? false)
 
 /** `undefined`: not read yet (or the read failed); `null`: the file holds no content; else its blob. */
 const blob = ref<FileBlobRef | null | undefined>(undefined)
+/** Who uploaded `blob` (`user:<id>` | `share:<identity>`), read with it where the source carries the door (a member). */
+const uploaderKey = ref<string | null>(null)
 let loads = 0
 async function loadBlob(): Promise<void> {
   const mine = ++loads
   if (!source.scopeId()) return
+  const parentId = props.node.parentId ?? null
   try {
-    const listed = await source.listBlobs(props.node.parentId ?? null)
-    if (mine === loads) blob.value = listed.get(props.node.id) ?? null
+    if (source.listWithUploaders) {
+      const listed = (await source.listWithUploaders(parentId)).get(props.node.id)
+      if (mine !== loads) return
+      blob.value = listed?.blob ?? null
+      uploaderKey.value = listed?.uploaderKey ?? null
+    } else {
+      const listed = await source.listBlobs(parentId)
+      if (mine === loads) blob.value = listed.get(props.node.id) ?? null
+    }
   } catch {
     if (mine === loads) blob.value = undefined // download stays unavailable until the next read
   }
 }
 watch(() => [source.listKey(), props.node.id], () => void loadBlob(), { immediate: true })
+
+/** The uploader as the header names it; a member's key asks the scope's current members (a failed read names nobody). */
+const uploader = ref<FileUploader | null>(null)
+let namings = 0
+watch(
+  uploaderKey,
+  async (k) => {
+    const mine = ++namings
+    const scopeId = source.scopeId()
+    const people = needsPeople(k) && scopeId
+      ? await loadScopePeople(scopeId).then((ps) => new Map(ps.map((p) => [p.userId, p]))).catch(() => null)
+      : null
+    if (mine === namings) uploader.value = uploaderOf(k, people)
+  },
+  { immediate: true },
+)
 
 const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }))
 /** The facts of the blob, opened under the file's key (a blob that carries no meta, or whose meta does not open, shows its size alone). */
@@ -242,7 +279,23 @@ async function replaceAnyway(n: Notice) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the file's own actions, then what it holds. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="pi pi-file" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions" />
+    <NodeHeader icon="pi pi-file" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions">
+      <template v-if="uploader" #meta>
+        <p class="file-detail-uploader" data-testid="file-uploader">
+          <!-- The space is real text, so the line reads "Uploaded by Anna" to assistive technology too; the avatar is decorative. -->
+          <span class="file-detail-uploader-label">{{ t('files.detail.uploadedBy') }}</span>{{ ' ' }}
+          <RouterLink v-if="uploader.kind === 'member'" :to="{ hash: personHash(uploader.userId) }" class="file-detail-uploader-person">
+            <PersonAvatar :name="uploader.name" :user-id="uploader.userId" />
+            <span class="file-detail-uploader-name">{{ uploader.name }}</span>
+          </RouterLink>
+          <span v-else-if="uploader.kind === 'former'" class="file-detail-uploader-person is-former" :title="t('people.formerMemberHint')">
+            <PersonAvatar :name="t('people.formerMember')" />
+            <span class="file-detail-uploader-name">{{ t('people.formerMember') }}</span>
+          </span>
+          <span v-else class="file-detail-uploader-person file-detail-uploader-name">{{ t('files.detail.aGuest') }}</span>
+        </p>
+      </template>
+    </NodeHeader>
     <section class="veyq-section file-detail">
       <Message v-for="n in notices" :key="n.key" severity="error" :closable="false" class="files-notice">
         <span class="file-detail-notice">
@@ -295,6 +348,39 @@ async function replaceAnyway(n: Notice) {
 .file-detail-facts dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+.file-detail-uploader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.25rem 0 0;
+  color: var(--app-muted);
+  font-size: 0.92rem;
+}
+.file-detail-uploader-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--app-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+a.file-detail-uploader-person:hover {
+  text-decoration: underline;
+}
+a.file-detail-uploader-person:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+  border-radius: var(--app-radius-sm);
+}
+.file-detail-uploader-person.is-former {
+  color: var(--app-muted);
+  font-weight: 500;
+  font-style: italic;
+}
+.file-detail-uploader-person.is-former :deep(.p-avatar) {
+  opacity: 0.6;
 }
 .file-detail-notice {
   display: flex;
