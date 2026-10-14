@@ -66,7 +66,7 @@ no such field. Decided by the coordinator on the owner's behalf, 2026-10-14 (inb
 
 - [x] 1 contracts: Decision 2.
   - Done when the trust-chain guards are green.
-- [ ] 2 backend: Decisions 1 and 4 (backend half).
+- [x] 2 backend: Decisions 1 and 4 (backend half).
   - Done when `./gradlew check` is green; bitten (the uploader not written, the field leaking to the share listing).
 - [ ] 3 web: Decision 3 and the web tests (member sees name/link/former, guest key reads "a guest", a guest session shows
   nothing - a guest-mode mount through `guardedClients`).

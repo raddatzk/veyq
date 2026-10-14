@@ -9,8 +9,10 @@ import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
 import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
 import me.raddatz.veyq.core.content.NodeSubtreePurge
 import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.quota.StorageUsage
+import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.FakePresignProfile
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
@@ -113,6 +115,35 @@ class FilesContentSliceTest {
         }
         assertEquals(second.byteSize, QuarkusTransaction.requiringNew().call { usage.tenantUsage(tenantId) }, "only the new blob counts")
         list(userId, scopeId, null).body("items[0].fileBlob.blobId", equalTo(newBlob))
+    }
+
+    /**
+     * ADR 0083 Addendum: the member's listing names who uploaded each file's CURRENT content — the attachment records the
+     * upload's opener, and a replace by another member moves it to the replacer. A file without content names nobody.
+     */
+    @Test
+    fun theListingNamesTheUploaderOfTheCurrentContentAndAReplaceMovesIt() {
+        val (owner, scopeId, tenantId) = seedMemberScope(ScopeEntity.GROUP)
+        val peer = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); userId = peer; this.tenantId = tenantId; this.scopeId = scopeId
+                role = MembershipEntity.MEMBER; wrappedGrant = GRANT; createdAt = Instant.now()
+            }.persist()
+            TenantRoots.join(peer, tenantId)
+        }
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        val empty = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+
+        val first = complete(owner, scopeId, file, start(owner, scopeId, file, TestBlob.SMALL)).statusCode(200).extract().path<String>("blobId")
+        assertEquals(owner to null, uploaderOf(file), "the member's upload records the member, no guest")
+        list(peer, scopeId, null).statusCode(200)
+            .body("items.find { it.nodeId == '$file' }.uploaderKey", equalTo("user:$owner"))
+            .body("items.find { it.nodeId == '$empty' }.uploaderKey", nullValue())
+
+        complete(peer, scopeId, file, start(peer, scopeId, file, TestBlob.SMALL), expected = first).statusCode(200)
+        assertEquals(peer to null, uploaderOf(file), "the replacer is the uploader now")
+        list(owner, scopeId, null).statusCode(200).body("items.find { it.nodeId == '$file' }.uploaderKey", equalTo("user:$peer"))
     }
 
     @Test
@@ -396,6 +427,12 @@ class FilesContentSliceTest {
             .`when`().post("/api/scopes/$scopeId/blob-downloads-batch").then()
 
     // --- committed state -----------------------------------------------------------------------------------------
+
+    /** The attachment's recorded uploader: (member user id, guest identity id). */
+    private fun uploaderOf(node: String): Pair<String?, String?> = QuarkusTransaction.requiringNew().call {
+        NodeAttachmentEntity.find("nodeId = ?1 and slot = ?2", node, FilesBlobRoles.FILE_CONTENT).firstResult()!!
+            .let { it.uploaderUserId to it.shareIdentityId }
+    }
 
     private fun attachedBlob(node: String): String? = QuarkusTransaction.requiringNew().call {
         NodeAttachmentEntity.find("nodeId = ?1 and slot = ?2", node, FilesBlobRoles.FILE_CONTENT).firstResult()?.blobId
