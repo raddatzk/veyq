@@ -51,8 +51,13 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
    it opens the tenant scope's shell, whichever scope the Memory was in.
 2. The profile shows the **display name**, an **avatar** (the profile picture, else the letter), and a list of **Memories** in which this person is a
    participant and the viewer has access. The list is drawn with core's level items (a larger cover, the name, the kind, the Memory's date and place
-   where it has them, and the group's name) as rows or as tiles; the same rows/tiles switch as the folder view sits beside the heading, and the
-   choice is the one per-user setting the folder view uses. There is no map here ([inbox #417](../../../inbox.md)).
+   where it has them, and the group's name) as rows, as tiles or on a **map**; the folder view's switch sits beside the heading and offers
+   what a level of Memories offers - tiles, rows and the map - and the choice is the one per-user setting the folder view uses (a stored
+   map shows the map here too; with nothing to list there is no switch and no map, only the empty text). The map is the level's own
+   (`SpaceMap`, owner decision 2026-10-14, [inbox #417](../../../inbox.md)): it pins the person's Memories that have a place and leaves
+   out one without (or with an automatic place that has no position yet), says "No places yet" when none is left, asks for the map
+   consent first and loads its tiles under the same CSP rules ([uc.memory.place](uc.memory.place.md), ADR 0018); a pin opens its Memory
+   as its row does. The places come from the same unsealed meta as the rows' details - no further read.
 3. The list comes from a lazily built, in-memory index `Map<userId, Set<memoryRef>>`: the client lists the tenant scope
    and every group scope the viewer is in (`fetchTreeRows`, revalidated by ETag, ADR 0081), and unseals each Memory's
    meta. The personal scope is not read.
@@ -103,12 +108,12 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** You can say who was there: add the people of your space to a memory, and they show in its header as a row of avatars. Hover or tap them for the names, click a name
-to see that person and every memory of theirs you can open. People who later leave the space stay listed, greyed out as
+to see that person and every memory of theirs you can open - as tiles, as a list, or on a map where they have a place. People who later leave the space stay listed, greyed out as
 "former member". Only members see this; the page of someone who gets a memory through a link shows nobody. The server
 never learns who was on which memory — the list is sealed with the memory. The list holds only anonymous ids, never names.
 
 **DE —** Du kannst festhalten, wer dabei war: Füge Personen deines Bereichs zu einer Erinnerung hinzu, sie erscheinen in
-deren Kopfzeile als Reihe von Avataren. Fahre darüber oder tippe darauf, um die Namen zu sehen; mit einem Klick auf einen Namen siehst du die Person und alle ihre Erinnerungen, die du öffnen darfst.
+deren Kopfzeile als Reihe von Avataren. Fahre darüber oder tippe darauf, um die Namen zu sehen; mit einem Klick auf einen Namen siehst du die Person und alle ihre Erinnerungen, die du öffnen darfst – als Kacheln, als Liste oder auf einer Karte, wo sie einen Ort haben.
 Wer den Bereich später verlässt, bleibt eingetragen und wird grau als „ehemaliges Mitglied“ gezeigt. Das sehen nur
 Mitglieder; wer eine Erinnerung über einen Link bekommt, bekommt keine Personen angezeigt. Die Liste enthält nur anonyme IDs, nie Namen. Der Server erfährt nie, wer bei
 welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
@@ -124,7 +129,9 @@ welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
   `components/MemoryParticipants.vue` exposes; `MemoryParticipantsDialog.vue`, `useMemoryParticipants.ts`; names
   from `core/people/directory.ts` (real name, else username; read from the tenant's member list).
 - Profile: `core/people/PersonProfile.vue` (core's frame, sections claimed through `registry.claimPersonSection`), Memories'
-  section `components/PersonMemories.vue` over `participantIndex.ts`; the route in `core/node/location.ts` and `views/MemoryHomeView.vue`.
+  section `components/PersonMemories.vue` over `participantIndex.ts` (its presentations `memoryViews.ts`, the level's list; its map
+  `components/SpaceMap.vue` with the pins of `spaceMap.ts` `locatedPin`, the level's rule); the route in `core/node/location.ts` and
+  `views/MemoryHomeView.vue`.
 - Uploader in the photo detail: `useUploaderNames.ts` and `MediaLightbox.vue`.
 
 ## Related
