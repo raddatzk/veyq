@@ -8,9 +8,10 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { i18n, SUPPORTED_LOCALES } from './index'
 
+// A list (`primevue.monthNames`, inbox #434) is ONE key: the source reads it whole through `tm`, never by index.
 function flatten(o: Record<string, unknown>, prefix = ''): string[] {
   return Object.entries(o).flatMap(([k, v]) =>
-    v && typeof v === 'object' ? flatten(v as Record<string, unknown>, `${prefix}${k}.`) : [`${prefix}${k}`],
+    v && typeof v === 'object' && !Array.isArray(v) ? flatten(v as Record<string, unknown>, `${prefix}${k}.`) : [`${prefix}${k}`],
   )
 }
 

@@ -2,14 +2,13 @@
 // A PrimeVue DatePicker bound to an `YYYY-MM-DD` string (cr-0067). Ported from the design source
 // `legacy/frontend-noe2ee/src/shared/components/IsoDateField.vue`; the only adaptation is the import path for
 // the ISO helpers. The model is a calendar day with no time/zone — exactly what a Memory's sealed date range
-// stores. The calendar panel's month/day names follow the active language via applyPrimeVueLocale (the global
-// PrimeVue config's `locale` is reactive); the `dateFormat` prop drives the input mask + on-blur manual parse.
-import { computed, watch } from 'vue'
+// stores. The calendar panel's month/day names follow the active language through core's one PrimeVue locale sync
+// (`app/primeVueLocale.ts`, inbox #434), never set here; the `dateFormat` prop drives the input mask + on-blur
+// manual parse.
+import { computed } from 'vue'
 import DatePicker, { type DatePickerBlurEvent } from 'primevue/datepicker'
-import { usePrimeVue } from 'primevue/config'
 import { useI18n } from 'vue-i18n'
 import { isoDateToLocalDate, localDateToIsoDate } from '../../../shared/isoDate'
-import { applyPrimeVueLocale } from '../../../i18n/primevueLocale'
 import type { SupportedLocale } from '../../../i18n'
 
 const model = defineModel<string>({ required: true })
@@ -22,9 +21,6 @@ const props = defineProps<{
 }>()
 
 const { locale } = useI18n()
-const primevue = usePrimeVue()
-// Localize the calendar panel (month/day names) to the active language; re-apply when the locale switches.
-watch(locale, (l) => applyPrimeVueLocale(primevue.config, l as SupportedLocale), { immediate: true })
 
 const dateFormat = computed(() => (locale.value === 'en' ? 'mm/dd/yy' : 'dd.mm.yy'))
 const dateValue = computed<Date | null>({
