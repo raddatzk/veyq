@@ -88,7 +88,7 @@ contributor guest too (reversing inbox #392).
 
 ## Phases
 
-- [ ] 1 web, the move browser (Decisions 1–4).
+- [x] 1 web, the move browser (Decisions 1–4). Landed `4607622a`; its browser pass was a harness, not the routed app (Where it stands).
   - Rewrite `MoveNodeDialog` over a node list and port its tests to the browser.
   - The test file must cover:
     - it opens at the parent;
@@ -100,7 +100,7 @@ contributor guest too (reversing inbox #392).
     - "Move here" sends the existing placement write.
   - Done when `npm run check` is green in `web/` and the dialog has been clicked through in a real browser, as a
     member and as a `READ_WRITE` guest, with a screenshot in the retro.
-- [ ] 2 web, replace by upload (Decisions 5–6).
+- [ ] 2 web, replace by upload (Decisions 5–6). **Partly landed** `0508e1eb` (rows, guest same-name replace); `FileDetail` is blocked on the open question below.
   - Remove the row action, the page button and its sentence, and the now-unused keys.
   - Turn the guest's same-name `slug_taken` path into the asked replace.
   - The tests must cover:
@@ -113,6 +113,33 @@ contributor guest too (reversing inbox #392).
     in a real browser.
 - [ ] 3 docs: sweep the inventory's grep in `docs/apps/files.md`, the sharing and files use-cases and **both wiki
   languages** (the wiki is what users read). Done when the trust-chain guards are green.
+
+## Where it stands (2026-10-14, implement session)
+
+- **Landed:** Phase 1 (`4607622a`) and the rows half of Phase 2 (`0508e1eb`). `npm run check` green after each (3458 tests).
+  The guard glob (`scripts/validate_*.py`, 57 guards, each run on a detached worktree) was green on `c8f5bd1e`, the
+  baseline, and green again on `0508e1eb`.
+- **Open question (product, not settled by this CR), blocking the rest of Phase 2 and Phase 3:** removing `FileDetail`'s
+  replace button (Decision 5) leaves a **`READ_WRITE` link on a single file** (`FilesShareRoots` admits it, inbox #378,
+  `fileSingleShare.e2e.test.ts` proves its replace) with no write at all: there is no folder above the file to upload a
+  same-name file into. Its share dialog still promises it (`files.share.roleContributorHint`: "…and replace its
+  content"), and `docs/apps/files.md` § A single file as a share root still describes the replace. Options:
+  (a) remove it as decided and stop offering `READ_WRITE` on a file (contract-free on the web: the file's share dialog
+  offers `READ` only; the backend's `FilesShareRoots` keeps or drops the role — an existing link would then be a
+  contributor link that can do nothing); (b) keep the replace on `FileDetail` **only at a single-file link's root** (the
+  one place with no folder), removing it everywhere else as decided; (c) remove it and keep the role as it is (a dead
+  option). **Recommendation: (a)**, web-side first: it keeps "there is no replace action" true everywhere, and a
+  single-file link that can replace is better served by a folder link, which now does it by uploading.
+- **Not done, waiting on that answer:** `FileDetail`'s replace button, its contributor sentence and its own upload
+  notices (they only explain its own replace), `FilesUpload.beginReplace`, the keys `files.replace`, `files.uploadInto`,
+  `files.replaceRowConfirm`, `files.detail.{replace,uploadInto,contributorHint}`, `files.guest.replaceFileConfirm`; then
+  Phase 3 (docs and both wikis; the wiki still says the move picks "from a list" and describes the row's replace).
+- **Browser pass:** the e2e route the brief named does not exist — `scripts/run_web_e2e.py` runs vitest suites against a
+  live backend, API-level, with no browser and no Playwright in the repo. Phase 1 was clicked in the Browser pane on a
+  throwaway harness (the real `MoveNodeDialog`, registry, i18n, theme and styles over an in-memory tree, served by the
+  Vite dev server, deleted afterwards): as a member (a folder, a chapter, a file in a guest's folder) and as a
+  `READ_WRITE` guest of a link on a folder, by mouse and by keyboard, at desktop and 375 px. Not the routed app, and no
+  backend. Phase 2's guest same-name replace has not been clicked in a browser.
 
 ## Definition of done
 
@@ -129,4 +156,48 @@ contributor guest too (reversing inbox #392).
 
 ## Retrospective
 
-_(filled at implementation)_
+_(in progress — the CR is not done; see Where it stands.)_
+
+**Mechanical gaps resolved at implement time:**
+- *Which places are listed.* Decision 1 says "only children that can take every kind". Read literally, a chapter's
+  browser would list Memories only, so a Memory in another folder is unreachable. Resolved as the old
+  `moveDestinations` did: a `FOLDER` is always listed (the way down), and "Move here" there says the place cannot hold
+  it (`kind`). A guest's browser lists folders only, because a Memory never takes a guest's child. A guest's identity
+  folder is not listed at all, rather than listed disabled.
+- *The node list.* The browser (`MoveBrowser.vue`) and its model (`move.ts`: `moveStart`, `moveTrail`, `movePlaces`,
+  `moveHereBlock`) take a list. `MoveNodeDialog` keeps one `node`, because a write of several needs #421's own
+  decisions: the toast wording, a partial failure, and the undo of several. Nodes from different parents open at the top.
+- *Kind words.* Core has no kind noun for a non-folder kind (only `nounWithArticle`), so a Memory place shows its
+  icon or cover and its name, with no meta line. A folder shows "Folder", as on the level.
+- *Strings.* "Move here"'s reasons are new sentence keys `node.move.here.*`. The old fragments read wrongly as a
+  sentence. `node.move.{destinations,nothing}` and `blocked.{current,identityFolder,kind}` went; `blocked.{self,inside}`
+  are the listed node's reason.
+- *The trail.* PrimeVue `Breadcrumb` with an `#item` slot that renders a `<button>` (never the `<a href="#">` of the
+  web/CLAUDE.md trap). The shared DOM helpers are `src/test/moveBrowser.ts`.
+- *Phase 2.* `FilesUpload.sameNameReplaces` went (true for both roles now); `filesCapabilities.replace` decides. A
+  guest's `slug_taken` on a FILE's name is now only a race, so it gets the generic text (`files.guest.fileExists` and
+  `files.guest.replaceConfirm` went).
+
+**Test migration, per file (expect / it, `c8f5bd1e` → now):** `MoveNodeDialog.test.ts` 32→61 / 12→18, `move.test.ts`
+32→59 / 16→18, `ShareTreePage.move.test.ts` 22→27 / 6→6, `MemoryHomeView.move.test.ts` 24→27 / 5→5,
+`levelRows.test.ts` 117→117 / 36→37, `levelRows.guest.test.ts` 68→67 / 18→17. Every loss is an assertion about the
+row's replace, the radio list, or the guest's refused same-name upload, which this CR removes.
+
+**Bite tests (snapshot → inject → run → restore, bytes compared, `git status --porcelain` unchanged):** all 17 went red
+on the named test.
+- Phase 1, 9 levers: the takes-filter off (a drop box listed); the identity-folder filter off; the node itself openable;
+  `current` dropped; the guest's top set to the scope root; an authenticated `sessionApi()` call from a guest's browser
+  (swallowed, still red through `guardedClients`); the focus call removed; the empty text removed; "Move here" enabled
+  at a blocked place.
+- Phase 2, 8 levers: a `replace` row action re-added; a replace picker re-built; the guest's same-name upload made no
+  replace (#392 back); a declined question still uploads; an empty file asks; a name another kind holds is sent; the
+  question's old row wording; a guest's FILE `slug_taken` given a special text again.
+
+**Process:**
+- The brief's machine hint promised a Playwright e2e for the click-through. The repo has none, and reading
+  `run_web_e2e.py`'s docstring settled it in one step. Next time: a hint that names a tool names the file that proves
+  it exists.
+- The CR's Decision 5 removed the opened file's replace without asking what that does to a single-file `READ_WRITE`
+  link. The refine read the folder flows and not the file share root (§ A single file as a share root, three screens
+  down in the same doc). Next time: a refine that removes a control greps every share root and role that reaches that
+  control (`FilesShareRoots`, the role hints) before deciding.
