@@ -155,7 +155,9 @@ or a one-off `1rem` label sitting in them.
 ## Buttons & dialog actions
 
 - Submit/save/confirm = positive (green); cancel/neutral = secondary; destructive = danger with an
-  explicit label. Icon-only actions use `.veyq-icon-button` + an `aria-label`/tooltip.
+  explicit label. Icon-only actions use `.veyq-icon-button` + an `aria-label`/tooltip. Two icon-only actions in one bar
+  (a `NodeHeader`'s, a row's) never share an icon: the icon is the only thing a sighted user tells them apart by, so a new
+  action's icon is checked against the list it joins (the Memory header carries `pi-user-plus` twice until inbox #425 is decided).
 - **Dialog footers use the one shared `.veyq-dialog-action-row`** (a `space-between` row; never a
   per-component `.dialog-actions` copy): **cancel/secondary anchored left, submit/confirm anchored right**;
   source order matches visual order. A **destructive tertiary** action that coexists with the primary confirm
