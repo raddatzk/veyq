@@ -923,6 +923,9 @@ const en = {
     levelEmptyNew: 'Nothing here yet. Choose New to add something ({entries}).',
     // An application tab with nothing in it and no application text of its own (the unified level list, inbox #407).
     tabEmpty: 'Nothing here yet.',
+    // A guest's self-chosen name as a member sees it (inbox #433, `core/sharing/guestIdentity.ts` `guestDisplayName`):
+    // marked, so a guest cannot pass for a member by picking a member's name.
+    guestName: '{name} (guest)',
     // The unified level list: a row's overflow menu button (`{name}` is the row's name), and a folder's meta line.
     rowMore: 'More actions for “{name}”',
     kindFolder: 'Folder',
@@ -2652,6 +2655,7 @@ const de: typeof en = {
     levelEmpty: 'Hier ist noch nichts.',
     levelEmptyNew: 'Hier ist noch nichts. Wähle „Neu“, um etwas hinzuzufügen ({entries}).',
     tabEmpty: 'Hier ist noch nichts.',
+    guestName: '{name} (Gast)',
     rowMore: 'Weitere Aktionen für „{name}“',
     kindFolder: 'Ordner',
     cover: {

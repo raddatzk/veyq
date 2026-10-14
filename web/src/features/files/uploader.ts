@@ -2,7 +2,8 @@
 // records the upload's opener on the attachment and serves it to MEMBERS only, as an opaque key (`uploaderKey` on the
 // member's listing): `user:<id>` is a member, named by core's display rule (decision 9) and linking to the profile while
 // they are in the scope - one who left is a "former member" with no link; `share:<identity>` is a link's guest, named by
-// the name it gave itself (inbox #431, {@link guestUploaderName}) and "a guest" where that name does not open. A share
+// the name it gave itself (inbox #431, {@link guestUploaderName}) - the page marks it as a guest's, "Ben (guest)" (core's
+// `guestDisplayName`, inbox #433) - and "a guest" where that name does not open. A share
 // guest's listing carries no key and no name at all, so a guest's page names nobody. Files reaches core only (ADR 0079):
 // the people come from `core/people`, a guest's name opens through `core/sharing/guestIdentity`.
 import type { Person } from '../../core/people/directory'
@@ -14,7 +15,8 @@ import type { FileUploaderName } from '../../api/generated/files'
 export type FileUploader =
   | { kind: 'member'; userId: string; name: string }
   | { kind: 'former' }
-  /** A link's guest: `name` as it named itself, or null where that does not open (the page then says "a guest"). */
+  /** A link's guest: `name` as it named itself, bare (the page marks it, "Ben (guest)"), or null where that does not open
+   *  (the page then says "a guest"). */
   | { kind: 'guest'; name: string | null }
 
 const USER = 'user:'

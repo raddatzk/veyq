@@ -93,7 +93,8 @@ What the cells rest on:
   key below the root ([ADR 0031](../decisions/0031-uploader-public-share.md) point 7).
   A `WRITE_ONLY` link seals to the root node's own drop key, set on that node by its first uploader link
   (`SharingStore.create`), and every reader of the node — a member's media page and buckets, a viewer link — is served
-  what opens it. A guest's name reaches members only; a guest read serves a `WRITE_ONLY` identity's wrapped key and
+  what opens it. A guest's name reaches members only, and is shown to them marked as a guest's — "Ben (guest)" in the
+  lightbox's uploader and the contributor's bucket (core's `guestDisplayName`, inbox #433); a guest read serves a `WRITE_ONLY` identity's wrapped key and
   never a `READ_WRITE` identity ([ADR 0030](../decisions/0030-contributor-public-share.md) point 8).
 - **A `READ_WRITE` guest's name is sealed under the link ROOT's key**, whichever node it writes in (core's
   `createGuestIdentity`, one identity per link). A folder link's guest who uploads into a Memory below, or a Memory

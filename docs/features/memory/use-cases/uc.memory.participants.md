@@ -89,7 +89,9 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 - In `MediaLightbox` the photo's **uploader's name** is shown. For a `user:` owner key it links to that person's profile
   (members only). For a `share:` key, and in **any** share view, the name is shown **without** a link.
 - A guest today gets **no uploader names** ([inbox #190](../../../inbox.md)): in a share view, a member-uploaded photo's
-  uploader stays unresolved — nothing is shown. A guest-uploaded photo shows a non-clickable name to members.
+  uploader stays unresolved — nothing is shown. A guest-uploaded photo shows a non-clickable name to members, marked as
+  a guest's — "Ben (guest)" (inbox #433, core's `guestDisplayName`): a guest names itself freely and could pick a
+  member's name. "Contribution", where the name does not open, stays as it is.
 - The uploader is independent of the participant list: a non-participant uploader is still shown. The bucket tab keeps
   usernames until it is aligned with the display-name rule.
 - **Files are not in the first version:** `files.openapi.yaml` has no uploader field (inbox follow-up).

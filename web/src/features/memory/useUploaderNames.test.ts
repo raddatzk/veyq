@@ -8,6 +8,7 @@ import { loadScopePeople } from '../../core/people/directory'
 import { openBucketName, type BucketItem } from './mediaBuckets'
 import type { BucketsDoor } from './source'
 import type { MediaItem } from './media'
+import { realI18n } from '../../test/i18n'
 
 const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
 const GONE = 'dddddddd-0000-4000-8000-000000000004'
@@ -25,6 +26,7 @@ function setup(buckets: BucketsDoor | null = door) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  realI18n() // the guest marker speaks the app's catalog, in English
   vi.mocked(loadScopePeople).mockResolvedValue([{ userId: ANNA, username: 'anna', realName: 'Anna Meyer', displayName: 'Anna Meyer' }])
   vi.mocked(openBucketName).mockReturnValue('Oma')
 })
@@ -43,8 +45,17 @@ describe('useUploaderNames (ADR 0083 decision 7)', () => {
     vi.mocked(openBucketName).mockReturnValueOnce('Oma').mockReturnValueOnce(null)
     const u = setup()
     await u.ensure()
-    expect(u.uploaderOf(item('share:i1'))).toEqual({ name: 'Oma', userId: null })
-    expect(u.uploaderOf(item('share:i2'))).toEqual({ name: 'Contributor', userId: null })
+    expect(u.uploaderOf(item('share:i1'))).toEqual({ name: 'Oma (guest)', userId: null }) // marked as a guest's (inbox #433)
+    expect(u.uploaderOf(item('share:i2'))).toEqual({ name: 'Contributor', userId: null }) // the fallback already says so: unmarked
+  })
+
+  it('a guest who took a member\'s name is marked; the member of that name is not (inbox #433)', async () => {
+    list.mockResolvedValue([bucket(`user:${ANNA}`), bucket('share:i1', { shareId: 'sh' })])
+    vi.mocked(openBucketName).mockReturnValue('Anna Meyer')
+    const u = setup()
+    await u.ensure()
+    expect(u.uploaderOf(item(`user:${ANNA}`))).toEqual({ name: 'Anna Meyer', userId: ANNA })
+    expect(u.uploaderOf(item('share:i1'))).toEqual({ name: 'Anna Meyer (guest)', userId: null })
   })
 
   it('a photo with no owner key, or an owner not listed, has no uploader; sub-buckets name nobody', async () => {
@@ -79,7 +90,7 @@ describe('useUploaderNames (ADR 0083 decision 7)', () => {
     list.mockResolvedValue([bucket(`user:${ANNA}`), bucket('share:i1', { shareId: 'sh' })])
     const u = setup()
     await u.ensure()
-    expect(u.uploaderOf(item('share:i1'))?.name).toBe('Oma')
+    expect(u.uploaderOf(item('share:i1'))?.name).toBe('Oma (guest)')
     expect(u.uploaderOf(item(`user:${ANNA}`))).toBeNull() // not claimed to have left: the directory is unknown
   })
 })

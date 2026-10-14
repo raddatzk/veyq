@@ -2,11 +2,13 @@
 // participant list: a non-participant uploader is still named. A `user:<id>` owner key is a member - named by the display
 // rule (real name else username) and, while they are still in the scope, a LINK to their profile; one who left is a greyed
 // "Former member" with no link. A `share:<identity>` owner is a link's contributor: its name is the sealed display name in its
-// bucket (the "Beiträge" source), shown WITHOUT a link - a guest has no profile. Members only, and only where the source
+// bucket (the "Beiträge" source), marked as a guest's ("Ben (guest)", core's `guestDisplayName`, inbox #433) and shown
+// WITHOUT a link - a guest has no profile. Members only, and only where the source
 // carries the buckets door: a share guest's source has none, so a guest is shown no uploader at all - exactly what it
 // saw before (the public resolve serves no names, inbox #190).
 import { ref } from 'vue'
 import { loadScopePeople, type Person } from '../../core/people/directory'
+import { guestDisplayName } from '../../core/sharing/guestIdentity'
 import { openBucketName } from './mediaBuckets'
 import type { MediaItem } from './media'
 import type { BucketsDoor } from './source'
@@ -51,7 +53,9 @@ export function useUploaderNames(ctx: UploaderNamesContext) {
           const person = byId.get(b.ownerKey.slice('user:'.length))
           next.set(b.ownerKey, person ? { name: person.displayName, userId: person.userId } : { name: ctx.formerLabel(), userId: null })
         } else if (b.ownerKey.startsWith('share:')) {
-          next.set(b.ownerKey, { name: openBucketName(ctx.scopeId(), nodeId, key, b, above) || ctx.contributorLabel(), userId: null })
+          // Marked as a guest's (inbox #433): a guest names itself freely and could pick a member's name.
+          const name = openBucketName(ctx.scopeId(), nodeId, key, b, above)
+          next.set(b.ownerKey, { name: name ? guestDisplayName(name) : ctx.contributorLabel(), userId: null })
         }
       }
       labels.value = next
