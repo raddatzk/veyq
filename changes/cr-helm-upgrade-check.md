@@ -1,7 +1,7 @@
 ---
 id: cr-helm-upgrade-check
 title: A chart upgrade is checked by rendering the predecessor's chart and the candidate's and comparing the immutable fields
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0064", "0057"]
 invariants: [self-hostable by default]
@@ -59,7 +59,7 @@ the coordinator on the owner's behalf, 2026-10-14 (inbox #428). `satisfies: []`:
 
 ## Phases
 
-- [ ] 1 scripts + CI: Decisions 1-4.
+- [x] 1 scripts + CI: Decisions 1-4.
   - Tests: the selftest covers every refusal of Decision 1 on a crafted pair and one "allowed change" control (an
     image tag or a label changes: no refusal); the verdict function for `release: none` and for a set release.
   - Bites: each refusal's check removed turns its selftest red; a real local run against `HEAD^1` is green; a chart

@@ -153,11 +153,12 @@ from __future__ import annotations  # `str | None` below — the repo's guards r
 import pathlib
 import posixpath
 import re
-import shutil
 import subprocess
 import sys
 
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+import chart_render  # the one `helm template` both chart scripts render through
+from chart_render import objects
 
 try:
     import yaml
@@ -208,19 +209,12 @@ CONTRADICTIONS = [
 errors: list[str] = []
 
 
-def helm() -> str:
-    found = shutil.which("helm")
-    if found is None:
-        print("chart meta check: `helm` is not on PATH — this guard cannot run, and a missing tool is not a green", file=sys.stderr)
-        sys.exit(2)
-    return found
+WHO = "chart meta check"
 
 
 def render(values: pathlib.Path, extra: list[str] | None = None) -> str:
-    out = subprocess.run(
-        [helm(), "template", "veyq", str(CHART), "-f", str(values), *(extra or [])],
-        cwd=ROOT, capture_output=True, text=True,
-    )
+    # The render itself is chart_render's, shared with chart_upgrade_check.py; only the error bookkeeping is here.
+    out = chart_render.template(WHO, CHART, values, extra)
     if out.returncode != 0:
         errors.append(f"{values.name}: `helm template` failed:\n{out.stderr.strip()}")
         return ""
@@ -229,14 +223,10 @@ def render(values: pathlib.Path, extra: list[str] | None = None) -> str:
 
 def lint(values: pathlib.Path, extra: list[str]) -> tuple[int, str]:
     out = subprocess.run(
-        [helm(), "lint", str(CHART), "-f", str(values), *extra],
+        [chart_render.helm(WHO), "lint", str(CHART), "-f", str(values), *extra],
         cwd=ROOT, capture_output=True, text=True,
     )
     return out.returncode, out.stdout + out.stderr
-
-
-def objects(rendered: str) -> list[dict]:
-    return [doc for doc in yaml.safe_load_all(rendered) if isinstance(doc, dict) and doc.get("kind")]
 
 
 def name_of(obj: dict) -> str:

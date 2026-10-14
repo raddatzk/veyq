@@ -145,8 +145,12 @@ jobs:
     permissions:
       contents: read
     steps:
+      # The whole history: the chart upgrade check below reads its predecessor's chart out of git (HEAD^1, or the
+      # last release tag once there is one).
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Set up Java
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
@@ -199,6 +203,14 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/chart-venv"
           "${RUNNER_TEMP}/chart-venv/bin/pip" install --quiet pyyaml
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_meta_check.py
+      # A `helm upgrade` from the upgrade proof's predecessor's chart to this one, checked on rendered manifests
+      # (ADR 0064 Addendum): immutable fields, claims that would go, values an operator already has. Information
+      # while scripts/applied_migrations.sha256 says `release: none`, red from the first release - the script's own
+      # verdict, so this step carries no switch of its own.
+      - name: Chart upgrade check
+        run: |
+          "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_upgrade_check_selftest.py
+          "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_upgrade_check.py
 
   build:
     name: Build ${{ matrix.image }} (${{ matrix.arch }})
