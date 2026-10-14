@@ -117,7 +117,7 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   // Who was there (ADR 0083, owner decision 2026-10-14): the picker opens from here, not from the row under the title. Shown by
   // `participants` (a member's alone, fail-closed) where the list may be written - never in a personal scope, never during a
   // pending deletion (E2) - which is the row's own `canEdit`.
-  { id: 'participants', label: t('memory.participants.title'), icon: 'pi pi-user-plus', shown: participantsRow.value?.canEdit === true, onClick: () => void participantsRow.value?.openPicker() },
+  { id: 'participants', label: t('memory.participants.title'), icon: 'pi pi-users', shown: participantsRow.value?.canEdit === true, onClick: () => void participantsRow.value?.openPicker() },
   { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', shown: can.value.rename, onClick: () => emit('rename') },
   // Core's move dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
   { id: 'move', label: t('node.move.action'), icon: 'pi pi-file-export', shown: can.value.move, onClick: () => emit('move') },
