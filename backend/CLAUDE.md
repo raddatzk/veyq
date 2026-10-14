@@ -187,7 +187,10 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   but only together with its pin line in the same commit, so the change is a visible diff — and every existing
   database, dev ones included, is then recreated (`docker compose -f infra/docker-compose.yml down -v`; repair does
   not rescue a changed baseline). From the release on the rule is absolute: a released migration is only followed
-  by a new one, and an upgrade proof against a database of the release becomes possible.
+  by a new one. The upgrade proof (`python3 scripts/run_web_e2e.py --upgrade`, `infra/README.md` § An upgrade) runs
+  against the previous commit until then and against the release from then on; **the commit that sets `release:`
+  also enables its CI job** (`container.yml`'s `upgrade-proof`: delete its `if: false` and the `"skipped"` `publish`
+  tolerates for it), because only then does a red proof mean a release that must not publish.
   Column types: `TEXT` for opaque base64 (65 535 bytes on MariaDB, so a base64 cap must be ≤ 65 532 —
   guarded by `scripts/validate_maxlength_storage.py`), `MEDIUMTEXT` where a cap needs more (16 MiB), `VARCHAR`
   for short, and **`UUID` (MariaDB's native type) for every id and id reference that is exactly a UUID** (inbox #387): the entities

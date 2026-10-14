@@ -776,12 +776,30 @@ is not a precaution taken *around* this procedure — it **is** the way back ([A
 Everything else below exists to keep that backup usable: to name the release you are leaving, and to notice a
 recipe change before it becomes a failed `up`.
 
-**Which of these steps has ever been executed — because the answer is "one".** Step 2 is rehearsed on every
-`scripts/run_web_e2e.py` run: it captures a live instance, destroys it, restores it and runs a suite against the
-result, and it holds the production capture to resolving the production project instead of whatever happens to
-run out of `infra/`. **No image has ever been published**, so no other step here has ever run — not the stop,
-not the pull, not the recipe diff, not the rollback. This is a procedure derived from the decisions that govern
-it, not from a rehearsal, and you are the one finding out where it is wrong. Read it that way.
+**Which of these steps has ever been executed.** Step 2 is rehearsed on every `scripts/run_web_e2e.py` run: it
+captures a live instance, destroys it, restores it and runs a suite against the result, and it holds the production
+capture to resolving the production project instead of whatever happens to run out of `infra/`. The DATA half of the
+whole upgrade is rehearsed by the upgrade proof below, from jars rather than images. **No image has ever been
+published**, so no other step here has ever run — not the stop, not the pull, not the recipe diff, not the rollback.
+This is a procedure derived from the decisions that govern it, not from a rehearsal, and you are the one finding out
+where it is wrong. Read it that way.
+
+**The upgrade proof — what it covers, and what it does not** ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) Addendum).
+`python3 scripts/run_web_e2e.py --upgrade` builds the **predecessor** in a worktree of its ref (its own fast-jar, its
+own web dependencies and client) and lets its own e2e seeder seal content of every application into a fresh instance;
+step 2's capture takes it, the restore puts it onto an instance freshly installed by **this** checkout's jar ("restore,
+start", ADR 0056 §7), the candidate migrates it up at its start, must report `configSecretState: OK` (step 7), and this
+checkout's reader opens every item the seeder recorded — names, date and place, the cover, every photo and file byte
+for byte, the drop box's guest files, and a READ link as its guest sees it. The predecessor is the commit before the
+one under test until the first release, the last release (`v<major>.<minor>`) from then on; `--upgrade-from <ref>`
+names another one, and a ref older than the seeder is refused. The run's summary ends with the predecessor, both
+builds' highest migration, the migrations changed or removed between them, and the outcome with its cause — a Flyway
+refusal (a changed baseline's checksum above all) is named as such. Before the first release a red proof informs and
+gates nothing; `container.yml`'s `upgrade-proof` job, which `publish` needs, is disabled until then
+([backend/CLAUDE.md](../backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
+images, so the pull, the recipe diff and the `up` of steps 4–6 and the rollback stay unrehearsed; and it says nothing
+about the chart — `helm upgrade` from the predecessor's chart to the candidate's, with its immutable fields and claims,
+runs in no cluster (§ Upgrading with `helm upgrade`, inbox #428).
 
 1. **Stop the application — and only the application.** *Cold* means the **writer** is stopped; MariaDB and
    Garage stay up, because the capture reads through their own interfaces (ADR 0056 §2).

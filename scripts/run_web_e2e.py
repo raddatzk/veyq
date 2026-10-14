@@ -34,6 +34,24 @@ Docker and the database root credential. Every one of those sweeps also searches
 capability token the run handled, read out of the HTTP recording by the contract's `token` marker
 ([token_needles]) — and the database sweep proves it armed by finding the tokens' hashes ([db_token_findings]).
 
+**The upgrade proof — two builds in one run** (ADR 0057 Addendum, `--upgrade` / `--upgrade-from <ref>`). The
+`upgrade` group's first member, the SEEDER, runs from a detached worktree of a PREDECESSOR ref built in the run
+directory ([prepare_predecessor]: its own `npm ci`, which generates its client, and its own fast-jar) and boots on the
+predecessor's jar; the group's hook captures that instance, destroys it and restores it onto a target installed by THIS
+checkout's jar ([upgrade_hook]); the READER, this tree's last member of the group, boots on this jar — which migrates
+the predecessor's schema up — and must read `configSecretState: OK` before it asserts every item of the record the
+seeder wrote (`web/src/test/upgradeRecord.ts`). The predecessor defaults to the first parent of `HEAD` while the pin
+file says `release: none`, and to the newest `v<major>.<minor>` release tag once it names a release
+([default_predecessor] — the one switch); a ref without the seeder is refused before anything is built. The run's
+summary ends with the proof's own lines ([upgrade_verdict]): the predecessor, both builds' highest migration, the
+migrations changed or removed between them, the reader's `configSecretState`, and GREEN or RED with its cause — a
+Flyway refusal read out of the reader's boot log is named as such ([flyway_cause]). Red exits non-zero; before the
+first release that informs and gates nothing. Every wire sweep runs as in any run, the predecessor's suite included —
+with one known edge: its HTTP recording is matched against THIS tree's contracts, so a call the candidate no longer
+declares fails the token derivation, naming the call. In an ordinary run the `upgrade` group runs like any other, both
+members from this tree, which keeps the pair working between proofs. Its pure parts are pinned, without Docker, by
+`scripts/upgrade_proof_selftest.py`.
+
 **Why a fresh instance per file.** Every suite cold-births its own Server Owner and asserts
 `setupRequired === true`, and a server is single-owner-per-instance. `ci.yml` used to call this "a fresh in-mem
 DB per file", which does not work: `quarkus.datasource.db-kind` is a BUILD-TIME property baked at augmentation
@@ -54,6 +72,8 @@ having run nothing — is guarded by `scripts/validate_e2e_discovery.py`, which 
 
 Usage:
     python3 scripts/run_web_e2e.py [FILE ...]        # from the repo root
+    python3 scripts/run_web_e2e.py --upgrade         # the upgrade proof against the default predecessor
+    python3 scripts/run_web_e2e.py --upgrade-from <git ref>
 
 With no arguments it runs every `web/src/**/*.e2e.test.ts` — that is how CI invokes it. Paths may be given
 relative to the repo root or to `web/`, which is a local debugging convenience only.
@@ -94,6 +114,7 @@ Environment (all optional):
 """
 from __future__ import annotations
 
+import atexit
 import base64
 import binascii
 import bisect
@@ -493,8 +514,10 @@ def wait_ready(deadline: float, proc: subprocess.Popen) -> str | None:
     return f"nothing answered the readiness probe {READY_URL} within {BOOT_SECS}s"
 
 
-def boot(database: str, secret_file: Path, log_path: Path, bucket: str | None = None) -> subprocess.Popen:
-    """Boot the fast-jar under `%e2e` against this file's own database.
+def boot(database: str, secret_file: Path, log_path: Path, bucket: str | None = None,
+         jar: Path = JAR) -> subprocess.Popen:
+    """Boot the fast-jar under `%e2e` against this file's own database — this checkout's jar unless the upgrade proof
+    hands the predecessor's ([Build]).
 
     Two per-boot overrides carry state that must NOT be shared between boots:
       - the datasource URL, so each file gets its own schema;
@@ -519,7 +542,7 @@ def boot(database: str, secret_file: Path, log_path: Path, bucket: str | None = 
     # the boot log's `—` came out as `?` — and a non-ASCII canary would too, which the needles then miss.
     # Pinned here; [sweep_logs] reads the file as UTF-8.
     return subprocess.Popen(
-        ["java", "-Dquarkus.profile=e2e", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8", "-jar", str(JAR)],
+        ["java", "-Dquarkus.profile=e2e", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8", "-jar", str(jar)],
         cwd=str(REPO), env=env, stdout=handle, stderr=subprocess.STDOUT,
     )
 
@@ -2081,6 +2104,31 @@ class Instance:
         return f"database {self.database}" + (f", bucket {self.bucket}" if self.bucket else "")
 
 
+class Build(NamedTuple):
+    """What a group member runs FROM: a tree (its suites, its generated client, its `node_modules`) and that tree's jar.
+
+    Every ordinary run has one, [CANDIDATE] — this checkout. The upgrade proof has two: the predecessor's, built in a
+    worktree of its ref ([prepare_predecessor]), seeds; this checkout's reads. A suite is only ever run by the build it
+    belongs to, so a member's tree and the jar it is booted on can never be mixed.
+    """
+    label: str
+    root: Path
+    jar: Path
+
+    @property
+    def web(self) -> Path:
+        return self.root / "web"
+
+
+CANDIDATE = Build("candidate", REPO, JAR)
+
+
+def member_name(path: Path, build: Build) -> str:
+    """A member as the summary names it: its path in its own `web/`, prefixed by the build when it is not this one."""
+    rel = path.relative_to(build.web).as_posix()
+    return rel if build is CANDIDATE else f"[{build.label}] {rel}"
+
+
 def group_of(path: Path) -> str:
     """`restore.a-capture.e2e.test.ts` → `restore`; `media.e2e.test.ts` → `media` (a group of one)."""
     return path.name[: -len(".e2e.test.ts")].split(".", 1)[0]
@@ -2222,21 +2270,7 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
     `503 mail_unavailable`. It is reached the way an operator reaches A2 — a restore told `--without-key` — not
     by editing the capture, so the two groups differ in exactly one restore flag.
     """
-    backup = group_dir / "backup"
-    kept_key = group_dir / "kept-apart" / instance_backup.KEY_NAME
-    backup_tool("capture", "--into", str(backup), "--key-into", str(kept_key), "--db-name", source.database,
-                "--store-bucket", source.bucket or STORE_BUCKET, "--config-secret-file", str(source.secret_file))
-    verify_capture(backup, kept_key)
-
-    destroy(source)
-
-    target = Instance(restore_database(index), group_dir / "restored-config-secret.key",
-                      f"veyq-e2e-dst-{index}")
-    fresh_database(target.database)
-    fresh_bucket(target.bucket)
-    install(target, group_dir / f"backend-install-{index}.log")
-    restore = ["restore", str(backup), "--domain", HOST, "--db-name", target.database,
-               "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file)]
+    backup, kept_key, target, restore = capture_destroy_install(index, source, group_dir, CANDIDATE)
     assert_unsupplied_key_is_refused(restore, target)
     if with_key:
         assert_newer_backup_is_refused(restore, backup, group_dir, target)
@@ -2256,6 +2290,58 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
     return target
 
 
+def capture_destroy_install(index: int, source: Instance, group_dir: Path,
+                            build: Build) -> tuple[Path, Path, Instance, list[str]]:
+    """The first half every hook shares: capture the stopped source (key kept apart), verify it, destroy the source, and
+    install the target the restore goes onto — with the jar of `build`, the build of the member that runs next. Returns
+    the capture, the kept key, the target and the restore command without its key flag: each hook adds the flag its
+    rehearsal is about."""
+    backup = group_dir / "backup"
+    kept_key = group_dir / "kept-apart" / instance_backup.KEY_NAME
+    backup_tool("capture", "--into", str(backup), "--key-into", str(kept_key), "--db-name", source.database,
+                "--store-bucket", source.bucket or STORE_BUCKET, "--config-secret-file", str(source.secret_file))
+    verify_capture(backup, kept_key)
+
+    destroy(source)
+
+    target = Instance(restore_database(index), group_dir / "restored-config-secret.key",
+                      f"veyq-e2e-dst-{index}")
+    fresh_database(target.database)
+    fresh_bucket(target.bucket)
+    install(target, group_dir / f"backend-install-{index}.log", build)
+    restore = ["restore", str(backup), "--domain", HOST, "--db-name", target.database,
+               "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file)]
+    return backup, kept_key, target, restore
+
+
+def upgrade_hook(index: int, source: Instance, group_dir: Path, build: Build) -> Instance:
+    """The `upgrade` group's hook: the documented capture -> destroy -> install -> restore, and nothing else.
+
+    The seeder's instance is restored WITH its separately kept key onto a target freshly installed by `build` — the
+    reader's: under `--upgrade` the CANDIDATE, so the reader's boot is the candidate migrating the predecessor's schema
+    up (ADR 0056 §7), exactly the "restore, start" an operator's upgrade is. The gates the restore rehearsal proves around
+    the same tool (the key gate, A5, the newer and older backup) are not repeated: this group's subject is the CONTENT
+    surviving the restore and the upgrade, which only its reader can assert. Before anything is captured the seeder's
+    record must be one the reader can read ([upgrade_record_problems]) — a seeder that wrote none is named as that, not
+    as a failed upgrade. A refused restore is a [HookFailure]: in the upgrade proof that is an outcome (a backup NEWER
+    than the candidate, say), which the summary names, not a crash of the harness.
+    """
+    record = group_dir / UPGRADE_RECORD_FILE
+    try:
+        problems = upgrade_record_problems(json.loads(record.read_text()))
+    except (OSError, ValueError) as e:
+        problems = [f"unreadable: {e}"]
+    if problems:
+        raise HookFailure(f"the seeder's record {shown(record)} is not one the reader can read: {'; '.join(problems)}")
+    _backup, kept_key, target, restore = capture_destroy_install(index, source, group_dir, build)
+    result = backup_tool_result(*restore, "--key-from", str(kept_key))
+    if result.returncode != 0:
+        body = (result.stdout + result.stderr).strip().splitlines()
+        raise HookFailure(f"the restore onto the {build.label} was refused (exit {result.returncode}): "
+                          f"{body[-1] if body else 'no output'}")
+    return target
+
+
 def verify_capture(backup: Path, kept_key: Path) -> None:
     """Every capture is checked by the tool's own `verify`, and must hold no key file of its own.
 
@@ -2271,14 +2357,14 @@ def verify_capture(backup: Path, kept_key: Path) -> None:
                          f"the key at {shown(kept_key)} (ADR 0056 §1)")
 
 
-def install(target: Instance, boot_log: Path) -> None:
+def install(target: Instance, boot_log: Path, build: Build) -> None:
     """Start the app once against [target] and stop it — which is what "a freshly installed instance" IS.
 
     One boot migrates the schema (`quarkus.flyway.migrate-at-start=true`, no profile gate) and runs the store
     provisioning. That is the operator's step 1 of a restore now, so it is this rehearsal's step 1 too.
     """
     log(f"installing the restore target ({target.describe()}): one boot to migrate and provision")
-    proc = boot(target.database, target.secret_file, boot_log, target.bucket)
+    proc = boot(target.database, target.secret_file, boot_log, target.bucket, build.jar)
     try:
         not_ready = wait_ready(time.time() + BOOT_SECS, proc)
         if not_ready:
@@ -2449,9 +2535,19 @@ def assert_newer_backup_is_refused(restore: list[str], backup: Path, group_dir: 
 # Group stem → the hook that runs between its members. A multi-member group with no entry here is a hard error:
 # it would otherwise run its second file against the first one's instance and pass for the wrong reason.
 HOOKS = {
-    "restore": lambda index, source, group_dir: restore_hook(index, source, group_dir, with_key=True),
-    "legthree": lambda index, source, group_dir: restore_hook(index, source, group_dir, with_key=False),
+    "restore": lambda index, source, group_dir, _build: restore_hook(index, source, group_dir, with_key=True),
+    "legthree": lambda index, source, group_dir, _build: restore_hook(index, source, group_dir, with_key=False),
+    "upgrade": upgrade_hook,
 }
+
+
+class HookFailure(RuntimeError):
+    """A hook could not establish the next member's precondition, for a reason the run reports rather than dies of.
+
+    [run_group] scores it as the next member's failure and runs no later member, exactly like a failed member. Only the
+    upgrade hook raises it today; the restore rehearsals' refusals stay `SystemExit`, because there a refusal is the
+    harness or the tool being broken, never an outcome.
+    """
 
 
 # ----------------------------------------------------------------------------------------------------------
@@ -2597,11 +2693,392 @@ def rehearse_production_project(workdir: Path) -> None:
         f"property of the file, not of the directory it sits in")
 
 
-def run_group(index: int, members: list[Path], workdir: Path, stamp: str) -> list[tuple[str, str]]:
+# ----------------------------------------------------------------------------------------------------------
+# The upgrade proof — the predecessor's build seeds, the candidate's reads (ADR 0057 Addendum)
+# ----------------------------------------------------------------------------------------------------------
+
+# The group the proof runs: its FIRST member is the seeder (run from the predecessor's tree), its LAST the reader (from
+# this one). Found by name in each tree ([upgrade_seeder]), never by a path, so either file may move.
+UPGRADE_GROUP = "upgrade"
+# The record the two members share, in the group directory (`web/src/test/upgradeRecord.ts` writes and reads it).
+UPGRADE_RECORD_FILE = "upgrade-record.json"
+UPGRADE_READING_FILE = "upgrade-reading.json"
+# What the record's `version` may be — the versions the CANDIDATE's reader reads. Mirrors `UPGRADE_RECORD_VERSION` and
+# the reader's own check; `upgrade_proof_selftest.py` and `upgradeRecord.test.ts` hold both to one fixture.
+UPGRADE_RECORD_VERSIONS = (1,)
+PIN_FILE = "scripts/applied_migrations.sha256"
+RELEASE_TAG = re.compile(r"^v(\d+)\.(\d+)$")
+MIGRATION_VERSION = re.compile(r"/V(\d+)__[^/]+\.sql$")
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+
+def upgrade_request(argv: list[str]) -> tuple[bool, str | None, list[str]]:
+    """Split the proof's flags off argv: (`is the proof asked for`, `the predecessor ref or None for the default`, rest).
+
+    `--upgrade` asks for the default predecessor ([default_predecessor]); `--upgrade-from <ref>` (or `=<ref>`) for that
+    ref. Every other argument is a test path, as it always was — and the proof refuses those itself ([main]).
+    """
+    upgrade, ref, rest = False, None, []
+    args = iter(argv)
+    for arg in args:
+        if arg == "--upgrade" or arg == "--upgrade-from" or arg.startswith("--upgrade-from="):
+            if upgrade:
+                raise ValueError("--upgrade and --upgrade-from name one predecessor between them; pass one of them once")
+            upgrade = True
+            if arg != "--upgrade":
+                ref = arg.split("=", 1)[1] if "=" in arg else next(args, "")
+                if not ref or ref.startswith("--"):
+                    raise ValueError("--upgrade-from names the predecessor: --upgrade-from <git ref>")
+        else:
+            rest.append(arg)
+    return upgrade, ref, rest
+
+
+def read_release(pin_text: str) -> str:
+    """The pin file's `release:` value — `none` until the first release, then the highest migration it shipped."""
+    for line in pin_text.splitlines():
+        if line.startswith("release:"):
+            return line.split(":", 1)[1].strip()
+    raise ValueError(f"{PIN_FILE} carries no `release:` line")
+
+
+def default_predecessor(release: str, tags: list[str]) -> str:
+    """The predecessor an unqualified `--upgrade` proves against — the ONE place the switch to the release happens.
+
+    While `release: none` it is the first parent of `HEAD`: the commit before the one under test (on a merge, the
+    branch it was merged into). Once a release is set it is the newest release ref `v<major>.<minor>` the caller found
+    reachable from that first parent ([main] passes `git tag --merged HEAD^1`), by version order — the release this
+    candidate would upgrade an instance of. The pin line names the release's highest migration, not its tag, so the tag
+    is found, never derived; a release line with no release tag to find is refused rather than guessed.
+    """
+    if release == "none":
+        return "HEAD^1"
+    found = sorted(((int(m.group(1)), int(m.group(2))), tag) for tag in tags if (m := RELEASE_TAG.match(tag)))
+    if not found:
+        raise ValueError(f"{PIN_FILE} says `release: {release}`, but no v<major>.<minor> tag is reachable from HEAD^1 "
+                         f"— fetch the tags, or name the predecessor with --upgrade-from <ref>")
+    return found[-1][1]
+
+
+def pinned_migrations(pin_text: str) -> dict[str, str]:
+    """Every pin line of the pin file: repo-relative migration path -> its SHA-256."""
+    pins: dict[str, str] = {}
+    for line in pin_text.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and not line.startswith(("#", "release:")):
+            pins[parts[1]] = parts[0]
+    return pins
+
+
+def highest_migration(pins: dict[str, str]) -> str | None:
+    """The highest Flyway version a build carries (`V<version>__…`), compared as Flyway does — numerically."""
+    versions = [m.group(1) for path in pins if (m := MIGRATION_VERSION.search("/" + path))]
+    return max(versions, key=int) if versions else None
+
+
+def changed_migrations(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    """The migrations a restored database would refuse to start on: one the candidate CHANGED (its checksum differs from
+    the one the predecessor applied) or REMOVED (applied, and no longer there). An added one is the upgrade itself."""
+    changed = [f"changed: {path}" for path in sorted(before) if path in after and after[path] != before[path]]
+    return changed + [f"removed: {path}" for path in sorted(before) if path not in after]
+
+
+# Flyway's own words for refusing a restored schema at the candidate's start (`migrate-at-start` validates first). The
+# boot log is where they land; each is named so a red proof says WHICH migration and why, not "the JVM exited".
+FLYWAY_REFUSALS = (
+    (re.compile(r"Migration checksum mismatch for migration version (\S+?)\.?$", re.M),
+     "Flyway refused the restored schema: migration V{} was applied by the predecessor with another checksum than "
+     "the candidate's file — a migration changed between the two builds"),
+    (re.compile(r"Detected applied migration not resolved locally: (\S+?)\.?$", re.M),
+     "Flyway refused the restored schema: migration V{} was applied by the predecessor and the candidate no longer "
+     "carries it"),
+    (re.compile(r"Detected resolved migration not applied to database: (\S+?)\.?$", re.M),
+     "Flyway refused the restored schema: the candidate's migration V{} sorts below the restored history, which "
+     "outOfOrder=false refuses"),
+)
+
+
+def flyway_cause(log_text: str) -> str | None:
+    """Name Flyway's refusal of a restored schema from a boot log, or None when the log holds none."""
+    for pattern, sentence in FLYWAY_REFUSALS:
+        found = pattern.search(log_text)
+        if found:
+            return sentence.format(found.group(1))
+    if "Validate failed" in log_text:
+        line = next(line for line in log_text.splitlines() if "Validate failed" in line)
+        return f"Flyway refused the restored schema: {line.strip()[-300:]}"
+    return None
+
+
+def upgrade_seeder(paths: Iterable[str]) -> str | None:
+    """The seeder among a tree's e2e files: the `upgrade` group's first member in filename order, or None."""
+    members = sorted(p for p in paths if p.endswith(".e2e.test.ts") and group_of(Path(p)) == UPGRADE_GROUP)
+    return members[0] if members else None
+
+
+def upgrade_record_problems(raw: object) -> list[str]:
+    """Every problem with `raw` as the upgrade record, or none — the orchestrator's half of the record's contract.
+
+    The same shape `web/src/test/upgradeRecord.ts`'s `upgradeRecordProblems` checks, structural only: the reader then
+    asserts the content. Both are held to `web/src/test/upgradeRecord.fixture.json` (accepted, and every edit listed
+    there refused with exactly one problem). Every list must be non-empty — a record without an item of one application
+    would make the reader's "every item" vacuous for it.
+    """
+    problems: list[str] = []
+    is_obj = lambda v: isinstance(v, dict)  # noqa: E731
+
+    def string(o: dict, key: str, at: str) -> None:
+        if not isinstance(o.get(key), str) or not o[key]:
+            problems.append(f"{at}.{key} is not a non-empty string")
+
+    def number(o: dict, key: str, at: str) -> None:
+        if isinstance(o.get(key), bool) or not isinstance(o.get(key), (int, float)):
+            problems.append(f"{at}.{key} is not a number")
+
+    def obj(o: dict, key: str, at: str) -> dict | None:
+        if is_obj(o.get(key)):
+            return o[key]
+        problems.append(f"{at}.{key} is not an object")
+        return None
+
+    def items(o: dict, key: str, at: str) -> list[dict]:
+        value = o.get(key)
+        if not isinstance(value, list) or not value:
+            problems.append(f"{at}.{key} is not a non-empty list")
+            return []
+        out = []
+        for i, item in enumerate(value):
+            if not is_obj(item):
+                problems.append(f"{at}.{key}[{i}] is not an object")
+            out.append(item if is_obj(item) else {})
+        return out
+
+    def stream(o: dict, at: str) -> None:
+        size = o.get("size")
+        if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
+            problems.append(f"{at}.size is not a positive integer")
+        if not isinstance(o.get("sha256"), str) or not SHA256_HEX.match(o["sha256"]):
+            problems.append(f"{at}.sha256 is not a hex SHA-256")
+
+    def media(o: dict, key: str, at: str) -> None:
+        for i, m in enumerate(items(o, key, at)):
+            string(m, "mediaId", f"{at}.{key}[{i}]")
+            stream(m, f"{at}.{key}[{i}]")
+
+    def files(o: dict, key: str, at: str) -> None:
+        for i, f in enumerate(items(o, key, at)):
+            here = f"{at}.{key}[{i}]"
+            for k in ("nodeId", "name", "type"):
+                string(f, k, here)
+            number(f, "modifiedAt", here)
+            stream(f, here)
+
+    if not is_obj(raw):
+        return ["the record is not a JSON object"]
+    record: dict = raw  # type: ignore[assignment]
+    if record.get("version") not in UPGRADE_RECORD_VERSIONS or isinstance(record.get("version"), bool):
+        return [f"version {json.dumps(record.get('version'))} is not one the reader knows "
+                f"(it reads {', '.join(map(str, UPGRADE_RECORD_VERSIONS))})"]
+    owner = obj(record, "owner", "record")
+    if owner is not None:
+        for k in ("email", "password", "secretKey", "tenantId"):
+            string(owner, k, "owner")
+    string(record, "scopeId", "record")
+
+    memory = obj(record, "memory", "record")
+    if memory is not None:
+        for k in ("nodeId", "name", "place"):
+            string(memory, k, "memory")
+        date = obj(memory, "date", "memory")
+        if date is not None:
+            if date.get("mode") != "range":
+                problems.append('memory.date.mode is not "range"')
+            string(date, "from", "memory.date")
+            string(date, "to", "memory.date")
+        cover = obj(memory, "cover", "memory")
+        if cover is not None:
+            string(cover, "mediaId", "memory.cover")
+            crop = obj(cover, "crop", "memory.cover")
+            if crop is not None:
+                for k in ("x", "y", "width", "height"):
+                    number(crop, k, "memory.cover.crop")
+        media(memory, "media", "memory")
+        chapter = obj(memory, "chapter", "memory")
+        if chapter is not None:
+            string(chapter, "nodeId", "memory.chapter")
+            string(chapter, "name", "memory.chapter")
+            media(chapter, "media", "memory.chapter")
+
+    section = obj(record, "files", "record")
+    if section is not None:
+        string(section, "folderId", "files")
+        string(section, "name", "files")
+        files(section, "files", "files")
+
+    box = obj(record, "dropBox", "record")
+    if box is not None:
+        string(box, "nodeId", "dropBox")
+        string(box, "name", "dropBox")
+        for i, guest in enumerate(items(box, "guests", "dropBox")):
+            string(guest, "name", f"dropBox.guests[{i}]")
+            string(guest, "folderId", f"dropBox.guests[{i}]")
+            files(guest, "files", f"dropBox.guests[{i}]")
+
+    share = obj(record, "share", "record")
+    if share is not None:
+        for k in ("shareId", "fragmentKey", "name"):
+            string(share, k, "share")
+        for i, m in enumerate(items(share, "media", "share")):
+            stream(m, f"share.media[{i}]")
+    return problems
+
+
+def git(*args: str, cwd: Path = REPO) -> str:
+    """One git command against this checkout; its stdout, stripped. A failure ends the run naming the command."""
+    result = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SystemExit(f"[e2e] git {' '.join(args)} failed: {result.stderr.strip()[-400:]}")
+    return result.stdout.strip()
+
+
+class Predecessor(NamedTuple):
+    """The build the proof upgrades FROM: how it was asked for, the commit it resolved to, its pin file, its build."""
+    asked: str      # the ref as given, or how the default chose it
+    commit: str
+    pins: str       # its `scripts/applied_migrations.sha256`
+    build: Build
+
+
+def resolve_predecessor(ref: str | None) -> tuple[str, str]:
+    """(how the predecessor was chosen, its commit). Refuses a ref that is no commit, and one WITHOUT the seeder — a
+    predecessor older than the seeder cannot seed anything (Decision 2 of cr-upgrade-proof)."""
+    if ref is None:
+        release = read_release((REPO / PIN_FILE).read_text())
+        tags = git("tag", "--merged", "HEAD^1", "--list", "v*").splitlines() if release != "none" else []
+        try:
+            ref = default_predecessor(release, tags)
+        except ValueError as e:
+            raise SystemExit(f"[e2e] UPGRADE PROOF: {e}") from e
+        asked = f"{ref} (the default while `release: {release}`)"
+    else:
+        asked = ref
+    found = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=str(REPO),
+                           capture_output=True, text=True)
+    if found.returncode != 0:
+        raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor {asked} names no commit of this repository")
+    commit = found.stdout.strip()
+    seeder = upgrade_seeder(git("ls-tree", "-r", "--name-only", commit, "--", "web/src").splitlines())
+    if seeder is None:
+        raise SystemExit(
+            f"[e2e] UPGRADE PROOF: the predecessor {asked} = {commit[:12]} carries no seeder (no `{UPGRADE_GROUP}.*` "
+            f"e2e group under web/src), so it cannot seed an instance to upgrade. A predecessor must be a commit at or "
+            f"after the one that added the seeder; name one with --upgrade-from <ref>."
+        )
+    return asked, commit
+
+
+def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
+    """A detached worktree of the predecessor in the run directory, built as its own CI would: its web dependencies
+    installed (which generates its client — `web`'s `prepare`) and its fast-jar built. Its suites run from there, never
+    from this tree ([Build]); [remove_predecessor] deletes it once the group has run.
+
+    The install is a plain `npm ci` of the predecessor's lockfile, not `npm_ci_no_deprecated.py`: that lockfile passed
+    the gate when it was the candidate, and a package deprecated SINCE would turn an upgrade proof red for a reason
+    that is not the upgrade. Its output goes to `predecessor-npm.log` / `predecessor-gradle.log` in the run directory.
+    """
+    asked, commit = resolve_predecessor(ref)
+    tree = workdir / "predecessor"
+    log(f"upgrade proof: predecessor {asked} = {commit[:12]}; a detached worktree at {shown(tree)}")
+    git("worktree", "add", "--detach", str(tree), commit)
+    # Removed however the run ends — a failed build, a `SystemExit` of a hook, a SIGTERM (which `main` turns into one) —
+    # so no stray worktree stays registered; [remove_predecessor] removes it earlier on the ordinary path.
+    atexit.register(remove_worktree, tree)
+    for label, cmd, cwd in (("npm", ["npm", "ci", "--no-audit", "--no-fund"], tree),
+                            ("gradle", ["./gradlew", "--no-daemon", "--console=plain", "quarkusBuild"], tree / "backend")):
+        out = workdir / f"predecessor-{label}.log"
+        log(f"upgrade proof: building the predecessor ({' '.join(cmd)}) -> {shown(out)}")
+        with out.open("w") as handle:
+            result = subprocess.run(cmd, cwd=str(cwd), stdout=handle, stderr=subprocess.STDOUT)
+        if result.returncode != 0:
+            tail(out)
+            raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor's {label} step failed (exit {result.returncode})")
+    jar = tree / "backend" / "build" / "quarkus-app" / "quarkus-run.jar"
+    if not jar.is_file() or not (tree / "web" / "src" / "api" / "generated").is_dir():
+        raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor built no jar at {shown(jar)} or generated no client")
+    return Predecessor(asked, commit, git("show", f"{commit}:{PIN_FILE}"),
+                       Build(f"predecessor {commit[:12]}", tree, jar))
+
+
+def remove_predecessor(predecessor: Predecessor | None) -> None:
+    """Delete the predecessor's worktree — before the run-level sweeps, which glob the run directory recursively."""
+    if predecessor is not None:
+        remove_worktree(predecessor.build.root)
+
+
+def remove_worktree(tree: Path) -> None:
+    """Remove a worktree this run added, and its registration. Idempotent: the second call finds nothing."""
+    if tree.exists():
+        log(f"upgrade proof: removing the predecessor's worktree {shown(tree)}")
+        subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=str(REPO), capture_output=True, text=True)
+        shutil.rmtree(tree, ignore_errors=True)
+        subprocess.run(["git", "worktree", "prune"], cwd=str(REPO), capture_output=True, text=True)
+
+
+def upgrade_members(predecessor: Predecessor, candidate_files: list[Path]) -> tuple[list[Path], list[Build]]:
+    """The proof's one group: the predecessor's seeder, then the candidate's reader (the group's LAST member here)."""
+    seeder = upgrade_seeder(p.relative_to(predecessor.build.web).as_posix() for p in discover(predecessor.build.web))
+    readers = [p for p in candidate_files if group_of(p) == UPGRADE_GROUP]
+    if seeder is None or len(readers) < 2:
+        raise SystemExit(f"[e2e] UPGRADE PROOF: no seeder in the predecessor or no reader in this tree "
+                         f"(the `{UPGRADE_GROUP}` group needs both)")
+    return [predecessor.build.web / seeder, sorted(readers)[-1]], [predecessor.build, CANDIDATE]
+
+
+def upgrade_verdict(predecessor: Predecessor, failures: list[tuple[str, str]], group_dir: Path,
+                    reader_log: Path) -> list[str]:
+    """The proof's own summary lines (Decision 5): which predecessor, both builds' highest migration, what changed
+    between them, what the candidate reported, and the outcome with its cause named."""
+    before, after = pinned_migrations(predecessor.pins), pinned_migrations((REPO / PIN_FILE).read_text())
+    release = read_release((REPO / PIN_FILE).read_text())
+    changed = changed_migrations(before, after)
+    reading: dict = {}
+    if (group_dir / UPGRADE_READING_FILE).is_file():
+        reading = json.loads((group_dir / UPGRADE_READING_FILE).read_text())
+    lines = [
+        f"predecessor: {predecessor.asked} = {predecessor.commit[:12]}",
+        f"highest migration: predecessor V{highest_migration(before)}, candidate V{highest_migration(after)}",
+        f"migrations changed or removed since the predecessor: {', '.join(changed) or 'none'}",
+        f"candidate's configSecretState: {reading.get('configSecretState', '(never read - the reader did not get there)')}",
+    ]
+    if not failures:
+        # Said as it happened: with no migration between the two builds the candidate started on the restored schema
+        # as it was, and a green proves the restore and the reading, not a migration.
+        migrated = ("migrated the predecessor's backup up" if highest_migration(before) != highest_migration(after)
+                    else "started on the predecessor's backup (no migration lies between the two builds)")
+        lines.append(f"outcome: GREEN — the candidate {migrated} and opened all {reading.get('items', '?')} recorded "
+                     f"item(s)")
+        return lines
+    cause = flyway_cause(reader_log.read_text(errors="replace")) if reader_log.is_file() else None
+    if cause is None and reading.get("configSecretState") not in (None, "OK"):
+        cause = (f"the candidate reports configSecretState {reading['configSecretState']} on the restored instance - the "
+                 f"key that came with the backup is not the one its rows were sealed for")
+    if cause is None and changed:
+        cause = f"probably the changed migration(s) above ({len(changed)}); the failures below say what broke"
+    lines.append(f"outcome: RED — {cause or failures[0][1]}")
+    if release == "none":
+        lines.append("before the first release (`release: none`) a baseline may change, so this red INFORMS and gates "
+                     "nothing (backend/CLAUDE.md § Migrations)")
+    return lines
+
+
+def run_group(index: int, members: list[Path], workdir: Path, stamp: str,
+              builds: list[Build] | None = None) -> list[tuple[str, str]]:
     """Run a group's members in order against one instance session. Returns every member's failure, if any.
 
-    A group of ONE takes exactly the old path: one fresh database, no bucket override, no hook.
+    A group of ONE takes exactly the old path: one fresh database, no bucket override, no hook. `builds` names the
+    build each member runs from — this checkout for all of them, unless the upgrade proof hands two.
     """
+    builds = builds or [CANDIDATE] * len(members)
     name = group_of(members[0])
     inst = Instance(suite_database(index), workdir / f"config-secret-{index}.key",
                     f"veyq-e2e-src-{index}" if len(members) > 1 else None)
@@ -2620,37 +3097,43 @@ def run_group(index: int, members: list[Path], workdir: Path, stamp: str) -> lis
 
     fresh_database(inst.database)
     failures: list[tuple[str, str]] = []
-    for position, path in enumerate(members, start=1):
+    for position, (path, build) in enumerate(zip(members, builds), start=1):
+        reason = None
         if position > 1:
-            inst = HOOKS[name](index, inst, group_dir)
-        reason = run_member(index, position, path, inst, group_dir if len(members) > 1 else None, workdir, stamp)
+            try:
+                inst = HOOKS[name](index, inst, group_dir, build)
+            except HookFailure as e:
+                reason = f"not run: the hook before it failed — {e}"
+                log(f"HOOK FAILED before {member_name(path, build)}: {e}")
+        reason = reason or run_member(index, position, path, inst, group_dir if len(members) > 1 else None, workdir,
+                                      stamp, build)
         if reason:
             # Never short-circuit ACROSS groups; within one, a failed member makes every later member
             # meaningless — it would run against an instance whose precondition was never established.
-            failures.append((path.relative_to(WEB).as_posix(), reason))
+            failures.append((member_name(path, build), reason))
             if position < len(members):
-                for skipped in members[position:]:
-                    failures.append((skipped.relative_to(WEB).as_posix(),
+                for skipped, skipped_build in zip(members[position:], builds[position:]):
+                    failures.append((member_name(skipped, skipped_build),
                                      f"not run: an earlier member of group `{name}` failed"))
             break
     return failures
 
 
 def run_member(index: int, position: int, test_path: Path, inst: Instance, group_dir: Path | None,
-               workdir: Path, stamp: str) -> str | None:
+               workdir: Path, stamp: str, build: Build = CANDIDATE) -> str | None:
     """Run one e2e file against its own fresh backend. Returns None on success, else a failure reason."""
-    rel = test_path.relative_to(WEB).as_posix()
+    rel = test_path.relative_to(build.web).as_posix()
     tag = f"{index}" if position == 1 else f"{index}-{position}"
-    log(f"=== {rel} ({inst.describe()}) ===")
+    log(f"=== {member_name(test_path, build)} ({inst.describe()}) ===")
 
     secret_file = inst.secret_file
     boot_log = workdir / f"backend-{tag}.log"
     canary_file = workdir / f"canaries-{tag}.json"
     record_file = workdir / f"http-{tag}.jsonl"
     database = inst.database
-    proc = boot(database, secret_file, boot_log, inst.bucket)
+    proc = boot(database, secret_file, boot_log, inst.bucket, build.jar)
     try:
-        log(f"waiting up to {BOOT_SECS}s for the backend to become ready")
+        log(f"waiting up to {BOOT_SECS}s for the backend ({build.label}) to become ready")
         not_ready = wait_ready(time.time() + BOOT_SECS, proc)
         if not_ready:
             tail(boot_log)
@@ -2677,7 +3160,7 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
             env["VEYQ_GROUP_DIR"] = str(group_dir)
         result = subprocess.run(
             ["npx", "vitest", "run", rel, "--testTimeout", TEST_MS],
-            cwd=str(WEB), env=env,
+            cwd=str(build.web), env=env,
         )
         if result.returncode != 0:
             # No sweep on a failed suite: the canary set is incomplete by construction, so a hit or a miss would
@@ -2737,6 +3220,12 @@ def keep_runs() -> int:
 
 
 def main(argv: list[str]) -> int:
+    try:
+        upgrade, upgrade_from, argv = upgrade_request(argv)
+    except ValueError as e:
+        raise SystemExit(f"[e2e] {e}") from e
+    if upgrade and argv:
+        raise SystemExit("[e2e] the upgrade proof runs the `upgrade` group of two builds and takes no test files")
     if not shutil.which("docker"):
         raise SystemExit("[e2e] docker is required (the bundled stack supplies the DB + object store)")
     if not JAR.is_file():
@@ -2744,6 +3233,9 @@ def main(argv: list[str]) -> int:
 
     files = [normalize(a) for a in argv] if argv else discover()
     groups = into_groups(files)
+    if upgrade:
+        # Refused before anything is built: a ref that is no commit, or one older than the seeder.
+        resolve_predecessor(upgrade_from)
     for port, variable, url in ((PORT, "VEYQ_PORT", READY_URL), (ADMIN_PORT, "VEYQ_ADMIN_PORT", f"{ADMIN_BASE}/api/setup")):
         if port_is_taken(url):
             raise SystemExit(
@@ -2755,7 +3247,8 @@ def main(argv: list[str]) -> int:
     # invite recipient, and the per-file database makes cross-file collisions impossible anyway. Digits only —
     # the username pattern is [A-Za-z0-9_.-] with a 32-char cap.
     stamp = str(int(time.time()))
-    log(f"running {len(files)} e2e file(s) in {len(groups)} group(s), stamp={stamp}")
+    log(f"running the upgrade proof (the `{UPGRADE_GROUP}` group of two builds), stamp={stamp}" if upgrade else
+        f"running {len(files)} e2e file(s) in {len(groups)} group(s), stamp={stamp}")
 
     # Retained, not a tempdir: the boot log is itself a sweep surface (ADR 0053 § Decision 4), and a canary file
     # discarded on exit cannot be re-read when a sweep hit needs explaining. It is created BEFORE the stack comes
@@ -2767,6 +3260,14 @@ def main(argv: list[str]) -> int:
     workdir = RUN_ROOT / stamp
     workdir.mkdir(parents=True, exist_ok=True)
     log(f"run artifacts (boot logs, canary files) land in {workdir.relative_to(REPO)}/")
+
+    # The upgrade proof's predecessor is built BEFORE the stack comes up — minutes of npm and Gradle that a failed build
+    # should not spend holding the shared database's statement log open — and removed after its group ran.
+    predecessor = prepare_predecessor(upgrade_from, workdir) if upgrade else None
+    builds: list[list[Build] | None] = [None] * len(groups)
+    if predecessor is not None:
+        members, member_builds = upgrade_members(predecessor, files)
+        files, groups, builds = members, [members], [member_builds]
 
     # A `kill` (SIGTERM) or a closed terminal (SIGHUP) would otherwise end the process without running a single
     # `finally` — and the statement log's `finally` is what switches a shared database's query log back off.
@@ -2788,9 +3289,12 @@ def main(argv: list[str]) -> int:
         rehearse_production_project(workdir)
 
         failures: list[tuple[str, str]] = []
-        for index, members in enumerate(groups, start=1):
-            # Never short-circuit across groups: one broken suite must not hide the state of the others.
-            failures.extend(run_group(index, members, workdir, stamp))
+        try:
+            for index, (members, member_builds) in enumerate(zip(groups, builds), start=1):
+                # Never short-circuit across groups: one broken suite must not hide the state of the others.
+                failures.extend(run_group(index, members, workdir, stamp, member_builds))
+        finally:
+            remove_predecessor(predecessor)
 
         # The run-level sweeps: after EVERY group, so each log is complete (its JVM has exited) and a restored
         # instance's log is swept for the member before it too. They run even when suites failed — a failed suite's
@@ -2822,6 +3326,11 @@ def main(argv: list[str]) -> int:
         f"run-level sweeps failed: {len(run_failures)}")
     for name, reason in failures + run_failures:
         log(f"  FAILED  {name}: {reason}")
+    if predecessor is not None:
+        log("==================== upgrade proof ====================")
+        for line in upgrade_verdict(predecessor, failures, workdir / f"group-1-{UPGRADE_GROUP}",
+                                    workdir / "backend-1-2.log"):
+            log(line)
     return 1 if failures or run_failures else 0
 
 
