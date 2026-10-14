@@ -772,7 +772,9 @@ paths:
         illegal_structure` — the scope root is never a guest's parent); the share's root is live (else `403
         share_not_contributable`); the kind's placement rule (`NodeKindRules`) admits it under the parent (else `422
         illegal_structure`); the owner of the parent's kind lets a READ_WRITE guest create that kind in it
-        (`GuestNodeRules`: core for a `FOLDER`; a kind no owner declares allows nothing — `422 illegal_scope`); the
+        (`GuestNodeRules`: core for a `FOLDER`, which admits a `FOLDER` and a kind its own application declares
+        guest-creatable — `GuestCreatableKinds`, Files' `FILE` — and never a Memory, a drop box or another application's
+        node; a container kind no owner declares allows nothing — either refusal is `422 illegal_scope`); the
         slug is free under the parent (`409 slug_taken`). **Epoch:** the request carries the epoch the guest sealed
         with (ADR 0080 Decision 6) — the name and the wrap are bound to scope, node, that epoch and placement version
         0, so the server stores it as sent; a guest never writes at the scope root, so the server checks it as a

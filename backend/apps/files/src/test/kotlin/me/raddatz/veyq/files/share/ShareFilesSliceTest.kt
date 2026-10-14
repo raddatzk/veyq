@@ -101,6 +101,22 @@ class ShareFilesSliceTest {
         assertEquals(blobId, blobOf(t.file), "the trashed file keeps its blob")
     }
 
+    /**
+     * Owner decision 2026-10-14: in a folder a contributor creates folders and files (Files declares `FILE`
+     * guest-creatable, core's `GuestCreatableKinds`) and no drop box — `422 illegal_scope`, nothing stored.
+     */
+    @Test
+    fun aContributorCreatesFoldersAndFilesButNoDropBox() {
+        val t = tree()
+        val link = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
+        GuestTreeShare.create(link, t.folder, FilesNodeKinds.DROPBOX).statusCode(422).body("code", equalTo("illegal_scope"))
+        assertEquals(listOf(t.file), tx { NodeEntity.find("parentId", t.folder).list().map { it.id } }, "a refused create stores nothing")
+        // controls: a folder and a file in the same place
+        val sub = UUID.randomUUID().toString()
+        GuestTreeShare.create(link, t.folder, NodeEntity.FOLDER, nodeId = sub).statusCode(201)
+        GuestTreeShare.create(link, sub, FilesNodeKinds.FILE).statusCode(201)
+    }
+
     @Test
     fun aContributorCreatesAFileUploadsReplacesAndRenamesIt() {
         val t = tree()

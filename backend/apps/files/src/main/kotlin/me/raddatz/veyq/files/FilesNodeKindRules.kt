@@ -3,6 +3,7 @@ package me.raddatz.veyq.files
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.sharing.GuestCreatableKinds
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareRoots
 import me.raddatz.veyq.core.sharing.WriteOnlyGuestKinds
@@ -73,4 +74,14 @@ class FilesShareRoots : ShareRoots {
 class FilesWriteOnlyGuestKinds : WriteOnlyGuestKinds {
     override fun creatable(rootKind: String): Set<String>? =
         if (rootKind == FilesNodeKinds.DROPBOX) setOf(FilesNodeKinds.FILE) else null
+}
+
+/**
+ * What a folder link's `READ_WRITE` guest may create in a folder besides a folder (ADR 0080 decision 6, core's
+ * [GuestCreatableKinds]): a `FILE` — the contributor's upload lands in one, created with core's `createShareNode`.
+ * **Never a drop box** (owner decision 2026-10-14): a guest makes no link-bearing node of the owner's.
+ */
+@ApplicationScoped
+class FilesGuestCreatableKinds : GuestCreatableKinds {
+    override fun kinds(): Set<String> = setOf(FilesNodeKinds.FILE)
 }

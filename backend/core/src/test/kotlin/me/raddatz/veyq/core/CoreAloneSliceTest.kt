@@ -29,7 +29,10 @@ import me.raddatz.veyq.core.quota.UploadAdmission
 import me.raddatz.veyq.core.scope.MembershipEraser
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
+import me.raddatz.veyq.core.sharing.CoreTestGuestCreatableKinds
+import me.raddatz.veyq.core.sharing.GuestCreatableKinds
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
+import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.NodeGuestIdentityUsage
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
@@ -85,7 +88,7 @@ import org.junit.jupiter.api.Test
  *    `NodeKindRules` and `ShareRoots` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
  *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), and every other seam —
  *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds`,
- *    `MemberBlobRoles` — none. The composed application's
+ *    `GuestCreatableKinds`, `MemberBlobRoles` — none. The composed application's
  *    sets are the root's `ModuleCompositionTest`. (`GuestIdentityUsage` is therefore never empty: its fail-closed
  *    branch for no usage at all is `GuestIdentityUsageTest`'s, boot-free, and no longer reachable here.)
  * 2. **Every seam fails closed with nobody behind it**: a `FOLDER` is created and a `MEMORY` is `illegal_structure`;
@@ -111,7 +114,7 @@ class CoreAloneSliceTest {
     class CoreAloneProfile : QuarkusTestProfile {
         override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
         override fun getConfigOverrides(): Map<String, String> =
-            mapOf("quarkus.arc.exclude-types" to CoreTestMemberBlobRoles::class.java.name)
+            mapOf("quarkus.arc.exclude-types" to listOf(CoreTestMemberBlobRoles::class, CoreTestGuestCreatableKinds::class).joinToString(",") { it.java.name })
     }
 
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
@@ -126,6 +129,7 @@ class CoreAloneSliceTest {
     @Inject @All lateinit var kindRules: MutableList<NodeKindRules>
     @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
     @Inject @All lateinit var writeOnlyGuestKinds: MutableList<WriteOnlyGuestKinds>
+    @Inject @All lateinit var guestCreatableKinds: MutableList<GuestCreatableKinds>
     @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
 
     @Inject lateinit var nodes: NodesStore
@@ -162,7 +166,7 @@ class CoreAloneSliceTest {
         for ((seam, beans) in mapOf(
             "MembershipEraser" to membershipErasers,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
-            "WriteOnlyGuestKinds" to writeOnlyGuestKinds,
+            "WriteOnlyGuestKinds" to writeOnlyGuestKinds, "GuestCreatableKinds" to guestCreatableKinds,
         )) {
             assertEquals(emptySet<Class<*>>(), classes(beans), "$seam: core implements none, and no application is here")
         }
@@ -184,6 +188,19 @@ class CoreAloneSliceTest {
         // control: the platform's own kind lands at the root
         createNode(userId, scopeId, NodeEntity.FOLDER).statusCode(201)
         createNode(userId, scopeId, "MEMORY").statusCode(422).body("code", equalTo("illegal_structure"))
+    }
+
+    /** Owner decision 2026-10-14: with no application declaring a kind ([GuestCreatableKinds]), a folder's `READ_WRITE`
+     *  guest creates folders only — every other kind, the applications' as the wire spells them, is `illegal_scope`. */
+    @Test
+    fun aFolderGuestCreatesFoldersOnly() {
+        val (userId, scopeId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val link = GuestTreeShare.seed(userId, scopeId, folder)
+        for (kind in kinds - NodeEntity.FOLDER + listOf("FILE", "FILES_DROPBOX")) {
+            GuestTreeShare.create(link, folder, kind).statusCode(422).body("code", equalTo("illegal_scope"))
+        }
+        GuestTreeShare.create(link, folder, NodeEntity.FOLDER).statusCode(201) // control
     }
 
     @Test

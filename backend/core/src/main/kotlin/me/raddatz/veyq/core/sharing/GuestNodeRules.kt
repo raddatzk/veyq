@@ -1,7 +1,11 @@
 package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.node.NodeEntity
+import io.quarkus.arc.All
+import io.quarkus.arc.ClientProxy
+import io.quarkus.runtime.StartupEvent
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.enterprise.event.Observes
 
 /** A tree operation a guest asks of a container ([GuestNodeRules]): each names the kind of the child it acts on. */
 sealed interface GuestNodeOp {
@@ -48,13 +52,28 @@ interface GuestNodeRules {
 }
 
 /**
- * Core's own container: inside a `FOLDER` a `READ_WRITE` guest may create, move in, move out and rename any kind —
- * `NodeKindRules` then decides whether that kind may live there (ADR 0080 decision 6: "a READ_WRITE guest may create
- * any kind `NodeKindRules` admits there").
+ * Core's own container (ADR 0080 decision 6): inside a `FOLDER` a `READ_WRITE` guest **creates** a `FOLDER`, or a kind
+ * its own application declares guest-creatable ([GuestCreatableKinds]: Files' `FILE`) — never a Memory, a drop box or
+ * any other application's node (owner decision 2026-10-14); it **moves in, moves out and renames** any kind. Either way
+ * `NodeKindRules` then decides whether that kind may live there.
+ *
+ * It also holds the declarations to their partition at startup ([GuestCreatableKinds.requireDisjoint]): a kind two
+ * applications declare fails the boot.
  */
 @ApplicationScoped
-class FolderGuestNodeRules : GuestNodeRules {
+class FolderGuestNodeRules(
+    /** `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
+    @All private val creatable: MutableList<GuestCreatableKinds>,
+) : GuestNodeRules {
     override fun handles(containerKind: String): Boolean = containerKind == NodeEntity.FOLDER
 
-    override fun readWriteAllows(containerKind: String, op: GuestNodeOp): Boolean = true
+    override fun readWriteAllows(containerKind: String, op: GuestNodeOp): Boolean = when (op) {
+        is GuestNodeOp.CreateChild -> op.childKind == NodeEntity.FOLDER || GuestCreatableKinds.allows(creatable, op.childKind)
+        is GuestNodeOp.MoveChildOut, is GuestNodeOp.MoveChildIn, is GuestNodeOp.RenameChild -> true
+    }
+
+    /** Uncaught on purpose: an exception out of a `StartupEvent` observer fails startup. */
+    fun onStart(@Observes ev: StartupEvent) {
+        GuestCreatableKinds.requireDisjoint(creatable.associate { ClientProxy.unwrap(it).javaClass.name to it.kinds() })
+    }
 }

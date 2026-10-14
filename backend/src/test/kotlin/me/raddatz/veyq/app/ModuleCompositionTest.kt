@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.quota.UploadAdmission
 import me.raddatz.veyq.core.scope.MembershipEraser
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
+import me.raddatz.veyq.core.sharing.GuestCreatableKinds
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import me.raddatz.veyq.core.sharing.GuestNodeOp
 import me.raddatz.veyq.core.sharing.GuestNodeRules
@@ -83,6 +84,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
     @Inject @All lateinit var guestNodeRules: MutableList<GuestNodeRules>
     @Inject @All lateinit var writeOnlyGuestKinds: MutableList<WriteOnlyGuestKinds>
+    @Inject @All lateinit var guestCreatableKinds: MutableList<GuestCreatableKinds>
     @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
 
     @Inject lateinit var quota: StorageQuota
@@ -101,6 +103,7 @@ class ModuleCompositionTest {
         ShareRoots::class.java to shareRoots,
         GuestNodeRules::class.java to guestNodeRules,
         WriteOnlyGuestKinds::class.java to writeOnlyGuestKinds,
+        GuestCreatableKinds::class.java to guestCreatableKinds,
         MemberBlobRoles::class.java to memberRoles,
     )
 
@@ -192,6 +195,25 @@ class ModuleCompositionTest {
         }
         for (kind in listOf("FILE", "NOT_A_KIND")) {
             assertFalse(NodeKindRules.takesCover(kindRules, kind), "$kind takes none")
+        }
+    }
+
+    /**
+     * What a folder's `READ_WRITE` guest may create, across core and every application (owner decision 2026-10-14): a
+     * folder, and the kinds their own applications declare guest-creatable — Files' `FILE`, declared once and by Files;
+     * never a Memory, a chapter or a drop box. Only here does a kind two applications declare show (it would fail the
+     * boot of this very test: `GuestCreatableKinds.requireDisjoint`). Moving and renaming any kind stay core's to allow.
+     */
+    @Test
+    fun aFolderGuestCreatesFoldersAndTheDeclaredKindsOnly() {
+        val declared = guestCreatableKinds.flatMap { bean -> bean.kinds().map { it to beanClass(bean) } }
+        assertEquals(listOf("FILE" to "me.raddatz.veyq.files.FilesGuestCreatableKinds"), declared, "the kinds the applications declare guest-creatable")
+        fun creates(kind: String) = GuestNodeRules.readWriteAllows(guestNodeRules, NodeEntity.FOLDER, GuestNodeOp.CreateChild(kind))
+        assertTrue(creates(NodeEntity.FOLDER), "a folder")
+        assertTrue(creates("FILE"), "a file")
+        for (kind in listOf("MEMORY", "CHAPTER", "FILES_DROPBOX", "NOT_A_KIND")) assertFalse(creates(kind), "a guest creates a $kind in a folder")
+        for (op in listOf(GuestNodeOp.MoveChildOut("MEMORY"), GuestNodeOp.MoveChildIn("MEMORY"), GuestNodeOp.RenameChild("FILES_DROPBOX"))) {
+            assertTrue(GuestNodeRules.readWriteAllows(guestNodeRules, NodeEntity.FOLDER, op), "unchanged: $op")
         }
     }
 
