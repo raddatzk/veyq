@@ -214,9 +214,10 @@ describe('an opened file: its page for a member', () => {
       t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete'),
       t('files.download', { name: 'Report.pdf' }), t('files.replace', { name: 'Report.pdf' }),
     ]))
-    // owner decision 2026-10-14: the download and the replace are header actions, before the standard four
+    // owner decision 2026-10-14: the download and the replace are header actions, before the standard four; core's
+    // "Copy to…" beside the move (uc.platform.copy-node)
     const ids = w.findAll('.veyq-node-header-actions button').map((b) => b.attributes('data-action'))
-    expect(ids.filter((id) => id !== 'favorite' && id !== 'export')).toEqual(['download', 'replace', 'share', 'rename', 'move', 'delete'])
+    expect(ids.filter((id) => id !== 'favorite' && id !== 'export')).toEqual(['download', 'replace', 'share', 'rename', 'move', 'copy', 'delete'])
     expect(w.findAll('button').filter((b) => !b.element.closest('.veyq-node-header') && !b.element.closest('.file-viewer')).map((b) => b.attributes('aria-label')), 'no action button below the header')
       .not.toEqual(expect.arrayContaining([t('files.download', { name: 'Report.pdf' }), t('files.replace', { name: 'Report.pdf' })]))
   })

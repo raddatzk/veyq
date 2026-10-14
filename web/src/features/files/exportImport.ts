@@ -10,6 +10,7 @@
 // (`files.drop-box`), no payload. It IMPORTS as a plain folder (`importsAsFolder` on its descriptor): a drop key, its guests'
 // identities and its links cannot be rebuilt from a download, so nothing tries.
 import { iterateBlob } from '../../core/blob/stream'
+import { CHUNK_SIZE } from '../../core/blob/transport'
 import type { ExportContentHook, ExportNodeContext, ImportContentHook } from '../../core/export/hooks'
 import type { ContentProblem } from '../../core/applications/registry'
 import type { ManifestContent } from '../../core/export/manifest'
@@ -57,6 +58,9 @@ export const exportFile: ExportContentHook = async (ctx) => {
     mediaType: meta?.type || 'application/octet-stream',
     modifiedAt: typeof meta?.modifiedAt === 'number' ? meta.modifiedAt : undefined,
     chunks: () => iterateBlob(provider, { signal: ctx.signal }),
+    // the same bytes by frame, for a copy (cr-copy-node Decision 3): the job below reads its payload only by frame-sized
+    // slices (the upload pump), so the kind declares `importStreams`
+    frames: { frameSize: CHUNK_SIZE, chunkCount: provider.chunkCount, getPlaintextChunk: (i) => provider.getPlaintextChunk(i) },
   })
   return { type: FILES_FILE_CONTENT, schema: SCHEMA, file }
 }

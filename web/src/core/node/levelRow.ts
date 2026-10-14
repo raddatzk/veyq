@@ -23,7 +23,7 @@ import type { TreeNode } from './tree'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { Access, TreeSource } from '../access'
 import type { ViewMode } from '../../shared/state/useViewMode'
-import type { CoreHeaderAction, NodeHeaderAction } from './nodeHeader'
+import { placeCoreActions, type CoreActionPlacement, type CoreHeaderAction, type NodeHeaderAction } from './nodeHeader'
 import type { LevelActionHandler } from './levelActions'
 import type { LoadedCover } from './cover/coverModel'
 import type { DirectoryInput } from '../export/importSource'
@@ -41,7 +41,7 @@ export interface LevelRowAction extends NodeHeaderAction {
 
 /** A core-owned action next to the application's (see the header). */
 export interface CoreRowAction extends LevelRowAction {
-  placement?: 'before' | 'after'
+  placement?: CoreActionPlacement
 }
 
 /** The row's leading visual when the kind's icon is not it: an application component with its props (Memories' cover). */
@@ -170,9 +170,7 @@ export type LevelRowsFactory = (ctx: Readonly<Ref<LevelRowsContext>>, host: Leve
 
 /** The row's actions: core's contributions around the application's list (stable order within each group). */
 export function mergeRowActions(core: readonly CoreRowAction[], app: readonly LevelRowAction[]): LevelRowAction[] {
-  const before = core.filter((a) => a.placement === 'before')
-  const after = core.filter((a) => a.placement !== 'before')
-  return [...before, ...app, ...after]
+  return placeCoreActions(core, app)
 }
 
 /** Split a row's actions into the buttons on the row and the overflow menu: the shown ones only, the first

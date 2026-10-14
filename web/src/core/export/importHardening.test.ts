@@ -15,6 +15,7 @@ import type { EpochKeys } from '../../features/spaces/epochs'
 import type { TreeSource } from '../access'
 import { memberAccessOf } from '../../test/models'
 import { exportSubtree } from './exportSubtree'
+import type { PayloadFile } from './hooks'
 import { importSubtree, openExport, planImport, type OpenedExport } from './importSubtree'
 import { pickedDirectory, type DirectoryFile, type ImportInput } from './importSource'
 import { LIMITS, MAX_DEPTH, MAX_NODES, type ManifestPayload } from './manifest'
@@ -25,6 +26,8 @@ const FILE = 'H_FILE'
 const ALBUM = 'H_ALBUM'
 const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
 const text = (s: string) => new TextEncoder().encode(s)
+/** A payload's bytes as text, read the way the upload pump reads (`slice(...).arrayBuffer()`). */
+const textOf = async (f: PayloadFile) => new TextDecoder().decode(await f.slice(0, f.size).arrayBuffer())
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 const sha = (s: string) => hex(v1.sha256Digest(text(s)))
 const access = memberAccessOf({ scopeId: 's', epochs })
@@ -41,7 +44,7 @@ beforeAll(() => {
     async importContent(ctx) {
       const f = await ctx.payload(ctx.node.content!.file as ManifestPayload, ctx.name)
       const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, FILE, ctx.name)
-      created[created.length - 1].bytes = await f.text()
+      created[created.length - 1].bytes = await textOf(f)
       return { nodeId: made.nodeId, nodeKey: made.contentKey }
     },
   })
@@ -54,7 +57,7 @@ beforeAll(() => {
     async importContent(ctx) {
       const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, ALBUM, ctx.name)
       const bodies: string[] = []
-      for (const ref of ctx.node.content!.files as ManifestPayload[]) bodies.push(await (await ctx.payload(ref, 'x')).text())
+      for (const ref of ctx.node.content!.files as ManifestPayload[]) bodies.push(await textOf(await ctx.payload(ref, 'x')))
       created[created.length - 1].bytes = bodies.join(',')
       return { nodeId: made.nodeId, nodeKey: made.contentKey }
     },

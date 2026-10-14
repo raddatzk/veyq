@@ -133,6 +133,32 @@ describe('the move browser: what a member is offered', () => {
   })
 })
 
+describe('the browser for a copy (uc.platform.copy-node): the current place is allowed, the node and its inside are not', () => {
+  const copyAt = (node: TreeNode, ats: (string | null)[]) =>
+    ats.map((at) => {
+      const block = moveHereBlock(member, [node], 'member', at, 'copy')
+      return `${at ?? 'ROOT'}${block ? `:${block}` : ''}`
+    })
+
+  it('a folder may be copied where it is (the copy is `Name (2)` there), never into itself or below it', () => {
+    const a = byId('a')
+    expect(copyAt(a, [null, 'home', 'b', 'a', 'a1'])).toEqual(['ROOT', 'home', 'b', 'a:self', 'a1:inside'])
+    expect(placesOf(movePlaces(member, [a], 'member', 'home')), 'itself listed, never to be opened').toEqual(['a:self', 'b'])
+  })
+
+  it('a chapter-like kind may be copied into its own ITEM, never where its placement does not reach; nothing into a guest\'s folder', () => {
+    expect(copyAt(byId('part'), ['item', 'item2', null, 'b'])).toEqual(['item', 'item2', 'ROOT:kind', 'b:kind'])
+    expect(copyAt(byId('a'), ['guest', 'inner'])).toEqual(['guest:identityFolder', 'inner:identityFolder'])
+  })
+
+  it('several: their own level is allowed; a place ANY of them holds is blocked, naming it', () => {
+    const [a, b] = [byId('a'), byId('b')]
+    expect(moveHereBlockOf(member, [a, b], 'member', 'home', 'copy')).toBeNull()
+    expect(moveHereBlockOf(member, [a, b], 'member', 'a1', 'copy')).toEqual({ block: 'inside', node: a })
+    expect(moveHereBlockOf(member, [a, b], 'member', 'home'), 'a move there is still refused').toEqual({ block: 'current', node: null })
+  })
+})
+
 describe('the move browser: what a guest is offered (its subtree, its folders)', () => {
   // A guest's view rooted at `home`: the served root carries parentId null; nothing above it exists.
   const sub = NODES.filter((x) => x.id !== 'item2').map((x) => (x.id === 'home' ? { ...x, parentId: null } : x))

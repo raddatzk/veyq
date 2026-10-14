@@ -33,6 +33,8 @@ describe('registerFiles', () => {
       contentSchema: { application: 'files', version: 1 },
       validateContent: validateFileContent,
       downloadsAsFile: true,
+      // its import reads the payload only by frame (the upload pump), so a copy hands it the original by frame (cr-copy-node)
+      importStreams: true,
       renameSelectionEnd: fileNameStemEnd,
       emptyInTrash: 'files.trashEmpty',
       nounWithArticle: 'files.aFile',
@@ -96,6 +98,8 @@ describe('registerFiles', () => {
       contentSchema: { application: 'files', version: 1 },
       validateContent: validateDropBoxContent,
       importsAsFolder: true,
+      // a copy makes it a plain folder too: its dialog names what stays behind (cr-copy-node Decision 4)
+      copyLosses: ['files.dropBox.copyLoss'],
     })
     expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
     expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding

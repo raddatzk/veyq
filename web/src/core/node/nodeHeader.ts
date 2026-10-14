@@ -31,17 +31,29 @@ export interface NodeHeaderAction {
 
 /** A core-owned action (e.g. a future favorite heart that every node gets, whatever its application): contributed by
  *  core next to the application's own, gated by a core capability function, never supplied by the application. */
+/** Where a core action goes among the application's: before them, after them, or right after the application's action of
+ *  that id (core's "Copy to…" beside "Move to…") - after them all where the application offers no such action. */
+export type CoreActionPlacement = 'before' | 'after' | { after: string }
+
 export interface CoreHeaderAction extends NodeHeaderAction {
-  /** Before or after the application's actions. Default `after`. */
-  placement?: 'before' | 'after'
+  /** Before or after the application's actions, or beside one of them. Default `after`. */
+  placement?: CoreActionPlacement
+}
+
+/** Core's contributions placed around (and beside) the application's list, stable order within each group: the one rule
+ *  of {@link mergeHeaderActions} and the level row's `mergeRowActions`. */
+export function placeCoreActions<A extends { id: string }, C extends A & { placement?: CoreActionPlacement }>(core: readonly C[], app: readonly A[]): A[] {
+  const before = core.filter((a) => a.placement === 'before')
+  const beside = (id: string) => core.filter((a) => typeof a.placement === 'object' && a.placement.after === id)
+  const ids = new Set(app.map((a) => a.id))
+  const after = core.filter((a) => a.placement === undefined || a.placement === 'after' || (typeof a.placement === 'object' && !ids.has(a.placement.after)))
+  return [...before, ...app.flatMap((a) => [a, ...beside(a.id)]), ...after]
 }
 
 /** The header's action row: core's contributions around the application's list (stable order within each group). This
  *  is where a core action plugs in — `NodeHeader` takes them as `coreActions`; no application change is needed. */
 export function mergeHeaderActions(core: readonly CoreHeaderAction[], app: readonly NodeHeaderAction[]): NodeHeaderAction[] {
-  const before = core.filter((a) => a.placement === 'before')
-  const after = core.filter((a) => a.placement !== 'before')
-  return [...before, ...app, ...after]
+  return placeCoreActions(core, app)
 }
 
 /** The four actions every container-like node shares, in their fixed order: share, rename, move, delete. */

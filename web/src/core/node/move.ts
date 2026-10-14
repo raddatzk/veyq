@@ -57,14 +57,20 @@ function withinMoved(tree: TreeSource, nodes: readonly MovedNode[], id: string):
   return null
 }
 
-/** Why `nodes` cannot be moved to the place `at` (null: the member's scope root), or null where they can. */
-export function moveHereBlock(tree: TreeSource, nodes: readonly MovedNode[], mode: Access['mode'], at: string | null): MoveBlock | null {
+/** What the browser places the nodes for: a move, or a copy (uc.platform.copy-node) - which may go where the nodes are
+ *  now (the copy is named `Name (2)` there), and never into itself or anything inside it, like a move. */
+export type PlaceIntent = 'move' | 'copy'
+
+/** Why `nodes` cannot be moved (or copied) to the place `at` (null: the member's scope root), or null where they can. */
+export function moveHereBlock(
+  tree: TreeSource, nodes: readonly MovedNode[], mode: Access['mode'], at: string | null, intent: PlaceIntent = 'move',
+): MoveBlock | null {
   if (at !== null) {
     const within = withinMoved(tree, nodes, at)
     if (within) return within
     if (tree.inIdentityFolder(at)) return 'identityFolder'
   }
-  if (nodes.length > 0 && nodes.every((n) => (n.parentId ?? null) === at)) return 'current'
+  if (intent === 'move' && nodes.length > 0 && nodes.every((n) => (n.parentId ?? null) === at)) return 'current'
   const kind = at === null ? null : (tree.node(at)?.kind ?? null)
   if (!nodes.every((n) => registry.placementAllows(n.kind, kind))) return 'kind'
   if (mode === 'guest' && kind !== FOLDER_KIND) return 'kind' // only a folder lets a guest's child in
@@ -74,11 +80,11 @@ export function moveHereBlock(tree: TreeSource, nodes: readonly MovedNode[], mod
 /** Why several `nodes` cannot be moved to `at`, and the node that blocks it (null where all of them are already there);
  *  null where the place takes them. A node that is already there blocks nothing: {@link planMove} leaves it out. */
 export function moveHereBlockOf<N extends MovedNode>(
-  tree: TreeSource, nodes: readonly N[], mode: Access['mode'], at: string | null,
+  tree: TreeSource, nodes: readonly N[], mode: Access['mode'], at: string | null, intent: PlaceIntent = 'move',
 ): { block: MoveBlock; node: N | null } | null {
-  if (nodes.length > 0 && nodes.every((n) => (n.parentId ?? null) === at)) return { block: 'current', node: null }
+  if (intent === 'move' && nodes.length > 0 && nodes.every((n) => (n.parentId ?? null) === at)) return { block: 'current', node: null }
   for (const node of nodes) {
-    const block = moveHereBlock(tree, [node], mode, at)
+    const block = moveHereBlock(tree, [node], mode, at, intent)
     if (block && block !== 'current') return { block, node }
   }
   return null

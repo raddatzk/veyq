@@ -94,6 +94,7 @@ import LevelRowItem from './components/LevelRowItem.vue'
 import LevelNotices from './components/LevelNotices.vue'
 import { standardNodeActions } from './nodeHeader'
 import { downloadHeaderActions, downloadRowActions } from '../export/downloadActions'
+import { copyHeaderActions, copyRowActions } from '../export/copyActions'
 import { isDownloadArchive } from '../export/importSubtree'
 import {
   directoryHoldsManifest, holdsManifest, readDroppedDirectory, type DirectoryInput, type DroppedDirectory, type DroppedEntry, type ImportOffer,
@@ -128,6 +129,9 @@ const emit = defineEmits<{
   deleteNodes: [nodes: SelectedForDelete[]]
   /** A node to download as a ZIP (ADR 0082): a row's, or the folder on screen. The host mounts core's `ExportSubtreeDialog`. */
   downloadNode: [node: TreeNode]
+  /** Nodes to copy elsewhere (uc.platform.copy-node): a row's, the folder on screen, or the copyable part of the level's
+   *  selection. The host mounts core's `CopyNodesDialog`. */
+  copyNodes: [nodes: TreeNode[]]
   /** A veyq download the member picked or dropped for an upload - a ZIP, or the download unpacked into a directory,
    *  recognised by its content (ADR 0082 decision 7): the host mounts core's `ImportSubtreeDialog` for it, under the folder
    *  on screen. A ZIP carries `uploadAsFile`, the way back to the ordinary upload. */
@@ -387,13 +391,22 @@ watch(levelItems, (now) => selection.retain(now.keys()))
 // (a kind nobody draws) gets none.
 // The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" /
 // cover" / "Remove cover" in the row's menu, gated by `coverCapabilities` (a writer, a kind that opted in; a guest none).
+// Core's "Copy to…" (uc.platform.copy-node) sits beside the application's "Move to…" in the row's menu, for a member only.
 const coreRowActions = (item: Item): CoreRowAction[] =>
-  item.unsupported ? [] : [...favoriteRowActions(t, props.access, item.node), ...cover.rowActions(item.node), ...downloadRowActions(t, props.access, item.node, () => emit('downloadNode', item.node))]
+  item.unsupported
+    ? []
+    : [
+        ...favoriteRowActions(t, props.access, item.node),
+        ...cover.rowActions(item.node),
+        ...copyRowActions(t, props.access, item.node, () => emit('copyNodes', [item.node])),
+        ...downloadRowActions(t, props.access, item.node, () => emit('downloadNode', item.node)),
+      ]
 // The folder on screen is a node too: its header carries the same heart and cover action (the scope root is no node and
 // has neither).
 const folderCoreActions = computed(() => [
   ...favoriteHeaderActions(t, props.access, props.folder),
   ...cover.headerActions(props.folder),
+  ...copyHeaderActions(t, props.access, props.folder, () => props.folder && emit('copyNodes', [props.folder])),
   ...downloadHeaderActions(t, props.access, props.folder, () => props.folder && emit('downloadNode', props.folder)),
 ])
 const folderCover = computed(() => (props.folder ? (cover.covers.value.get(props.folder.id) ?? null) : null))

@@ -14,7 +14,7 @@ import { blobApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import type { PresignedUrl } from '../../api/generated/blob'
 import type { ChunkProvider } from '../../sw/protocol'
-import type { BlobDeclare, BlobPlan, BlobRef, BlobRole, ChunkPut, ReservedUpload, WindowFn } from './types'
+import type { BlobDeclare, BlobPlan, BlobRef, BlobRole, BlobSource, ChunkPut, ReservedUpload, WindowFn } from './types'
 import { openBlobMetaOf, type BlobMeta, type OpenedBlobMeta } from './meta'
 
 /**
@@ -59,7 +59,7 @@ export const CHUNK_SIZE = v1.CHUNK_FRAME_SIZE.plaintextBytes
  *  sealed under that same `K_blob` (`blob-meta`, inbox #397) and declared with the blob — write-once, so it describes
  *  exactly these bytes; without it the plan, and so the declare, is what it was before the field (no randomness drawn). */
 export function planBlob(
-  scopeId: string, owner: { ownerId: string; role: BlobRole }, key: Uint8Array, source: Blob, meta?: BlobMeta,
+  scopeId: string, owner: { ownerId: string; role: BlobRole }, key: Uint8Array, source: BlobSource, meta?: BlobMeta,
 ): BlobPlan {
   const blobKey = v1.randomBytes(32)
   const blobId = crypto.randomUUID()
@@ -283,10 +283,17 @@ export function makeChunkProvider(
   const blobKey = unwrapBlobKey(scopeId, key, ref)
   let urls: string[] | undefined
   let issuedAt = 0
+  // ONE presign in flight: readers that ask at once - the upload pump's workers reading a copy's original by frame
+  // (cr-copy-node), the Service Worker's parallel ranges - share it instead of each presigning the whole blob.
+  let presigning: Promise<string[]> | null = null
   async function freshUrls(force: boolean): Promise<string[]> {
     if (force || !urls || Date.now() - issuedAt > PRESIGN_REFRESH_MS) {
-      urls = await presignAll()
-      issuedAt = Date.now()
+      presigning ??= presignAll().then((fresh) => {
+        urls = fresh
+        issuedAt = Date.now()
+        return fresh
+      }).finally(() => { presigning = null })
+      return presigning
     }
     return urls
   }

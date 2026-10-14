@@ -33,7 +33,8 @@ export type ExportResult = { nodes: number; payloads: number; bytes: number; ski
 
 export type ExportProgress = { bytesDone: number; bytesTotal: number }
 
-type Pending = { ref: ManifestPayload; source: ExportPayloadSource }
+/** One declared payload: the manifest's reference to it and where its bytes come from. */
+export type Pending = { ref: ManifestPayload; source: ExportPayloadSource }
 
 export type PrepareExportParams = {
   /** Who downloads (a member, or a READ / READ_WRITE guest). */
@@ -66,10 +67,21 @@ const cancelled = (signal?: AbortSignal): never => {
 /** The scope a session's seals bind: a member's own, a guest's the link's. */
 export const scopeOfAccess = (access: Access): string => (access.mode === 'member' ? access.scopeId : access.head.scopeId)
 
-/** Walk the subtree and run every kind's hook, so the size and the report are known BEFORE the member picks a place to save
- *  (the save picker needs the click's user activation, which a long walk would have used up). */
-export async function prepareExport(params: PrepareExportParams): Promise<PreparedExport> {
-  const { access, tree, rootId, appVersion, signal } = params
+/** A walked subtree, nothing written: the manifest's root (its payloads only DECLARED - no `sha256` yet), each payload with
+ *  its source in tree order, the directories, what was left out, and the applications it carries. What a download writes
+ *  into a ZIP ({@link prepareExport}) and what a copy replays under its destination (`copySubtree.ts`). */
+export type WalkedSubtree = {
+  root: ManifestNode
+  payloads: Pending[]
+  directories: string[]
+  skipped: SkippedNode[]
+  applications: Map<string, number>
+  nodes: number
+}
+
+/** Walk the subtree under `rootId` as the session reads it, running every kind's export hook (see the header). */
+export async function walkSubtree(params: Omit<PrepareExportParams, 'appVersion' | 'now'>): Promise<WalkedSubtree> {
+  const { access, tree, rootId, signal } = params
   const scopeId = scopeOfAccess(access)
   const root = tree.node(rootId)
   const rootKey = root ? tree.keyOf(rootId) : null
@@ -146,7 +158,14 @@ export async function prepareExport(params: PrepareExportParams): Promise<Prepar
   // The archive's root holds the exported node and `.veyq/`; no node takes the manifest directory's name.
   const built = await build(root, rootKey, null, new Set([MANIFEST_DIR]))
   if (!built) throw new ExportError('nothing_to_import', 'nothing to download under this node')
-  const exportedRoot: ManifestNode = built
+  return { root: built, payloads: pending, directories, skipped, applications, nodes }
+}
+
+/** Walk the subtree and run every kind's hook, so the size and the report are known BEFORE the member picks a place to save
+ *  (the save picker needs the click's user activation, which a long walk would have used up). */
+export async function prepareExport(params: PrepareExportParams): Promise<PreparedExport> {
+  const { signal } = params
+  const { root: exportedRoot, payloads: pending, directories, skipped, applications, nodes } = await walkSubtree(params)
 
   const bytesTotal = pending.reduce((sum, p) => sum + p.source.size, 0)
   async function write(sink: ByteSink, onProgress?: (p: ExportProgress) => void): Promise<void> {
@@ -172,7 +191,7 @@ export async function prepareExport(params: PrepareExportParams): Promise<Prepar
         format: MANIFEST_FORMAT,
         version: MANIFEST_VERSION,
         exportedAt: (params.now ?? (() => new Date()))().toISOString(),
-        appVersion,
+        appVersion: params.appVersion,
         applications: [...applications].map(([id, contentSchema]): ManifestApplication => ({ id, contentSchema })),
         root: exportedRoot,
       }

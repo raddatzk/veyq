@@ -52,6 +52,10 @@ export function registerMemories(registry: Registry): void {
     exportContent: exportMemoryContent,
     contentSchema: MEMORIES_CONTENT_SCHEMA,
     validateContent: validateMemoryContent,
+    // What a copy or an import does not carry of a Memory (core's copy dialog lists it). No `importStreams`: the import
+    // decodes each original whole to derive its tiers, so a copy leaves Memories out and names them (cr-copy-node
+    // Decision 3, handed back).
+    copyLosses: ['memory.copyLoss'],
   }
   // Where each may be moved (core's move dialog, inbox #358) mirrors the backend's `MemoryNodeKindRules`: a Memory at the
   // root or in a folder, a chapter only directly in a Memory.

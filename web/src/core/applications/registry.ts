@@ -209,6 +209,15 @@ export interface KindDescriptor {
    *  the node's name and its children under it, and needs no `importContent`. Its content is still checked
    *  (`validateContent`) and still names its application and version (`contentSchema`); the manifest keeps the kind it was. */
   importsAsFolder?: boolean
+  /** This kind's `importContent` reads each payload only by `slice(...).arrayBuffer()` - as the upload pump does - so a copy
+   *  (ADR 0082 Addendum 2) can hand it the original read by frame, never held whole (cr-copy-node Decision 3). Absent: a
+   *  copy leaves a node of this kind out, with its subtree, and names it before anything is written - fail closed, so a kind
+   *  whose import needs its bytes as a real `Blob` (to decode them) is never handed a file it would have to buffer. */
+  importStreams?: boolean
+  /** What a copy (and an import) of a node of this kind does not carry beyond core's own list (shares, favourites, the
+   *  trash, server-observed times): i18n keys of the application's OWN namespace, which core's copy dialog lists where a
+   *  copied node is of this kind (uc.platform.copy-node, "What a copy does not carry"). */
+  copyLosses?: readonly string[]
 }
 
 /** What a kind that carries a cover may add to core's mechanism (inbox #411). Core reads one source, the uploaded image; a
@@ -351,6 +360,8 @@ export interface NodeDetailEmits {
   move: [node: TreeNode]
   /** Download the opened node and its subtree as a ZIP (ADR 0082): the host mounts core's `ExportSubtreeDialog`. */
   download: []
+  /** Copy the opened node and its subtree elsewhere (uc.platform.copy-node): the host mounts core's `CopyNodesDialog`. */
+  copy: []
   createChild: [kind: NodeKind]
   openNode: [node: TreeNode]
   share: []
@@ -531,7 +542,7 @@ export function createRegistry(): Registry {
     // A folder lives at the root or in another folder (the server's `FolderNodeRules`).
     [FOLDER_KIND, {
       kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true, shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
-      placement: { root: true, parents: [FOLDER_KIND] }, cover: {},
+      placement: { root: true, parents: [FOLDER_KIND] }, cover: {}, copyLosses: ['node.copy.lossFolderCover'],
     }],
   ])
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()

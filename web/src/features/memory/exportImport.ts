@@ -19,7 +19,9 @@
 // link reads. A guest's download carries no names - not the participants, not the contributors - because a guest never
 // reads the tenant's member directory; and no EXIF copy, which the link does not serve.
 import { iterateBlob } from '../../core/blob/stream'
-import type { ExportContentHook, ExportNodeContext, ImportContentHook, ImportNodeContext } from '../../core/export/hooks'
+import type { ExportContentHook, ExportNodeContext, ImportContentHook, ImportNodeContext, PayloadFile } from '../../core/export/hooks'
+import { framesOfBytes } from '../../core/export/copySource'
+import { CHUNK_SIZE } from '../../core/blob/transport'
 import type { ContentProblem } from '../../core/applications/registry'
 import type { ManifestContent, ManifestPayload } from '../../core/export/manifest'
 import { loadTenantPeople } from '../../core/people/directory'
@@ -100,6 +102,7 @@ export const exportMemoryContent: ExportContentHook = async (ctx) => {
       // The upload falls back to the modified time for a capture time the file lacks: carry the capture time there.
       modifiedAt: captured ?? (typeof blobMeta?.modifiedAt === 'number' ? blobMeta.modifiedAt : undefined),
       chunks: () => iterateBlob(provider, { signal: ctx.signal }),
+      frames: { frameSize: CHUNK_SIZE, chunkCount: provider.chunkCount, getPlaintextChunk: (i) => provider.getPlaintextChunk(i) },
     })
     const medium: ExportedMedium = { file, name }
     if (captured !== undefined) medium.capturedAt = new Date(captured).toISOString()
@@ -139,7 +142,7 @@ async function coverOf(
   }
   const bytes = await source.loaders.coverBlob(cover.source.ref, ctx.nodeKey).catch(() => null)
   if (!bytes) return undefined
-  const file = ctx.addPayload('cover.jpg', { size: bytes.length, mediaType: 'image/jpeg', chunks: async function* () { yield bytes } })
+  const file = ctx.addPayload('cover.jpg', { size: bytes.length, mediaType: 'image/jpeg', chunks: async function* () { yield bytes }, frames: framesOfBytes(bytes) })
   return { file, crop: cover.crop }
 }
 
@@ -202,6 +205,13 @@ export function validateMemoryContent(content: ManifestContent): ContentProblem 
   return null
 }
 
+/** A payload as the real `Blob` the upload decodes (the derivatives, the dimensions): a download's always is one. A copy's
+ *  original read by frame is not, and these kinds do not declare `importStreams`, so a copy never hands one in. */
+function wholePayload(file: PayloadFile): File {
+  if (!(file instanceof Blob)) throw new Error('import_needs_whole_payload')
+  return file as File
+}
+
 const isoToMs = (v: unknown): number | undefined => {
   const t = typeof v === 'string' ? Date.parse(v) : NaN
   return Number.isFinite(t) ? t : undefined
@@ -227,7 +237,7 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
     const added: { mediaId: string; medium: ExportedMedium }[] = []
     for (const medium of media) {
       if (ctx.signal?.aborted) throw ctx.signal.reason ?? new DOMException('Import cancelled', 'AbortError')
-      const file = await ctx.payload(medium.file, medium.name ?? 'file')
+      const file = wholePayload(await ctx.payload(medium.file, medium.name ?? 'file'))
       const before = done
       const { mediaId } = await addMedia(
         ctx.scopeId, nodeId, nodeKey, { blob: file, mediaType: medium.file.mediaType, lastModified: file.lastModified, name: file.name },
@@ -271,7 +281,7 @@ async function restoreCover(ctx: ImportNodeContext, nodeId: string, nodeKey: Uin
     await writeNodeCover({ scopeId: ctx.scopeId, nodeId, nodeKey, current, cover: memoryPhotoSource.seal(mediaId, readCover({ crop }, nodeId)!.crop), surfaceConflict: false })
     return
   }
-  const file = await ctx.payload(cover.file, 'cover')
+  const file = wholePayload(await ctx.payload(cover.file, 'cover'))
   const { uploadId, plan } = await uploadCoverImage(ctx.scopeId, nodeId, nodeKey, { blob: file, mediaType: cover.file.mediaType, name: 'cover' }, undefined, { signal: ctx.signal })
   await writeNodeCover({ scopeId: ctx.scopeId, nodeId, nodeKey, current, cover: uploadedCover(plan, readCover({ crop }, nodeId)!.crop), uploadId, surfaceConflict: false })
 }

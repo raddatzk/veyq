@@ -936,6 +936,55 @@ const en = {
     },
     // Core's move dialog (`core/node/MoveNodeDialog.vue`, inbox #358): pick a destination, then the placement write.
     // Each refusal the server answers is explained by its code (`refused.<code>`, `core/node/move.ts` `moveRefusalOf`).
+    // "Copy to…" (uc.platform.copy-node, `core/export/CopyNodesDialog.vue`): the move's browser with "Copy here", then what the
+    // copy creates, what it leaves out and what does not come along; `reason` names why a node is left out.
+    copy: {
+      action: 'Copy to…',
+      title: 'Copy “{name}”',
+      hint: 'Open the place the copy should go to and choose “Copy here”. Everything inside it is copied along.',
+      submit: 'Copy here',
+      preparing: 'Collecting what is in it…',
+      summary: '{nodes} item, {size}, will be copied to “{target}”. | {nodes} items, {size}, will be copied to “{target}”.',
+      nothing: 'Nothing here can be copied by this version of veyq.',
+      walkFailed: 'What is in it could not be read. Nothing was copied.',
+      leftOut: 'Left out, because this version cannot copy them:',
+      leftOutLine: '“{name}”: {reason}',
+      reason: {
+        unsupported_kind: 'not supported',
+        nothing_to_export: 'nothing in it',
+        unknown_application: 'not supported',
+        newer_content: 'not supported',
+        not_copyable: 'cannot be copied yet',
+      },
+      losses: 'What does not come along:',
+      lossAlways: 'Shares, favourites, the trash and the original upload times. You become the owner of the copy.',
+      lossFolderCover: 'A folder’s cover.',
+      notice: 'Everything is copied on this device and stored again: a large folder takes as long as uploading it and uses its space twice.',
+      noRoom: 'There is not enough storage space for this copy ({size}). Free some space, or ask whoever runs your space.',
+      copying: 'Copying… {done} of {total} items',
+      copied: '“{name}” copied to “{to}”.',
+      copiedLeftOut: 'Left out: {names}.',
+      failed: 'The copy stopped after {done} of {total} items. What was created has been moved to the trash.',
+      failedLeft: 'The copy stopped after {done} of {total} items and what was created could not be removed. Look in “{to}” and delete it.',
+      quota: 'There is not enough storage space for this copy.',
+      here: {
+        self: 'It can’t be copied into itself.',
+        inside: 'It can’t be copied into something inside it.',
+        identityFolder: 'Nothing can be copied into a guest’s folder.',
+        kind: 'This place can’t hold it.',
+      },
+      many: {
+        title: 'Copy {count} items',
+        hint: 'Open the place the copies should go to and choose “Copy here”. Everything inside them is copied along.',
+        copied: '{count} copied to “{to}”.',
+        here: {
+          self: '“{name}” can’t be copied into itself.',
+          inside: '“{name}” can’t be copied into something inside it.',
+          identityFolder: 'Nothing can be copied into a guest’s folder.',
+          kind: 'This place can’t hold “{name}”.',
+        },
+      },
+    },
     move: {
       action: 'Move to…',
       title: 'Move “{name}”',
@@ -1020,6 +1069,8 @@ const en = {
     },
   },
   memory: {
+    // What a copy or an import of a Memory does not carry (core's copy dialog lists it, `copyLosses`).
+    copyLoss: 'Who was there, and who added each photo.',
     memories: 'Memories',
     memoryEmpty: 'No Memories here yet.',
     // The noun that leads a row's meta line in the unified level list (inbox #407): "Memory · 1 Jun – 30 Jun 2024".
@@ -1323,6 +1374,8 @@ const en = {
     },
     // The drop box (cr-files-application F3): a member's section, detail, create and share dialogs; a guest's page.
     dropBox: {
+      // What a copy of a drop box does not carry (core's copy dialog lists it, `copyLosses`).
+      copyLoss: 'A drop box becomes an ordinary folder, its people’s folders ordinary folders: no links, nobody can drop files into it, no cover.',
       section: 'Drop boxes',
       // A drop box's row meta line: "Drop box · 3 people" (the guests who have a folder in it).
       kind: 'Drop box',
@@ -2516,6 +2569,53 @@ const de: typeof en = {
       cannotMove: '{n} von {m} kann nicht verschoben werden. | {n} von {m} können nicht verschoben werden.',
       cannotDelete: '{n} von {m} kann nicht gelöscht werden. | {n} von {m} können nicht gelöscht werden.',
     },
+    copy: {
+      action: 'Kopieren nach …',
+      title: '„{name}“ kopieren',
+      hint: 'Öffne den Ort, an den die Kopie soll, und wähle „Hierher kopieren“. Alles darin wird mitkopiert.',
+      submit: 'Hierher kopieren',
+      preparing: 'Sammle, was darin ist …',
+      summary: '{nodes} Eintrag, {size}, wird nach „{target}“ kopiert. | {nodes} Einträge, {size}, werden nach „{target}“ kopiert.',
+      nothing: 'Hier kann diese Version von veyq nichts kopieren.',
+      walkFailed: 'Was darin ist, ließ sich nicht lesen. Nichts wurde kopiert.',
+      leftOut: 'Ausgelassen, weil diese Version sie nicht kopieren kann:',
+      leftOutLine: '„{name}“: {reason}',
+      reason: {
+        unsupported_kind: 'nicht unterstützt',
+        nothing_to_export: 'nichts darin',
+        unknown_application: 'nicht unterstützt',
+        newer_content: 'nicht unterstützt',
+        not_copyable: 'lässt sich noch nicht kopieren',
+      },
+      losses: 'Was nicht mitkommt:',
+      lossAlways: 'Freigaben, Favoriten, der Papierkorb und die ursprünglichen Hochladezeiten. Die Kopie gehört dir.',
+      lossFolderCover: 'Das Titelbild eines Ordners.',
+      notice: 'Alles wird auf diesem Gerät kopiert und neu gespeichert: Ein großer Ordner braucht so lange wie sein Hochladen und belegt seinen Platz doppelt.',
+      noRoom: 'Für diese Kopie ist nicht genug Speicherplatz frei ({size}). Schaffe Platz oder frag, wer deinen Bereich betreibt.',
+      copying: 'Kopiere … {done} von {total} Einträgen',
+      copied: '„{name}“ nach „{to}“ kopiert.',
+      copiedLeftOut: 'Ausgelassen: {names}.',
+      failed: 'Das Kopieren hat nach {done} von {total} Einträgen aufgehört. Was schon angelegt war, liegt jetzt im Papierkorb.',
+      failedLeft: 'Das Kopieren hat nach {done} von {total} Einträgen aufgehört, und was schon angelegt war, ließ sich nicht entfernen. Sieh in „{to}“ nach und lösche es.',
+      quota: 'Für diese Kopie ist nicht genug Speicherplatz frei.',
+      here: {
+        self: 'Es kann nicht in sich selbst kopiert werden.',
+        inside: 'Es kann nicht in etwas kopiert werden, das darin liegt.',
+        identityFolder: 'In den Ordner einer Person lässt sich nichts kopieren.',
+        kind: 'Dieser Ort kann es nicht aufnehmen.',
+      },
+      many: {
+        title: '{count} Einträge kopieren',
+        hint: 'Öffne den Ort, an den die Kopien sollen, und wähle „Hierher kopieren“. Alles darin wird mitkopiert.',
+        copied: '{count} nach „{to}“ kopiert.',
+        here: {
+          self: '„{name}“ kann nicht in sich selbst kopiert werden.',
+          inside: '„{name}“ kann nicht in etwas kopiert werden, das darin liegt.',
+          identityFolder: 'In den Ordner einer Person lässt sich nichts kopieren.',
+          kind: 'Dieser Ort kann „{name}“ nicht aufnehmen.',
+        },
+      },
+    },
     move: {
       action: 'Verschieben nach …',
       title: '„{name}“ verschieben',
@@ -2589,6 +2689,7 @@ const de: typeof en = {
     },
   },
   memory: {
+    copyLoss: 'Wer dabei war und wer welches Foto hinzugefügt hat.',
     memories: 'Erinnerungen',
     memoryEmpty: 'Hier gibt es noch keine Erinnerungen.',
     kindMemory: 'Erinnerung',
@@ -2858,6 +2959,7 @@ const de: typeof en = {
       replaceFileConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Link haben, auch für die Person, der die Datei gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
     },
     dropBox: {
+      copyLoss: 'Ein Briefkasten wird ein gewöhnlicher Ordner, die Ordner der Personen darin gewöhnliche Ordner: keine Links, niemand kann mehr einwerfen, kein Titelbild.',
       section: 'Briefkästen',
       kind: 'Briefkasten',
       people: 'Noch niemand | 1 Person | {count} Personen',

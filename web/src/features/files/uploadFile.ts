@@ -30,6 +30,7 @@ import { createContentNode, deleteNode, type NodeParent } from '../../core/node/
 import { planBlob, reserveAndPump, authedReserve, authedWindow, throwIfAborted } from '../../core/blob/transport'
 import type { UploadBatch, UploadJob, UploadJobContext } from '../../core/blob/queue'
 import type { BlobMeta } from '../../core/blob/meta'
+import type { PayloadFile } from '../../core/export/hooks'
 import { expectMintedId } from '../../core/node/mintedId'
 import type { EpochKeys } from '../spaces/epochs'
 import { withRefresh } from '../../app/sessionRefresh'
@@ -60,7 +61,7 @@ export class StaleFileError extends Error {
 
 /** The blob meta a picked file is uploaded with: its type as the browser reports it (may be ''), its name and its
  *  modified time (`File.lastModified`). Sealed under the blob's `K_blob` by core's `planBlob`, member and guest alike. */
-export function fileBlobMeta(file: File): BlobMeta {
+export function fileBlobMeta(file: Pick<PayloadFile, 'type' | 'name' | 'lastModified'>): BlobMeta {
   return { type: file.type, name: file.name, modifiedAt: file.lastModified }
 }
 
@@ -141,9 +142,10 @@ export function deliveredSince(batches: readonly UploadBatch[]): Set<string> {
 /**
  * One queue job for one picked file into `target` (see the header for its three steps). The job's `run` may be called
  * again by the queue's automatic retry and by the member's retry: it reuses a node it created and rethrows a final
- * refusal without touching the network.
+ * refusal without touching the network. `file` is a picked `File`, or a copy's original read by frame (`PayloadFile`): it
+ * is read only by the pump's frame-sized slices.
  */
-export function fileUploadJob(target: FileUploadTarget, file: File): UploadJob<FileUploadResult, FileJobExtra> {
+export function fileUploadJob<F extends PayloadFile = File>(target: FileUploadTarget, file: F): UploadJob<FileUploadResult, { file: F; replaceNodeId?: string }> {
   const { scopeId } = target
   let node: { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null } | null =
     target.replace ? { ...target.replace } : null

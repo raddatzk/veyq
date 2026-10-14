@@ -34,6 +34,7 @@ import { fileChunkProvider, fileFacts } from './download'
 import { fileUploadJob, type FileUploadTarget } from './uploadFile'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { FILES_DROPBOX_CONTENT } from './exportImport'
+import type { PayloadFile } from '../../core/export/hooks'
 
 if (!registry.kind(DROPBOX_KIND).supported) registerFiles(registry)
 
@@ -115,10 +116,10 @@ describe('a drop box as a download', () => {
     let n = 0
     vi.mocked(createContentNode).mockImplementation(async () => ({ nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(n) }))
     const uploaded: { parent: string | undefined; name: string; body: string }[] = []
-    vi.mocked(fileUploadJob).mockImplementation((target: FileUploadTarget, file: File) => ({
+    vi.mocked(fileUploadJob).mockImplementation((target: FileUploadTarget, file: PayloadFile) => ({
       name: file.name, sizeBytes: file.size, extra: { file },
       run: async () => {
-        uploaded.push({ parent: target.parent?.id, name: file.name, body: await file.text() })
+        uploaded.push({ parent: target.parent?.id, name: file.name, body: new TextDecoder().decode(await file.slice(0, file.size).arrayBuffer()) })
         return { nodeId: `file-${file.name}` }
       },
     }))

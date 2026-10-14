@@ -25,12 +25,23 @@ export type BlobRef = {
 }
 
 /**
+ * What the pump reads a blob's plaintext from: a `Blob` (a picked `File`, a slice of a ZIP), or a source that answers a
+ * byte range on demand without holding the whole (a copy reads its original by chunk, `core/export/copySource.ts`).
+ * The pump only ever asks `slice(start, end).arrayBuffer()` of one frame at a time, and the size.
+ */
+export interface BlobSource {
+  readonly size: number
+  readonly type: string
+  slice(start?: number, end?: number, contentType?: string): { arrayBuffer(): Promise<ArrayBuffer> }
+}
+
+/**
  * A blob about to be uploaded: its plaintext source, a fresh `K_blob` (with its wrap under the owner's key) and the
  * shape the frame size fixes. Nothing is sealed yet — the pump seals frame `i` from `source.slice` when it is about
  * to send it, so the client never holds the whole file, nor its sealed copy (ADR 0013 Consequences).
  */
 export type BlobPlan = {
-  source: Blob
+  source: BlobSource
   blobKey: Uint8Array
   wrappedBlobKey: string
   chunkCount: number

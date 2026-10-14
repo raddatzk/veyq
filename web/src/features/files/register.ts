@@ -76,6 +76,7 @@ export function registerFiles(registry: Registry): void {
     contentSchema: FILES_CONTENT_SCHEMA,
     validateContent: validateFileContent,
     downloadsAsFile: true,
+    importStreams: true,
     renameSelectionEnd: fileNameStemEnd,
     // A trashed file that holds no blob is one whose upload never finished (inbox #391): core's trash says so.
     emptyInTrash: 'files.trashEmpty',
@@ -124,6 +125,7 @@ export function registerFiles(registry: Registry): void {
     contentSchema: FILES_CONTENT_SCHEMA,
     validateContent: validateDropBoxContent,
     importsAsFolder: true,
+    copyLosses: ['files.dropBox.copyLoss'],
   })
   registry.claimShareBody(DROPBOX_KIND, DropBoxShareBody)
   // Files is the one application with NO route segment (inbox #328, ADR 0015 amendment): a file or a drop box is its plain

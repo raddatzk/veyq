@@ -25,6 +25,7 @@ import {
   ExportError, MANIFEST_MAX_BYTES, MANIFEST_PATH, MANIFEST_PATH_V1, applicationOf, collectPayloads, isSafePayloadPathV1, parseManifest,
   type Manifest, type ManifestNode, type ManifestPayload,
 } from './manifest'
+import type { PayloadFile } from './hooks'
 
 export type OpenedExport = { source: ImportSource; manifest: Manifest }
 
@@ -112,8 +113,9 @@ export async function openExport(input: ImportInput): Promise<OpenedExport> {
   return { source, manifest }
 }
 
-/** Why the dry run leaves a node (and its subtree) out. */
-export type SkipReason = 'unknown_application' | 'newer_content'
+/** Why the dry run leaves a node (and its subtree) out: an application this build does not have, content newer than it
+ *  reads, or - in a copy - a kind whose import cannot take the original read by frame (`KindDescriptor.importStreams`). */
+export type SkipReason = 'unknown_application' | 'newer_content' | 'not_copyable'
 
 /** A subtree the import leaves out: its top node, and how many nodes it holds. */
 export type SkippedSubtree = { name: string; kind: string; application: string; reason: SkipReason; nodes: number }
@@ -149,16 +151,34 @@ function skipReason(n: ManifestNode, manifest: Manifest): { application: string;
   return null
 }
 
+/** How a dry run reads its manifest. */
+export type PlanOptions = {
+  /** The manifest came from outside (a download, decision 10): each kind checks its content. Default true; a copy's
+   *  manifest is the member's own tree as the walk read it, so nothing is checked (cr-copy-node Decision 2). */
+  untrusted?: boolean
+  /** A further reason to leave a node out (a copy's: a kind that cannot take a payload read by frame). */
+  leaveOut?: (n: ManifestNode) => SkipReason | null
+}
+
+/** Why `n` is left out (with its subtree), by this build and by the caller's own rule; null where it is created. */
+export const leftOutWhy = (n: ManifestNode, manifest: Manifest, options: PlanOptions): { application: string; reason: SkipReason } | null => {
+  const skip = skipReason(n, manifest)
+  if (skip) return skip
+  const reason = options.leaveOut?.(n) ?? null
+  return reason ? { application: n.content ? applicationOf(n.content.type) : n.kind, reason } : null
+}
+
 /**
  * The dry run: what an import would create and how many payload bytes it would upload, from the manifest alone, with every
  * subtree this build cannot import listed (decision 9). Each importable node's content is checked by its kind
  * (`validateContent`), so a manifest whose content is not its kind's shape is refused here, before anything is written.
  * @throws ExportError `invalid_manifest` / `too_large` (from a kind's check)
  */
-export function planImport(manifest: Manifest): ImportPlan {
+export function planImport(manifest: Manifest, options: PlanOptions = {}): ImportPlan {
+  const untrusted = options.untrusted ?? true
   const plan: ImportPlan = { nodes: 0, bytes: 0, skipped: [], groups: [] }
   const walk = (n: ManifestNode) => {
-    const skip = skipReason(n, manifest)
+    const skip = leftOutWhy(n, manifest, options)
     if (skip) {
       const nodes = countNodes(n)
       plan.skipped.push({ name: n.name, kind: n.kind, ...skip, nodes })
@@ -167,7 +187,7 @@ export function planImport(manifest: Manifest): ImportPlan {
       else plan.groups.push({ ...skip, nodes })
       return
     }
-    if (n.kind !== FOLDER_KIND) {
+    if (untrusted && n.kind !== FOLDER_KIND) {
       const d = registry.kind(n.kind)
       const problem = d.supported && d.validateContent && n.content ? d.validateContent(n.content) : null
       if (problem) throw new ExportError(problem.code, `${n.id}: ${problem.message}`, n.name)
@@ -185,7 +205,7 @@ export type ImportProgress = { nodesDone: number; nodesTotal: number; bytesDone:
 export type ImportResult = { nodeId: string; nodes: number; skipped: SkippedSubtree[] }
 
 /** An import that stopped part-way: `done` of `total` nodes were created, and what it had created was trashed
- *  (`rolledBack`; false when even that failed - the top-level node is then still in the target, named in `leftover`). */
+ *  (`rolledBack`; false when even that failed - a top-level node is then still in the target, named in `leftover`). */
 export class ImportFailed extends Error {
   constructor(readonly done: number, readonly total: number, readonly rolledBack: boolean, readonly leftover: string | null, readonly cause: unknown) {
     super(`import stopped after ${done} of ${total}`)
@@ -204,28 +224,70 @@ export type ImportSubtreeParams = {
   onProgress?: (p: ImportProgress) => void
 }
 
+/** Hands an import hook one payload of its manifest (`ImportNodeContext.payload`). */
+export type PayloadResolver = (ref: ManifestPayload, fileName: string) => Promise<PayloadFile>
+
+/** One subtree to replay: its manifest, where its payloads come from, and how its dry run reads it. */
+export type ReplayItem = { manifest: Manifest; payload: PayloadResolver; plan?: PlanOptions }
+
+export type ReplayParams = Omit<ImportSubtreeParams, 'opened'> & { items: readonly ReplayItem[] }
+
+/** What a replay created: the top node of each subtree, in order, how many nodes, and what it left out. */
+export type ReplayResult = { nodeIds: string[]; nodes: number; skipped: SkippedSubtree[] }
+
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 const MAX_NAME_TRIES = 50
 
 /** The kind an import creates for `n`: its own, or a plain `FOLDER` for a kind that imports as one (a drop box). */
-const createdKind = (n: ManifestNode): string => {
+export const createdKind = (n: { kind: string }): string => {
   if (n.kind === FOLDER_KIND) return FOLDER_KIND
   const d = registry.kind(n.kind)
   return d.supported && d.importsAsFolder ? FOLDER_KIND : n.kind
 }
 
+/** The payload resolver of a download (decision 10): the path checked, the size the manifest says, and its SHA-256 (and a
+ *  ZIP entry's CRC) verified by one pass over its bytes BEFORE a hook uploads it, then handed out as a lazy `File`. */
+function archivePayload(opened: OpenedExport, signal?: AbortSignal): PayloadResolver {
+  const { source, manifest } = opened
+  return async (ref, fileName) => {
+    if (!(manifest.version === 1 ? isSafePayloadPathV1(ref.path) : isArchivePath(ref.path))) throw new ExportError('unsafe_path', 'unsafe payload path', ref.path)
+    const size = source.size(ref.path)
+    if (size === undefined) throw new ExportError('payload_missing', `the download lacks ${ref.path}`, ref.path)
+    if (size !== ref.size) throw new ExportError('size_mismatch', `${ref.path} is not the size the manifest says`, ref.path)
+    const hasher = v1.sha256Stream()
+    try {
+      for await (const chunk of source.stream(ref.path)) {
+        if (signal?.aborted) throw signal.reason ?? new DOMException('Import cancelled', 'AbortError')
+        hasher.update(chunk)
+      }
+    } catch (e) {
+      throw asExportError(e, ref.path)
+    }
+    if (ref.sha256 && hex(hasher.digest()) !== ref.sha256) throw new ExportError('checksum', `${ref.path} does not match its checksum`, ref.path)
+    return new File([source.blob(ref.path, ref.mediaType)], fileName, { type: ref.mediaType, lastModified: ref.modifiedAt })
+  }
+}
+
 /** Import the rest: everything {@link planImport} does not leave out. Nothing is written when the plan holds nothing. */
 export async function importSubtree(params: ImportSubtreeParams): Promise<ImportResult> {
-  const { scopeId, epochs, tree, parent, opened, signal, onProgress } = params
-  const { source, manifest } = opened
-  const plan = planImport(manifest)
-  if (plan.nodes === 0) throw new ExportError('nothing_to_import', 'this build can import nothing in this download')
-  const leftOut = new Set<ManifestNode>()
-  const mark = (n: ManifestNode) => {
-    if (skipReason(n, manifest)) leftOut.add(n)
-    else n.children?.forEach(mark)
-  }
-  mark(manifest.root)
+  const { opened, ...rest } = params
+  const result = await replaySubtrees({ ...rest, items: [{ manifest: opened.manifest, payload: archivePayload(opened, params.signal) }] })
+  return { nodeId: result.nodeIds[0], nodes: result.nodes, skipped: result.skipped }
+}
+
+/**
+ * Re-create each item's subtree under `parent`, one after the other, through the kinds' import hooks: what an import does
+ * with a download, and what a copy does with the subtrees it walked (ADR 0082 Addendum 2). A name taken among the target's
+ * siblings - the tree's, and those this run created - gets `Name (2)`. A failure trashes every top-level node the run
+ * created (their subtrees go with them, ADR 0061) and reports how far it got.
+ * @throws ExportError `nothing_to_import` when the plans hold nothing (nothing is written); {@link ImportFailed} part-way.
+ */
+export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult> {
+  const { scopeId, epochs, tree, parent, items, signal, onProgress } = params
+  const plans = items.map((item) => planImport(item.manifest, item.plan))
+  const nodesTotal = plans.reduce((s, p) => s + p.nodes, 0)
+  const bytesTotal = plans.reduce((s, p) => s + p.bytes, 0)
+  if (nodesTotal === 0) throw new ExportError('nothing_to_import', 'this build can import nothing in this download')
 
   // slugs taken per parent: the target's siblings from the tree, a fresh folder's from what this run puts into it
   const taken = new Map<string | null, Set<string>>()
@@ -244,29 +306,11 @@ export async function importSubtree(params: ImportSubtreeParams): Promise<Import
 
   let nodesDone = 0
   let bytesDone = 0
-  const report = () => onProgress?.({ nodesDone, nodesTotal: plan.nodes, bytesDone, bytesTotal: plan.bytes })
+  const report = () => onProgress?.({ nodesDone, nodesTotal, bytesDone, bytesTotal })
   const cache = new Map<string, unknown>()
-  let top: string | null = null
+  const tops: string[] = []
 
-  async function payload(ref: ManifestPayload, fileName: string): Promise<File> {
-    if (!(manifest.version === 1 ? isSafePayloadPathV1(ref.path) : isArchivePath(ref.path))) throw new ExportError('unsafe_path', 'unsafe payload path', ref.path)
-    const size = source.size(ref.path)
-    if (size === undefined) throw new ExportError('payload_missing', `the download lacks ${ref.path}`, ref.path)
-    if (size !== ref.size) throw new ExportError('size_mismatch', `${ref.path} is not the size the manifest says`, ref.path)
-    const hasher = v1.sha256Stream()
-    try {
-      for await (const chunk of source.stream(ref.path)) {
-        if (signal?.aborted) throw signal.reason ?? new DOMException('Import cancelled', 'AbortError')
-        hasher.update(chunk)
-      }
-    } catch (e) {
-      throw asExportError(e, ref.path)
-    }
-    if (ref.sha256 && hex(hasher.digest()) !== ref.sha256) throw new ExportError('checksum', `${ref.path} does not match its checksum`, ref.path)
-    return new File([source.blob(ref.path, ref.mediaType)], fileName, { type: ref.mediaType, lastModified: ref.modifiedAt })
-  }
-
-  async function create(n: ManifestNode, at: NodeParent): Promise<{ nodeId: string; nodeKey: Uint8Array }> {
+  async function create(n: ManifestNode, at: NodeParent, payload: PayloadResolver): Promise<{ nodeId: string; nodeKey: Uint8Array }> {
     const parentId = at?.id ?? null
     const used = takenIn(parentId)
     let lastError: unknown = null
@@ -307,26 +351,37 @@ export async function importSubtree(params: ImportSubtreeParams): Promise<Import
     throw lastError ?? new ExportError('nothing_to_import', `no free name for ${n.name}`)
   }
 
-  async function walk(n: ManifestNode, at: NodeParent): Promise<string> {
+  async function walk(n: ManifestNode, at: NodeParent, item: ReplayItem, leftOut: Set<ManifestNode>, top: boolean): Promise<string> {
     if (signal?.aborted) throw signal.reason ?? new DOMException('Import cancelled', 'AbortError')
-    const made = await create(n, at)
-    if (top === null) top = made.nodeId
+    const made = await create(n, at, item.payload)
+    if (top) tops.push(made.nodeId)
     nodesDone++
     report()
     const here: NodeParent = { id: made.nodeId, key: made.nodeKey }
     for (const c of n.children ?? []) {
       if (leftOut.has(c)) continue // listed in the plan, named in the result
-      await walk(c, here)
+      await walk(c, here, item, leftOut, false)
     }
     return made.nodeId
   }
 
+  const nodeIds: string[] = []
+  const skipped = plans.flatMap((p) => p.skipped)
   try {
-    const nodeId = await walk(manifest.root, parent)
-    return { nodeId, nodes: nodesDone, skipped: plan.skipped }
+    for (const [i, item] of items.entries()) {
+      if (plans[i].nodes === 0) continue // its top itself is left out: listed in the plan
+      const leftOut = new Set<ManifestNode>()
+      const mark = (n: ManifestNode) => {
+        if (leftOutWhy(n, item.manifest, item.plan ?? {})) leftOut.add(n)
+        else n.children?.forEach(mark)
+      }
+      mark(item.manifest.root)
+      nodeIds.push(await walk(item.manifest.root, parent, item, leftOut, true))
+    }
+    return { nodeIds, nodes: nodesDone, skipped }
   } catch (e) {
-    let rolledBack = true
-    if (top !== null) await deleteNode(scopeId, top).catch(() => void (rolledBack = false))
-    throw new ImportFailed(nodesDone, plan.nodes, rolledBack, rolledBack ? null : top, e)
+    let leftover: string | null = null
+    for (const top of tops) await deleteNode(scopeId, top).catch(() => void (leftover ??= top))
+    throw new ImportFailed(nodesDone, nodesTotal, leftover === null, leftover, e)
   }
 }

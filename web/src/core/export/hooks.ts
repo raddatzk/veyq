@@ -3,9 +3,20 @@
 // (`KindDescriptor.exportContent` / `importContent`), beside `createEntry`, so core reaches an application only through
 // the registry (ADR 0079).
 import type { EpochKeys } from '../../features/spaces/epochs'
+import type { BlobSource } from '../blob/types'
 import type { Access, TreeSource } from '../access'
 import type { NodeParent, TreeNode } from '../node/tree'
 import type { ManifestContent, ManifestNode, ManifestPayload } from './manifest'
+
+/** A payload's plaintext by frame, in any order: frame `i` holds bytes `[i * frameSize, (i + 1) * frameSize)` of the payload, the
+ *  last one the rest (an empty payload is one empty frame). A stored blob's frames are the chunks its upload sealed (the
+ *  download's chunk provider, `CHUNK_SIZE` each); bytes already in memory are one frame. What a copy reads its original
+ *  through (`copySource.ts`), one frame at a time. */
+export type PlaintextFrames = {
+  readonly frameSize: number
+  readonly chunkCount: number
+  getPlaintextChunk(index: number): Promise<Uint8Array>
+}
 
 /** The bytes of one payload: its size is declared up front (the ZIP writer needs it), the chunks are produced on demand. */
 export type ExportPayloadSource = {
@@ -13,7 +24,16 @@ export type ExportPayloadSource = {
   mediaType: string
   modifiedAt?: number
   chunks: () => AsyncIterable<Uint8Array>
+  /** The same bytes by frame, for a reader that seeks (a copy, ADR 0082 Addendum 2). A payload without them cannot be
+   *  copied: the copy leaves its node out and names it before anything is written. */
+  frames?: PlaintextFrames
 }
+
+/** What an import hook is handed for a payload: a `File` (from a ZIP or a directory), or - in a copy - a source that reads
+ *  the original by frame on demand (`copySource.ts`). Either is read only by `slice(...).arrayBuffer()`, as the upload pump
+ *  reads; a hook that needs the bytes as a real `Blob` (to decode them) must check `instanceof Blob`, and its kind does not
+ *  declare `importStreams`. */
+export type PayloadFile = BlobSource & { readonly name: string; readonly lastModified: number }
 
 export type ExportNodeContext = {
   /** Who downloads: a member, or a `READ`/`READ_WRITE` share guest (ADR 0082 decision 5). A hook reads through that
@@ -43,8 +63,9 @@ export type ImportNodeContext = {
   /** The name to create it under: the exported name, made free among the target's siblings. */
   name: string
   node: ManifestNode
-  /** A payload as a seekable `File` named `fileName`, its checksum verified; refuses (throws) a payload that fails it. */
-  payload(ref: ManifestPayload, fileName: string): Promise<File>
+  /** A payload, seekable, named `fileName`: from a download its checksum verified first (refuses - throws - a payload that
+   *  fails it); in a copy the original read by frame, each frame checked against the size the walk declared. */
+  payload(ref: ManifestPayload, fileName: string): Promise<PayloadFile>
   signal?: AbortSignal
   /** Fraction of THIS node's bytes uploaded. */
   onProgress?: (fraction: number) => void

@@ -38,6 +38,7 @@ import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { downloadHeaderActions } from '../../../core/export/downloadActions'
+import { copyHeaderActions } from '../../../core/export/copyActions'
 import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import NodeCoverImage from '../../../core/node/cover/components/NodeCoverImage.vue'
 import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
@@ -57,6 +58,7 @@ const cover = useNodeCover(() => props.access, () => props.tree, () => [props.no
 const coreActions = computed(() => [
   ...favoriteHeaderActions(t, props.access, props.node),
   ...cover.headerActions(props.node),
+  ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
   ...downloadHeaderActions(t, props.access, props.node, () => emit('download')),
 ])
 const nodeCover = computed(() => cover.covers.value.get(props.node.id) ?? null)

@@ -15,6 +15,7 @@ import type { ByteSink } from '../blob/stream'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import { exportSubtree } from './exportSubtree'
 import { ImportFailed, importSubtree, openExport, planImport } from './importSubtree'
+import type { PayloadFile } from './hooks'
 import { ExportError, parseManifest, type ManifestNode, type ManifestPayload } from './manifest'
 import { ZipWriter, openZip } from './zip'
 import { isArchivePath } from './archiveName'
@@ -29,6 +30,8 @@ const ODD = 'T_ODD'
 const BOX = 'T_BOX'
 const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
 const text = (s: string) => new TextEncoder().encode(s)
+/** A payload's bytes as text, read the way the upload pump reads (`slice(...).arrayBuffer()`). */
+const textOf = async (f: PayloadFile) => new TextDecoder().decode(await f.slice(0, f.size).arrayBuffer())
 const hexOf = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 const access = memberAccessOf({ scopeId: 's', epochs })
 
@@ -84,7 +87,7 @@ beforeEach(() => {
         if (ctx.name === failOn) throw new Error('boom')
         const f = await ctx.payload(ref, ctx.name)
         const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, FILE, ctx.name)
-        imported[imported.length - 1].bytes = await f.text()
+        imported[imported.length - 1].bytes = await textOf(f)
         return { nodeId: made.nodeId, nodeKey: made.contentKey }
       },
     })
@@ -97,7 +100,7 @@ beforeEach(() => {
       async importContent(ctx) {
         const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, ALBUM, ctx.name)
         const bodies = []
-        for (const ref of ctx.node.content!.files as ManifestPayload[]) bodies.push(await (await ctx.payload(ref, 'x')).text())
+        for (const ref of ctx.node.content!.files as ManifestPayload[]) bodies.push(await textOf(await ctx.payload(ref, 'x')))
         imported[imported.length - 1].bytes = bodies.join(',')
         return { nodeId: made.nodeId, nodeKey: made.contentKey }
       },

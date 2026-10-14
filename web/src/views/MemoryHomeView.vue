@@ -11,6 +11,7 @@
 // on screen, an application's row, an opened node, a drop box's guest folder — is core's `core/node/MoveNodeDialog.vue`
 // through the member's door (`nodeMover`, inbox #358); a level's selection of several moves through core's
 // `core/node/MoveNodesDialog.vue` by the same door, and is deleted after one question (`DeleteNodesDialog`, inbox #421).
+// A copy of one node or of a selection is core's `core/export/CopyNodesDialog.vue` (uc.platform.copy-node), a member's only.
 // The fragment is a slug path derived from the names (ADR 0015), so
 // after every write that re-reads the tree the node on screen is followed to its path in the new tree (`stayOn`): a
 // move or a rename of it or of a folder above it, and an older equal-segment sibling restored or moved in, change it.
@@ -48,6 +49,7 @@ import PersonProfile from '../core/people/PersonProfile.vue'
 import { loadTenantPeople, personNow } from '../core/people/directory'
 import ExportSubtreeDialog from '../core/export/ExportSubtreeDialog.vue'
 import ImportSubtreeDialog from '../core/export/ImportSubtreeDialog.vue'
+import CopyNodesDialog from '../core/export/CopyNodesDialog.vue'
 import type { ImportOffer } from '../core/export/importSource'
 import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
 import MoveNodesDialog from '../core/node/MoveNodesDialog.vue'
@@ -170,6 +172,11 @@ const mover = nodeMover(() => access.value)
 // ADR 0082: the node being downloaded as a ZIP (core's `ExportSubtreeDialog`), and the download being imported under the folder on screen.
 const exporting = ref<TreeNode | null>(null)
 const importing = shallowRef<ImportOffer | null>(null)
+// uc.platform.copy-node: the nodes being copied (core's `CopyNodesDialog`), one or a level's selection, and what was on screen.
+const copying = shallowRef<{ nodes: TreeNode[]; shown: string | null } | null>(null)
+function startCopy(nodes: TreeNode[]) {
+  copying.value = { nodes, shown: currentNodeId.value }
+}
 const deleteVisible = ref(false)
 const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
 
@@ -374,6 +381,7 @@ async function onDeleteDone() {
         @delete="startDelete(currentNode)"
         @move="startMove"
         @download="exporting = currentNode"
+        @copy="startCopy([currentNode])"
         @create-child="startCreate"
         @open-node="openNode"
         @share="shareVisible = true"
@@ -397,6 +405,7 @@ async function onDeleteDone() {
         @move-nodes="startMoveMany"
         @delete-nodes="startDeleteMany"
         @download-node="exporting = $event"
+        @copy-nodes="startCopy"
         @import-archive="importing = $event"
         @open-trash="trashVisible = true"
         @share="shareVisible = true"
@@ -459,6 +468,15 @@ async function onDeleteDone() {
       :target-name="currentFolderName ?? rootLabel"
       @done="onMutationDone"
       @close="importing = null"
+    />
+    <CopyNodesDialog
+      v-if="copying && access.mode === 'member'"
+      :nodes="copying.nodes"
+      :access="access"
+      :tree="tree"
+      :root-label="rootLabel"
+      @copied="stayOn(copying?.shown ?? null)"
+      @close="copying = null"
     />
     <MoveNodeDialog
       v-if="moving && mover"

@@ -32,6 +32,8 @@ div.veyq-node-host
               span.p-button-icon.pi.pi-pencil
             button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Move to…"]
               span.p-button-icon.pi.pi-file-export
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Copy to…"]
+              span.p-button-icon.pi.pi-copy
             button.p-button.p-button-danger.p-button-icon-only.p-button-outlined.p-button-sm.p-component.veyq-danger-action.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Delete"]
               span.p-button-icon.pi.pi-trash
             button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Set cover"]
