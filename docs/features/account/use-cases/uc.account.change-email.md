@@ -1,0 +1,71 @@
+# UC: Change the address an account signs in with
+
+- **ID:** uc.account.change-email
+- **Status:** decided 2026-10-14 by the coordinator on the owner's behalf (inbox #197); not yet built.
+- **Primary actor:** A signed-in, unlocked account holder who belongs to a tenant with a working mail relay.
+- **Goal:** Sign in with a new address from now on, without losing the account, its keys or its data - and without
+  letting a stolen session move the address a password reset is sent to.
+- **Preconditions:** a session and the vault unlocked; the actor knows their password and holds their Secret Key; the
+  request's tenant can send mail ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)).
+- **Postconditions (success):** the account's email is the new address, recorded as confirmed; its auth keypair is the
+  one derived under the new address's salt; every other session is signed out; the old address got a notice. The Master
+  Key, every wrap, the Secret Key and the content are untouched.
+
+## Main flow
+
+1. In Settings → Account the actor chooses **Change sign-in address**, enters the new address, their password and their
+   Secret Key.
+2. The client derives the new auth keypair (`Argon2id(password, authSalt(newEmail))`, ADR 0003 - the email is the auth
+   salt's input; the KEKs use stored random salts and do not change), and sends the new address, the new public key, an
+   attestation signed with the **current** auth key and a Secret-Key proof (as a password change does).
+3. The server stores a **pending change** and mails a confirmation link to the **new** address through the tenant's
+   relay. It answers the same way whether or not the address is free (no enumeration): "If the address can be used, a
+   link was sent to it."
+4. The actor opens the link **in a session of the same account**; the server checks the address is still free, then in
+   one transaction swaps the email and the auth public key, sets the address confirmed (the link proved it), revokes
+   every other session, and mails the **old** address a fixed notice ("your sign-in address was changed", the domain,
+   no new address - [ADR 0049](../../../decisions/0049-email-delivery-boundary.md)'s closed variable set).
+5. The app says the change is done and offers a **new Emergency Kit** (the old one prints the old address; its Secret
+   Key is still valid).
+
+## Alternate / exception flows
+
+- **E1 — the address is taken** (by any account of the instance): nothing is said at the request; the confirmation
+  fails with a neutral "this address cannot be used" and nothing changes.
+- **E2 — no mail relay** for the tenant: `503 mail_unavailable` before anything is stored; no copy-link.
+- **E3 — wrong password or Secret Key:** the proof fails; nothing is stored.
+- **E4 — the link expired, was used, or is opened in another account's session:** refused; nothing changes. A newer
+  request replaces an older pending one.
+- **E5 — a Server Owner in no tenant:** no relay to mail through; not offered (as recovery).
+- **E6 — open tenant invites addressed to the old address** can no longer be accepted by this account (they match by
+  address); said in the confirmation step's result.
+
+## Quality notes
+
+- **A session alone cannot move the reset address.** The request needs the password and the Secret Key; the old address
+  is told.
+- **Operator-blind, unchanged.** The server sees the new address (it is the login identifier) and a new public key; no
+  password, no key material.
+- **Non-enumerable.** The request's answer is the same for a free and a taken address; uniqueness is enforced at confirm,
+  under a lock.
+
+## What this means for you / Was das für dich bedeutet
+
+**EN —** You can change the email address you sign in with. You confirm it with your password and Secret Key, then click
+the link sent to the new address. Your data and keys stay as they are; other devices are signed out, and your old address
+gets a short notice. Print a new Emergency Kit afterwards - the old one still works, but shows the old address.
+
+**DE —** Du kannst die E-Mail-Adresse ändern, mit der du dich anmeldest. Du bestätigst das mit Passwort und Secret Key und
+klickst dann auf den Link, der an die neue Adresse geht. Deine Daten und Schlüssel bleiben, wie sie sind; andere Geräte
+werden abgemeldet, und deine alte Adresse bekommt einen kurzen Hinweis. Drucke danach ein neues Emergency Kit - das alte
+funktioniert weiter, zeigt aber die alte Adresse.
+
+## Related
+
+- Feature: [Account](../_index.md)
+- Use-cases: [uc.account.confirm-email-address](uc.account.confirm-email-address.md) (the confirmation record this sets),
+  [uc.account.change-password](uc.account.change-password.md) (the proof and the session revocation it mirrors),
+  [uc.account.recover-access](uc.account.recover-access.md) (what the address is for)
+- Decisions: [ADR 0074](../../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md) Addendum,
+  [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md), [ADR 0049](../../../decisions/0049-email-delivery-boundary.md),
+  [ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)

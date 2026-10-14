@@ -158,3 +158,22 @@ at will. None of that matters, because nothing is gated on it (Decision 3).
   - **Proving the bootstrap owner's address at redemption through a server-level mailer.** Rejected in ADR 0055
     §3 for the instance-wide mail secret it would reintroduce. This record waits for the tenant's own relay
     instead.
+
+## Addendum (2026-10-14): changing the address
+
+Decided by the coordinator on the owner's behalf, 2026-10-14 (inbox #197;
+[uc.account.change-email](../features/account/use-cases/uc.account.change-email.md)); not yet built (cr-change-email).
+The address is the login identifier and the auth salt's input, so a change re-derives the auth keypair on the client and
+installs it only when the new address is proven:
+
+1. **The client sends the new auth public key with the request**, attested by the current auth key and accompanied by a
+   Secret-Key proof (as a password change); the server keeps it **pending** and swaps email and key together when the
+   link mailed to the new address is opened in the same account's session. One password prompt; a stolen session alone
+   cannot move the reset address.
+2. **The confirmation is this ADR's record:** the swap sets `email_confirmed_at`, because the link proved the address.
+3. **The old address gets a fixed notice** within ADR 0049's closed variable set (no new address in it); no cancel link
+   in this slice.
+4. **Every other session is revoked**, as a password change does.
+5. **Non-enumerable:** the request answers alike for a free and a taken address; uniqueness is enforced at the swap,
+   under a lock, and a taken address fails the confirmation neutrally.
+6. **The Emergency Kit:** the old kit's Secret Key stays valid; the app offers a new kit with the new address.

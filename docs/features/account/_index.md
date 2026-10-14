@@ -28,6 +28,7 @@ holds only **public** keys and ciphertext, never the password and never a conten
 
 - ★ [Account login (password)](use-cases/uc.account.login.md) — **refined**
 - ★ [Unlock the Master Key (password + Secret Key)](use-cases/uc.account.unlock.md) — **refined** (L0 — the floor)
+- [Change the sign-in address](use-cases/uc.account.change-email.md) — **refined, not built** (inbox #197, ADR 0074 Addendum)
 
 **Device unlock** — what a device may remember, so the Secret Key is typed once per device
 ([ADR 0005 §8–13](../../decisions/0005-unlock-methods-and-device-trust.md)):
