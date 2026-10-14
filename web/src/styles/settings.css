@@ -101,7 +101,11 @@
     flex-direction: column;
   }
 
+  /* Below 820 px a row is one column with its actions left-aligned, so a second line of actions is the layout doing
+     what it already does - and nowrap overflowed: the sessions row's "sign out + remove key" ended 47 px past its row
+     at 375 px (inbox #145). */
   .management-actions {
+    flex-wrap: wrap;
     justify-content: flex-start;
   }
 }
