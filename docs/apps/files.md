@@ -89,10 +89,13 @@ reads).
   sealed meta (`download.ts` `fileFacts`; the only modified time Files has is that sealed one - `FileBlobRef` carries no server-observed `updatedAt`; a blob without meta, or one whose meta does not open under this node's key,
   shows its size alone; a file listed without a blob says "not uploaded yet" — none of it reads the node's own payload).
   Its **primary click opens** the file's own page (`FileDetail`); **download is its one first-class action** (a button on
-  the row, beside core's own favorite heart, which every kind's row has - `core/favorites`, ADR 0068 §10), and **replace, rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**
+  the row, beside core's own favorite heart, which every kind's row has - `core/favorites`, ADR 0068 §10), and **rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**
   (into core's trash, restored from core's trash dialog — or at once from the "moved to the trash" toast's Undo, core's
   `trashUndo.ts`, inbox #385 (c)) sit in the row's one "more" menu, each `shown` by `filesCapabilities` narrowed to the
-  doors the session's source carries (fail closed: a guest gets the same row with fewer actions). Files, Memories and
+  doors the session's source carries (fail closed: a guest gets the same row with fewer actions). **There is no
+  replace action** — not on a row, not on the opened file (owner decision 2026-10-14): a file's content is replaced by
+  uploading a file of the same name into its folder, which asks first (below), for a member and a contributor guest
+  alike; an upload of that name also fills a file that holds no content. Files, Memories and
   drop boxes are listed together, folders first and then everything by name (core's order); the tab "Files" filters the
   list to FILE nodes, the folders stay. **Upload** is a level action (`files.upload`, the "New" menu's "Upload files"),
   registered with the level by the factory for the level's whole life — so it is available under every tab — and core
@@ -282,12 +285,11 @@ shows is `filesCapabilities(access, target)` (`web/src/features/files/capabiliti
 | Right | member | member, pending deletion | member, guest's identity folder | `READ` | `READ_WRITE` | `WRITE_ONLY` |
 |---|---|---|---|---|---|---|
 | download (a folder's files; a drop box's guests' folders; an opened file) | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
-| upload, replace | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder, not in a drop box below the link) | ✓ on its own drop box only |
+| upload, and replace by uploading a file of the same name | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder, not in a drop box below the link) | ✓ on its own drop box only |
 | rename a file | ✓ | ✗ | ✗ | ✗ | ✗ (the server allows it; offered nowhere yet) | ✗ |
 | move a file (core's move dialog, inbox #358) | ✓ | ✗ | ✓ out of it (inbox #377 (a)) | ✗ | ✓ between the subtree's folders (not in an identity folder) | ✗ |
 | move a guest's folder out of a drop box, move the drop box | ✓ | ✗ | — | ✗ | ✗ (a drop box below the link is read-only, #380) | ✗ |
 | delete a file, a guest's folder | ✓ | ✗ | ✓ (inbox #391) | ✗ | ✗ | ✗ |
-| the **opened file** (`FileDetail`): replace | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder) | ✗ |
 | the opened file: rename, share, delete, move | all ✓ (share with the instance's public links; not in an identity folder) | share only (links are a read) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
 | create a drop box | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | a drop box's links, delete it | links with the instance's public links; delete ✓ | links only | — | ✗ | ✗ | ✗ |
@@ -328,10 +330,10 @@ box at the root or in a folder (the kinds' `placement`), never into a drop box o
   the blob meta → `completeShareFile`) and re-resolves the link afterwards (`access.reload`). So a guest sees the
   member's rows — name, size and date opened under the chain's keys, the download — and a contributor the upload and a
   row's replace (an upload into it, for a file that holds no content). No standing sentence above the list (removed by the
-  owner 2026-10-14): the link's role badge says a contributor can upload over any file, and the replace itself asks. An upload of a name a file there already holds stays refused
-  (`409 slug_taken`, no replace by upload for a guest, owner decision 2026-10-08, inbox #392): the guest's source does
-  not turn it into a replace as the member's does, and the notice says a file of that name exists and to use its row's
-  replace. **Every replace asks first** (owner decision 2026-10-08, inbox #383) — the contributor's row replace, after
+  owner 2026-10-14): the link's role badge says a contributor can upload over any file, and the replace itself asks. An upload of a name a file there already holds
+  **replaces that file after the same question a member gets** (owner decision 2026-10-14, reversing inbox #392's
+  "no replace by upload for a guest"): the guest's source turns it into a replace as the member's does, because the
+  row's replace it used to point to no longer exists. **Every replace asks first** (owner decision 2026-10-08, inbox #383) — the contributor's row replace, after
   the file is picked and before the guest is named ("it changes for everyone who sees this folder, the owner too; the
   old content cannot be restored"), as the member's does (§ The web); a file that holds no content asks nothing; after a
   peer's replace (`stale_file`) the page offers "replace anyway" on the current blob, as a member's does. The guest names

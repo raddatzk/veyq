@@ -15,16 +15,19 @@
 ## Main flow
 
 1. On a node it may move — a folder's card, an opened Memory's or chapter's header, a file's row, a drop box's card, a
-   guest's folder in a drop box — the user chooses **Move to…** (no drag and drop: a list reachable by keyboard and
-   screen reader). What is offered is the application's capability function for whoever looks (a member: any node,
+   guest's folder in a drop box — the user chooses **Move to…**. What is offered is the application's capability function for whoever looks (a member: any node,
    out of a drop box too; a `READ_WRITE` guest: a node a folder of its subtree holds — never the link's root, never in
    or of a guest's folder; a `READ` or `WRITE_ONLY` guest: nothing).
-2. Core's move dialog lists the destinations the session can see: a member's whole space with its root, a guest's
-   subtree only. A place that cannot be picked says why — the node itself, inside it, where it is now, a guest's
-   folder, a place that does not take its kind (the kinds' `placement`, which mirrors the server's `NodeKindRules`: a
-   folder, a Memory, a file or a drop box at the root or in a folder; a chapter only in a Memory; a guest only into a
-   folder).
-3. The user picks a destination and confirms. Before anything is sent, a node at the destination whose name folds to the
+2. Core's move dialog is a **folder browser**, not a list of every destination (owner decision 2026-10-14, replacing
+   inbox #358's list). It opens at the node's current place, with a breadcrumb up to the top of what the session can
+   see (a member's space root, a guest's link root), and shows **only the places that can take the node's kind** (the
+   kinds' `placement`, which mirrors the server's `NodeKindRules`: a folder, a Memory, a file or a drop box at the root
+   or in a folder; a chapter only in a Memory; a guest only into a folder), drawn as the level's own rows without their
+   actions. Opening a place moves into it. **"Move here"** applies to the place on screen and is disabled with the
+   reason where the node cannot go: where it is now, the node itself or anything inside it (which it does not open), a
+   guest's folder. Every place and the breadcrumb are real buttons, so the browser is as reachable by keyboard and
+   screen reader as the list was. Drag and drop comes later, as a second way (inbox #421).
+3. The user moves into the destination and chooses **Move here**, or **Cancel**. Before anything is sent, a node at the destination whose name folds to the
    same slug is named ("There is already a file named … there").
 4. Moving a drop-box guest's folder out asks first: it becomes an ordinary folder, its guest can add nothing more, and
    it cannot be moved back into the drop box.
@@ -59,6 +62,8 @@
 
 - **A move changes one wrap, not a subtree.** Every node carries its own content key (ADR 0080 decision 1); a move
   re-wraps only the moved node's, so a subtree of any size moves in one request and every key below keeps opening.
+- **One picker for one node and for many.** The browser takes the node's kind and place as input, so the selection of
+  inbox #421 moves through the same dialog: the places shown are those that take every selected kind.
 - **The picker is a hint, the server the authority.** The client mirrors `NodeKindRules` and the guest rules so it
   offers only what would be taken; a disagreement surfaces as the server's refusal, explained by its code — never a
   silently different result.
@@ -68,14 +73,15 @@
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** You can move a folder, a memory, a chapter, a file or a drop box to another place in your space with "Move
-to…": pick where it should go from a list, and everything inside it comes along and stays readable. If someone shared
+to…": open the folder it should go to and choose "Move here", and everything inside it comes along and stays readable. If someone shared
 a folder with you and lets you add things, you can move things around inside that folder too — but nothing out of it.
 If a guest sent files into your drop box, you can move their folder out to keep it as an ordinary folder; the guest
 then can no longer add to it. A move can be undone right away. The server only learns that something moved, never what
 it is called.
 
 **DE —** Mit „Verschieben nach …“ kannst du einen Ordner, eine Erinnerung, ein Kapitel, eine Datei oder einen
-Briefkasten an einen anderen Ort in deinem Bereich verschieben: Wähle das Ziel aus einer Liste, und alles darin kommt
+Briefkasten an einen anderen Ort in deinem Bereich verschieben: Öffne den Ordner, in den es soll, und wähle „Hierher
+verschieben“, und alles darin kommt
 mit und bleibt lesbar. Hat dir jemand einen Ordner freigegeben, in den du etwas hinzufügen darfst, kannst du darin auch
 verschieben – aber nichts heraus. Hat eine Person Dateien in deinen Briefkasten eingeworfen, kannst du ihren Ordner
 herausverschieben und als gewöhnlichen Ordner behalten; die Person kann dann nichts mehr hinzufügen. Ein Verschieben
