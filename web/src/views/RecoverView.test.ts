@@ -35,7 +35,7 @@ const stubs = {
   Message: { template: '<div class="msg"><slot /></div>' },
   InputText: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   Password: { props: ['modelValue'], template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  // The breach-check box: a native checkbox, so a test ticks it with `setValue(true)`.
+  // The breach warning's "Use it anyway": a native checkbox, so a test ticks it with `setValue(true)`.
   Checkbox: {
     props: ['modelValue'],
     template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
@@ -79,6 +79,8 @@ describe('RecoverView', () => {
     // leak that into every later test. Restated per test rather than left to the module factory.
     vi.mocked(requestRecovery).mockResolvedValue(undefined)
     vi.mocked(completeRecovery).mockResolvedValue(undefined)
+    // The breach check is automatic, so every step-3 submit passes through it: clean unless a case says otherwise.
+    vi.mocked(pwnedCount).mockResolvedValue(0)
     window.history.replaceState(null, '', '/recover')
   })
 
@@ -304,27 +306,69 @@ describe('RecoverView', () => {
     expect(w.text()).toContain(t('recovery.done'))
   })
 
-  it('with the breach check ticked, a hit stops the first submit and the second goes ahead', async () => {
-    // The slip the composable's own test cannot see: a dialog that forgets to await the guard.
-    vi.mocked(pwnedCount).mockResolvedValue(3)
+  /** Mounts on step 3 — the new password — with the token's material opened. */
+  async function onPasswordStep() {
     withToken()
     vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
     vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32) })
     const w = mountView()
     await flushPromises()
-
     await w.find('input[name="secret-key"]').setValue('the-secret-key')
     await w.find('form').trigger('submit')
     await flushPromises()
+    return w
+  }
+
+  it('checks the finished new password when its field is left — never while typing, once per password', async () => {
+    const w = await onPasswordStep()
+    expect(w.text()).toContain(t('password.pwnedNote'))
+    const pw = w.findAll('input[type="password"]')
+    await pw[0].setValue('a brand')
+    await pw[0].setValue('a brand new password')
+    await flushPromises()
+    expect(pwnedCount).not.toHaveBeenCalled()
+
+    await pw[0].trigger('blur')
+    await pw[0].trigger('blur')
+    await flushPromises()
+    expect(pwnedCount).toHaveBeenCalledOnce()
+    expect(pwnedCount).toHaveBeenCalledWith('a brand new password')
+  })
+
+  it('a hit blocks the submit until "Use it anyway" — pressing submit again is not the acceptance', async () => {
+    // The slip the composable's own test cannot see: a dialog that forgets to await the guard.
+    vi.mocked(pwnedCount).mockResolvedValue(3)
+    const w = await onPasswordStep()
 
     const pw = w.findAll('input[type="password"]')
     await pw[0].setValue('a brand new password')
     await pw[1].setValue('a brand new password')
-    await w.find('input[type="checkbox"]').setValue(true)
     await w.find('form').trigger('submit')
     await flushPromises()
     expect(completeRecovery).not.toHaveBeenCalled()
     expect(w.text()).toContain(t('password.pwnedWarning', { count: 3 }))
+
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(completeRecovery).not.toHaveBeenCalled()
+
+    await w.find('input[type="checkbox"]').setValue(true)
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(completeRecovery).toHaveBeenCalledOnce()
+    expect(pwnedCount).toHaveBeenCalledOnce()
+  })
+
+  it('a check that could not run goes ahead, and says so in one line', async () => {
+    vi.mocked(pwnedCount).mockResolvedValue(null)
+    const w = await onPasswordStep()
+
+    const pw = w.findAll('input[type="password"]')
+    await pw[0].setValue('a brand new password')
+    await pw[0].trigger('blur')
+    await pw[1].setValue('a brand new password')
+    await flushPromises()
+    expect(w.text()).toContain(t('password.pwnedUnavailable'))
 
     await w.find('form').trigger('submit')
     await flushPromises()

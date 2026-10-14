@@ -13,13 +13,13 @@ import Button from 'primevue/button'
 import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
 import Password from 'primevue/password'
 import Message from 'primevue/message'
-import Checkbox from 'primevue/checkbox'
 import { changePassword, ChangePasswordRefused } from './changePassword'
 import { enrolDeviceKey, isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { masterKey } from '../../../app/vault'
 import { account } from '../../../app/account'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { useBreachCheck } from '../passwordWarning'
+import PasswordBreachNotice from '../PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../../../shared/passwordPolicy'
 import { useCapabilities } from '../../../shared/state/useCapabilities'
 import { ACCOUNT_DEVICE_TRUST } from '../../platform/capabilities'
@@ -35,7 +35,7 @@ const secretKey = ref('')
 const error = ref('')
 const done = ref(false)
 
-const { enabled: checkBreaches, stop: breachStop, proceed: breachCheckPasses } = useBreachCheck(newPassword)
+const { state: breachState, useAnyway, checkNow: checkBreaches, proceed: breachCheckPasses } = useBreachCheck(newPassword)
 
 const rememberSupported = isRememberSupported() && hasCapability(ACCOUNT_DEVICE_TRUST)
 // The length floor is a CLIENT-side floor and cannot be anything else: under Model B (ADR 0003) the password
@@ -131,19 +131,18 @@ function startOver() {
 
           <label class="settings-field">
             {{ t('changePassword.newPasswordLabel') }}
-            <Password v-model="newPassword" :feedback="false" toggle-mask autocomplete="new-password" :disabled="busy" input-id="change-password-new" />
+            <Password
+              v-model="newPassword"
+              :feedback="false"
+              toggle-mask
+              autocomplete="new-password"
+              :disabled="busy"
+              input-id="change-password-new"
+              @blur="checkBreaches"
+            />
             <small v-if="passwordHintKey(newPassword)" class="field-hint">{{ t(passwordHintKey(newPassword)!) }}</small>
           </label>
-          <div class="checkbox-row">
-            <Checkbox v-model="checkBreaches" input-id="change-password-breach-check" binary :disabled="busy" />
-            <label for="change-password-breach-check">
-              {{ t('password.pwnedCheck') }}
-              <small class="field-hint">{{ t('password.pwnedCheckNote') }}</small>
-            </label>
-          </div>
-          <Message v-if="breachStop" severity="warn" :closable="false">{{
-            breachStop.count === null ? t('password.pwnedUnavailable') : t('password.pwnedWarning', { count: breachStop.count })
-          }}</Message>
+          <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="change-password" :disabled="busy" />
           <label class="settings-field">
             {{ t('changePassword.confirmPasswordLabel') }}
             <Password v-model="confirmPassword" :feedback="false" toggle-mask autocomplete="new-password" :disabled="busy" input-id="change-password-confirm" />
