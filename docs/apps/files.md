@@ -327,8 +327,8 @@ box at the root or in a folder (the kinds' `placement`), never into a drop box o
   and, for a contributor, uploads one core-queue job per file (`shareUpload.ts`: guest create → guest transport with
   the blob meta → `completeShareFile`) and re-resolves the link afterwards (`access.reload`). So a guest sees the
   member's rows — name, size and date opened under the chain's keys, the download — and a contributor the upload and a
-  row's replace (an upload into it, for a file that holds no content), above the list the sentence that it can replace
-  any file, the owner's too, and that no version is kept. An upload of a name a file there already holds stays refused
+  row's replace (an upload into it, for a file that holds no content). No standing sentence above the list (removed by the
+  owner 2026-10-14): the link's role badge says a contributor can upload over any file, and the replace itself asks. An upload of a name a file there already holds stays refused
   (`409 slug_taken`, no replace by upload for a guest, owner decision 2026-10-08, inbox #392): the guest's source does
   not turn it into a replace as the member's does, and the notice says a file of that name exists and to use its row's
   replace. **Every replace asks first** (owner decision 2026-10-08, inbox #383) — the contributor's row replace, after

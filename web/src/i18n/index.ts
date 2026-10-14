@@ -1236,7 +1236,6 @@ const en = {
       empty: 'No files here.',
       linkFull: '“{name}” was not uploaded: this link takes no more uploads right now.',
       // A contributor's page (inbox #383): what an upload or a replace does, said before it happens.
-      contributorHint: 'You can upload files here and replace any file, including the owner’s. A replaced file cannot be brought back: there is no version history.',
       replaceConfirm: 'Replace the content of “{name}” with “{file}”? It changes for everyone who sees this folder, the owner too. The old content cannot be restored: there is no version history.',
       replaceFileConfirm: 'Replace the content of “{name}” with “{file}”? It changes for everyone who has this link, the owner too. The old content cannot be restored: there is no version history.',
       // A contributor's upload of a name a file here already has (inbox #392): refused (409), and what to do instead.
@@ -2701,7 +2700,6 @@ const de: typeof en = {
     guest: {
       empty: 'Hier liegen keine Dateien.',
       linkFull: '„{name}“ wurde nicht hochgeladen: Dieser Link nimmt gerade keine weiteren Uploads an.',
-      contributorHint: 'Du kannst hier Dateien hochladen und jede Datei ersetzen, auch die der Person, der der Ordner gehört. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
       replaceConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Ordner sehen, auch für die Person, der er gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
       replaceFileConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Link haben, auch für die Person, der die Datei gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
       fileExists: '„{name}“ wurde nicht hochgeladen: Hier gibt es schon eine Datei mit diesem Namen. Um sie zu ersetzen, nutze die Schaltfläche zum Ersetzen in ihrer Zeile.',

@@ -205,21 +205,20 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     expectNoMemberWorld()
   })
 
-  it('a READ guest gets the download only: no upload, replace, rename or delete, no contributor hint', async () => {
+  it('a READ guest gets the download only: no upload, replace, rename or delete', async () => {
     const h = mountSection()
     await flushPromises()
     expect(h.actions.get('files.upload')!.enabled(), 'the level\'s upload action is not enabled').toBe(false)
     expect(await actionIdsOf(h.w, 'aaa.bin')).toEqual(['download'])
     expect(await actionIdsOf(h.w, 'Report.pdf')).toEqual(['download'])
     expect(h.w.text()).not.toContain(t('files.upload'))
-    expect(h.w.text()).not.toContain(t('files.guest.contributorHint'))
     expectNoMemberWorld()
   })
 
-  it('a contributor gets upload and replace — still no rename and no delete — and is told what a replace does (inbox #383)', async () => {
+  it('a contributor gets upload and replace — still no rename and no delete — and no standing notice above the list', async () => {
     const h = mountSection({ role: ShareRole.ReadWrite })
     await flushPromises()
-    expect(h.w.text()).toContain(t('files.guest.contributorHint'))
+    expect(noticeTexts(h), 'the replace asks when it happens (inbox #383); nothing stands above the list').toEqual([])
     expect(h.actions.get('files.upload')!.enabled()).toBe(true)
     expect(await actionDisabled(h.w, 'Report.pdf', 'replace')).toBe(false)
     // no rename and no delete for any guest: the actions are download, replace, move
@@ -244,7 +243,6 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     expect(rowTitles(h)).toEqual(['steuer.pdf'])
     expect(h.actions.get('files.upload')!.enabled(), 'nothing is placed in an identity folder').toBe(false)
     expect(await actionIdsOf(h.w, 'steuer.pdf')).toEqual(['download'])
-    expect(h.w.text()).not.toContain(t('files.guest.contributorHint'))
     expectNoMemberWorld()
   })
 
@@ -409,11 +407,10 @@ describe('a contributor uploads into the shared folder', () => {
     expect(requestGuest).not.toHaveBeenCalled()
     expect(guestFileUploadJob).not.toHaveBeenCalled()
     const text = t('files.nameTakenBy', { name: 'sub', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Sub' }) })
-    // beside the contributor's standing hint (which cannot be dismissed)
-    expect(noticeTexts(h)).toEqual([t('files.guest.contributorHint'), text])
+    expect(noticeTexts(h)).toEqual([text])
     const refusal = h.w.findAll('.veyq-level-notice').find((n) => n.text().includes(text))!
     await refusal.findAll('button').find((b) => b.text() === t('node.dismiss'))!.trigger('click')
-    expect(noticeTexts(h)).toEqual([t('files.guest.contributorHint')])
+    expect(noticeTexts(h)).toEqual([])
   })
 
   // Inbox #395 (F9): once the same file arrives, its failure is no longer explained.

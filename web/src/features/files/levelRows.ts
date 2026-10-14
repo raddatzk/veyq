@@ -293,8 +293,8 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
   const notices = computed<LevelNotice[]>(() => {
     const mine = batches.value.filter((b) => b.key === batchKey.value)
     const madeGood = deliveredSince(mine) // the same file uploaded since: nothing left to explain (inbox #395)
-    // A contributor guest is told what an upload or a replace does before it happens (inbox #383); a replace asks again.
-    const hint: LevelNotice[] = guest && caps.value.upload ? [{ key: 'contributor-hint', severity: 'info', text: t('files.guest.contributorHint') }] : []
+    // No standing notice for a contributor guest (owner 2026-10-14): the share's role badge says what the link allows,
+    // and every replace asks before it happens, saying the old content cannot be restored (inbox #383).
     const refused = refusals.value.map((r): LevelNotice => ({
       key: r.key, severity: 'error', text: r.text,
       dismiss: () => (refusals.value = refusals.value.filter((x) => x.key !== r.key)),
@@ -312,7 +312,7 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
           dismiss: () => removeFile(item.id),
         }]
       })
-    return [...hint, ...refused, ...failed]
+    return [...refused, ...failed]
   })
 
   // --- download, delete ---------------------------------------------------------------------------------------------
