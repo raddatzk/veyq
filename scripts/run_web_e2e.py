@@ -3051,8 +3051,12 @@ def upgrade_verdict(predecessor: Predecessor, failures: list[tuple[str, str]], g
         f"candidate's configSecretState: {reading.get('configSecretState', '(never read - the reader did not get there)')}",
     ]
     if not failures:
-        lines.append(f"outcome: GREEN — the candidate migrated the predecessor's backup and opened all "
-                     f"{reading.get('items', '?')} recorded item(s)")
+        # Said as it happened: with no migration between the two builds the candidate started on the restored schema
+        # as it was, and a green proves the restore and the reading, not a migration.
+        migrated = ("migrated the predecessor's backup up" if highest_migration(before) != highest_migration(after)
+                    else "started on the predecessor's backup (no migration lies between the two builds)")
+        lines.append(f"outcome: GREEN — the candidate {migrated} and opened all {reading.get('items', '?')} recorded "
+                     f"item(s)")
         return lines
     cause = flyway_cause(reader_log.read_text(errors="replace")) if reader_log.is_file() else None
     if cause is None and reading.get("configSecretState") not in (None, "OK"):
