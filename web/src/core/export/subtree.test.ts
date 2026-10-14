@@ -26,6 +26,7 @@ import * as v1 from '@veyq/crypto/v1'
 const FILE = 'T_FILE'
 const ALBUM = 'T_ALBUM'
 const ODD = 'T_ODD'
+const BOX = 'T_BOX'
 const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
 const text = (s: string) => new TextEncoder().encode(s)
 const hexOf = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
@@ -102,6 +103,12 @@ beforeEach(() => {
       },
     })
     registry.registerKind({ kind: ODD, icon: 'x', shareable: false }) // no hooks: cannot be downloaded
+    // a container that downloads with a content of its own and imports as a plain folder (a Files drop box's shape)
+    registry.registerKind({
+      kind: BOX, icon: 'x', shareable: false, contentSchema: { application: 't', version: 1 }, importsAsFolder: true,
+      exportContent: async () => ({ type: 't.box', schema: 1 }),
+      validateContent: (c) => (Object.keys(c).every((k) => k === 'type' || k === 'schema') ? null : { code: 'invalid_manifest', message: 'a box with more' }),
+    })
   }
 })
 
@@ -245,6 +252,59 @@ describe('import', () => {
     await w2.addBytes('manifest.json', text(JSON.stringify({ format: 'veyq-subtree', version: 99, exportedAt: 'x', appVersion: 'x', root: { id: 'n1', kind: 'FOLDER', name: 'x' } })))
     await w2.finish()
     await expect(openExport(zipOf(n.blob()))).rejects.toMatchObject({ code: 'newer_version' })
+  })
+})
+
+// cr-download-is-the-export Decision 7: a kind that imports as a plain folder, and the paths that follow the shown names.
+describe('a kind that imports as a folder, and the shown names', () => {
+  const boxTree = [
+    node('box', null, BOX, 'Inbox'),
+    node('g2', 'box', 'FOLDER', 'Anna'),
+    node('g1', 'box', 'FOLDER', 'Anna'),
+    node('f1', 'g1', FILE, 'one.txt'),
+  ]
+  // the session shows the two equal names apart (`Anna (2)` for g2), as a drop box's detail does
+  const shown = (tree: TreeNode[]): TreeSource<TreeNode> => ({ ...sourceOf(tree), nameOf: (id) => (id === 'g2' ? 'Anna (2)' : (tree.find((n) => n.id === id)?.name ?? '')) })
+
+  it('downloads it as a directory with its content; each path segment is the name the session shows, the manifest keeps the own name', async () => {
+    const m = memorySink()
+    await exportSubtree({ access, tree: shown(boxTree), rootId: 'box', sink: m.sink, appVersion: 'test' })
+    const { manifest } = await openExport(zipOf(m.blob()))
+    expect(manifest.root).toMatchObject({ kind: BOX, path: 'Inbox', content: { type: 't.box', schema: 1 } })
+    // listed in the order the shown names number them, so an import numbers them alike
+    expect(manifest.root.children!.map((c) => [c.name, c.path])).toEqual([['Anna', 'Inbox/Anna'], ['Anna', 'Inbox/Anna (2)']])
+    expect(await entriesOf(m.blob())).toContain('Inbox/Anna/one.txt')
+  })
+
+  it('imports it - with no importContent - as a FOLDER, its children under it, equal names numbered among the new siblings', async () => {
+    const m = memorySink()
+    await exportSubtree({ access, tree: shown(boxTree), rootId: 'box', sink: m.sink, appVersion: 'test' })
+    const opened = await openExport(zipOf(m.blob()))
+    expect(planImport(opened.manifest)).toMatchObject({ nodes: 4, skipped: [] })
+    await importSubtree({ scopeId: 's', epochs, tree: [], parent: null, opened })
+    expect(imported.map((i) => [i.kind, i.name, i.parent])).toEqual([
+      // the folder that held one.txt is `Anna` in the archive and after the import
+      ['FOLDER', 'Inbox', null], ['FOLDER', 'Anna', 'new1'], [FILE, 'one.txt', 'new2'], ['FOLDER', 'Anna (2)', 'new1'],
+    ])
+  })
+
+  it('lists eleven equal names in their shown order (`G (2)` before `G (10)`), so the import numbers each as its directory is named', async () => {
+    const guests = Array.from({ length: 11 }, (_, i) => node(`g${String(i).padStart(2, '0')}`, 'box', 'FOLDER', 'G'))
+    const label = new Map(guests.map((g, i) => [g.id, i === 0 ? 'G' : `G (${i + 1})`]))
+    // served in reverse, so only the shown names can put them in order
+    const tree = [node('box', null, BOX, 'Inbox'), ...guests.reverse()]
+    const m = memorySink()
+    await exportSubtree({ access, tree: { ...sourceOf(tree), nameOf: (id) => label.get(id) ?? 'Inbox' }, rootId: 'box', sink: m.sink, appVersion: 'test' })
+    const { manifest } = await openExport(zipOf(m.blob()))
+    expect(manifest.root.children!.map((c) => c.path)).toEqual(Array.from({ length: 11 }, (_, i) => (i === 0 ? 'Inbox/G' : `Inbox/G (${i + 1})`)))
+  })
+
+  it('still checks its content (decision 10): a box content the kind refuses is refused before anything is written', async () => {
+    const m = memorySink()
+    await exportSubtree({ access, tree: shown(boxTree), rootId: 'box', sink: m.sink, appVersion: 'test' })
+    const { manifest } = await openExport(zipOf(m.blob()))
+    const tampered = { ...manifest, root: { ...manifest.root, content: { type: 't.box', schema: 1, extra: 'x' } } }
+    expect(() => planImport(tampered)).toThrow(ExportError)
   })
 })
 

@@ -3,8 +3,12 @@
 // the downloading session's own source - a member's listing, or a READ / READ_WRITE guest's link listing - opens the file's
 // blob under its own key and streams the plaintext chunks; import creates the node and uploads the payload through the same
 // job the "Upload files" action runs (`fileUploadJob`), so a replayed file is sealed under the new node's key like any upload,
-// and a node whose upload fails is trashed by the job's own `abandon`. A drop box is not downloaded (it is a share object with
-// guest identities).
+// and a node whose upload fails is trashed by the job's own `abandon`.
+//
+// A drop box downloads like any other container (cr-download-is-the-export Decision 7): a directory, its guests' folders as
+// directories under the names the detail shows them by, their files inside - its content names only what it was
+// (`files.drop-box`), no payload. It IMPORTS as a plain folder (`importsAsFolder` on its descriptor): a drop key, its guests'
+// identities and its links cannot be rebuilt from a download, so nothing tries.
 import { iterateBlob } from '../../core/blob/stream'
 import type { ExportContentHook, ExportNodeContext, ImportContentHook } from '../../core/export/hooks'
 import type { ContentProblem } from '../../core/applications/registry'
@@ -15,6 +19,7 @@ import { guestFilesSource, memberFilesSource, type FilesSource } from './source'
 import { fileUploadJob } from './uploadFile'
 
 export const FILES_FILE_CONTENT = 'files.file'
+export const FILES_DROPBOX_CONTENT = 'files.drop-box'
 /** The application id of every content type above, and the content schema this build writes and reads. */
 export const FILES_CONTENT_SCHEMA = { application: 'files', version: 1 } as const
 const SCHEMA = FILES_CONTENT_SCHEMA.version
@@ -54,6 +59,16 @@ export const exportFile: ExportContentHook = async (ctx) => {
     chunks: () => iterateBlob(provider, { signal: ctx.signal }),
   })
   return { type: FILES_FILE_CONTENT, schema: SCHEMA, file }
+}
+
+/** A drop box's content: what it was, nothing else - its guests' folders are its children, their files theirs. */
+export const exportDropBox: ExportContentHook = async () => ({ type: FILES_DROPBOX_CONTENT, schema: SCHEMA })
+
+/** A `files.drop-box` content from a download carries nothing but its type and version (the import makes it a plain folder). */
+export function validateDropBoxContent(content: ManifestContent): ContentProblem | null {
+  if (content.type !== FILES_DROPBOX_CONTENT) return { code: 'invalid_manifest', message: `not a Files drop box: ${content.type}` }
+  const extra = Object.keys(content).filter((k) => k !== 'type' && k !== 'schema')
+  return extra.length > 0 ? { code: 'invalid_manifest', message: `a drop box with ${extra.join(', ')}` } : null
 }
 
 /** A `files.file` content from a download is its one payload reference (core checks the reference itself). */

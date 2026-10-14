@@ -11,7 +11,7 @@ import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
 import FileDetail from './components/FileDetail.vue'
 import FileShareDialog from './components/FileShareDialog.vue'
-import { exportFile, importFile, validateFileContent } from './exportImport'
+import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent } from './exportImport'
 
 describe('registerFiles', () => {
   it('registers the FILE kind: shareable (READ / READ_WRITE, a single-file link), a file icon, its rows, its own page and link dialog', () => {
@@ -91,6 +91,11 @@ describe('registerFiles', () => {
       createEntry: { label: 'files.dropBox.create', icon: 'pi pi-inbox', order: 20, allowed: expect.any(Function), enabled: expect.any(Function) },
       shareDialog: DropBoxShareDialog,
       placement: { root: true, parents: [FOLDER_KIND] },
+      // downloaded as a directory of its guests' folders, imported as a plain folder (cr-download-is-the-export Decision 7)
+      exportContent: exportDropBox,
+      contentSchema: { application: 'files', version: 1 },
+      validateContent: validateDropBoxContent,
+      importsAsFolder: true,
     })
     expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
     expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding

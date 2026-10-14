@@ -31,7 +31,7 @@ import FileShareDialog from './components/FileShareDialog.vue'
 import { canUploadFolder, filesCapabilities } from './capabilities'
 import { filesRows, UPLOAD_ACTION, UPLOAD_FOLDER_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
-import { exportFile, importFile, validateFileContent, FILES_CONTENT_SCHEMA } from './exportImport'
+import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent, FILES_CONTENT_SCHEMA } from './exportImport'
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
  *  the last dot, unless the name starts with its only dot (`.env` stays whole). */
@@ -119,6 +119,11 @@ export function registerFiles(registry: Registry): void {
     },
     shareDialog: DropBoxShareDialog,
     placement: FILES_PLACEMENT,
+    // Downloaded as a directory of its guests' folders; imported as a plain folder (cr-download-is-the-export Decision 7).
+    exportContent: exportDropBox,
+    contentSchema: FILES_CONTENT_SCHEMA,
+    validateContent: validateDropBoxContent,
+    importsAsFolder: true,
   })
   registry.claimShareBody(DROPBOX_KIND, DropBoxShareBody)
   // Files is the one application with NO route segment (inbox #328, ADR 0015 amendment): a file or a drop box is its plain

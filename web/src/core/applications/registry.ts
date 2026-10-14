@@ -204,6 +204,11 @@ export interface KindDescriptor {
   /** A node of this kind IS one file (Files' file): Download saves it as itself through the application's own action, so core
    *  offers no ZIP download for it, and inside an archive it is that one file at the node's path, not a directory. */
   downloadsAsFile?: boolean
+  /** A node of this kind is imported as a plain `FOLDER` (Files' drop box, cr-download-is-the-export Decision 7): what makes it
+   *  this kind - a drop key, guests' identities, links - cannot be rebuilt from a download, so the import creates a folder of
+   *  the node's name and its children under it, and needs no `importContent`. Its content is still checked
+   *  (`validateContent`) and still names its application and version (`contentSchema`); the manifest keeps the kind it was. */
+  importsAsFolder?: boolean
 }
 
 /** What a kind that carries a cover may add to core's mechanism (inbox #411). Core reads one source, the uploaded image; a

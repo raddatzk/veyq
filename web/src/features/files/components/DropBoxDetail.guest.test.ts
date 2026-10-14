@@ -37,6 +37,7 @@ import { DROPBOX_KIND, FILE_KIND } from '../kinds'
 import { authenticatedCalls } from '../../../test/guestMode'
 import DropBoxGuestForm from './DropBoxGuestForm.vue'
 import DropBoxDetail from './DropBoxDetail.vue'
+import ExportSubtreeDialog from '../../../core/export/ExportSubtreeDialog.vue'
 
 const SCOPE_ID = '55555555-5555-4555-8555-555555555555'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_8'
@@ -134,6 +135,22 @@ function expectNoWriteControl(w: Body) {
 }
 
 describe("a drop box inside a folder share is the member's detail, read-only (inbox #380, #401 S3)", () => {
+  // cr-download-is-the-export Decision 7: a READ or READ_WRITE guest of a folder link above a drop box downloads it as a ZIP,
+  // as a member does - core's action in the drop box's header, core's dialog over the guest's own tree.
+  for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
+    it(`${role}: the drop box's header offers Download; a real click opens core's download of THIS drop box`, async () => {
+      const w = await mountBody(role)
+      await click(tile(w, 'Postfach')!.element)
+      const action = w.findComponent(DropBoxDetail).find('.veyq-node-header-actions button[data-action="download"]')
+      expect(action.attributes('aria-label')).toBe(t('export.action'))
+      await click(action.element)
+      const dialog = w.findComponent(ExportSubtreeDialog)
+      expect(dialog.exists()).toBe(true)
+      expect(dialog.props('node').id).toBe(DROP)
+      expect(authenticatedCalls, 'no authenticated client').toEqual([])
+    })
+  }
+
   it('precondition: the walk opens the drop box, the guest folder (through the drop key) and its file', () => {
     const parts = openGuestTreeParts(head(ShareRole.Read))
     for (const id of [DROP, ANNA, ANNA_FILE, INNER_DROP]) expect(parts.keys.has(id), id).toBe(true)

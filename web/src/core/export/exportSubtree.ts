@@ -91,7 +91,9 @@ export async function prepareExport(params: PrepareExportParams): Promise<Prepar
       return null
     }
     const id = `n${++counter}`
-    const segment = archiveName(node.name, taken)
+    // the name as the session's views show it among its siblings (`Anna (2)` for a drop box's second guest named Anna, whose
+    // folders share a name the server never compares, inbox #393), made safe; the manifest keeps the node's own name
+    const segment = archiveName(tree.nameOf(node.id) || node.name, taken)
     const path = dir === null ? segment : `${dir}/${segment}`
     const out: ManifestNode = { id, kind: node.kind, name: node.name, path }
     const asFile = node.kind !== FOLDER_KIND && d.supported && !!d.downloadsAsFile
@@ -124,7 +126,10 @@ export async function prepareExport(params: PrepareExportParams): Promise<Prepar
     directories.push(path)
     const kids: ManifestNode[] = []
     const names = new Set<string>()
-    for (const child of [...tree.children(node.id)].sort(byOrder)) {
+    // equal names in the order their shown names number them (`Anna`, `Anna (2)`), so an import - which numbers a clash in the
+    // order it meets the nodes - gives each the name its directory has
+    const shownOrder = (a: TreeNode, b: TreeNode) => byOrder(a, b) || tree.nameOf(a.id).localeCompare(tree.nameOf(b.id), undefined, { numeric: true })
+    for (const child of [...tree.children(node.id)].sort(shownOrder)) {
       if (signal?.aborted) cancelled(signal)
       const childKey = tree.keyOf(child.id)
       if (!childKey) {

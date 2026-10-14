@@ -79,6 +79,23 @@ describe('DropBoxDetail', () => {
     expect(toggleFavorite).toHaveBeenCalledWith(BOX.id, SCOPE)
   })
 
+  it('core\'s Download is in the drop box\'s header (cr-download-is-the-export Decision 7): a real click asks the host to download it', async () => {
+    // a member whose keys are open (core's `canDownload`); with them locked, none
+    expect(mountDetail().find('.veyq-node-header-actions button[data-action="download"]').exists()).toBe(false)
+    const epochs = epochsOf(new Uint8Array(32).fill(4))
+    const w = mount(DropBoxDetail, {
+      props: {
+        node: BOX, scopeId: SCOPE, epochs, contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps['children'],
+        access: memberAccessOf({ scopeId: SCOPE, epochs }), tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
+      },
+      global: { plugins: [realI18n()] },
+    })
+    const action = w.find('.veyq-node-header-actions button[data-action="download"]')
+    expect(action.attributes('aria-label')).toBe(t('export.action'))
+    await action.trigger('click')
+    expect(w.emitted('download')).toEqual([[]])
+  })
+
   it('lists the guests’ folders, a repeated name numbered in creation order, each with its file count', () => {
     const w = mountDetail()
     const rows = w.findAll('.veyq-row-title').map((e) => e.text())

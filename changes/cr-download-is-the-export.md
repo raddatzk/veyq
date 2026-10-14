@@ -138,7 +138,7 @@ and imports as a plain folder.
     safe names, a clash suffix); the preflight's "no" writes nothing; one file's failure leaves the rest uploaded; a
     `READ_WRITE` guest's pick is the folder upload, never the import; the "New" menu no longer lists Import. Bitten.
   - Done when `npm run check` is green and a real browser on the dev instance picked a directory both ways.
-- [ ] 6 web (+ contracts if needed): Decision 7 - drop box download and import as plain folders.
+- [x] 6 web (+ contracts if needed): Decision 7 - drop box download and import as plain folders.
   - Tests: a drop box with two guests' folders downloads as that tree; its import creates folders only (no drop key,
     no share); the Download action is offered on a drop box to a member and to a guest of a folder link above it,
     never to its `WRITE_ONLY` guest. Bitten.

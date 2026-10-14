@@ -141,7 +141,7 @@ function skipReason(n: ManifestNode, manifest: Manifest): { application: string;
   if (n.kind === FOLDER_KIND) return null
   const application = n.content ? applicationOf(n.content.type) : n.kind
   const d = registry.kind(n.kind)
-  if (!d.supported || !d.importContent || (d.contentSchema && d.contentSchema.application !== application)) {
+  if (!d.supported || !(d.importContent || d.importsAsFolder) || (d.contentSchema && d.contentSchema.application !== application)) {
     return { application, reason: 'unknown_application' }
   }
   const written = n.content?.schema ?? manifest.applications?.find((a) => a.id === application)?.contentSchema ?? 1
@@ -207,6 +207,13 @@ export type ImportSubtreeParams = {
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 const MAX_NAME_TRIES = 50
 
+/** The kind an import creates for `n`: its own, or a plain `FOLDER` for a kind that imports as one (a drop box). */
+const createdKind = (n: ManifestNode): string => {
+  if (n.kind === FOLDER_KIND) return FOLDER_KIND
+  const d = registry.kind(n.kind)
+  return d.supported && d.importsAsFolder ? FOLDER_KIND : n.kind
+}
+
 /** Import the rest: everything {@link planImport} does not leave out. Nothing is written when the plan holds nothing. */
 export async function importSubtree(params: ImportSubtreeParams): Promise<ImportResult> {
   const { scopeId, epochs, tree, parent, opened, signal, onProgress } = params
@@ -264,11 +271,12 @@ export async function importSubtree(params: ImportSubtreeParams): Promise<Import
     const used = takenIn(parentId)
     let lastError: unknown = null
     const nodeBytes = collectPayloads(n).reduce((s, p) => s + p.size, 0)
+    const kind = createdKind(n)
     for (const name of candidates(n.name)) {
-      const slug = registry.slugFor(n.kind, name)
+      const slug = registry.slugFor(kind, name)
       if (used.has(slug)) continue
       try {
-        if (n.kind === FOLDER_KIND) {
+        if (kind === FOLDER_KIND) {
           const { nodeId, contentKey } = await createContentNode(scopeId, epochs, at, FOLDER_KIND, name)
           used.add(slug)
           return { nodeId, nodeKey: contentKey }

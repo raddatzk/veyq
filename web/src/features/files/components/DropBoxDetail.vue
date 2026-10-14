@@ -37,6 +37,7 @@ import { FILE_KIND } from '../kinds'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
+import { downloadHeaderActions } from '../../../core/export/downloadActions'
 import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import NodeCoverImage from '../../../core/node/cover/components/NodeCoverImage.vue'
 import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
@@ -51,7 +52,13 @@ const { t } = useI18n()
 // Core's heart (inbox #409) and cover (inbox #411): the same for every kind that carries one; a guest gets neither action.
 // A drop box's cover is its own image (core's picker), shown in the header's leading slot; the inbox icon is the default.
 const cover = useNodeCover(() => props.access, () => props.tree, () => [props.node])
-const coreActions = computed(() => [...favoriteHeaderActions(t, props.access, props.node), ...cover.headerActions(props.node)])
+// …and core's Download (cr-download-is-the-export Decision 7): the drop box as a ZIP of its guests' folders, for a member and a READ
+// or READ_WRITE guest of a folder link above it - never its own WRITE_ONLY guest, who holds no key (core's `canDownload`).
+const coreActions = computed(() => [
+  ...favoriteHeaderActions(t, props.access, props.node),
+  ...cover.headerActions(props.node),
+  ...downloadHeaderActions(t, props.access, props.node, () => emit('download')),
+])
 const nodeCover = computed(() => cover.covers.value.get(props.node.id) ?? null)
 const { ask } = useConfirm()
 const toast = useToast()
