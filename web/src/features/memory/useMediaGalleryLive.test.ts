@@ -8,6 +8,7 @@ vi.mock('./media', async (orig) => ({
   openGrid: vi.fn(),
   deleteMedia: vi.fn(),
   restoreMedia: vi.fn(),
+  originalBlobMeta: vi.fn(),
   hasDerivatives: vi.fn(),
   unsealMeta: vi.fn(),
   effectiveCapturedAt: vi.fn(),
@@ -24,9 +25,9 @@ vi.mock('./useOptimisticTiles', async () => {
 })
 // The undo affordance is now a global toast (cr-0157) + i18n summary: stub the toast so the isolated composable runs and
 // the test can capture the `showUndo({ onUndo })` call to drive the restore (the toast surface lives in App.vue).
-const { showUndo, dismissUndo } = vi.hoisted(() => ({ showUndo: vi.fn(), dismissUndo: vi.fn() }))
+const { showUndo, dismissUndo, toastError } = vi.hoisted(() => ({ showUndo: vi.fn(), dismissUndo: vi.fn(), toastError: vi.fn() }))
 vi.mock('../../shared/state/useToast', () => ({
-  useToast: () => ({ success: vi.fn(), showUndo, dismissUndo }),
+  useToast: () => ({ success: vi.fn(), error: toastError, showUndo, dismissUndo }),
   UNDO_GROUP: 'undo',
 }))
 
@@ -38,6 +39,7 @@ import {
   listMediaPage,
   deleteMedia,
   restoreMedia,
+  originalBlobMeta,
   openGrid,
   hasDerivatives,
   unsealMeta,
@@ -59,6 +61,7 @@ beforeEach(() => {
   vi.mocked(unsealMeta).mockReturnValue({ v: 1, w: 100, h: 100 })
   vi.mocked(effectiveCapturedAt).mockImplementation((m) => (m ? 1 : undefined))
   vi.mocked(newestCursor).mockReturnValue(undefined)
+  vi.mocked(originalBlobMeta).mockReturnValue(null)
 })
 
 const KEY = new Uint8Array(32)
@@ -127,5 +130,49 @@ describe('useMediaGalleryLive', () => {
     await flushPromises()
     expect(restoreMedia).toHaveBeenCalledWith('scope-1', 'a')
     expect(vm.items.map((i) => i.mediaId)).toEqual(['a']) // re-listed after the tombstone lifted
+    expect(toastError).not.toHaveBeenCalled() // a restore that went says nothing
+  })
+})
+
+/** A generated-client refusal: the `ResponseError` shape `decodeHttpError` reads (`.response` with a JSON `code`). */
+const refusal = (status: number, code: string) =>
+  Object.assign(new Error(code), { response: new Response(JSON.stringify({ code }), { status, headers: { 'content-type': 'application/json' } }) })
+
+describe('useMediaGalleryLive — a lightbox Undo whose restore is refused (inbox #429)', () => {
+  /** Open the lightbox on `id` over a bucket's grid in the order c, b, a (the organizer's `openBucketLightbox`), trash
+   *  it there, then hit the undo toast's Undo. */
+  async function deleteInLightboxAndUndo(id: string) {
+    vi.mocked(listMediaPage).mockResolvedValue(page([item('a'), item('b'), item('c')]))
+    const { vm } = setup()
+    await flushPromises()
+    const grid = ['c', 'b', 'a'].map(item)
+    vm.openBucketLightbox({ items: grid, index: grid.findIndex((m) => m.mediaId === id) })
+    await vm.onDeleteFromLightbox({ mediaId: id })
+    await showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+  }
+
+  it('names the refused medium by its sealed file name with its reason, and re-lists', async () => {
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, m) => ({ v: 1, type: 'image/jpeg', name: `${m.mediaId}.jpg` }))
+    vi.mocked(restoreMedia).mockRejectedValue(refusal(409, 'scope_deleting'))
+    await deleteInLightboxAndUndo('b')
+
+    expect(restoreMedia).toHaveBeenCalledWith('scope-1', 'b')
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual(['Not restored: b.jpg. This space is being deleted.'])
+    expect(listMediaPage).toHaveBeenCalledTimes(2) // the mount's list and the re-list after the refused restore
+  })
+
+  it('names a medium without a sealed file name by its place in the grid the lightbox opened on, by reason', async () => {
+    vi.mocked(restoreMedia).mockRejectedValue(refusal(404, 'media_not_found')) // purged meanwhile
+    await deleteInLightboxAndUndo('a')
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual([
+      'Not restored: Item 3. Already gone from this Memory, or you no longer have access.',
+    ])
+
+    toastError.mockClear()
+    showUndo.mockClear()
+    vi.mocked(restoreMedia).mockRejectedValue(new TypeError('Failed to fetch'))
+    await deleteInLightboxAndUndo('b')
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual(['Not restored: Item 2. Please try again.'])
   })
 })
