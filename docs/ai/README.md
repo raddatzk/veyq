@@ -230,6 +230,9 @@ A refined CR nails **decisions, not keystrokes**:
   ZIP without saying where the picker sits or reconciling the use case's E5, and both came back as owner questions.
   A sentence that leans on a neighbour ("a startup failure, as the other seams handle it") cites the line it means:
   in cr-guests-create-no-application-nodes no other seam did, the refine had described them from memory.
+  The same holds for a core feature over application nodes: name the registry hook that carries each kind's answer
+  (cr-select-nodes said "capabilities decide per node", and core may not call an application's capability function -
+  the implementer had to add `LevelRow.selection`).
 - **Run the locator here — from two angles, and read the output as a list.** Handing one over unrun is the
   estimate wearing a command's clothes. And the first command you reach for is a paraphrase of what you already
   believe, so it fails silently wherever that belief is wrong: cr-0171's refine measured "246 scalars" with a
