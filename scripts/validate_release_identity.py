@@ -688,7 +688,20 @@ else:
             )
 
 written_tags = 0
-for path in sorted(p for p in INFRA.rglob("*") if p.is_file()):
+# Tracked files only, as in assertion 9's flag scan. A gitignored `infra/.env` is one operator's local pin (a
+# dev build's `veyq:cr162`, say), not something this repository tells anyone to run — scanning it made the
+# guard red on that machine and green in CI over the same commit.
+tracked_infra = subprocess.run(
+    ["git", "ls-files", "-z", "--", str(INFRA.relative_to(ROOT))], cwd=ROOT, capture_output=True, text=True
+)
+if tracked_infra.returncode != 0:
+    fail(
+        "`git ls-files` failed, so this guard cannot enumerate the tracked deployment files and its tag scan "
+        f"checked NOTHING ({tracked_infra.stderr.strip()[-200:]})."
+    )
+for path in sorted(ROOT / rel for rel in tracked_infra.stdout.split("\0") if rel):
+    if not path.is_file():
+        continue  # tracked but deleted in the working tree
     try:
         text = path.read_text()
     except (UnicodeDecodeError, OSError):
