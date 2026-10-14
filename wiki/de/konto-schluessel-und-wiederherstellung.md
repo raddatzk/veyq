@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/account/use-cases/uc.account.confirm-email-address.md; pair: en/account-keys-and-recovery.md -->
+<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/account/use-cases/uc.account.confirm-email-address.md, docs/features/account/use-cases/uc.account.change-email.md; pair: en/account-keys-and-recovery.md -->
 # Konto-Schlüssel & Wiederherstellung
 
 Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Weil veyq
@@ -130,6 +130,30 @@ Eine Sache lohnt sich, *bevor* du das je brauchst: **mach in einem Raum, den nur
 zweiten Besitzerin oder zum zweiten Besitzer.** Sonst ist dort niemand, der dich wieder hereinlassen kann.
 
 Dein Notfall-Kit funktioniert danach weiter — dein Secret Key ändert sich nicht, nur das, was er öffnet.
+
+## Die Adresse ändern, mit der du dich anmeldest
+
+Unter *Einstellungen → Sicherheit*, neben der Adresse, an die ein Link zum Zurücksetzen ginge, wählst du
+**„Anmeldeadresse ändern"**. Du gibst die neue Adresse, dein Passwort und deinen Secret Key ein, und wir schicken
+einen Link an die **neue** Adresse. Öffne ihn auf einem Gerät, auf dem du in diesem Konto angemeldet bist — erst
+dann wird geändert. Bis dahin meldest du dich weiter mit der alten Adresse an, und öffnest du den Link nie, ändert
+sich nichts.
+
+Deine Erinnerungen, deine Schlüssel und der Secret Key in deinem Notfall-Kit bleiben genau, wie sie sind. Was sich
+ändert: Du meldest dich mit der neuen Adresse an, deine anderen Geräte werden abgemeldet, und deine **alte** Adresse
+bekommt einen kurzen Hinweis darauf — ohne die neue Adresse. Einladungen, die an deine alte Adresse gingen, kannst du
+mit diesem Konto nicht mehr annehmen.
+
+Warum Passwort **und** Secret Key? An deine Adresse geht ein Link zum Zurücksetzen des Passworts. Wer nur ein
+angemeldetes Gerät hat — oder nur dein Passwort —, darf das nicht in ein eigenes Postfach umleiten können.
+
+Erstelle danach ein **neues Notfall-Kit**: Das alte funktioniert weiter, zeigt aber deine alte Adresse. Die Seite,
+die die Änderung abschließt, bietet es dir gleich an, sobald du Passwort und Secret Key eingibst — sie prüft beides
+zuerst, damit nie ein vertippter Schlüssel in einem Kit landet.
+
+Kann die neue Adresse nicht verwendet werden — etwa weil sich schon ein anderes Konto damit anmeldet —, erfährst du
+das erst, wenn du den Link öffnest. Das ist Absicht: Sonst könnte jede Person mit diesem Formular ausprobieren, zu
+welchen Adressen es hier ein Konto gibt.
 
 ## Was der Server tatsächlich speichert
 

@@ -268,7 +268,7 @@ class OperatorBlindProbeTest {
             "Host-resolved and self-scoped: reads or writes only the caller's own rows on the Host's own tenant, so " +
                 "the Host filter is a correct suspension gate for exactly these (cr D10).",
             "listMyScopes", "listMyGroupInvitations", "getMyProfile", "updateMyProfile", "requestEmailConfirmation",
-            "setMyAvatar", "clearMyAvatar",
+            "setMyAvatar", "clearMyAvatar", "requestEmailChange", "confirmEmailChange",
         )
         reason(
             "addressed by the caller's own unaccepted proposal, which the gate by definition does not count as a " +

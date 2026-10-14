@@ -4,7 +4,7 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
-import { cacheSessionVault, loadSessionVault, clearSessionVault, isSessionVaultSupported } from './sessionVault'
+import { cacheSessionVault, loadSessionVault, clearSessionVault, isSessionVaultSupported, readdressSessionVault } from './sessionVault'
 import { b64std } from '@veyq/crypto/base64'
 import { memoryStorage } from '../../../test/memoryStorage'
 
@@ -62,5 +62,26 @@ describe('sessionVault (web "off" tier, cr-0057)', () => {
   it('returns null on corrupt sessionStorage data instead of throwing', async () => {
     sessionStorage.setItem('veyq.session-vault', 'not-json')
     expect(await loadSessionVault()).toBeNull()
+  })
+})
+
+describe('readdressSessionVault (uc.account.change-email)', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    globalThis.indexedDB = new IDBFactory()
+  })
+
+  it('moves the vault to the new address and it still opens', async () => {
+    await cacheSessionVault('old@example.com', masterKey())
+    readdressSessionVault('Old@Example.com', ' New@Example.com')
+    const v = await loadSessionVault()
+    expect(v?.email).toBe('new@example.com')
+    expect(v?.masterKey).toEqual(masterKey())
+  })
+
+  it('leaves a vault of another address alone', async () => {
+    await cacheSessionVault('someone@example.com', masterKey())
+    readdressSessionVault('old@example.com', 'new@example.com')
+    expect((await loadSessionVault())?.email).toBe('someone@example.com')
   })
 })

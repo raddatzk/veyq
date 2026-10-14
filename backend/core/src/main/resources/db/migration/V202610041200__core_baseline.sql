@@ -532,6 +532,22 @@ CREATE TABLE veyq_email_confirmation (
 CREATE UNIQUE INDEX ux_email_confirmation_token_hash ON veyq_email_confirmation (token_hash);
 CREATE INDEX ix_email_confirmation_user_status ON veyq_email_confirmation (user_id, status);
 
+-- A pending change of the sign-in address (uc.account.change-email, ADR 0074 Addendum): the new address and the auth
+-- public key derived under its salt, installed together when the link mailed to the new address is confirmed. At
+-- most one per account (a newer request replaces it); spent by deleting it; an expired one is purged.
+CREATE TABLE veyq_email_change (
+    id              UUID         NOT NULL PRIMARY KEY,
+    user_id         UUID         NOT NULL,
+    new_email       VARCHAR(254) NOT NULL,
+    auth_public_key TEXT         NOT NULL,
+    token_hash      VARCHAR(64)  NOT NULL,
+    expires_at      TIMESTAMP    NOT NULL,
+    CONSTRAINT fk_email_change_user FOREIGN KEY (user_id) REFERENCES veyq_user (id)
+);
+CREATE UNIQUE INDEX ux_email_change_user ON veyq_email_change (user_id);
+CREATE UNIQUE INDEX ux_email_change_token_hash ON veyq_email_change (token_hash);
+CREATE INDEX ix_email_change_expires ON veyq_email_change (expires_at);
+
 -- Every share id the scope purge erased (the id only), so create never mints one twice (ADR 0029 §7).
 CREATE TABLE veyq_share_retired_id (
     id VARCHAR(64) NOT NULL PRIMARY KEY

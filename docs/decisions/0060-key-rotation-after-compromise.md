@@ -62,8 +62,8 @@ A device-link holder has the Master Key and the identity key and can call `rotat
 `POST /api/account/password` directly. So can someone who holds only the password, because a session is all
 those endpoints used to ask for. Therefore every account carries a **Secret-Key proof key**: an Ed25519 keypair
 derived from the Secret Key alone, whose public half is registered at account birth. Every flow that mints a
-cold credential — rotation, change-password, and recovery completion ([ADR 0054](0054-password-recovery-two-factor-release.md))
-— carries a signature of that key over what the flow installs and the state it replaces. The server verifies
+cold credential — rotation, change-password, recovery completion ([ADR 0054](0054-password-recovery-two-factor-release.md)),
+and a change of the sign-in address ([ADR 0074](0074-address-control-is-recorded-where-nothing-else-proves-it.md) Addendum) — carries a signature of that key over what the flow installs and the state it replaces. The server verifies
 the signature against the stored public key and refuses the request otherwise.
 - **The public key reveals nothing.** The Secret Key is 256 random bits.
 - **It never changes in these flows.** None of them rotates the Secret Key. Re-issuing an Emergency Kit, a

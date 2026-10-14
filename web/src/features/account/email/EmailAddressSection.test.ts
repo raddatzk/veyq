@@ -16,6 +16,7 @@ vi.mock('./emailConfirmation', async (orig) => ({
 import EmailAddressSection from './EmailAddressSection.vue'
 import { getAccountEmail, requestEmailConfirmation } from './emailConfirmation'
 import { realI18n, t } from '../../../test/i18n'
+import { activeSpace } from '../../../app/activeSpace'
 
 const stubs = {
   Button: { props: ['label', 'loading'], emits: ['click'], template: '<button :disabled="loading" @click="$emit(\'click\')">{{ label }}</button>' },
@@ -103,5 +104,25 @@ describe('EmailAddressSection (uc.account.confirm-email-address, web)', () => {
     // Control on the same mapping: an answer the contract does not give this endpoint is the generic failure.
     const other = await sendWith(httpError(500))
     expect(other.text()).toContain(t('emailConfirm.requestFailed'))
+  })
+})
+
+// uc.account.change-email E5: the link is mailed through a space's relay, so the change is offered only inside one.
+describe('EmailAddressSection — changing the address (uc.account.change-email)', () => {
+  it('offers "Change sign-in address" inside a space, and not outside one', async () => {
+    vi.mocked(getAccountEmail).mockResolvedValue({ email: ADDRESS, confirmed: true })
+    activeSpace.tenantId = null
+    const outside = mountSection()
+    await flushPromises()
+    expect(outside.find('[data-testid="change-email-open"]').exists()).toBe(false)
+
+    activeSpace.tenantId = 'tenant-1'
+    try {
+      const inside = mountSection()
+      await flushPromises()
+      expect(inside.find('[data-testid="change-email-open"]').exists()).toBe(true)
+    } finally {
+      activeSpace.tenantId = null
+    }
   })
 })

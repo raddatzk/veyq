@@ -231,9 +231,9 @@ export const authVerify = (publicKey: Uint8Array, message: Uint8Array, signature
 // base64 text — so both stacks rebuild it from bytes, not from an encoding either could spell differently. The
 // backend rebuilds the same bytes itself; `secret_key_proof` in the vectors pins both stacks to one encoding.
 //
-// There is deliberately no user id in them: the web client does not know its own (no read hands it over), and
-// nothing is lost — the server verifies under the CALLER's stored proof key, so a statement cannot be carried to
-// another account, and the replaced state it binds (identity, auth key, token) is already that account's alone.
+// There is no user id in them, and nothing is lost: the server verifies under the CALLER's stored proof key, so a
+// statement cannot be carried to another account, and the replaced state it binds (identity, auth key, token) is
+// already that account's alone. (The recovery path could not carry one anyway: it has no session to read it from.)
 
 /** `seed = HKDF-SHA256(ikm = secretKey, salt = "", info = "veyq/v1/secret-key-proof")`, and from it an Ed25519
  *  keypair. Deterministic: the Secret Key never changes in these flows, so neither does this key. */
@@ -298,6 +298,38 @@ export const recoveryProofStatement = (s: {
     s.authPublicKey,
     wrapDigest(s.passwordWrap),
   )
+
+/** The one email normalization (trim, lower-case) — `deriveAuthSalt`'s rule, and the server's `normalizeEmail`. A
+ *  statement binds the address as both stacks store and salt it, never as it happened to be typed. */
+const normalizedEmail = (email: string): Uint8Array => utf8(email.trim().toLowerCase())
+
+/** Change-email (uc.account.change-email): the auth key it replaces, the one derived under the new address's salt,
+ *  and that address. Not the password change's statement: there is no wrap to bind here, and the address is what
+ *  this flow installs — so a new domain, with the address in the place the wrap digest holds there. */
+export const emailChangeProofStatement = (s: {
+  currentAuthPublicKey: Uint8Array
+  authPublicKey: Uint8Array
+  email: string
+}): Uint8Array =>
+  statement(
+    'veyq/v1/secret-key-proof/change-email',
+    s.currentAuthPublicKey,
+    s.authPublicKey,
+    normalizedEmail(s.email),
+  )
+
+/**
+ * The attestation a change-email carries (uc.account.change-email): signed with the CURRENT auth private key (the
+ * password being kept), over the account, the new address and the auth key derived under it. A password change's
+ * attestation signs the new key's raw bytes alone; this one is domain-separated and binds the address, so neither
+ * can stand for the other, and a captured one cannot install its key under another address or account.
+ */
+export const emailChangeAttestationStatement = (s: {
+  userId: string
+  email: string
+  authPublicKey: Uint8Array
+}): Uint8Array =>
+  statement('veyq/v1/auth-attestation/change-email', utf8(s.userId), normalizedEmail(s.email), s.authPublicKey)
 
 /** Sign a statement with the proof key's private half. Ed25519 is deterministic, so the vectors pin signatures. */
 export const secretKeyProofSign = (privateKey: Uint8Array, stmt: Uint8Array): Uint8Array => ed25519.sign(stmt, privateKey)

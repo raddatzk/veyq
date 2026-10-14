@@ -530,7 +530,7 @@ export interface KindRoute {
 /** Words the platform keeps for itself in a route slug's place: the history-mode routes (`router.ts`) and the scope tokens'
  *  names. An application's slug can never shadow them, whatever a later route or mapping makes of the fragment. */
 export const RESERVED_ROUTE_SEGMENTS: readonly string[] = [
-  'api', 'confirm-email', 'folder', 'invitations', 'login', 'not-set-up', 'offline', 'people', 'recover', 's', 'settings', 'tenant', 'terms',
+  'api', 'confirm-email', 'confirm-email-change', 'folder', 'invitations', 'login', 'not-set-up', 'offline', 'people', 'recover', 's', 'settings', 'tenant', 'terms',
 ]
 const ROUTE_SLUG = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
 

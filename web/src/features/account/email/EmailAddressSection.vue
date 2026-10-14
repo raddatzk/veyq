@@ -17,6 +17,8 @@ import { useAsyncData } from '../../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { handle401 } from '../../../shared/handle401'
 import { isUnauthorized } from '../../../shared/httpError'
+import { activeSpace } from '../../../app/activeSpace'
+import ChangeEmailForm from './ChangeEmailForm.vue'
 
 const { t } = useI18n()
 const on401 = handle401(useRouter())
@@ -77,6 +79,10 @@ const { run: send, pending: sending } = useAsyncAction(
           @click="send()"
         />
       </div>
+
+      <!-- uc.account.change-email: the address above is the one this changes. Only inside a space — its relay mails
+           the link, so an account in no space (a Server Owner alone) is not offered it (E5). -->
+      <ChangeEmailForm v-if="activeSpace.tenantId" :current-email="account.email" />
     </template>
   </section>
 </template>

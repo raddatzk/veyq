@@ -617,6 +617,40 @@ const en = {
     noLink: 'This page confirms your email address from the link in a confirmation email. Ask for one in your settings.',
     failed: 'The confirmation didn’t go through. Check your connection and try again.',
   },
+  emailChange: {
+    action: 'Change sign-in address',
+    formSub:
+      'You confirm the change with your password and Secret Key, then open the link we send to the new address. Your data and keys stay as they are.',
+    newEmailLabel: 'New email address',
+    passwordLabel: 'Password',
+    secretKeyLabel: 'Secret Key',
+    secretKeyHint: 'From your Emergency Kit — type it, paste it, or import the kit.',
+    submit: 'Send link to the new address',
+    submitting: 'Checking…',
+    cancel: 'Cancel',
+    unchanged: 'That is already the address you sign in with.',
+    sent:
+      'If {email} can be used, a link was sent to it. Open it on a device where you are signed in to this account. Until then you keep signing in with your current address.',
+    errorCredential: 'That password or Secret Key didn’t match. Nothing was changed.',
+    errorLocked: 'Unlock veyq first, then try again.',
+    errorFailed: 'The change couldn’t be started. Nothing was changed — check your connection and try again.',
+    pageTitle: 'Confirm your new sign-in address',
+    confirming: 'Changing your sign-in address…',
+    done: 'Done — you sign in with your new address from now on.',
+    doneNote:
+      'Your other devices were signed out, and your old address got a short notice. Invitations sent to your old address can no longer be accepted with this account.',
+    invalid:
+      'This link can’t be used — it has expired, was replaced by a newer one, was already used, belongs to a different account, or the address can’t be used. Nothing was changed.',
+    mailUnavailable: 'This space can’t send email right now, so the change can’t be finished yet. Nothing was changed.',
+    noLink: 'This page finishes a change of your sign-in address from the link in an email. Start one in your settings.',
+    failed: 'The change didn’t go through. Nothing was changed — check your connection and try again.',
+    kitTitle: 'Print a new Emergency Kit',
+    kitSub:
+      'Your old kit still works, but it shows your old address. Enter your password and your Secret Key — or import the old kit — and we check them before making one with the new address.',
+    kitCheck: 'Check and make the kit',
+    kitRefused: 'That password or Secret Key didn’t match, so no kit was made — a kit with a wrong key would fail exactly when you need it.',
+    kitFailed: 'The check didn’t go through, so no kit was made. Check your connection and try again.',
+  },
   login: {
     title: 'Sign in',
     submit: 'Sign in',
@@ -2323,6 +2357,40 @@ const de: typeof en = {
       'Dieser Link funktioniert nicht – er ist abgelaufen, wurde durch einen neueren ersetzt, wurde schon benutzt oder gehört zu einem anderen Konto. Fordere in deinen Einstellungen einen neuen an.',
     noLink: 'Diese Seite bestätigt deine E-Mail-Adresse über den Link in einer Bestätigungsmail. Fordere eine in deinen Einstellungen an.',
     failed: 'Die Bestätigung hat nicht geklappt. Prüfe deine Verbindung und versuche es erneut.',
+  },
+  emailChange: {
+    action: 'Anmeldeadresse ändern',
+    formSub:
+      'Du bestätigst die Änderung mit Passwort und Secret Key und öffnest dann den Link, den wir an die neue Adresse schicken. Deine Daten und Schlüssel bleiben, wie sie sind.',
+    newEmailLabel: 'Neue E-Mail-Adresse',
+    passwordLabel: 'Passwort',
+    secretKeyLabel: 'Secret Key',
+    secretKeyHint: 'Aus deinem Notfall-Kit – eintippen, einfügen oder das Kit importieren.',
+    submit: 'Link an die neue Adresse senden',
+    submitting: 'Wird geprüft…',
+    cancel: 'Abbrechen',
+    unchanged: 'Mit dieser Adresse meldest du dich schon an.',
+    sent:
+      'Wenn {email} verwendet werden kann, ging ein Link dorthin. Öffne ihn auf einem Gerät, auf dem du in diesem Konto angemeldet bist. Bis dahin meldest du dich weiter mit deiner bisherigen Adresse an.',
+    errorCredential: 'Passwort oder Secret Key passen nicht. Es wurde nichts geändert.',
+    errorLocked: 'Entsperre veyq zuerst und versuche es dann erneut.',
+    errorFailed: 'Die Änderung konnte nicht gestartet werden. Es wurde nichts geändert – prüfe deine Verbindung und versuche es erneut.',
+    pageTitle: 'Neue Anmeldeadresse bestätigen',
+    confirming: 'Deine Anmeldeadresse wird geändert…',
+    done: 'Erledigt – ab jetzt meldest du dich mit deiner neuen Adresse an.',
+    doneNote:
+      'Deine anderen Geräte wurden abgemeldet, und deine alte Adresse hat einen kurzen Hinweis bekommen. Einladungen an deine alte Adresse kannst du mit diesem Konto nicht mehr annehmen.',
+    invalid:
+      'Dieser Link kann nicht verwendet werden – er ist abgelaufen, wurde durch einen neueren ersetzt, wurde schon benutzt, gehört zu einem anderen Konto, oder die Adresse kann nicht verwendet werden. Es wurde nichts geändert.',
+    mailUnavailable: 'Dieser Bereich kann gerade keine E-Mails senden, daher lässt sich die Änderung noch nicht abschließen. Es wurde nichts geändert.',
+    noLink: 'Diese Seite schließt die Änderung deiner Anmeldeadresse über den Link in einer E-Mail ab. Starte sie in deinen Einstellungen.',
+    failed: 'Die Änderung hat nicht geklappt. Es wurde nichts geändert – prüfe deine Verbindung und versuche es erneut.',
+    kitTitle: 'Neues Notfall-Kit erstellen',
+    kitSub:
+      'Dein altes Kit funktioniert weiter, zeigt aber deine alte Adresse. Gib dein Passwort und deinen Secret Key ein – oder importiere das alte Kit –; wir prüfen beides, bevor wir eines mit der neuen Adresse erstellen.',
+    kitCheck: 'Prüfen und Kit erstellen',
+    kitRefused: 'Passwort oder Secret Key passen nicht, deshalb wurde kein Kit erstellt – ein Kit mit falschem Schlüssel versagt genau dann, wenn du es brauchst.',
+    kitFailed: 'Die Prüfung hat nicht geklappt, deshalb wurde kein Kit erstellt. Prüfe deine Verbindung und versuche es erneut.',
   },
   login: {
     title: 'Anmelden',

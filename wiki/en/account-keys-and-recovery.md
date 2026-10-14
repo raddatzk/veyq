@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/account/use-cases/uc.account.confirm-email-address.md; pair: de/konto-schluessel-und-wiederherstellung.md -->
+<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/account/use-cases/uc.account.confirm-email-address.md, docs/features/account/use-cases/uc.account.change-email.md; pair: de/konto-schluessel-und-wiederherstellung.md -->
 # Account keys & recovery
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md). Because veyq is end-to-end
@@ -121,6 +121,28 @@ One thing worth setting up *before* you ever need this: **in a space only you ow
 too.** Otherwise there is nobody there who can let you back in.
 
 Your Emergency Kit keeps working afterwards — your secret key doesn't change, only what it opens.
+
+## Changing the address you sign in with
+
+Under *Settings → Security*, next to the address a reset link would go to, choose **"Change sign-in address"**.
+You enter the new address, your password and your secret key, and we mail a link to the **new** address. Open it on
+a device where you are signed in to this account — that is the moment the change happens. Until then you keep
+signing in with the old address, and if you never open the link, nothing changes.
+
+Your memories, your keys and your Emergency Kit's secret key stay exactly as they are. What changes: you sign in with
+the new address, your other devices are signed out, and your **old** address gets a short note that it happened —
+without the new address in it. Invitations that were sent to your old address can't be accepted with this account
+any more.
+
+Why the password **and** the secret key? Your address is where a password-reset link goes. Someone holding just a
+signed-in device — or just your password — must not be able to move that to a mailbox of their own.
+
+Afterwards, print a **new Emergency Kit**: the old one still works, but it shows your old address. The page that
+finishes the change offers it right there, once you enter your password and secret key — it checks them first, so
+a mistyped key never ends up in a kit.
+
+If the new address can't be used — say another account already signs in with it — you only find out when you open
+the link. That is on purpose: otherwise anybody could use this form to test which addresses have an account here.
 
 ## What the server actually stores
 

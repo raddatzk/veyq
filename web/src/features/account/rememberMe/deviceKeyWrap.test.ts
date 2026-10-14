@@ -13,7 +13,7 @@ vi.mock('../../../api/client', () => ({
   sessionApi: vi.fn(),
 }))
 
-import { enrolDeviceKey, restoreDeviceKey, clearDeviceKey, isRemembered, rememberedWrapId } from './deviceKeyWrap'
+import { enrolDeviceKey, restoreDeviceKey, clearDeviceKey, isRemembered, rememberedWrapId, readdressRemembered } from './deviceKeyWrap'
 import { accountWrapsApi } from '../../../api/client'
 import type { AccountKeyMaterial, AccountWrapsApi, MasterKeyWrap } from '../../../api/generated/account'
 import { fakeApi } from '../../../test/apiMock'
@@ -161,5 +161,29 @@ describe('deviceKeyWrap (web remember-me, cr-0054)', () => {
 
     expect(del).not.toHaveBeenCalled()
     expect(await isRemembered()).toBe(false)
+  })
+})
+
+// uc.account.change-email: the record's email is the one thing boot learns the account's address from.
+describe('readdressRemembered (uc.account.change-email)', () => {
+  it('moves the record to the new address, keeping its key and its wrap', async () => {
+    const add = vi.fn<AddWrap>().mockResolvedValue({ id: 'wrap-1' })
+    mockWrapsApi(add, vi.fn<DeleteWrap>())
+    await enrolDeviceKey('old@example.com', masterKey())
+
+    await readdressRemembered(' Old@Example.com', 'New@Example.com ')
+
+    expect(await rememberedWrapId('new@example.com')).toBe('wrap-1')
+    expect(await rememberedWrapId('old@example.com')).toBeNull()
+    const restored = await restoreDeviceKey(materialFrom(add, 'wrap-1'))
+    expect(restored?.email).toBe('new@example.com')
+    expect(restored?.masterKey).toEqual(masterKey())
+  })
+
+  it('leaves another account’s record alone', async () => {
+    mockWrapsApi(vi.fn<AddWrap>().mockResolvedValue({ id: 'wrap-2' }), vi.fn<DeleteWrap>())
+    await enrolDeviceKey('someone@example.com', masterKey())
+    await readdressRemembered('old@example.com', 'new@example.com')
+    expect(await rememberedWrapId('someone@example.com')).toBe('wrap-2')
   })
 })

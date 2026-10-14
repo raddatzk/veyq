@@ -58,6 +58,18 @@ class SecretKeyProofTest {
     }
 
     @Test
+    fun theChangeEmailStatementIsTheVectorsAndItsSignatureVerifies() {
+        val c = v["change_email"]
+        // email_utf8 is the raw, un-normalized input: the statement must carry the address as stored.
+        val stmt = SecretKeyProof.emailChangeStatement(
+            currentAuthPublicKey = b64(c["current_auth_public_key"]),
+            authPublicKey = b64(c["auth_public_key"]),
+            email = c["email_utf8"].asText(),
+        )
+        assertStatementAndSignature(c, stmt)
+    }
+
+    @Test
     fun aSignatureAnswersOnlyForItsOwnFlow() {
         // Domain separation: the rotation vector's signature, presented over the change-password statement, must
         // not verify — otherwise one flow's proof would authorise another's write.

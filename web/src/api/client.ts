@@ -19,6 +19,7 @@ import {
   AccountIdentityPinsApi,
   AccountDeviceRegisterApi,
   AccountEmailApi,
+  AccountEmailChangeApi,
   AccountPasswordApi,
   AccountProfileApi,
   AccountRotationApi,
@@ -107,6 +108,11 @@ export function accountDeviceRegisterApi(): AccountDeviceRegisterApi {
 /** The caller's own address and its confirmation (ADR 0074) — session-authenticated, unlock not required. */
 export function accountEmailApi(): AccountEmailApi {
   return new AccountEmailApi(new AccountConfiguration(bearerParams()))
+}
+
+/** Changing the sign-in address (uc.account.change-email) — session-authenticated; the request carries its own proofs. */
+export function accountEmailChangeApi(): AccountEmailChangeApi {
+  return new AccountEmailChangeApi(new AccountConfiguration(bearerParams()))
 }
 
 export function accountRotationApi(): AccountRotationApi {
