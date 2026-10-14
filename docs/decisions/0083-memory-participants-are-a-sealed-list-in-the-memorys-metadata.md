@@ -90,9 +90,8 @@ the uploader of a member-uploaded photo stays **unresolved** — nothing is show
 photo's `share:` key resolves for members only, as a non-clickable name. The bucket tab keeps usernames until it is aligned
 with the display-name rule.
 
-**8. Files is out of the first version.** `files.openapi.yaml` has no uploader field; showing an uploader on a file needs
-a contract and a backend field first (a guest-uploaded file then shows a non-clickable name). That is a separate slice.
-The first version is **Memories only**.
+**8. Files came as a separate slice.** The first version was **Memories only**: Files had no uploader field. A file's
+uploader is the Addendum below, with its own contract and backend field.
 
 **9. Display-name rule.** The **real name** when it opens, else the **username**.
 
@@ -108,23 +107,25 @@ The first version is **Memories only**.
   client); the reader treats an id its directory does not know as a former member.
 - **A participants write is a Memory-meta write**, so it is a member's right like date and place: not for a guest, not
   during a pending scope deletion.
-- **Follow-up slices:** a user avatar ([ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)); an uploader field on Files nodes (contract, backend).
+- **Follow-up slices:** a user avatar ([ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)); a file's uploader (the Addendum).
 - **Rejected:** a `veyq_node_participant` table (the leak above); a name snapshot on shares (stale names, and it hands
   a link holder people's names); a `~people` or history-mode route (collides with the personal-scope token, or reaches
   the access log).
 
 ## Addendum (2026-10-14): a file's page names its uploader
 
-Decided by the coordinator on the owner's behalf, 2026-10-14 (inbox #415, the follow-up slice decision 8 named). Not yet
-built (cr-file-uploader).
+Decided by the coordinator on the owner's behalf, 2026-10-14 (inbox #415, the follow-up slice decision 8 named).
 
 1. **The uploader is whoever uploaded the file's current content.** A replace moves it, as a guest's attribution already
    moves with the attachment (`veyq_node_attachment.share_identity_id`). Who created the node is not recorded.
 2. **A member's upload is recorded by the server**, as a user id on the attachment beside the guest identity (exactly one
-   of the two set). This is a new row of the class Memories already discloses (a medium's `owner_key`, ADR 0034): the
+   of the two set: `veyq_node_attachment.uploader_user_id` / `share_identity_id`, held by the check constraint
+   `ck_attachment_uploader`; written from the upload's opener by core's `AttachmentStore.attach`, so a cover's attachment
+   records its uploader too). This is a new row of the class Memories already discloses (a medium's `owner_key`, ADR 0034): the
    operator learns which member uploaded which file's current bytes, which it otherwise saw only during the upload. Taken
    for the same reasons; a sealed uploader inside the blob meta was rejected because an uploader could claim anyone.
 3. **Shown on the file's page header, to members only.** A member is named by decision 9's rule and links to the profile;
    one who left is a "former member"; a guest's upload reads "a guest" without a name in this slice (no endpoint serves a
    member the sealed identity names yet - inbox #431). A share guest's listing carries **no** uploader field (inbox #190):
-   the contract keeps it off the share's file listing. No row meta in this slice.
+   the contract keeps it off the share's file listing, which has an item schema of its own (`ShareFileListItem`) so the
+   member's `FileListItem.uploaderKey` cannot reach it by accident. No row meta in this slice.

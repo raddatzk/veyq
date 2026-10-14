@@ -74,7 +74,7 @@ no such field. Decided by the coordinator on the owner's behalf, 2026-10-14 (inb
   - _Open (implementer, 2026-10-14):_ `npm run check` green and every web test bitten; the browser pass is NOT done - a
     worktree subagent cannot serve its tree to the browser pane. The main session runs it after the merge (the baseline
     changed: recreate the dev database first), then ticks this box.
-- [ ] 4 docs: ADR 0083 Addendum and the security model's "not yet built" removed; `docs/apps/files.md`; the use case and
+- [x] 4 docs: ADR 0083 Addendum and the security model's "not yet built" removed; `docs/apps/files.md`; the use case and
   its coverage; both wikis' files page; inbox #415 done.
   - Done when every `scripts/validate_*.py` is green, run on a detached worktree.
 
@@ -86,4 +86,26 @@ no such field. Decided by the coordinator on the owner's behalf, 2026-10-14 (inb
 
 ## Retrospective
 
-_(filled at implementation)_
+- **Planning - Decision 1 mixed two migration strategies.** It asks for "exactly one" (a check constraint) AND says
+  "existing rows (dev only) may hold neither", while the constraints section edits the baseline, which recreates every
+  database - so no existing row can exist. Built: the strict `ck_attachment_uploader` in the baseline (every session has
+  exactly one opener, `BlobUploadStore.createSession`, so no honest writer can violate it); the web still names nobody for
+  a missing key. Root cause: the CR kept a sentence from a "new migration" variant it did not choose. Next time: a CR that
+  edits a baseline says "no existing rows" outright, or names the migration it adds instead.
+- **Planning - "the member's file listing / file read" named one read that does not exist.** There is no member
+  single-file read; the page reads `listFiles` of its folder. `completeFile`'s response (`FileBlobRef`) is shared with the
+  guest's `completeShareFile`, so the key stayed off it (the replacer is the caller anyway, and the page re-reads the
+  listing after a replace). Settled by the CR's own rule ("never on a shape a guest reaches"), not handed back. Side effect
+  worth knowing: core's `attach` records the uploader of EVERY attachment, so a cover's row carries one too (shown nowhere).
+- **Execution - the space between "Uploaded by" and the name was eaten by the template compiler** (whitespace between
+  elements across a newline is condensed away; flex `gap` hid it on screen). Only a test that compared the read-aloud text
+  (the line without its `aria-hidden` avatar) saw it; fixed with an explicit `{{ ' ' }}`. Next time: a label-plus-name
+  line asserts its spoken text, not its DOM pieces.
+- **Process.** An API rate limit cut the run off after the contract edit (uncommitted); the resume was clean because the
+  diff was intact and re-read first. A web suite run beside `./gradlew check` timed out in `setup.ts`'s `beforeAll` (10 s) -
+  load, green when re-run alone. Every new test was bitten (backend: the check removed, the replace not moving the
+  uploader, the listing dropping it, the share listing reusing the member item; web: the guest source growing the door, a
+  former member linked, an unread directory read as former, the page ignoring the door, a guest key unnamed), and the
+  three backend classes plus both `EntitySchemaValidationTest`s ran green on MariaDB 11.4 too
+  (`run_backend_races_on_mariadb.py --tests`), so the check constraint holds on the production engine. The
+  phase-3 browser pass is open: a worktree subagent cannot serve its tree to the browser pane.

@@ -1,7 +1,8 @@
 useCase: uc.files.view-file
 feature: files
 title: View a file — open it and see it (image, text, PDF, video, audio), or get the download
-# Built for inbox #412 (web only: no contract or backend change - the viewer reads the chunks a download reads). The
+# Built for inbox #412 (web only: no contract or backend change - the viewer reads the chunks a download reads); the
+# uploader line for inbox #415 (cr-file-uploader: contract, backend and web). The
 # decision (core/blob/sniff.ts, features/files/view.ts), the state machine (useFileViewer.ts) and the DOM (FileViewer.vue)
 # are proven in unit and real-DOM tests; the page mounts for a member and, through core's page of a link, for a READ and
 # a READ_WRITE guest with guarded clients. No real browser has played a video or audio through the service worker for a
@@ -82,7 +83,16 @@ acceptanceCriteria:
     text: A READ and a READ_WRITE guest of a file link open the file through the link's own presign (the share id and password token) and see the same viewer with the same controls as the member, with no authenticated client called; a file the viewer cannot show offers the download both roles hold.
     coverage:
       web: { unit: [src/features/files/components/FileDetail.guest.test.ts, src/features/files/components/FileDetail.test.ts] }
-gaps:
-  backend: >-
-    No backend part: the viewer reads the same presigned ciphertext chunks a download reads (FilesContentSliceTest, in
-    uc.files.member-files), and the server never sees a type or a byte of plaintext.
+  - id: a-member-sees-who-uploaded-the-current-content
+    text: The server records who uploaded a file's current content on its attachment - exactly one of a member's user id and a guest identity (a check constraint), from the upload's opener, moved to the replacer by a replace - and the member's listing serves it as uploaderKey (user:<id> | share:<identityId>, null with no content). The file's page header reads "Uploaded by" a member's avatar and display name as a real link to the profile, a greyed "former member" with no link for one no longer in the scope, "a guest" for a guest's upload; a directory that cannot be read, a key of no known shape and a file with no content name nobody.
+    coverage:
+      backend: { integration: [FilesContentSliceTest.theListingNamesTheUploaderOfTheCurrentContentAndAReplaceMovesIt, NodeAttachmentSliceTest.anAttachmentNamesExactlyOneUploader, ShareFilesSliceTest.aGuestsUploadIsAttributedToItsIdentityForMembersAndTheGuestListingNamesNoUploader] }
+      web: { unit: [src/features/files/components/FileDetail.uploader.test.ts] }
+    gaps:
+      - surface: web
+        reason: Proven in unit tests with a real router and the real catalog; no real browser has shown the line on the dev instance yet (cr-file-uploader phase 3 leaves that pass to the session that merges it).
+  - id: a-guest-is-shown-no-uploader
+    text: A share guest is never told who uploaded a file - the link's file listing has an item schema of its own with no uploader field (its raw JSON carries neither the field nor either id), and the guest's page names nobody and asks no member directory.
+    coverage:
+      backend: { integration: [ShareFilesSliceTest.aGuestsUploadIsAttributedToItsIdentityForMembersAndTheGuestListingNamesNoUploader] }
+      web: { unit: [src/features/files/components/FileDetail.guest.test.ts] }
