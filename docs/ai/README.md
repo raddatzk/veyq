@@ -124,7 +124,9 @@ Five rules follow:
    commit by its hash, never by its distance from the tip.** An explicit path is not enough on its own: `git rm`
    stages at once, so a later phase's deletion rides along with an earlier phase's commit (it did on
    2026-09-27, when a failed `git add` left only that deletion staged). Read `git status --short` between the
-   add and the commit.
+   add and the commit, column by column: `git mv` stages the rename with the OLD content, and an `RM` line is that rename
+   with its edits unstaged - a staging filter that skipped `RM` lines committed a renamed module's old body under its new
+   name (cr-download-is-the-export, 2026-10-14; the next phase's commit carried the fix).
 
    **And the rule reaches a *delegated* read, where nobody can apply it from inside.** A subagent measures
    whatever tree it is pointed at and cannot know which parts of it this session already moved. A `web/`

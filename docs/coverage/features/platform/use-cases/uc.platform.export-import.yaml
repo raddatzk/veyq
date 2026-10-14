@@ -9,28 +9,48 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/core/export/zip.test.ts, src/core/blob/stream.test.ts]
-  - id: manifest-is-trusted-for-nothing
-    text: A payload path must be a plain data/<id>/<name>, ids are unique, a newer version and a file that is no export are refused, and every payload is checked against its SHA-256 before a kind uploads it.
+  - id: archive-reads-as-the-tree
+    text: A download (format version 2) unpacks as the tree - a directory per node that holds others, each file under its own name, a kind that is one file as that file - with every name made safe by core's archiveName (no separators, no dot names, no control or Windows-forbidden characters, no reserved device names, no trailing dot or space, bounded length, a case-insensitive clash numbered `Name (2)`), and the manifest at .veyq/manifest.json maps every node to its path and names each application with its content-schema version.
     coverage:
       web:
-        unit: [src/core/export/subtree.test.ts]
+        unit: [src/core/export/archiveName.test.ts, src/core/export/subtree.test.ts]
+  - id: both-layouts-and-both-inputs
+    text: An archive written before the tree layout (version 1, data/<id>/) still imports, and a download and the same download unpacked into a directory (dropped or picked, names in either Unicode form) import to the same tree.
+    coverage:
+      web:
+        unit: [src/core/export/importHardening.test.ts]
+  - id: manifest-is-trusted-for-nothing
+    text: Before anything is written the reader refuses, each with a reason the dialog shows, a manifest that is not the contract's shape (a kind checking its own content), one over a cap (node count, depth, a name or field over its contract maxLength - pinned to the schema), a path that is no safe name, leaves its node or reaches into .veyq/, a payload missing or not its declared size, and a ZIP whose structure does not hold (an offset outside the file, overlapping entries, a declared size that is not the actual one, a ZIP64 field out of range); every payload is checked against its SHA-256 while it streams, and a mismatch trashes what was created.
+    coverage:
+      web:
+        unit: [src/core/export/importHardening.test.ts, src/core/export/subtree.test.ts, src/core/export/ImportSubtreeDialog.test.ts, src/features/memory/exportImport.test.ts]
+  - id: unknown-and-newer-reported
+    text: The dry run lists, per application, how many nodes this build cannot import and why - an application it does not have, or content newer than it reads; "Import the rest" creates exactly the rest and names what it left out, an archive with nothing importable offers only Cancel, and Cancel writes nothing (no request).
+    coverage:
+      web:
+        unit: [src/core/export/importHardening.test.ts, src/core/export/ImportSubtreeDialog.test.ts, src/core/export/ImportSubtreeDialog.cancel.test.ts]
+  - id: recognised-on-upload
+    text: A ZIP picked for an upload or dropped, and a dropped directory holding .veyq/manifest.json, are recognised by their content and offered to a member who may create there as an import - a ZIP with "Upload as a file" beside it, one import per pick or drop, the other files uploaded at once; a guest gets the ordinary upload, a locked level too, and a directory without the manifest says folder upload is not available yet and uploads nothing.
+    coverage:
+      web:
+        unit: [src/core/node/LevelView.test.ts, src/features/files/levelRows.test.ts, src/core/export/ImportSubtreeDialog.test.ts]
   - id: round-trip-by-hooks
     text: Core walks the tree and each kind supplies its content through its descriptor's hooks; a kind without a hook is left out and reported; an import recreates the tree under the importer with a free name (Name (2)), and a failure moves what it created to the trash and says N of M.
     coverage:
       web:
         unit: [src/core/export/subtree.test.ts, src/features/files/exportImport.test.ts, src/features/memory/exportImport.test.ts]
   - id: memories-content
-    text: A Memory and a chapter export their originals with capture time (a correction flagged), place, date, cover and participants as names, and an import restores date and place at birth, corrections and place names afterwards, and the cover; includeLocation=false leaves out what the manifest adds.
+    text: A Memory and a chapter download their originals with capture time (a correction flagged), place, EXIF, date, cover and participants as names, and an import restores date and place at birth, corrections and place names afterwards, and the cover.
     coverage:
       web:
         unit: [src/features/memory/exportImport.test.ts]
-  - id: member-only-and-fail-closed
-    text: Export is offered only to a member whose keys are open, on a folder or a kind with an export hook; import only where the member may create; a share guest gets neither, and a locked level treats a dropped export as an ordinary upload.
+  - id: download-for-members-and-readers
+    text: Download is offered on a folder, a Memory or a chapter to a member whose keys are open and to a READ or READ_WRITE share guest - who reads through the link and carries no names and no EXIF copy - never to a WRITE_ONLY guest; a file keeps its own download and gets no ZIP action; import only where a member may create.
     coverage:
       web:
-        unit: [src/core/export/exportActions.test.ts, src/core/node/LevelView.test.ts]
+        unit: [src/core/export/downloadActions.test.ts, src/core/sharing/ShareTreePage.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/features/files/exportImport.test.ts, src/features/memory/exportImport.test.ts, src/core/node/LevelView.test.ts]
   - id: dialogs
-    text: The export dialog warns that the file is plain and opens the save target first with the known size; the import dialog shows what would be created before anything is written and says how far a failed import got.
+    text: The download dialog asks nothing - no warning, no location option - walks at once, says what is in it and opens the save target first with the safe name and the known size; the import dialog shows what would be created before anything is written and says how far a failed import got.
     coverage:
       web:
         unit: [src/core/export/ExportSubtreeDialog.test.ts, src/core/export/ImportSubtreeDialog.test.ts]

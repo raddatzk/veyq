@@ -1,11 +1,11 @@
 # UC: Take a node and everything under it out as a file, and bring such a file back in
 
 - **ID:** uc.platform.export-import
-- **Status:** built 2026-10-13 ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)), web, plus one small backend operation, the quota preflight (`checkTenantStorageFit`); the file format is [`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json). Seen working in a real browser with a Memory of two photos: exported, imported again as "Urlaub (2)" with both photos, the date and the place. The quota preflight was tried against the real backend with a real quota: at 20 000 bytes the dialog said there was no room and kept Import shut, at 100 MB it let the import start, and past ten questions in a short time the server answered `429`. The export dialog was also seen in dark mode at 375 px (no overflow, readable); the import dialog was only measured there (same width, no overflow), not seen. **Not yet seen:** a multi-GB export, a Memory with GPS-tagged photos, a Files folder tree, an uploaded cover, the failure messages and the progress bar, and the dialog's own look while a `429` leaves the question unanswered (unit-tested, not read in the browser).
-- **Primary actor:** A member whose keys are unlocked.
+- **Status:** built 2026-10-13, Download and the tree layout 2026-10-14 ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)), web, plus one small backend operation, the quota preflight (`checkTenantStorageFit`); the file format is [`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json). The quota preflight was tried against the real backend with a real quota: at 20 000 bytes the dialog said there was no room and kept Import shut, at 100 MB it let the import start, and past ten questions in a short time the server answered `429`. Download and import (format version 2) were seen in a real browser on 2026-10-14: a folder holding a Memory of six photos and a file downloaded as a ZIP that `unzip` unpacks as the tree with every SHA-256 matching; that ZIP dropped back offered Import / Upload as a file and imported as "Archiv (2)", the unpacked directory dropped back imported as "Archiv (3)" with the same tree, Cancel wrote nothing, "Upload as a file" uploaded it as a file, a ZIP with an unknown application imported the rest and named what it left out, and a tampered one was refused with its reason. **Not yet seen:** a guest's download in a browser, a directory picker (none is offered: a directory is dropped), a multi-GB export, a Memory with GPS-tagged photos, a Files folder tree, an uploaded cover, the failure messages and the progress bar, and the dialog's own look while a `429` leaves the question unanswered (unit-tested, not read in the browser).
+- **Primary actor:** A member whose keys are unlocked; for the download also a `READ` / `READ_WRITE` share guest (E6).
 - **Goal:** Get a folder tree, a file, a Memory with its chapters out as one ZIP that outlives veyq and can be handed to someone, and get such a file back in, as new content that belongs to the importer.
-- **Preconditions:** Signed in and unlocked. Export: any node of a kind that can be exported (a folder, a file, a Memory, a chapter). Import: a place where the member may create (not a read-only scope, not a guest's view).
-- **Postconditions (success):** Export: one ZIP on the member's disk, written by the browser while the content was decrypted on the device. Import: a new node tree under the folder on screen, sealed under the importer's keys, uploaded by the importer.
+- **Preconditions:** Signed in and unlocked. Download: a folder, a Memory or a chapter as a ZIP; a file downloads as itself. Import: a place where the member may create (not a read-only scope, not a guest's view).
+- **Postconditions (success):** Download: one ZIP on the member's disk, written by the browser while the content was decrypted on the device. Import: a new node tree under the folder on screen, sealed under the importer's keys, uploaded by the importer.
 
 ## Main flow — download (formerly "export")
 
@@ -20,9 +20,12 @@
 
 ## Main flow — import
 
-1. The member uploads a ZIP or picks a directory (or drops either onto the level). It is recognised **by its content** — a
-   ZIP or a directory holding `.veyq/manifest.json` that says `veyq-subtree` — never by its name, and the member is offered
-   **Import** or **Upload as a file**. Anything else is an ordinary upload (a directory: a folder upload, inbox #424).
+1. The member uploads a ZIP (picked for "Upload files", or dropped onto the level) or drops a directory onto the level. It is
+   recognised **by its content** — a ZIP holding a veyq manifest (`.veyq/manifest.json`, or a version 1 archive's
+   `manifest.json`), or a directory holding `.veyq/manifest.json` at its root — never by its name. A ZIP offers **Import** or
+   **Upload as a file**, a directory **Import**; one import per pick or drop, every other file is uploaded at once. Anything
+   else is an ordinary upload; a directory without the manifest says "Folder upload is not available yet" (inbox #424).
+   Core's **New → Import…** picks a ZIP for the import directly. No directory picker is offered yet.
 2. The dialog reads the manifest and says what would be created, how big it is and where it goes; what this version cannot
    import is listed — a kind of an application this instance does not have, or newer data of one it has — with **Import the
    rest** or **Cancel** (ADR 0082 decision 9).
@@ -45,7 +48,7 @@
 
 ## What an import does not carry, by design
 
-Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, members and the trash. The original contributor of a medium and a Memory's participants stay in the file as **names only**. A coordinate comes back only if the photo file still carries it; "Include places and coordinates" off drops what veyq adds to the manifest but **cannot remove the location tags inside a photo file** ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md) addendum).
+Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, members and the trash. The original contributor of a medium and a Memory's participants stay in the file as **names only** (a guest's download carries neither: a guest never reads the member directory). A coordinate comes back only if the photo file still carries it; the archive keeps each original's bytes, its own location tags included ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md) addendum).
 
 ## Quality notes
 
@@ -63,6 +66,6 @@ Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, 
 ## Related
 
 - Feature: [Platform](../_index.md)
-- End-user view (wiki): [Export and import](../../../../wiki/en/export-and-import.md) · [Export und Import](../../../../wiki/de/export-und-import.md)
+- End-user view (wiki): [Download and import](../../../../wiki/en/download-and-import.md) · [Herunterladen und Importieren](../../../../wiki/de/herunterladen-und-importieren.md)
 - Use-cases: [uc.platform.node-cover](uc.platform.node-cover.md), [uc.memory.participants](../../memory/use-cases/uc.memory.participants.md), [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md)
 - Decisions: [ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md), [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md), [ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)

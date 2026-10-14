@@ -96,7 +96,7 @@ file**. The import's dry-run reports nodes this build cannot read (an unknown ap
   - Done when `npm run check` is green, plus a real-browser round trip on the dev instance (veyq-web on 8089,
     `?devlogin`): download a folder with a Memory and a file, unpack it, upload the ZIP and then the directory, and
     import both. The owner allowed using and wiping the dev instance.
-- [ ] 4 docs: both wiki pages (rename to download wording, keep the old page names as links if other pages link
+- [x] 4 docs: both wiki pages (rename to download wording, keep the old page names as links if other pages link
   them), `docs/apps/*` where "export" is named, and the coverage YAML for the use-case's new criteria.
   - Done when `python3 scripts/validate_coverage.py` and the trust-chain guards are green.
 
@@ -108,6 +108,49 @@ file**. The import's dry-run reports nodes this build cannot read (an unknown ap
 - Coverage is updated.
 - An archive written before this CR still imports.
 
+## Where it stands
+
+All four phases are built and committed (568c902a contracts, 41fb175d + a83902e7 web, and the docs commit). Two product
+questions the CR does not settle keep it open; both are the owner's:
+
+1. **Where a member PICKS a directory.** Decision 3 names a `webkitdirectory` pick and the use case "picks a directory", but
+   no control names where. Built: a DROPPED directory (with `.veyq/manifest.json` imported, without it "Folder upload is not
+   available yet"), and `pickedDirectory` (`core/export/importSource.ts`, tested) that maps a picked `FileList` to the same
+   import input. Recommendation: the picker arrives with inbox #424 as a "New → Upload folder…" entry whose pick goes to the
+   import when the manifest is there - no import-only picker now. Related: core's **New → Import…** (ZIP only) still exists
+   beside the recognition on upload; keep it (one explicit door) or drop it with #424.
+2. **A drop box as a ZIP.** The Goal and ADR 0082 decision 4 say a drop box downloads as a ZIP; uc E5 and Files' hooks say a
+   drop box is not exported (it is a share object with guest identities, and nothing can place a guest's folder on import).
+   Built: no Download on a drop box (unchanged). Recommendation: download-only - the drop box as a directory with its
+   guests' folders as folders - and on import create it as a plain folder (no identities, no links), stated in E5; or strike
+   "drop box" from decision 4.
+
 ## Retrospective
 
-_(filled at implementation)_
+- **A phase commit that did not build (execution).** Phase 2 renamed `exportActions` with `git mv`, rewrote it, and staged
+  by a `git status` filter that skipped `RM` lines - so 41fb175d holds the renamed module's old body and does not typecheck
+  alone; a83902e7 carries the fix (no history rewrite on a shared `main`). Root cause: `RM` read as "done". Moved to
+  `docs/ai/README.md` step 3 (an `RM` line is a rename with its edits unstaged). Next time: after a `git mv` + edit, `git add`
+  the new path and confirm the line reads `R `.
+- **The CR settled the archive and left the controls open (planning).** It decided a picked directory and a drop box's ZIP
+  without naming the control or reconciling E5, so both came back as questions; and "Download sits where Export was" did not
+  say that a file must NOT get core's ZIP action - resolved mechanically by a descriptor flag, `downloadsAsFile`. Next time:
+  a refine that adds an input names the control it arrives through, per surface.
+- **Bites showed four tests that passed for the wrong reason.** A content-type refusal was caught by the "application not
+  listed" check, and three path refusals by the node-path check, so removing the named check stayed green. Each test now
+  keeps every other check satisfied and pins its refusal's message. Next time: write a negative's crafted input so that only
+  the check under test can refuse it, and bite it at once.
+- **Mechanical gaps resolved in the build:** a file kind's layout and Download (`downloadsAsFile`); the application of a node
+  (its `content.type` prefix) and the build's version (`contentSchema` on the descriptor); "schema validation" of a kind's
+  content (`validateContent`, core never names a kind's fields); the caps' values (the export schema now carries every
+  `maxLength`, pinned by tests to the reader); one import per pick or drop; a directory offers Import only (it cannot be
+  "uploaded as a file"); Windows-forbidden characters `<>:"|?*` count as unsafe; the old i18n keys renamed in place (`export.*`
+  namespace kept, values say Download); wiki pages renamed with no stubs (only `Home.md` linked them, now relinked).
+- **Bitten (each red, then restored by snapshot):** WRITE_ONLY guest download; ZIP action on a one-file kind; reserved names;
+  case-fold clash; `.veyq` reservation; length bound; guest reads the member directory; v1 layout read; NFC for a directory;
+  unknown application skip; newer content skip; Cancel writes nothing; content-type, unlisted-application, v2-at-v1-place,
+  kind content check, name cap, depth cap, node-count cap; payload safe names, payload under its node, node path under its
+  parent, `.veyq` path, FS-refused name; payload presence/size pre-check; ZIP offset outside, declared size, overlap, ZIP64
+  range; LIMITS vs schema pin; guest upload not screened; folder-upload message; directory not uploaded as a file; one import
+  per drop; Upload-as-a-file only when offered; Import hidden with nothing importable; Memories participant cap and medium
+  without file; Files' picker through the screen.

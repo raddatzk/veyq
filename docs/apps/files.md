@@ -438,7 +438,7 @@ write and the display are core's, the image is the box's own blob in the `COVER`
   drop box's name, its share and delete; inbox #385 (b)) — (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
   creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's
   `compareByCreation`, by core's `displayNamesOf`, which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
-  core's `segmentsOf` in `core/node/location.ts`, which a future folder export uses for its directory names too), opens a folder
+  core's `segmentsOf` in `core/node/location.ts`; a download's ZIP names its directories by core's `archiveName` instead), opens a folder
   (core's level view, read-only there: download and a delete per file — a content-less one too — through the level's
   `deletable`, no share, and no tab that has nothing to show — core's `hideEmptyTabs`) and deletes a folder. **Members place nothing** in a drop box or
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
