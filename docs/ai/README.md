@@ -255,7 +255,9 @@ A refined CR nails **decisions, not keystrokes**:
   pointed at. And **a crafted negative input fails exactly one check**: in cr-download-is-the-export four refusal
   tests stayed green with their named check removed, because an earlier check refused the same input first. And **a
   proof of a transition says whether its recorded run must cross one**: cr-upgrade-proof's first green claimed a
-  migration that no build in the run carried.
+  migration that no build in the run carried. And **a guard's list of what it refuses derives from the authority's rule, not from
+  today's instances**: cr-helm-upgrade-check's refine listed the StatefulSet fields the chart sets, the API server
+  refuses every field outside a small mutable set, and the build had to widen it.
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest
   names — an attacker who, with that same link and dump, decrypts every photo of the Memory. The owner took the
