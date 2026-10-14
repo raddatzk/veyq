@@ -20,12 +20,14 @@
 
 ## Main flow — import
 
-1. The member uploads a ZIP (picked for "Upload files", or dropped onto the level) or drops a directory onto the level. It is
+1. The member uploads a ZIP (picked for "Upload files", or dropped onto the level) or a directory (picked for
+   **New → Upload folder…**, or dropped onto the level). It is
    recognised **by its content** — a ZIP holding a veyq manifest (`.veyq/manifest.json`, or a version 1 archive's
    `manifest.json`), or a directory holding `.veyq/manifest.json` at its root — never by its name. A ZIP offers **Import** or
    **Upload as a file**, a directory **Import**; one import per pick or drop, every other file is uploaded at once. Anything
-   else is an ordinary upload; a directory without the manifest says "Folder upload is not available yet" (inbox #424).
-   Core's **New → Import…** picks a ZIP for the import directly. No directory picker is offered yet.
+   else is an ordinary upload; a directory without the manifest is uploaded as its tree, a folder per directory and a file
+   per file (inbox #424). There is no separate "Import…" entry: upload recognises an archive itself (owner decision
+   2026-10-14).
 2. The dialog reads the manifest and says what would be created, how big it is and where it goes; what this version cannot
    import is listed — a kind of an application this instance does not have, or newer data of one it has — with **Import the
    rest** or **Cancel** (ADR 0082 decision 9).
@@ -38,7 +40,9 @@
 - **E2 — a damaged archive** (a checksum does not match, a payload is missing): the import stops, what it created is moved to the trash, and the dialog says how far it got.
 - **E3 — storage or any other stop part-way:** the same: the top-level node created is moved to the trash (its subtree with it), the message says "N of M".
 - **E4 — a browser that cannot save a file this large** (no file picker, no download route): the dialog says so before anything is written; use a Chromium-based browser on a computer.
-- **E5 — a node a kind cannot export** (a drop box, a kind this build does not know): left out with its subtree and listed.
+- **E5 — a drop box:** downloads as a directory with each guest's folder under it, and imports as a **plain folder** with
+  plain folders inside: no drop key, no links, no guest identities (nothing can rebuild a guest's folder or identity;
+  owner decision 2026-10-14). A node a kind leaves out of its download is listed in the dialog.
 - **E6 — a share guest:** a `READ` or `READ_WRITE` guest **downloads** what it sees, a ZIP for a folder or a Memory, as a
   member does (ADR 0082 decision 5); no guest imports, and a recognised archive is an ordinary upload for a guest.
 - **E8 — a tampered or malformed archive:** a manifest that fails its schema, a path or name outside the rules, an offset

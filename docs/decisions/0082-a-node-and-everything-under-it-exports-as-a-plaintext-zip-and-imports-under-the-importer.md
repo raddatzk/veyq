@@ -58,7 +58,9 @@ This layout is format `version` 2; version 1 kept the manifest at the root and e
 a reader reads both while a writer writes only 2.
 
 **4. It is a download, and is called one** (owner decision 2026-10-14). There is no "Export": a node offers
-**Download** — a file as itself, a folder, a Memory, a chapter or a drop box as this ZIP. No plaintext warning and no
+**Download** — a file as itself, a folder, a Memory, a chapter or a drop box as this ZIP (a drop box as a directory
+with each guest's folder under it; it imports as a plain folder, because nothing can rebuild a guest's folder or
+identity — owner decision 2026-10-14). No plaintext warning and no
 location option: a downloaded file is as plaintext as a downloaded archive, and a photo's coordinates sit in its own
 EXIF, which the archive keeps byte for byte (Addendum 2), so an option that dropped only the manifest's copies promised
 more than it did.
@@ -78,7 +80,8 @@ target parent gets a numeric suffix, `Name (2)`. An unknown newer `version` is *
 **7. Detected by content, offered only to members.** An archive is recognised by its **content** — the ZIP signature plus a
 `.veyq/manifest.json` whose `format` matches — never by file name. **A picked directory** that holds `.veyq/manifest.json`
 (the archive, unpacked) is recognised the same way and imported from its files; one without it is an ordinary folder
-upload (inbox #424). Recognised, a member is offered **Import** or **Upload as a file**. A dropped archive in a Files folder offers **Import** to
+upload (inbox #424). A directory is picked through the level's **New → Upload folder…**, or dropped; there is no separate
+"Import…" entry, because upload recognises an archive itself (owner decision 2026-10-14). Recognised, a member is offered **Import** or **Upload as a file**. A dropped archive in a Files folder offers **Import** to
 members only: never on a guest view (any role), so for a guest — a `WRITE_ONLY` one included — it stays an ordinary upload.
 
 **8. Failure and atomicity.** The server offers no multi-node atomicity. An import is a sequence of ordinary writes; one

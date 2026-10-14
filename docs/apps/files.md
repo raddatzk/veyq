@@ -107,6 +107,12 @@ reads).
   lists its files in the grid, inbox #404). An empty Files tab says so in Files' words (`files.empty` where an upload is
   possible, `files.emptyReadOnly`, `files.guest.empty`). Read-only during a pending deletion: download only. The same
   rows are a share guest's (§ Guests).
+- **Upload folder** (owner decision 2026-10-14, inbox #424; **decided, not yet built**): a second level action, the "New"
+  menu's "Upload folder…", offered where "Upload files" is, taking a picked or a dropped directory. A directory holding
+  `.veyq/manifest.json` at its root is an unpacked download and goes to core's import (members only); any other is
+  uploaded as its tree, a `FOLDER` per directory and a `FILE` per file, names made safe by core's `archiveName` with its
+  clash suffix, after the quota preflight for the whole tree. A `READ_WRITE` guest gets the folder upload, never the
+  import. Core's "New → Import…" is gone: upload recognises an archive itself.
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
   FILE sibling already holds by `fileNameSlug`, replace that file after the uploader confirmed (`files.replaceConfirm`,
   for a member and a contributor guest alike — the one way a row's file is replaced, owner decision 2026-10-14); the
@@ -395,6 +401,12 @@ the member view with functions removed). Decided with it, small questions answer
 A **`FILES_DROPBOX`** is a Files node at the root or in a `FOLDER` (no placement rule admits anything under it), shared
 **`WRITE_ONLY` only** (`FilesShareRoots`). Its guests hold no key of it; what they send lands in **identity folders**,
 one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_identity_id` (ADR 0080 decision 11).
+
+**A drop box downloads as a ZIP** like any other container (owner decision 2026-10-14, **decided, not yet built**;
+[ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
+decision 4): a directory for the drop box with each guest's folder under it by its shown name. It **imports as a plain
+folder** with plain folders inside - no drop key, no links, no identities, because nothing can rebuild a guest's folder
+or identity ([uc.platform.export-import](../features/platform/use-cases/uc.platform.export-import.md) E5).
 
 **A drop box carries a cover** (inbox #411, core's feature - [uc.platform.node-cover](../features/platform/use-cases/uc.platform.node-cover.md)):
 Files opts it in (`FilesNodeKindRules.takesCover`, `register.ts` `cover: {}`), nothing else - the action, the dialog (choose, crop, remove), the upload, the

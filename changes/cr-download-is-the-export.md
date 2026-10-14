@@ -16,6 +16,11 @@ importable export. On upload, a ZIP, or a picked directory holding the manifest,
 file**. The import's dry-run reports nodes this build cannot read (an unknown application, newer content) with
 **Import the rest** / **Cancel**. The reader treats the archive as untrusted input. Owner decisions 2026-10-14.
 
+Second round, owner answers 2026-10-14 (Decisions 6 and 7): a directory is picked through **New → Upload folder…**,
+which also brings the ordinary folder upload (inbox #424) - with the manifest it goes to the import, without it it is
+uploaded as folders and files - and core's **New → Import…** goes. A drop box downloads as a ZIP like any other node
+and imports as a plain folder.
+
 ## Context & constraints
 
 - [ADR 0082](../docs/decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md):
@@ -30,7 +35,8 @@ file**. The import's dry-run reports nodes this build cannot read (an unknown ap
 - **`version` policy (ADR 0082 Consequences):** a change an old reader would misread bumps `version`. The new layout
   is such a change. So the reader must read **both** the new version and the current one, because archives already
   written must stay importable. The writer writes only the new one.
-- **Out of scope:** folder upload without a manifest (inbox #424); downloading a selection (#421).
+- **In scope since the second round:** folder upload without a manifest (inbox #424, Decision 6).
+- **Out of scope:** downloading a selection (#421); a `WRITE_ONLY` drop-box guest's folder upload (the drop page).
 - **Invariant:** operator-blind. Nothing reaches the server but the ordinary writes the import already makes.
 
 ## Inventory (commands)
@@ -72,6 +78,32 @@ file**. The import's dry-run reports nodes this build cannot read (an unknown ap
    - `sha256` while streaming, as today.
    Each refusal carries a reason the dialog shows (E8).
 
+6. **Upload folder (owner answer 2026-10-14; inbox #424 joins this CR).**
+   - The one directory picker is **New → Upload folder…** in the level's "New" menu, beside "Upload files". It is
+     Files' level action (a tree of `FOLDER`s and `FILE`s; core never names `FILE`, ADR 0079), offered where Files'
+     "Upload files" is offered; it takes a dropped directory too. The existing `pickedDirectory`
+     (`core/export/importSource.ts`) maps the picked `FileList`.
+   - A directory with `.veyq/manifest.json` at its root goes to the import (as a dropped one does today); one without it
+     is uploaded as its tree: a `FOLDER` per directory, a `FILE` per file, every name through `archiveName`'s rules
+     and its clash suffix, the top folder's name clashing among its siblings as `Name (2)` (as the import's root).
+   - The "Folder upload is not available yet" message goes.
+   - Before anything is written: the quota preflight for the tree's total bytes (the import's `checkTenantStorageFit`,
+     same rules: a "no" says so and writes nothing, an unanswered question never blocks).
+   - A file that fails is the upload queue's per-file failure; the others go on (the upload's existing rule: one
+     file's hard failure does not cancel its batch).
+   - A `READ_WRITE` guest gets it as a member does (share view = member view; a guest creates folders and uploads
+     files), with no import: a guest's directory is always the ordinary folder upload, its `.veyq/` included as files.
+   - **Core's "New → Import…" is removed** (entry, i18n keys, tests); upload recognises an archive itself.
+7. **A drop box downloads and imports as a plain folder (owner answer 2026-10-14).**
+   - Download: a drop box offers **Download** like any other container (member, and a `READ`/`READ_WRITE` guest of a
+     folder link above it, who sees it read-only); the ZIP holds the drop box as a directory and each guest's folder as
+     a directory under its shown name (a repeated name numbered as the detail numbers it), the files inside.
+   - Import: the drop box and its guests' folders are created as **plain `FOLDER`s** - no drop key, no identities, no
+     links; nothing can rebuild a guest's folder or identity. The manifest keeps the truth (the kind it was); the
+     mapping to a folder is the drop box kind's own declaration, so core does not name `FILES_DROPBOX`.
+   - If the manifest needs a field for this, it is a contracts change first; an addition an old reader ignores does
+     not bump `version`.
+
 ## Phases
 
 - [x] 1 contracts: the schema's new version.
@@ -100,6 +132,23 @@ file**. The import's dry-run reports nodes this build cannot read (an unknown ap
   them), `docs/apps/*` where "export" is named, and the coverage YAML for the use-case's new criteria.
   - Done when `python3 scripts/validate_coverage.py` and the trust-chain guards are green.
 
+- [ ] 5 web: Decision 6 - "New → Upload folder…" (pick and drop), the folder upload, the manifest routing, the preflight;
+  core's "New → Import…" removed.
+  - Tests: a picked directory with the manifest opens the import and one without it creates the tree (folders, files,
+    safe names, a clash suffix); the preflight's "no" writes nothing; one file's failure leaves the rest uploaded; a
+    `READ_WRITE` guest's pick is the folder upload, never the import; the "New" menu no longer lists Import. Bitten.
+  - Done when `npm run check` is green and a real browser on the dev instance picked a directory both ways.
+- [ ] 6 web (+ contracts if needed): Decision 7 - drop box download and import as plain folders.
+  - Tests: a drop box with two guests' folders downloads as that tree; its import creates folders only (no drop key,
+    no share); the Download action is offered on a drop box to a member and to a guest of a folder link above it,
+    never to its `WRITE_ONLY` guest. Bitten.
+  - Done when `npm run check` is green and a drop box was downloaded and re-imported in a real browser.
+- [ ] 7 live: a guest's download in a real browser - a `READ` folder link holding a Memory and a file (and a drop
+  box) downloads its ZIP, which unpacks as the tree.
+- [ ] 8 docs: uc E5, E6 and import step 1 (no "not available yet", no "Import…", the picker), `docs/apps/files.md`
+  (Upload folder; the drop box's download), both wikis, coverage, inbox #424 closed into this CR.
+  - Done when the trust-chain guards are green.
+
 ## Definition of done
 
 - `npm run check` is green in `web/`.
@@ -109,6 +158,9 @@ file**. The import's dry-run reports nodes this build cannot read (an unknown ap
 - An archive written before this CR still imports.
 
 ## Where it stands
+
+Phases 1-4 are built; the two open questions below were answered by the owner on 2026-10-14 (Decisions 6 and 7) and
+became phases 5-8.
 
 All four phases are built and committed (568c902a contracts, 41fb175d + a83902e7 web, and the docs commit). Two product
 questions the CR does not settle keep it open; both are the owner's:
