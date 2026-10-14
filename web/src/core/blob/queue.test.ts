@@ -171,6 +171,21 @@ describe('core upload queue — failure and retry', () => {
     expect(item.final).toBe(true)
   })
 
+  // Owner decision 2026-10-14 (inbox #426): one file's hard failure does not stop the rest of its batch — 36 good
+  // photos are not held back by one refused one; each failure is the file's own, with its own retry.
+  it('a hard failure of one job leaves the rest of its batch running to completion', async () => {
+    const bad = vi.fn<Run>().mockRejectedValue(new Error('stale_file'))
+    const good = vi.fn<Run>().mockResolvedValue('ok')
+    const { batches } = useUploadQueue()
+    enqueue([job('a', good), { ...job('b', bad), isFinal: (e) => e === 'stale_file' }, job('c', good), job('d', good)], { label: '4' })
+    const [a, b, c, d] = batches.value[0].files
+
+    await vi.waitFor(() => expect(d.status).toBe('done'))
+    expect(b.status).toBe('failed')
+    expect([a.status, c.status, d.status]).toEqual(['done', 'done', 'done'])
+    expect(good).toHaveBeenCalledTimes(3)
+  })
+
   it('marks a job failed after the retry is exhausted; retryFile re-runs it with fresh attempts', async () => {
     const run = vi.fn<Run>().mockRejectedValue(new Error('chunk_put_failed:500'))
     const complete = vi.fn()

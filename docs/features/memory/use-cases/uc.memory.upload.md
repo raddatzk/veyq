@@ -36,7 +36,7 @@
    over the larger set (so it can go down); a list the user closed is not reopened, a later batch starts a new one.
    Different targets stay separate lists. Each file shows the same status (queued / preparing / uploading / done /
    failed / cancelled) and a **cancel** control while it is queued/uploading. The grouping is the tray's: the queue
-   keeps its batches, with their own completion hooks and their own "a hard failure cancels the rest of this batch".
+   keeps its batches, with their own completion hooks.
 5. As each file finishes, its optimistic tile **reconciles into the real decrypted thumbnail** (matched by the
    returned `mediaId`) with no empty-flash and no duplicate: the tile's **content** changes, its **position**
    does not. The user can **close** (acknowledge) a finished list in the tray, which closes every batch in it.
@@ -44,7 +44,8 @@
 ## Alternate / exception flows
 
 - **E1 — transient failure** (aborted/failed request): the file is re-queued for one automatic retry; a
-  hard error marks it **failed** and cancels the rest of that batch's queued files (the user retries explicitly).
+  hard error marks **that file** failed (the user retries it explicitly); the rest of its batch keeps uploading —
+  one refused photo does not hold back the others (owner decision 2026-10-14, inbox #426).
 - **E2 — cancel:** cancelling a queued file drops it; cancelling an in-flight file aborts its PUTs and stops
   before `complete` (no media is attached). The abandoned upload session is reclaimed by the store-side GC.
 - **E3 — Safari's Photos picker.** Files chosen from the Photos gallery arrive with an **empty MIME type**, and
