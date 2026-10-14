@@ -107,6 +107,8 @@ inbox #407). Under the title sits **one meta line**: the kind's noun (`meta`: "M
 
 The layout is core's and shared by every kind: a list row's visual is a 4.5 x 3 rem tile (6.5 x 4 rem from 521 px), a grid
 tile a 16:9 cover over text, and the same item component is drawn on the profile page, whose rows/tiles switch is the level's
-own (`ViewModeToggle` over the per-user `useViewMode` preference). A map is not part of this ([inbox #417](../inbox.md)).
+own (`ViewModeToggle` over the per-user `useViewMode` preference). A map is not part of this hook: it is an application's own
+presentation (`presentation(mode)` beside `row`, named in its kinds' `list.views`), and the profile page offers Memories'
+map the same way the level does, the same component over the person's Memories that have a place ([inbox #417](../inbox.md)).
 
 A concept doc is **not** state the code answers to: nothing in it is built, refined into use-cases or planned.

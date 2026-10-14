@@ -7,7 +7,8 @@ title: Memory participants — opaque ids in the sealed meta, a profile that lis
 # holds K_mem; the list holds opaque ids only, so the accepted residual is the count and the ids, never a name (ADR 0083
 # decision 4, comparable to ADR 0030 point 8). Not built: a user avatar (inbox #414), the uploader on Files (inbox #415).
 # The header action and "I was there" were clicked through on the dev instance (2026-10-14); the rest of the first build was
-# not verified in a real browser. The profile's covers load per visit only.
+# not verified in a real browser. The profile's covers load per visit only. The profile's map (inbox #417, 2026-10-14) is the
+# level's own SpaceMap; its unit tests stub Leaflet, so the drawn map on the profile was not seen in a real browser here.
 acceptanceCriteria:
   - id: participants-sealed-in-node-meta
     text: A Memory's participants are a `participants` sub-object of opaque user ids (`{ userIds }`, unique, at most 100) inside its `wrappedMeta` under K_mem, written read-modify-write with the metaVersion compare-and-set; nothing but ids is stored (no name, no snapshot), unknown siblings are kept, an empty list drops the sub-object, and the server stores one opaque blob and no participant relation.
@@ -70,7 +71,7 @@ acceptanceCriteria:
           - src/features/memory/participantIndex.test.ts
           - src/features/memory/components/PersonMemories.test.ts
   - id: profile-list-is-the-level-list
-    text: The profile's Memories list is drawn with the level view's own item component (a larger cover, the name, the kind, the Memory's date and place as details - the level's builder, a missing fact left out - and the group's name), as rows or as tiles through the same switch and the same per-user stored view-mode preference the folder view uses (no map); a stored map mode shows tiles without being rewritten.
+    text: The profile's Memories list is drawn with the level view's own item component (a larger cover, the name, the kind, the Memory's date and place as details - the level's builder, a missing fact left out - and the group's name), as rows or as tiles through the same switch and the same per-user stored view-mode preference the folder view uses; the stored mode shows where the page offers it and is never rewritten.
     coverage:
       web:
         unit:
@@ -79,6 +80,14 @@ acceptanceCriteria:
           - src/features/memory/memoryRowDetails.test.ts
           - src/core/people/PersonProfile.test.ts
           - src/features/memory/lifecycle.test.ts
+  - id: profile-map-is-the-level-map
+    text: Where the person has Memories, the profile's switch offers what a level of Memories offers - tiles, rows and Memories' map (one list, `memoryViews.ts`) - also when none of them has a place; in map mode the level's own map component replaces the list and pins exactly the person's Memories that have a position (one without a place, or with a pending automatic place, is left out by the level's rule; none left shows the map's "No places yet"), behind the same map consent; a pin opens the Memory in its own scope as its row does; a stored map shows the map, and with nothing to list there is no switch and no map.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/PersonMemories.test.ts
+          - src/features/memory/participantIndex.test.ts
+          - src/features/memory/spaceMap.test.ts
   - id: uploader-name-in-lightbox
     text: The photo detail shows the uploader's name by the display rule, independent of the participant list; a `user:` owner links to the profile for members only, a `share:` owner and a former member are plain names, and a share guest's session resolves no uploader (it shows nothing, as before).
     coverage:

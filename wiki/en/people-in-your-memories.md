@@ -14,9 +14,11 @@ took part in.
   unticked, it starts with nobody. It means "I was there", not "I made this" — so it is your choice each time.
 - **Open a person.** Click a name and you land on that person's profile: their name, their picture (or a letter), and below them
   the Memories they took part in — only the ones **you** are allowed to open. A Memory you can't see is simply not
-  in the list. Each one shows its cover, name, date and place (when it has them) — as tiles or as rows: use the
-  same **Grid view / List view** buttons as in a folder, and your choice is remembered. (If you have many Memories,
-  the list says when it may be incomplete.)
+  in the list. Each one shows its cover, name, date and place (when it has them) — as tiles, as rows or on a map: use the
+  same **Grid view / List view / Map view** buttons as in a folder, and your choice is remembered. The map is the one you
+  know from a folder: it shows the person's Memories that have a place (one without a place is simply not on it), asks
+  before it loads any map tiles, and opens a Memory when you click it. (If you have many Memories, the list says when it
+  may be incomplete.)
 - **Who added a photo.** Open a photo and its details say who added it, as a link to that person's profile. This
   is independent of the participant list: someone who only uploaded, and was never named, still shows up.
 - **People who left.** Someone who later leaves the space stays on the Memory, greyed out as "Former member" and
