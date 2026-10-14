@@ -200,6 +200,9 @@
           "$ref": "#/$defs/filesFile"
         },
         {
+          "$ref": "#/$defs/filesDropBox"
+        },
+        {
           "$ref": "#/$defs/memoriesMemory"
         },
         {
@@ -211,6 +214,7 @@
               "not": {
                 "enum": [
                   "files.file",
+                  "files.drop-box",
                   "memories.memory",
                   "memories.chapter"
                 ]
@@ -234,6 +238,22 @@
         "type",
         "file"
       ]
+    },
+    "filesDropBox": {
+      "description": "Files: a FILES_DROPBOX node. It carries nothing but what it was: its guests' folders are its FOLDER children (each under the name the drop box shows it by, a repeated name numbered), their files theirs. An importing build creates it as a plain FOLDER - a drop key, guests' identities and links cannot be rebuilt from a download.",
+      "properties": {
+        "type": {
+          "const": "files.drop-box"
+        },
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
     },
     "memoriesMemory": {
       "description": "Memories: the content of a MEMORY node. Its chapters are the node's CHAPTER children, each with its own `memories.chapter` content; the media listed here are the Memory's own.",
