@@ -1,7 +1,7 @@
 ---
 id: cr-release-pipeline-and-chart-oci
 title: A publish is started by hand as a snapshot or a release, releases the chart beside the images, and a restore accepts an older backup
-status: planned
+status: done
 satisfies: [uc.admin.identify-instance-release, uc.admin.back-up-and-restore-instance]
 adrs: ["0057", "0064", "0065", "0056", "0040"]
 invariants: [self-hostable by default]
@@ -189,14 +189,14 @@ implemented on its own, before or after the others.
 
 ## Phases
 
-- [ ] 1 contracts + backend: the wire prose states the new form.
+- [x] 1 contracts + backend: the wire prose states the new form.
   - `instance.openapi.yaml` `release` description: `<major>.<minor>` or `<major>.<minor>-SNAPSHOT`, a
     snapshot's name being the one that moves (ADR 0057 §1).
   - The KDoc and property comment from the inventory.
   - No shape change.
   - Done when `npm run generate:api` + `npm run check` are green in `web/` and `admin-web/`, and
     `./gradlew check` is green.
-- [ ] 2 workflow + guard: Decisions 1–4 and 9, plus `VERSION` → `0` (the owner's first test stage).
+- [x] 2 workflow + guard: Decisions 1–4 and 9, plus `VERSION` → `0` (the owner's first test stage).
   - Extend `validate_release_identity.py` so that it:
     - executes the version step inside a throwaway git repository it builds itself: a few commits, a `VERSION`
       change, more commits, and a shallow clone of it. The minor is then asserted against a known count, never
@@ -211,7 +211,7 @@ implemented on its own, before or after the others.
     assertion counts.
   - Done when every `scripts/validate_*.py` is green and every bite test failed as intended. Name the run in
     the retro.
-- [ ] 3 chart: Decisions 5–6 and the chart half of the refuse step.
+- [x] 3 chart: Decisions 5–6 and the chart half of the refuse step.
   - Rehearse locally against a throwaway OCI registry (`registry:2`, pinned by digest): package, push, check
     that the artifact lands at `<registry>/charts/veyq`, then `helm install --dry-run` by tag and by digest.
     This measures the three remembered Helm facts.
@@ -222,7 +222,7 @@ implemented on its own, before or after the others.
     - two-segment `ghcr.io/<owner>/charts/veyq` tokens are collected and must be `@digest`.
   - Done when `chart_meta_check.py` and `helm lint` are green, the rehearsal output is recorded in the retro,
     and the guards plus bite tests are green.
-- [ ] 4 docs: the release process and the operator side.
+- [x] 4 docs: the release process and the operator side.
   - infra/README § Verifying a release adds the chart: resolve its digest once, `cosign verify` it with the
     same identity, install by digest (or by tag, if phase 3 measured that digest installs do not work).
   - § Running on Kubernetes installs from `oci://ghcr.io/raddatzk/charts/veyq` and keeps `./charts/veyq` as
@@ -238,7 +238,7 @@ implemented on its own, before or after the others.
       `scripts/applied_migrations.sha256` in one commit.
   - ADR 0064's "not yet built" sentence and inbox #26 move to *built, publish unobserved*.
   - Done when the trust-chain guards are green.
-- [ ] 5 restore across versions: Decision 8, in `scripts/instance_backup.py`, plus the infra/README restore and
+- [x] 5 restore across versions: Decision 8, in `scripts/instance_backup.py`, plus the infra/README restore and
   upgrade sections (the rollback sentence and the older-backup case).
   - `instance_backup_selftest.py` pins three things:
     - the version order (a case where string order and Flyway order disagree, e.g. `9` vs `44`);
@@ -255,7 +255,7 @@ implemented on its own, before or after the others.
     needs a released predecessor.
   - Done when the selftest is green, the `run_web_e2e.py` run with both hooks is green (named in the retro),
     and the bite test failed as intended.
-- [ ] 6 coverage:
+- [x] 6 coverage:
   - The header of `uc.admin.identify-instance-release.yaml` restates the publish half in the new form (still a
     guard, not coverage).
   - `uc.admin.back-up-and-restore-instance.yaml` gains two criteria, `an-older-backup-restores-and-migrates-up`
@@ -284,4 +284,54 @@ implemented on its own, before or after the others.
 
 ## Retrospective
 
-_(filled at implementation)_
+**Where it was run.** `main` from `0724a9d7` (commits `af73974d`, `ada162ef`, `cb1be12a`, then phases 4–6). Every
+guard glob ran on a detached worktree holding exactly the phase's state, because the live tree carries the owner's
+gitignored `infra/.env` (`veyq:cr162`), which `validate_release_identity.py` scans and reds on — pre-existing,
+untouched. Baseline at `0724a9d7`: 57 guards, 0 red. Phases 2, 3, 4: 57/57 green each. Phase 1: `generate:api` in
+`web/` and `admin-web/`, both `npm run check` exit 0, `./gradlew check` BUILD SUCCESSFUL (5 m 15 s).
+
+**Bite tests, each injected on a worktree copy, red BY MESSAGE, restored and byte-compared.** Phase 2, 17/17:
+VERSION `0.4`; the minor counted from the first VERSION change (5) and over every commit (6); the shallow
+refusal removed; dispatch from any branch; `release` defaulting to true; `RELEASE` not passed to the step; a
+`git fetch --unshallow` in the step; the build login and the build push on every non-PR event; the publish job on
+every non-PR event and widened by `||`; the refusal for a snapshot; the tag for every publish; an ungated
+`docker push` in `test`; a snapshot without `-SNAPSHOT`; a push publishing as a snapshot. Phase 3, 10/10: the
+chart and the admin image missing from the refusal; `--app-version` dropped; a literal `VERSION`; a push to the
+owner root; the chart unsigned; the values repository blank and swapped; the README verifying the chart by tag;
+an ungated `helm push`. Phase 4, 2/2: the chart's verify dropped, and widened. Phase 5: the selftest bit on string
+order, a newer backup accepted, the rollback dropped from the closing log, and the release dropped from the
+refusal (the first form of that last injection removed the name from one of two places and did not bite — the
+oracle still found it in the other; re-cut, it bit); the e2e drop bite is below.
+
+**The Helm facts the CR remembered, measured** (Helm 4.0.1, `registry:2@sha256:a3d8aaa6…` on 127.0.0.1:5055):
+`helm push … oci://<r>/charts` landed at `<r>/charts/veyq` (*holds*); `helm install --dry-run=client` by
+`oci://…@sha256:97c57e87…` and by `--version 0.3` rendered (*holds*); "pre-releases are ignored without
+`--devel`" holds only for three-part versions (`0.5.0` vs `0.6.0-SNAPSHOT`) — for the two-part ones the publish
+stamps, Helm finds **no** tag without an exact version, `--devel` or not, and `helm lint` warns "not a valid
+SemVerV2". ADR 0064 and 0057 corrected; the trade it leaves is inbox #420. Also measured: the push's
+`Digest:` line equals the sha256 of `imagetools inspect --raw`, `imagetools inspect` resolves and refuses ("not
+found", exit 1) a chart tag like an image's, and cosign signs and verifies the chart by digest (with a key).
+
+**Restore across versions.** `run_web_e2e.py` over the `restore` group, run `.e2e-out/1791967032`: the A10 control
+refused a copy claiming `V10000000000000` from release `0.9999` before any write, the older-backup rehearsal
+accepted with `veyq_e2e_future_table` gone and the 2-row history the capture's, total 2 passed / 0 failed. Drop
+removed, run `.e2e-out/1791967193`: red with "OLDER BACKUP LEFT THE TARGET'S TABLE".
+
+**Where the CR was under-refined, and what I did.**
+- *The dry run's stamp.* Decision 2 names `version` for a snapshot and a release, never for a push. A dry run
+  stamps `<major>.<minor>-SNAPSHOT`, so an image that was never released cannot carry a release's name; the guard
+  pins it.
+- *A target with no Flyway history.* Decision 8 compares with "the target's version" and never says what happens
+  when there is none. It is refused, telling the operator to start the app once — ADR 0056 §7 compares against
+  "the freshly installed target", which such a target is not.
+- *Two of the three remembered Helm facts were incomplete* (above), and `0.0-dev`, the placeholder Decision 5
+  fixes, draws the same lint warning. Docs corrected; the version shape is the owner's call (#420).
+- *Pullability.* Phase 4 asks for "packages public or a pull secret"; the chart has no `imagePullSecrets` value
+  (`grep imagePullSecrets charts/veyq` is empty), so the section says public.
+- *Mechanical:* `helm push` needs its own `helm registry login`; the refusal's existence check needed `--raw` to
+  be safe on a chart artifact; the guard's chart section had to sit after the build-matrix reader it calls; the
+  e2e's default ports (8080, and 18080, which the dev compose publishes) were taken.
+- *Phases 4 and 5 both edit `infra/README.md`*; the phase-4 commit was staged from a reconstructed blob.
+
+**Next time:** a remembered tool fact in a CR gets the one command that measures it run at refine — all three
+here were seconds against a `registry:2`, and one of them changed an ADR.

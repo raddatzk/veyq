@@ -8,7 +8,7 @@ title: Back up an instance and restore it onto an empty one
 # The capture/restore machinery itself is a Python script and an orchestrator extension, neither of which is a
 # coverage surface; what is claimable here is what a test can observe about a restored instance.
 #
-# `status: planned` stays, and it is not a formality: five criteria are out of every surface's reach — their
+# `status: planned` stays, and it is not a formality: seven criteria are out of every surface's reach — their
 # observable is a stopped app, the operator tool's exit, or a second store no harness stands up — the same
 # shape as uc.admin.identify-instance-release's manifest criterion. `docs/coverage/README.md` § Rules gives such
 # a criterion no other legal home, so each says on itself how it is proven instead. (Until 2026-09-24 this file
@@ -96,6 +96,32 @@ acceptanceCriteria:
       widened what the gate accepts, and a gate whose entire job is refusal is not demonstrated by the case it
       accepts. Nothing reconciles two populated instances (A5), and the refusal is asserted by its own message
       rather than by a non-zero exit, which a connection failure produces equally well.
+  - id: an-older-backup-restores-and-migrates-up
+    # No coverage on a surface: the observable is the operator tool's exit and log and the target database's
+    # tables, not anything a browser sees — the shape of `a-populated-target-is-refused-rather-than-reconciled`
+    # above, in the same `web-e2e` hook. `simulate_newer_target` in `scripts/run_web_e2e.py` gives the freshly
+    # installed target a table no migration creates and a successful history row above every one the capture
+    # knows; the group's real restore then runs, and `assert_older_backup_restored` requires the table gone, the
+    # Flyway history equal to the capture's, and the closing log naming the upgrade and the rollback it is not.
+    # The suite that runs next against the restored instance is the "and it starts" half. What it does not prove
+    # is a real forward migration over real data — that needs a released predecessor (inbox #419).
+    text: >-
+      A backup whose schema is older than the freshly installed target's is accepted (ADR 0056 §7, A9): the
+      restore drops every table of the target before it loads the dump, so a table only the newer release has
+      cannot survive under the backup's older history, and the application migrates the data up at its next
+      start. The restore says that this is an upgrade, and that a rollback installs the backup's own release
+      instead (A7).
+  - id: a-newer-backup-is-refused-naming-its-release
+    # No coverage on a surface, for the same reason, in the same hook: `assert_newer_backup_is_refused` restores a
+    # copy of the capture whose manifest claims a schema above the target's — chosen so that string order would
+    # call it OLDER — and requires the refusal to name the newer schema and the release, and the target's tables,
+    # Flyway history and key file to be what they were before. Version order itself, the message and the closing
+    # log are pinned without Docker by `scripts/instance_backup_selftest.py`.
+    text: >-
+      A backup whose schema is newer than the target's is refused before anything is written, and the message
+      names the release the backup came from (A10). The target's release would refuse to start on a history
+      holding migrations it does not know, so loading first and failing at boot would leave the operator with
+      neither instance. The comparison is Flyway's version order, never a string comparison.
   - id: the-key-is-kept-apart-and-nothing-is-readable-by-others
     # No coverage on a surface: the observable is the operator tool's exit and message, like
     # `a-populated-target-is-refused-rather-than-reconciled` above, and it rides in the same `web-e2e` hook.

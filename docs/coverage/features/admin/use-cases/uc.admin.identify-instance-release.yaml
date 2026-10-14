@@ -1,10 +1,12 @@
 useCase: uc.admin.identify-instance-release
 feature: admin
 title: Know which release an instance runs, and which release a backup came from
-# cr-release-identity delivers it: a `VERSION` file the publish stamps into the image, a workflow that derives
-# the version from the tree offline and refuses to republish a tag, the production recipe copied into the
-# runtime image, an owner-gated `GET /api/instance/release`, the Settings → Server → Release panel, and a
-# backup manifest that reads the release off the app CONTAINER instead of off the capture process's environment.
+# cr-release-identity delivered it and cr-release-pipeline-and-chart-oci reshaped its publish half: a version the
+# workflow derives from the tree offline (the major in `VERSION`, the minor a commit count) and stamps into the
+# image — `<major>.<minor>` for a release, `<major>.<minor>-SNAPSHOT` for a snapshot (A5) — a publish started only
+# by hand that refuses to republish a release, the production recipe copied into the runtime image, an
+# owner-gated `GET /api/instance/release`, the Settings → Server → Release panel, and a backup manifest that reads
+# the release off the app CONTAINER instead of off the capture process's environment.
 #
 # `status: planned` is nonetheless correct, and it is not a formality. It rests on two conditions, and the
 # second one does not go away:
@@ -22,9 +24,10 @@ title: Know which release an instance runs, and which release a backup came from
 #     other legal home (docs/coverage/README.md § Rules). How it is proven instead is on the criterion.
 #
 # And what is NOT claimable here even after a CI run: the publish half of ADR 0057 — a tree-derived version, a
-# `v<major>.<minor>` ref, a refusal to republish — is a GitHub Actions workflow, and a workflow is not a
-# coverage surface either. What holds it is `scripts/validate_release_identity.py`, which *executes* the version
-# step offline and asserts what a publish would stamp; that guard is in the trust chain, not in this model.
+# publish only on `workflow_dispatch`, a snapshot or a release, a `v<major>.<minor>` ref and a refusal to
+# republish for a release only — is a GitHub Actions workflow, and a workflow is not a coverage surface either.
+# What holds it is `scripts/validate_release_identity.py`, which *executes* the version step offline inside a
+# history it builds and asserts what a publish would stamp; that guard is in the trust chain, not in this model.
 status: planned
 acceptanceCriteria:
   - id: server-owner-reads-the-running-release
