@@ -5,8 +5,8 @@ import jakarta.enterprise.context.ApplicationScoped
 
 /**
  * The release this instance is running (ADR 0057), read once from `veyq.release.version` — which
- * `application.properties` binds to the image's `VEYQ_VERSION`, stamped by the publish from the tree's
- * `VERSION` file.
+ * `application.properties` binds to the image's `VEYQ_VERSION`, stamped by the publish with the version it
+ * derived from the tree (the major in the `VERSION` file, the minor a commit count).
  *
  * It answers the **operator's** question, *"which bits are running, and what do I roll back to?"*, and is
  * deliberately never merged with the pre-auth `version: { major, build }` on `GET /api/setup`, which answers

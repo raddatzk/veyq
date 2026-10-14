@@ -30,7 +30,9 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      is refused; the step that runs `helm package` sets `--version` and `--app-version` from the tree-derived
      version and pushes to `oci://ghcr.io/<owner>/charts`; a `cosign sign` step names `charts/<name>`; and the
      chart's default image repositories are exactly the upstream images `infra/README.md` verifies by digest —
-     `image.repository` the chart's own name, `admin.image.repository` its `-admin` sibling.
+     `image.repository` the chart's own name, `admin.image.repository` its `-admin` sibling. And
+     `infra/README.md` verifies the chart itself by digest (assertion 7 collects `ghcr.io/<owner>/charts/<name>`
+     tokens as it collects the images', and holds them to a digest the same way).
   4. **The deployment recipe travels in the image, in every runtime target.** Every `runtime-*` stage of the
      `Dockerfile` (one today, `runtime-jvm`) copies `infra/docker-compose.prod.yml` and `infra/.env.example`
      from their real in-tree paths, to the same destination, and that destination is neither `/work` (it holds
@@ -1045,6 +1047,13 @@ else:
                 f"signs every image it ships, and an operator told to verify one of a pair runs the other on "
                 f"trust — and the pair includes the higher-privilege admin image (ADR 0065)."
             )
+    chart_ref = f"charts/{(yaml.safe_load(CHART.read_text()) or {}).get('name') or ''}"
+    if commands and chart_ref not in verified_images:
+        fail(
+            f"{README.relative_to(ROOT)} never verifies `{REGISTRY}/{owner}/{chart_ref}` by digest. The publish "
+            f"signs the chart beside the images (ADR 0064), and a chart nobody is told to verify is the one "
+            f"artifact of the release an operator installs on trust — the one that chooses which images run."
+        )
     values_file = CHART_DIR / "values.yaml"
     values = (yaml.safe_load(values_file.read_text()) or {}) if values_file.is_file() else {}
     chart_name = str((yaml.safe_load(CHART.read_text()) or {}).get("name") or "")

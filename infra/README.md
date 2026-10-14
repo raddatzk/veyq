@@ -116,6 +116,44 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
   opposite — `scripts/run_web_e2e.py` starts this profile itself and waits on it, because every suite it runs
   onboards a member out of this mailbox.
 
+## Cutting a release
+
+For the maintainer; an operator starts at § Running in production. **Nothing is published by a push**
+([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) §1): a push to `main` or
+`release/**`, and every pull request, runs `.github/workflows/container.yml` as a **dry run** — the test gate (the
+chart's `scripts/chart_meta_check.py` included) and both image builds, with no registry login and no push. A publish
+is started by hand, from `main` or `release/<major>.x`, and is one of two kinds:
+
+```sh
+gh workflow run container.yml --ref main                    # a snapshot: <major>.<minor>-SNAPSHOT
+gh workflow run container.yml --ref main -f release=true    # a release:  <major>.<minor>
+```
+
+- **A snapshot** publishes both images and the chart as `<major>.<minor>-SNAPSHOT` (and the images as
+  `sha-<commit>`), signed, with no git ref. Dispatching again on the same commit replaces it — it is the one name
+  that moves, and it is never a rollback target.
+- **A release** publishes `<major>.<minor>`, `<major>`, `sha-<commit>`, `latest` from `main`, and the chart, all
+  signed, then creates the git ref `v<major>.<minor>`. A release whose images, chart or ref already exist is
+  **refused** before anything is pushed: release a later commit instead.
+- **The version is the tree's.** `VERSION` holds the major alone; the minor counts the commits since `VERSION` last
+  changed, so `VERSION` is touched only to change the major — any commit touching it restarts the minor at `0`.
+  Major `0` is pre-release: it exercises the whole path and promises no upgrade path.
+- **The packages must be pullable.** The first publish creates `veyq`, `veyq-admin` and `charts/veyq` under the
+  owner's GHCR packages. Make all three public, or every operator needs registry credentials — and the chart has no
+  `imagePullSecrets` value, so public is the state it supports.
+- **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
+  at the top of `container.yml`, checked against the published `.sha256sum` and the GitHub release notes.
+- **The first `1.x` release is one commit, then a release dispatch:** `VERSION` set to `1` **and** the `release:`
+  line of `scripts/applied_migrations.sha256` set to the highest migration that release ships, together. From then
+  on a released migration is never edited ([backend/CLAUDE.md](../backend/CLAUDE.md) § Migrations).
+
+**No dispatch has ever run** — this repository has no remote — so all of the above is a statement about a file,
+held by `scripts/validate_release_identity.py`, not about a run. The first runs are its proof, in this order: a
+push (the dry run is green and nothing lands in GHCR); a snapshot dispatch at `VERSION=0` (both images and the
+chart published and signed, no git tag); a release dispatch (`v0.<n>` exists), then a **second** release dispatch
+on the same commit, which must be red at the refusal; then the `1.x` commit above and its release dispatch. Until
+that refused repeat has run, ADR 0064 says the chart's release is built, its publish unobserved.
+
 ## Running in production
 
 `infra/docker-compose.prod.yml` is the deployment artifact: the app, its administration surface, MariaDB,
@@ -142,14 +180,15 @@ the stack names one of them.
 
 ### Verifying a release — before anything runs it
 
-A release is two images, `ghcr.io/raddatzk/veyq` and `ghcr.io/raddatzk/veyq-admin`, and the publish signs both
-keylessly with cosign ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) §3). This is
-the one procedure for a first install, an upgrade and a Helm install alike. It ends with the two image references
-you deploy, **by digest**: a tag can move between the moment you verify it and the moment you pull it, and a
-digest cannot.
+A release is two images, `ghcr.io/raddatzk/veyq` and `ghcr.io/raddatzk/veyq-admin`, and a Helm chart,
+`ghcr.io/raddatzk/charts/veyq`, and the publish signs all three keylessly with cosign
+([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) §3,
+[ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)). This is the one procedure for a first
+install, an upgrade and a Helm install alike. It ends with the references you deploy, **by digest**: a tag can
+move between the moment you verify it and the moment you pull it, and a digest cannot.
 
 ```sh
-version=<version>        # the <major>.<minor> you are about to run, e.g. 1.0
+version=<version>        # the release you are about to run, <major>.<minor>, e.g. 1.4 — never a -SNAPSHOT
 
 # 1. resolve each tag to its multi-arch index digest ONCE — everything below uses the digest, never the tag
 app_digest="$(docker buildx imagetools inspect "ghcr.io/raddatzk/veyq:${version}" --format '{{.Manifest.Digest}}')"
@@ -169,9 +208,18 @@ docker create --name veyq-recipe "ghcr.io/raddatzk/veyq@${app_digest}" >/dev/nul
 docker cp veyq-recipe:/opt/veyq/deploy/. "./recipe-${version}/"
 docker rm veyq-recipe >/dev/null
 
-# 4. the two lines infra/.env pins (under Helm: image.tag/digest and admin.image.tag/digest, § Running on Kubernetes)
+# 4. the two lines infra/.env pins (under Helm: image.digest and admin.image.digest, § Running on Kubernetes)
 echo "VEYQ_IMAGE=ghcr.io/raddatzk/veyq:${version}@${app_digest}"
 echo "VEYQ_ADMIN_IMAGE=ghcr.io/raddatzk/veyq-admin:${version}@${admin_digest}"
+```
+
+Under Helm, verify the chart the same way, once, and install it by that digest (§ Running on Kubernetes):
+
+```sh
+chart_digest="$(docker buildx imagetools inspect "ghcr.io/raddatzk/charts/veyq:${version}" --format '{{.Manifest.Digest}}')"
+cosign verify "ghcr.io/raddatzk/charts/veyq@${chart_digest}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/container\.yml@refs/heads/(main|release/[0-9]+\.x)$'
 ```
 
 **If either `cosign verify` fails, stop.** Nothing has run yet, and nothing should.
@@ -188,9 +236,18 @@ the same reason. If you deploy your own fork's images, verify them against **you
 In the two image lines, Docker pulls by the digest and ignores the tag; the tag is there so a person can still
 read which release a line names.
 
-**Nothing has been published yet**, so this procedure has never run against a veyq release. It has been run as
-written against another image that is keyless-signed from a GitHub workflow on `main`, with that image's own
-identity; the first publish is where it is first run for real.
+**Pin a release, never a snapshot.** A publish is a release (`<major>.<minor>`, which never moves) or a snapshot
+(`<major>.<minor>-SNAPSHOT`, which the next publish of that commit replaces); both are signed by the same identity,
+so the signature does not tell them apart and the name does. A snapshot is for trying a build on an instance you
+may throw away: it is never a rollback target. `sha-<commit>` names the last publish of a commit, not a release.
+Major `0` is pre-release and promises no upgrade path.
+
+**Nothing has been published yet**, so this procedure has never run against a veyq release. The image half has been
+run as written against another image that is keyless-signed from a GitHub workflow on `main`, with that image's own
+identity. The chart half has been run against a local OCI registry, with a key of its own instead of the keyless
+identity: `helm push` put the chart at `<registry>/charts/veyq`, the digest above resolved from its tag, `cosign`
+signed and verified the chart by that digest, and Helm installed it by digest and by exact version. The first
+publish is where any of it is first run for real.
 
 ### Setting up a brand-new instance
 
@@ -336,16 +393,28 @@ tenant domains as `Ingress` objects into its own namespace and lists them by lab
 would reconcile each other's routing away.
 
 ```sh
-cp charts/veyq/values.yaml my-values.yaml         # fill in: domain, storeDomain, both image repositories,
-                                                  # every key under secrets, the ingress.tls block, and
-                                                  # networkPolicy.ingressFrom — your ingress controller's pods:
+# § Verifying a release first: it leaves ${version}, ${app_digest}, ${admin_digest} and ${chart_digest}
+chart="oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}"
+helm show values "$chart" > my-values.yaml        # fill in: domain, storeDomain, every key under secrets,
+                                                  # the ingress.tls block, and networkPolicy.ingressFrom —
+                                                  # your ingress controller's pods:
 #   networkPolicy:
 #     ingressFrom:
 #       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
 #         podSelector: {matchLabels: {app.kubernetes.io/name: ingress-nginx}}
-# § Verifying a release, then pin what it verified: image.tag/digest and admin.image.tag/digest
-helm install veyq ./charts/veyq -n veyq --create-namespace -f my-values.yaml
+helm install veyq "$chart" -n veyq --create-namespace -f my-values.yaml \
+  --set image.digest="${app_digest}" --set admin.image.digest="${admin_digest}"
 ```
+
+The published chart already names the release: its `appVersion` is the image tag both images default to, and
+the image repositories default to the upstream's. Pin the two digests the verification resolved, so the pods run
+exactly what you verified. Helm finds a veyq chart **only by its digest or its exact version** (`--version 1.4`):
+the version has two parts, and Helm's tag listing skips every tag that is not three-part SemVer, so `helm install`
+without a version, or with a range, finds nothing (measured with Helm 4.0.1, ADR 0064).
+
+**From a checkout** the chart is `./charts/veyq`, and its in-tree version is a placeholder (`0.0-dev`) no publish
+uses, so name the release yourself: add `--set image.tag="${version}" --set admin.image.tag="${version}"` to the
+same `helm install`, with `./charts/veyq` in place of `"$chart"`.
 
 **Reachability is default-deny, and you name the ingress controller** ([ADR
 0071](../docs/decisions/0071-runtime-hardening-on-both-targets.md)). The chart renders a NetworkPolicy set that
@@ -490,16 +559,15 @@ kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the applicatio
 # 2. capture and verify — § Backup & restore, through port-forwards, with
 #    --config-secret-file ./veyq-config-secret.key --key-into /media/usb-stick/veyq-<stamp>.key;
 #    then delete ./veyq-config-secret.key — the key now lives on its own medium, never in the capture
-helm upgrade veyq ./charts/veyq -n veyq -f my-values.yaml \
-  --set image.tag=<new> --set image.digest="${app_digest}" \
-  --set admin.image.tag=<new> --set admin.image.digest="${admin_digest}"   # from § Verifying a release
+helm upgrade veyq "oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}" -n veyq -f my-values.yaml \
+  --set image.digest="${app_digest}" --set admin.image.digest="${admin_digest}"   # § Verifying a release, <new>
 # 3. the schema migrates during this boot; then verify as the compose runbook says — not by "it started"
 ```
 
-Pin the same tag on both images, each with the digest the verification resolved for it: they ship as one
-release, and only one of a mismatched pair migrated the schema. With a digest set the pod runs
-`repository:tag@digest`, and the node pulls by the digest. Rollback is the backup plus the previous tags and
-digests, exactly as under compose.
+The new chart names the new release as both images' tag; pin each image to the digest the verification resolved
+for it: they ship as one release, and only one of a mismatched pair migrated the schema. With a digest set the pod
+runs `repository:tag@digest`, and the node pulls by the digest. Rollback is the backup plus the previous chart's
+and images' digests, exactly as under compose.
 
 #### Restore under Helm
 
@@ -745,9 +813,10 @@ it, not from a rehearsal, and you are the one finding out where it is wrong. Rea
    the day you need it, which is the day you find out. Encrypt it before it leaves this host (§ Capture).
 
 3. **Confirm the backup can name the release you are leaving.** Read `app.version` in the capture's
-   `manifest.json`. A release is `<major>.<minor>`, and a publish onto an existing tag **fails** rather than
+   `manifest.json`. A release is `<major>.<minor>`, and a release onto an existing tag **fails** rather than
    replacing it ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)), so that tag
-   names one fixed set of bits for good — which is what makes it a rollback target rather than a label. If the
+   names one fixed set of bits for good — which is what makes it a rollback target rather than a label. A
+   `<major>.<minor>-SNAPSHOT` is not: its tag moves, so roll back to the digest you pinned instead. If the
    manifest records no release, the backup is still valid and still restorable; what it cannot tell you is which
    image to start it under, so write that down yourself now, from **Settings → Server → Release**, while the
    instance you are leaving still exists to be asked. And keep a copy of `infra/.env`'s `VEYQ_IMAGE` and

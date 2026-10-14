@@ -158,11 +158,14 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   default to the upstream's own (`ghcr.io/raddatzk/veyq`, `ghcr.io/raddatzk/veyq-admin`), written out for the
   same reason the verify identity is: a fork that deploys its own images overrides them, knowingly. A release
   refuses to republish the chart as it does the images; a release with two images and no chart is a partial
-  release. **This is the one part of the decision not yet built**, and deliberately so: its only proof is a
-  workflow run, and no CI run has ever executed in this repository (no remote). V1 is unaffected — it gates on
-  the instance being *deployable* onto a cluster, and `helm install ./charts/veyq` is that. It stays the
-  remaining sub-slice on [inbox #26](../inbox.md); until it lands, `Chart.yaml`'s `version`/`appVersion` are
-  set by hand and must move with the `VERSION` file.
+  release. **Built, publish unobserved:** `container.yml`'s publish packages, pushes and signs the chart, and
+  `scripts/validate_release_identity.py` holds it there — but its only proof is a workflow run, and no CI run has
+  ever executed in this repository (no remote). The first proof is the staged run [infra/README](../../infra/README.md)
+  § Cutting a release lists; until its refused repeat release has run, this stays *unobserved*, not *released*.
+  In the tree, `Chart.yaml` carries the placeholder `0.0-dev` no publish uses, because the minor is a commit count
+  no tree can hold, and `helm install ./charts/veyq` from a checkout sets the image tags itself. The image
+  repositories' defaults are held to the names infra/README verifies by the same guard; `chart_meta_check.py`
+  runs in `container.yml`'s test job.
 - **The chart generates nothing and every pod passes `restricted`**, to which
   [ADR 0071](0071-runtime-hardening-on-both-targets.md) adds a read-only root and a NetworkPolicy set whose
   ingress-controller peer the operator must name. Every secret is the operator's to supply

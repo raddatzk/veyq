@@ -201,8 +201,10 @@ flowchart TB
 - **Host-based tenant routing** — the active tenant resolves from the request Host (port stripped)
   ([scopes & tenancy](../crosscutting/scopes-and-tenancy.md),
   [uc.admin.setup-server](../features/admin/use-cases/uc.admin.setup-server.md)).
-- **A release is named by the tree, and carries its own deployment recipe** — the version comes from a `VERSION`
-  file rather than from a registry count, a publish onto an existing tag fails instead of replacing it, and the
+- **A release is named by the tree, and carries its own deployment recipe** — the version comes from the tree (the
+  major in a `VERSION` file, the minor a commit count) rather than from a registry count, nothing is published
+  by a push, a release onto an existing tag fails instead of replacing it, the Helm chart ships beside the two
+  images as the release's third signed artifact, and the
   production compose file travels *inside* the signed image so it cannot drift from the bits it describes
   ([ADR 0057](../decisions/0057-release-identity-and-deployment-recipe.md)). This is what gives
   [ADR 0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md) §6's rollback a target it can
