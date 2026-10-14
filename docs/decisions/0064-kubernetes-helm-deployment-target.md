@@ -210,3 +210,18 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   [ADR 0057](0057-release-identity-and-deployment-recipe.md) (the compose-side precedents this generalizes).
 - [ADR 0065](0065-admin-ui-cli-separate-service.md) (the admin container the chart also deploys).
 - [inbox #26](../inbox.md) (the reversed scope cut).
+
+## Addendum (2026-10-14): a chart upgrade is checked by rendering both versions
+
+Decided by the coordinator on the owner's behalf, 2026-10-14 (inbox #428; the owner delegated the decision). The app-level
+upgrade proof ([ADR 0057](0057-release-identity-and-deployment-recipe.md) Addendum) proves the data; what can break a
+`helm upgrade` of this chart is an **immutable field** - a Deployment's or StatefulSet's `selector`, a StatefulSet's
+`serviceName` and `volumeClaimTemplates`, a PVC's `accessModes` / `storageClassName` or a shrinking size, a RoleBinding's
+`roleRef`, a kind changing under a name - or an object (a StatefulSet, a PVC) disappearing with the data behind it, or an
+operator's existing values no longer passing the candidate's schema. All of these are visible **without a cluster**: a
+check renders the predecessor's chart and the candidate's with the same values and compares those fields, and renders the
+candidate with the predecessor's `ci/` values. The predecessor is the upgrade proof's (`default_predecessor`); the check
+runs in the image `test` job, is **information until the first release and red from it** (the same switch as the upgrade
+proof), so from then on it gates `publish`. **Not covered, stated:** a missing StorageClass or expansion support,
+admission, image pulls, data surviving a real `helm upgrade`, and a `mariadbPassword` changed on upgrade (the database
+keeps the old one). A cluster leg (kind) that would see those is a later step of its own (inbox #430).
