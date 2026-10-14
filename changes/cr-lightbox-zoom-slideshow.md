@@ -65,6 +65,8 @@ runs). Member and guest alike. Decided by the coordinator on the owner's behalf,
   - Tests (fake timers): advances every 5 s, a video's poster for one interval, stops at the end, pauses on interaction
     and hidden tab, one preview ahead, no EXIF/geocode call while running, details load after pausing. Bitten.
   - Done when `npm run check` is green and a real browser ran a slideshow over a Memory with a photo and a video.
+  - **Built and unit-proven; the browser pass is OPEN** (as phase 1): `npm run check` green, every new test bitten, the
+    lightbox suite 8 of 8 runs green. The box stays open until the main session ran a slideshow after the merge.
 - [ ] 3 docs: uc.memory.gallery step 3a and the quality note (built, what was seen), its coverage, both wikis' gallery
   text, inbox #90/#91 done.
   - Done when every `scripts/validate_*.py` is green, run on a detached worktree.

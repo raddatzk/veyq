@@ -1056,7 +1056,13 @@ describe('MediaLightbox: the uploader', () => {
 // the session's own `originalLoader`. happy-dom lays nothing out, so each test lays the <img> out itself: 1000 CSS px wide
 // from a 2048 px preview on a 1x screen - 2x shows 2000 px (no original), 3x shows 3000 (the original).
 describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
-  beforeEach(() => Object.defineProperty(window, 'devicePixelRatio', { value: 1, configurable: true }))
+  beforeEach(() => {
+    Object.defineProperty(window, 'devicePixelRatio', { value: 1, configurable: true })
+    // A double-tap is two taps within 300 ms of `performance.now()`: frozen here, so a loaded machine's scheduling stall
+    // between two synchronous dispatches cannot split one double-click into two single taps.
+    vi.useFakeTimers({ toFake: ['performance'] })
+  })
+  afterEach(() => vi.useRealTimers())
 
   const stage = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-stage')
   const shown = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-stage img')
@@ -1261,6 +1267,232 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
     expect(vi.mocked(openShareOriginal).mock.calls[0][0]).toBe('share-1')
     expect(store.blob.presignBlobDownloads, "no member read").not.toHaveBeenCalled()
     expect(scaleOf(w)).toBe(3)
+    w.unmount()
+  })
+})
+
+// The slideshow (cr-lightbox-zoom-slideshow, uc.memory.gallery 3a), on fake interval/timeout/Date clocks (setImmediate stays
+// real, so `flushPromises` works): every 5 s one step through the items, a video's poster for one interval and never played,
+// a stop ON the last item, a pause on every interaction and a hidden tab, one preview ahead, and no EXIF read or place
+// backfill while it runs.
+describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] }))
+  afterEach(() => vi.useRealTimers())
+
+  const FTYP_MP4 = new Uint8Array([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d])
+  /** Seed media of the given types, in that order. */
+  async function seed(memoryKey: Uint8Array, types: string[]) {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    for (const [i, mediaType] of types.entries()) {
+      const bytes = mediaType.startsWith('video/') ? FTYP_MP4 : new Uint8Array(8).fill(i + 1)
+      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([bytes as BlobPart]), mediaType }, stubDeriver())
+    }
+    return { store, items: await listMedia(SCOPE_ID, NODE_ID) }
+  }
+  const position = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-title small').text()
+  const at = (index: number, count = 3) => t('media.itemPosition', { index, count })
+  const toggle = (w: ReturnType<typeof mountLightbox>) => w.find('[data-slideshow-toggle]')
+  const status = (w: ReturnType<typeof mountLightbox>) => w.find('[data-testid="slideshow-status"]').text()
+  async function advance(ms: number) {
+    await vi.advanceTimersByTimeAsync(ms)
+    await flushPromises()
+  }
+  /** The toggle as a pointer presses it: its pointerdown reaches the lightbox's pause listener first. */
+  async function press(w: ReturnType<typeof mountLightbox>) {
+    toggle(w).element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0 }))
+    await toggle(w).trigger('click')
+    await flushPromises()
+  }
+  /** The member's props with the preview, original and EXIF loaders recorded. */
+  function recorded(memoryKey: Uint8Array) {
+    const p = memberProps(memoryKey)
+    return { ...p, previewLoader: vi.fn(p.previewLoader), originalLoader: vi.fn(p.originalLoader), exifLoader: vi.fn(p.exifLoader) }
+  }
+
+  it('advances every 5 s through the items and stops on the last, announced', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    expect(toggle(w).attributes('aria-label')).toBe(t('media.slideshowStart'))
+    expect(status(w)).toBe('')
+    await press(w)
+    expect(toggle(w).attributes('aria-label')).toBe(t('media.slideshowPause'))
+    expect(status(w)).toBe(t('media.slideshowPlaying'))
+    await advance(4999)
+    expect(position(w)).toBe(at(1))
+    await advance(1)
+    expect(position(w)).toBe(at(2))
+    await press(w) // the toggle's own pointer pauses it - and its click does not start it again
+    expect(status(w)).toBe(t('media.slideshowPaused'))
+    await advance(10000)
+    expect(position(w)).toBe(at(2))
+    await press(w)
+    expect(status(w)).toBe(t('media.slideshowPlaying'))
+    await advance(5000)
+    expect(position(w)).toBe(at(3))
+    expect(status(w), 'it stops ON the last item').toBe(t('media.slideshowEnded'))
+    expect(toggle(w).attributes('aria-label')).toBe(t('media.slideshowStart'))
+    expect(toggle(w).attributes('disabled'), 'nothing left to play').toBeDefined()
+    await advance(15000)
+    expect(position(w)).toBe(at(3))
+    w.unmount()
+  })
+
+  it('a video shows its poster for one interval and is never played', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seed(memoryKey, ['image/png', 'video/mp4', 'image/png'])
+    const props = recorded(memoryKey)
+    const w = mountLightbox(memoryKey, items, 0, null, props)
+    await flushPromises()
+    await press(w)
+    await advance(5000)
+    expect(position(w)).toBe(at(2))
+    expect(w.find('.media-lightbox-video-poster').exists(), 'the poster').toBe(true)
+    expect(w.find('.media-lightbox-stage video').exists(), 'no <video>').toBe(false)
+    await advance(4999)
+    expect(position(w)).toBe(at(2))
+    await advance(1)
+    expect(position(w)).toBe(at(3))
+    expect(registerPlayback).not.toHaveBeenCalled()
+    expect(props.originalLoader).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
+  // Each interaction on its own lightbox: the slideshow pauses, says so, and the clock no longer moves it.
+  it('pauses on a key, a pointer, a wheel, the details panel, a hidden tab and suspendKeys — not on its own toggle', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
+    const interactions: Record<string, (w: ReturnType<typeof mountLightbox>) => Promise<unknown> | void> = {
+      key: () => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' })),
+      pointer: (w) => void w.find('.media-lightbox-stage').element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0 })),
+      wheel: (w) => void w.find('.media-lightbox-stage').element.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 10 })),
+      details: (w) => void w.find('.media-lightbox-details').element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0 })),
+      hidden: () => {
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+      },
+      suspendKeys: (w) => w.setProps({ suspendKeys: true }),
+    }
+    for (const [name, interact] of Object.entries(interactions)) {
+      // attached, so a key dispatched on the toggle bubbles up to the window listener as a real one does
+      const w = mount(MediaLightbox, {
+        props: { memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', coverMediaId: null, ...memberProps(memoryKey) },
+        global: { plugins: [realI18n()] },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      await press(w)
+      expect(status(w), `${name}: the toggle's own press starts it`).toBe(t('media.slideshowPlaying'))
+      let reached = false
+      const probe = () => { reached = true }
+      window.addEventListener('keydown', probe)
+      toggle(w).element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      window.removeEventListener('keydown', probe)
+      expect(reached, 'the key reached the window listener').toBe(true)
+      await flushPromises()
+      expect(status(w), `${name}: Enter on the toggle is the toggle's`).toBe(t('media.slideshowPlaying'))
+      await interact(w)
+      await flushPromises()
+      expect(status(w), name).toBe(t('media.slideshowPaused'))
+      expect(toggle(w).attributes('aria-label'), name).toBe(t('media.slideshowStart'))
+      await advance(15000)
+      expect(position(w), name).toBe(at(1))
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      w.unmount()
+    }
+  })
+
+  it('waits for a slow preview: the clock never skips past an item that is still loading', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
+    const props = recorded(memoryKey)
+    let release: () => void = () => {}
+    const real = props.previewLoader.getMockImplementation()!
+    props.previewLoader.mockImplementation(async (it: MediaItem) => {
+      if (it.mediaId === items[1].mediaId) await new Promise<void>((r) => { release = r })
+      return real(it)
+    })
+    const w = mountLightbox(memoryKey, items, 0, null, props)
+    await flushPromises()
+    await press(w)
+    await advance(5000)
+    expect(position(w)).toBe(at(2))
+    await advance(15000)
+    expect(position(w), 'still loading: no step').toBe(at(2))
+    release()
+    await flushPromises()
+    await advance(5000)
+    expect(position(w)).toBe(at(3))
+    w.unmount()
+  })
+
+  it('fetches one preview ahead, shows it without a second fetch, and drops it when it is not shown', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
+    const props = recorded(memoryKey)
+    const w = mountLightbox(memoryKey, items, 0, null, props)
+    await flushPromises()
+    const fetchedFor = (i: number) => props.previewLoader.mock.calls.filter(([it]) => it.mediaId === items[i].mediaId).length
+    expect([fetchedFor(0), fetchedFor(1), fetchedFor(2)]).toEqual([1, 0, 0])
+    await press(w)
+    expect(fetchedFor(1), 'the next one, ahead').toBe(1)
+    expect(fetchedFor(2), 'only one ahead').toBe(0)
+    await advance(5000)
+    expect(position(w)).toBe(at(2))
+    expect(w.find('.media-lightbox-stage img').attributes('src')).toBeTruthy()
+    expect(fetchedFor(1), 'shown from the prefetch').toBe(1)
+    expect(fetchedFor(2), 'and the next one ahead').toBe(1)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' })) // pause: the prefetch of the third is dropped
+    await flushPromises()
+    await w.find('.lightbox-nav-next').trigger('click')
+    await flushPromises()
+    expect(fetchedFor(2), 'nothing kept for an item that was not on screen').toBe(2)
+    w.unmount()
+  })
+
+  it('reads no EXIF and backfills no place while it runs; pausing on an item runs both', async () => {
+    resetPlaceNameCache()
+    mapConfig.maps = true
+    mapConfig.geocoder = 'https://geo.example'
+    const memoryKey = v1.randomBytes(32)
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    const geo = vi.fn(async (url: string, init?: RequestInit) =>
+      String(url).includes('geo.example')
+        ? ({ ok: true, status: 200, json: async () => ({ address: { city: 'Ort', country: 'Land' } }) } as unknown as Response)
+        : store.fetchStub(url, init),
+    )
+    vi.stubGlobal('fetch', geo)
+    for (const [i, lat] of [48.1, 50.9, 52.5].entries()) { // three places apart, so each is a geocoder request of its own
+      vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', latitude: lat, longitude: 11.5 })
+      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(i + 1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
+    }
+    const items = await listMedia(SCOPE_ID, NODE_ID)
+    const props = recorded(memoryKey)
+    const w = mountLightbox(memoryKey, items, 0, null, props)
+    await advance(2000)
+    const geocoded = () => geo.mock.calls.filter((c) => String(c[0]).includes('geo.example')).length
+    const exifFor = (i: number) => props.exifLoader.mock.calls.filter(([it]) => it.mediaId === items[i].mediaId).length
+    expect([exifFor(0), geocoded()], 'control: the first item, opened, reads and resolves').toEqual([1, 1])
+    const writes = store.api.updateMediaMeta.mock.calls.length
+    expect(writes, 'control: and backfills').toBeGreaterThan(0)
+    await press(w)
+    await advance(5000)
+    expect(position(w)).toBe(at(2))
+    await advance(3000)
+    expect(exifFor(1), 'no EXIF read while it runs').toBe(0)
+    expect(geocoded(), 'no geocoder request').toBe(1)
+    expect(store.api.updateMediaMeta.mock.calls.length, 'no backfill').toBe(writes)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' })) // pause on the second item
+    await advance(2000)
+    expect(exifFor(1), 'pausing reads it').toBe(1)
+    expect(geocoded(), 'and resolves its place').toBe(2)
+    expect(store.api.updateMediaMeta.mock.calls.length).toBe(writes + 1)
     w.unmount()
   })
 })
