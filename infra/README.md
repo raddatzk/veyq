@@ -546,14 +546,16 @@ to this target.
   Addendum). `python3 scripts/chart_upgrade_check.py` reads the upgrade proof's predecessor's `charts/veyq` out of git
   (the commit before until the first release, the last `v<major>.<minor>` from then on; `--upgrade-from <ref>` names
   another), renders it and this checkout's chart with each of this chart's `ci/` values files, and refuses what
-  `helm upgrade` cannot apply or would lose data over: a Deployment's or StatefulSet's `selector`, a StatefulSet's
-  `serviceName`, `podManagementPolicy` or claim templates (name, access modes, class, size), a claim's access modes,
+  `helm upgrade` cannot apply or would lose data over: a Deployment's or StatefulSet's `selector`, any StatefulSet
+  `spec` field the API server does not let an update change (all but `replicas`, `ordinals`, `template`,
+  `updateStrategy`, `persistentVolumeClaimRetentionPolicy`, `minReadySeconds`) - `serviceName`, `podManagementPolicy`,
+  the claim templates whole (name, order, access modes, class, size, their labels), a claim's access modes,
   class or a shrinking size, a RoleBinding's `roleRef`, a kind changed under a name, a StatefulSet or claim gone. It
   also renders this chart with the predecessor's `ci/` values: values you already run must still pass the schema.
   `container.yml`'s `test` job runs it; before the first release its findings inform, from it they fail the build.
   **It renders and installs nothing**, so it does not see a missing StorageClass or one that cannot expand a growing
   claim, admission, image pulls, your data surviving the upgrade, a `mariadbPassword` changed on upgrade (MariaDB keeps
-  the old one), a StatefulSet field it does not name (a claim template's labels, say), a value path no `ci/` file
+  the old one), a value path no `ci/` file
   sets, or what you edited in the cluster by hand. A cluster leg that would is inbox #430.
 - **Kubernetes-native backup is not built** ([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)
   defers it, [ADR 0056](../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md)'s gap

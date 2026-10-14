@@ -79,9 +79,13 @@ the coordinator on the owner's behalf, 2026-10-14 (inbox #428). `satisfies: []`:
 - **Planning: Decision 1's field list is narrower than the rule it stands for.** The API server refuses an update to
   ANY StatefulSet spec field outside its mutable set (replicas, template, updateStrategy, minReadySeconds, ordinals,
   the PVC retention policy), so a label added to a claim template's `metadata` - or any claim-template field beyond
-  name, modes, class and size - renders green here and fails the upgrade. Built as decided ("anything else may
-  change"), the gap stated in the script's docstring, ADR 0064's Addendum and infra/README, and handed back with a
-  recommendation (compare the whole StatefulSet spec minus the mutable set). Root cause: the refine enumerated the
+  name, modes, class and size - rendered green and would fail the upgrade. Built first as decided ("anything else may
+  change"), handed back with a recommendation, and **decided by the coordinator on the owner's behalf, 2026-10-14:
+  compare the whole StatefulSet spec minus the mutable set**, claim templates whole (metadata included, order
+  included, quantities compared by value so `1Gi` = `1024Mi`), absent fields equal to the server's defaults
+  (`podManagementPolicy`, `revisionHistoryLimit`). Built in a third commit; Decision 1's list above is superseded by
+  it, and the mutable set is the API server's refusal message as remembered, not measured on a cluster (a field it
+  wrongly omits is a false red, never a false green). Root cause: the refine enumerated the
   fields today's templates set, not the API's own rule. Next time: when a CR lists "what is immutable", derive the list
   from the API server's validation and cite it, then narrow on purpose.
 - **Execution: two controls were not bitten until their levers were.** "The same size in another unit finds nothing"

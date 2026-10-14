@@ -5,13 +5,14 @@
 `scripts/chart_upgrade_check.py` renders two charts and hands both renders to `compare`; whether its findings fail the
 build is `verdict`'s. This asserts each of them:
   1. every refusal, on a crafted predecessor/candidate pair that differs in exactly that field - a Deployment's and a
-     StatefulSet's selector, a StatefulSet's serviceName and podManagementPolicy, a claim template's name, access
-     modes, class and size, a claim's access modes and class and a shrinking size, a RoleBinding's roleRef, a kind
-     changed under a name, a StatefulSet and a claim missing from the candidate - each found once, naming the object
-     and the field;
+     StatefulSet's selector, a StatefulSet's serviceName, podManagementPolicy and a spec field no rule names
+     (revisionHistoryLimit), a claim template's name, order, access modes, class, size and metadata labels, a
+     claim's access modes and class and a shrinking size, a RoleBinding's roleRef, a kind changed under a name, a
+     StatefulSet and a claim missing from the candidate - each found once, naming the object and the field;
   2. the controls: an identical pair, and a pair whose image tag, labels, replicas and env changed, find nothing; a
-     claim that grows, a ConfigMap or a Service that disappears, and `podManagementPolicy: OrderedReady` written out
-     where the predecessor left it to the default find nothing either;
+     claim that grows, a ConfigMap or a Service that disappears, every field of the StatefulSet's mutable set
+     changing, and `podManagementPolicy: OrderedReady` / `revisionHistoryLimit: 10` written out where the
+     predecessor left them to the default find nothing either;
   3. the quantities a size is compared in (`1Gi` is `1024Mi`, `1G` is not `1Gi`), and an unreadable size refused
      rather than guessed;
   4. the verdict: no finding is OK either way; findings exit 0 "information only" while `release: none`, and 1 once a
@@ -116,6 +117,15 @@ def refusal_cases() -> None:
     refused_once("a StatefulSet's podManagementPolicy changed",
                  set_in(["StatefulSet", "db", "spec", "podManagementPolicy"], "Parallel"),
                  "StatefulSet/db", "spec.podManagementPolicy")
+    refused_once("a StatefulSet spec field beyond the named ones changed (revisionHistoryLimit)",
+                 set_in(["StatefulSet", "db", "spec", "revisionHistoryLimit"], 3),
+                 "StatefulSet/db", "spec.revisionHistoryLimit")
+    refused_once("a claim template's metadata labels changed",
+                 lambda r: template(r, "data")["metadata"].__setitem__("labels", {"tier": "db"}),
+                 "StatefulSet/db", "spec.volumeClaimTemplates[data] changed")
+    refused_once("claim templates reordered",
+                 lambda r: obj(r, "StatefulSet", "db")["spec"]["volumeClaimTemplates"].reverse(),
+                 "StatefulSet/db", "volumeClaimTemplates order")
     refused_once("a claim template renamed",
                  lambda r: template(r, "meta")["metadata"].__setitem__("name", "metadata"),
                  "StatefulSet/db", "volumeClaimTemplates names")
@@ -180,6 +190,16 @@ def control_cases() -> None:
     check("a ConfigMap and a Service disappearing find nothing (no data behind them)", found == [], f"found {found}")
     found = cuc.compare(base(), edited(set_in(["StatefulSet", "db", "spec", "podManagementPolicy"], "OrderedReady")))
     check("the default podManagementPolicy written out finds nothing", found == [], f"found {found}")
+    found = cuc.compare(base(), edited(set_in(["StatefulSet", "db", "spec", "revisionHistoryLimit"], 10)))
+    check("the default revisionHistoryLimit written out finds nothing", found == [], f"found {found}")
+
+    def mutable(render: list[dict]) -> None:
+        spec = obj(render, "StatefulSet", "db")["spec"]
+        spec.update({"replicas": 3, "ordinals": {"start": 1}, "updateStrategy": {"type": "OnDelete"},
+                     "persistentVolumeClaimRetentionPolicy": {"whenDeleted": "Delete"}, "minReadySeconds": 5})
+        spec["template"]["spec"]["containers"][0]["image"] = "mariadb:12"
+    found = cuc.compare(base(), edited(mutable))
+    check("every field of the StatefulSet's mutable set changing finds nothing", found == [], f"found {found}")
 
 
 def quantity_cases() -> None:

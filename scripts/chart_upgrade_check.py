@@ -7,10 +7,13 @@ with the same values - each of the CANDIDATE's `ci/*.yaml`, like for like - then
 object, keyed by `(kind, metadata.name)`. It refuses, each with a reason naming the object and the field:
 
   1. a Deployment's or a StatefulSet's `spec.selector` changed;
-  2. a StatefulSet's `serviceName` or `podManagementPolicy` changed (an absent policy is `OrderedReady`, the
-     server's default, so spelling the default out is no change);
-  3. a StatefulSet's `volumeClaimTemplates` changed in a template's name (one added, removed or renamed), its
-     `accessModes`, its `storageClassName` or its size;
+  2. a StatefulSet's spec changed in any field outside the API server's mutable set (`replicas`, `ordinals`,
+     `template`, `updateStrategy`, `persistentVolumeClaimRetentionPolicy`, `minReadySeconds`) - `serviceName`,
+     `podManagementPolicy`, `revisionHistoryLimit` and whatever field a later API adds (an absent field the server
+     defaults - `podManagementPolicy: OrderedReady`, `revisionHistoryLimit: 10` - equals its default spelled out);
+  3. a StatefulSet's `volumeClaimTemplates` changed: a template added, removed, renamed or reordered, its
+     `accessModes`, its `storageClassName` or its size each by name, and anything else in the template - its
+     `metadata` labels included - as the template having changed;
   4. a PersistentVolumeClaim's `accessModes` or `storageClassName` changed, or its size shrank (a growth is left to
      the StorageClass - see the limits);
   5. a RoleBinding's `roleRef` changed;
@@ -40,9 +43,10 @@ an uncommitted edit of `veyq.selector` and of a claim template's size (cr-helm-u
 **Its limits - what a green run does NOT prove.** It renders; it never installs. Not covered, as ADR 0064's Addendum
 states: a missing StorageClass or one that cannot expand a growing claim, admission under `restricted`, image pulls,
 data surviving a real `helm upgrade`, and a `mariadbPassword` changed on upgrade (the database keeps the old one) -
-the kind cluster leg (inbox #430) is what would see those. Beyond that list: it compares the fields named above and
-no others, while the API server refuses an update to ANY StatefulSet spec field outside its mutable set - a label
-added to a claim template's `metadata`, say, renders green here and fails the upgrade. It renders only the values
+the kind cluster leg (inbox #430) is what would see those. Beyond that list: the StatefulSet mutable set above is
+the API server's refusal message as remembered, not measured against a cluster - a field the server lets change that
+is missing from it is a false red, never a false green. A field a render leaves out is equal only to the defaults
+named in `STATEFULSET_DEFAULTS`; another default spelled out is reported. It renders only the values
 files in the two `ci/` directories, so a value path neither sets is compared at its default alone. It compares
 against one predecessor, so an operator upgrading across several releases is checked step by step at best. And it
 sees what the chart renders, not what the cluster holds: an object an operator edited by hand is out of reach.
@@ -58,6 +62,7 @@ Its pure parts - the comparison and the verdict - are pinned by `scripts/chart_u
 """
 from __future__ import annotations  # `X | None` below - the repo's scripts run on Python 3.9
 
+import copy
 import io
 import pathlib
 import re
@@ -78,8 +83,13 @@ WHO = "chart upgrade check"
 
 # The kinds whose loss loses data: a StatefulSet's claims and a standalone claim (refusal 7).
 DATA_KINDS = ("StatefulSet", "PersistentVolumeClaim")
-# The server's default for an absent `podManagementPolicy`.
-DEFAULT_POD_MANAGEMENT = "OrderedReady"
+# The StatefulSet spec fields the API server lets an update change. It refuses every other one ("updates to
+# statefulset spec for fields other than 'replicas', 'ordinals', 'template', 'updateStrategy',
+# 'persistentVolumeClaimRetentionPolicy' and 'minReadySeconds' are forbidden"), so everything else is compared.
+STATEFULSET_MUTABLE = {"replicas", "ordinals", "template", "updateStrategy", "persistentVolumeClaimRetentionPolicy",
+                       "minReadySeconds"}
+# The server's defaults for fields a render may leave out: spelling one out is no change.
+STATEFULSET_DEFAULTS = {"podManagementPolicy": "OrderedReady", "revisionHistoryLimit": 10}
 # Kubernetes quantity suffixes - binary, decimal, and milli.
 SUFFIXES = {
     "Ki": 1024, "Mi": 1024 ** 2, "Gi": 1024 ** 3, "Ti": 1024 ** 4, "Pi": 1024 ** 5, "Ei": 1024 ** 6,
@@ -112,9 +122,21 @@ def index(rendered: list[dict]) -> dict[tuple[str, str], dict]:
 
 
 def claim_templates(spec: dict) -> dict[str, dict]:
-    """A StatefulSet's `volumeClaimTemplates` by name -> the template's spec."""
-    return {str((t.get("metadata") or {}).get("name")): (t.get("spec") or {})
+    """A StatefulSet's `volumeClaimTemplates` by name -> the whole template, metadata included."""
+    return {str((t.get("metadata") or {}).get("name")): t
             for t in (spec.get("volumeClaimTemplates") or []) if isinstance(t, dict)}
+
+
+def comparable(claim_template: dict) -> dict:
+    """A claim template with its resource quantities read as numbers - the server compares `1Gi` and `1024Mi` as
+    equal, so the whole-template comparison must too."""
+    out = copy.deepcopy(claim_template)
+    for bucket in (((out.get("spec") or {}).get("resources") or {}).values()):
+        if isinstance(bucket, dict):
+            for key, value in bucket.items():
+                read = quantity(value)
+                bucket[key] = read if read is not None else value
+    return out
 
 
 def compare(before: list[dict], after: list[dict]) -> list[str]:
@@ -148,12 +170,13 @@ def compare_object(at: str, kind: str, a: dict, b: dict) -> list[str]:
     if kind in ("Deployment", "StatefulSet") and sa.get("selector") != sb.get("selector"):
         problems.append(changed(at, "spec.selector", sa.get("selector"), sb.get("selector")))
     if kind == "StatefulSet":
-        if sa.get("serviceName") != sb.get("serviceName"):
-            problems.append(changed(at, "spec.serviceName", sa.get("serviceName"), sb.get("serviceName")))
-        policy_a = sa.get("podManagementPolicy") or DEFAULT_POD_MANAGEMENT
-        policy_b = sb.get("podManagementPolicy") or DEFAULT_POD_MANAGEMENT
-        if policy_a != policy_b:
-            problems.append(changed(at, "spec.podManagementPolicy", policy_a, policy_b))
+        # Every spec field outside the mutable set; the selector above and the claim templates below by their own,
+        # more precise reasons. serviceName and podManagementPolicy are two of the fields this loop compares.
+        for field in sorted((set(sa) | set(sb)) - STATEFULSET_MUTABLE - {"selector", "volumeClaimTemplates"}):
+            value_a = sa.get(field, STATEFULSET_DEFAULTS.get(field))
+            value_b = sb.get(field, STATEFULSET_DEFAULTS.get(field))
+            if value_a != value_b:
+                problems.append(changed(at, f"spec.{field}", value_a, value_b))
         problems.extend(compare_claim_templates(at, sa, sb))
     if kind == "PersistentVolumeClaim":
         problems.extend(compare_claim(at, "spec", sa, sb, growth_allowed=True))
@@ -167,8 +190,15 @@ def compare_claim_templates(at: str, sa: dict, sb: dict) -> list[str]:
     problems: list[str] = []
     if sorted(ta) != sorted(tb):
         problems.append(changed(at, "spec.volumeClaimTemplates names", sorted(ta), sorted(tb)))
+    elif list(ta) != list(tb):
+        problems.append(changed(at, "spec.volumeClaimTemplates order", list(ta), list(tb)))
     for name in sorted(set(ta) & set(tb)):
-        problems.extend(compare_claim(at, f"spec.volumeClaimTemplates[{name}]", ta[name], tb[name], growth_allowed=False))
+        field = f"spec.volumeClaimTemplates[{name}]"
+        found = compare_claim(at, field, ta[name].get("spec") or {}, tb[name].get("spec") or {}, growth_allowed=False)
+        # The template is immutable as a whole: what the named fields above do not explain is still a change.
+        if not found and comparable(ta[name]) != comparable(tb[name]):
+            found = [changed(at, field, ta[name], tb[name])]
+        problems.extend(found)
     return problems
 
 
