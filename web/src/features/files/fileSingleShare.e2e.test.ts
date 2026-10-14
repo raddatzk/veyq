@@ -24,7 +24,7 @@ import { ShareRole } from '../../api/generated/sharing'
 import { createFolder, deleteNode, listTree, nodeContentKey } from '../../core/node/tree'
 import { CHUNK_SIZE } from '../../core/blob/transport'
 import { registry } from '../../core/applications/registry'
-import { mintShare } from '../../core/sharing/manageShares'
+import { mintShare, NO_NOTE } from '../../core/sharing/manageShares'
 import { resolvePublicShare } from '../../core/sharing/resolvePublicShare'
 import { createGuestIdentity } from '../../core/sharing/guestIdentity'
 import { createShareNodeAsGuest, GuestTreeError, guestTreeContext, openGuestTreeParts } from '../../core/sharing/guestTree'
@@ -92,7 +92,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
     const siblingBlob = listing.find((i) => i.nodeId === sibling)!.fileBlob!
 
     // --- a WRITE_ONLY link on a file is refused ------------------------------------------------------------------------
-    const dropOnFile = await failure(mintShare(scopeId, target, targetKey, epochs, TARGET_FILE, ShareRole.WriteOnly, null, {}, '', '', {
+    const dropOnFile = await failure(mintShare(scopeId, target, targetKey, epochs, TARGET_FILE, ShareRole.WriteOnly, null, NO_NOTE, '', '', {
       dropFields: async () => ({ sealedDropPublicKey: filler(), sealedDropPrivateKey: filler() }),
     }))
     expect(await decodeHttpError(dropOnFile)).toEqual({ status: 422, code: 'illegal_scope' })

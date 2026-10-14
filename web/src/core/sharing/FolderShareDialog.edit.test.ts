@@ -20,7 +20,7 @@ vi.mock('./manageShares', () => ({
   isReissueRequired: vi.fn(),
   isShareDeleted: vi.fn(),
   readShareName: vi.fn(),
-  readShareNoteMap: vi.fn(),
+  readShareNote: vi.fn(),
   readSharePassword: vi.fn(),
   hasLocaleText: vi.fn(),
 }))
@@ -74,7 +74,7 @@ beforeEach(() => {
   settleConfirm(false)
   vi.mocked(recoverShareLink).mockImplementation((a) => `https://x/s/${a.shareId}#k=rec`)
   vi.mocked(manage.readShareName).mockImplementation((_e, _a, _copy, sealed) => (sealed ? 'Family' : ''))
-  vi.mocked(manage.readShareNoteMap).mockReturnValue({ en: 'Hello' })
+  vi.mocked(manage.readShareNote).mockReturnValue({ texts: { en: 'Hello' }, mustAccept: false })
   vi.mocked(manage.hasLocaleText).mockImplementation((m) => Object.values(m).some((v) => !!v))
   vi.mocked(manage.readSharePassword).mockReturnValue('')
   updateShare.mockResolvedValue(undefined)
@@ -119,7 +119,7 @@ describe('FolderShareDialog — edit a link in place (#364)', () => {
     expect(address, 'the link and the folder this dialog was opened for').toEqual({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, shareId: 's-own' })
     expect(epochs).toEqual(EPOCHS)
     expect(copy, 'its recovery copy re-opens K_share').toEqual(share)
-    expect(note, 'the note is re-sent').toEqual({ en: 'Hello' })
+    expect(note, 'the note is re-sent').toEqual({ texts: { en: 'Hello' }, mustAccept: false })
     expect(name).toBe('Grandparents')
     expect(expiresAt?.getTime(), 'the expiry is re-sent, so an unrelated edit keeps it').toBe(new Date(new Date(EXPIRES).setHours(23, 59, 59, 999)).getTime())
     expect(role).toBe(ShareRole.ReadWrite)
@@ -146,7 +146,7 @@ describe('FolderShareDialog — edit a link in place (#364)', () => {
     await flushPromises()
     const [, , , note, , , , passwordChange] = updateShare.mock.calls[0]
     expect(passwordChange).toEqual({ remove: true })
-    expect(note).toEqual({})
+    expect(note).toEqual({ texts: {}, mustAccept: false })
   })
 
   it('a changed password is set; a password the copy cannot open blocks the save until one is typed', async () => {
@@ -206,5 +206,56 @@ describe('FolderShareDialog — edit a link in place (#364)', () => {
     settleConfirm(false)
     expect(asked).toBe(t('share.reissueTitle'))
     expect(updateShare).not.toHaveBeenCalled()
+  })
+})
+
+// uc.sharing.share-note: the note's acceptance switch — a checkbox under the note editor, off by default, enabled only
+// while the note has text, read back on edit from the opened note and sealed inside it.
+describe("FolderShareDialog — the note's acceptance switch", () => {
+  const mustAccept = (w: W) => w.find('#share-note-must-accept')
+
+  it('is read back on edit and re-sent; unticked, the note is saved without it', async () => {
+    vi.mocked(manage.readShareNote).mockReturnValue({ texts: { en: 'Hello' }, mustAccept: true })
+    listSharesFor.mockResolvedValue([row({})])
+    const w = mountDialog()
+    await flushPromises()
+    click(byLabel(w, t('share.edit'))[0].element)
+    await flushPromises()
+    expect((mustAccept(w).element as HTMLInputElement).checked, 'read back from the opened note').toBe(true)
+    expect(mustAccept(w).attributes('disabled'), 'the note has text').toBeUndefined()
+
+    click(byText(w, t('common.save'))!.element)
+    await flushPromises()
+    expect(updateShare.mock.calls[0][3], 'an unrelated save keeps it').toEqual({ texts: { en: 'Hello' }, mustAccept: true })
+
+    click(byLabel(w, t('share.edit'))[0].element)
+    await flushPromises()
+    click(mustAccept(w).element)
+    await flushPromises()
+    click(byText(w, t('common.save'))!.element)
+    await flushPromises()
+    expect(updateShare.mock.calls[1][3]).toEqual({ texts: { en: 'Hello' }, mustAccept: false })
+  })
+
+  it('a new link starts with it off, and it stays disabled until the note has text', async () => {
+    listSharesFor.mockResolvedValue([])
+    vi.mocked(manage.mintShare).mockResolvedValue({ shareId: 'new', kShare: new Uint8Array(32) })
+    const w = mountDialog()
+    await flushPromises()
+    click(byText(w, t('share.createNew'))!.element)
+    await flushPromises()
+    click(toggle(w, t('share.noteSection')).element)
+    await flushPromises()
+    expect((mustAccept(w).element as HTMLInputElement).checked, 'off by default').toBe(false)
+    expect(mustAccept(w).attributes('disabled'), 'no text, nothing to accept').toBeDefined()
+
+    w.findComponent({ name: 'LocaleMarkdownEditor' }).vm.$emit('update:modelValue', { en: 'Read me first' })
+    await flushPromises()
+    expect(mustAccept(w).attributes('disabled')).toBeUndefined()
+    click(mustAccept(w).element)
+    await flushPromises()
+    click(byText(w, t('share.create'))!.element)
+    await flushPromises()
+    expect(vi.mocked(manage.mintShare).mock.calls[0][7]).toEqual({ texts: { en: 'Read me first' }, mustAccept: true })
   })
 })

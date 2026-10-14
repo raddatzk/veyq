@@ -41,6 +41,7 @@ const FOLDER_NAME = 'Familienarchiv Kowalczyk'
 const MEMORY_NAME = 'Sommerfest Gartenlaube'
 const SUB_NAME = 'Briefe Urgrossmutter'
 const OUTSIDE_NAME = 'Steuerordner Privat'
+const GATED_NOTE = 'Bitte zuerst lesen: nur fuer die Familie Kowalczyk'
 
 /** Deterministic bytes, a different fill per photo. */
 function bytes(fill: number, size = 200 * 1024): Uint8Array {
@@ -120,7 +121,16 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
     expect(refused, 'the WRITE_ONLY mint failed').not.toBeNull()
     expect(await isCodedError(refused, HttpStatus.unprocessable, 'illegal_scope'), 'a WRITE_ONLY folder link is 422 illegal_scope').toBe(true)
 
+    // --- uc.sharing.share-note: a note that asks to be accepted carries its switch INSIDE the seal ---------------
+    expect(head.noteAcceptance, 'a link without a note asks nothing').toBeUndefined()
+    const asked = await mintShare(scopeId, folderId, folderKey!, epochs, FOLDER_NAME, ShareRole.Read, null, { texts: { en: GATED_NOTE }, mustAccept: true })
+    const gated = await resolvePublicShare(asked.shareId, b64url(asked.kShare))
+    expect(gated.noteByLocale, 'the guest opens the note with the fragment key').toEqual({ en: GATED_NOTE })
+    expect(gated.noteAcceptance?.digest, 'and learns from inside the seal that it asks to be accepted').toMatch(/^[A-Za-z0-9_-]{43}$/)
+    const gatedWire = await (await publicSharesApi().resolveShareRaw({ shareId: asked.shareId })).raw.json()
+    expect(JSON.stringify(gatedWire), 'the switch is no field of its own on the wire').not.toMatch(/mustAccept/)
+
     // Every value recovered by UNSEALING what the server returned (ADR 0053).
-    recordCanaries(head.name, walked.names.get(memory.nodeId), walked.names.get(subId))
+    recordCanaries(head.name, walked.names.get(memory.nodeId), walked.names.get(subId), gated.noteByLocale)
   }, 240_000)
 })

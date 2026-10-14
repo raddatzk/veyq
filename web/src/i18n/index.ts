@@ -1412,6 +1412,12 @@ const en = {
     // cr-0118: password protection (an access-control gate — set / change / remove in place, same link)
     noteSection: 'Note',
     noteSectionHint: 'A message shown to whoever opens the link.',
+    // cr-share-note-acceptance-gate: the note's switch (sealed inside the note) and the visitor's gate
+    noteMustAccept: 'Must be accepted before opening',
+    noteMustAcceptHint: 'Whoever opens the link sees this note first and continues only after accepting it. The acceptance stays on their device.',
+    noteGateTitle: 'Please read this note',
+    noteGateIntro: 'The person who shared this asks you to accept their note before you continue. Your acceptance stays on this device.',
+    noteGateAccept: 'Accept and continue',
     passwordSection: 'Password protection',
     passwordSectionHint: 'Open the share only with a password ({min}+ characters).',
     expirySection: 'Expiry date',
@@ -2862,6 +2868,12 @@ const de: typeof en = {
     // cr-0118: Passwortschutz (eine Zugriffsschranke — setzen / ändern / entfernen in-place, gleicher Link)
     noteSection: 'Hinweis',
     noteSectionHint: 'Eine Nachricht für alle, die den Link öffnen.',
+    // cr-share-note-acceptance-gate: der Schalter des Hinweises (im Hinweis versiegelt) und die Schranke für Besuchende
+    noteMustAccept: 'Muss vor dem Öffnen akzeptiert werden',
+    noteMustAcceptHint: 'Wer den Link öffnet, sieht zuerst diesen Hinweis und kommt erst nach dem Akzeptieren weiter. Die Zustimmung bleibt auf dem eigenen Gerät.',
+    noteGateTitle: 'Bitte lies diesen Hinweis',
+    noteGateIntro: 'Die Person, die das mit dir teilt, bittet dich, ihren Hinweis vor dem Fortfahren zu akzeptieren. Deine Zustimmung bleibt auf diesem Gerät.',
+    noteGateAccept: 'Akzeptieren und fortfahren',
     passwordSection: 'Passwortschutz',
     passwordSectionHint: 'Freigabe nur mit Passwort ab {min} Zeichen öffnen.',
     expirySection: 'Ablaufdatum',

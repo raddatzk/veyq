@@ -25,7 +25,7 @@ import {
   deleteShare,
   isReissueRequired,
   readShareName,
-  readShareNoteMap,
+  readShareNote,
   hasLocaleText,
   type ManagedShare,
 } from '../share'
@@ -97,7 +97,7 @@ const decoded = computed(() => {
   for (const s of shares.value) {
     m.set(s.shareId, {
       name: readShareName(props.epochs, addressOf(s), s, s.sealedShareName),
-      hasNote: hasLocaleText(readShareNoteMap(props.epochs, addressOf(s), s, s.sealedNote)),
+      hasNote: hasLocaleText(readShareNote(props.epochs, addressOf(s), s, s.sealedNote).texts),
     })
   }
   return m

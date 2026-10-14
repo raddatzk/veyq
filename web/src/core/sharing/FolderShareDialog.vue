@@ -40,12 +40,14 @@ import {
   isShareDeleted,
   updateShare,
   readShareName,
-  readShareNoteMap,
+  readShareNote,
   readSharePassword,
   hasLocaleText,
   type LocaleMap,
   type ManagedShare,
 } from './manageShares'
+import { NO_NOTE, type ShareNote } from './shareNote'
+import ShareNoteAcceptField from './ShareNoteAcceptField.vue'
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { ShareRole } from '../../api/generated/sharing'
 import type { NodeShareDialogProps } from '../applications/registry'
@@ -95,7 +97,7 @@ const decoded = computed(() => {
   for (const s of shares.value) {
     m.set(s.shareId, {
       name: readShareName(props.epochs, addressOf(s), s, s.sealedShareName),
-      hasNote: hasLocaleText(readShareNoteMap(props.epochs, addressOf(s), s, s.sealedNote)),
+      hasNote: hasLocaleText(readShareNote(props.epochs, addressOf(s), s, s.sealedNote).texts),
       link: recoverShareLink(addressOf(s), props.epochs, s),
     })
   }
@@ -215,6 +217,10 @@ const name = ref('')
 const role = ref<ShareRole>(ShareRole.Read)
 const noteEnabled = ref(false)
 const note = ref<LocaleMap>({})
+/** The note's acceptance switch, sealed inside the note (uc.sharing.share-note). */
+const noteMustAccept = ref(false)
+/** The note as it is saved: none when its section is off. */
+const effectiveNote = (): ShareNote => (noteEnabled.value ? { texts: note.value, mustAccept: noteMustAccept.value } : NO_NOTE)
 const passwordEnabled = ref(false)
 const password = ref('')
 const revealPw = ref(false)
@@ -253,7 +259,9 @@ function openEdit(s: ManagedShare) {
   const address = addressOf(s)
   name.value = readShareName(props.epochs, address, s, s.sealedShareName)
   role.value = s.role
-  note.value = readShareNoteMap(props.epochs, address, s, s.sealedNote)
+  const opened = readShareNote(props.epochs, address, s, s.sealedNote)
+  note.value = { ...opened.texts }
+  noteMustAccept.value = opened.mustAccept
   noteEnabled.value = hasLocaleText(note.value)
   currentPassword.value = readSharePassword(props.epochs, address, s, s.sealedPassword)
   password.value = currentPassword.value
@@ -278,7 +286,7 @@ const { run: runSave, pending: saving } = useAsyncAction(
       : password.value === currentPassword.value ? undefined : ({ set: password.value } as const)
     // Note, label and expiry are full replaces: the pre-filled values are always re-sent, so an unrelated edit keeps them.
     await updateShare(
-      addressOf(s), props.epochs, s, noteEnabled.value ? note.value : {}, name.value,
+      addressOf(s), props.epochs, s, effectiveNote(), name.value,
       expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null, role.value, passwordChange,
     )
     editing.value = null
@@ -309,6 +317,7 @@ function openCreate() {
   role.value = ShareRole.Read
   noteEnabled.value = false
   note.value = {}
+  noteMustAccept.value = false
   passwordEnabled.value = false
   password.value = ''
   expiryEnabled.value = false
@@ -329,7 +338,7 @@ const { run: runCreate, pending: minting } = useAsyncAction(
     const minted = await mintShare(
       props.scopeId, props.nodeId, props.nodeKey, props.epochs, props.nodeName, role.value,
       expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null,
-      noteEnabled.value ? note.value : {}, name.value, passwordEnabled.value ? password.value : '',
+      effectiveNote(), name.value, passwordEnabled.value ? password.value : '',
     )
     link.value = buildShareLink(minted.shareId, minted.kShare) // the origin belongs here, not in the data layer
     view.value = 'link'
@@ -434,6 +443,7 @@ function onDialogVisible(visible: boolean) {
         <template v-if="noteEnabled">
           <LocaleMarkdownEditor v-model="note" :placeholder="t('share.notePlaceholder')" />
           <p class="veyq-form-copy folder-share-hint">{{ t('share.noteHint') }}</p>
+          <ShareNoteAcceptField v-model="noteMustAccept" :note="note" :disabled="creating" />
         </template>
       </div>
 

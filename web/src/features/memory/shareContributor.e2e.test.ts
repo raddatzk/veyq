@@ -101,7 +101,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     nodeId = memory.nodeId
     const kMem = memory.memoryKey
 
-    const minted = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.ReadWrite, null, NOTE, SHARE_NAME)
+    const minted = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.ReadWrite, null, { texts: NOTE, mustAccept: false }, SHARE_NAME)
     shareId = minted.shareId
     expect(shareId, 'the client minted an opaque shareId (ADR 0072)').toMatch(/^[A-Za-z0-9_-]{43}$/)
 

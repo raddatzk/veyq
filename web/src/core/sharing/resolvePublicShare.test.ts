@@ -16,7 +16,7 @@ import {
   acceptedTermsVersion,
   recordTermsAccepted,
   pickLocaleText,
-  openNoteMap,
+  openShareNote,
   SHARE_MEMORY_NAME,
   SHARE_NOTE,
   ShareUnavailableError,
@@ -28,6 +28,7 @@ import { fakeApi } from '../../test/apiMock'
 import { httpError } from '../../test/httpError'
 import { ShareRole, type PublicShare, type SharingApi } from '../../api/generated/sharing'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
+import { noteDigest } from './shareNote'
 
 const K_SHARE = v1.randomBytes(32)
 const FRAGMENT = b64url(K_SHARE)
@@ -116,10 +117,55 @@ describe('resolvePublicShare: the head', () => {
   })
 })
 
-describe('openNoteMap', () => {
-  it('is {} for a seal that does not open or is not a JSON object', () => {
-    expect(openNoteMap(K_SHARE, 'AAAA')).toEqual({})
-    expect(openNoteMap(K_SHARE, seal(SHARE_NOTE, '["a"]'))).toEqual({})
+describe("the note's acceptance switch on the head (uc.sharing.share-note)", () => {
+  it('a note with the switch opens its texts and asks to be accepted, keyed by the digest of its plaintext', async () => {
+    const plaintext = JSON.stringify({ texts: { de: 'Lies mich', en: 'Read me' }, mustAccept: true })
+    serve({ sealedNote: seal(SHARE_NOTE, plaintext) })
+
+    const head = await resolvePublicShare('s1', FRAGMENT)
+
+    expect(head.noteByLocale).toEqual({ de: 'Lies mich', en: 'Read me' })
+    expect(head.noteAcceptance).toEqual({ digest: noteDigest(v1.utf8(plaintext)) })
+  })
+
+  it("an older client's flat note, and a note with the switch off, never gate", async () => {
+    for (const plaintext of [JSON.stringify({ en: 'Hello' }), JSON.stringify({ texts: { en: 'Hello' }, mustAccept: false })]) {
+      serve({ sealedNote: seal(SHARE_NOTE, plaintext) })
+      const head = await resolvePublicShare('s1', FRAGMENT)
+      expect(head.noteByLocale, plaintext).toEqual({ en: 'Hello' })
+      expect(head.noteAcceptance, plaintext).toBeUndefined()
+    }
+  })
+
+  it('a switch on a note with no text gates nothing', async () => {
+    serve({ sealedNote: seal(SHARE_NOTE, JSON.stringify({ texts: { en: '  ' }, mustAccept: true })) })
+    expect((await resolvePublicShare('s1', FRAGMENT)).noteAcceptance).toBeUndefined()
+  })
+
+  it('a note of any other shape does not open — no text and no gate, never a gate the visitor cannot pass', async () => {
+    const malformed = [
+      JSON.stringify({ texts: { en: 'x' }, mustAccept: 'yes' }),
+      JSON.stringify({ texts: { en: 'x' }, mustAccept: 1 }),
+      JSON.stringify({ texts: { en: 'x' } }),
+      JSON.stringify({ texts: ['x'], mustAccept: true }),
+      JSON.stringify({ texts: { en: 1 }, mustAccept: true }),
+      JSON.stringify({ texts: { en: 'x' }, mustAccept: true, extra: 1 }),
+      JSON.stringify({ en: 5 }),
+      JSON.stringify(['a']),
+      JSON.stringify('a'),
+      'not json',
+    ]
+    for (const plaintext of malformed) {
+      serve({ sealedNote: seal(SHARE_NOTE, plaintext) })
+      const head = await resolvePublicShare('s1', FRAGMENT)
+      expect(head.noteByLocale, plaintext).toEqual({})
+      expect(head.noteAcceptance, plaintext).toBeUndefined()
+    }
+  })
+
+  it('a seal that does not open is no note', () => {
+    expect(openShareNote(K_SHARE, 'AAAA')).toBeNull()
+    expect(openShareNote(v1.randomBytes(32), seal(SHARE_NOTE, JSON.stringify({ en: 'x' })))).toBeNull()
   })
 })
 

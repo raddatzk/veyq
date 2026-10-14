@@ -25,8 +25,10 @@ import {
   carriedSettings,
   mintShare,
   remintShare,
+  NO_NOTE,
   type LocaleMap,
   type MintedShare,
+  type ShareNote,
   type ReissuableShare,
   type ReissueSettings,
   type WriteOnlyMint,
@@ -64,9 +66,10 @@ import type { MediaDerivativeKind } from '../../api/generated/media'
 export {
   newShareId,
   hasLocaleText,
+  NO_NOTE,
   recoverShareKey,
   readSharePassword,
-  readShareNoteMap,
+  readShareNote,
   readShareName,
   carriedSettings,
   updateShare,
@@ -83,6 +86,7 @@ export {
   type ReissuableShare,
   type ManagedShare,
   type LocaleMap,
+  type ShareNote,
 } from '../../core/sharing/manageShares'
 
 // --- curator (authenticated) -----------------------------------------------
@@ -106,7 +110,7 @@ export async function createShare(
   memoryName: string,
   role: ShareRole = ShareRole.Read,
   expiresAt: Date | null = null,
-  note: LocaleMap = {},
+  note: ShareNote = NO_NOTE,
   name = '',
   password = '',
 ): Promise<MintedShare> {

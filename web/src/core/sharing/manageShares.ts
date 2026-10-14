@@ -17,11 +17,11 @@ import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 import { sharesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
-import { SHARE_MEMORY_NAME, SHARE_NOTE, openNoteMap } from './resolvePublicShare'
+import { SHARE_MEMORY_NAME, SHARE_NOTE, openShareNote } from './resolvePublicShare'
+import { NO_NOTE, encodeShareNote, hasLocaleText, type ShareNote } from './shareNote'
 import { SHARE_KEY } from './shareTree'
 import { keyAt, writeKey, zeroEpochKeys, type EpochKeys } from '../../features/spaces/epochs'
 import { isStaleEpoch, openScopeById } from '../../features/spaces/scopes'
-import type { LocaleMap } from '../../shared/ui/localeMap'
 import { ShareRole } from '../../api/generated/sharing'
 
 // The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the
@@ -51,14 +51,14 @@ export function newShareId(): string {
  *  editor was lifted there — re-exported so the share management's callers keep reading it from here. */
 export type { LocaleMap } from '../../shared/ui/localeMap'
 
-/** Whether a per-locale map has any non-blank text. */
-export function hasLocaleText(map: LocaleMap): boolean {
-  return Object.values(map).some((t) => t.trim().length > 0)
-}
+/** A curator note (its texts and its acceptance switch) and the helpers around it, from `./shareNote.ts` — re-exported
+ *  so the share management's callers keep reading them from here. */
+export { NO_NOTE, hasLocaleText, type ShareNote } from './shareNote'
 
-/** Seal a per-locale curator-note map under `K_share` — the plaintext is a JSON `{locale: markdown}` map (cr-0116). */
-function sealNoteMap(kShare: Uint8Array, note: LocaleMap): string {
-  return b64std(v1.seal(SHARE_NOTE, kShare, v1.utf8(JSON.stringify(note))))
+/** Seal a curator note under `K_share`, or nothing when it has no text (`./shareNote.ts` owns the plaintext's shape:
+ *  the switch rides inside the seal, so the operator cannot tell a note that asks to be accepted from one that does not). */
+function sealNote(kShare: Uint8Array, note: ShareNote): string | undefined {
+  return hasLocaleText(note.texts) ? b64std(v1.seal(SHARE_NOTE, kShare, v1.utf8(encodeShareNote(note)))) : undefined
 }
 /** Seal a share's optional private name under `K_share` (opaque base64). */
 function sealShareName(kShare: Uint8Array, name: string): string {
@@ -121,16 +121,16 @@ export function readSharePassword(
   }
 }
 
-/** A managed share's per-locale note, decrypted (recover `K_share` through the epoch keys, then open the map). `{}`
- *  when there is none or the ciphertext can't be opened. */
-export function readShareNoteMap(
+/** A managed share's note, decrypted (recover `K_share` through the epoch keys, then open it): its texts and its
+ *  acceptance switch. {@link NO_NOTE} when there is none, or the ciphertext or its plaintext does not open. */
+export function readShareNote(
   epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy, sealedNote: string | null,
-): LocaleMap {
-  if (!copy.sealedShareKey || !sealedNote) return {}
+): ShareNote {
+  if (!copy.sealedShareKey || !sealedNote) return NO_NOTE
   try {
-    return openNoteMap(recoverShareKey(epochs, share, copy), sealedNote)
+    return openShareNote(recoverShareKey(epochs, share, copy), sealedNote)?.note ?? NO_NOTE
   } catch {
-    return {}
+    return NO_NOTE
   }
 }
 /** A managed share's private name, decrypted. '' when none / unreadable. */
@@ -190,7 +190,7 @@ export async function mintShare(
   rootName: string,
   role: ShareRole = ShareRole.Read,
   expiresAt: Date | null = null,
-  note: LocaleMap = {},
+  note: ShareNote = NO_NOTE,
   name = '',
   password = '',
   writeOnly?: WriteOnlyMint,
@@ -205,7 +205,7 @@ export async function mintShare(
   // later — and no link can, point 4), and the optional per-locale note + private name under K_share. The copy is on
   // EVERY share, so a note/name can be added later even to one minted without them.
   const recoveryCopy = recoveryCopyOf({ scopeId, nodeId, shareId }, kShare)
-  const sealedNote = hasLocaleText(note) ? sealNoteMap(kShare, note) : undefined
+  const sealedNote = sealNote(kShare, note)
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : undefined
   // cr-0118 (ADR 0037): an optional operator-blind password gate (fields derived client-side; the raw password never leaves).
   const pw = password.trim() ? await buildPasswordFields(kShare, password) : undefined
@@ -264,7 +264,7 @@ function recoveryCopyOf(address: ShareAddress, kShare: Uint8Array) {
 }
 
 /** What a re-issue gives the new share — the settings the curator confirmed in the pre-filled dialog. */
-export type ReissueSettings = { note: LocaleMap; name: string; password: string; expiresAt: Date | null }
+export type ReissueSettings = { note: ShareNote; name: string; password: string; expiresAt: Date | null }
 
 /** The old share a re-issue starts from, as the manage list serves it. */
 export type ReissuableShare = ShareAddress & RecoveryCopy &
@@ -279,7 +279,7 @@ export function carriedSettings(epochs: EpochKeys, old: ReissuableShare): Reissu
   const password = readSharePassword(epochs, old, old, old.sealedPassword)
   if (old.passwordRequired && !password) throw new Error('share_password_not_recoverable')
   return {
-    note: readShareNoteMap(epochs, old, old, old.sealedNote),
+    note: readShareNote(epochs, old, old, old.sealedNote),
     name: readShareName(epochs, old, old, old.sealedShareName),
     password,
     expiresAt: old.expiresAt,
@@ -311,7 +311,7 @@ export async function remintShare(
   const shareId = newShareId()
   const wrap = writeOnly ? undefined : b64std(v1.seal(SHARE_KEY, kShare, rootKey))
   const sealedName = sealRootName(kShare, rootName)
-  const sealedNote = hasLocaleText(settings.note) ? sealNoteMap(kShare, settings.note) : undefined
+  const sealedNote = sealNote(kShare, settings.note)
   const sealedShareName = settings.name.trim() ? sealShareName(kShare, settings.name) : undefined
   const pw = settings.password.trim() ? await buildPasswordFields(kShare, settings.password) : undefined
   const recoveryCopy = recoveryCopyOf({ scopeId, nodeId, shareId }, kShare)
@@ -359,13 +359,13 @@ async function freshRecoveryCopy<T>(scopeId: string, seal: (ek: EpochKeys) => T)
  * Owner-gated server-side; the link/`K_share` are untouched throughout.
  */
 export async function updateShare(
-  share: ShareAddress, epochs: EpochKeys, copy: RecoveryCopy, note: LocaleMap, name: string,
+  share: ShareAddress, epochs: EpochKeys, copy: RecoveryCopy, note: ShareNote, name: string,
   expiresAt: Date | null, role?: ShareRole,
   passwordChange?: { set: string } | { remove: true },
 ): Promise<void> {
   const { shareId } = share
   const kShare = recoverShareKey(epochs, share, copy)
-  const sealedNote = hasLocaleText(note) ? sealNoteMap(kShare, note) : null
+  const sealedNote = sealNote(kShare, note) ?? null
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : null
   // cr-0118: the password tri-state. A `remove` sends only `passwordRequired: false` — the server clears the fields.
   const passwordPatch =
@@ -396,7 +396,7 @@ export type ManagedShare = {
   createdAt: Date
   expiresAt: Date | null
   /** The note (per-locale) + name ciphertext (under `K_share`) + the recoverable `K_share` (under `K_SC` at
-   *  `sealedShareKeyEpoch`, ADR 0036 point 4). The dialog reads them via `readShareNoteMap`/`readShareName` and edits
+   *  `sealedShareKeyEpoch`, ADR 0036 point 4). The dialog reads them via `readShareNote`/`readShareName` and edits
    *  them via `updateShare`. */
   sealedNote: string | null
   sealedShareName: string | null
