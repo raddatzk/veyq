@@ -14,8 +14,12 @@
 - **Preconditions:** an **authenticated, unlocked** caller; the target is a current member of the tenant (the
   tenant's member directory lists them and their identity key). A pin is not required: verifying an unpinned
   member pins them with the confirmed key (ADR 0028 Decision 3).
-- **Status:** **built** (cr-identity-verification, web). Real-browser pass: *to be recorded by the session that
-  merges it* (the implementer's worktree could not be served to a browser).
+- **Status:** **built** (cr-identity-verification, web). Seen in a real browser on 2026-10-14 (a freshly
+  seeded two-member tenant): the owner's own profile showed "Your safety number" with its QR; the member's profile showed
+  "Not verified" and 6x5 digits equal to the number computed independently from the member's stored identity key (the
+  crypto package's `fingerprint` over the database's `identity_public_key`); "Compare digits" → "They match" turned it
+  "Verified" with "… is verified on this account", the tenant's member list showed "Verified", and both survived a full
+  reload. Not exercised in the browser: the camera scan, "They don't match", a verified contact's key change.
 - **Postconditions (success):** the target's pin is **verified**, on the key the compare confirmed; the profile and
   the tenant's and groups' member lists say "Verified". Operator-blind throughout: the only server call is the pin
   store's sealed write, so the operator never learns who verified whom.
