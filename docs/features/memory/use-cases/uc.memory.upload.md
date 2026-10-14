@@ -26,7 +26,7 @@
 3. The queue uploads **one file at a time**: each file is sealed on-device (with its
    [derivatives](../enablers/en.memory.derivatives.md)) and sent **direct-to-store**, then attached to the
    Memory node — the seal → start → PUT → attach choreography is
-   [en.memory.media](../enablers/en.memory.media.md)'s. Per-file + per-batch **progress** advance as it uploads.
+   [en.memory.media](../enablers/en.memory.media.md)'s. Per-file + per-list **progress** advance as it uploads.
    **Each tile names the stage its file is actually in** — *queued*, *preparing*, *uploading* — because they are
    three different waits and in two of them no byte has left the device yet. A tile that said *"uploading"*
    while the device was still decoding is what made a large batch read as hung.
@@ -80,16 +80,17 @@
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** Drop photos or videos into a memory and they upload in the background — each picture tells you what it
-is doing (waiting, getting ready, uploading), a button up top shows the whole batch, and you can cancel any of
-them. Getting a photo ready takes a moment before anything is sent, which is why a big batch does not start
-moving the instant you pick it. Everything is scrambled on your device before it leaves; the server only ever
-stores the scrambled pieces.
+is doing (waiting, getting ready, uploading), a button up top shows one list per memory (what you add to the same
+memory joins its list until you close it), and you can cancel any of them. Getting a photo ready takes a moment
+before anything is sent, which is why a big batch does not start moving the instant you pick it. Everything is
+scrambled on your device before it leaves; the server only ever stores the scrambled pieces.
 
 **DE —** Leg Fotos oder Videos in eine Erinnerung — sie laden im Hintergrund hoch; jedes Bild sagt dir, was
-gerade passiert (wartet, wird vorbereitet, lädt hoch), ein Button oben zeigt den ganzen Stapel, und du kannst
-jeden Upload abbrechen. Ein Foto vorzubereiten dauert einen Moment, bevor überhaupt etwas gesendet wird —
-deshalb setzt sich ein großer Stapel nicht sofort in Bewegung. Alles wird auf deinem Gerät verschlüsselt, bevor
-es das Gerät verlässt; der Server speichert nur die verschlüsselten Teile.
+gerade passiert (wartet, wird vorbereitet, lädt hoch), ein Button oben zeigt eine Liste pro Erinnerung (was du
+dazulegst, kommt in ihre Liste, bis du sie schließt), und du kannst jeden Upload abbrechen. Ein Foto vorzubereiten
+dauert einen Moment, bevor überhaupt etwas gesendet wird — deshalb setzt sich ein großer Stapel nicht sofort in
+Bewegung. Alles wird auf deinem Gerät verschlüsselt, bevor es das Gerät verlässt; der Server speichert nur die
+verschlüsselten Teile.
 
 ## Related
 

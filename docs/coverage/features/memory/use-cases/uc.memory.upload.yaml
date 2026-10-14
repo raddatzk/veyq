@@ -26,13 +26,24 @@ acceptanceCriteria:
       web:
         unit: [src/features/memory/sealBinding.test.ts]
   - id: global-uploads-tray
-    text: A TopBar uploads button (active-count badge) opens a popup listing each batch's files with status + progress and a cancel/retry control; the queue is a module singleton so uploads survive navigation.
+    text: A TopBar uploads button (active-count badge, counting files) opens a popup listing the files with status + progress and a cancel/retry control; the queue is a module singleton so uploads survive navigation.
     coverage:
       web:
         unit:
           - src/core/blob/UploadStatusMenu.test.ts
           - src/features/memory/uploadQueue.test.ts
           - src/core/blob/queue.test.ts
+  - id: one-list-per-destination
+    text: >-
+      The popup draws one list per destination: every open batch with the same `key` is one list, under its first
+      batch's label, with one bar over all its files by the per-file formula (a done file counts whole). A batch
+      enqueued later for that destination joins the open list, so the bar recomputes and can go down; Close appears
+      once every batch of the list has finished and acknowledges all of them; a closed list is not reopened, a later
+      batch starts a new one. Different keys are different lists, and a batch with no key is a list of its own. The
+      grouping is the tray's: the queue keeps its batches and their hooks.
+    coverage:
+      web:
+        unit: [src/core/blob/UploadStatusMenu.test.ts]
   - id: progress-and-cancel
     text: Per-file progress advances as the ciphertext chunks land; cancelling an in-flight upload aborts its PUTs before completing, so no media is attached.
     coverage:

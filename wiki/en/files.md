@@ -9,7 +9,8 @@ space, side by side.
 ## What you can do with a file
 
 - **Upload** — choose **New → Upload files**, or drop files onto the folder. Uploads run in the background, and the
-  status menu in the top bar shows how far they are.
+  status menu in the top bar shows how far they are, one list for each place you upload into (a second upload
+  into the same folder joins its list).
 - **Download** — the download button on the file's row (or at the top of its page) gives you the file back exactly as
   you put it in, under the name it has in veyq. Clicking the row itself opens the file's own page.
 - **Look at it** — click the file's row and its page opens with the file itself on it: a **picture** is shown, a
