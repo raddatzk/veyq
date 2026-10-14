@@ -16,11 +16,10 @@
 
 0. **Who uploaded it** (ADR 0083 Addendum): a member sees the uploader of the file's current content in the header -
    "Uploaded by" a member's name and picture, linking to their profile; one who left the space as a greyed "former
-   member" without a link; a guest's upload as "a guest". A replace makes the replacer the uploader. A share guest sees
-   none: the link's listing carries no uploader. **A guest's name** (decided 2026-10-14 by the coordinator on the owner's
-   behalf, inbox #431; not yet built): a folder link's guest is named by the name it gave itself, opened under the
-   nearest ancestor key the member holds; a drop-box guest by its identity folder's name; a guest of a deleted link stays
-   named; "a guest" remains only where the name does not open.
+   member" without a link; a link's guest by the name it gave itself, without a link (inbox #431) - a drop-box guest by
+   its identity folder's name, any other guest by its sealed name opened under the file's key or the nearest ancestor key
+   the member holds; a guest of a deleted link stays named; "a guest" only where the name does not open. A replace makes
+   the replacer the uploader. A share guest sees none: the link's listing carries no uploader and no name.
 1. The page opens. Only now does the client read the file (not for a row in a list): it opens the first chunk under the
    file's key and **sniffs the bytes** (magic numbers) — the sealed type and the name only narrow, never decide.
 2. **Image** (JPEG, PNG, GIF, WebP, AVIF, BMP, SVG; HEIC is tried and falls back where the browser cannot decode it):
