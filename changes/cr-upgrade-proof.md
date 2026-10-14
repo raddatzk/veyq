@@ -1,7 +1,7 @@
 ---
 id: cr-upgrade-proof
 title: An upgrade is proven - a predecessor's backup, written by its own client, restored onto the candidate and read back
-status: planned
+status: in-progress
 satisfies: [uc.admin.back-up-and-restore-instance]
 adrs: ["0057", "0056", "0040"]
 invariants: [operator-blind E2EE everywhere, self-hostable by default]
@@ -73,16 +73,16 @@ until the first release**. Owner decisions 2026-10-14 (inbox #419).
 
 ## Phases
 
-- [ ] 1 scripts + web e2e: Decisions 1-5, the seeder committed first, then the proof run locally on the dev machine.
+- [x] 1 scripts + web e2e: Decisions 1-5, the seeder committed first, then the proof run locally on the dev machine.
   - Tests: the runner's pure parts (default ref resolution for `release: none` and for a set release; the record's
     validation) unit-tested in Python next to the existing selftests; `validate_e2e_discovery.py` still green.
   - Bites: the reader fails when one seeded item is missing or altered (edit the record); the run fails when the
     candidate's `configSecretState` is not OK; a changed baseline between the refs is named as the cause.
   - Done when a local run against the seeder's own commit (Decision 2) is green and its report is recorded in the
     use case's criterion comment.
-- [ ] 2 CI: Decision 6.
+- [x] 2 CI: Decision 6.
   - Done when the job is in `container.yml`, disabled, and every `scripts/validate_*.py` is green.
-- [ ] 3 docs: `infra/README.md` § An upgrade (what the proof covers and what it does not: the Helm leg, #428),
+- [x] 3 docs: `infra/README.md` § An upgrade (what the proof covers and what it does not: the Helm leg, #428),
   `backend/CLAUDE.md` § Migrations (the release enables the job), the ADR 0057 Addendum's "not yet built" removed, the
   criterion's comment names the run.
   - Done when every `scripts/validate_*.py` is green.
@@ -96,4 +96,23 @@ until the first release**. Owner decisions 2026-10-14 (inbox #419).
 
 ## Retrospective
 
-_(filled at implementation)_
+- **Decision 6 asked for something GitHub does not do as written.** "A job `publish` needs, with `if: false`" skips
+  `publish` too: a skipped need skips its dependents unless their `if:` carries a status function. `publish` now reads
+  `always() && <dispatch> && version/build success && upgrade-proof in [success, skipped]` - still the pure `&&` chain
+  `validate_release_identity.py` requires (it refuses `!cancelled()`), and the enabling change drops the `skipped`
+  (its comment and `backend/CLAUDE.md` § Migrations say so). Root cause: the refine decided the dependency and the
+  disabling separately. Next time: a refine that disables a job others `needs:` says what the dependents do with a
+  skipped need.
+- **Decision 1's release branch names a ref the pin file cannot give.** `release:` holds the highest migration
+  version, not a tag, so "that release's ref `v<major>.<minor>`" is FOUND: the newest `v<major>.<minor>` tag merged
+  into `HEAD^1`, by version order (`default_predecessor`, selftested; a set release with no such tag is refused, never
+  guessed). Built that way and handed back for the owner's confirmation. Decision 3 likewise implied two validators of
+  one shape (the reader's and the runner's, "unit-tested in Python"); one shared fixture
+  (`web/src/test/upgradeRecord.fixture.json`) holds both, each refusing every listed edit with exactly one problem.
+- **No migration lay between any two builds this CR ran,** so every green says "started on the predecessor's
+  backup", not "migrated it" - the summary words it so (a fix commit, after the first green claimed a migration that
+  never ran). The forward-migration half is proven by the first proof run across a commit that adds one. Smaller:
+  `cp` asked to overwrite during a bite restore (the memory note on the interactive `cp` existed and was not heeded;
+  `git checkout --` restored it); a failed reader boot also reddens the run-level log sweep (its boot log has no
+  shutdown line) - a second red behind the named cause, left as is. **Next time:** a CR that proves a transition names
+  in its Definition of done whether the transition must actually occur in the recorded run, or only be possible.

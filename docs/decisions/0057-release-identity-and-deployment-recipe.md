@@ -191,7 +191,8 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
 
 ## Addendum (2026-10-14): an upgrade is proven before it is published
 
-Owner decision 2026-10-14 (inbox #419); decided, not yet built. A release does not only claim that it upgrades an instance of its predecessor;
+Owner decision 2026-10-14 (inbox #419); built as `scripts/run_web_e2e.py --upgrade` and `container.yml`'s
+`upgrade-proof` job ([infra/README](../../infra/README.md) § An upgrade, step by step). A release does not only claim that it upgrades an instance of its predecessor;
 a run shows it. **The proof:** the predecessor's own build (its fast-jar and its own e2e suites, from a worktree of its
 ref) writes sealed content into a fresh instance; [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
 tool captures it; the capture is restored onto a freshly installed **candidate**, which migrates it up at its start

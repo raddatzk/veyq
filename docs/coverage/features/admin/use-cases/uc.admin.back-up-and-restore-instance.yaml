@@ -104,7 +104,8 @@ acceptanceCriteria:
     # knows; the group's real restore then runs, and `assert_older_backup_restored` requires the table gone, the
     # Flyway history equal to the capture's, and the closing log naming the upgrade and the rollback it is not.
     # The suite that runs next against the restored instance is the "and it starts" half. What it does not prove
-    # is a real forward migration over real data — that needs a released predecessor (inbox #419).
+    # is a real forward migration over real data — the next criterion's proof does, whenever a migration lies
+    # between its two builds.
     text: >-
       A backup whose schema is older than the freshly installed target's is accepted (ADR 0056 §7, A9): the
       restore drops every table of the target before it loads the dump, so a table only the newer release has
@@ -112,10 +113,19 @@ acceptanceCriteria:
       start. The restore says that this is an upgrade, and that a rollback installs the backup's own release
       instead (A7).
   - id: a-predecessors-backup-upgrades-with-its-content-intact
-    # Decided 2026-10-14 (inbox #419, ADR 0057 Addendum), not yet built: cr-upgrade-proof. No coverage on a surface:
-    # the observable is an orchestrator run that boots two builds - the predecessor's jar and suites, then the
-    # candidate's - which no single surface's test can be. The candidate's reading suite is a web e2e; once built,
-    # the run's own report names it, and the criterion says here how it is proven, as the two above do.
+    # No coverage on a surface: the observable is an orchestrator run that boots two builds - the predecessor's jar
+    # and suites, then the candidate's - which no single surface's test can be. `scripts/run_web_e2e.py --upgrade`
+    # (ADR 0057 Addendum, infra/README.md § An upgrade, step by step) runs the predecessor's
+    # `upgrade.a-seed.e2e.test.ts` from a worktree of its ref on its own jar, restores the capture onto an instance
+    # installed by the candidate's jar, and the candidate's `upgrade.b-read.e2e.test.ts` asserts configSecretState
+    # OK first and then every item of the record the seeder wrote, byte for byte; its summary names the predecessor,
+    # both highest migrations and the outcome with its cause. No CI run executes it: container.yml's `upgrade-proof`
+    # is disabled until the first release, so the claim is the recorded run, not a build. Recorded run:
+    # 2026-10-14, `--upgrade-from 0d57c3b2` (the seeder's own commit) onto candidate 0e5450ca: GREEN - both builds at
+    # V202610041201 (no migration between them, so no migration ran), configSecretState OK, all 18 recorded items
+    # opened, every wire sweep green; `--upgrade` (HEAD^1) the same. Bitten the same day: an edited record (a media
+    # item the instance lacks, a file hash, the place, a guest) fails the reader; a restore without the key fails it
+    # on configSecretState MISMATCH; a changed core baseline fails the run, named as Flyway's checksum mismatch.
     text: >-
       A backup written by the predecessor's own build - its jar and its own e2e suites sealing real content - and
       restored onto the candidate is migrated up at the candidate's start, reports configSecretState OK, and the
