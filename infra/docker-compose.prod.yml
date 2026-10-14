@@ -37,10 +37,11 @@ services:
   # one-shot step chowns each such volume's ROOT before its service starts, holding CAP_CHOWN alone. The uid is
   # the path it mounts the volume under (`/chown/<uid>/…`), so the script carries no uid of its own; the guard
   # holds each one to the `user:` of the service that writes the volume. A root that already matches is left
-  # alone, so every later `up` is a no-op, and it never walks a store's data tree. The image is one this file
-  # already pins, so the step adds no supply-chain input.
+  # alone, so every later `up` is a no-op, and it never walks a store's data tree. The image is busybox for its
+  # `sh`, `stat` and `chown` and nothing else: a step that does one thing reads as that thing. It is pinned by
+  # digest like every other image here, and Dependabot's `docker-compose` ecosystem bumps it.
   volume-ownership:
-    image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
+    image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
     <<: *hardened
     user: "0:0"
     cap_add: [CHOWN]

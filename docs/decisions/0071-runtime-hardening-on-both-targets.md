@@ -47,7 +47,11 @@ Forces:
 2. **Compose sets volume ownership with a one-shot init service.** It runs before Garage and Traefik
    (`depends_on: … service_completed_successfully`) and holds only `CAP_CHOWN`. It changes a volume root only
    when that root is not already owned by the target uid: a no-op after the first run, and it never walks a
-   store's data tree. Its image is one the recipe already pins, so it adds no supply-chain input.
+   store's data tree. Its image is a digest-pinned `busybox`, which carries the three tools the step runs and
+   nothing else. Reusing an image the recipe already pins (Traefik's, which has a shell) would add no
+   supply-chain input, and was the first form. It was rejected because a service named for ownership that runs
+   the proxy's image reads as part of the proxy. One more pinned image, kept current like the rest, is the
+   cheaper cost.
 3. **Reachability is default-deny on both targets, then exactly the paths the stack uses.**
    - **Compose: separate networks.** The proxy shares one with the app and the store; the database shares one
      with the app alone; the admin container shares one with the app and the proxy, which routes to it when
