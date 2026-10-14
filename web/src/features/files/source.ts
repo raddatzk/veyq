@@ -21,7 +21,7 @@ import { decodeHttpError, HttpStatus } from '../../shared/httpError'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
 import { withRefresh } from '../../app/sessionRefresh'
 import type { EpochKeys } from '../spaces/epochs'
-import type { FileBlobRef } from '../../api/generated/files'
+import type { FileBlobRef, FileUploaderName } from '../../api/generated/files'
 import { ShareRole } from '../../api/generated/sharing'
 import { filesApi, publicShareFilesApi } from './api'
 import { downloadFile, fileChunkProvider } from './download'
@@ -66,10 +66,11 @@ export interface FilesUpload {
 }
 
 /** One file of a member's listing: its blob (null: none yet) and who uploaded that blob — `user:<id>` | `share:<identity>`,
- *  null with no blob (ADR 0083 Addendum). */
+ *  null with no blob (ADR 0083 Addendum) — with a guest uploader's sealed name and its share (inbox #431; null otherwise). */
 export interface ListedFile {
   blob: FileBlobRef | null
   uploaderKey: string | null
+  uploaderName: FileUploaderName | null
 }
 
 /** Files' data source; see the header. */
@@ -139,7 +140,7 @@ export function memberFilesSource(from: {
     const scopeId = from.scopeId()
     if (!scopeId) return new Map()
     const page = await withRefresh(() => filesApi().listFiles({ scopeId, parentId: folderId ?? undefined }))
-    return new Map(page.items.map((i) => [i.nodeId, { blob: i.fileBlob ?? null, uploaderKey: i.uploaderKey ?? null }]))
+    return new Map(page.items.map((i) => [i.nodeId, { blob: i.fileBlob ?? null, uploaderKey: i.uploaderKey ?? null, uploaderName: i.uploaderName ?? null }]))
   }
   return {
     scopeId: from.scopeId,

@@ -28,10 +28,11 @@
 // viewer; nothing about it is a capability of its own beyond the download it offers where the matrix grants one.
 //
 // **Who uploaded the current content** (ADR 0083 Addendum, `../uploader.ts`): a member's page names them in the header's meta
-// line - a member by core's display rule with a link to the profile, one who left as a greyed "former member", a guest's
-// upload as "a guest". It comes from the member listing's `uploaderKey`, a door only the member's source carries
-// (`listWithUploaders`): a share guest's source has none and its link listing serves no uploader, so a guest's page names
-// nobody and asks no directory.
+// line - a member by core's display rule with a link to the profile, one who left as a greyed "former member", a guest
+// by the name it gave itself (inbox #431: its identity folder inside a drop box, else its sealed name opened under the
+// nearest key the tree holds), "a guest" where that does not open. It comes from the member listing's `uploaderKey` and
+// `uploaderName`, a door only the member's source carries (`listWithUploaders`): a share guest's source has none and its
+// link listing serves no uploader, so a guest's page names nobody and asks no directory.
 //
 // Operator-blind as the section: every name, size and date is opened here under keys the tree holds.
 import { computed, ref, watch } from 'vue'
@@ -49,7 +50,7 @@ import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { formatBytes } from '../../../shared/formatBytes'
 import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
-import type { FileBlobRef } from '../../../api/generated/files'
+import type { FileBlobRef, FileUploaderName } from '../../../api/generated/files'
 import { targetOf, type GuestAccess } from '../../../core/access'
 import { filesCapabilities } from '../capabilities'
 import { guestFilesSource, memberFilesSource, sourceCapabilities, type FilesSource } from '../source'
@@ -60,8 +61,8 @@ import type { ViewerTarget } from '../useFileViewer'
 import FileViewer from './FileViewer.vue'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import { personHash } from '../../../core/node/location'
-import { loadScopePeople } from '../../../core/people/directory'
-import { needsPeople, uploaderOf, type FileUploader } from '../uploader'
+import { loadScopePeople, type Person } from '../../../core/people/directory'
+import { guestUploaderName, needsPeople, uploaderOf, type FileUploader } from '../uploader'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
@@ -100,8 +101,10 @@ const writeReady = computed(() => source.upload?.ready() ?? false)
 
 /** `undefined`: not read yet (or the read failed); `null`: the file holds no content; else its blob. */
 const blob = ref<FileBlobRef | null | undefined>(undefined)
-/** Who uploaded `blob` (`user:<id>` | `share:<identity>`), read with it where the source carries the door (a member). */
+/** Who uploaded `blob` (`user:<id>` | `share:<identity>`), read with it where the source carries the door (a member), and
+ *  a guest uploader's sealed name with its share (inbox #431). */
 const uploaderKey = ref<string | null>(null)
+const uploaderName = ref<FileUploaderName | null>(null)
 let loads = 0
 async function loadBlob(): Promise<void> {
   const mine = ++loads
@@ -113,6 +116,7 @@ async function loadBlob(): Promise<void> {
       if (mine !== loads) return
       blob.value = listed?.blob ?? null
       uploaderKey.value = listed?.uploaderKey ?? null
+      uploaderName.value = listed?.uploaderName ?? null
     } else {
       const listed = await source.listBlobs(parentId)
       if (mine === loads) blob.value = listed.get(props.node.id) ?? null
@@ -123,21 +127,31 @@ async function loadBlob(): Promise<void> {
 }
 watch(() => [source.listKey(), props.node.id], () => void loadBlob(), { immediate: true })
 
-/** The uploader as the header names it; a member's key asks the scope's current members (a failed read names nobody). */
-const uploader = ref<FileUploader | null>(null)
+/** The scope's current members as read for `key` (a member's key asks for them; a failed read is null and names nobody). */
+const people = ref<{ key: string | null; byId: ReadonlyMap<string, Person> | null }>({ key: null, byId: null })
 let namings = 0
 watch(
   uploaderKey,
   async (k) => {
     const mine = ++namings
     const scopeId = source.scopeId()
-    const people = needsPeople(k) && scopeId
+    const byId = needsPeople(k) && scopeId
       ? await loadScopePeople(scopeId).then((ps) => new Map(ps.map((p) => [p.userId, p]))).catch(() => null)
       : null
-    if (mine === namings) uploader.value = uploaderOf(k, people)
+    if (mine === namings) people.value = { key: k, byId }
   },
   { immediate: true },
 )
+/** The uploader as the header names it: a member once the members were read for this key; a guest by the name it gave
+ *  itself, opened under the keys the tree holds - re-asked when they open (a member's tree loads after the listing). */
+const uploader = computed<FileUploader | null>(() => {
+  const k = uploaderKey.value
+  const scopeId = source.scopeId()
+  const byId = people.value.key === k ? people.value.byId : null
+  return uploaderOf(k, byId, (identityId) =>
+    scopeId ? guestUploaderName(props.tree, scopeId, props.node.id, identityId, uploaderName.value) : null,
+  )
+})
 
 const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }))
 /** The facts of the blob, opened under the file's key (a blob that carries no meta, or whose meta does not open, shows its size alone). */
@@ -292,7 +306,8 @@ async function replaceAnyway(n: Notice) {
             <PersonAvatar :name="t('people.formerMember')" />
             <span class="file-detail-uploader-name">{{ t('people.formerMember') }}</span>
           </span>
-          <span v-else class="file-detail-uploader-person file-detail-uploader-name">{{ t('files.detail.aGuest') }}</span>
+          <!-- A guest by the name it gave itself (no link: a guest has no profile), else "a guest". -->
+          <span v-else class="file-detail-uploader-person file-detail-uploader-name">{{ uploader.name ?? t('files.detail.aGuest') }}</span>
         </p>
       </template>
     </NodeHeader>

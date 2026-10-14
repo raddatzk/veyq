@@ -5,7 +5,7 @@
 // of its own wrapped to the drop key — ADR 0031 point 7 — and which therefore stays in `features/memory/share.ts`).
 import { computed, ref, type ComputedRef } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
-import { b64std, fromB64url } from '@veyq/crypto/base64'
+import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
 import type { PublicShareHead } from './resolvePublicShare'
 import { openShareRoot } from './shareTree'
@@ -14,6 +14,34 @@ import { openShareRoot } from './shareTree'
  *  a READ_WRITE guest, under its own `K_up` for an uploader. Who reads it opens it with the same context. */
 export const identityNameContext = (scopeId: string, shareId: string, identityId: string) =>
   ({ purpose: 'share-identity-name', scopeId, shareId, identityId }) as const
+
+/**
+ * A guest's display name as a MEMBER reads it (inbox #431): `sealedName` (standard base64, as a member's listing serves
+ * it) opened under the first of `keys` it opens under, or null when none does. A READ_WRITE guest named itself under its
+ * link's ROOT key, which need not be the node the member looks at — a folder link's guest who uploads below the folder —
+ * so the caller passes the node's own key and its ancestors', NEAREST FIRST, as the session holds them through the chain
+ * (`contentKeyChain`); a WRITE_ONLY guest's name opens only under its own `K_up`. Every application reads a guest's name
+ * here: Memories' contributor buckets (`features/memory/mediaBuckets.ts`) and Files' uploader (`features/files/uploader.ts`).
+ */
+export function openIdentityName(
+  scopeId: string, shareId: string, identityId: string, sealedName: string, keys: Iterable<Uint8Array>,
+): string | null {
+  let sealed: Uint8Array
+  try {
+    sealed = fromB64std(sealedName)
+  } catch {
+    return null // not base64: nothing to open
+  }
+  const context = identityNameContext(scopeId, shareId, identityId)
+  for (const key of keys) {
+    try {
+      return new TextDecoder().decode(v1.open(context, key, sealed))
+    } catch {
+      /* not under this key — the next one up */
+    }
+  }
+  return null
+}
 
 /** What creating an identity yields: the client-minted id and the capability token every guest write presents — and,
  *  once saved, the name the guest gave (`displayName`, kept on its device only: the server holds it sealed, and the

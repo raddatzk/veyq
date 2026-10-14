@@ -60,6 +60,9 @@ of a deleted link stays named. Nothing reaches a share path. Decided by the coor
 - [x] 2 backend: Decisions 2 and 4 (backend half). Done when `./gradlew check` is green; bitten.
 - [ ] 3 web: Decisions 3 and 4 (web half). Done when `npm run check` is green; bitten; a real browser showed a guest's name
   on a file page (the main session clicks it if this runs in a worktree).
+  - _Open (implementer, 2026-10-14):_ `npm run check` green and every new web test bitten; the browser pass is NOT done -
+    a worktree subagent cannot serve its tree to the browser pane. The main session runs it after the merge (steps in the
+    implementer's report: a READ_WRITE folder link, a guest uploading into it, a member opening the file), then ticks this.
 - [ ] 4 docs: uc.files.view-file step 0 (built), its coverage, `docs/apps/files.md`, ADR 0083's uploader decision, both
   wikis' files page, inbox #431 done. Done when every `scripts/validate_*.py` is green, run on a detached worktree.
 

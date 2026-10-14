@@ -8,6 +8,7 @@ import { bucketsApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type BucketSummary } from '../../api/generated/media'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
+import { openIdentityName } from '../../core/sharing/guestIdentity'
 
 // Bucket names sealed under K_mem (cr-0113), each bound to its object (ADR 0072): a user-created sub-bucket's name
 // to (scope, node, bucket); a contributor primary's name IS the identity's sealed display name (cr-0101, copied
@@ -43,32 +44,33 @@ export type BucketItem = {
  * A READ_WRITE guest's name is sealed under the key of its link's ROOT, which need not be this node: a folder link's
  * guest who uploads into a Memory below, a Memory link's guest into a chapter (5a.5). So a contributor primary also
  * tries `ancestorKeys` — the keys of this node's ancestors, nearest first, as a member holds them through the chain
- * (`contentKeyChain`). A sub-bucket's name and a WRITE_ONLY guest's (under its own `K_up`) open under this node's only.
+ * (`contentKeyChain`) — through core's {@link openIdentityName}, which every application reads a guest's name with. A
+ * sub-bucket's name and a WRITE_ONLY guest's (under its own `K_up`) open under this node's only.
  */
 export function openBucketName(
   scopeId: string, nodeId: string, memoryKey: Uint8Array, bucket: BucketItem, ancestorKeys: readonly Uint8Array[] = [],
 ): string | null {
   const sealed = bucket.sealedName
   if (!sealed) return null
-  const context = bucketNameContext_(scopeId, nodeId, bucket)
-  const guestName = context.purpose === 'share-identity-name' && !bucket.uploader
-  for (const key of guestName ? [memoryKey, ...ancestorKeys] : [memoryKey]) {
-    try {
-      return new TextDecoder().decode(v1.open(context, mediaKey(scopeId, key, bucket), fromB64std(sealed)))
-    } catch {
-      /* not under this key — the next one up, else the picker's neutral fallback label */
+  try {
+    const guest = contributorOf(bucket)
+    if (guest) {
+      const keys = bucket.uploader ? [mediaKey(scopeId, memoryKey, bucket)] : [memoryKey, ...ancestorKeys]
+      return openIdentityName(scopeId, guest.shareId, guest.identityId, sealed, keys)
     }
+    const context = bucketNameContext(scopeId, nodeId, bucket.bucketId)
+    return new TextDecoder().decode(v1.open(context, mediaKey(scopeId, memoryKey, bucket), fromB64std(sealed)))
+  } catch {
+    return null // not under this node's key (an uploader's K_up that does not open included): the neutral fallback label
   }
-  return null
 }
 
-/** A contributor primary's name is its identity's seal; every other named bucket carries its own. */
-function bucketNameContext_(scopeId: string, nodeId: string, b: BucketItem): v1.SealContext {
+/** A contributor primary's identity — its name is that identity's seal; null for every other bucket (it carries its own). */
+function contributorOf(b: BucketItem): { shareId: string; identityId: string } | null {
   if (b.isPrimary && b.ownerKey.startsWith(OWNER_SHARE_PREFIX) && b.shareId) {
-    const identityId = b.ownerKey.slice(OWNER_SHARE_PREFIX.length)
-    return { purpose: 'share-identity-name', scopeId, shareId: b.shareId, identityId }
+    return { shareId: b.shareId, identityId: b.ownerKey.slice(OWNER_SHARE_PREFIX.length) }
   }
-  return bucketNameContext(scopeId, nodeId, b.bucketId)
+  return null
 }
 
 function toBucket(b: BucketSummary, nodeId: string, sealedDropPrivateKey: string | null | undefined): BucketItem {
