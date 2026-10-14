@@ -38,7 +38,11 @@ describe('registerFiles', () => {
       nounWithArticle: 'files.aFile',
       list: { rows: filesRows, tabLabel: 'files.title', emptyText: expect.any(Function) },
       // "Upload files" takes files dropped onto the level too (core hands them over only while the entry is enabled)
-      levelActions: [{ id: 'files.upload', label: 'files.upload', icon: 'pi pi-upload', order: 30, acceptsDrop: true, allowed: expect.any(Function) }],
+      // …and so does "Upload folder…" beside it (a dropped directory, inbox #424)
+      levelActions: [
+        { id: 'files.upload', label: 'files.upload', icon: 'pi pi-upload', order: 30, acceptsDrop: true, allowed: expect.any(Function) },
+        { id: 'files.uploadFolder', label: 'files.uploadFolder', icon: 'pi pi-folder-open', order: 31, acceptsDrop: true, allowed: expect.any(Function) },
+      ],
       placement: { root: true, parents: [FOLDER_KIND] },
     })
   })

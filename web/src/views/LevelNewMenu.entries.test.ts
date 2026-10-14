@@ -28,9 +28,9 @@ function ctx(access: Access, over: { identity?: boolean; epochs?: boolean } = {}
 const shown = (c: LevelActionContext) => registry.levelMenu().filter((e) => e.allowed(c)).map((e) => e.id)
 
 describe('the applications\' "New" menu entries', () => {
-  it('are ordered Memory, drop box, upload (core adds the folder before them)', () => {
-    expect(registry.levelMenu().map((e) => e.id)).toEqual(['create:MEMORY', 'create:FILES_DROPBOX', 'files.upload'])
-    expect(registry.levelMenu().map((e) => e.label)).toEqual(['memory.create', 'files.dropBox.create', 'files.upload'])
+  it('are ordered Memory, drop box, upload, upload folder (core adds the folder before them; no import entry)', () => {
+    expect(registry.levelMenu().map((e) => e.id)).toEqual(['create:MEMORY', 'create:FILES_DROPBOX', 'files.upload', 'files.uploadFolder'])
+    expect(registry.levelMenu().map((e) => e.label)).toEqual(['memory.create', 'files.dropBox.create', 'files.upload', 'files.uploadFolder'])
   })
 
   it('a chapter is not created from a level: no entry for it', () => {
@@ -38,7 +38,7 @@ describe('the applications\' "New" menu entries', () => {
   })
 
   it('a member at a folder sees all of them', () => {
-    expect(shown(ctx(memberAccessOf()))).toEqual(['create:MEMORY', 'create:FILES_DROPBOX', 'files.upload'])
+    expect(shown(ctx(memberAccessOf()))).toEqual(['create:MEMORY', 'create:FILES_DROPBOX', 'files.upload', 'files.uploadFolder'])
   })
 
   it('a pending deletion writes nothing: no entry', () => {
@@ -57,8 +57,8 @@ describe('the applications\' "New" menu entries', () => {
     expect(shown(ctx(guestAccessOf('SOMETHING_NEW')))).toEqual([])
   })
 
-  it('a READ_WRITE guest sees what its role creates, and the upload', () => {
-    expect(shown(ctx(guestAccessOf(ShareRole.ReadWrite)))).toEqual(['create:MEMORY', 'files.upload'])
+  it('a READ_WRITE guest sees what its role creates, and both uploads (share view = member view)', () => {
+    expect(shown(ctx(guestAccessOf(ShareRole.ReadWrite)))).toEqual(['create:MEMORY', 'files.upload', 'files.uploadFolder'])
   })
 
   it('the create entries are greyed out while the member\'s epoch keys are locked; the upload is the section\'s to enable', () => {

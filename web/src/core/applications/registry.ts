@@ -79,8 +79,8 @@
 // capability function that decides whether it shows) opens that kind's `createDialog`; a kind's `levelActions` are entries
 // that are no create dialog (Files' "Upload files"), run through a handler the application's row factory registers with the
 // level (`core/node/levelActions.ts`) for the level's whole life, whichever tab is shown - and an entry declaring `acceptsDrop`
-// also takes the files dropped onto the level. `levelMenu()` lists them (each with the kind that declared it); core adds the
-// folder entry itself.
+// also takes what is dropped onto the level (files, or a directory). `levelMenu()` lists them (each with the kind that
+// declared it); core adds the folder entry itself.
 //
 // **Fail closed.** `kind()` never returns `undefined`: a node kind nobody registered resolves to
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
@@ -261,9 +261,10 @@ export interface LevelMenuEntry {
   order: number
   allowed(ctx: LevelActionContext): boolean
   enabled?(ctx: LevelActionContext): boolean
-  /** An action entry that takes FILES dropped onto the level (Files' upload): core hands the dropped files to the
-   *  handler registered under the entry's id (`LevelActionHandler.drop`), and only while the entry is `allowed` and the
-   *  handler `enabled` - a drop is never more than the menu entry would be. Ignored on a create entry. */
+  /** An action entry that takes what is dropped onto the level: core hands dropped FILES to the handler registered under
+   *  the entry's id that has a `LevelActionHandler.drop` (Files' "Upload files"), and a dropped DIRECTORY that is no download
+   *  to one that has a `dropDirectory` (Files' "Upload folder…") - only while the entry is `allowed` and the handler
+   *  `enabled`: a drop is never more than the menu entry would be. Ignored on a create entry. */
   acceptsDrop?: boolean
 }
 

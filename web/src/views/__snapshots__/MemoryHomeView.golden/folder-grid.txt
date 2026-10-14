@@ -5,7 +5,6 @@ div.veyq-node-host
         span.p-button-icon.p-button-icon-left.pi.pi-plus
         span.p-button-label
           "New"
-      input
       button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component [aria-label="Trash"]
         span.p-button-icon.p-button-icon-left.pi.pi-trash
         span.p-button-label

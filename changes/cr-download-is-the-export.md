@@ -132,7 +132,7 @@ and imports as a plain folder.
   them), `docs/apps/*` where "export" is named, and the coverage YAML for the use-case's new criteria.
   - Done when `python3 scripts/validate_coverage.py` and the trust-chain guards are green.
 
-- [ ] 5 web: Decision 6 - "New → Upload folder…" (pick and drop), the folder upload, the manifest routing, the preflight;
+- [x] 5 web: Decision 6 - "New → Upload folder…" (pick and drop), the folder upload, the manifest routing, the preflight;
   core's "New → Import…" removed.
   - Tests: a picked directory with the manifest opens the import and one without it creates the tree (folders, files,
     safe names, a clash suffix); the preflight's "no" writes nothing; one file's failure leaves the rest uploaded; a

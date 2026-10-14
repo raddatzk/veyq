@@ -32,7 +32,7 @@ export function mountRows(
   factory: LevelRowsFactory,
   ctx: LevelRowsContext,
   mode: 'grid' | 'list' = 'list',
-  options: { stubs?: Record<string, unknown>; screenUpload?: LevelRowsHost['screenUpload'] } = {},
+  options: { stubs?: Record<string, unknown>; screenUpload?: LevelRowsHost['screenUpload']; screenDirectory?: LevelRowsHost['screenDirectory'] } = {},
 ): RowsHarness {
   const events = { open: [] as TreeNode[], rename: [] as TreeNode[], move: [] as TreeNode[], ensuredCovers: [] as TreeNode[] }
   const covers = ref(new Map<string, LoadedCover>())
@@ -49,6 +49,7 @@ export function mountRows(
         covers,
         ensureCovers: (nodes) => events.ensuredCovers.push(...nodes),
         ...(options.screenUpload ? { screenUpload: options.screenUpload } : {}),
+        ...(options.screenDirectory ? { screenDirectory: options.screenDirectory } : {}),
       })
       return () => {
         // The application's own presentation of the mode (Memories' map) replaces the list, as core's level view does.

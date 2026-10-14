@@ -4,7 +4,7 @@
 // `docs/apps/files.md` § Guests (ADR 0080 decision 6); this is its code. Every field defaults to false: an unknown mode,
 // role or kind grants nothing.
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { Access, CapabilityTarget } from '../../core/access'
+import { folderCapabilities, type Access, type CapabilityTarget } from '../../core/access'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 
 export interface FilesCapabilities {
@@ -139,4 +139,11 @@ function guestCapabilities(role: string, at: CapabilityTarget): FilesCapabilitie
     default:
       return NO_FILES_CAPABILITIES
   }
+}
+
+/** "Upload folder…" (inbox #424): a tree of folders and files, so it needs both Files' upload at the level and core's folder
+ *  create there (`folderCapabilities`) - a member and a `READ_WRITE` guest alike (share view = member view), never in a guest's
+ *  identity folder, never during a pending deletion. */
+export function canUploadFolder(access: Access, at: CapabilityTarget): boolean {
+  return filesCapabilities(access, at).upload && folderCapabilities(access, at).createFolder
 }

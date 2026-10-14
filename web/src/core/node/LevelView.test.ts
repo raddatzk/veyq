@@ -483,7 +483,7 @@ describe('LevelView: the empty level', () => {
 
   it('a member who may create is told what "New" offers - folder and the application\'s entries - once, in plain text', () => {
     const w = mountLevel([])
-    expect(blocks(w)).toEqual([`empty:${t('node.levelEmptyNew', { entries: `${t('node.folderCreate')}, ${t('node.anItem')}, ${t('export.import')}` })}`])
+    expect(blocks(w)).toEqual([`empty:${t('node.levelEmptyNew', { entries: `${t('node.folderCreate')}, ${t('node.anItem')}` })}`])
     expect(w.find('.veyq-create-card').exists()).toBe(false)
   })
 
@@ -505,6 +505,7 @@ describe('LevelView: the "New" menu', () => {
   const ready = { value: true }
   const ran: string[] = []
   const dropped: string[][] = []
+  const droppedDirs: { name: string; paths: string[] }[] = []
   let rows: StubRows
   const allowed = (ctx: { access: { mode: string; role?: string } }) => grant.value && !(ctx.access.mode === 'guest' && ctx.access.role === ShareRole.Read)
   beforeEach(() => {
@@ -512,10 +513,17 @@ describe('LevelView: the "New" menu', () => {
     ready.value = true
     ran.length = 0
     dropped.length = 0
+    droppedDirs.length = 0
     // The row factory registers the handler while the LEVEL lives - not while a tab is shown (below).
     toastError.mockReset()
     rows = stubRows('a', {
-      action: { id: 'x.upload', handler: { enabled: () => ready.value, run: () => ran.push('upload'), drop: (files) => dropped.push(files.map((f) => f.name)) } },
+      action: {
+        id: 'x.upload',
+        handler: {
+          enabled: () => ready.value, run: () => ran.push('upload'), drop: (files) => dropped.push(files.map((f) => f.name)),
+          dropDirectory: (dir) => droppedDirs.push({ name: dir.name, paths: dir.files.map((f) => f.path).sort() }),
+        },
+      },
     })
     reg().registerKind({
       kind: 'ALPHA', icon: 'pi pi-a', shareable: false, createDialog: Dialog, list: { rows: rows.factory },
@@ -526,7 +534,8 @@ describe('LevelView: the "New" menu', () => {
 
   it('lists core\'s folder entry and the registry\'s entries by order, and each choice acts: create by kind, an action by its handler', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS })
-    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.anItem'), t('node.rename'), t('export.import')])
+    // no import entry (cr-download-is-the-export Decision 6): an upload recognises a download itself
+    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.anItem'), t('node.rename')])
     await chooseNew(w, t('node.anItem'))
     await chooseNew(w, t('node.rename'))
     await chooseNew(w, t('node.folderCreate'))
@@ -546,7 +555,7 @@ describe('LevelView: the "New" menu', () => {
   it('fails closed: an entry whose capability function says no is not drawn; none left, no button', async () => {
     grant.value = false
     const w = mountLevel([TRIPS], { folder: TRIPS })
-    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('export.import')])
+    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate')])
     const readonly = mountLevel([TRIPS], { folder: TRIPS, pending: true })
     expect(hasNewMenu(readonly)).toBe(false)
   })
@@ -716,30 +725,57 @@ describe('LevelView: the "New" menu', () => {
       expect(dropped).toEqual([])
     })
 
-    it('a directory without the manifest is no import: folder upload is not available yet - said, nothing uploaded', async () => {
+    it('a directory without the manifest is the folder upload: handed to the action that takes directories, nothing imported', async () => {
       const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
-      await dropEntries(w, dirEntry('Holiday', [fileEntry('a.jpg')]))
+      await dropEntries(w, dirEntry('Holiday', [fileEntry('a.jpg'), dirEntry('Day 1', [fileEntry('b.jpg')])]))
       expect(w.emitted('importArchive')).toBeUndefined()
       expect(dropped).toEqual([])
-      expect(toastError).toHaveBeenCalledWith(t('export.folderUploadUnavailable'))
+      expect(droppedDirs).toEqual([{ name: 'Holiday', paths: ['Day 1/b.jpg', 'a.jpg'] }])
+      expect(toastError).not.toHaveBeenCalled()
     })
 
-    it('the New menu offers "Import…" to a member, and choosing it opens the file picker', async () => {
+    it('one import per drop: a second unpacked download in the same drop is a folder upload', async () => {
       const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
-      const click = vi.spyOn(w.find<HTMLInputElement>('[data-testid="import-input"]').element, 'click').mockImplementation(() => {})
-      await chooseNew(w, t('export.import'))
-      expect(click).toHaveBeenCalled()
-      const picker = w.find<HTMLInputElement>('[data-testid="import-input"]')
-      const file = await downloadFile()
-      Object.defineProperty(picker.element, 'files', { value: [file], configurable: true })
-      await picker.trigger('change')
-      expect(offers(w)).toEqual([{ input: { kind: 'zip', file } }])
-      expect(await newMenuLabels(mountGuest(ShareRole.ReadWrite))).not.toContain(t('export.import'))
+      const unpacked = (name: string) => dirEntry(name, [dirEntry('.veyq', [fileEntry('manifest.json', '{}')])])
+      await dropEntries(w, unpacked('One'), unpacked('Two'))
+      expect(offers(w).map((o) => o.input.name)).toEqual(['One'])
+      expect(droppedDirs.map((d) => d.name)).toEqual(['Two'])
     })
 
-    it('while the keys are locked the import entry is disabled and a download is dropped as a plain upload', async () => {
+    it('a guest\'s dropped directory is always the folder upload, its .veyq/ included - never the import', async () => {
+      const g = mountGuest(ShareRole.ReadWrite)
+      await dropEntries(g, dirEntry('Trip download', [dirEntry('.veyq', [fileEntry('manifest.json', '{}')])]))
+      expect(g.emitted('importArchive')).toBeUndefined()
+      expect(droppedDirs).toEqual([{ name: 'Trip download', paths: ['.veyq/manifest.json'] }])
+    })
+
+    it('a dropped directory goes nowhere where no action takes it (not enabled, or none declared)', async () => {
+      ready.value = false
+      await dropEntries(mountLevel([TRIPS], { folder: TRIPS, unlocked: true }), dirEntry('Holiday', [fileEntry('a.jpg')]))
+      expect(droppedDirs).toEqual([])
+    })
+
+    it('a directory PICKED for a folder upload passes the same screen: a download unpacked is the import (true), any other is not', async () => {
+      const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
+      const host = rows.host()
+      const file = (path: string) => ({ path, file: new File(['x'], path.split('/').pop()!) })
+      const unpacked = { kind: 'directory' as const, name: 'Trip download', files: [file('.veyq/manifest.json'), file('Trip/a.txt')] }
+      // a manifest below the root (a download unpacked INTO a folder of it) does not make the directory one
+      const plain = { kind: 'directory' as const, name: 'Holiday', files: [file('a.txt'), file('.veyq/other.json'), file('Old/.veyq/manifest.json')] }
+      expect(host.screenDirectory!(plain)).toBe(false)
+      expect(w.emitted('importArchive')).toBeUndefined()
+      expect(host.screenDirectory!(unpacked)).toBe(true)
+      expect(offers(w)).toEqual([{ input: unpacked }])
+      // a guest's pick is never screened into the import
+      mountGuest(ShareRole.ReadWrite)
+      expect(rows.host().screenDirectory!(unpacked)).toBe(false)
+      // nor a member's while the keys are locked
+      mountLevel([TRIPS], { folder: TRIPS })
+      expect(rows.host().screenDirectory!(unpacked)).toBe(false)
+    })
+
+    it('while the keys are locked a download is dropped as a plain upload', async () => {
       const w = mountLevel([TRIPS], { folder: TRIPS })
-      expect(isDisabled((await openNewMenu(w)).find((i) => i.textContent?.trim() === t('export.import'))!)).toBe(true)
       await dropFiles(w, await downloadFile('trip.zip'))
       expect(w.emitted('importArchive')).toBeUndefined()
       expect(dropped).toEqual([['trip.zip']])

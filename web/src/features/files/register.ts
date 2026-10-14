@@ -28,8 +28,8 @@ import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
 import FileDetail from './components/FileDetail.vue'
 import FileShareDialog from './components/FileShareDialog.vue'
-import { filesCapabilities } from './capabilities'
-import { filesRows, UPLOAD_ACTION } from './levelRows'
+import { canUploadFolder, filesCapabilities } from './capabilities'
+import { filesRows, UPLOAD_ACTION, UPLOAD_FOLDER_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
 import { exportFile, importFile, validateFileContent, FILES_CONTENT_SCHEMA } from './exportImport'
 
@@ -43,6 +43,7 @@ export function fileNameStemEnd(name: string): number {
 /** Where Files' entries sit in the level's "New" menu: after core's folder (0) and Memories' Memory (10). */
 const NEW_DROPBOX_ORDER = 20
 const NEW_UPLOAD_ORDER = 30
+const NEW_UPLOAD_FOLDER_ORDER = 31
 
 /** Where a file and a drop box live (the backend's `FilesNodeKindRules`): at the root or directly in a folder — never in
  *  another file or a drop box, which take no placed child. */
@@ -84,9 +85,14 @@ export function registerFiles(registry: Registry): void {
     // "Upload files" in core's level "New" menu (inbox #406): no create dialog - the row factory registers the handler that
     // opens its picker under this id (`core/node/levelActions.ts`) for the level's whole life, whichever tab is shown; the same
     // handler takes the files dropped onto the level (`acceptsDrop`, inbox #407).
+    // "Upload folder…" beside it (inbox #424): a picked or dropped directory, uploaded as its tree of folders and files - or,
+    // a download unpacked, the member's import (core decides that, by its content).
     levelActions: [{
       id: UPLOAD_ACTION, label: 'files.upload', icon: 'pi pi-upload', order: NEW_UPLOAD_ORDER, acceptsDrop: true,
       allowed: (ctx: LevelActionContext) => filesCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).upload,
+    }, {
+      id: UPLOAD_FOLDER_ACTION, label: 'files.uploadFolder', icon: 'pi pi-folder-open', order: NEW_UPLOAD_FOLDER_ORDER, acceptsDrop: true,
+      allowed: (ctx: LevelActionContext) => canUploadFolder(ctx.access, targetOf(ctx.tree, ctx.folder)),
     }],
     // Where it may be moved (core's move dialog, inbox #358): the backend's `FilesNodeKindRules`.
     placement: FILES_PLACEMENT,

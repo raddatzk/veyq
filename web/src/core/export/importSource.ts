@@ -13,6 +13,16 @@ export type DirectoryFile = { path: string; file: File }
 /** What an import was handed: a ZIP file, or the files of a directory (paths below it). */
 export type ImportInput = { kind: 'zip'; file: File } | { kind: 'directory'; name: string; files: DirectoryFile[] }
 
+/** A picked or dropped directory: its name and its files, by their paths below it. What "Upload folder…" uploads as its tree
+ *  (Files' folder upload, inbox #424) where it is no download, and what the import reads where it is one. */
+export type DirectoryInput = Extract<ImportInput, { kind: 'directory' }>
+
+/** Whether a picked directory is a download unpacked: `.veyq/manifest.json` at its root (by its path, in NFC). Nothing is read. */
+export function directoryHoldsManifest(dir: DirectoryInput): boolean {
+  const at = `${MANIFEST_DIR}/manifest.json`
+  return dir.files.some((f) => f.path.normalize('NFC') === at)
+}
+
 /** An import the level offers its host: the input, and - for a ZIP that came from an upload - the way back to the ordinary
  *  upload ("Upload as a file", decision 7). */
 export type ImportOffer = { input: ImportInput; uploadAsFile?: () => void }
@@ -61,7 +71,7 @@ export function directorySource(files: readonly DirectoryFile[]): ImportSource {
 }
 
 /** The files of a picked directory (`<input webkitdirectory>`): each `webkitRelativePath` is `<directory>/<path>`. */
-export function pickedDirectory(files: readonly File[]): ImportInput | null {
+export function pickedDirectory(files: readonly File[]): DirectoryInput | null {
   if (files.length === 0) return null
   const name = files[0].webkitRelativePath.split('/')[0]
   return {
@@ -97,7 +107,7 @@ export function holdsManifest(dir: DroppedDirectory): Promise<boolean> {
 
 /** Every file below a dropped directory, with its path below it. A reader hands its entries out in batches, so it is asked
  *  until it hands out none. */
-export async function readDroppedDirectory(dir: DroppedDirectory): Promise<ImportInput> {
+export async function readDroppedDirectory(dir: DroppedDirectory): Promise<DirectoryInput> {
   const files: DirectoryFile[] = []
   const walk = async (d: DroppedDirectory, prefix: string): Promise<void> => {
     const reader = d.createReader()

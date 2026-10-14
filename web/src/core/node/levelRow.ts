@@ -26,6 +26,7 @@ import type { ViewMode } from '../../shared/state/useViewMode'
 import type { CoreHeaderAction, NodeHeaderAction } from './nodeHeader'
 import type { LevelActionHandler } from './levelActions'
 import type { LoadedCover } from './cover/coverModel'
+import type { DirectoryInput } from '../export/importSource'
 
 /** How many `first` actions a row shows as buttons; further ones fall into the overflow menu. */
 export const MAX_FIRST_ACTIONS = 2
@@ -117,6 +118,11 @@ export interface LevelRowsHost {
    *  back through `uploadAsFile`. Resolves the files to upload now (all of them for a guest, or where nothing is
    *  recognised). Absent: upload them all. */
   screenUpload?(files: File[], uploadAsFile: (files: File[]) => void): Promise<File[]>
+  /** Look at a directory picked for a folder upload before it is uploaded (ADR 0082 decision 7, inbox #424): a download
+   *  unpacked (`.veyq/manifest.json` at its root) is, for a member who may create here, offered as the import - true, and
+   *  the caller uploads nothing. False: upload it as its tree (a guest's directory always; the `.veyq/` in it as files).
+   *  Absent: upload it. */
+  screenDirectory?(dir: DirectoryInput): boolean
 }
 
 /** A message the application shows above the list, e.g. why a file was not uploaded. */

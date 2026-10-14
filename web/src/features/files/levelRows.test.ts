@@ -24,8 +24,10 @@ vi.mock('./uploadFile', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./uploadFile')>()),
   fileUploadJob: vi.fn(),
 }))
+vi.mock('../tenant/tenantStorage', () => ({ tenantStorageFits: vi.fn() }))
 vi.mock('../../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../core/node/tree')>()),
+  createContentNode: vi.fn(),
   deleteNode: vi.fn(async () => {}),
   restoreNode: vi.fn(async () => {}),
   nodeContentKey: (_s: string, _e: unknown, _t: unknown, nodeId: string) => keys.get(nodeId) ?? null,
@@ -44,7 +46,9 @@ import type { BlobMeta } from '../../core/blob/meta'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { MEMORY_KIND } from '../memory/kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
-import { deleteNode, restoreNode, type TreeNode } from '../../core/node/tree'
+import { createContentNode, deleteNode, restoreNode, type TreeNode } from '../../core/node/tree'
+import { tenantStorageFits } from '../tenant/tenantStorage'
+import type { DirectoryInput } from '../../core/export/importSource'
 import { loadTree } from '../../core/node/treeStore'
 import { enqueue, clearUploads, useUploadQueue } from '../../core/blob/queue'
 import { confirmRequest, settleConfirm } from '../../shared/state/useConfirm'
@@ -106,9 +110,9 @@ let harness: RowsHarness | null = null
 /** `pending`: the scope is pending deletion (the member's `access.readonly`); `identityFolder`: the level is a guest's
  *  identity folder in a drop box (what the member's tree answers for it). `siblings`: the level's children of other
  *  kinds - in the tree (what the any-kind pre-check reads, inbox #400), not in `nodes`, as core's level view hands them. */
-function mountSection({ pending = false, identityFolder = false, siblings = [], nodes, folder = DOCS, screenUpload }: {
+function mountSection({ pending = false, identityFolder = false, siblings = [], nodes, folder = DOCS, screenUpload, screenDirectory }: {
   nodes: TreeNode[]; pending?: boolean; identityFolder?: boolean; folder?: TreeNode | null; siblings?: TreeNode[]
-  screenUpload?: LevelRowsHost['screenUpload']
+  screenUpload?: LevelRowsHost['screenUpload']; screenDirectory?: LevelRowsHost['screenDirectory']
 }) {
   const epochs = epochsOf(v1.randomBytes(32))
   const tree = memberTreeOf(() => [DOCS, ...nodes, ...siblings], { scopeId: SCOPE, epochs })
@@ -116,7 +120,7 @@ function mountSection({ pending = false, identityFolder = false, siblings = [], 
     folder, nodes, epochs, viewMode: 'grid', liveTick: undefined,
     access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: pending }),
     tree: { ...tree, inIdentityFolder: () => identityFolder },
-  }, 'list', { screenUpload })
+  }, 'list', { screenUpload, screenDirectory })
   return harness
 }
 async function pick(index: number, files: File[]) {
@@ -126,6 +130,7 @@ async function pick(index: number, files: File[]) {
   await flushPromises()
 }
 const MULTI = 0
+const FOLDER_PICKER = 1
 const dateOf = (ms: number) => new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(ms)
 const targets = () => vi.mocked(fileUploadJob).mock.calls.map(([target, file]) => ({ target: target as FileUploadTarget, name: file.name }))
 const metaOf = (h: RowsHarness, title: string) => rowOf(h.w, title).find('.veyq-level-item-meta').text()
@@ -292,6 +297,123 @@ describe('Files rows', () => {
     })
   })
 
+  // inbox #424 / cr-download-is-the-export Decision 6: "Upload folder…" picks a DIRECTORY; core screens it (a download
+  // unpacked is the member's import), anything else is uploaded as its tree - after the quota preflight, the folders first.
+  describe('the level action "files.uploadFolder"', () => {
+    /** Files of a picked directory, as `<input webkitdirectory>` hands them: each `webkitRelativePath` is `<dir>/<path>`. */
+    const picked = (...paths: string[]) => paths.map((p) => {
+      const f = new File([p], p.split('/').pop()!)
+      Object.defineProperty(f, 'webkitRelativePath', { value: p })
+      return f
+    })
+    let made: { parent: unknown; kind: string; name: string }[]
+    beforeEach(() => {
+      made = []
+      let n = 0
+      vi.mocked(createContentNode).mockReset().mockImplementation(async (_s, _e, parent, kind, name) => {
+        made.push({ parent: parent?.id ?? null, kind, name })
+        const nodeId = `new-${++n}`
+        return { nodeId, contentKey: keyFor(nodeId) }
+      })
+      vi.mocked(tenantStorageFits).mockReset().mockResolvedValue(true)
+      activeSpace.tenantId = 'tenant-1'
+    })
+    afterEach(() => {
+      activeSpace.tenantId = null
+    })
+
+    it('is registered, enabled for a member who may upload; running it opens the DIRECTORY picker', async () => {
+      const h = mountSection({ nodes: [] })
+      await flushPromises()
+      const handler = h.actions.get('files.uploadFolder')!
+      expect(handler.enabled()).toBe(true)
+      const click = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (this: HTMLInputElement) { this.dataset.clicked = 'y' })
+      handler.run()
+      expect(pickers()[FOLDER_PICKER].dataset.clicked).toBe('y')
+      expect(pickers()[FOLDER_PICKER].webkitdirectory).toBe(true)
+      click.mockRestore()
+      expect(mountSection({ nodes: [], pending: true }).actions.get('files.uploadFolder')!.enabled()).toBe(false)
+    })
+
+    it('a picked directory without the manifest is created as its tree: the folders top-down, then one job per file under its folder', async () => {
+      const screenDirectory = vi.fn(() => false)
+      mountSection({ nodes: [], screenDirectory, siblings: [node('x1', FOLDER_KIND, 'Holiday')] })
+      await flushPromises()
+      await pick(FOLDER_PICKER, picked('Holiday/a.txt', 'Holiday/Day 1/b.jpg', 'Holiday/Day 1/B.JPG'))
+      expect((screenDirectory.mock.calls[0] as unknown as [DirectoryInput])[0]).toMatchObject({ kind: 'directory', name: 'Holiday' })
+      // the top folder numbered among the level's siblings, a case clash numbered before the extension
+      expect(made).toEqual([{ parent: D, kind: FOLDER_KIND, name: 'Holiday (2)' }, { parent: 'new-1', kind: FOLDER_KIND, name: 'Day 1' }])
+      expect(targets().map((x) => [x.target.parent?.id, x.name])).toEqual([['new-1', 'a.txt'], ['new-2', 'b.jpg'], ['new-2', 'B (2).JPG']])
+      expect(targets()[0].target.parent).toEqual({ id: 'new-1', key: keyFor('new-1') })
+      expect(tenantStorageFits).toHaveBeenCalledWith('tenant-1', 'Holiday/a.txt'.length + 'Holiday/Day 1/b.jpg'.length + 'Holiday/Day 1/B.JPG'.length)
+      expect(loadTree).toHaveBeenCalled()
+    })
+
+    it('a directory core takes as the import (the screen says so) creates nothing', async () => {
+      mountSection({ nodes: [], screenDirectory: () => true })
+      await flushPromises()
+      await pick(FOLDER_PICKER, picked('Trip download/.veyq/manifest.json', 'Trip download/Trip/a.txt'))
+      expect(createContentNode).not.toHaveBeenCalled()
+      expect(fileUploadJob).not.toHaveBeenCalled()
+      expect(tenantStorageFits).not.toHaveBeenCalled()
+    })
+
+    it('the preflight\'s "no" writes nothing and says so; an unanswered question (null) never blocks', async () => {
+      vi.mocked(tenantStorageFits).mockResolvedValue(false)
+      const h = mountSection({ nodes: [] })
+      await flushPromises()
+      await pick(FOLDER_PICKER, picked('Big/a.bin'))
+      expect(createContentNode).not.toHaveBeenCalled()
+      expect(fileUploadJob).not.toHaveBeenCalled()
+      expect(noticeTexts(h)).toEqual([t('files.uploadFolderNoRoom', { name: 'Big', size: formatBytes('Big/a.bin'.length, 'en') })])
+      vi.mocked(tenantStorageFits).mockResolvedValue(null)
+      await pick(FOLDER_PICKER, picked('Big/a.bin'))
+      expect(made.map((m) => m.name)).toEqual(['Big'])
+      expect(targets().map((x) => x.name)).toEqual(['a.bin'])
+    })
+
+    it('one file\'s failure is the queue\'s per-file failure: the rest of the tree is uploaded', async () => {
+      vi.mocked(fileUploadJob).mockImplementation((_target, file) => ({
+        name: file.name, sizeBytes: file.size, extra: { file }, isFinal: () => true,
+        run: async () => {
+          if (file.name === 'bad.txt') throw new Error('illegal_structure')
+          return { nodeId: R }
+        },
+      }))
+      mountSection({ nodes: [] })
+      await flushPromises()
+      await pick(FOLDER_PICKER, picked('T/a.txt', 'T/bad.txt', 'T/sub/c.txt'))
+      await vi.waitFor(() => expect(useUploadQueue().batches.value.flatMap((b) => b.files).every((f) => f.status === 'done' || f.status === 'failed')).toBe(true))
+      const statuses = Object.fromEntries(useUploadQueue().batches.value.flatMap((b) => b.files).map((f) => [f.name, f.status]))
+      expect(statuses).toEqual({ 'a.txt': 'done', 'bad.txt': 'failed', 'c.txt': 'done' })
+    })
+
+    it('a folder that cannot be created is named; the rest of the tree goes on', async () => {
+      vi.mocked(createContentNode).mockImplementation(async (_s, _e, parent, kind, name) => {
+        if (name === 'broken') throw new Error('network')
+        made.push({ parent: parent?.id ?? null, kind, name })
+        return { nodeId: `id-${name}`, contentKey: keyFor(`id-${name}`) }
+      })
+      const h = mountSection({ nodes: [] })
+      await flushPromises()
+      await pick(FOLDER_PICKER, picked('T/a.txt', 'T/broken/b.txt', 'T/ok/c.txt'))
+      expect(made.map((m) => m.name)).toEqual(['T', 'ok'])
+      expect(targets().map((x) => x.name)).toEqual(['a.txt', 'c.txt'])
+      expect(noticeTexts(h)).toEqual([t('files.uploadFolderPartFailed', { name: 'T/broken' })])
+    })
+
+    it('takes a dropped directory (core has screened it): uploaded as its tree, not screened again', async () => {
+      const screenDirectory = vi.fn(() => true)
+      const h = mountSection({ nodes: [], screenDirectory })
+      await flushPromises()
+      h.actions.get('files.uploadFolder')!.dropDirectory!({ kind: 'directory', name: 'Dropped', files: [{ path: 'a.txt', file: new File(['a'], 'a.txt') }] })
+      await flushPromises()
+      expect(screenDirectory).not.toHaveBeenCalled()
+      expect(made.map((m) => m.name)).toEqual(['Dropped'])
+      expect(targets().map((x) => x.name)).toEqual(['a.txt'])
+    })
+  })
+
   it('read-only (pending deletion): download stays, no replace, rename, move or delete', async () => {
     const h = mountSection({ nodes: [NOTES], pending: true })
     await flushPromises()
@@ -409,8 +531,8 @@ describe('Files rows', () => {
     await flushPromises()
     expect(await actionIdsOf(h.w, 'notes.txt')).toEqual(['download', 'rename', 'move', 'delete'])
     expect(await actionIdsOf(h.w, 'pending.bin')).toEqual(['download', 'rename', 'move', 'delete'])
-    expect(pickers(), 'one picker: the multi-file upload').toHaveLength(1)
-    expect(pickers()[0].multiple).toBe(true)
+    // no replace picker: the multi-file upload and the folder upload's directory picker only
+    expect(pickers().map((p) => (p.webkitdirectory ? 'directory' : p.multiple ? 'files' : 'one'))).toEqual(['files', 'directory'])
   })
 
   // inbox #383 (owner decision 2026-10-08): every replace of content asks, saying the old content cannot be restored.

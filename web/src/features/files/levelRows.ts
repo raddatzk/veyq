@@ -16,6 +16,11 @@
 //   nothing (#384), nor does "replace anyway" after a peer's replace. A picked name that a sibling of ANOTHER kind holds (a
 //   folder, a Memory, a drop box - each folded by its own kind) is not sent at all, for a member and a guest alike: a
 //   notice names that sibling instead (inbox #400).
+// - **Upload folder…** (inbox #424): a second level action (`files.uploadFolder`) whose picker picks a DIRECTORY
+//   (`webkitdirectory`), and which takes a dropped directory too (`dropDirectory`). Core looks first (`host.screenDirectory`):
+//   a download unpacked is, for a member, the import; anything else - a guest's always - is uploaded as its tree
+//   (`uploadFolder.ts`), after the quota preflight (a member's: the tenant's yes or no for the tree's bytes; a "no" writes
+//   nothing, an unanswered question never blocks).
 // - **The notices** only this application can explain: why a file of THIS folder was not uploaded, with the one remedy
 //   there is (replace anyway after a peer's replace).
 // - **Download and delete** (the delete into the scope's trash with the undo, inbox #385 (c)).
@@ -44,12 +49,17 @@ import { deliveredSince, FileUploadError, type FileJobExtra, type FileUploadResu
 import { fileFacts } from './download'
 import { plaintextTotal } from '../../sw/range'
 import { isSaveCancelled, SaveTooLarge } from '../../shared/saveStream'
-import { filesCapabilities } from './capabilities'
+import { canUploadFolder, filesCapabilities } from './capabilities'
 import { targetOf, type GuestAccess, type TreeSource } from '../../core/access'
+import { pickedDirectory, type DirectoryInput } from '../../core/export/importSource'
+import { tenantStorageFits } from '../tenant/tenantStorage'
+import { createFolders, planFolderUpload } from './uploadFolder'
 import { guestFilesSource, memberFilesSource, sourceCapabilities, type FileUploadEntry, type FilesSource } from './source'
 
 /** The id of Files' "Upload files" level action (`register.ts` declares the menu entry under it). */
 export const UPLOAD_ACTION = 'files.upload'
+/** The id of Files' "Upload folder…" level action (inbox #424). */
+export const UPLOAD_FOLDER_ACTION = 'files.uploadFolder'
 
 export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsHost): LevelRowSource {
   // One session for the source's life: a member's level or a link's page, never both - so the source is fixed at setup.
@@ -253,6 +263,67 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     enabled: () => caps.value.upload && writeReady.value,
     run: () => picker.click(),
     drop: (files) => void startUploads(files),
+  })
+
+  // --- upload a folder (inbox #424) ---------------------------------------------------------------------------------
+
+  const folderPicker = document.createElement('input')
+  folderPicker.type = 'file'
+  folderPicker.webkitdirectory = true
+  const folderReady = computed(() => !!source.upload && canUploadFolder(ctx.value.access, targetOf(ctx.value.tree, ctx.value.folder)) && writeReady.value)
+  const refuse = (text: string) => (refusals.value = [...refusals.value, { key: `refused-${++refusalSeq}`, text }])
+
+  /** Upload `dir` as its tree under the folder on screen (see `uploadFolder.ts`): the preflight, the folders, then one queue
+   *  job per file. */
+  async function uploadFolder(dir: DirectoryInput): Promise<void> {
+    const upload = source.upload
+    if (!upload || !folderReady.value || dir.files.length === 0) return
+    const level = ctx.value.folder
+    const plan = planFolderUpload(dir, (ctx.value.tree as TreeSource<TreeNode>).children(folderId()))
+    // Before anything is written: would the tree fit the tenant's quota? Only a member can ask (a guest's link has a limit of
+    // its own, which its uploads meet); a "no" says so and writes nothing, an unanswered question never blocks.
+    if (!guest && plan.bytes > 0) {
+      const tenantId = activeSpace.tenantId
+      if (tenantId && (await tenantStorageFits(tenantId, plan.bytes)) === false) {
+        refuse(t('files.uploadFolderNoRoom', { name: plan.root.name, size: formatBytes(plan.bytes, locale.value) }))
+        return
+      }
+    }
+    const tree = await upload.beginTree(level)
+    if (!tree) return
+    let made: Awaited<ReturnType<typeof createFolders>>
+    try {
+      made = await createFolders(plan, tree)
+    } catch {
+      refuse(t('files.uploadFolderFailed', { name: plan.root.name }))
+      return
+    } finally {
+      refresh()
+    }
+    for (const path of made.failed) refuse(t('files.uploadFolderPartFailed', { name: path }))
+    if (made.jobs.length === 0) return
+    enqueue<FileUploadResult, FileJobExtra>(made.jobs, {
+      label: made.rootName,
+      key: batchKey.value,
+      onItemDone: refresh,
+      onComplete: refresh,
+    })
+  }
+
+  // A download unpacked is core's to recognise (ADR 0082 decision 7): for a member it is the import, never this upload.
+  const takeDirectory = (dir: DirectoryInput) => {
+    if (!host.screenDirectory?.(dir)) void uploadFolder(dir)
+  }
+  folderPicker.addEventListener('change', () => {
+    const dir = pickedDirectory([...(folderPicker.files ?? [])])
+    folderPicker.value = '' // the same directory can be picked again
+    if (dir) takeDirectory(dir)
+  })
+  host.registerAction(UPLOAD_FOLDER_ACTION, {
+    enabled: () => folderReady.value,
+    run: () => folderPicker.click(),
+    // core has looked at a dropped directory already (one import per drop): what reaches here is the folder upload
+    dropDirectory: (dir) => void uploadFolder(dir),
   })
 
   // --- what the status menu cannot explain: this level's files that were not (fully) uploaded -----------------------

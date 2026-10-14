@@ -8,7 +8,6 @@ const en = {
   common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', close: 'Close', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', zoom: 'Zoom', unreachable: 'This instance can’t be reached right now. Please try again.' },
   export: {
     action: 'Download',
-    import: 'Import…',
     title: 'Download “{name}”',
     preparing: 'Collecting what is in it…',
     summary: '{nodes} items, {files} files, {size}',
@@ -43,7 +42,6 @@ const en = {
     importRest: 'Import the rest',
     importedLeftOut: 'Imported “{name}”. Left out: {names}',
     uploadAsFile: 'Upload as a file',
-    folderUploadUnavailable: 'Folder upload is not available yet.',
     importSummary: '{nodes} items, {size}, will be added to “{target}”.',
     importNotice: 'You become the owner of everything imported. Shares, members and the trash are not part of a download.',
     importSkipped: 'Left out, because this version cannot import them:',
@@ -1136,6 +1134,11 @@ const en = {
   files: {
     title: 'Files',
     upload: 'Upload files',
+    // "Upload folder…" (inbox #424): a picked directory uploaded as its tree. Said above the list when the tree is not sent.
+    uploadFolder: 'Upload folder…',
+    uploadFolderNoRoom: '“{name}” was not uploaded: there is not enough storage space for it ({size}). Free some space, or ask whoever runs your space.',
+    uploadFolderFailed: '“{name}” could not be created, so nothing of it was uploaded.',
+    uploadFolderPartFailed: 'The folder “{name}” could not be created, so nothing in it was uploaded.',
     empty: 'No files yet — choose New to upload the first one.',
     // Where nothing can be uploaded (a pending deletion): no pointer to the "New" menu, which is not there.
     emptyReadOnly: 'No files yet.',
@@ -1579,7 +1582,6 @@ const de: typeof en = {
   common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', close: 'Schließen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', zoom: 'Zoom', unreachable: 'Diese Instanz ist gerade nicht erreichbar. Bitte erneut versuchen.' },
   export: {
     action: 'Herunterladen',
-    import: 'Importieren…',
     title: '„{name}“ herunterladen',
     preparing: 'Sammle, was darin ist…',
     summary: '{nodes} Einträge, {files} Dateien, {size}',
@@ -1614,7 +1616,6 @@ const de: typeof en = {
     importRest: 'Den Rest importieren',
     importedLeftOut: '„{name}“ importiert. Weggelassen: {names}',
     uploadAsFile: 'Als Datei hochladen',
-    folderUploadUnavailable: 'Ordner hochladen ist noch nicht möglich.',
     importSummary: '{nodes} Einträge, {size}, werden zu „{target}“ hinzugefügt.',
     importNotice: 'Du wirst Eigentümer von allem Importierten. Freigaben, Mitglieder und der Papierkorb sind nicht Teil eines Downloads.',
     importSkipped: 'Weggelassen, weil diese Version sie nicht importieren kann:',
@@ -2638,6 +2639,10 @@ const de: typeof en = {
   files: {
     title: 'Dateien',
     upload: 'Dateien hochladen',
+    uploadFolder: 'Ordner hochladen…',
+    uploadFolderNoRoom: '„{name}“ wurde nicht hochgeladen: Dafür ist nicht genug Speicherplatz vorhanden ({size}). Gib Platz frei oder frage die Person, die deinen Bereich betreibt.',
+    uploadFolderFailed: '„{name}“ konnte nicht angelegt werden, deshalb wurde nichts davon hochgeladen.',
+    uploadFolderPartFailed: 'Der Ordner „{name}“ konnte nicht angelegt werden, deshalb wurde nichts darin hochgeladen.',
     empty: 'Noch keine Dateien — mit „Neu“ lädst du die erste hoch.',
     emptyReadOnly: 'Noch keine Dateien.',
     aFile: 'eine Datei',

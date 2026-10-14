@@ -2,7 +2,7 @@
 // the rights it grants; every other right must be false — a default flipped to true, a role or a kind falling through,
 // a guest deleting or renaming: each is red here.
 import { describe, it, expect } from 'vitest'
-import { filesCapabilities, NO_FILES_CAPABILITIES, type FilesCapabilities } from './capabilities'
+import { canUploadFolder, filesCapabilities, NO_FILES_CAPABILITIES, type FilesCapabilities } from './capabilities'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { Access, CapabilityTarget } from '../../core/access'
@@ -95,5 +95,24 @@ describe('filesCapabilities: the matrix', () => {
         }
       }
     }
+  })
+})
+
+// inbox #424: "Upload folder…" needs Files' upload AND core's folder create at the level - a member and a READ_WRITE guest alike
+// (share view = member view), never a reader, a drop box's own guest, a guest's identity folder or a pending deletion.
+describe('canUploadFolder', () => {
+  const cases: [string, Access, CapabilityTarget, boolean][] = [
+    ['member at the scope root', member, at(null), true],
+    ['member in a folder', member, at(FOLDER_KIND), true],
+    ['member in a guest\'s identity folder', member, at(FOLDER_KIND, { inIdentityFolder: true }), false],
+    ['member, pending deletion', pending, at(FOLDER_KIND), false],
+    ['member on a drop box', member, at(DROPBOX_KIND), false],
+    ['READ_WRITE guest in a folder', RW, at(FOLDER_KIND), true],
+    ['READ_WRITE guest in an identity folder', RW, at(FOLDER_KIND, { inIdentityFolder: true }), false],
+    ['READ guest in a folder', READ, at(FOLDER_KIND), false],
+    ['WRITE_ONLY guest on its drop box', WO, at(DROPBOX_KIND), false],
+  ]
+  it.each(cases)('%s', (_name, access, target, expected) => {
+    expect(canUploadFolder(access, target)).toBe(expected)
   })
 })

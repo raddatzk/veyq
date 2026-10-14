@@ -69,8 +69,8 @@ describe('composition root', () => {
     ])
   })
 
-  it('lets Files\' upload take dropped files, and nothing else', () => {
-    expect(registry.levelMenu().filter((e) => e.acceptsDrop).map((e) => e.id)).toEqual(['files.upload'])
+  it('lets Files\' uploads take what is dropped (files, a directory), and nothing else', () => {
+    expect(registry.levelMenu().filter((e) => e.acceptsDrop).map((e) => e.id)).toEqual(['files.upload', 'files.uploadFolder'])
   })
 
   // The tray and the pins are list slots (P4a). The upload status is core's since B3 (the top bar mounts it itself) and so is

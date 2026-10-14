@@ -13,9 +13,11 @@
 import type { UploadJob } from '../../core/blob/queue'
 import type { BlobChunkProvider } from '../../core/blob/transport'
 import type { GuestAccess } from '../../core/access'
-import { deleteNode, restoreNode, type NodeParent, type TreeNode } from '../../core/node/tree'
+import { createContentNode, deleteNode, restoreNode, type NodeParent, type TreeNode } from '../../core/node/tree'
+import { FOLDER_KIND } from '../../core/node/kind'
 import { loadTree, treeStore } from '../../core/node/treeStore'
-import { guestTreeContext } from '../../core/sharing/guestTree'
+import { createShareNodeAsGuest, guestTreeContext, guestTreeErrorOf, GuestTreeError, type GuestTreeContext } from '../../core/sharing/guestTree'
+import { decodeHttpError, HttpStatus } from '../../shared/httpError'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
 import { withRefresh } from '../../app/sessionRefresh'
 import type { EpochKeys } from '../spaces/epochs'
@@ -23,7 +25,7 @@ import type { FileBlobRef } from '../../api/generated/files'
 import { ShareRole } from '../../api/generated/sharing'
 import { filesApi, publicShareFilesApi } from './api'
 import { downloadFile, fileChunkProvider } from './download'
-import { fileUploadJob, type FileJobExtra, type FileReplace, type FileUploadResult } from './uploadFile'
+import { FileUploadError, fileUploadJob, type FileJobExtra, type FileReplace, type FileUploadResult } from './uploadFile'
 import { guestFileUploadJob } from './shareUpload'
 import type { FilesCapabilities } from './capabilities'
 
@@ -34,6 +36,15 @@ export type FileUploadEntry = { file: File; replace?: FileReplace }
 export interface FilesUploadBatch {
   /** The queue jobs for `entries` — empty when the visitor declined to name itself (a guest), so nothing is sent. */
   jobs(entries: readonly FileUploadEntry[]): Promise<UploadJob<FileUploadResult, FileJobExtra>[]>
+}
+
+/** A folder upload's writes (inbox #424), begun by {@link FilesUpload.beginTree}: the folders of the tree, then the jobs of
+ *  its files. A folder is addressed by the id {@link folder} returned, `null` being the level's folder the upload began at. */
+export interface FilesTreeUpload {
+  /** Create a `FOLDER` named `name` under `parent`; its id. Throws `Error('slug_taken')` when a sibling holds the name. */
+  folder(parent: string | null, name: string): Promise<string>
+  /** The queue jobs that upload `files` into new `FILE` nodes under `parent`, each named by its `File`'s name. */
+  jobs(parent: string | null, files: readonly File[]): UploadJob<FileUploadResult, FileJobExtra>[]
 }
 
 /** The upload door of a session that has one. A picked file whose name a FILE sibling already holds goes into that file
@@ -49,6 +60,9 @@ export interface FilesUpload {
    *  folder to create under, so none is asked for — every entry handed to `jobs` names the file it replaces. Null as
    *  `begin`: this session cannot write now. */
   beginReplace(): FilesUploadBatch | null
+  /** Start a folder upload under the level `folder` (null: a member's scope root): a guest is named first through the page's
+   *  one flow. Null: this session cannot create there now, or the visitor declined to name itself - nothing is sent. */
+  beginTree(folder: TreeNode | null): Promise<FilesTreeUpload | null>
 }
 
 /** Files' data source; see the header. */
@@ -151,6 +165,14 @@ export function memberFilesSource(from: {
         // A replace creates nothing, so no parent is read: the file's own key comes with the entry.
         return scopeId && epochs ? memberBatch(scopeId, epochs, null) : null
       },
+      async beginTree(folder) {
+        const scopeId = from.scopeId()
+        const epochs = from.epochs()
+        if (!scopeId || !epochs) return null
+        const key = folder ? from.keyOf(folder.id) : null
+        if (folder && !key) return null
+        return memberTree(scopeId, epochs, folder && key ? { id: folder.id, key } : null)
+      },
     },
     async deleteFile(nodeId) {
       const scopeId = from.scopeId()
@@ -167,6 +189,32 @@ export function memberFilesSource(from: {
     },
     rename: from.rename,
     move: from.move,
+  }
+}
+
+/** A member's folder upload: each folder created by core's `createContentNode` under its parent's key, its key kept for what
+ *  goes below it (ADR 0080 Decision 1). */
+function memberTree(scopeId: string, epochs: EpochKeys, level: NodeParent): FilesTreeUpload {
+  const made = new Map<string, NodeParent>()
+  const at = (parent: string | null): NodeParent => {
+    if (parent === null) return level
+    const p = made.get(parent)
+    if (!p) throw new Error(`no folder ${parent} in this upload`)
+    return p
+  }
+  return {
+    async folder(parent, name) {
+      try {
+        const { nodeId, contentKey } = await createContentNode(scopeId, epochs, at(parent), FOLDER_KIND, name)
+        made.set(nodeId, { id: nodeId, key: contentKey })
+        return nodeId
+      } catch (e) {
+        const { status, code } = await decodeHttpError(e)
+        if (status === HttpStatus.conflict && code === FileUploadError.slugTaken) throw new Error(FileUploadError.slugTaken)
+        throw e
+      }
+    },
+    jobs: (parent, files) => files.map((file) => fileUploadJob({ scopeId, epochs, parent: at(parent) }, file)),
   }
 }
 
@@ -220,6 +268,35 @@ function guestUpload(access: () => GuestAccess): FilesUpload {
     },
     // A replace creates nothing, so the parent a create would use is never read (any id does; the job's type wants one).
     beginReplace: () => guestBatch(access, ''),
+    async beginTree(folder) {
+      if (!folder) return null
+      const a = access()
+      const guest = await a.requestGuest()
+      if (!guest) return null
+      return guestTree(guestTreeContext(a.head, { contributorToken: guest.contributorToken, fragmentKey: a.fragmentKey, pwToken: a.pwToken }), folder.id)
+    },
+  }
+}
+
+/** A guest's folder upload: each folder created as the guest (core's `createShareNodeAsGuest`) under its parent's key from the
+ *  chain; the new folder joins the context, so what goes below it seals under its key. */
+function guestTree(ctx: GuestTreeContext, levelId: string): FilesTreeUpload {
+  return {
+    async folder(parent, name) {
+      const parentId = parent ?? levelId
+      try {
+        const { nodeId, contentKey } = await createShareNodeAsGuest(ctx, { parentId, kind: FOLDER_KIND, name })
+        ctx.keys.set(nodeId, contentKey)
+        ctx.names.set(nodeId, name)
+        ctx.nodes.set(nodeId, { id: nodeId, parentId, kind: FOLDER_KIND, epoch: ctx.nodes.get(parentId)?.epoch ?? 0 })
+        return nodeId
+      } catch (e) {
+        const err = await guestTreeErrorOf(e)
+        if (err instanceof GuestTreeError && err.code === 'slug_taken') throw new Error(FileUploadError.slugTaken)
+        throw err
+      }
+    },
+    jobs: (parent, files) => files.map((file) => guestFileUploadJob({ ctx, parentId: parent ?? levelId }, file)),
   }
 }
 

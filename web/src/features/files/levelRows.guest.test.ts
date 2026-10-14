@@ -34,8 +34,10 @@ vi.mock('./shareUpload', () => ({ guestFileUploadJob: vi.fn() }))
 vi.mock('../../core/sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store.test/0']) }))
 vi.mock('../../core/sharing/guestTree', async (orig) => ({
   ...(await orig<typeof import('../../core/sharing/guestTree')>()),
-  guestTreeContext: vi.fn((head: unknown, o: object) => ({ head, ...o })),
+  guestTreeContext: vi.fn((head: unknown, o: object) => ({ head, ...o, keys: new Map(), names: new Map(), nodes: new Map() })),
+  createShareNodeAsGuest: vi.fn(),
 }))
+vi.mock('../tenant/tenantStorage', () => ({ tenantStorageFits: vi.fn() }))
 
 import { filesRows } from './levelRows'
 import { registerFiles } from './register'
@@ -44,7 +46,8 @@ import { publicShareFilesApi } from './api'
 import { downloadFile } from './download'
 import { guestFileUploadJob, type GuestFileTarget } from './shareUpload'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
-import { guestTreeContext } from '../../core/sharing/guestTree'
+import { createShareNodeAsGuest, guestTreeContext } from '../../core/sharing/guestTree'
+import { tenantStorageFits } from '../tenant/tenantStorage'
 import { planBlob } from '../../core/blob/transport'
 import { deleteNode, sealName, wrapContentKey, type TreeNode } from '../../core/node/tree'
 import { loadTree } from '../../core/node/treeStore'
@@ -220,7 +223,8 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     // no rename and no delete for any guest, and no replace for anyone: a file with content and one without alike
     expect(await actionIdsOf(h.w, 'Report.pdf')).toEqual(['download', 'move'])
     expect(await actionIdsOf(h.w, 'aaa.bin')).toEqual(['download', 'move'])
-    expect(pickers(), 'one picker: the multi-file upload').toHaveLength(1)
+    // no replace picker: the multi-file upload and the folder upload's directory picker only
+    expect(pickers().map((p) => (p.webkitdirectory ? 'directory' : p.multiple ? 'files' : 'one'))).toEqual(['files', 'directory'])
     expectNoMemberWorld()
   })
 
@@ -288,6 +292,48 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     mountSection({ at: SUB })
     await flushPromises()
     expect(listShareFiles, 'an empty level asks nothing').not.toHaveBeenCalled()
+  })
+})
+
+// inbox #424 / cr-download-is-the-export Decision 6: a READ_WRITE guest gets "Upload folder…" as a member does (share view =
+// member view) - named first, the folders created as the guest, a `.veyq/` directory uploaded as files like any other; a guest
+// never imports, and asks no quota preflight (a member's question; the link has its own limit).
+describe('a contributor uploads a folder', () => {
+  const picked = (...paths: string[]) => paths.map((p) => {
+    const f = new File([p], p.split('/').pop()!)
+    Object.defineProperty(f, 'webkitRelativePath', { value: p })
+    return f
+  })
+  beforeEach(() => {
+    let n = 0
+    vi.mocked(createShareNodeAsGuest).mockReset().mockImplementation(async () => ({ nodeId: `g-${++n}`, contentKey: v1.randomBytes(32) }))
+    vi.mocked(tenantStorageFits).mockClear()
+  })
+
+  it('is offered to a READ_WRITE guest only; a pick is created as its tree, as the guest, its .veyq/ included as files', async () => {
+    expect(mountSection({ role: ShareRole.Read }).actions.get('files.uploadFolder')!.enabled()).toBe(false)
+    const requestGuest = vi.fn(async () => GUEST)
+    const h = mountSection({ role: ShareRole.ReadWrite, requestGuest })
+    await flushPromises()
+    expect(h.actions.get('files.uploadFolder')!.enabled()).toBe(true)
+    await setPicked(pickers().filter((p) => p.webkitdirectory).at(-1)!, picked('Trip download/.veyq/manifest.json', 'Trip download/Trip/a.txt'))
+    expect(requestGuest).toHaveBeenCalledOnce()
+    expect(vi.mocked(createShareNodeAsGuest).mock.calls.map(([, o]) => [o.parentId, o.kind, o.name])).toEqual([
+      [ROOT, FOLDER_KIND, 'Trip download'], ['g-1', FOLDER_KIND, '.veyq'], ['g-1', FOLDER_KIND, 'Trip'],
+    ])
+    expect(targets().map((t0) => [t0.parentId, (t0.ctx as unknown as { contributorToken: string }).contributorToken])).toEqual([['g-2', 'tok-1'], ['g-3', 'tok-1']])
+    // the folder the guest just made joins the context, so what goes below it seals under its key
+    expect((targets()[0].ctx as unknown as { keys: Map<string, Uint8Array> }).keys.has('g-2')).toBe(true)
+    expect(tenantStorageFits).not.toHaveBeenCalled()
+    expectNoMemberWorld()
+  })
+
+  it('a visitor who declines to name itself creates nothing', async () => {
+    mountSection({ role: ShareRole.ReadWrite, requestGuest: async () => null })
+    await flushPromises()
+    await setPicked(pickers().filter((p) => p.webkitdirectory).at(-1)!, picked('T/a.txt'))
+    expect(createShareNodeAsGuest).not.toHaveBeenCalled()
+    expect(guestFileUploadJob).not.toHaveBeenCalled()
   })
 })
 
