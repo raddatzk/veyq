@@ -76,7 +76,7 @@ async function copyLink() {
         <small class="field-hint">{{ t('tenant.domainHint') }}</small>
       </label>
       <label>
-        {{ t('tenant.ownerEmail') }}
+        {{ t('tenant.ownerEmailNew') }}
         <InputText v-model="ownerEmail" type="email" autocomplete="email" required :disabled="loading" />
       </label>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
