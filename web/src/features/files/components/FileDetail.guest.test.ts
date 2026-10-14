@@ -212,7 +212,6 @@ describe('the guest of a single-file link sees the member\'s file view', () => {
     expect(labels(w)).toEqual([t('files.download', { name: 'Report.pdf' })])
     expect(w.find('input[type="file"]').exists()).toBe(false)
     for (const icon of ['.pi-pencil', '.pi-trash', '.pi-share-alt', '.pi-file-export', '.pi-sync']) expect(w.find(icon).exists(), icon).toBe(false)
-    expect(w.text()).not.toContain(t('files.detail.contributorHint'))
     expectNoMemberWorld()
   })
 
@@ -242,13 +241,16 @@ describe('the guest of a single-file link sees the member\'s file view', () => {
     expect(toastError.mock.calls).toEqual([[t('files.downloadFailed')]])
   })
 
-  it('a READ_WRITE guest may also replace the content — told first what that does, asked again on the pick, then named', async () => {
+  // Owner decision 2026-10-14: the replace stays on the opened file (the one way a single-file READ_WRITE link writes), as a
+  // header action beside the download; no standing sentence says what it does - the question does, when it happens.
+  it('a READ_WRITE guest may also replace the content from the header — no standing sentence; asked on the pick, then named', async () => {
     const dialog = mountConfirmDialog()
     const requestGuest = vi.fn(async () => GUEST)
     const reload = vi.fn(async () => {})
     const w = await mountPage(ShareRole.ReadWrite, { requestGuest, reload })
-    expect(w.text()).toContain(t('files.detail.contributorHint'))
-    expect(t('files.detail.contributorHint')).toMatch(/owner too.*cannot be restored/)
+    expect(w.findAll('.veyq-node-header-actions button').map((b) => b.attributes('data-action'))).toEqual(['download', 'replace'])
+    expect(w.find('.file-detail .veyq-form-copy').exists(), 'no standing sentence about the replace').toBe(false)
+    expect(w.text()).not.toMatch(/owner too|cannot be restored/)
     for (const icon of ['.pi-pencil', '.pi-trash', '.pi-share-alt', '.pi-file-export']) expect(w.find(icon).exists(), icon).toBe(false)
 
     await pick(w, 'new.pdf')

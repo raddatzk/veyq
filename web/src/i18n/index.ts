@@ -1132,9 +1132,10 @@ const en = {
     aFile: 'a file',
     modified: 'Modified {date}',
     download: 'Download {name}',
-    // An opened file's replace (FileDetail) keeps the file's name: the picked file's content goes into it (inbox #385).
+    // An opened file's replace (FileDetail's header action and its tooltip) keeps the file's name: the picked file's content
+    // goes into it (inbox #385).
     replace: 'Replace the content of {name} — the name stays',
-    // A file that holds no content (an upload that never finished, inbox #384): its page uploads into it.
+    // A file that holds no content (an upload that never finished, inbox #384): its page's header uploads into it.
     uploadInto: 'Upload {name} again',
     rename: 'Rename {name}',
     move: 'Move {name} to…',
@@ -1157,10 +1158,6 @@ const en = {
       typeUnknown: 'Unknown',
       modified: 'Modified',
       download: 'Download',
-      replace: 'Replace content',
-      uploadInto: 'Upload content',
-      // A contributor of a file link: what a replace does, said before it happens (inbox #383).
-      contributorHint: 'You can replace this file’s content. It changes for everyone who has this link, the owner too. The old content cannot be restored: there is no version history.',
     },
     // The viewer on an opened file's page (components/FileViewer.vue, inbox #412).
     viewer: {
@@ -2634,9 +2631,6 @@ const de: typeof en = {
       typeUnknown: 'Unbekannt',
       modified: 'Geändert',
       download: 'Herunterladen',
-      replace: 'Inhalt ersetzen',
-      uploadInto: 'Inhalt hochladen',
-      contributorHint: 'Du kannst den Inhalt dieser Datei ersetzen. Das gilt dann für alle, die diesen Link haben, auch für die Person, der die Datei gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
     },
     // Die Ansicht auf der Seite einer geöffneten Datei (components/FileViewer.vue, Inbox #412).
     viewer: {

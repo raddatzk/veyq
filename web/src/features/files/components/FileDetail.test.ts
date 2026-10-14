@@ -131,7 +131,9 @@ describe('an opened file: the viewer on its page (inbox #412)', () => {
     expect(img.attributes('alt')).toBe('Report.pdf')
     const facts = w.find('.file-detail-facts').element
     expect(img.element.compareDocumentPosition(facts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(w.find('.file-viewer').element.compareDocumentPosition(w.find('.file-detail-actions').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // the download and the replace are the header's (owner decision 2026-10-14): above the viewer, no button row below it
+    expect(w.find('.veyq-node-header').element.compareDocumentPosition(w.find('.file-viewer').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(w.find('.file-detail-actions').exists()).toBe(false)
   })
 
   it('reads nothing for a list row: only the opened page asks the source for a reader, and not before the blob is known', async () => {
@@ -205,13 +207,18 @@ describe('an opened file: its page for a member', () => {
     expect(listFiles).toHaveBeenCalledWith({ scopeId: SCOPE, parentId: D })
   })
 
-  it('offers everything the matrix grants a member: download, replace, and the card\'s share, rename, move and delete', async () => {
+  it('offers everything the matrix grants a member, all in the header: download, replace, share, rename, move and delete', async () => {
     const w = mountDetail()
     await flushPromises()
     expect(ariaLabels(w)).toEqual(expect.arrayContaining([
       t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete'),
       t('files.download', { name: 'Report.pdf' }), t('files.replace', { name: 'Report.pdf' }),
     ]))
+    // owner decision 2026-10-14: the download and the replace are header actions, before the standard four
+    const ids = w.findAll('.veyq-node-header-actions button').map((b) => b.attributes('data-action'))
+    expect(ids.filter((id) => id !== 'favorite' && id !== 'export')).toEqual(['download', 'replace', 'share', 'rename', 'move', 'delete'])
+    expect(w.findAll('button').filter((b) => !b.element.closest('.veyq-node-header') && !b.element.closest('.file-viewer')).map((b) => b.attributes('aria-label')), 'no action button below the header')
+      .not.toEqual(expect.arrayContaining([t('files.download', { name: 'Report.pdf' }), t('files.replace', { name: 'Report.pdf' })]))
   })
 
   it('core\'s heart is in the header, first: a real click toggles THIS file in the access\'s scope, and a pinned file shows it pressed', async () => {

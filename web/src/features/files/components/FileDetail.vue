@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// An opened file (inbox #378): the page of ONE file — its name under core's header card (share, rename, move, delete,
-// each where Files' matrix says so), its size, type and modified time opened from the blob's own sealed meta, a
-// download, and a replace of its content. It is FILE's `detail` in the registry, so the host mounts it for a member who
+// An opened file (inbox #378): the page of ONE file — core's header with the file's actions (download, replace of its
+// content, share, rename, move, delete, each where Files' matrix says so; owner decision 2026-10-14: the download and the
+// replace are header actions, no longer buttons below it), then the file itself and its size, type and modified time
+// opened from the blob's own sealed meta. It is FILE's `detail` in the registry, so the host mounts it for a member who
 // opens a file from the folder's list, and core's page of a public link (`ShareTreePage`) mounts the very same component
 // for a guest at the link's root — a single-file link — or at a file inside a folder link (inbox #401: a share is the
 // member's view with functions removed, never a page of its own).
@@ -9,7 +10,8 @@
 // **What it offers is `filesCapabilities(access, targetOf(tree, file))` narrowed to what the data source carries**
 // (`../capabilities.ts`, `../source.ts`): a member everything its row offers plus share, rename, move and delete of the
 // file; a `READ` guest the download; a `READ_WRITE` guest the download and the replace — after the question that says it
-// changes the file for everyone who sees it, the owner too (inbox #383) — and, for a file inside a folder link, the move
+// changes the file for everyone who sees it, the owner too (inbox #383); no standing sentence says so beforehand — and,
+// for a file inside a folder link, the move
 // between the subtree's folders. A guest renames and deletes nothing (nodes store no authorship), and a `WRITE_ONLY`
 // link on a file does not exist (the backend refuses it).
 //
@@ -17,6 +19,8 @@
 // (`listBlobs` — a member's reads the file's folder, a guest's the link) says which blob the file holds, and the bytes
 // download through the session's own door. The replace is a compare-and-set against the blob this page read
 // (`expectedBlobId`): a peer's replace in the meantime refuses it (`stale_file`) and the page offers "replace anyway".
+// A row of the folder's list offers no replace (owner decision 2026-10-14: there, an upload of the same name replaces);
+// this page keeps it, because it is the one way a `READ_WRITE` link on a single file writes — it has no folder above it.
 //
 // **The file is shown when its page opens** (inbox #412, `FileViewer`): an image, a text, a video or audio through the service
 // worker's media route, the download offered for anything else; Files makes no thumbnail or preview blob. It reads the blob
@@ -30,7 +34,7 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
-import { standardNodeActions } from '../../../core/node/nodeHeader'
+import { standardNodeActions, type NodeHeaderAction } from '../../../core/node/nodeHeader'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { exportHeaderActions } from '../../../core/export/exportActions'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
@@ -76,14 +80,6 @@ const source: FilesSource = guest
       move: (node) => emit('move', node),
     })
 const caps = computed(() => sourceCapabilities(filesCapabilities(props.access, targetOf(props.tree, props.node)), source))
-/** The header's actions: share, rename, move, delete — each only where the capability matrix grants it. */
-const headerActions = computed(() =>
-  standardNodeActions(
-    t,
-    { share: caps.value.share, rename: caps.value.rename, move: caps.value.moveNode, remove: caps.value.deleteNode },
-    { share: () => emit('share'), rename: () => emit('rename'), move: () => source.move?.(props.node), remove: () => emit('delete') },
-  ),
-)
 const key = computed(() => props.contentKey ?? props.tree.keyOf(props.node.id))
 const writeReady = computed(() => source.upload?.ready() ?? false)
 
@@ -114,6 +110,27 @@ const facts = computed(() => {
   return { size: opened?.size ?? 0, type: opened?.meta?.type || null, modifiedAt: opened?.meta?.modifiedAt ?? null, uploadedName: opened?.meta?.name ?? null }
 })
 const empty = computed(() => blob.value === null)
+
+/** The header's actions (owner decision 2026-10-14): the download, the replace of the content (an upload into a file that
+ *  holds none), then share, rename, move, delete — each only where the capability matrix grants it. The download is the
+ *  page's call to action; it runs inside the click (the save picker needs its activation). */
+const headerActions = computed<NodeHeaderAction[]>(() => [
+  {
+    id: 'download', label: t('files.download', { name: props.node.name }), icon: 'pi pi-download', severity: 'primary',
+    class: 'file-detail-download', shown: caps.value.download, disabled: !blob.value || !key.value || downloading.value,
+    onClick: () => void download(),
+  },
+  {
+    id: 'replace', label: t(empty.value ? 'files.uploadInto' : 'files.replace', { name: props.node.name }),
+    icon: empty.value ? 'pi pi-upload' : 'pi pi-sync', class: 'file-detail-replace', shown: caps.value.replace,
+    disabled: !writeReady.value, onClick: () => picker.value?.click(),
+  },
+  ...standardNodeActions(
+    t,
+    { share: caps.value.share, rename: caps.value.rename, move: caps.value.moveNode, remove: caps.value.deleteNode },
+    { share: () => emit('share'), rename: () => emit('rename'), move: () => source.move?.(props.node), remove: () => emit('delete') },
+  ),
+])
 
 /** What the viewer opens: this blob, read through the session's own door. The claims (sealed type; the node's name, else the
  *  uploaded one when the node's has no extension) only narrow what the decrypted bytes already allow (`view.ts`). Null until
@@ -257,35 +274,8 @@ async function replaceAnyway(n: Notice) {
         </template>
       </dl>
 
-      <!-- A contributor is told what a replace does before it happens (inbox #383); the question asks again when a file is picked. -->
-      <p v-if="guest && caps.replace" class="veyq-form-copy">{{ t('files.detail.contributorHint') }}</p>
-
-      <div class="veyq-action-group file-detail-actions">
-        <Button
-          v-if="caps.download"
-          type="button"
-          class="file-detail-download"
-          icon="pi pi-download"
-          :label="t('files.detail.download')"
-          :aria-label="t('files.download', { name: node.name })"
-          :loading="downloading"
-          :disabled="!blob || !key || downloading"
-          @click="download"
-        />
-        <Button
-          v-if="caps.replace"
-          type="button"
-          class="file-detail-replace"
-          :icon="empty ? 'pi pi-upload' : 'pi pi-sync'"
-          :label="t(empty ? 'files.detail.uploadInto' : 'files.detail.replace')"
-          :aria-label="t(empty ? 'files.uploadInto' : 'files.replace', { name: node.name })"
-          severity="secondary"
-          outlined
-          :disabled="!writeReady"
-          @click="picker?.click()"
-        />
-        <input v-if="caps.replace" ref="picker" class="files-picker" type="file" hidden @change="onPicked" />
-      </div>
+      <!-- The replace's picker (the header's replace opens it); the replace asks when a file is picked (inbox #383). -->
+      <input v-if="caps.replace" ref="picker" class="files-picker" type="file" hidden @change="onPicked" />
     </section>
   </div>
 </template>
@@ -303,9 +293,6 @@ async function replaceAnyway(n: Notice) {
 .file-detail-facts dd {
   margin: 0;
   overflow-wrap: anywhere;
-}
-.file-detail-actions {
-  flex-wrap: wrap;
 }
 .file-detail-notice {
   display: flex;
