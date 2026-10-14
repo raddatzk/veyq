@@ -6,6 +6,7 @@
 // (pre-filled from the current share, always re-sent — an edit that drops it clears it).
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import PrimeVue from 'primevue/config'
 
 // The dialog decrypts an editShare on mount; stub the share data layer so it mounts crypto/network-free.
 // The dialog assembles the link itself now (the origin is a UI concern), so `shareLink` is its own stub.
@@ -16,7 +17,7 @@ vi.mock('../share', () => ({
   reissueShare: vi.fn(),
   isShareDeleted: vi.fn(),
   readShareName: vi.fn(),
-  readShareNoteMap: vi.fn(),
+  readShareNote: vi.fn(),
   readSharePassword: vi.fn(),
   hasLocaleText: vi.fn(),
 }))
@@ -34,7 +35,7 @@ const SHARE_DELETED = new Error('409 share_deleted')
 // The real predicate is share.test.ts's; here it answers for the error the stubbed reissue throws.
 vi.mocked(share.isShareDeleted).mockImplementation(async (e: unknown) => e === SHARE_DELETED)
 vi.mocked(share.readShareName).mockReturnValue('')
-vi.mocked(share.readShareNoteMap).mockReturnValue({})
+vi.mocked(share.readShareNote).mockReturnValue({ texts: {}, mustAccept: false })
 vi.mocked(share.readSharePassword).mockReturnValue('')
 vi.mocked(share.hasLocaleText).mockReturnValue(false)
 vi.mocked(buildShareLink).mockImplementation((shareId) => `https://x/s/${shareId}#k=abc`)
@@ -229,5 +230,41 @@ describe('ShareCreateDialog — a role edit onto a link that holds no verifier (
     await flushPromises()
     await pick(w, t('share.roleContributor'))
     expect(warning(w).exists()).toBe(false)
+  })
+})
+
+// uc.sharing.share-note: the note's acceptance switch is core's field (`ShareNoteAcceptField`) under the note editor,
+// read back on edit and sealed inside the note — the Memory dialog hands it on exactly as core's folder dialog does.
+describe("ShareCreateDialog — the note's acceptance switch", () => {
+  // The real Checkbox needs PrimeVue's config, which the stubbed suite above does not install.
+  const mountWithPrime = (props: Record<string, unknown>) =>
+    mount(ShareCreateDialog, {
+      props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', ...props },
+      global: { plugins: [realI18n(), PrimeVue], stubs },
+    })
+  const mustAccept = (w: ReturnType<typeof mountWithPrime>) => w.find('#share-note-must-accept')
+
+  it('is read back on edit and re-sent with the note', async () => {
+    updateShare.mockClear()
+    vi.mocked(share.readShareNote).mockReturnValueOnce({ texts: { en: 'Read me' }, mustAccept: true })
+    vi.mocked(share.hasLocaleText).mockReturnValueOnce(true)
+    const w = mountWithPrime({ editShare: editShareWith({ sealedNote: 'n' }) })
+    await flushPromises()
+    expect((mustAccept(w).element as HTMLInputElement).checked).toBe(true)
+    await w.findAll('button').find((b) => b.text() === t('share.noteSave'))!.trigger('click')
+    await flushPromises()
+    expect(updateShare.mock.calls[0][3]).toEqual({ texts: { en: 'Read me' }, mustAccept: true })
+  })
+
+  it('a new link with a note and the switch ticked asks to be accepted', async () => {
+    createShare.mockClear()
+    const w = mountWithPrime({})
+    await w.find(`[aria-label="${t('share.noteSection')}"]`).trigger('click')
+    w.findComponent({ name: 'LocaleMarkdownEditor' }).vm.$emit('update:modelValue', { en: 'Read me first' })
+    await flushPromises()
+    await mustAccept(w).setValue(true)
+    await w.findAll('button').find((b) => b.text() === t('share.create'))!.trigger('click')
+    await flushPromises()
+    expect(createShare.mock.calls[0][7]).toEqual({ texts: { en: 'Read me first' }, mustAccept: true })
   })
 })

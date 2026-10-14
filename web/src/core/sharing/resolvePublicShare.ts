@@ -16,6 +16,7 @@ import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import type { LocaleMap } from '../../shared/ui/localeMap'
+import { decodeShareNote, hasLocaleText, noteDigest, type ShareNote } from './shareNote'
 import type { NodeKind } from '../node/kind'
 import type { ShareRole, PublicShare, ShareTerms } from '../../api/generated/sharing'
 
@@ -25,14 +26,20 @@ export const SHARE_MEMORY_NAME = { purpose: 'share-memory-name' } as const
 export const SHARE_NOTE = { purpose: 'share-note' } as const
 const textDecoder = new TextDecoder()
 
-/** Open a per-locale note map sealed under `K_share`; `{}` when it can't be opened or isn't a JSON object. */
-export function openNoteMap(kShare: Uint8Array, sealed: string): LocaleMap {
+/** A note opened with `K_share`: the note, and the digest of its plaintext that keys a device's acceptance of it. */
+export type OpenedShareNote = { note: ShareNote; digest: string }
+
+/** Open a curator note sealed under `K_share` (either plaintext shape, `./shareNote.ts`). A seal that does not open and
+ *  a plaintext of neither shape are the same answer, `null`: no text, and no gate. */
+export function openShareNote(kShare: Uint8Array, sealed: string): OpenedShareNote | null {
+  let plaintext: Uint8Array
   try {
-    const parsed = JSON.parse(textDecoder.decode(v1.open(SHARE_NOTE, kShare, fromB64std(sealed))))
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as LocaleMap) : {}
+    plaintext = v1.open(SHARE_NOTE, kShare, fromB64std(sealed))
   } catch {
-    return {}
+    return null
   }
+  const note = decodeShareNote(textDecoder.decode(plaintext))
+  return note ? { note, digest: noteDigest(plaintext) } : null
 }
 
 /** Pick the best per-locale text for a viewer's locale (exact → base language → en → first present). '' if empty. */
@@ -80,6 +87,10 @@ export type PublicShareHead = {
   name: string
   /** The optional curator note per locale (`pickLocaleText` picks the viewer's). */
   noteByLocale: LocaleMap
+  /** Present only when the note asks to be accepted before the share opens (its switch, sealed inside the note): the
+   *  digest of the opened plaintext, which keys this device's memory of the acceptance (`./shareNote.ts`). Absent for a
+   *  note without the switch, an older client's note, and a note that does not open. */
+  noteAcceptance?: { digest: string }
   role: ShareRole
   /** The kind of the share's root node (`PublicShare.rootKind`); null when the server names none — a root in the
    *  trash, which serves nothing (the shell then shows its unavailable state). */
@@ -112,8 +123,14 @@ function headOf(shareId: string, kShare: Uint8Array, share: PublicShare): Public
     throw new ShareUnavailableError('bad_fragment_key') // the id was valid but the fragment key doesn't match
   }
   // cr-0116: the optional per-locale curator note, opened with the same fragment key (a bad/absent one leaves `{}`).
-  const noteByLocale = share.sealedNote ? openNoteMap(kShare, share.sealedNote) : {}
-  return { shareId, share, kShare, scopeId: share.scopeId, name, noteByLocale, role: share.role, rootKind: share.rootKind ?? null }
+  const opened = share.sealedNote ? openShareNote(kShare, share.sealedNote) : null
+  const noteByLocale = opened?.note.texts ?? {}
+  // A note asks to be accepted only with text to accept: a switch on an empty note gates nothing.
+  const noteAcceptance = opened?.note.mustAccept && hasLocaleText(opened.note.texts) ? { digest: opened.digest } : undefined
+  return {
+    shareId, share, kShare, scopeId: share.scopeId, name, noteByLocale, ...(noteAcceptance ? { noteAcceptance } : {}),
+    role: share.role, rootKind: share.rootKind ?? null,
+  }
 }
 
 /**

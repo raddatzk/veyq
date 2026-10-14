@@ -8,9 +8,9 @@ vi.mock('../../api/client', () => ({ sharesApi: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
-import { mintShare, recoverShareKey, remintShare, resealShareNames, type ReissuableShare } from './manageShares'
+import { mintShare, readShareNote, recoverShareKey, remintShare, resealShareNames, updateShare, NO_NOTE, type ReissuableShare } from './manageShares'
 import { SHARE_KEY } from './shareTree'
-import { SHARE_MEMORY_NAME } from './resolvePublicShare'
+import { SHARE_MEMORY_NAME, SHARE_NOTE } from './resolvePublicShare'
 import { sharesApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
 import { ShareRole, type ShareSummary, type SharingApi } from '../../api/generated/sharing'
@@ -46,9 +46,58 @@ describe('mintShare', () => {
 
     await expect(mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'x', ShareRole.WriteOnly))
       .rejects.toThrow('share_write_only_mint_mismatch')
-    await expect(mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'x', ShareRole.Read, null, {}, '', '', drop))
+    await expect(mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'x', ShareRole.Read, null, NO_NOTE, '', '', drop))
       .rejects.toThrow('share_write_only_mint_mismatch')
     expect(create).not.toHaveBeenCalled()
+  })
+})
+
+describe("the note's acceptance switch (uc.sharing.share-note)", () => {
+  const minted = async (note: Parameters<typeof mintShare>[7]) => {
+    const create = vi.fn<SharingApi['createShare']>(async ({ createShareRequest }) => ({ shareId: createShareRequest.shareId }))
+    fakeApi(sharesApi, { createShare: create })
+    const m = await mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Taxes', ShareRole.Read, null, note)
+    const req = create.mock.calls[0][0].createShareRequest
+    return { ...m, req, address: { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: m.shareId } }
+  }
+  const plaintextOf = (kShare: Uint8Array, sealed: string) => new TextDecoder().decode(v1.open(SHARE_NOTE, kShare, fromB64std(sealed)))
+
+  it('is sealed inside the note and read back on edit; the request carries nothing else of it', async () => {
+    const note = { texts: { en: 'Read me' }, mustAccept: true }
+    const { kShare, req, address } = await minted(note)
+
+    expect(plaintextOf(kShare, req.sealedNote!)).toBe(JSON.stringify({ texts: { en: 'Read me' }, mustAccept: true }))
+    expect(readShareNote(EPOCHS, address, req, req.sealedNote!)).toEqual(note)
+    expect(JSON.stringify(req)).not.toMatch(/mustAccept|Read me/)
+  })
+
+  it("off, the note is sealed as today's flat map; with no text nothing is sealed, switch or not", async () => {
+    const off = await minted({ texts: { en: 'Hello' }, mustAccept: false })
+    expect(plaintextOf(off.kShare, off.req.sealedNote!)).toBe(JSON.stringify({ en: 'Hello' }))
+    expect(readShareNote(EPOCHS, off.address, off.req, off.req.sealedNote!)).toEqual({ texts: { en: 'Hello' }, mustAccept: false })
+
+    const empty = await minted({ texts: { en: ' ' }, mustAccept: true })
+    expect(empty.req.sealedNote).toBeUndefined()
+  })
+
+  it('an edit re-seals the switch with the text; a renew carries it', async () => {
+    const { req, address } = await minted({ texts: { en: 'v1' }, mustAccept: false })
+    const update = vi.fn<SharingApi['updateShare']>().mockResolvedValue(undefined)
+    fakeApi(sharesApi, { updateShare: update })
+    await updateShare(address, EPOCHS, req, { texts: { en: 'v2' }, mustAccept: true }, '', null)
+    const sealedNote = update.mock.calls[0][0].updateShareRequest.sealedNote!
+    expect(readShareNote(EPOCHS, address, req, sealedNote)).toEqual({ texts: { en: 'v2' }, mustAccept: true })
+
+    const reissue = vi.fn<SharingApi['reissueShare']>(async ({ reissueShareRequest }) => ({ shareId: reissueShareRequest.shareId }))
+    fakeApi(sharesApi, { reissueShare: reissue })
+    const old: ReissuableShare = {
+      ...address, role: ShareRole.Read, expiresAt: null, sealedNote, sealedShareName: null, passwordRequired: false, sealedPassword: null,
+      sealedShareKey: req.sealedShareKey!, sealedShareKeyEpoch: req.sealedShareKeyEpoch!,
+    }
+    const renewed = await remintShare(old, v1.randomBytes(32), EPOCHS, 'Taxes')
+    const r = reissue.mock.calls[0][0].reissueShareRequest
+    const renewedAt = { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: renewed.shareId }
+    expect(readShareNote(EPOCHS, renewedAt, r, r.sealedNote!)).toEqual({ texts: { en: 'v2' }, mustAccept: true })
   })
 })
 
@@ -62,7 +111,7 @@ describe('remintShare', () => {
       sealedNote: null, sealedShareName: null, passwordRequired: false, sealedPassword: null,
       sealedShareKey: null, sealedShareKeyEpoch: null,
     }
-    const settings = { note: {}, name: '', password: '', expiresAt: null }
+    const settings = { note: NO_NOTE, name: '', password: '', expiresAt: null }
 
     const minted = await remintShare(old, nodeKey, EPOCHS, 'Taxes', settings)
 

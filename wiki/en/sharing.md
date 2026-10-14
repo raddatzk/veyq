@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/files/use-cases/uc.files.share-folder-files.md, docs/features/files/use-cases/uc.files.share-file.md, docs/features/files/use-cases/uc.files.drop-box.md, docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md, docs/features/sharing/use-cases/uc.sharing.share-password.md; pair: de/teilen.md -->
+<!-- speaks-for: docs/features/files/use-cases/uc.files.share-folder-files.md, docs/features/files/use-cases/uc.files.share-file.md, docs/features/files/use-cases/uc.files.drop-box.md, docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md, docs/features/sharing/use-cases/uc.sharing.share-password.md, docs/features/sharing/use-cases/uc.sharing.share-note.md; pair: de/teilen.md -->
 # Sharing with people who have no account
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md) and [Files](files.md). You can hand
@@ -35,6 +35,20 @@ Two honest details:
   and there is **no version history** — the old content is gone. Guests cannot **delete** files.
 - Someone who hands things in through a drop box sees what they just added only in that browser tab. It's for
   *handing things in*, not for managing a gallery. You see everything.
+
+## A note with your link
+
+You can add a short **note** to a link — a greeting, or what people should know before they look. Whoever opens the
+link sees it, and you can change it later without making a new link.
+
+If the note matters, tick **Must be accepted before opening**. Then the note comes first: people read it and press
+**Accept and continue** before anything of what you shared is shown. If you change the note later, they are asked
+again. Their acceptance is remembered **only on their own device** — it is never sent to the server, so nobody,
+not even the person running it, gets a list of who accepted. That also means it is a request, not a lock: someone
+determined could get past it, and doing so is simply not accepting.
+
+The note is locked like everything else: only people with the link can read it, and the server cannot even tell
+whether a link asks for acceptance.
 
 ## A drop box for files
 

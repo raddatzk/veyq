@@ -343,7 +343,8 @@ here; the server is blind.
   2026-10-09, inbox #401). A guest's function goes into the member's component as a door of the application's data
   source and a right of its capability function; a member-only function must not leak into share mode (no door on the
   guest's source, false in the guest's column, and the guest-mode mount test of that view records it). The guest-only
-  exceptions are exactly the ones with no member equivalent: the shell's gates (password, terms), core's one naming
+  exceptions are exactly the ones with no member equivalent: the shell's gates (password, terms, a note that asks to be accepted — decided on each full resolve, never by a
+  live poll, so it cannot yank a page mid-visit), core's one naming
   component with "Not you?" (`GuestNaming`, the shell's dialog behind `access.requestGuest`), the curator-note banner, the
   role badge and the breadcrumb up to the link's root (`ShareTreePage`), and the two `WRITE_ONLY` drop pages
   (`*ShareBody.vue`, claimed — `scripts/validate_web_share_bodies_are_drop_pages.py`). Every other separate guest body

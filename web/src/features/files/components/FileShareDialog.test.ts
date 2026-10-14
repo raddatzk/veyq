@@ -10,7 +10,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 vi.mock('../../../core/sharing/shareLink', () => ({ buildShareLink: vi.fn(), recoverShareLink: vi.fn() }))
 vi.mock('../../../core/sharing/manageShares', () => ({
   mintShare: vi.fn(), remintShare: vi.fn(), listSharesFor: vi.fn(), revokeShare: vi.fn(), reactivateShare: vi.fn(),
-  deleteShare: vi.fn(), isReissueRequired: vi.fn(), isShareDeleted: vi.fn(), readShareName: vi.fn(), readShareNoteMap: vi.fn(),
+  deleteShare: vi.fn(), isReissueRequired: vi.fn(), isShareDeleted: vi.fn(), readShareName: vi.fn(), readShareNote: vi.fn(),
   hasLocaleText: vi.fn(),
 }))
 
@@ -67,7 +67,7 @@ beforeEach(() => {
   vi.mocked(buildShareLink).mockImplementation((id) => `https://x/s/${id}#k=abc`)
   vi.mocked(recoverShareLink).mockImplementation((a) => `https://x/s/${a.shareId}#k=rec`)
   vi.mocked(manage.readShareName).mockReturnValue('')
-  vi.mocked(manage.readShareNoteMap).mockReturnValue({})
+  vi.mocked(manage.readShareNote).mockReturnValue({ texts: {}, mustAccept: false })
   vi.mocked(manage.hasLocaleText).mockReturnValue(false)
 })
 

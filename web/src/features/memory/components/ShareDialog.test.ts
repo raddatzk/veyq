@@ -13,7 +13,7 @@ vi.mock('../share', () => ({
   reactivateShare: vi.fn(),
   deleteShare: vi.fn(),
   readShareName: vi.fn(),
-  readShareNoteMap: vi.fn(),
+  readShareNote: vi.fn(),
   hasLocaleText: vi.fn(),
 }))
 
@@ -28,7 +28,7 @@ const listSharesFor = vi.mocked(shareModule.listSharesFor)
 const deleteShare = vi.mocked(shareModule.deleteShare)
 vi.mocked(recoverShareLink).mockReturnValue('https://x/s/1#k=abc')
 vi.mocked(shareModule.readShareName).mockReturnValue('A share')
-vi.mocked(shareModule.readShareNoteMap).mockReturnValue({})
+vi.mocked(shareModule.readShareNote).mockReturnValue({ texts: {}, mustAccept: false })
 vi.mocked(shareModule.hasLocaleText).mockReturnValue(false)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cd'

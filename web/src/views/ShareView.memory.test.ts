@@ -305,3 +305,117 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     w.unmount()
   })
 })
+
+// uc.sharing.share-note: a note whose curator ticked "must be accepted before opening" is a gate of the shell — after the
+// password and the tenant's terms, before anything of the share, for every role — and an accepted one is remembered on
+// this device only, for this share and this text. The head carries the switch only as `noteAcceptance` (the digest of
+// the opened plaintext, `resolvePublicShare.test.ts`); here the page's half.
+describe('a note that asks to be accepted before the share opens', () => {
+  const NOTE = { en: 'Please **read** me first' }
+  const asks = (h: PublicShareHead, digest = 'digest-v1'): PublicShareHead => ({ ...h, noteByLocale: NOTE, noteAcceptance: { digest } })
+  const gate = (w: Page) => w.find('[data-testid="share-note-gate"]')
+  /** A reload: the link opened again in a fresh page. The router is the suite's, and after an unmount it sits on `/`,
+   *  so a remount without pushing the link again reads an EMPTY share id — and "asks again" for the wrong reason. */
+  async function reload(h: PublicShareHead) {
+    await router.push(`/s/${SHARE}${HASH}`)
+    return mountPage(h)
+  }
+  async function accept(w: Page) {
+    click(gate(w).find('button').element)
+    await flushPromises()
+  }
+  /** Nothing of the share is drawn or fetched: no detail, no tree, no drop page, no media read. */
+  function expectNothingOfTheShare(w: Page) {
+    expect(w.find('.memory-detail').exists(), "the member's detail").toBe(false)
+    expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)
+    expect(w.text(), 'the drop page').not.toContain(t('share.uploaderIntro'))
+    expect(publicShareMediaApi().listShareMedia, 'no media read').not.toHaveBeenCalled()
+  }
+
+  for (const role of [ShareRole.Read, ShareRole.ReadWrite, ShareRole.WriteOnly]) {
+    it(`${role}: the note and Accept come first; accepted, the share opens and the note is not repeated as its banner`, async () => {
+      const w = await mountPage(asks(head(role)))
+      expect(gate(w).exists(), 'the gate').toBe(true)
+      expect(gate(w).find('.markdown-body').html(), 'the rendered note').toContain('<strong>read</strong>')
+      expect(gate(w).text()).toContain(t('share.noteGateAccept'))
+      expectNothingOfTheShare(w)
+
+      await accept(w)
+      expect(gate(w).exists()).toBe(false)
+      if (role === ShareRole.WriteOnly) expect(w.text()).toContain(t('share.uploaderIntro'))
+      else await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
+      expect(w.text(), 'no banner of an accepted note').not.toContain('read me first')
+      expect(authenticatedCalls).toEqual([])
+      expect(touched).toEqual([])
+      w.unmount()
+    })
+  }
+
+  it('comes after the tenant terms', async () => {
+    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: 't-1', termsVersion: 1, terms: { en: 'Be nice.' } })
+    const w = await mountPage(asks(head(ShareRole.Read)))
+    expect(w.text()).toContain(t('share.termsTitle'))
+    expect(gate(w).exists(), 'not before the terms').toBe(false)
+    click(w.findAll('button').find((b) => b.text() === t('share.termsAccept'))!.element)
+    await flushPromises()
+    expect(gate(w).exists(), 'then the note').toBe(true)
+    expectNothingOfTheShare(w)
+    await accept(w)
+    await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
+    w.unmount()
+  })
+
+  it('is remembered on this device for this share and this text: a reload opens, an edited note asks again', async () => {
+    const first = await mountPage(asks(head(ShareRole.Read)))
+    await accept(first)
+    first.unmount()
+
+    const reloaded = await reload(asks(head(ShareRole.Read)))
+    expect(gate(reloaded).exists(), 'accepted on this device').toBe(false)
+    await vi.waitFor(() => expect(tiles(reloaded)).toEqual(['m-1']))
+    reloaded.unmount()
+
+    const edited = await reload(asks(head(ShareRole.Read), 'digest-v2'))
+    expect(gate(edited).exists(), 'an edited note asks again').toBe(true)
+    edited.unmount()
+    // what the device keeps: the share id and the digest, never the note's text
+    const kept = Object.keys(localStorage).filter((k) => k.startsWith('veyq:share-note-accepted:'))
+    expect(kept).toEqual([`veyq:share-note-accepted:${SHARE}:digest-v1`])
+    expect(JSON.stringify({ ...localStorage })).not.toContain('read me')
+  })
+
+  it('a device whose storage refuses lets the visitor through once, and asks again on the next load', async () => {
+    const store = localStorage
+    const refusing = new Proxy(store, {
+      get(target, p) {
+        if (p === 'getItem' || p === 'setItem') {
+          return (key: string, ...rest: string[]) => {
+            if (key.startsWith('veyq:share-note-accepted:')) throw new Error('SecurityError')
+            return p === 'getItem' ? target.getItem(key) : target.setItem(key, rest[0])
+          }
+        }
+        const v = Reflect.get(target, p)
+        return typeof v === 'function' ? v.bind(target) : v
+      },
+    })
+    vi.stubGlobal('localStorage', refusing)
+
+    const first = await mountPage(asks(head(ShareRole.Read)))
+    await accept(first)
+    expect(gate(first).exists()).toBe(false)
+    await vi.waitFor(() => expect(tiles(first)).toEqual(['m-1']))
+    first.unmount()
+
+    const reloaded = await reload(asks(head(ShareRole.Read)))
+    expect(gate(reloaded).exists(), 'nothing could be remembered, so it asks again').toBe(true)
+    reloaded.unmount()
+  })
+
+  it("a note without the switch never gates: it is the page's banner, as before", async () => {
+    const w = await mountPage({ ...head(ShareRole.Read), noteByLocale: NOTE })
+    expect(gate(w).exists()).toBe(false)
+    await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
+    expect(w.find('.markdown-body').html()).toContain('<strong>read</strong>')
+    w.unmount()
+  })
+})

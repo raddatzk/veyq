@@ -96,5 +96,6 @@ kann sie nicht lesen — nur wer den Link von dir bekommt.
 - **Decisions:** [ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md) (the recoverable
   share key + the editable note), [ADR 0029](../../../decisions/0029-public-viewer-share.md) (the share model +
   `K_share`), [ADR 0035](../../../decisions/0035-server-terms-of-service.md) (the reused markdown renderer).
+- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md) (`sealed_share_key` = new opaque
   ciphertext; the members-only `K_share`-derivability note; the § What holds today row on a sibling link).

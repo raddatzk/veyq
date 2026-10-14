@@ -13,8 +13,8 @@
 // Anything else — a root kind nobody can render, or none named — is the explicit unavailable state, never a blank page.
 // A footer links to veyq's security docs (the client-integrity trust tier, ADR 0026).
 //
-// The order is password -> terms -> content. A share whose keys cannot be opened (a server that served no wrap) is
-// discovered when the page mounts — after the terms gate — and the page answers with `unavailable`.
+// The order is password -> terms -> the note's acceptance -> content. A share whose keys cannot be opened (a server that
+// served no wrap) is discovered when the page mounts — after the gates — and the page answers with `unavailable`.
 //
 // **Who looks (inbox #401 S2).** Behind the gates the shell builds the guest's `access` (`core/sharing/guestAccess.ts`:
 // the link's role and head, the password token) and hands it to the page, which hands it on to every view it mounts.
@@ -33,6 +33,7 @@ import {
   pickShareTerms,
   acceptedTermsVersion,
   recordTermsAccepted,
+  pickLocaleText,
   SharePasswordRequiredError,
   SharePasswordIncorrectError,
   ShareUnavailableError,
@@ -48,6 +49,7 @@ import GuestNaming from '../core/sharing/GuestNaming.vue'
 import { renderMarkdown } from '../shared/markdown'
 import { setPreferenceAudience } from '../shared/state/scopedPreference'
 import { shareTreeFingerprint } from '../core/sharing/shareTreeFingerprint'
+import { isNoteAccepted, recordNoteAccepted } from '../core/sharing/shareNote'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -110,6 +112,42 @@ function acceptTerms() {
   recordTermsAccepted(termsTenantId.value, termsVersion.value)
   acceptedVersion.value = termsVersion.value
 }
+
+// --- the note's acceptance gate (uc.sharing.share-note, ADR 0036 point 2) ----------------------------------------
+// A curator may ask that their note be accepted before the share opens: the switch is sealed inside the note, so the
+// head carries it only after the fragment key opened it (`noteAcceptance`, the digest of the opened plaintext). The gate
+// sits after the password and the terms and before anything of the share is drawn, for every role, and is the shell's
+// like the terms gate: decided on each full resolve (`load`), BEFORE the page flips to `ready`, so no content flashes
+// ahead of it; a live poll never raises it mid-visit (an edited note asks at the next load). Accepting is remembered on
+// this device only (`core/sharing/shareNote.ts`, keyed by share and digest — an edited note asks again), and for this
+// visit in memory, so a device whose storage refuses still lets the visitor through once and asks again on the next
+// load. Nothing reaches the server. Operational, not enforcement: the content opens with the fragment key alone.
+/** The digests this visit accepted (a re-resolve after a guest's write must not ask again where storage refused). */
+const acceptedNotes = new Set<string>()
+/** The digest of the note this visitor has still to accept, or null (no note asks, or it was accepted). */
+const noteGate = ref<string | null>(null)
+const needsNote = computed(() => status.value === 'ready' && noteGate.value !== null)
+const renderedNote = computed(() => {
+  const text = needsNote.value && head.value ? pickLocaleText(head.value.noteByLocale, locale.value) : ''
+  return text ? renderMarkdown(text) : ''
+})
+/** The gate a resolved head asks for: its note's digest unless this device (or this visit) accepted that very text. */
+function noteGateOf(h: PublicShareHead): string | null {
+  const digest = h.noteAcceptance?.digest
+  if (!digest || acceptedNotes.has(digest) || isNoteAccepted(shareId, digest)) return null
+  return digest
+}
+/** Accept the note: remembered on this device (if it can) and for this visit; no server call. */
+function acceptNote() {
+  const digest = noteGate.value
+  if (!digest) return
+  recordNoteAccepted(shareId, digest)
+  acceptedNotes.add(digest)
+  noteGate.value = null
+}
+/** The head the page below the gates is handed: a note that asked to be accepted is not repeated as its banner — the
+ *  visitor got past its gate, so they have read it. */
+const bodyHead = computed(() => (head.value?.noteAcceptance ? { ...head.value, noteByLocale: {} } : head.value))
 
 // The security-doc footer link (ADR 0026 trust-tier honesty) — the published wiki, locale-aware.
 const securityDocUrl = computed(() =>
@@ -228,6 +266,7 @@ async function load() {
     // Decide the terms gate BEFORE flipping to 'ready' so an ungated content flash can't slip in between resolve
     // and the gate (loadTerms fails open, so it never throws here). The gate then sits ahead of the content.
     await loadTerms()
+    noteGate.value = noteGateOf(resolved) // the note's gate too, decided before 'ready' (it follows the terms gate)
     head.value = resolved
     status.value = 'ready'
   } catch (e) {
@@ -307,7 +346,21 @@ onMounted(() => {
       </div>
     </div>
 
-    <template v-else-if="head && body && access">
+    <!-- The note's acceptance gate (uc.sharing.share-note): the curator's note + Accept, AFTER the terms and before
+         anything of the share (every role). No decline: closing the tab is the decline. renderMarkdown escapes first
+         (safe subset), so v-html is safe. -->
+    <div v-else-if="needsNote" class="share-view-state share-name-gate">
+      <div class="veyq-surface share-name-card share-terms-card" data-testid="share-note-gate">
+        <span class="pi pi-envelope share-terms-icon" />
+        <h1>{{ t('share.noteGateTitle') }}</h1>
+        <p class="share-name-intro">{{ t('share.noteGateIntro') }}</p>
+        <!-- eslint-disable-next-line vue/no-v-html -->
+        <div class="share-terms-body markdown-body" v-html="renderedNote"></div>
+        <button class="share-name-submit" type="button" @click="acceptNote">{{ t('share.noteGateAccept') }}</button>
+      </div>
+    </div>
+
+    <template v-else-if="head && bodyHead && body && access">
       <GuestNaming v-if="showsIdentity" class="share-view-identity" :current="session" :forget="() => forgetGuestSession(shareId)" />
       <!-- Core's page of the link's tree (the member's views), or a WRITE_ONLY link's drop page (its naming too). -->
       <component
@@ -315,7 +368,7 @@ onMounted(() => {
         :share-id="shareId"
         :fragment-key="fragmentKey"
         :pw-token="pwToken"
-        :head="head"
+        :head="bodyHead"
         :reload="load"
         :access="access"
         @unavailable="status = 'unavailable'"

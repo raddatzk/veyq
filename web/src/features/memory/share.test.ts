@@ -17,7 +17,7 @@ vi.mock('../spaces/scopes', async (importOriginal) => ({
   openScopeById: vi.fn(),
 }))
 
-import { createShare, reissueShare, isShareDeleted, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, readSharePassword, shareChunkProvider, openSharedMemory } from './share'
+import { createShare, reissueShare, isShareDeleted, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNote, NO_NOTE, readShareName, readSharePassword, shareChunkProvider, openSharedMemory } from './share'
 import { pickLocaleText, derivePasswordToken, resolvePublicShare, ShareUnavailableError, SharePasswordRequiredError } from '../../core/sharing/resolvePublicShare'
 import { openGuestTreeParts } from '../../core/sharing/guestTree'
 // The link builders live in `shareLink.ts` (the UI edge, the only part that needs `window`) — see its header.
@@ -501,7 +501,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     mockCurator(create)
     const kMem = v1.randomBytes(32)
 
-    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom 2026', undefined, null, { de: 'Viel Spaß!', en: 'Enjoy our trip!' })
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom 2026', undefined, null, { texts: { de: 'Viel Spaß!', en: 'Enjoy our trip!' }, mustAccept: false })
     const req = posted(create)
     // all ciphertexts are opaque base64; neither locale's plaintext appears in the request
     expect(req.sealedNote).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
@@ -525,23 +525,23 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     const update = vi.fn<SharingApi['updateShare']>().mockResolvedValue(undefined)
     fakeApi(sharesApi, { createShare: create, updateShare: update })
     const kMem = v1.randomBytes(32)
-    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { en: 'v1 note' }, 'For friends')
+    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { texts: { en: 'v1 note' }, mustAccept: false }, 'For friends')
     const req = posted(create)
     const share = addressOf(req)
 
-    await updateShare(share, EPOCHS, req, { en: 'v2 note' }, 'For Grandma', null)
+    await updateShare(share, EPOCHS, req, { texts: { en: 'v2 note' }, mustAccept: false }, 'For Grandma', null)
     const patch = update.mock.calls[0][0]
     expect(patch.shareId).toBe(req.shareId)
     // both ciphertexts round-trip to the new values via the recovered K_share
-    expect(readShareNoteMap(EPOCHS, share, req, patch.updateShareRequest.sealedNote!)).toEqual({ en: 'v2 note' })
+    expect(readShareNote(EPOCHS, share, req, patch.updateShareRequest.sealedNote!)).toEqual({ texts: { en: 'v2 note' }, mustAccept: false })
     expect(readShareName(EPOCHS, share, req, patch.updateShareRequest.sealedShareName!)).toBe('For Grandma')
     // the recovery copy is bound to its share: listed on another share's row it recovers nothing (ADR 0072)
     const elsewhere = { ...share, shareId: ADDR.shareId }
     expect(readShareName(EPOCHS, elsewhere, req, patch.updateShareRequest.sealedShareName!)).toBe('')
-    await expect(updateShare(elsewhere, EPOCHS, req, { en: 'x' }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
+    await expect(updateShare(elsewhere, EPOCHS, req, { texts: { en: 'x' }, mustAccept: false }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
     // …and to its epoch: relabelled as another epoch it opens under neither key (the right key, the wrong label)
     const relabelled = { ...req, sealedShareKeyEpoch: 1 }
-    await expect(updateShare(share, EPOCHS, relabelled, { en: 'x' }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
+    await expect(updateShare(share, EPOCHS, relabelled, { texts: { en: 'x' }, mustAccept: false }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
   })
 
   it('clears note + name with blank edits (PATCH nulls)', async () => {
@@ -549,10 +549,10 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     const update = vi.fn<SharingApi['updateShare']>().mockResolvedValue(undefined)
     fakeApi(sharesApi, { createShare: create, updateShare: update })
     const kMem = v1.randomBytes(32)
-    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { en: 'note' }, 'name')
+    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { texts: { en: 'note' }, mustAccept: false }, 'name')
     const req = posted(create)
 
-    await updateShare(addressOf(req), EPOCHS, req, { en: '  ' }, '   ', null)
+    await updateShare(addressOf(req), EPOCHS, req, { texts: { en: '  ' }, mustAccept: false }, '   ', null)
     expect(update.mock.calls[0][0].updateShareRequest.sealedNote).toBeNull()
     expect(update.mock.calls[0][0].updateShareRequest.sealedShareName).toBeNull()
   })
@@ -561,17 +561,17 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     const create = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-n5' })
     mockCurator(create)
     const kMem = v1.randomBytes(32)
-    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, {}, 'For Grandma')
+    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, NO_NOTE, 'For Grandma')
     const req = posted(create)
     expect(req.sealedShareName).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
     expect(JSON.stringify(req)).not.toContain('For Grandma')
     expect(readShareName(EPOCHS, addressOf(req), req, req.sealedShareName!)).toBe('For Grandma')
   })
 
-  it('readShareNoteMap / readShareName return empty when there is no ciphertext or recoverable key', () => {
+  it('readShareNote / readShareName return empty when there is no ciphertext or recoverable key', () => {
     const copy = { sealedShareKey: 'x', sealedShareKeyEpoch: 0 }
-    expect(readShareNoteMap(EPOCHS, ADDR, NO_COPY, 'x')).toEqual({})
-    expect(readShareNoteMap(EPOCHS, ADDR, copy, null)).toEqual({})
+    expect(readShareNote(EPOCHS, ADDR, NO_COPY, 'x')).toEqual(NO_NOTE)
+    expect(readShareNote(EPOCHS, ADDR, copy, null)).toEqual(NO_NOTE)
     expect(readShareName(EPOCHS, ADDR, NO_COPY, 'x')).toBe('')
     expect(readShareName(EPOCHS, ADDR, copy, null)).toBe('')
   })
@@ -580,7 +580,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     const create = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-n4' })
     mockCurator(create)
     const kMem = v1.randomBytes(32)
-    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, {})
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, NO_NOTE)
     const req = posted(create)
 
     // recovering K_share via K_SC(epoch) reconstructs exactly the minted link — so any old link is re-copyable
@@ -600,7 +600,7 @@ describe('password protection (cr-0118)', () => {
   it('createShare with a password sends the gate fields; the verifier = SHA-256(Argon2id(pw, salt))', async () => {
     const create = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-p1' })
     mockCurator(create)
-    await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom', undefined, null, {}, '', 'hunter2')
+    await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom', undefined, null, NO_NOTE, '', 'hunter2')
     const req = posted(create)
     expect(req.passwordRequired).toBe(true)
     expect(req.pwSalt).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
@@ -633,7 +633,7 @@ describe('password protection (cr-0118)', () => {
   it('resolveShare throws SharePasswordRequiredError on a locked shell, then unlocks with the token', async () => {
     const create = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-p2' })
     mockCurator(create)
-    const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom', undefined, null, {}, '', 'hunter2')
+    const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom', undefined, null, NO_NOTE, '', 'hunter2')
     const { wrap, sealedName } = posted(create)
     const resolveMock = vi.fn<SharingApi['resolveShare']>()
       .mockResolvedValueOnce({ passwordRequired: true, pwSalt: 'c2FsdA==', role: 'READ', nodes: [] })
@@ -663,7 +663,7 @@ describe('a link opens nothing of a sibling share (W1)', () => {
     mockCurator(create)
     const kMem = v1.randomBytes(32)
     // B — the sibling with a password, a private label and a note; A — the viewer link the attacker holds.
-    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { en: 'note for B' }, 'For Grandma', 'correct horse battery')
+    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { texts: { en: 'note for B' }, mustAccept: false }, 'For Grandma', 'correct horse battery')
     const b = posted(create)
     const a = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', ShareRole.Read)
     const aReq = posted(create, 1)
@@ -689,7 +689,7 @@ describe('reissueShare (ADR 0075, W1)', () => {
     const create = echoCreate()
     const reissue = vi.fn<SharingApi['reissueShare']>(async ({ reissueShareRequest }) => ({ shareId: reissueShareRequest.shareId }))
     fakeApi(sharesApi, { createShare: create, reissueShare: reissue })
-    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', role, null, { en: 'note for B' }, 'For Grandma', password)
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', role, null, { texts: { en: 'note for B' }, mustAccept: false }, 'For Grandma', password)
     const c = posted(create, create.mock.calls.length - 1)
     const old: ReissuableShare = {
       ...addressOf(c), role, expiresAt: null, sealedShareKey: c.sealedShareKey, sealedShareKeyEpoch: c.sealedShareKeyEpoch,

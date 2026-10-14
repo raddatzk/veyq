@@ -15,7 +15,7 @@ import { withRefresh } from '../../app/sessionRefresh'
 import type { EpochKeys } from '../spaces/epochs'
 import { createContentNode, openContentKey, sealName, slugTokenFor, wrapContentKey, type NodeParent } from '../../core/node/tree'
 import { FOLDER_KIND } from '../../core/node/kind'
-import { mintShare, type MintedShare } from '../../core/sharing/manageShares'
+import { mintShare, NO_NOTE, type MintedShare } from '../../core/sharing/manageShares'
 import { dropKeysForShare, mintIdentityKey, openDropPublicKey } from '../../core/sharing/dropKey'
 import { forgetGuestSession, identityNameContext, loadGuestSession, saveGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
@@ -49,7 +49,7 @@ async function currentSealedDropKey(scopeId: string, nodeId: string): Promise<st
 export function mintDropBoxLink(
   scopeId: string, nodeId: string, nodeKey: Uint8Array, epochs: EpochKeys, nodeName: string, name = '', password = '',
 ): Promise<MintedShare> {
-  return mintShare(scopeId, nodeId, nodeKey, epochs, nodeName, ShareRole.WriteOnly, null, {}, name, password, {
+  return mintShare(scopeId, nodeId, nodeKey, epochs, nodeName, ShareRole.WriteOnly, null, NO_NOTE, name, password, {
     dropFields: async (kShare) => dropKeysForShare(scopeId, nodeId, nodeKey, kShare, await currentSealedDropKey(scopeId, nodeId)),
     retryOnce: (e) => isCodedError(e, HttpStatus.conflict, 'drop_key_exists'),
   })

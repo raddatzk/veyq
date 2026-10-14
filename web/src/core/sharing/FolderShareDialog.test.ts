@@ -17,7 +17,7 @@ vi.mock('./manageShares', () => ({
   isReissueRequired: vi.fn(),
   isShareDeleted: vi.fn(),
   readShareName: vi.fn(),
-  readShareNoteMap: vi.fn(),
+  readShareNote: vi.fn(),
   hasLocaleText: vi.fn(),
 }))
 
@@ -78,7 +78,7 @@ beforeEach(() => {
   vi.mocked(buildShareLink).mockImplementation((id) => `https://x/s/${id}#k=abc`)
   vi.mocked(recoverShareLink).mockImplementation((a) => `https://x/s/${a.shareId}#k=rec`)
   vi.mocked(manage.readShareName).mockReturnValue('')
-  vi.mocked(manage.readShareNoteMap).mockReturnValue({})
+  vi.mocked(manage.readShareNote).mockReturnValue({ texts: {}, mustAccept: false })
   vi.mocked(manage.hasLocaleText).mockReturnValue(false)
 })
 

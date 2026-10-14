@@ -14,6 +14,11 @@ title: Share note — a curator attaches an editable message to a share
 # only — never on the viewer resolve), and the dialog is redesigned (list-only + a separate create dialog, the
 # uploader as its own capability-gated action, copy-only links). The anonymous acceptance gate + password
 # protection are later CRs (cr-0117 / cr-0118).
+# cr-share-note-acceptance-gate adds the note's acceptance switch (ADR 0036 point 2), web only: the switch rides
+# inside the sealed note, so the wire and the backend are unchanged and there is no backend behaviour to cover. The
+# acceptance is client-only localStorage keyed by share id + the digest of the opened plaintext (the server records
+# nothing about the accountless visitor). Its wire half (a minted note with the switch resolves with the gate, and
+# `mustAccept` is no field on the raw wire) also runs in src/features/memory/folderShare.e2e.test.ts.
 acceptanceCriteria:
   - id: curator-sets-note-at-creation
     text: When creating a share, the curator may attach an optional note; the client seals it under K_share (AAD share-note) and stores it alongside sealed_share_key (K_share sealed under K_SC at the scope's current epoch, with that epoch). A share with no note stores nothing and shows no banner.
@@ -40,3 +45,39 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ShareKeyRecoveryEpochSliceTest.aCreateAtAnEpochOtherThanTheScopesCurrentIs409StaleEpochAndWritesNothing, ShareKeyRecoveryEpochSliceTest.aKeyWithoutItsEpochAndAnEpochWithoutItsKeyAreEach400, ShareKeyRecoveryEpochSliceTest.aCreateAtTheCurrentEpochSucceedsAndTheManageListServesThatEpoch] }
       web: { unit: [src/features/memory/share.test.ts] }
+  - id: note-acceptance-switch-sealed-inside-the-note
+    text: >
+      With a note, the curator may tick "must be accepted before opening" — a checkbox under the note editor, off by
+      default, enabled only while the note has text, read back on edit from the opened note and carried by a renew.
+      It is sealed INSIDE the note under K_share — the plaintext is {"texts": {locale: markdown}, "mustAccept": true}
+      — and a note with the switch off is written as the flat {locale: markdown} map, exactly as before, so the
+      operator cannot tell which links ask. A note with no text seals nothing, switch or not.
+    coverage:
+      web:
+        unit: [src/core/sharing/manageShares.test.ts, src/core/sharing/shareNote.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
+  - id: note-acceptance-gate-on-the-share-page
+    text: >
+      A note that asks to be accepted is a gate of the share page after the password and the tenant's terms and
+      before anything of the share is drawn or fetched, for READ, READ_WRITE and WRITE_ONLY alike: the rendered note
+      (safe markdown) and Accept, no decline. Once accepted the share opens and the note is not repeated as its
+      banner. The gate page calls no authenticated client.
+    coverage:
+      web:
+        unit: [src/views/ShareView.memory.test.ts]
+  - id: note-acceptance-remembered-on-the-device-only
+    text: >
+      Accepting is remembered on the visitor's device only (localStorage), keyed by the share id and a digest of the
+      opened note plaintext — never the note's text, never an account — so a reload opens the share and an edited
+      note asks again. Where storage is unavailable or throws, the gate asks on every load; it never skips the gate
+      because nothing could be remembered. Nothing is sent to the server.
+    coverage:
+      web:
+        unit: [src/core/sharing/shareNote.test.ts, src/views/ShareView.memory.test.ts]
+  - id: old-or-malformed-note-never-traps
+    text: >
+      A note written by an older client (the flat map) never gates. A plaintext of any other shape — an unknown
+      shape, a non-boolean mustAccept, a text that is not a string, an unknown key — opens as no note at all (no
+      text, no gate), exactly like a seal that does not open: never a gate the visitor cannot pass.
+    coverage:
+      web:
+        unit: [src/core/sharing/resolvePublicShare.test.ts, src/core/sharing/shareNote.test.ts]

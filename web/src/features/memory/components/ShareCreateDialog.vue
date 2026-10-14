@@ -15,7 +15,9 @@ import SelectButton from 'primevue/selectbutton'
 import ToggleSwitch from 'primevue/toggleswitch'
 import DatePicker from 'primevue/datepicker'
 import LocaleMarkdownEditor from '../../../shared/ui/LocaleMarkdownEditor.vue'
-import { createShare, updateShare, reissueShare, isShareDeleted, readShareNoteMap, readShareName, readSharePassword, hasLocaleText, type LocaleMap, type ManagedShare } from '../share'
+import { createShare, updateShare, reissueShare, isShareDeleted, readShareNote, readShareName, readSharePassword, hasLocaleText, type LocaleMap, type ManagedShare } from '../share'
+import { NO_NOTE, type ShareNote } from '../../../core/sharing/shareNote'
+import ShareNoteAcceptField from '../../../core/sharing/ShareNoteAcceptField.vue'
 import { buildShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { EpochKeys } from '../../spaces/epochs'
@@ -66,6 +68,8 @@ const headerLabel = computed(() =>
 const name = ref('')
 const role = ref<ShareRole>(props.uploader ? ShareRole.WriteOnly : ShareRole.Read)
 const note = ref<LocaleMap>({})
+/** The note's acceptance switch, sealed inside the note (uc.sharing.share-note); off by default. */
+const noteMustAccept = ref(false)
 // cr-0118: an optional password. On edit it is pre-filled from the recovered reveal copy; comparing against
 // `currentPassword` on save decides untouched / change / remove. `revealPw` toggles the field's visibility.
 const password = ref('')
@@ -98,7 +102,9 @@ onMounted(() => {
   const s = props.editShare ?? props.reissueFrom
   if (s && (s.sealedShareKey || isReissue.value)) {
     name.value = readShareName(props.epochs, addressOf(s), s, s.sealedShareName)
-    note.value = readShareNoteMap(props.epochs, addressOf(s), s, s.sealedNote)
+    const opened = readShareNote(props.epochs, addressOf(s), s, s.sealedNote)
+    note.value = { ...opened.texts }
+    noteMustAccept.value = opened.mustAccept
     role.value = s.role
     currentPassword.value = readSharePassword(props.epochs, addressOf(s), s, s.sealedPassword)
     password.value = currentPassword.value
@@ -129,7 +135,7 @@ const roleNeedsReissue = computed(
 const { run: runSubmit, pending: busy } = useAsyncAction(
   async () => {
     // A disabled toggle means "no note / no password" — send an empty note / clear the password.
-    const effectiveNote = noteEnabled.value ? note.value : {}
+    const effectiveNote: ShareNote = noteEnabled.value ? { texts: note.value, mustAccept: noteMustAccept.value } : NO_NOTE
     // Expiry: the picker gives a local date; the link should work THROUGH that day, so expire at its end. Off /
     // no date → null (no expiry). Full replace on edit — always sent so an unrelated edit keeps it.
     const expiry = expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null
@@ -279,6 +285,7 @@ function endOfDay(d: Date): Date {
         <div v-if="noteEnabled" class="share-group-body">
           <LocaleMarkdownEditor v-model="note" :placeholder="t('share.notePlaceholder')" />
           <p class="share-hint">{{ t('share.noteHint') }}</p>
+          <ShareNoteAcceptField v-model="noteMustAccept" :note="note" :disabled="busy" />
         </div>
       </div>
 
