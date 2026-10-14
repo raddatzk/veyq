@@ -43,16 +43,19 @@ the node, its files under their own names (`Trip 2025/Lisbon/IMG_1.jpg`), and th
 **`.veyq/manifest.json`**, so the same archive is an ordinary download and an importable export. Names are made safe for
 every file system before they become paths: no `/` or `\`, no `.`/`..`, no control characters, none of Windows'
 reserved names (`CON`, `NUL`, …) or trailing dots and spaces, a bounded length, and a numeric suffix where two names of
-one directory fold to the same name ignoring case. The manifest maps every node to its path; the path is a label, never
-an identity. The manifest — `format: "veyq-subtree"`,
-`version`, `exportedAt`, `appVersion`, the options chosen, and the tree (each node: archive-local `id`, `kind`, `name`,
-`cover`, `metadata`, the kind's `content` reference, `children`) — is specified by
+one directory fold to the same name ignoring case (`Name (2)`, before the extension). A node that holds others (a folder,
+a Memory, a chapter) is a directory; a node of a kind that IS one file (a Files file) is that file. The manifest maps every
+node to its path; the path is a label, never an identity. The manifest — `format: "veyq-subtree"`, `version`,
+`exportedAt`, `appVersion`, the `applications` it carries (decision 9), and the tree (each node: archive-local `id`,
+`kind`, `name`, `path`, `cover`, `metadata`, the kind's `content` reference, `children`) — is specified by
 [`contracts/export/veyq-subtree.schema.json`](../../contracts/export/veyq-subtree.schema.json); a worked example is
 below. The writer and reader are **hand-written and streaming**, with **no new dependency**: the writer emits local
 headers with the data-descriptor flag and a central directory at the end; the reader finds the central directory from the
 end and reads entries with `Blob.slice`, so an import never holds the file in memory. Payload paths come from the manifest
-only and are refused if they leave `data/` (no `..`, no absolute path); each payload's `sha256` is verified while
-streaming. ZIP64 is required from the start (a subtree exceeds 4 GiB).
+only, lie at or under their node's path, and are refused when a segment is not a safe name or the path reaches into
+`.veyq/`; each payload's `sha256` is verified while streaming. ZIP64 is required from the start (a subtree exceeds 4 GiB).
+This layout is format `version` 2; version 1 kept the manifest at the root and every payload under `data/<node id>/`, and
+a reader reads both while a writer writes only 2.
 
 **4. It is a download, and is called one** (owner decision 2026-10-14). There is no "Export": a node offers
 **Download** — a file as itself, a folder, a Memory, a chapter or a drop box as this ZIP. No plaintext warning and no
@@ -98,53 +101,65 @@ archive cannot be a compression bomb.
 
 ## Worked example
 
-*(The example below shows the `data/<node-id>/` layout of the first form; decision 3's human-readable layout replaces it,
-and `contracts/export/veyq-subtree.schema.json` is updated with it.)*
+A folder "Trip 2025" holding a file and a Memory "Lisbon" with a chapter "Alfama: day 1" and two photos. The ZIP holds:
 
-A folder "Trip 2025" holding a file and a Memory "Lisbon" with a chapter and two photos (the location of the second photo
-was opted out, so it has none):
+```
+.veyq/manifest.json
+Trip 2025/
+Trip 2025/itinerary.pdf
+Trip 2025/Lisbon/
+Trip 2025/Lisbon/IMG_0412.jpg
+Trip 2025/Lisbon/IMG_0413.jpg
+Trip 2025/Lisbon/Alfama_ day 1/
+```
+
+The chapter's directory is its name made safe (`:` is not allowed on every file system); the manifest keeps the name as veyq
+shows it:
 
 ```json
 {
   "format": "veyq-subtree",
-  "version": 1,
-  "exportedAt": "2026-10-13T09:30:00Z",
-  "appVersion": "0.9.0",
-  "options": { "includeLocation": true },
+  "version": 2,
+  "exportedAt": "2026-10-14T09:30:00Z",
+  "appVersion": "0.9",
+  "applications": [
+    { "id": "files", "contentSchema": 1 },
+    { "id": "memories", "contentSchema": 1 }
+  ],
   "root": {
-    "id": "n1", "kind": "FOLDER", "name": "Trip 2025", "cover": null, "metadata": {},
+    "id": "n1", "kind": "FOLDER", "name": "Trip 2025", "path": "Trip 2025",
     "children": [
       {
-        "id": "n2", "kind": "FILE", "name": "itinerary.pdf", "metadata": {},
+        "id": "n2", "kind": "FILE", "name": "itinerary.pdf", "path": "Trip 2025/itinerary.pdf",
         "content": {
           "type": "files.file", "schema": 1,
-          "file": { "path": "data/n2/itinerary.pdf", "size": 48213, "mediaType": "application/pdf",
+          "file": { "path": "Trip 2025/itinerary.pdf", "size": 48213, "mediaType": "application/pdf",
                     "sha256": "9f2c0c4e1b7a5d3e8a6f4b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e" }
         }
       },
       {
-        "id": "n3", "kind": "MEMORY", "name": "Lisbon",
+        "id": "n3", "kind": "MEMORY", "name": "Lisbon", "path": "Trip 2025/Lisbon",
         "content": {
           "type": "memories.memory", "schema": 1,
           "date": { "mode": "range", "from": "2025-09-14", "to": "2025-09-17" },
           "participants": ["Anna", "Kevin"],
           "cover": { "mediaIndex": 0, "crop": { "x": 0, "y": 0, "width": 1, "height": 1 } },
           "media": [
-            { "file": { "path": "data/n3/IMG_0412.jpg", "size": 3811920, "mediaType": "image/jpeg",
+            { "file": { "path": "Trip 2025/Lisbon/IMG_0412.jpg", "size": 3811920, "mediaType": "image/jpeg",
                         "sha256": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809" },
               "name": "IMG_0412.jpg", "capturedAt": "2025-09-14T16:02:11Z",
               "location": { "lat": 38.7139, "lon": -9.1394, "place": "Lisbon" },
               "exif": { "Make": "Fujifilm", "Model": "X-T5", "FNumber": 4 },
               "contributor": "Anna" },
-            { "file": { "path": "data/n3/IMG_0413.jpg", "size": 4120377, "mediaType": "image/jpeg",
+            { "file": { "path": "Trip 2025/Lisbon/IMG_0413.jpg", "size": 4120377, "mediaType": "image/jpeg",
                         "sha256": "f0e1d2c3b4a5968778695a4b3c2d1e0ff0e1d2c3b4a5968778695a4b3c2d1e0f" },
               "name": "IMG_0413.jpg", "capturedAt": "2025-09-14T16:05:40Z",
               "contributor": "Kevin" }
           ]
         },
         "children": [
-          { "id": "n4", "kind": "CHAPTER", "name": "Alfama",
-            "content": { "type": "memories.chapter", "schema": 1, "media": [] }, "children": [] }
+          { "id": "n4", "kind": "CHAPTER", "name": "Alfama: day 1", "path": "Trip 2025/Lisbon/Alfama_ day 1",
+            "content": { "type": "memories.chapter", "schema": 1, "media": [] } }
         ]
       }
     ]
@@ -161,11 +176,9 @@ Three things the build found that the decision above did not know, each decided 
    `content` (`memories.memory`), and **a chapter's media sit in the chapter's own content** (`memories.chapter`), not in the
    Memory's list: the chapter is a node of its own with its own key, and the Memory's hook returns before the chapter
    exists. The per-medium `chapter` field is gone from the schema.
-2. **`includeLocation: false` cannot clean the original's bytes.** The export keeps the pristine original, and a photo's own
-   GPS tags are inside it. The option drops what the *manifest* adds (coordinates and place name per medium, the Memory's
-   place, the EXIF copy's locating fields) but not the file's own EXIF; the export dialog must say so, and a member who wants
-   no coordinates anywhere strips them before sharing the file. Re-encoding the originals to remove them is deliberately not
-   done: it would change the bytes the export promises to keep.
+2. **The archive keeps each original's bytes, its own GPS tags included.** Re-encoding the originals to remove them is
+   deliberately not done: it would change the bytes the download promises to keep. This is why decision 4 offers no location
+   option: one could drop only the manifest's copies, never the file's own EXIF.
 3. **An import restores a coordinate only if the file still carries it.** The upload reads GPS and camera data from the
    file's bytes, and there is no way to seal a coordinate the file lacks. What an import restores beyond the file: the Memory's
    date and place, the capture time (via the payload's modified time, or as a correction when the member had corrected it),
@@ -179,9 +192,11 @@ Three things the build found that the decision above did not know, each decided 
   Nothing in the backend or `contracts/api/` — the client uses the existing node, blob and quota endpoints. The schema
   under `contracts/export/` is the one new contract artefact.
 - **The format is a public promise.** `version` bumps only for a change an old reader would misread; kinds version their
-  own `content.schema`. A reader that tolerates additions keeps old files importable.
-- **The plaintext file is outside the E2EE guarantee by design**; the operator never sees it, but the member's disk,
-  mail or cloud does. The warning is the only mitigation; an encrypted variant is deliberately not built.
+  own `content.schema`, named per application in `applications`. A reader that tolerates additions keeps old files
+  importable, and a reader keeps every older `version` it ever wrote: the tree layout (2) replaced `data/<id>/` (1), and
+  archives of version 1 still import.
+- **The plaintext file is outside the E2EE guarantee by design**, exactly as a downloaded file is; the operator never sees
+  it, but the member's disk, mail or cloud does. An encrypted variant is deliberately not built.
 - **Rollback is best-effort**, not a transaction: a crash mid-import leaves a partial subtree in the trash-able state it
   reached, and the report says how far it got. Accepted because the alternative needs server-side atomicity across nodes
   and blobs that does not exist.
@@ -192,4 +207,4 @@ Three things the build found that the decision above did not know, each decided 
   as a zip package — a dependency for no gain on already-compressed media; carrying ids and keys — turns an import into
   a restore that must fight the live tree.
 - **Open (not decided here):** the exact ZIP64/data-descriptor details and the `exportContent`/`importContent` signatures
-  belong to the CR; the manifest's `name` for payload files on a name clash inside one node (a suffix is expected).
+  belong to the build.

@@ -1,7 +1,7 @@
 ---
 id: cr-download-is-the-export
 title: Download replaces Export - a readable ZIP with a hidden manifest, recognised on upload, unknown applications reported
-status: planned
+status: in-progress
 satisfies: [uc.platform.export-import]
 adrs: ["0082", "0079"]
 invariants: [operator-blind E2EE everywhere]
@@ -74,7 +74,7 @@ file**. The import's dry-run reports nodes this build cannot read (an unknown ap
 
 ## Phases
 
-- [ ] 1 contracts: the schema's new version.
+- [x] 1 contracts: the schema's new version.
   - The schema gains: node path, `applications`, and `.veyq/manifest.json` as the location. `options.includeLocation`
     is removed, and payload locations become paths.
   - The old version stays describable, because the reader needs it.
