@@ -193,8 +193,28 @@ Accepting a changed key clears the accepting account's own grant-delivery declin
 Decision 2's *"the wrap then proceeds"* holds ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 7). One
 thing remains:
 
-- **Decision 4, strict mode** — and with it the proactive verification ceremony's UI, deliberately unbuilt
-  ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)
-  is refined and its pin-store primitives ship; the entry point does not). It needs redesigning before it is wired: an
-  *account-global* toggle cannot protect shared-scope content, because any co-member may key an unverified
-  identity.
+- **Decision 4, strict mode.** It needs redesigning before it is wired: an *account-global* toggle cannot protect
+  shared-scope content, because any co-member may key an unverified identity. The proactive verification ceremony no
+  longer waits for it (Addendum below).
+
+## Addendum (2026-10-14): the verification ceremony ships without strict mode
+
+Owner decisions 2026-10-14 ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)
+main flow; decided, not yet built). The ceremony was held back on the argument that a "verified" mark nothing acts on
+is advisory noise. It is not: TOFU (Decision 2) only detects a key that changes **after** the first pin, so an operator
+that serves a substituted key **at first contact** goes unnoticed - the gap the security model lists as open - and an
+out-of-band compare is the one thing in the tree that closes it until key transparency exists. So:
+
+1. **Show and compare.** Every member sees **their own** safety number (Decision 3's per-identity 6x5 digits, the
+   pinned `fingerprint` vector - no pairwise number, no new crypto) and a QR of it on their own profile page; on another
+   member's profile they see that member's number, can **scan** the other's QR or compare the digits read aloud, and
+   **mark verified**. The QR carries a veyq marker plus the fingerprint hash, never the identity bundle (the
+   `jsqr` exception in `web/CLAUDE.md` is bounded by what our own payloads carry).
+2. **Verifying pins.** A member with no pin yet is pinned **at** verification, with the key the human compare just
+   confirmed; nothing else pins more than today (no pin on a directory read or a profile view).
+3. **A verified contact's key change is louder.** The changed-key review names it as a **verified** contact's key;
+   accepting re-pins as `pinned`, and `verified` returns only through a new compare (Decision 3) - shown, never silent.
+4. **Where it shows:** the person's profile and the tenant's and groups' member lists (a "verified" mark beside the
+   existing "key changed").
+
+Strict mode (Decision 4) stays open as above.

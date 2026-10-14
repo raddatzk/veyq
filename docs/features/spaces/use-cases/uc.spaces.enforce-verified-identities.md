@@ -10,8 +10,9 @@
   first sight, notice and review a changed key — is [uc.spaces.verify-identity](uc.spaces.verify-identity.md),
   which this use-case builds on rather than repeats.
 - **Preconditions:** an **authenticated, unlocked** caller; the target appears in a scope **member directory** the
-  caller can read; the caller already holds a **pin** for the target
-  ([uc.spaces.verify-identity](uc.spaces.verify-identity.md) A1 — first sight already ran).
+  caller can read. A pin is not required: verifying an unpinned member pins them with the confirmed key (owner
+  decision 2026-10-14, ADR 0028 Addendum).
+- **Status:** the ceremony (main flow, A1, A3) is **decided 2026-10-14, not yet built**; strict mode (A2) stays open.
 - **Postconditions (success):** the target's pin is **verified** (elevated from `pinned`); if strict mode was
   turned on, the grant-delivery worker treats every **unverified** member of the scope as *awaiting access*
   rather than delivering to them. Operator-blind throughout: the pin store is sealed under the Master Key, and
@@ -19,11 +20,14 @@
 
 ## Main flow
 
-1. **Open "Verify".** The caller opens a member → the app shows **their own** view of that member's **safety
-   number** (6×5 digits) + a **scan** affordance.
+0. **Show mine.** On their own profile page every member sees **their own** safety number and a QR of it (a veyq
+   marker plus the fingerprint hash, never the key).
+1. **Open "Verify".** The caller opens a member's **profile** → the app shows its view of that member's **safety
+   number** (6×5 digits), the verification state, and **scan** / **compare the digits**.
 2. **Compare out-of-band.** The ergonomic path is **QR**: the other person's device shows a QR of *their* identity
    fingerprint; the caller **scans it**, and the app **compares the scanned value against the pinned key**.
-3. **Feedback.** **Matches** → offer "mark verified" → `state = verified`. **Differs** → warn *this is a different
+3. **Feedback.** **Matches** → offer "mark verified" → `state = verified` (pinning first if there was no pin); the
+   profile and the tenant's and groups' member lists show "verified" from then on. **Differs** → warn *this is a different
    key* — do **not** trust; likely a substituted key or an un-accepted rotation
    ([uc.spaces.verify-identity](uc.spaces.verify-identity.md) handles the review from here).
 
@@ -58,9 +62,11 @@ sequenceDiagram
   toggle cannot protect shared-scope content, since any co-member can key an unverified identity regardless of
   the caller's own setting — the mechanism has to be **scope-wide**, and that redesign is undecided. This use-case
   states the intent; the shape is open.
-- **E1 — the target has no pin yet:** verification needs a pin to compare against
-  ([uc.spaces.verify-identity](uc.spaces.verify-identity.md) A1 pins on first sight); until then there is nothing
-  to elevate.
+- **A3 — a verified contact's key changes:** the changed-key review ([uc.spaces.verify-identity](uc.spaces.verify-identity.md))
+  says that a **verified** contact's key changed; accepting re-pins as `pinned`, and "verified" returns only after a
+  new compare (ADR 0028 Decision 3 and Addendum).
+- **E1 — the target has no pin yet:** verifying pins them with the key the compare confirmed (ADR 0028 Addendum);
+  until a compare happens, nothing pins them.
 
 ## Quality notes
 
@@ -69,9 +75,9 @@ sequenceDiagram
   server, [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)).
 - **Manual, so it protects those who do it.** In the default flow verification is **optional** trust elevation;
   strict mode is for those who want it enforced. Stated, not oversold.
-- **Advisory noise until strict mode exists.** A per-member "verified" badge with nothing reading it is why the
-  ceremony UI was deliberately not shipped alongside the pin-store primitives that back it (cr-0099) — it only
-  pays for itself once something *acts* on the distinction.
+- **Worth it without strict mode.** The ceremony was first held back as advisory noise until strict mode acts on
+  it; the owner reversed that on 2026-10-14 (ADR 0028 Addendum): TOFU cannot see a key substituted at first contact,
+  and a compare out-of-band can.
 - **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Holds against an active
   operator only on a client it does not serve, once the pin store cannot be rolled back
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator on
