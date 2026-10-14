@@ -178,8 +178,8 @@ here; the server is blind.
   leading visual (the kind's icon, or an application component with props - Memories' cover), the name, ONE meta line (the kind's noun in `meta`, then the application's
   `details`: "File - 157 B - Modified ...", "Memory - date range - place", "Drop box - 3 people"; each detail an `{ id, text }` the application
   LEAVES OUT when the node has no such fact - never a placeholder - and core joins, wraps and styles, `levelRowDetails`; the profile
-  page's Memories list draws the same `LevelRowItem` with the same builder and offers the level's rows/tiles switch, `ViewModeToggle`
-  over `useViewMode`, [docs/apps](../docs/apps/README.md#how-an-application-shows-facts-in-a-levels-rows-and-tiles)), the PRIMARY click (what a plain click does: it opens
+  page's Memories list draws the same `LevelRowItem` with the same builder and offers the level's rows/tiles/map switch, `ViewModeToggle`
+  over `useViewMode` - the map is the level's `SpaceMap`, the views `memoryViews.ts`, inbox #417 -, [docs/apps](../docs/apps/README.md#how-an-application-shows-facts-in-a-levels-rows-and-tiles)), the PRIMARY click (what a plain click does: it opens
   the node) and the actions. An action is the header's model (`NodeHeaderAction`: id, label = aria-label, icon, onClick,
   severity, shown, disabled, pressed) plus `first` and `loading`: AT MOST TWO actions marked `first` are real buttons on the
   row (Files: download, every kind: core's heart), every other shown action sits in ONE "more" menu (a PrimeVue `Menu`, entries
