@@ -156,7 +156,9 @@ reads).
   without a link (`guestUploaderName`, inbox #431: inside a drop box the identity folder of that identity, else the
   sealed name `listFiles` serves beside a `share:` key - `uploaderName` `{sealedName, shareId}`, core's identity row read
   once per listing, a deleted link's too - opened by core's `openIdentityName` under the file's key or the nearest
-  ancestor's) or "a guest" where that does not open; a directory that cannot be read names nobody. The key comes from the member
+  ancestor's), marked as a guest's - "Ben (guest)", core's `guestDisplayName` (inbox #433: a guest names itself freely
+  and could pick a member's name; the identity folder itself keeps its plain name, listed in the drop box as a guest's
+  folder) -, or "a guest" where that does not open; a directory that cannot be read names nobody. The key comes from the member
   source's `listWithUploaders` door (the same one `listFiles` request as `listBlobs`); the guest's source has no such door
   and asks no directory (`FileDetail.guest.test.ts`). No row shows it.
 - **The download** (`download.ts`) saves under core's `downloadName` (the node name, else the blob's sealed name, plus

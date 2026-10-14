@@ -130,6 +130,8 @@ Decided by the coordinator on the owner's behalf, 2026-10-14 (inbox #415, the fo
    its share beside the `share:` key - a ciphertext the server already stores, to a member it already serves, so no new
    plaintext and no new relation -, opened under the file's key or the nearest ancestor key the member holds (core's
    reader, which Memories' buckets use too); a drop-box guest is named by its identity folder; a guest of a deleted link
-   stays named; "a guest" only where the name does not open. A share guest's listing carries **no** uploader field (inbox #190):
+   stays named; "a guest" only where the name does not open. Wherever a member reads a guest's name - here, Memories'
+   lightbox and buckets - it is marked as a guest's, "Ben (guest)" (inbox #433, core's `guestDisplayName`), because a
+   guest names itself freely and could otherwise pass for a member. A share guest's listing carries **no** uploader field (inbox #190):
    the contract keeps it off the share's file listing, which has an item schema of its own (`ShareFileListItem`) so the
    member's `FileListItem.uploaderKey` cannot reach it by accident. No row meta in this slice.

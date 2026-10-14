@@ -89,7 +89,7 @@ acceptanceCriteria:
           - src/features/memory/participantIndex.test.ts
           - src/features/memory/spaceMap.test.ts
   - id: uploader-name-in-lightbox
-    text: The photo detail shows the uploader's name by the display rule, independent of the participant list; a `user:` owner links to the profile for members only, a `share:` owner and a former member are plain names, and a share guest's session resolves no uploader (it shows nothing, as before).
+    text: The photo detail shows the uploader's name by the display rule, independent of the participant list; a `user:` owner links to the profile for members only, a `share:` owner and a former member are plain names - a `share:` owner's own name marked as a guest's, "Ben (guest)" (inbox #433), the member of the same name unmarked -, and a share guest's session resolves no uploader (it shows nothing, as before).
     coverage:
       web:
         unit:

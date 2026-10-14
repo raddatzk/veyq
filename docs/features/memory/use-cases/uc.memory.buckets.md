@@ -31,7 +31,9 @@ UI** (create/rename/move/delete folders) is built next on the same table + endpo
 
 Uploaders span **members** (`owner_key = user:{userId}`, display name = the per-tenant **username**) and anonymous
 **public contributors** (`owner_key = share:{shareIdentityId}`, display name = the **`K_mem`-sealed** name from
-[ADR 0030](../../../decisions/0030-contributor-public-share.md)). One's own bucket reads **"Deine Beiträge"**.
+[ADR 0030](../../../decisions/0030-contributor-public-share.md)), shown marked as a guest's — "Ben (guest)" (inbox #433):
+a contributor names itself freely and could pick a member's name; a sub-bucket's name is a member's and stays as it is.
+One's own bucket reads **"Deine Beiträge"**.
 
 ## Main flow
 

@@ -18,7 +18,9 @@
    "Uploaded by" a member's name and picture, linking to their profile; one who left the space as a greyed "former
    member" without a link; a link's guest by the name it gave itself, without a link (inbox #431) - a drop-box guest by
    its identity folder's name, any other guest by its sealed name opened under the file's key or the nearest ancestor key
-   the member holds; a guest of a deleted link stays named; "a guest" only where the name does not open. A replace makes
+   the member holds; a guest of a deleted link stays named; the name is marked as a guest's, "Uploaded by Ben (guest)",
+   so a guest that named itself like a member is still told apart (inbox #433); "a guest" only where the name does not
+   open. A replace makes
    the replacer the uploader. A share guest sees none: the link's listing carries no uploader and no name.
    Seen in a real browser on 2026-10-14: the owner's upload read "Uploaded by" with the owner's avatar and a profile
    link; a `READ_WRITE` folder link's guest named itself "Ben Gast" and uploaded a file - the guest's own file page showed
