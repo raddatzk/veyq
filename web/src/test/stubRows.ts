@@ -1,10 +1,12 @@
 // A STUB row factory for core's level view tests (inbox #407): core's view knows no application, and neither do its tests.
 // Kinds are made-up tokens (`ALPHA`, `BETA`, …); the stub draws each node as a row titled by its name, records what the level
 // handed it (called once per level view; the context, reactive; the host) and gives every row ONE menu action `rename` that
-// asks the host to rename it. Optional: a presentation for a mode (the stand-in for Memories' map) and a level action.
+// asks the host to rename it. Optional: a presentation for a mode (the stand-in for Memories' map), a level action, and each
+// row's part in a selection of the level (`selection`, inbox #421; omitted: the row carries none - it allows nothing).
 import { computed, defineComponent, h, ref, type Ref } from 'vue'
 import type { LevelActionHandler } from '../core/node/levelActions'
-import type { LevelNotice, LevelRowsContext, LevelRowsFactory, LevelRowsHost, LevelRowSource } from '../core/node/levelRow'
+import type { LevelNotice, LevelRowSelection, LevelRowsContext, LevelRowsFactory, LevelRowsHost, LevelRowSource } from '../core/node/levelRow'
+import type { TreeNode } from '../core/node/tree'
 import type { ViewMode } from '../shared/state/useViewMode'
 
 export interface StubRows {
@@ -20,7 +22,12 @@ export interface StubRows {
 
 export function stubRows(
   name: string,
-  opts: { presentationFor?: ViewMode; action?: { id: string; handler: LevelActionHandler }; shownActions?: boolean } = {},
+  opts: {
+    presentationFor?: ViewMode
+    action?: { id: string; handler: LevelActionHandler }
+    shownActions?: boolean
+    selection?: (node: TreeNode) => LevelRowSelection
+  } = {},
 ): StubRows {
   let calls = 0
   let lastCtx: Readonly<Ref<LevelRowsContext>> | null = null
@@ -43,6 +50,7 @@ export function stubRows(
         meta: `${name} meta`,
         primary: { label: `open ${node.name}`, onClick: () => host.open(node) },
         actions: [{ id: 'rename', label: `rename ${node.name}`, icon: 'pi pi-pencil', shown: opts.shownActions ?? true, onClick: () => host.rename(node) }],
+        ...(opts.selection ? { selection: opts.selection(node) } : {}),
       }),
       notices: computed(() => notices.value),
       presentation: (mode) => (opts.presentationFor === mode ? { component: Presentation, props: { nodes: ctx.value.nodes } } : null),

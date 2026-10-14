@@ -151,6 +151,13 @@ describe('Memories rows', () => {
     expect(await actionIdsOf(h.w, 'Solo')).toEqual([])
   })
 
+  it('a Memory\'s part in a selection of the level (inbox #421): a member moves and deletes it (core\'s door); read-only neither', () => {
+    const solo = node('m1', MEMORY_KIND, 'Solo')
+    expect(mountSection({ nodes: [solo] }).source().row(solo)!.selection).toEqual({ move: true, delete: true })
+    harness?.w.unmount()
+    expect(mountSection({ nodes: [solo], pending: true }).source().row(solo)!.selection).toEqual({ move: false, delete: false })
+  })
+
   it('a member\'s row offers rename and move in its menu, and no heart of its own: one heart, core\'s (inbox #409)', async () => {
     const h = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
     expect(await actionIdsOf(h.w, 'Solo')).toEqual(['rename', 'move'])

@@ -9,6 +9,10 @@ div.veyq-node-host
         span.p-button-icon.p-button-icon-left.pi.pi-trash
         span.p-button-label
           "Trash"
+      button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-select-button [aria-label="Select"] [aria-pressed="false"]
+        span.p-button-icon.p-button-icon-left.pi.pi-check-square
+        span.p-button-label
+          "Select"
       div.view-mode-toggle [role="group"] [aria-label="View"]
         button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
           span.pi.pi-th-large

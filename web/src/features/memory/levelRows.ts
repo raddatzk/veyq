@@ -111,6 +111,9 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
       details: memoryDetails(facts.value.get(node.id) ?? NO_FACTS, t, locale.value),
       primary: { label: node.name, onClick: () => host.open(node) },
       actions,
+      // With a selection of the level (inbox #421): the same matrix for THIS node; its delete is core's `deleteNode`, as the
+      // Memory's own page asks the host for.
+      selection: { move: c.move, delete: c.deleteNode },
     }
   }
 

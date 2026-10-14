@@ -228,6 +228,20 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     expectNoMemberWorld()
   })
 
+  // inbox #421: a selection of a guest's level moves what the row moves and deletes nothing (a guest deletes no node).
+  it('a file\'s part in a selection: a contributor moves it and deletes nothing; a READ guest neither', async () => {
+    for (const [role, move] of [[ShareRole.ReadWrite, true], [ShareRole.Read, false]] as const) {
+      const h = mountSection({ role })
+      await flushPromises()
+      const tree = guestTreeSource(head(role), { hash: HASH })
+      for (const file of childrenOf([...tree.nodes], ROOT).byKind.get(FILE_KIND) ?? []) {
+        expect(h.source().row(file)!.selection, `${role} ${file.name}`).toEqual({ move, delete: false })
+      }
+      h.w.unmount()
+    }
+    expectNoMemberWorld()
+  })
+
   // inbox #358: a contributor moves a file of a folder (core's move dialog, the host's — asked through `move`); a READ
   // guest has no such button (the case above lists every label it has).
   it('a contributor\'s row offers the move, which asks the host for core\'s move dialog', async () => {

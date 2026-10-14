@@ -136,6 +136,13 @@ describe('Memories rows for a share guest', () => {
       expect(metaOf(h, 'Ostsee')).toBe(`${t('memory.kindMemory')} · ${formatClosedRange('2019-07-01', '2019-07-01', 'en')}`)
       // no rename (the heart is core's, and a guest has none: `core/favorites/favoriteActions.test.ts`); a contributor may move a Memory a folder holds
       expect(await actionIdsOf(h.w, 'Rom')).toEqual(role === ShareRole.Read ? [] : ['move'])
+      // a selection of the level (inbox #421) moves what the row moves and deletes nothing: a guest deletes no node
+      const tree = guestTreeSource(head(role), reactive({ hash: `#k=${b64url(K_SHARE)}` }))
+      const memories = tree.children(ROOT).filter((n) => n.kind === MEMORY_KIND)
+      expect(memories).toHaveLength(2)
+      for (const memory of memories) {
+        expect(h.source().row(memory)!.selection, memory.name).toEqual({ move: role === ShareRole.ReadWrite, delete: false })
+      }
       expect(authenticatedCalls).toEqual([])
     })
   }

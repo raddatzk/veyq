@@ -79,6 +79,20 @@ export interface LevelRow {
   /** The row's primary click: what a plain click on the row does (open, or download). `label` is its accessible name. */
   primary: { label: string; onClick: () => void; disabled?: boolean }
   actions: readonly LevelRowAction[]
+  /** What a selection of the level may do with THIS node (inbox #421): its application's capability answer, as its actions
+   *  are. Omitted: nothing - the node can be selected, but no action of the selection reaches it (fail closed). */
+  selection?: LevelRowSelection
+}
+
+/** A node's part in a selection of several (inbox #421, `LevelView`'s Select mode). */
+export interface LevelRowSelection {
+  /** It moves with the selection, through core's move browser and the session's one door (`move.ts` `nodeMover`). */
+  move: boolean
+  /** It is deleted with the selection, into the scope's trash. */
+  delete: boolean
+  /** The kind's own delete write where its single delete has one (Files' source for a file); it re-reads nothing - the
+   *  selection's delete re-reads the tree once, after the last node. Omitted: core's `deleteNode`. */
+  remove?: (nodeId: string) => Promise<void>
 }
 
 /** The level, reactive, as a row source reads it. */

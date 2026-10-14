@@ -443,6 +443,9 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       details: fileDetails(key, node.id, blob),
       primary: { label: t('files.detail.open', { name }), onClick: () => host.open(node) },
       actions,
+      // With a selection of the level (inbox #421): the same answers, and the same door as this row's delete (Files' source),
+      // without its re-read - the selection re-reads the tree once.
+      selection: { move: c.moveFile, delete: c.deleteFile, ...(source.deleteFile ? { remove: (id: string) => source.deleteFile!(id, { reload: false }) } : {}) },
     }
   }
 
@@ -464,6 +467,8 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
           onClick: () => void remove(node, 'files.dropBox.deleteConfirm', 'files.dropBox.delete'),
         },
       ],
+      // With a selection of the level (inbox #421): the row's answers; deleted through core's `deleteNode`, as the drop box's own page does.
+      selection: { move: c.moveNode, delete: c.deleteNode && !!source.deleteFile },
     }
   }
 

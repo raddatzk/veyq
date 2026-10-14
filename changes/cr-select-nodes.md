@@ -1,7 +1,7 @@
 ---
 id: cr-select-nodes
 title: Select several nodes of a level and move or delete them together
-status: planned
+status: in-progress
 satisfies: [uc.memory.browse, uc.memory.move-node, uc.memory.delete-node]
 adrs: ["0079", "0080"]
 invariants: [operator-blind E2EE everywhere]
@@ -71,7 +71,7 @@ happened. Owner decisions 2026-10-14 (inbox #421). Drag and drop is **not** part
 
 ## Phases
 
-- [ ] 1 web, core: the selection model and the Select mode (Decisions 1, 2) on a member's and a guest's level.
+- [x] 1 web, core: the selection model and the Select mode (Decisions 1, 2) on a member's and a guest's level.
   - Tests: All / None / toggle; kept across a tab switch, cleared on navigation and on leaving the mode; the count and
     its hidden part; checkboxes labelled; no Select in map mode; a guest's bar has Move and no Delete; an action
     disabled when no selected node allows it. Bitten.

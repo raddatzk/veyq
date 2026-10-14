@@ -647,6 +647,23 @@ describe('Files rows', () => {
     expect(loadTree).toHaveBeenCalled()
   })
 
+  // inbox #421: what a selection of the level may do with a file - the row's own answers, and the row's delete door
+  // (Files' source) without its re-read: the selection re-reads the tree once, after the last node.
+  it('a file\'s part in a selection: moves and is deleted through Files\' source, which re-reads nothing; read-only: neither', async () => {
+    const h = mountSection({ nodes: [NOTES] })
+    await flushPromises()
+    const part = h.source().row(NOTES)!.selection!
+    expect(part).toMatchObject({ move: true, delete: true })
+    vi.mocked(loadTree).mockClear()
+    await part.remove!(N)
+    expect(deleteNode).toHaveBeenCalledWith(SCOPE, N)
+    expect(loadTree, 'the selection re-reads once, not this door').not.toHaveBeenCalled()
+    harness?.w.unmount()
+    const readOnly = mountSection({ nodes: [NOTES], pending: true })
+    await flushPromises()
+    expect(readOnly.source().row(NOTES)!.selection).toMatchObject({ move: false, delete: false })
+  })
+
   it('a failed delete says so and offers no undo', async () => {
     vi.mocked(deleteNode).mockRejectedValueOnce(new Error('boom'))
     const h = mountSection({ nodes: [NOTES] })
@@ -777,6 +794,17 @@ describe('Drop box rows', () => {
     const h = mountBoxes()
     await flushPromises()
     expect(metaOf(h, 'Inbox')).toBe(`${t('files.dropBox.kind')} · Nobody yet`)
+  })
+
+  it('a drop box\'s part in a selection (inbox #421): moves and is deleted by core\'s door; neither during a pending deletion', async () => {
+    const h = mountBoxes()
+    await flushPromises()
+    const part = h.source().row(BOX)!.selection!
+    expect(part).toEqual({ move: true, delete: true })
+    harness?.w.unmount()
+    const readOnly = mountBoxes({ pending: true })
+    await flushPromises()
+    expect(readOnly.source().row(BOX)!.selection).toEqual({ move: false, delete: false })
   })
 
   it('offers move and delete to a member, and neither during a pending deletion (fail closed)', async () => {

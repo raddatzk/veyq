@@ -9,6 +9,10 @@
 // application's list by `mergeRowActions`.
 //
 // The visual is hidden from assistive technology: an item is named by its title (the primary button's `aria-label`).
+//
+// In the level's Select mode (inbox #421) the item carries a real `<input type="checkbox">` named by the node's title, drawn
+// over the visual's corner as a media tile's (`selected` is then a boolean; omitted: no checkbox). The primary click still
+// opens the node: selecting is the checkbox's alone.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -29,9 +33,12 @@ const props = withDefaults(
     folder?: boolean
     /** A kind this client cannot show: not clickable, says so. */
     unsupported?: boolean
+    /** The level's Select mode is on and this item is (true) or is not (false) selected; omitted: no checkbox. */
+    selected?: boolean
   }>(),
-  { kind: undefined, coreActions: () => [], folder: false, unsupported: false },
+  { kind: undefined, coreActions: () => [], folder: false, unsupported: false, selected: undefined },
 )
+const emit = defineEmits<{ toggleSelect: [] }>()
 const { t } = useI18n()
 
 // The meta line is real text in reading order: the kind, then each detail the application supplied ("Memory · 12 Oct 2026 ·
@@ -55,9 +62,13 @@ const severityOf = (a: LevelRowAction) => (a.severity === 'danger' ? 'danger' : 
 <template>
   <li
     class="veyq-level-item"
-    :class="[`is-${mode}`, { 'has-cover': !!row.leading, 'is-folder': folder, 'is-unsupported': unsupported }]"
+    :class="[`is-${mode}`, { 'has-cover': !!row.leading, 'is-folder': folder, 'is-unsupported': unsupported, 'is-selected': selected === true }]"
     :data-kind="kind"
   >
+    <label v-if="selected !== undefined" class="veyq-level-item-check" :class="{ 'is-on': selected }">
+      <input type="checkbox" :checked="selected" :aria-label="row.title" @change="emit('toggleSelect')" />
+      <span class="pi pi-check" aria-hidden="true" />
+    </label>
     <div v-if="unsupported" class="veyq-level-item-main">
       <span class="veyq-level-item-visual" aria-hidden="true"><span class="veyq-level-item-icon" :class="row.icon" /></span>
       <span class="veyq-level-item-text">

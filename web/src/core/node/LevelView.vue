@@ -51,7 +51,18 @@
 //
 // In a guest's identity folder (a drop box's, inbox #385) a tab with nothing to show is left out instead of saying "none yet" -
 // nobody can add anything there, so an empty tab only says that this kind exists.
-import { computed, onBeforeUnmount, ref } from 'vue'
+//
+// **Select** (inbox #421, owner decisions 2026-10-14): a toolbar button beside "New" and the trash turns on the level's
+// selection mode (`selection.ts`): a labelled checkbox on every row, and a bar with All / None, the count (announced) and the
+// selection's **Move to…** and **Delete**. The selection is the LEVEL's: switching tabs keeps it ("All" adds what the tab on
+// screen shows, "None" takes that away, the count says how many of the selected the tab hides), leaving the mode or the
+// folder clears it, and a node no longer here drops out. What each selected node allows is its application's capability
+// answer (`LevelRow.selection`; a folder's is core's `folderCapabilities`): an action is shown where some node of the level
+// allows it, enabled where some SELECTED node does, and its hint says how many of the selected it cannot reach. Select is
+// offered only where some node here allows an action (a `READ` guest has none) and never in an application's own
+// presentation (Memories' map has no rows). The level writes nothing itself: it hands the movable part to the host
+// (`moveNodes`, core's move dialog) and the deletable part (`deleteNodes`, core's delete question).
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Menu from 'primevue/menu'
@@ -71,7 +82,8 @@ import { compareByCreation, displayNamesOf } from './location'
 import { orderLevel } from './levelList'
 import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './levelTabs'
-import type { CoreRowAction, LevelRow, LevelRowsContext, LevelRowsHost } from './levelRow'
+import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
+import { useSelection, type SelectedForDelete } from './selection'
 import { favoriteHeaderActions, favoriteRowActions } from '../favorites/favoriteActions'
 import { useNodeCover } from './cover/useNodeCover'
 import NodeCoverImage from './cover/components/NodeCoverImage.vue'
@@ -109,6 +121,11 @@ const emit = defineEmits<{
   /** A node to move (inbox #358): the folder on screen (its header) or a row's node (Files' row). The host mounts core's
    *  `MoveNodeDialog` for it. */
   moveNode: [node: TreeNode]
+  /** The movable part of the level's selection (inbox #421): the host mounts core's move dialog for several nodes. */
+  moveNodes: [nodes: TreeNode[]]
+  /** The deletable part of the level's selection (inbox #421), each with its kind's own write where it has one: the host
+   *  asks once and deletes them. */
+  deleteNodes: [nodes: SelectedForDelete[]]
   /** A node to download as a ZIP (ADR 0082): a row's, or the folder on screen. The host mounts core's `ExportSubtreeDialog`. */
   downloadNode: [node: TreeNode]
   /** A veyq download the member picked or dropped for an upload - a ZIP, or the download unpacked into a directory,
@@ -280,7 +297,10 @@ function rawItem(node: TreeNode): Item {
     const label = folderLabels.value.get(node.id) ?? node.name
     return {
       key: node.id, node, kind: node.kind, folder: true, unsupported: false,
-      row: { icon: 'pi pi-folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => emit('openNode', node) }, actions: [] },
+      row: {
+        icon: 'pi pi-folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => emit('openNode', node) }, actions: [],
+        selection: folderSelection(node),
+      },
     }
   }
   const row = sourceOfKind.get(node.kind)?.row(node) ?? null
@@ -296,6 +316,72 @@ function rawItem(node: TreeNode): Item {
     },
   }
 }
+/** A sub-folder's part in a selection: core's matrix for THAT folder (`folderCapabilities`). */
+function folderSelection(node: TreeNode): LevelRowSelection {
+  const c = folderCapabilities(props.access, targetOf(props.tree, node))
+  return { move: c.move, delete: c.deleteNode }
+}
+
+// --- the selection (inbox #421) ------------------------------------------------------------------------------------------
+// Every node at the level, whichever tab is shown: a selected node the tab hides still moves and is deleted with the rest.
+const levelItems = computed(() => new Map([...props.level.folders, ...[...props.level.byKind.values()].flat()].map((n) => [n.id, rawItem(n)])))
+const selection = useSelection()
+const selecting = ref(false)
+const allowsOf = (id: string): LevelRowSelection | undefined => levelItems.value.get(id)?.row.selection
+// Offered where something here allows an action, and only while core draws the rows (no application presentation).
+const anyMove = computed(() => [...levelItems.value.values()].some((i) => i.row.selection?.move === true))
+const anyDelete = computed(() => [...levelItems.value.values()].some((i) => i.row.selection?.delete === true))
+const canSelect = computed(() => (mode.value === 'grid' || mode.value === 'list') && (anyMove.value || anyDelete.value))
+const selectedIds = computed(() => [...selection.ids.value].filter((id) => levelItems.value.has(id)))
+const movable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.move === true))
+const deletable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.delete === true))
+const shownIds = computed(() => items.value.map((i) => i.key))
+const hiddenCount = computed(() => {
+  const shown = new Set(shownIds.value)
+  return selectedIds.value.filter((id) => !shown.has(id)).length
+})
+const countText = computed(() =>
+  hiddenCount.value > 0
+    ? t('node.select.countHidden', { count: selectedIds.value.length, hidden: hiddenCount.value })
+    : t('node.select.count', { count: selectedIds.value.length }),
+)
+const cannotMoveText = computed(() => {
+  const m = selectedIds.value.length
+  const n = m - movable.value.length
+  return n > 0 ? t('node.select.cannotMove', { n, m }) : ''
+})
+const cannotDeleteText = computed(() => {
+  const m = selectedIds.value.length
+  const n = m - deletable.value.length
+  return anyDelete.value && n > 0 ? t('node.select.cannotDelete', { n, m }) : ''
+})
+function toggleSelecting(): void {
+  selecting.value = !selecting.value
+}
+function moveSelected(): void {
+  const nodes = movable.value.map((id) => levelItems.value.get(id)!.node)
+  if (nodes.length) emit('moveNodes', nodes)
+}
+function deleteSelected(): void {
+  const chosen = deletable.value.map((id) => {
+    const item = levelItems.value.get(id)!
+    return { node: item.node, ...(item.row.selection?.remove ? { remove: item.row.selection.remove } : {}) }
+  })
+  if (chosen.length) emit('deleteNodes', chosen)
+}
+// Leaving the mode, another folder, or a presentation without rows clears it; a node that left the level drops out.
+watch(selecting, (on) => {
+  if (!on) selection.clear()
+})
+watch(() => props.folder?.id ?? null, () => {
+  selecting.value = false
+  selection.clear()
+})
+watch(canSelect, (can) => {
+  if (!can) selecting.value = false
+})
+watch(levelItems, (now) => selection.retain(now.keys()))
+
 // Core's own row actions: the favorite heart of inbox #409, gated by `favoriteCapabilities` (member only, fail closed) and
 // merged around the application's, for EVERY kind and the folders, with no change to any application. An unsupported row
 // (a kind nobody draws) gets none.
@@ -409,7 +495,7 @@ async function onDrop(e: DragEvent): Promise<void> {
     <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own. Hidden
          where nothing is written (a pending deletion: a restore is a write; a guest's folder). The view switch governs the
          whole list, so it is the level's too - a guest's as well. -->
-    <div v-if="menuEntries.length || caps.nodeTrash || showViews" class="veyq-level-toolbar">
+    <div v-if="menuEntries.length || caps.nodeTrash || showViews || canSelect" class="veyq-level-toolbar">
       <template v-if="menuEntries.length">
         <Button
           type="button"
@@ -431,6 +517,18 @@ async function onDrop(e: DragEvent): Promise<void> {
         outlined
         size="small"
         @click="emit('openTrash')"
+      />
+      <Button
+        v-if="canSelect"
+        type="button"
+        class="veyq-select-button"
+        :label="t('node.select.action')"
+        icon="pi pi-check-square"
+        severity="secondary"
+        :outlined="!selecting"
+        size="small"
+        :aria-pressed="selecting"
+        @click="toggleSelecting"
       />
       <ViewModeToggle v-if="showViews" :views="views" />
     </div>
@@ -458,6 +556,42 @@ async function onDrop(e: DragEvent): Promise<void> {
 
     <p v-if="emptyText" class="veyq-empty veyq-empty-inline">{{ emptyText }}</p>
 
+    <!-- The selection's bar (inbox #421): All / None, the count (announced), and what the selection may do. -->
+    <div v-if="selecting" class="veyq-level-selection-bar" role="group" :aria-label="t('node.select.bar')">
+      <Button type="button" class="veyq-select-all" :label="t('node.select.all')" severity="secondary" text size="small" @click="selection.all(shownIds)" />
+      <Button type="button" class="veyq-select-none" :label="t('node.select.none')" severity="secondary" text size="small" @click="selection.none(shownIds)" />
+      <span class="veyq-level-selection-count" aria-live="polite">{{ countText }}</span>
+      <span class="veyq-level-selection-actions">
+        <Button
+          v-if="anyMove"
+          type="button"
+          class="veyq-select-move"
+          :label="t('node.move.action')"
+          icon="pi pi-file-export"
+          size="small"
+          outlined
+          :disabled="movable.length === 0"
+          :aria-describedby="cannotMoveText ? 'veyq-select-cannot-move' : undefined"
+          @click="moveSelected"
+        />
+        <Button
+          v-if="anyDelete"
+          type="button"
+          class="veyq-select-delete"
+          :label="t('node.delete')"
+          icon="pi pi-trash"
+          severity="danger"
+          size="small"
+          outlined
+          :disabled="deletable.length === 0"
+          :aria-describedby="cannotDeleteText ? 'veyq-select-cannot-delete' : undefined"
+          @click="deleteSelected"
+        />
+      </span>
+      <p v-if="anyMove && cannotMoveText" id="veyq-select-cannot-move" class="veyq-level-selection-hint">{{ cannotMoveText }}</p>
+      <p v-if="cannotDeleteText" id="veyq-select-cannot-delete" class="veyq-level-selection-hint">{{ cannotDeleteText }}</p>
+    </div>
+
     <ul v-if="!presentations.length && items.length" class="veyq-level-list" :class="{ 'is-list': mode === 'list' }">
       <LevelRowItem
         v-for="item in items"
@@ -468,6 +602,8 @@ async function onDrop(e: DragEvent): Promise<void> {
         :folder="item.folder"
         :unsupported="item.unsupported"
         :core-actions="coreRowActions(item)"
+        :selected="selecting ? selection.has(item.key) : undefined"
+        @toggle-select="selection.toggle(item.key)"
       />
     </ul>
     <!-- The one cover dialog (inbox #411): opened by the cover action of a row or of the folder's header. -->

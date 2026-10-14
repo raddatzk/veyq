@@ -89,9 +89,10 @@ export interface FilesSource {
   refresh(reloadBlobs: () => Promise<void>): void
   /** Upload and replace. Absent: this session uploads nothing. */
   readonly upload?: FilesUpload
-  /** Delete a file — or a guest's folder of a drop box — into the scope's trash, then re-read the tree. Absent: this
-   *  session deletes nothing. */
-  readonly deleteFile?: (nodeId: string) => Promise<void>
+  /** Delete a file — or a guest's folder of a drop box — into the scope's trash, then re-read the tree (`reload: false`:
+   *  not — a selection's delete of several re-reads once, after the last, inbox #421). Absent: this session deletes
+   *  nothing. */
+  readonly deleteFile?: (nodeId: string, options?: { reload?: boolean }) => Promise<void>
   /** Bring back a node this session just deleted (the undo after a delete, inbox #385 (c)): core's trash restore, then
    *  re-read the tree. Absent: no undo (a guest deletes nothing). */
   readonly restore?: (node: TreeNode) => Promise<void>
@@ -174,11 +175,11 @@ export function memberFilesSource(from: {
         return memberTree(scopeId, epochs, folder && key ? { id: folder.id, key } : null)
       },
     },
-    async deleteFile(nodeId) {
+    async deleteFile(nodeId, options) {
       const scopeId = from.scopeId()
       if (!scopeId) return
       await deleteNode(scopeId, nodeId)
-      await loadTree()
+      if (options?.reload !== false) await loadTree()
     },
     async restore(node) {
       const scopeId = from.scopeId()

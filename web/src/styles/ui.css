@@ -919,6 +919,77 @@ div.veyq-level-item-main,
   opacity: 0.85;
 }
 
+/* The level's Select mode (inbox #421): a real checkbox over the visual's corner, the media tile's round check
+   (`.media-tile-check`) in core's own class; a selected item keeps the accent border. Tokens only, so no dark twin. */
+.veyq-level-item.is-selected {
+  border-color: var(--app-accent);
+}
+.veyq-level-item-check {
+  position: absolute;
+  z-index: 1;
+  top: 6px;
+  left: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-backdrop-strong) 55%, transparent);
+  color: var(--app-on-strong);
+  cursor: pointer;
+}
+.veyq-level-item-check.is-on {
+  background: var(--app-accent);
+  color: var(--app-on-fill);
+}
+.veyq-level-item-check:focus-within {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+}
+.veyq-level-item-check input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.veyq-level-item-check .pi {
+  font-size: 0.75rem;
+  opacity: 0;
+}
+.veyq-level-item-check.is-on .pi {
+  opacity: 1;
+}
+
+/* The selection's bar (inbox #421): All, None, the count, and the actions; one wrapping row under the toolbar. */
+.veyq-level-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+}
+.veyq-level-selection-count {
+  color: var(--app-muted);
+  font-size: 0.9rem;
+}
+.veyq-level-selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.veyq-level-selection-hint {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 0.85rem;
+}
+
 .veyq-row-menu-item.is-danger .p-menu-item-label,
 .veyq-row-menu-item.is-danger .p-menu-item-icon {
   color: var(--app-danger);

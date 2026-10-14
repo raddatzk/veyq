@@ -905,6 +905,18 @@ const en = {
     deleteFolderCopy: '“{name}” and everything inside it move to the trash. You can restore them from there until they are removed for good.',
     deleteCopy: '“{name}” moves to the trash. You can restore it from there until it is removed for good.',
     deleteFailed: 'Could not delete it. Please try again.',
+    // The level's Select mode (`core/node/LevelView.vue`, inbox #421): the toolbar button, the bar's All / None, its count
+    // (`{hidden}`: how many of the selected the tab on screen does not show) and what part of it an action cannot reach.
+    select: {
+      action: 'Select',
+      bar: 'Selection',
+      all: 'All',
+      none: 'None',
+      count: '{count} selected',
+      countHidden: '{count} selected, {hidden} of them not shown in this tab',
+      cannotMove: '{n} of {m} cannot be moved.',
+      cannotDelete: '{n} of {m} cannot be deleted.',
+    },
     // Core's move dialog (`core/node/MoveNodeDialog.vue`, inbox #358): pick a destination, then the placement write.
     // Each refusal the server answers is explained by its code (`refused.<code>`, `core/node/move.ts` `moveRefusalOf`).
     move: {
@@ -2431,6 +2443,16 @@ const de: typeof en = {
     deleteFolderCopy: '„{name}“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
     deleteCopy: '„{name}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.',
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
+    select: {
+      action: 'Auswählen',
+      bar: 'Auswahl',
+      all: 'Alle',
+      none: 'Keine',
+      count: '{count} ausgewählt',
+      countHidden: '{count} ausgewählt, davon {hidden} in diesem Tab nicht sichtbar',
+      cannotMove: '{n} von {m} können nicht verschoben werden.',
+      cannotDelete: '{n} von {m} können nicht gelöscht werden.',
+    },
     move: {
       action: 'Verschieben nach …',
       title: '„{name}“ verschieben',

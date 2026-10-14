@@ -178,4 +178,31 @@ describe('LevelRowItem', () => {
       expect(meta(mountItem(r, 'list')).text()).toBe(meta(mountItem(r, 'grid')).text())
     })
   })
+
+  // The level's Select mode (inbox #421): a real checkbox named by the node, beside - never instead of - the primary click.
+  describe('in the Select mode', () => {
+    it('no checkbox outside the mode', () => {
+      expect(mountItem(row()).find('input[type="checkbox"]').exists()).toBe(false)
+    })
+
+    it('a real checkbox named by the node\'s title, checked as told; a change asks the level to toggle it', async () => {
+      const w = mountItem(row(), 'grid', { selected: false })
+      const box = w.find('input[type="checkbox"]')
+      expect(box.attributes('aria-label')).toBe('report.pdf')
+      expect((box.element as HTMLInputElement).checked).toBe(false)
+      await box.setValue(true)
+      expect(w.emitted('toggleSelect')).toHaveLength(1)
+      expect(calls, 'the primary did not run').toEqual([])
+      const on = mountItem(row(), 'list', { selected: true })
+      expect((on.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true)
+      expect(on.classes()).toContain('is-selected')
+    })
+
+    it('the primary click still opens the node and toggles nothing', async () => {
+      const w = mountItem(row(), 'list', { selected: false })
+      await w.find('button.veyq-level-item-main').trigger('click')
+      expect(calls).toEqual(['primary'])
+      expect(w.emitted('toggleSelect')).toBeUndefined()
+    })
+  })
 })
