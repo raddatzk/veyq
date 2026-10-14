@@ -22,6 +22,8 @@ export const MAX_ZOOM = 8
 export const TAP_ZOOM = 2
 /** The factor one `+` / `-` key press zooms by. */
 export const KEY_ZOOM_STEP = 1.5
+/** The pixels one arrow key press pans by while zoomed. */
+export const KEY_PAN_STEP = 80
 /** Two taps closer than this in time (ms) and space (px) are a double-tap. */
 export const DOUBLE_TAP_MS = 300
 export const DOUBLE_TAP_SLOP = 24
@@ -175,9 +177,20 @@ export function usePanZoom(frame: () => PanZoomFrame | null, o: { now?: () => nu
     zoomBy(Math.exp(-px * WHEEL_ZOOM_PER_PX), fromClient(e.clientX, e.clientY))
   }
 
-  /** `+` / `-` zoom about the centre, `0` back to 1x. True when the key was one of them. */
+  /** The arrow keys' pan while zoomed: an arrow looks that way, so the content moves the other. */
+  const ARROW_PAN: Record<string, Point> = {
+    ArrowLeft: { x: KEY_PAN_STEP, y: 0 },
+    ArrowRight: { x: -KEY_PAN_STEP, y: 0 },
+    ArrowUp: { x: 0, y: KEY_PAN_STEP },
+    ArrowDown: { x: 0, y: -KEY_PAN_STEP },
+  }
+
+  /** `+` / `-` zoom about the centre, `0` back to 1x, and while zoomed the arrow keys pan (at 1x they are the host's). True
+   *  when the key was taken. */
   function onKey(key: string): boolean {
-    if (key === '+' || key === '=') zoomBy(KEY_ZOOM_STEP)
+    const pan = zoomed.value ? ARROW_PAN[key] : undefined
+    if (pan) place({ x: x.value + pan.x, y: y.value + pan.y })
+    else if (key === '+' || key === '=') zoomBy(KEY_ZOOM_STEP)
     else if (key === '-') zoomBy(1 / KEY_ZOOM_STEP)
     else if (key === '0') reset()
     else return false

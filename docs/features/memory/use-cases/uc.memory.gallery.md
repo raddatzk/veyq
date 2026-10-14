@@ -28,13 +28,15 @@
    order is exact on device (cr-0066).
 3a. **Zoom and slideshow in the lightbox** (decided 2026-10-14 by the coordinator on the owner's behalf, inbox #90 and
    #91; built the same day). **Zoom** (a photo; a video does not zoom): double-click / double-tap toggles 1x / 2x at the
-   pointer, a pinch with two pointers and ctrl+wheel zoom continuously (1x - 8x), a drag pans within the zoomed photo's
-   edges, and `+` / `-` / `0` are the keyboard path. Once the zoomed photo shows more device pixels than the preview
-   has, the **original** is fetched and decrypted once for that item - only for a sealed media type every browser decodes
+   pointer, a pinch with two pointers and ctrl+wheel zoom continuously (1x - 8x), a drag or the arrow keys pan within the
+   zoomed photo's edges, and `+` / `-` / `0` zoom from the keyboard. Once the zoomed photo shows more device pixels than
+   the preview has, the **original** is fetched and decrypted once for that item - only where the preview was scaled down
+   (its longer edge at the 2048 px tier; a smaller preview already has every pixel the original has), for a sealed
+   media type every browser decodes
    (JPEG, PNG, GIF, WebP, AVIF, BMP; HEIC is left out, only Safari decodes it) and under 50 MB of ciphertext - and
    replaces the preview in place; anything else, or a failure, stays on the preview without a message. Navigating
-   resets the zoom and drops the original; the arrow keys do not navigate while zoomed, and Escape un-zooms before it
-   closes. **Slideshow:** a play / pause control in the lightbox's toolbar advances every 5 s through the grid order, a
+   resets the zoom and drops the original; while zoomed the arrow keys pan instead of navigating, and Escape un-zooms
+   before it closes. **Slideshow:** a play / pause control in the lightbox's toolbar advances every 5 s through the grid order, a
    video showing its poster for one interval (no autoplay), and stops on the last item; any key, pointer or wheel in the
    lightbox (so any zoom or details interaction) pauses it, a hidden tab and a dialog over the lightbox too; the state is
    announced to a screen reader. A slow preview is waited for, never skipped. The next preview is fetched one ahead and

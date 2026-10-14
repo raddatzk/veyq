@@ -1123,14 +1123,17 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
     w.unmount()
   })
 
-  it('paging resets the zoom; the arrows do not page while zoomed; Escape un-zooms first, then closes', async () => {
+  it('paging resets the zoom; the arrows pan instead of paging while zoomed; Escape un-zooms first, then closes', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)
     const w = mountLightbox(memoryKey, items, 0)
     await flushPromises()
+    layOut(w)
     await doubleClick(w)
+    const before = shown(w).attributes('style')
     await key('ArrowRight')
     expect(w.find('.media-lightbox-title small').text(), 'no paging while zoomed').toBe(t('media.itemPosition', { index: 1, count: 2 }))
+    expect(shown(w).attributes('style'), 'the arrow panned').not.toBe(before)
     expect(scaleOf(w)).toBe(2)
     await key('Escape')
     expect(scaleOf(w), 'Escape un-zooms').toBe(1)
@@ -1199,12 +1202,12 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
   it('never otherwise: below the threshold, an undecodable type, over the cap; a failed fetch keeps the preview, silently', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)
-    const zoomTo3x = async (extra: Record<string, unknown>, list = items, fitted = 1000) => {
+    const zoomTo3x = async (extra: Record<string, unknown>, list = items, fitted = 1000, natural = 2048) => {
       const props = { ...recordedOriginal(memoryKey), ...extra }
       const w = mountLightbox(memoryKey, list, 0, null, props)
       await flushPromises()
       const preview = shown(w).attributes('src')
-      layOut(w, fitted)
+      layOut(w, fitted, natural)
       await doubleClick(w)
       await key('+')
       return { w, preview, originalLoader: props.originalLoader as ReturnType<typeof vi.fn> }
@@ -1212,6 +1215,10 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
     // a small preview on screen: 3x of 600 px is 1800 of 2048
     let r = await zoomTo3x({}, items, 600)
     expect(r.originalLoader, 'below the threshold').not.toHaveBeenCalled()
+    r.w.unmount()
+    // a preview drawn at the original's own size (1600 px, under the 2048 px tier): the original has no more pixels
+    r = await zoomTo3x({}, items, 1000, 1600)
+    expect(r.originalLoader, 'preview not scaled down').not.toHaveBeenCalled()
     r.w.unmount()
     // HEIC: only Safari decodes it
     r = await zoomTo3x({ blobMetaResolver: () => ({ v: 1, type: 'image/heic' }) })

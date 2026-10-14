@@ -8,7 +8,7 @@
 // The detail panel (cr-0064) shows the lazily-loaded EXIF tier and lets the user **correct the capture time**
 // (cr-0065, sealed under K_mem).
 // **Zoom** (cr-lightbox-zoom-slideshow, uc.memory.gallery 3a): double-click/tap, pinch, ctrl+wheel and `+`/`-`/`0` on a
-// photo (`shared/ui/usePanZoom.ts`, a drag pans while zoomed); past the preview's resolution the ORIGINAL replaces it in
+// photo (`shared/ui/usePanZoom.ts`, a drag or the arrow keys pan while zoomed); past the preview's resolution the ORIGINAL replaces it in
 // place where `../lightboxZoom.ts` allows - fetched as ciphertext through the source's `originalLoader`, decrypted here, its
 // object URL revoked on navigation / close like the preview's. A video does not zoom.
 // **Slideshow** (same CR): the toolbar's play control advances every 5 s through the items in their grid order
@@ -54,7 +54,7 @@ import type { UploaderLabel } from '../useUploaderNames'
 import { personHash } from '../../../core/node/location'
 import { usePanZoom } from '../../../shared/ui/usePanZoom'
 import { createVisibilityPoller } from '../../../shared/state/visibilityPoller'
-import { exceedsPreview, originalZoomable } from '../lightboxZoom'
+import { exceedsPreview, originalZoomable, previewDownscaled } from '../lightboxZoom'
 
 const props = defineProps<{
   memoryKey: Uint8Array
@@ -296,6 +296,7 @@ async function maybeLoadOriginal() {
   const img = stageImg.value
   if (!target || !img || !zoomable.value || originalAsked === target.mediaId) return
   if (!originalZoomable(mediaType.value, target.original.byteSize)) return
+  if (!previewDownscaled(img.naturalWidth, img.naturalHeight)) return // the original has no more pixels than this
   if (!exceedsPreview(img.clientWidth, zoom.scale.value, window.devicePixelRatio, img.naturalWidth)) return
   originalAsked = target.mediaId
   const natural = { w: img.naturalWidth, h: img.naturalHeight }
@@ -649,11 +650,11 @@ function onKeydown(event: KeyboardEvent) {
   // Any key pauses the slideshow — except the activation keys on its own toggle, whose click would start it again.
   if (!(isSlideshowToggle(event.target) && (event.key === 'Enter' || event.key === ' '))) pauseOnInteraction(event)
   if (props.suspendKeys) return // a modal (cover cropper) is open over the lightbox — let it own the keyboard
-  if (zoomable.value && !isEditingCapturedAt.value && zoom.onKey(event.key)) return // + / - / 0: the zoom's keyboard path
+  if (zoomable.value && !isEditingCapturedAt.value && zoom.onKey(event.key)) return // + / - / 0, and the arrows' pan while zoomed
   if (event.key === 'Escape') {
     if (zoom.zoomed.value) zoom.reset() // Escape un-zooms first, then closes
     else emit('close')
-  } else if (zoom.zoomed.value && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) return // no paging while zoomed
+  } else if (zoom.zoomed.value && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) return // no paging while zoomed (the arrows pan, above)
   else if (event.key === 'ArrowLeft') prev()
   else if (event.key === 'ArrowRight') next()
   else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); emitDelete() } // cr-0110 culling hotkey

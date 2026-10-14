@@ -136,6 +136,19 @@ describe('usePanZoom gestures', () => {
     expect(z.onKey('ArrowLeft')).toBe(false)
   })
 
+  it('the arrow keys pan only while zoomed, never past the edges, and are left to the host at 1x', () => {
+    const { z } = setup()
+    expect(z.onKey('ArrowLeft'), 'at 1x the host pages').toBe(false)
+    expect(z.x.value).toBe(0)
+    z.zoomTo(3)
+    expect(z.onKey('ArrowLeft')).toBe(true)
+    expect(z.x.value, 'looking left moves the photo right').toBe(80)
+    z.onKey('ArrowDown')
+    expect(z.y.value).toBe(-80)
+    for (let i = 0; i < 20; i++) z.onKey('ArrowRight')
+    expect(z.x.value, 'the overhang at 3x').toBe(-560)
+  })
+
   it('reset drops a gesture under way', () => {
     const { z, down, move } = setup()
     z.zoomTo(2)

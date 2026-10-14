@@ -18,11 +18,12 @@ acceptanceCriteria:
   - id: lightbox-zoom
     text: >
       A photo in the lightbox zooms - double-click / double-tap toggles 1x / 2x at the pointer, a two-pointer pinch and
-      ctrl+wheel zoom continuously within 1x - 8x, a drag pans only while zoomed and never past the photo's edges, + / - / 0
-      are the keyboard path; a video does not zoom. Navigating resets it, the arrow keys do not navigate while zoomed and
-      Escape un-zooms before it closes. Past the preview's resolution in device pixels the ORIGINAL replaces the preview
-      in place, fetched once per shown item through the session's own original loader (a share guest's through the
-      link's gated read) and only for a sealed type every browser decodes under 50 MB of ciphertext; any other case, and a
+      ctrl+wheel zoom continuously within 1x - 8x, a drag and the arrow keys pan only while zoomed and never past the photo's
+      edges, + / - / 0 zoom from the keyboard; a video does not zoom. Navigating resets it, the arrow keys pan instead of
+      navigating while zoomed and Escape un-zooms before it closes. Past the preview's resolution in device pixels the
+      ORIGINAL replaces the preview in place, fetched once per shown item through the session's own original loader (a
+      share guest's through the link's gated read) and only where the preview was scaled down (its longer edge at the
+      2048 px tier), for a sealed type every browser decodes under 50 MB of ciphertext; any other case, and a
       failed fetch, keeps the preview without an error; its object URL is revoked on navigation (cr-lightbox-zoom-slideshow).
     coverage:
       web:

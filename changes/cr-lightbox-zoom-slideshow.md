@@ -119,7 +119,8 @@ listeners are native (`addEventListener`, capture). First suspected was a schedu
 **happy-dom:** its `WheelEvent` is no `MouseEvent` and drops `ctrlKey` (the test sets it on the instance); it lays nothing
 out, so each zoom test sets the image's fitted and natural size by hand - the coverage gap says so.
 
-**Handed back** (not decided here): (a) an original whose preview is not downscaled (preview edge < 2048, so the original
-has no more pixels) is still fetched past the threshold - the CR's rule, literally; skipping it would save the fetch.
-(b) While zoomed the arrow keys are inert; panning with them would give the keyboard a pan path.
+**Handed back, then decided by the coordinator on the owner's behalf (2026-10-14) and built in a fourth commit:** (a) an
+original whose preview was not scaled down (the preview's longer edge under `TIER_SPECS.PREVIEW.maxEdge`) is NOT fetched -
+it has no more pixels (`lightboxZoom.ts` `previewDownscaled`); (b) while zoomed the arrow keys PAN (80 px a press, within
+the edges), at 1x they still page. (c) "both wikis' gallery text" = the use-case's own EN/DE section, confirmed.
 
