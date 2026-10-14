@@ -3,7 +3,8 @@
 // trashed media (restorable until the retention purge, cr-0110), loaded lazily on open, with batch selection, a
 // per-tile restore/purge menu, and the irreversible-purge confirm (cr-0111). It owns its own thumbnail object-URL
 // lifecycle (revoked on unmount). Two outward effects go back to the host via callbacks: a restore/purge lifts the
-// gallery's optimistic-delete tombstone (`liftTombstone`) and a restore re-lists the gallery (`reloadGallery`).
+// gallery's optimistic-delete tombstone (`liftTombstone`) and a restore re-lists the gallery (`reloadGallery`). A
+// refused restore is named with its reason, as the organizer's delete and Undo name theirs (inbox #427, #429, #432).
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Menu from 'primevue/menu'
@@ -11,7 +12,9 @@ import type { MenuItem } from 'primevue/menuitem'
 import { hasDerivatives, unsealMeta, type MediaItem } from './media'
 import type { MemorySource } from './source'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
+import { refusalsByReason, sealedMediaName } from './mediaRefusal'
 import { useObjectUrls } from '../../shared/state/useObjectUrls'
+import { useToast } from '../../shared/state/useToast'
 import type { TreeNode } from '../../core/node/tree'
 
 /** The reactive context MemoryDetail hands the trash slice — getters so props stay reactive, plus the two host
@@ -29,6 +32,7 @@ export interface MediaTrashContext {
 
 export function useMediaTrash(ctx: MediaTrashContext) {
   const { t } = useI18n()
+  const toast = useToast()
 
   const trashedItems = ref<MediaItem[]>([])
   // Per-tile decrypted thumbnails — the object-URL lifecycle (replace/drop/reset/unmount) is owned by the primitive.
@@ -40,17 +44,35 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   const menuTargetId = ref<string | null>(null)
   const purgeConfirm = ref<{ ids: string[] } | null>(null)
 
-  /** Restore a media from the Trash tab: drop it from the tab (optimistic), restore server-side, re-list the gallery. */
+  /** Restore a media from the Trash tab (its 3-dot menu) — `restoreFromTrash` for the one. */
   async function onRestoreFromTrash(mediaId: string) {
+    await restoreFromTrash([mediaId])
+  }
+
+  /** Restore [ids] from the Trash tab: drop them from the tab (optimistic), restore each server-side (a refusal does
+   *  not stop the rest), one re-list of the gallery. Every refused restore is named — by the name it had in the tab:
+   *  its sealed file name, else its place in the trash grid — with its reason, one error per reason, and the tab
+   *  re-lists so a medium still in the trash shows again (inbox #432). What was restored just leaves the tab. */
+  async function restoreFromTrash(ids: string[]) {
     const trash = ctx.source.trash
-    if (!trash) return
-    dropFromTrash(mediaId)
-    ctx.liftTombstone(mediaId) // cr-0111: a genuine restore lifts the gallery tombstone
-    try {
-      await trash.restore(mediaId)
-    } finally {
-      ctx.reloadGallery()
+    if (!ids.length || !trash) return
+    const names = ids.map(trashedNameOf) // before the drop: a name by its place needs the tab as it was
+    ids.forEach((id) => { dropFromTrash(id); ctx.liftTombstone(id) }) // cr-0111: a genuine restore lifts the tombstone
+    const results = await Promise.allSettled(ids.map((id) => trash.restore(id)))
+    ctx.reloadGallery()
+    const refused = await refusalsByReason(results, names)
+    for (const [why, refusedNames] of refused) {
+      toast.error(t('memory.buckets.restoreRefused', { names: refusedNames.join(', '), reason: t(`memory.buckets.deleteRefusedReason.${why}`) }))
     }
+    if (refused.size) void loadTrash() // resync the tab, as a refused purge does
+  }
+
+  /** A trashed medium's name for a refusal: the file name sealed in its original's blob meta, else its place in the
+   *  trash grid (the organizer's wording, `memory.buckets.unnamedMedia`). */
+  function trashedNameOf(mediaId: string): string {
+    const at = trashedItems.value.findIndex((it) => it.mediaId === mediaId)
+    const item = at >= 0 ? trashedItems.value[at] : undefined
+    return sealedMediaName(ctx.scopeId(), ctx.memoryKey(), item) || t('memory.buckets.unnamedMedia', { n: at >= 0 ? at + 1 : 1 })
   }
 
   /** Drop a media from the Trash tab locally (revoke its thumb + deselect) — the optimistic half of restore/purge. */
@@ -148,14 +170,9 @@ export function useMediaTrash(ctx: MediaTrashContext) {
     if (ids.length) purgeConfirm.value = { ids: [...ids] }
   }
 
-  /** Batch restore the current selection: optimistic drop, restore each server-side, one re-list of the gallery. */
+  /** Batch restore the current selection — `restoreFromTrash` for the selection. */
   async function restoreSelected() {
-    const ids = [...selectedTrash.value]
-    const trash = ctx.source.trash
-    if (!ids.length || !trash) return
-    ids.forEach((id) => { dropFromTrash(id); ctx.liftTombstone(id) })
-    await Promise.allSettled(ids.map((id) => trash.restore(id)))
-    ctx.reloadGallery()
+    await restoreFromTrash([...selectedTrash.value])
   }
   function purgeSelected() {
     requestPurge([...selectedTrash.value])
