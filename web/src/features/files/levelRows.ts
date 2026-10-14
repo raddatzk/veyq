@@ -10,12 +10,14 @@
 // - **Upload and replace.** One core-queue job per picked or dropped file (`uploadFile.ts`): the top bar's status menu shows
 //   its progress. "Upload files" is a level action (`files.upload`, a "New" menu entry, inbox #406) registered with the level
 //   for as long as it is mounted - so it does not depend on which tab is shown - and it takes dropped files too (`drop`,
-//   which core calls only while the action is enabled). The row's replace asks first (inbox #383: the old content cannot be
-//   restored), once per such file; a file that holds no content asks nothing (#384), nor does "replace anyway" after a
-//   peer's replace. A picked name that a sibling of ANOTHER kind holds (a folder, a Memory, a drop box - each folded by its
-//   own kind) is not sent at all, for a member and a guest alike: a notice names that sibling instead (inbox #400).
+//   which core calls only while the action is enabled). There is no replace action (owner decision 2026-10-14): a picked
+//   file whose name a FILE here holds replaces that file's content, for a member and a contributor guest alike, after the
+//   one question (inbox #383: the old content cannot be restored), once per such file; a file that holds no content asks
+//   nothing (#384), nor does "replace anyway" after a peer's replace. A picked name that a sibling of ANOTHER kind holds (a
+//   folder, a Memory, a drop box - each folded by its own kind) is not sent at all, for a member and a guest alike: a
+//   notice names that sibling instead (inbox #400).
 // - **The notices** only this application can explain: why a file of THIS folder was not uploaded, with the one remedy
-//   there is (replace anyway after a peer's replace); for a contributor guest, what an upload and a replace do (#383).
+//   there is (replace anyway after a peer's replace).
 // - **Download and delete** (the delete into the scope's trash with the undo, inbox #385 (c)).
 //
 // What a row offers is Files' capability matrix for the level (`./capabilities.ts`, inbox #401) narrowed to the doors the
@@ -145,14 +147,11 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
 
   // --- upload and replace -------------------------------------------------------------------------------------------
 
-  // The pickers are built, never drawn: a level has no markup of its own to hold an `<input type="file">`, and a detached
+  // The picker is built, never drawn: a level has no markup of its own to hold an `<input type="file">`, and a detached
   // input opens the browser's picker on `click()` like an attached one.
   const picker = document.createElement('input')
   picker.type = 'file'
   picker.multiple = true
-  const replacePicker = document.createElement('input')
-  replacePicker.type = 'file'
-  let replaceTarget: TreeNode | null = null
 
   const batchKey = computed(() => source.batchKey(folderId()))
 
@@ -164,7 +163,7 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     // Both sessions' trees serve decrypted `TreeNode`s (the guest's `guestTreeSource` too).
     return collidingSibling((ctx.value.tree as TreeSource<TreeNode>).children(parentId), parentId, FILE_KIND, name)
   }
-  /** The FILE sibling a picked name collides with, or none: what a member's same-name upload replaces. */
+  /** The FILE sibling a picked name collides with, or none: what a same-name upload replaces. */
   function siblingFile(name: string): TreeNode | undefined {
     const s = sibling(name)
     return s && s.kind === FILE_KIND ? s : undefined
@@ -184,14 +183,14 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
   }
 
   /**
-   * Enqueue one job per file. Replacing a file's content always asks first (inbox #383: the old content cannot be
-   * restored, there is no version history) - once per such file; declined -> that file is skipped: a file whose name a
-   * FILE sibling already holds (a member's upload only: a guest's is refused by the server, inbox #392), and
-   * `replaceNode`, the row the visitor chose "replace" on, whose picked file goes into it whatever its name (the question
-   * names both; a guest's says it changes for everyone, the owner too). A file that holds no content asks nothing (there
-   * is nothing to lose, #384), nor does `confirmed`: "replace anyway" after a peer's replace, itself the explicit answer.
-   * The node keeps its name either way; the blob the visitor saw is what the replace expects to find (`expectedBlobId`).
-   * A guest is named (the page's one flow) only after every question, and a declined name sends nothing.
+   * Enqueue one job per file. A file whose name a FILE sibling already holds REPLACES that file's content (owner decision
+   * 2026-10-14: the one way to replace, for a member and a contributor guest alike - it reverses inbox #392, where a
+   * guest's was refused) where the matrix grants `replace`, and replacing always asks first (inbox #383: the old content
+   * cannot be restored, there is no version history) - once per such file; declined -> that file is skipped. A file that
+   * holds no content asks nothing (there is nothing to lose, #384), nor does `confirmed` with `replaceNode`: "replace
+   * anyway" after a peer's replace, itself the explicit answer. The node keeps its name either way; the blob the visitor
+   * saw is what the replace expects to find (`expectedBlobId`). A guest is named (the page's one flow) only after every
+   * question, and a declined name sends nothing.
    */
   async function startUploads(files: File[], replaceNode?: TreeNode, confirmed = false): Promise<void> {
     const upload = source.upload
@@ -201,19 +200,17 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     const entries: FileUploadEntry[] = []
     for (const file of files) {
       // A name a folder, Memory or drop box here holds (each folded by its own kind): no question, nothing sent - for a
-      // member and a guest alike. A FILE sibling stays the replace below (a guest's is refused by the server).
+      // member and a guest alike. A FILE sibling is the replace below.
       const other = replaceNode ? null : sibling(file.name)
       if (other && other.kind !== FILE_KIND) {
         refusals.value = [...refusals.value, { key: `refused-${++refusalSeq}`, text: takenBy(file.name, other) }]
         continue
       }
-      const existing = replaceNode ?? (upload.sameNameReplaces ? siblingFile(file.name) : undefined)
+      const existing = replaceNode ?? (caps.value.replace ? siblingFile(file.name) : undefined)
       if (existing && !confirmed && !isEmpty(existing)) {
         const accepted = await ask({
           header: t('files.replaceTitle'),
-          message: replaceNode
-            ? t(guest ? 'files.guest.replaceConfirm' : 'files.replaceRowConfirm', { name: existing.name, file: file.name })
-            : t('files.replaceConfirm', { name: existing.name }),
+          message: t('files.replaceConfirm', { name: existing.name }),
           acceptLabel: t('files.replaceAccept'),
           acceptIcon: 'pi pi-upload',
         })
@@ -244,16 +241,6 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     return files
   }
   picker.addEventListener('change', () => void startUploads(takePicked(picker)))
-  replacePicker.addEventListener('change', () => {
-    const node = replaceTarget
-    replaceTarget = null
-    const files = takePicked(replacePicker)
-    if (node && files.length > 0) void startUploads([files[0]], node)
-  })
-  function startReplace(node: TreeNode) {
-    replaceTarget = node
-    replacePicker.click()
-  }
 
   // "Upload files" is an entry of core's level "New" menu (`register.ts`, inbox #406), and the level hands dropped files to
   // the same entry: both exist for as long as the level does, whichever tab is shown. A drop is only ever as enabled as the
@@ -267,16 +254,13 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
   // --- what the status menu cannot explain: this level's files that were not (fully) uploaded -----------------------
 
   const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED])
-  /** Why a file was not uploaded, in this session's words: a guest's link has a limit of its own and no trash to point at,
-   *  and a guest's upload of a name a file here holds was refused on purpose (inbox #392) - the notice says where the
-   *  replace is, not the generic "a similar name". */
+  /** Why a file was not uploaded, in this session's words: a guest's link has a limit of its own and no trash to point at. */
   function noticeText(code: string, name: string): string {
     if (guest && code === QUOTA_EXCEEDED) return t('files.guest.linkFull', { name })
     if (code === FileUploadError.slugTaken) {
       // The race backstop: a sibling that came since the pick (or one the pre-check could not see) - named when it is here now.
       const other = sibling(name)
       if (other && other.kind !== FILE_KIND) return takenBy(name, other)
-      if (guest && other) return t('files.guest.fileExists', { name })
     }
     return t(`files.errors.${code}`, { name })
   }
@@ -359,7 +343,6 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
   function fileRow(node: TreeNode): LevelRow {
     const key = keyOf(node)
     const blob = blobs.value.get(node.id) ?? null
-    const empty = isEmpty(node)
     const name = node.name
     const c = caps.value
     const actions: LevelRowAction[] = [
@@ -368,11 +351,6 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
         id: 'download', label: t('files.download', { name }), icon: 'pi pi-download', first: true, shown: c.download,
         loading: downloading.value === node.id, disabled: !blob || !key || downloading.value !== null,
         onClick: () => void download(node, key, blob),
-      },
-      // Its label says what the icon cannot: the picked file's content goes in, the name stays (inbox #385).
-      {
-        id: 'replace', label: t(empty ? 'files.uploadInto' : 'files.replace', { name }), icon: empty ? 'pi pi-upload' : 'pi pi-sync',
-        shown: c.replace, disabled: !writeReady.value, onClick: () => startReplace(node),
       },
       { id: 'rename', label: t('files.rename', { name }), icon: 'pi pi-pencil', shown: c.rename, onClick: () => source.rename?.(node) },
       { id: 'move', label: t('files.move', { name }), icon: 'pi pi-file-export', shown: c.moveFile, onClick: () => source.move?.(node) },

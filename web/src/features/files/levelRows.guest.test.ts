@@ -2,7 +2,8 @@
 // Files' rows of the unified level list for a SHARE GUEST (inbox #401 S3, #407): the member's row factory, handed a guest's
 // access and the tree its link opened (`guestTreeSource` over real crypto), as core's folder page hands it. It replaces
 // `FilesSection.guest.test.ts` (which replaced the guest-only `ShareFilesSection`); its cases are ported here. The guest sees the member's rows with the member-only functions removed
-// (no rename, no delete for any guest; upload and replace for a contributor only, never inside an identity folder) and
+// (no rename, no delete for any guest; upload - a same-name one replaces, after the question - for a contributor only,
+// never inside an identity folder) and
 // NOTHING of the member's world is touched: every authenticated client throws (`test/guestMode.ts`), the member's
 // `activeSpace` records any read, core's member node operations and `treeStore` are stubs that must stay uncalled.
 // Stubbed by path besides: the guest job factory (the TARGET each pick produces; its wire is `shareUpload.wire.test.ts`'s),
@@ -65,7 +66,7 @@ import { stubApi } from '../../test/apiMock'
 import { mountConfirmDialog } from '../../test/confirmDialog'
 import { guestAccessFor } from '../../test/models'
 import { authenticatedCalls } from '../../test/guestMode'
-import { clickAction, actionIdsOf, actionLabel, actionDisabled, mountRows, rowOf, titlesOf, type RowsHarness } from '../../test/levelRows'
+import { clickAction, actionIdsOf, mountRows, rowOf, titlesOf, type RowsHarness } from '../../test/levelRows'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_5'
@@ -126,7 +127,7 @@ function head(role: ShareRole): PublicShareHead {
 let listShareFiles: ReturnType<typeof stubApi<typeof publicShareFilesApi, 'listShareFiles'>>['listShareFiles']
 
 type Opts = { role?: ShareRole; at?: string; requestGuest?: () => Promise<GuestIdentity | null>; reload?: () => Promise<void>; nodes?: TreeNode[] }
-// The pickers the factory builds (a multi-file one, then the replace's single one), captured as they are made.
+// The picker the factory builds (the multi-file one; there is no replace picker), captured as it is made.
 const inputs: HTMLInputElement[] = []
 const pickers = () => inputs.filter((i) => i.type === 'file')
 const created = document.createElement.bind(document)
@@ -148,11 +149,6 @@ async function setPicked(input: HTMLInputElement, files: File[]) {
   Object.defineProperty(input, 'files', { value: files, configurable: true })
   input.dispatchEvent(new Event('change'))
   await flushPromises()
-}
-/** Run the row's replace of `name` (or its upload into, for a content-less file), then pick `picked`. */
-async function pickReplace(h: Wrapper, name: string, picked: string) {
-  await clickAction(h.w, name, 'replace')
-  await setPicked(pickers()[1], [new File(['n'], picked)])
 }
 async function pickNew(_h: Wrapper, names: string[]) {
   await setPicked(pickers()[0], names.map((n) => new File([n], n)))
@@ -215,14 +211,16 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     expectNoMemberWorld()
   })
 
-  it('a contributor gets upload and replace — still no rename and no delete — and no standing notice above the list', async () => {
+  // Owner decision 2026-10-14: no replace action anywhere; a contributor replaces by uploading a file of the same name.
+  it('a contributor gets the upload and the move — no replace action, no rename, no delete — and no standing notice', async () => {
     const h = mountSection({ role: ShareRole.ReadWrite })
     await flushPromises()
     expect(noticeTexts(h), 'the replace asks when it happens (inbox #383); nothing stands above the list').toEqual([])
     expect(h.actions.get('files.upload')!.enabled()).toBe(true)
-    expect(await actionDisabled(h.w, 'Report.pdf', 'replace')).toBe(false)
-    // no rename and no delete for any guest: the actions are download, replace, move
-    expect(await actionIdsOf(h.w, 'Report.pdf')).toEqual(['download', 'replace', 'move'])
+    // no rename and no delete for any guest, and no replace for anyone: a file with content and one without alike
+    expect(await actionIdsOf(h.w, 'Report.pdf')).toEqual(['download', 'move'])
+    expect(await actionIdsOf(h.w, 'aaa.bin')).toEqual(['download', 'move'])
+    expect(pickers(), 'one picker: the multi-file upload').toHaveLength(1)
     expectNoMemberWorld()
   })
 
@@ -317,55 +315,48 @@ describe('a contributor uploads into the shared folder', () => {
     expect(useUploadQueue().batches.value).toEqual([])
   })
 
-  // inbox #392 (owner decision 2026-10-08): no replace by upload for a guest — the name a file here holds is sent as a new
-  // file, asks nothing, and the server's 409 is explained below.
-  it("an upload of a name a file here holds is not turned into a replace: no question, a new file's job", async () => {
-    const h = mountSection({ role: ShareRole.ReadWrite })
-    await flushPromises()
-    await pickNew(h, ['report.PDF'])
-    expect(confirmRequest.value, 'no replace question').toBeNull()
-    expect(targets().map((t0) => [t0.parentId, t0.replace])).toEqual([[ROOT, undefined]])
-  })
-
-  // inbox #383 (owner decision 2026-10-08): a contributor's replace asks first — it changes the file for everyone, the
-  // owner too, and no version is kept. Answered through the real dialog's buttons; nothing is sent, and no guest is
-  // asked for, before the answer.
-  it("a row's replace asks first, then targets that file with its key and the blob the guest saw", async () => {
+  // Owner decision 2026-10-14, reversing inbox #392: a contributor's upload of a name a file here holds REPLACES that file,
+  // after the same question a member gets (inbox #383: no version is kept). Answered through the real dialog's buttons;
+  // nothing is sent, and no guest is asked for, before the answer.
+  it('a same-name upload asks in the app\'s dialog, then replaces that file with its key and the blob the guest saw', async () => {
     const dialog = mountConfirmDialog()
     const requestGuest = vi.fn(async () => GUEST)
     const h = mountSection({ role: ShareRole.ReadWrite, requestGuest })
     await flushPromises()
-    await pickReplace(h, 'Report.pdf', 'new.pdf')
-    expect(dialog.text()).toContain(t('files.guest.replaceConfirm', { name: 'Report.pdf', file: 'new.pdf' }))
-    expect(t('files.guest.replaceConfirm', { name: 'a', file: 'b' })).toMatch(/owner too.*cannot be restored/)
+    await pickNew(h, ['report.PDF'])
+    expect(dialog.text()).toContain(t('files.replaceTitle'))
+    expect(dialog.text()).toContain(t('files.replaceConfirm', { name: 'Report.pdf' }))
     expect(guestFileUploadJob, 'nothing before the answer').not.toHaveBeenCalled()
     expect(requestGuest).not.toHaveBeenCalled()
     dialog.click(t('files.replaceAccept'))
     await flushPromises()
     expect(dialog.isOpen()).toBe(false)
+    expect(requestGuest).toHaveBeenCalledOnce()
     const target = targets()[0]
     expect(target.replace).toMatchObject({ nodeId: R, expectedBlobId: REPORT_BLOB.blobId })
     expect(Array.from(target.replace!.nodeKey), "the file's key from the chain").toEqual(Array.from(keys.report))
+    expectNoMemberWorld()
   })
 
-  it("a row's replace cancelled in the dialog sends nothing", async () => {
+  it('a same-name upload cancelled in the dialog sends nothing and names nobody', async () => {
     const dialog = mountConfirmDialog()
-    const h = mountSection({ role: ShareRole.ReadWrite })
+    const requestGuest = vi.fn(async () => GUEST)
+    const h = mountSection({ role: ShareRole.ReadWrite, requestGuest })
     await flushPromises()
-    await pickReplace(h, 'Report.pdf', 'new.pdf')
+    await pickNew(h, ['Report.pdf'])
     dialog.click(t('common.cancel'))
     await flushPromises()
     expect(dialog.isOpen()).toBe(false)
+    expect(requestGuest).not.toHaveBeenCalled()
     expect(guestFileUploadJob).not.toHaveBeenCalled()
     expect(useUploadQueue().batches.value).toEqual([])
   })
 
-  // inbox #384: a guest cannot delete the content-less file an unfinished upload left; its row uploads into it instead.
-  it('a file known to hold no content offers an upload into it, filling that node with nothing to replace', async () => {
+  // inbox #384: a guest cannot delete the content-less file an unfinished upload left; an upload of its name fills it.
+  it('a file known to hold no content is filled by an upload of its name, with nothing to replace and no question', async () => {
     const h = mountSection({ role: ShareRole.ReadWrite })
     await flushPromises()
-    expect(await actionLabel(h.w, 'aaa.bin', 'replace')).toBe(t('files.uploadInto', { name: 'aaa.bin' }))
-    await pickReplace(h, 'aaa.bin', 'again.bin')
+    await pickNew(h, ['AAA.bin'])
     expect(confirmRequest.value, 'nothing to lose: no question').toBeNull()
     expect(targets()[0].replace).toMatchObject({ nodeId: P, expectedBlobId: null })
   })
@@ -381,20 +372,19 @@ describe('a contributor uploads into the shared folder', () => {
     expect(h.w.text()).not.toContain(t('files.errors.quota_exceeded', { name: 'big.iso' }))
   })
 
-  // Inbox #392: the refused name a file here holds says so plainly, with where the replace is; a name taken by something
-  // else keeps the generic wording.
-  it('a refused name a file here holds says a file exists and points at its replace; a folder is named; an unseen one stays generic', async () => {
+  // The server's slug_taken is now only a race (a same-name upload is a replace): a sibling of another kind is named by its
+  // kind; a file's name, or one this guest cannot see, keeps the generic wording.
+  it('a refused name: a folder here is named; a file\'s and an unseen one stay generic', async () => {
     const h = mountSection({ role: ShareRole.ReadWrite })
     await flushPromises()
     const refused = (name: string) => ({ name, sizeBytes: 1, run: async () => { throw new Error('slug_taken') }, extra: { file: new File([''], name) } })
     enqueue([refused('report.PDF'), refused('Sub'), refused('elsewhere.txt')], { label: 'x', key: `files-share:${SHARE}:${ROOT}` })
     await vi.waitFor(() => expect(useUploadQueue().batches.value[0]?.files.every((f) => f.status === 'failed')).toBe(true))
     await flushPromises()
-    expect(h.w.text()).toContain(t('files.guest.fileExists', { name: 'report.PDF' }))
+    expect(h.w.text()).toContain(t('files.errors.slug_taken', { name: 'report.PDF' }))
     // the race backstop (inbox #400): a sibling of another kind that holds the name now is named by its kind
     expect(h.w.text()).toContain(t('files.nameTakenBy', { name: 'Sub', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Sub' }) }))
     expect(h.w.text()).toContain(t('files.errors.slug_taken', { name: 'elsewhere.txt' }))
-    expect(h.w.text()).not.toContain(t('files.errors.slug_taken', { name: 'report.PDF' }))
   })
 
   // Inbox #400: the guest goes through the member's pre-check — a name another kind holds is not sent, and the guest is

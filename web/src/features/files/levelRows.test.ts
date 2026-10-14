@@ -56,7 +56,7 @@ import { SaveCancelled, SaveTooLarge } from '../../shared/saveStream'
 import { stubApi } from '../../test/apiMock'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../test/models'
 import { mountConfirmDialog } from '../../test/confirmDialog'
-import { actionDisabled, actionIdsOf, actionLabel, clickAction, mountRows, rowOf, titlesOf, type RowsHarness } from '../../test/levelRows'
+import { actionDisabled, actionIdsOf, clickAction, mountRows, rowOf, titlesOf, type RowsHarness } from '../../test/levelRows'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
 const D = '5c09e000-0000-4000-8000-0000000000d0'
@@ -96,7 +96,7 @@ const BLOBS: FileListPage = {
 }
 let listFiles: ReturnType<typeof stubApi<typeof filesApi, 'listFiles'>>['listFiles']
 
-// The pickers the factory builds (a multi-file one, then the replace's single one): captured as they are made.
+// The picker the factory builds (the multi-file one; there is no replace picker): captured as it is made.
 const inputs: HTMLInputElement[] = []
 const pickers = () => inputs.filter((i) => i.type === 'file')
 const created = document.createElement.bind(document)
@@ -124,7 +124,6 @@ async function pick(index: number, files: File[]) {
   await flushPromises()
 }
 const MULTI = 0
-const SINGLE = 1
 const dateOf = (ms: number) => new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(ms)
 const targets = () => vi.mocked(fileUploadJob).mock.calls.map(([target, file]) => ({ target: target as FileUploadTarget, name: file.name }))
 const metaOf = (h: RowsHarness, title: string) => rowOf(h.w, title).find('.veyq-level-item-meta').text()
@@ -383,30 +382,38 @@ describe('Files rows', () => {
     expect(useUploadQueue().batches.value).toEqual([])
   })
 
-  // inbox #383 (owner decision 2026-10-08): every replace of content asks - the row's too, naming the file it replaces
-  // and the one picked, and saying the old content cannot be restored. Answered through the real dialog's buttons.
-  it('a row\'s replace asks first, then takes the picked file into THAT node, whatever its name', async () => {
-    const dialog = mountConfirmDialog()
-    const h = mountSection({ nodes: [REPORT, NOTES] })
+  // Owner decision 2026-10-14: a file's content is replaced only by uploading its name again - no row offers a replace (nor
+  // an "upload into" for a file that holds none), and the factory builds no picker of its own for one.
+  it('no row offers a replace: a file with content and one without carry the same actions, and only the upload picker exists', async () => {
+    const h = mountSection({ nodes: [PENDING, NOTES] })
     await flushPromises()
-    await clickAction(h.w, 'notes.txt', 'replace')
-    await pick(SINGLE, [new File(['x'], 'other-name.md')])
+    expect(await actionIdsOf(h.w, 'notes.txt')).toEqual(['download', 'rename', 'move', 'delete'])
+    expect(await actionIdsOf(h.w, 'pending.bin')).toEqual(['download', 'rename', 'move', 'delete'])
+    expect(pickers(), 'one picker: the multi-file upload').toHaveLength(1)
+    expect(pickers()[0].multiple).toBe(true)
+  })
+
+  // inbox #383 (owner decision 2026-10-08): every replace of content asks, saying the old content cannot be restored.
+  // Answered through the real dialog's buttons.
+  it('a same-name upload asks in the app\'s dialog, then replaces THAT node on accept', async () => {
+    const dialog = mountConfirmDialog()
+    mountSection({ nodes: [REPORT, NOTES] })
+    await flushPromises()
+    await pick(MULTI, [new File(['x'], 'Notes.TXT')])
     expect(dialog.text()).toContain(t('files.replaceTitle'))
-    expect(dialog.text()).toContain(t('files.replaceRowConfirm', { name: 'notes.txt', file: 'other-name.md' }))
-    expect(t('files.replaceRowConfirm', { name: 'a', file: 'b' })).toContain('cannot be restored')
+    expect(dialog.text()).toContain(t('files.replaceConfirm', { name: 'notes.txt' }))
     expect(fileUploadJob, 'nothing before the answer').not.toHaveBeenCalled()
     dialog.click(t('files.replaceAccept'))
     await flushPromises()
     expect(dialog.isOpen()).toBe(false)
-    expect(targets()).toEqual([{ name: 'other-name.md', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: N, expectedBlobId: NOTES_BLOB.blobId }) }) }])
+    expect(targets()).toEqual([{ name: 'Notes.TXT', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: N, expectedBlobId: NOTES_BLOB.blobId }) }) }])
   })
 
-  it('a row\'s replace cancelled in the dialog uploads nothing', async () => {
+  it('a same-name upload cancelled in the dialog sends nothing', async () => {
     const dialog = mountConfirmDialog()
-    const h = mountSection({ nodes: [REPORT, NOTES] })
+    mountSection({ nodes: [REPORT, NOTES] })
     await flushPromises()
-    await clickAction(h.w, 'notes.txt', 'replace')
-    await pick(SINGLE, [new File(['x'], 'other-name.md')])
+    await pick(MULTI, [new File(['x'], 'notes.txt')])
     dialog.click(t('common.cancel'))
     await flushPromises()
     expect(dialog.isOpen()).toBe(false)
@@ -414,29 +421,22 @@ describe('Files rows', () => {
     expect(useUploadQueue().batches.value).toEqual([])
   })
 
-  // inbox #384: a file that holds no content has nothing to replace - its row uploads into it, and a picked file of its
-  // name fills it without the replace question (which says the old content is deleted).
-  it('a file known to hold no content offers an upload into it, and a picked file of its name fills it without a question', async () => {
-    const h = mountSection({ nodes: [PENDING, NOTES] })
+  // inbox #384: a file that holds no content has nothing to replace - a picked file of its name fills it without the
+  // replace question (which says the old content is deleted).
+  it('a file known to hold no content is filled by a picked file of its name, without a question', async () => {
+    mountSection({ nodes: [PENDING, NOTES] })
     await flushPromises()
-    expect(await actionLabel(h.w, 'pending.bin', 'replace')).toBe(t('files.uploadInto', { name: 'pending.bin' }))
-    expect(await actionLabel(h.w, 'notes.txt', 'replace'), 'control: a file with content is replaced').toBe(t('files.replace', { name: 'notes.txt' }))
-
-    await clickAction(h.w, 'pending.bin', 'replace')
-    await pick(SINGLE, [new File(['x'], 'anything.bin')])
     await pick(MULTI, [new File(['y'], 'Pending.BIN')])
     expect(confirmRequest.value).toBeNull()
     expect(targets()).toEqual([
-      { name: 'anything.bin', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: P, expectedBlobId: null }) }) },
       { name: 'Pending.BIN', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: P, expectedBlobId: null }) }) },
     ])
   })
 
   it('a file whose content could not be read is not taken for empty: a picked file of its name still asks', async () => {
     listFiles.mockRejectedValue(new TypeError('Failed to fetch'))
-    const h = mountSection({ nodes: [PENDING] })
+    mountSection({ nodes: [PENDING] })
     await flushPromises()
-    expect(await actionLabel(h.w, 'pending.bin', 'replace')).toBe(t('files.replace', { name: 'pending.bin' }))
     const picking = pick(MULTI, [new File(['y'], 'pending.bin')])
     await flushPromises()
     expect(confirmRequest.value).toMatchObject({ message: t('files.replaceConfirm', { name: 'pending.bin' }) })

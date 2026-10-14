@@ -1132,15 +1132,16 @@ const en = {
     aFile: 'a file',
     modified: 'Modified {date}',
     download: 'Download {name}',
-    // The row's replace keeps the file's name: the picked file's content goes into it (inbox #385).
+    // An opened file's replace (FileDetail) keeps the file's name: the picked file's content goes into it (inbox #385).
     replace: 'Replace the content of {name} — the name stays',
-    // A file that holds no content (an upload that never finished, inbox #384): its row uploads into it.
+    // A file that holds no content (an upload that never finished, inbox #384): its page uploads into it.
     uploadInto: 'Upload {name} again',
     rename: 'Rename {name}',
     move: 'Move {name} to…',
     delete: 'Delete {name}',
     replaceTitle: 'Replace file',
-    // Every replace of content asks (inbox #383): a same-name upload, and the row's replace with the picked file named.
+    // Every replace of content asks (inbox #383): a same-name upload (a member's and a contributor's), and an opened file's
+    // replace with the picked file named.
     replaceConfirm: 'Replace “{name}”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history.',
     replaceRowConfirm: 'Replace the content of “{name}” with “{file}”? The name stays. The old content cannot be restored: there is no version history.',
     replaceAccept: 'Replace',
@@ -1243,11 +1244,8 @@ const en = {
     guest: {
       empty: 'No files here.',
       linkFull: '“{name}” was not uploaded: this link takes no more uploads right now.',
-      // A contributor's page (inbox #383): what an upload or a replace does, said before it happens.
-      replaceConfirm: 'Replace the content of “{name}” with “{file}”? It changes for everyone who sees this folder, the owner too. The old content cannot be restored: there is no version history.',
+      // A contributor's replace on an opened file (FileDetail, inbox #383): what it does, said before it happens.
       replaceFileConfirm: 'Replace the content of “{name}” with “{file}”? It changes for everyone who has this link, the owner too. The old content cannot be restored: there is no version history.',
-      // A contributor's upload of a name a file here already has (inbox #392): refused (409), and what to do instead.
-      fileExists: '“{name}” was not uploaded: a file with this name already exists here. To replace it, use the replace button in its row.',
     },
     // The drop box (cr-files-application F3): a member's section, detail, create and share dialogs; a guest's page.
     dropBox: {
@@ -2713,9 +2711,7 @@ const de: typeof en = {
     guest: {
       empty: 'Hier liegen keine Dateien.',
       linkFull: '„{name}“ wurde nicht hochgeladen: Dieser Link nimmt gerade keine weiteren Uploads an.',
-      replaceConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Ordner sehen, auch für die Person, der er gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
       replaceFileConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Link haben, auch für die Person, der die Datei gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
-      fileExists: '„{name}“ wurde nicht hochgeladen: Hier gibt es schon eine Datei mit diesem Namen. Um sie zu ersetzen, nutze die Schaltfläche zum Ersetzen in ihrer Zeile.',
     },
     dropBox: {
       section: 'Briefkästen',

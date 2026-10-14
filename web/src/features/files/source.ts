@@ -36,11 +36,10 @@ export interface FilesUploadBatch {
   jobs(entries: readonly FileUploadEntry[]): Promise<UploadJob<FileUploadResult, FileJobExtra>[]>
 }
 
-/** The upload door of a session that has one. */
+/** The upload door of a session that has one. A picked file whose name a FILE sibling already holds goes into that file
+ *  (an entry with `replace`, after the view's question), for a member and a contributor guest alike (owner decision
+ *  2026-10-14, reversing inbox #392): the view decides, the door only carries it. */
 export interface FilesUpload {
-  /** A picked file whose name a FILE sibling already holds REPLACES that file after a question (a member), or is created
-   *  as new and refused by the server's `409 slug_taken` (a guest: the owner kept no replace by upload, inbox #392). */
-  readonly sameNameReplaces: boolean
   /** The session can write now (a member's epoch keys are unlocked); the controls stay, disabled, until it can. */
   ready(): boolean
   /** Start the level `folder`'s uploads (null: a member's scope root), or null when this session cannot create there
@@ -134,7 +133,6 @@ export function memberFilesSource(from: {
       void loadTree().then(reloadBlobs)
     },
     upload: {
-      sameNameReplaces: true,
       ready: () => !!from.epochs(),
       begin(folder) {
         const scopeId = from.scopeId()
@@ -215,7 +213,6 @@ export function guestFilesSource(access: () => GuestAccess, host: { move?: (node
 
 function guestUpload(access: () => GuestAccess): FilesUpload {
   return {
-    sameNameReplaces: false,
     ready: () => true,
     begin(folder) {
       if (!folder) return null // a guest is never at a scope root
