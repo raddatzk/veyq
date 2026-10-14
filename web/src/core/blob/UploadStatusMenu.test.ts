@@ -4,9 +4,10 @@
 // plain queue jobs, no application involved, and it lists a batch of any application (the case at the end) — what a
 // Memories batch looks like through the real top bar is `AppTopbar.test.ts`'s.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import UploadStatusMenu from './UploadStatusMenu.vue'
-import { enqueue, clearUploads, type UploadJob } from './queue'
+import { enqueue, clearUploads, useUploadQueue, type UploadJob } from './queue'
 import { realI18n, t } from '../../test/i18n'
 
 const mountTray = () => mount(UploadStatusMenu, { global: { plugins: [realI18n()] } })
@@ -24,6 +25,33 @@ const pendingJob = (name = 'photo.png'): UploadJob => ({
       signal.addEventListener('abort', abort)
     }),
 })
+/** A job that finishes at once. */
+const doneJob = (name: string): UploadJob => ({
+  name,
+  sizeBytes: 3,
+  run: async ({ onProgress }) => onProgress(1),
+})
+/** A job whose progress the test reports, and that stays in flight until the test aborts it. */
+function steeredJob(name: string): { job: UploadJob; report(fraction: number): void } {
+  let onProgress: (fraction: number) => void = () => {}
+  const job: UploadJob = { ...pendingJob(name), run: (ctx) => ((onProgress = ctx.onProgress), pendingJob(name).run(ctx)) }
+  return { job, report: (fraction) => onProgress(fraction) }
+}
+/** What the open tray draws: per list its title, its files and its bar's value, and whether it offers Close. */
+const listsOf = (w: VueWrapper) =>
+  w.findAll('.uploads-list').map((l) => ({
+    title: l.find('.uploads-list-head strong').text(),
+    files: l.findAll('.uploads-file-name').map((n) => n.text()),
+    bar: l.find('.uploads-bar').attributes('aria-valuenow'),
+    close: l.find('.uploads-dismiss').exists(),
+  }))
+async function openTray() {
+  const w = mountTray()
+  await flushPromises()
+  await w.find('.uploads-trigger').trigger('click')
+  return w
+}
+
 /** A job that fails every attempt with `code`. */
 const failingJob = (code: string, name = 'photo.png'): UploadJob => ({
   name,
@@ -133,8 +161,8 @@ describe('UploadStatusMenu', () => {
 
     expect(w.find('.uploads-badge').text()).toBe('3') // every application's active items count
     await w.find('.uploads-trigger').trigger('click')
-    const batches = w.findAll('.uploads-batch')
-    expect(batches.map((b) => b.find('.uploads-batch-head strong').text())).toEqual(['1 photo', '2 files'])
+    const batches = w.findAll('.uploads-list')
+    expect(batches.map((b) => b.find('.uploads-list-head strong').text())).toEqual(['1 photo', '2 files'])
     expect(batches[1].findAll('.uploads-file-name').map((n) => n.text())).toEqual(['report.pdf', 'notes.txt'])
     // one job at a time across batches: the first batch's file is in flight, the second batch waits behind it
     expect(batches[0].find('.uploads-file-status').text()).toBe(t('upload.status.uploading'))
@@ -142,5 +170,82 @@ describe('UploadStatusMenu', () => {
       t('upload.status.queued'),
       t('upload.status.queued'),
     ])
+  })
+
+  // One list per destination (uc.memory.upload step 4): the tray groups the OPEN batches by their `key`; the queue keeps
+  // its batches as they are.
+  describe('one list per destination', () => {
+    it('draws two batches with one key as one list, under the first label, with one bar over all their files', async () => {
+      enqueue([doneJob('a.jpg')], { label: 'Rome', key: 'm1' })
+      const b = steeredJob('b.jpg')
+      enqueue([b.job], { label: 'Rome again', key: 'm1' })
+      const w = await openTray()
+      b.report(0.5)
+      await nextTick()
+
+      // (1 for the done file + 0.5) / 2 files — the per-batch formula over the whole list
+      expect(listsOf(w)).toEqual([{ title: 'Rome', files: ['a.jpg', 'b.jpg'], bar: '75', close: false }])
+    })
+
+    it('a batch enqueued later for that destination joins the open list, and the bar goes down', async () => {
+      enqueue([doneJob('a.jpg')], { label: 'Rome', key: 'm1' })
+      const w = await openTray()
+      expect(listsOf(w)).toEqual([{ title: 'Rome', files: ['a.jpg'], bar: '100', close: true }])
+
+      enqueue([pendingJob('b.jpg')], { label: 'Rome', key: 'm1' })
+      await flushPromises()
+
+      // joined, not a second list; no Close while one of its batches still runs
+      expect(listsOf(w)).toEqual([{ title: 'Rome', files: ['a.jpg', 'b.jpg'], bar: '50', close: false }])
+    })
+
+    it('a closed list stays closed: a later batch for its destination starts a new list', async () => {
+      enqueue([doneJob('a.jpg')], { label: 'Rome', key: 'm1' })
+      const w = await openTray()
+      await w.find('.uploads-dismiss').trigger('click')
+      expect(listsOf(w)).toEqual([])
+
+      enqueue([pendingJob('b.jpg')], { label: 'Rome', key: 'm1' })
+      await flushPromises()
+
+      expect(listsOf(w)).toEqual([{ title: 'Rome', files: ['b.jpg'], bar: '0', close: false }])
+    })
+
+    it('two destinations are two lists, each at its first batch\'s place; the header still counts files', async () => {
+      enqueue([pendingJob('a.jpg')], { label: 'Rome', key: 'm1' })
+      enqueue([pendingJob('b.jpg')], { label: 'Paris', key: 'm2' })
+      enqueue([pendingJob('c.jpg')], { label: 'Rome', key: 'm1' })
+      const w = await openTray()
+
+      expect(listsOf(w).map((l) => [l.title, l.files])).toEqual([
+        ['Rome', ['a.jpg', 'c.jpg']],
+        ['Paris', ['b.jpg']],
+      ])
+      expect(w.find('.uploads-badge').text()).toBe('3')
+      expect(w.find('.uploads-header p').text()).toBe(t('upload.active', { count: 3 }))
+    })
+
+    it('a batch without a key is a list of its own, beside one with the same label', async () => {
+      enqueue([pendingJob('a.jpg')], { label: 'Cover' })
+      enqueue([pendingJob('b.jpg')], { label: 'Cover' })
+      const w = await openTray()
+
+      expect(listsOf(w).map((l) => l.files)).toEqual([['a.jpg'], ['b.jpg']])
+    })
+
+    it('Close acknowledges every batch of its list, and no other', async () => {
+      enqueue([doneJob('a.jpg')], { label: 'Rome', key: 'm1' })
+      enqueue([doneJob('b.jpg')], { label: 'Rome', key: 'm1' })
+      enqueue([doneJob('c.jpg')], { label: 'Paris', key: 'm2' })
+      const w = await openTray()
+      expect(listsOf(w).map((l) => [l.title, l.close])).toEqual([
+        ['Rome', true],
+        ['Paris', true],
+      ])
+
+      await w.find('.uploads-dismiss').trigger('click') // Rome's one Close
+      expect(useUploadQueue().batches.value.map((b) => b.files[0].name)).toEqual(['c.jpg'])
+      expect(listsOf(w).map((l) => l.title)).toEqual(['Paris'])
+    })
   })
 })
