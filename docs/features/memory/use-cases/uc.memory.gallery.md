@@ -42,8 +42,11 @@
    announced to a screen reader. A slow preview is waited for, never skipped. The next preview is fetched one ahead and
    dropped when it is not shown; while it runs, no EXIF read and no place-name backfill happen - they start when the
    slideshow pauses on an item. The member and the guest get both (share view = member view; a guest's loaders are its
-   source's). Proven by unit tests; the first real-browser pass (zoom by wheel and double-click, a slideshow over a
-   photo and a video) is the merge's.
+   source's). Seen in a real browser on 2026-10-14 (a Memory of three 3000 x 2000 JPEGs, 2048 px previews): a
+   double-click zoomed to 2x and fetched the original once (two chunks; the image became 3000 x 2000), ArrowRight panned
+   while zoomed and did not page, Escape un-zoomed without closing, paging reset the zoom; the slideshow advanced every
+   5 s, stopped on the last item announcing it, and fetched EXIF only on arriving there. Not yet seen in a browser: a
+   video's poster in a slideshow, a pinch, ctrl+wheel, the 50 MB cap, a share guest's zoom.
 3. **Lightbox:** clicking an item opens it full-view; the client fetches that item's **preview**, decrypts, and
    displays it; **prev/next** page through the grid order. (The preview — not the multi-MB original — keeps the
    lightbox fast.) A **video** (known from the media type sealed in its original's blob meta, which rides the

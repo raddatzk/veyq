@@ -33,7 +33,7 @@ acceptanceCriteria:
           - src/features/memory/components/MediaLightbox.test.ts
     gaps:
       - surface: web
-        reason: The gestures are driven by synthetic pointer, wheel and key events in happy-dom, which lays nothing out (each test sets the image's fitted and natural size by hand); no real browser had zoomed a photo when the CR closed its implementation - the first pass is the merge's.
+        reason: The gestures are driven by synthetic pointer, wheel and key events in happy-dom, which lays nothing out (each test sets the image's fitted and natural size by hand); a real browser (2026-10-14) zoomed by double-click, fetched the original once and panned by arrow keys, but has not run a pinch, ctrl+wheel or the 50 MB cap.
   - id: lightbox-slideshow
     text: >
       A play / pause control in the lightbox advances every 5 s through the grid order, shows a video's poster for one
@@ -47,7 +47,7 @@ acceptanceCriteria:
           - src/features/memory/components/MediaLightbox.test.ts
     gaps:
       - surface: web
-        reason: Proven on fake interval/timeout/Date clocks in happy-dom; no real browser had run a slideshow over a Memory with a photo and a video when the CR closed its implementation - the first pass is the merge's.
+        reason: Proven on fake interval/timeout/Date clocks in happy-dom; a real browser (2026-10-14) ran it over three photos (5 s, stop at the end, EXIF only on arrival) but no video's poster interval yet.
   - id: download-original
     text: An explicit download fetches the pristine, full-resolution original (the only byte-identical copy).
     coverage:
