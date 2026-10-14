@@ -121,7 +121,7 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
 For the maintainer; an operator starts at § Running in production. **Nothing is published by a push**
 ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) §1): a push to `main` or
 `release/**`, and every pull request, runs `.github/workflows/container.yml` as a **dry run** — the test gate (the
-chart's `scripts/chart_meta_check.py` included) and both image builds, with no registry login and no push. A publish
+chart's `scripts/chart_meta_check.py` and `scripts/chart_upgrade_check.py` included) and both image builds, with no registry login and no push. A publish
 is started by hand, from `main` or `release/<major>.x`, and is one of two kinds:
 
 ```sh
@@ -542,6 +542,19 @@ to this target.
   starts the new pod before the old one stops, which would run two migrators against one schema during every
   upgrade; `Recreate` is what makes "one migrator at a time" true, at the cost of a short outage per upgrade.
   The day the update mechanism is decided (inbox #121) this is the constraint to revisit.
+- **What the chart change between two releases is checked for — and what not** ([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)
+  Addendum). `python3 scripts/chart_upgrade_check.py` reads the upgrade proof's predecessor's `charts/veyq` out of git
+  (the commit before until the first release, the last `v<major>.<minor>` from then on; `--upgrade-from <ref>` names
+  another), renders it and this checkout's chart with each of this chart's `ci/` values files, and refuses what
+  `helm upgrade` cannot apply or would lose data over: a Deployment's or StatefulSet's `selector`, a StatefulSet's
+  `serviceName`, `podManagementPolicy` or claim templates (name, access modes, class, size), a claim's access modes,
+  class or a shrinking size, a RoleBinding's `roleRef`, a kind changed under a name, a StatefulSet or claim gone. It
+  also renders this chart with the predecessor's `ci/` values: values you already run must still pass the schema.
+  `container.yml`'s `test` job runs it; before the first release its findings inform, from it they fail the build.
+  **It renders and installs nothing**, so it does not see a missing StorageClass or one that cannot expand a growing
+  claim, admission, image pulls, your data surviving the upgrade, a `mariadbPassword` changed on upgrade (MariaDB keeps
+  the old one), a StatefulSet field it does not name (a claim template's labels, say), a value path no `ci/` file
+  sets, or what you edited in the cluster by hand. A cluster leg that would is inbox #430.
 - **Kubernetes-native backup is not built** ([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)
   defers it, [ADR 0056](../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md)'s gap
   statement stays accurate). Until it is, § *Backup & restore*'s capture runs against this cluster through
@@ -798,8 +811,9 @@ refusal (a changed baseline's checksum above all) is named as such. Before the f
 gates nothing; `container.yml`'s `upgrade-proof` job, which `publish` needs, is disabled until then
 ([backend/CLAUDE.md](../backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
 images, so the pull, the recipe diff and the `up` of steps 4–6 and the rollback stay unrehearsed; and it says nothing
-about the chart — `helm upgrade` from the predecessor's chart to the candidate's, with its immutable fields and claims,
-runs in no cluster (§ Upgrading with `helm upgrade`, inbox #428).
+about the chart — `helm upgrade` from the predecessor's chart to the candidate's runs in no cluster; its immutable
+fields and claims are compared on rendered manifests by `scripts/chart_upgrade_check.py` (§ Upgrading with
+`helm upgrade`), and a cluster leg is inbox #430.
 
 1. **Stop the application — and only the application.** *Cold* means the **writer** is stopped; MariaDB and
    Garage stay up, because the capture reads through their own interfaces (ADR 0056 §2).
