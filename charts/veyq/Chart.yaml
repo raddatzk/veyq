@@ -6,12 +6,13 @@ description: >-
   five services infra/docker-compose.prod.yml runs, with tenant domains projected as Ingress objects by the
   backend itself and certificates obtained for them through the operator's ingress controller.
 type: application
-# The chart's own version and the release it deploys. `appVersion` is the image tag the values default to and
-# has the release shape ADR 0057 defines (`<major>.<minor>`, the repository's VERSION file). Deriving both from
-# that file at publish time is the chart's OCI-release sub-slice (inbox #26), not decided here; until then they
-# are set by hand and must move together.
-version: 1.0.0
-appVersion: "1.0"
+# A placeholder no publish uses. The publish packages the chart with its own release version as BOTH `version` and
+# `appVersion` (`<major>.<minor>`, or `<major>.<minor>-SNAPSHOT`; ADR 0057 §1, ADR 0064), and the minor is a commit
+# count — so no tree can hold the real value, and writing one here would be a number that is wrong on the next
+# commit. `appVersion` is the image tag the values default to, so an install from a checkout sets `image.tag` and
+# `admin.image.tag` (infra/README.md § Running on Kubernetes); an install from the registry needs neither.
+version: 0.0-dev
+appVersion: "0.0-dev"
 # `restricted` PodSecurity admission is GA from 1.25, and every pod here is written to pass it.
 kubeVersion: ">=1.25.0-0"
 keywords:

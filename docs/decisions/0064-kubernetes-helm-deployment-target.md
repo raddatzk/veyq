@@ -147,8 +147,14 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   to `oci://ghcr.io/<owner>` the chart `veyq` would land on `ghcr.io/<owner>/veyq`, the app image's own
   repository. The chart's `version` and `appVersion` are **both** the release version (`<major>.<minor>`, or
   `<major>.<minor>-SNAPSHOT` for a snapshot), set at packaging from the publish's version, never by hand. Helm
-  takes a two-part version as it is — measured with Helm 4.0.1, which packages `--version 1.0` and
-  `--version 1.42-SNAPSHOT` unchanged — so the chart needs no patch level of its own. The image repositories
+  takes a two-part version **by name only** — measured with Helm 4.0.1 against a local OCI registry: it packages,
+  pushes and installs `--version 0.3`, `--version 0.4-SNAPSHOT` and `oci://…@sha256:<digest>` unchanged, but
+  `helm lint` warns that `0.3` *"is not a valid SemVerV2"*, and with no `--version`, or a range, Helm finds no
+  tag at all (*"unable to locate any tags"*, `--devel` or not): its tag listing skips every tag that is not
+  three-part SemVer. (A three-part control, `0.5.0` beside `0.6.0-SNAPSHOT`, resolves `0.5.0`, and `--devel`
+  the snapshot.) So the chart needs no patch level to be installed the way the operator page installs it — by
+  the verified digest, or by its exact version — and in exchange a version range or "the latest chart" selects
+  nothing, a snapshot included. The image repositories
   default to the upstream's own (`ghcr.io/raddatzk/veyq`, `ghcr.io/raddatzk/veyq-admin`), written out for the
   same reason the verify identity is: a fork that deploys its own images overrides them, knowingly. A release
   refuses to republish the chart as it does the images; a release with two images and no chart is a partial

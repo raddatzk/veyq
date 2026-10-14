@@ -141,8 +141,10 @@ its sibling guards own (`validate_compose_posture.py` holds that target's half o
 **Why it sits OUTSIDE the `validate_*` glob.** It shells out to `helm`, which is not a repository artifact,
 and the glob's contract (`trust-chain.yml`) is buildless and diff-free: a `validate_*` guard that needs a tool
 outside the repo is green wherever that tool is missing. The precedent is `mutation_meta_check*.py`, which
-sit outside the glob for the same reason (they need a built report). No CI workflow runs it today; run it by
-hand and from any job that has `helm` on its PATH; without `helm` it exits 2 and says so, never 0:
+sit outside the glob for the same reason (they need a built report). `container.yml`'s `test` job runs it, with
+Helm installed from the release tarball pinned there by SHA-256, ahead of every build that ships the chart — a job
+no run has executed yet (this repository has no remote). Run it locally with `helm` on the PATH; without `helm` it
+exits 2 and says so, never 0:
 
     python3 scripts/chart_meta_check.py
 """

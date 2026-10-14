@@ -25,6 +25,12 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      exists, and a step that creates that ref — both run for `kind == release` only, neither with `--force`, and
      both keyed on the *tree-derived* version rather than on anything else. The `build` job stamps the same value
      into the image as `VEYQ_VERSION`, which is what the running instance later reports.
+  8. **The chart is the release's third artifact** (ADR 0064). The refuse step names every published image (the
+     build matrix) AND `charts/<name>` (`Chart.yaml`'s `name`), so a release with any of the three already out
+     is refused; the step that runs `helm package` sets `--version` and `--app-version` from the tree-derived
+     version and pushes to `oci://ghcr.io/<owner>/charts`; a `cosign sign` step names `charts/<name>`; and the
+     chart's default image repositories are exactly the upstream images `infra/README.md` verifies by digest —
+     `image.repository` the chart's own name, `admin.image.repository` its `-admin` sibling.
   4. **The deployment recipe travels in the image, in every runtime target.** Every `runtime-*` stage of the
      `Dockerfile` (one today, `runtime-jvm`) copies `infra/docker-compose.prod.yml` and `infra/.env.example`
      from their real in-tree paths, to the same destination, and that destination is neither `/work` (it holds
@@ -89,6 +95,10 @@ Assertions 2 and 3 were reshaped by a defect of the pipeline's own design (cr-re
 version in `VERSION`, so every push after the first would have been a red run at the refusal until someone
 committed a bump, and there was no way to try the publish path before it named something for good. Publishing
 moved behind a dispatch, and the minor into the history; this guard holds both.
+
+Assertion 8 came with the chart's OCI release (same CR): no incident, the chart had never been published. Each of
+its halves was bitten by injection before it counted, and the measurement that shaped it is in ADR 0064 — `helm
+push` appends the chart's name to the target, which is why the target ends in `/charts`.
 
 **A note for whoever edits this next, because the first run of assertion 5 tripped on it:** this guard scans
 durable state for a literal, and its own file is durable state, so spelling that literal here makes the guard
@@ -171,6 +181,7 @@ VERSION_JOB, VERSION_STEP = "version", "veyq-version"
 PUBLISH_JOB = "publish"
 REFUSE_STEP, TAG_STEP = "assert-release-unpublished", "release-tag"
 BUILD_JOB = "build"
+CHART_DIR = ROOT / "charts/veyq"
 
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
@@ -759,6 +770,70 @@ else:
         fail(f"{PROD_COMPOSE.relative_to(ROOT)} declares no services — this assertion checked NOTHING")
 
 
+if workflow_doc:
+    # ---- 8. the chart is the release's third artifact ---------------------------------------------------------
+    chart_meta = yaml.safe_load((CHART_DIR / "Chart.yaml").read_text()) if (CHART_DIR / "Chart.yaml").is_file() else {}
+    chart_name = str((chart_meta or {}).get("name") or "")
+    owner_expr = "ghcr.io/${{ github.repository_owner }}"
+    refuse = step_by_id(workflow_doc, PUBLISH_JOB, REFUSE_STEP) or {}
+    # Whole words of the step's env, with the owner expression kept as one word (it contains spaces), so
+    # `…/veyq` is not satisfied by `…/veyq-admin` or by `…/charts/veyq`.
+    refuse_env = (
+        " ".join(str(v) for v in (refuse.get("env") or {}).values())
+        .replace("${{ github.repository_owner }}", "\0OWNER\0")
+        .split()
+    )
+    refuse_env = [word.replace("\0OWNER\0", "${{ github.repository_owner }}") for word in refuse_env]
+    matrix_images = sorted(published_images(WORKFLOW.read_text())) if WORKFLOW.is_file() else []
+    if not chart_name:
+        fail(f"{(CHART_DIR / 'Chart.yaml').relative_to(ROOT)} names no chart, so the chart's release cannot be held")
+    for artifact in [*matrix_images, f"charts/{chart_name}"]:
+        if f"{owner_expr}/{artifact}" not in refuse_env:
+            fail(
+                f"the `{REFUSE_STEP}` step does not check `{owner_expr}/{artifact}` — a release with that artifact "
+                f"already out would be published again around it, and a release whose images and chart disagree "
+                f"is a partial one (ADR 0064, ADR 0065)"
+            )
+    package_steps = [s for s in job_steps(workflow_doc, PUBLISH_JOB) if "helm package" in str(s.get("run") or "")]
+    if len(package_steps) != 1:
+        fail(
+            f"the `{PUBLISH_JOB}` job has {len(package_steps)} step(s) running `helm package`; the chart ships "
+            f"with every publish, packaged exactly once (ADR 0064)"
+        )
+    for step in package_steps:
+        body = str(step.get("run") or "")
+        env = {str(k): str(v) for k, v in (step.get("env") or {}).items()}
+        if env.get("VERSION") != VERSION_EXPR:
+            fail(
+                f"the chart packaging step's `VERSION` is `{env.get('VERSION')}`, not `{VERSION_EXPR}` — the "
+                f"chart's version must be the release's, never the in-tree placeholder or a literal"
+            )
+        for flag in ('--version "$VERSION"', '--app-version "$VERSION"'):
+            if flag not in body:
+                fail(
+                    f"the chart packaging step does not pass `{flag}` — the chart's `version` and `appVersion` "
+                    f"are both the release version, set at packaging (ADR 0064); `appVersion` is the image tag "
+                    f"the values default to, so a chart packaged without it deploys the placeholder"
+                )
+        if not re.search(r"helm\s+push\b", body) or f"oci://{owner_expr}/charts" not in str(step.get("env") or {}) + body:
+            fail(
+                f"the chart packaging step does not `helm push` to `oci://{owner_expr}/charts` — `helm push` "
+                f"appends the chart's name, so that target is what puts it at `charts/{chart_name}` and not on "
+                f"the app image's own repository (ADR 0064, measured with Helm 4.0.1)"
+            )
+    signs_chart = any(
+        re.search(r"cosign\s+sign\b", str(s.get("run") or ""))
+        and f"{owner_expr}/charts/{chart_name}" in str(s.get("env") or {}) + str(s.get("run") or "")
+        for s in job_steps(workflow_doc, PUBLISH_JOB)
+    )
+    if chart_name and not signs_chart:
+        fail(
+            f"no `{PUBLISH_JOB}` step runs `cosign sign` over `{owner_expr}/charts/{chart_name}` — the chart is "
+            f"verified the way the images are (infra/README.md § Verifying a release), and an unsigned one "
+            f"verifies against nothing"
+        )
+
+
 # ---- 6. the production project is declared by the file, and no state instructs the flag it replaced ---------
 # The flow surfaces. They record what was decided and retired, so a retired rule's name necessarily survives
 # there — excluding them is the repository's own state/flow line, not a list of files that happened to be red.
@@ -951,7 +1026,9 @@ else:
                     f"accepts a signature the veyq release never made."
                 )
         for token in argv:
-            match = re.match(rf"^{re.escape(REGISTRY)}/{re.escape(owner)}/([a-z0-9-]+)([@:])", token)
+            # One segment or more: the chart lives at `charts/veyq`, and a token this did not collect would be one
+            # nobody held to a digest.
+            match = re.match(rf"^{re.escape(REGISTRY)}/{re.escape(owner)}/((?:[a-z0-9-]+/)*[a-z0-9-]+)([@:])", token)
             if match:
                 if match.group(2) == ":":
                     fail(
@@ -967,6 +1044,26 @@ else:
                 f"{README.relative_to(ROOT)} never verifies `{REGISTRY}/{owner}/{image}` by digest. The publish "
                 f"signs every image it ships, and an operator told to verify one of a pair runs the other on "
                 f"trust — and the pair includes the higher-privilege admin image (ADR 0065)."
+            )
+    values_file = CHART_DIR / "values.yaml"
+    values = (yaml.safe_load(values_file.read_text()) or {}) if values_file.is_file() else {}
+    chart_name = str((yaml.safe_load(CHART.read_text()) or {}).get("name") or "")
+    for key, image in (("image", chart_name), ("admin.image", f"{chart_name}-admin")):
+        node = values
+        for part in key.split("."):
+            node = (node or {}).get(part) if isinstance(node, dict) else None
+        default = (node or {}).get("repository") if isinstance(node, dict) else None
+        want = f"{REGISTRY}/{owner}/{image}"
+        if default != want:
+            fail(
+                f"{values_file.relative_to(ROOT)}: `{key}.repository` defaults to `{default}`, not `{want}` — "
+                f"the chart installs from the registry with the upstream's own images, the ones "
+                f"{README.relative_to(ROOT)} verifies (ADR 0064); a fork overrides it knowingly"
+            )
+        elif commands and image not in verified_images:
+            fail(
+                f"{values_file.relative_to(ROOT)}: `{key}.repository` defaults to `{want}`, which "
+                f"{README.relative_to(ROOT)} never verifies by digest — a default nobody is told to verify"
             )
     if WORKFLOW.is_file() and "certificate-identity" in WORKFLOW.read_text():
         fail(

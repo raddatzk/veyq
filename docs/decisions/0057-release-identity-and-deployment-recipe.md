@@ -63,7 +63,8 @@ one of two kinds:
 
 - **A snapshot** — the default. Published as `<major>.<minor>-SNAPSHOT` and `sha-<sha>`, signed like a release,
   and **mutable**: dispatching again on the same commit replaces it. It gets no `<major>`, no `latest` and no
-  git ref. `-SNAPSHOT` is a SemVer pre-release, so a version range does not select it unless asked to. A
+  git ref. A version range never selects it: for the chart, Helm resolves a two-part version only by its exact
+  name or digest, a release included (measured, [ADR 0064](0064-kubernetes-helm-deployment-target.md)). A
   snapshot is for trying a build on an instance that may be thrown away, and **never a rollback target**: an
   instance that ran one may hold a migration that changes before it is released, which Flyway's checksum check
   then refuses at the next start.

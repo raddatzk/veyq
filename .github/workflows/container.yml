@@ -41,9 +41,11 @@ concurrency:
   group: ${{ github.event_name == 'workflow_dispatch' && 'veyq-container-publish' || format('veyq-container-dry-run-{0}', github.ref) }}
   cancel-in-progress: false
 
-# Helm for the chart gate in `test`: the official release tarball, checked against this SHA-256 before it runs —
-# the shape ADR 0057 §6 uses for the OpenAPI generator JAR, and no setup action. Measured 2026-10-14: get.helm.sh's helm-v4.0.1-linux-amd64.tar.gz.sha256sum, the tarball's own hash and
-# the checksum in the GitHub release notes of helm/helm v4.0.1 all agree. Bumping it is part of cutting a release.
+# Helm for the chart gate in `test` and the chart packaging in `publish`: the official release tarball, checked
+# against this SHA-256 before it runs — the shape ADR 0057 §6 uses for the OpenAPI generator JAR, and no setup
+# action. Measured 2026-10-14: get.helm.sh's helm-v4.0.1-linux-amd64.tar.gz.sha256sum, the tarball's own hash
+# and the checksum in the GitHub release notes of helm/helm v4.0.1 all agree. Bumping it is part of cutting a
+# release.
 env:
   HELM_VERSION: v4.0.1
   HELM_SHA256: e0365548f01ed52a58a1181ad310b604a3244f59257425bb1739499372bdff60
@@ -181,7 +183,7 @@ jobs:
         working-directory: admin-web
         run: npm run check
       # The pinned Helm (workflow-level env above): verified against the pin BEFORE it is extracted, so a
-      # tarball that does not match never runs.
+      # tarball that does not match never runs. The same step installs it in `test` and in `publish`.
       - name: Install Helm (pinned tarball)
         run: |
           set -euo pipefail
@@ -273,7 +275,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
 
   publish:
-    name: Publish both images
+    name: Publish the release (both images and the chart)
     runs-on: ubuntu-latest
     needs:
       - version
@@ -297,6 +299,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The pinned Helm (workflow-level env above): verified against the pin BEFORE it is extracted, so a
+      # tarball that does not match never runs. The same step installs it in `test` and in `publish`.
+      - name: Install Helm (pinned tarball)
+        run: |
+          set -euo pipefail
+          tarball="helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLo "${RUNNER_TEMP}/${tarball}" "https://get.helm.sh/${tarball}"
+          echo "${HELM_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict -
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}" linux-amd64/helm
+          echo "${RUNNER_TEMP}/linux-amd64" >> "$GITHUB_PATH"
+
       # A release onto an existing one FAILS rather than replacing it (ADR 0057 §1). What this replaces: the old
       # pipeline asked the registry for the highest published minor and incremented it, with `|| printf '[]'` as
       # its error path — so a transient API error and "nothing published yet" were indistinguishable and both ended
@@ -307,10 +320,10 @@ jobs:
         id: assert-release-unpublished
         if: needs.version.outputs.kind == 'release'
         env:
-          # Both images of the release. EITHER already being published means this release has shipped — a
-          # partial republish is worse than a whole one, because the pair would then disagree about which
-          # version the instance runs (ADR 0065: one release, two images).
-          ARTIFACTS: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin
+          # All three artifacts of the release. ANY of them already being published means this release has
+          # shipped — a partial republish is worse than a whole one, because the set would then disagree about
+          # which version the instance runs (ADR 0065: one release, two images; ADR 0064: the chart beside them).
+          ARTIFACTS: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin ghcr.io/${{ github.repository_owner }}/charts/veyq
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
@@ -406,6 +419,40 @@ jobs:
             echo "Signing $image@${digest}"
             cosign sign --yes "$image@${digest}"
           done
+
+      # The chart is the release's third artifact (ADR 0064): packaged with the publish's own version as both
+      # `version` and `appVersion` — never the in-tree placeholder — so its default image tag is this release's,
+      # pushed beside the images, and signed with the same identity. `helm push` appends the chart's NAME to the
+      # target, so it lands on ghcr.io/<owner>/charts/veyq and not on the app image's own repository.
+      - name: Package and push the chart
+        id: chart
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          CHART_REGISTRY: oci://ghcr.io/${{ github.repository_owner }}/charts
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | helm registry login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          helm package charts/veyq --version "$VERSION" --app-version "$VERSION" --destination "${RUNNER_TEMP}/chart"
+          helm push "${RUNNER_TEMP}/chart/veyq-${VERSION}.tgz" "$CHART_REGISTRY" 2>&1 | tee "${RUNNER_TEMP}/chart-push.log"
+          # Measured with Helm 4.0.1: a push prints `Pushed: <ref>` and `Digest: sha256:<64 hex>`, and that digest
+          # is the sha256 of the manifest `docker buildx imagetools inspect --raw` returns for the same tag.
+          digest="$(sed -n 's/^Digest: \(sha256:[0-9a-f]\{64\}\)$/\1/p' "${RUNNER_TEMP}/chart-push.log")"
+          if [[ -z "$digest" ]]; then
+            echo "helm push printed no digest, so there is nothing to sign" >&2
+            exit 1
+          fi
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign the published chart (keyless)
+        env:
+          CHART: ghcr.io/${{ github.repository_owner }}/charts/veyq
+          DIGEST: ${{ steps.chart.outputs.digest }}
+        run: |
+          set -euo pipefail
+          echo "Signing ${CHART}@${DIGEST}"
+          cosign sign --yes "${CHART}@${DIGEST}"
 
       # One release, one name, one tree (ADR 0057 §2). The ref is created LAST, by the publish itself, so it
       # exists only for a release that actually shipped — and it is the ref at which the deployment files

@@ -6,7 +6,7 @@
 # tenant Ingress objects into its own namespace and lists them by label, so two releases there would reconcile
 # each other's routing away.
 #
-# What is required and has no default:  domain · storeDomain · image.repository · admin.image.repository ·
+# What is required and has no default:  domain · storeDomain ·
 # every key under secrets (or secrets.existingSecret) · externalDatabase.jdbcUrl when mariadb.enabled=false ·
 # ingress.tls.secretName when ingress.tls.mode=shared · ingress.tls.acme.email when ingress.tls.acme.enabled ·
 # networkPolicy.ingressFrom while networkPolicy.enabled (the default).
@@ -32,10 +32,13 @@ hsts:
   enabled: true
 
 image:
-  # e.g. ghcr.io/raddatzk/veyq. The app image, cosign-signed by the same publish as the admin image below.
-  repository: ""
-  # Defaults to the chart's appVersion, which has the release shape `<major>.<minor>`. Pin one; `latest` moves,
-  # the schema migrates at boot with no gate, and there is no downgrade path (ADR 0057).
+  # The upstream's app image, cosign-signed by the same publish as the admin image and the chart — written out, as
+  # the verify identity is (ADR 0057 §3), so a fork that deploys its own images overrides it knowingly.
+  # scripts/validate_release_identity.py holds it to the name infra/README.md § Verifying a release verifies.
+  repository: ghcr.io/raddatzk/veyq
+  # Defaults to the chart's appVersion: the release a published chart was packaged with (`<major>.<minor>`), and
+  # a placeholder in a checkout, where it must be set. Pin one; `latest` moves, the schema migrates at boot with
+  # no gate, and there is no downgrade path (ADR 0057).
   tag: ""
   # The digest infra/README.md § Verifying a release resolved and verified for that tag (`sha256:<64 hex>`).
   # Set, the pod runs `repository:tag@digest` and the runtime pulls by the digest; the tag stays for a reader.
@@ -97,9 +100,9 @@ app:
 
 admin:
   image:
-    # e.g. ghcr.io/raddatzk/veyq-admin — pin the SAME tag as the app: the two ship as one release and only one
-    # of a mismatched pair migrated the schema.
-    repository: ""
+    # The upstream's admin image (see image.repository) — pin the SAME tag as the app: the two ship as one release
+    # and only one of a mismatched pair migrated the schema.
+    repository: ghcr.io/raddatzk/veyq-admin
     tag: ""
     # Verified with the app image, by the same section, and set together with it — never one digest alone.
     digest: ""
