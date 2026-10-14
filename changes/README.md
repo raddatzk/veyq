@@ -1621,6 +1621,16 @@ the rows the gated write adds. Keyed on the cleanups (`grep` the bulk deletes an
 `@Scheduled` purges), cr-a-gate-holds-until-its-write-commits found thirteen real ones in five clusters and could
 name every other gate safe in one line each.
 
+### A refine that removes a control lists every role and share root that reaches it
+
+`cr-move-browser-and-replace-by-upload` removed the replace from every surface, the opened file's included, after
+reading only the folder flows. A `READ_WRITE` link on a single file (`FilesShareRoots`, three screens further down in
+the same `docs/apps/files.md`) writes through exactly that control, and nothing else would have been left for it. The
+gap surfaced at implement time, stopped the CR midway, and the owner reversed half of the decision. So before a CR
+takes a control away, its refine greps the matrix row, the share roots and the role hints that name that control
+(`grep -n <capability> docs/apps/<app>.md`, the `roleContributorHint`-style strings). It then writes down, for each
+role, what that role can still do.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong
