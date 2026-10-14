@@ -10,8 +10,8 @@ space, side by side.
 
 - **Upload** — choose **New → Upload files**, or drop files onto the folder. Uploads run in the background, and the
   status menu in the top bar shows how far they are.
-- **Download** — the download button on the file's row gives you the file back exactly as you put it in, under the
-  name it has in veyq. Clicking the row itself opens the file's own page.
+- **Download** — the download button on the file's row (or at the top of its page) gives you the file back exactly as
+  you put it in, under the name it has in veyq. Clicking the row itself opens the file's own page.
 - **Look at it** — click the file's row and its page opens with the file itself on it: a **picture** is shown, a
   **text** (plain text, Markdown, code, JSON, CSV …) is shown as text (select it as you like, or use the **Copy**
   button; **Wrap lines** switches line wrapping on and off), a **PDF** is shown page by page (with its page
@@ -26,11 +26,12 @@ space, side by side.
   not shown as live elements, and **scanned pages** (some scanners store the page in an image format veyq does not draw)
   may show gaps — and have no text to select unless the scanner added it. When something cannot be shown, the download
   button is right there.
-- **Replace** — put a newer version of a file in its place. The name stays. veyq **asks first**, because there is
-  **no version history**: the old content cannot be brought back. Uploading a file whose name is already taken in
-  that folder asks the same question.
-- **Rename and move** — both are in the **⋯** menu of the file's row. **Move to…** opens a list of places; pick one and the file goes
-  there (more on moving below).
+- **Replace** — put a newer version of a file in its place: upload a file with the **same name** into its folder, or
+  open the file and use the replace button at the top of its page. The name stays. veyq **asks first**, because there is
+  **no version history**: the old content cannot be brought back. A file whose upload never finished is simply filled,
+  without the question.
+- **Rename and move** — both are in the **⋯** menu of the file's row. **Move to…** lets you open the folder it should go
+  to and choose **Move here** (more on moving below).
 - **Delete, with an undo** — a deleted file goes to the **trash**, and a message at the time offers **Undo** right
   away. Later you can still restore it from the trash until it is removed for good; the trash shows the date. Space
   in the trash still counts against your storage until the trash is emptied.
@@ -48,9 +49,12 @@ Where it cannot, a very large file may be refused with a message instead of fail
 
 ## Moving things
 
-**Move to…** works the same on a folder, a Memory, a chapter, a file or a drop box: choose the new place from a
-list, and everything inside comes along and stays readable. If somebody shared a
-folder with you and lets you contribute, you can move things around **inside** that folder — but not out of it.
+**Move to…** works the same on a folder, a Memory, a chapter, a file or a drop box. It opens where the item is now,
+with the path above it: click a folder to go into it, or a part of the path to go back up, and choose **Move here**
+in the place it should go — or **Cancel**. Only places that can take the item are shown (a chapter, for example, only
+goes into a Memory), and **Move here** is greyed out, with the reason, where the item cannot go — for instance where it
+already is. Everything inside comes along and stays readable. If somebody shared a folder with you and lets you
+contribute, you can move things around **inside** that folder — but not out of it.
 
 ## One list for everything in a folder
 

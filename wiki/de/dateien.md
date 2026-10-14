@@ -10,8 +10,8 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
 
 - **Hochladen** — wähle **Neu → Dateien hochladen** oder lege Dateien auf den Ordner. Das Hochladen läuft im
   Hintergrund; das Status-Menü in der oberen Leiste zeigt, wie weit es ist.
-- **Herunterladen** — die Herunterladen-Schaltfläche in der Zeile der Datei gibt dir die Datei genau so zurück, wie
-  du sie abgelegt hast, unter dem Namen, den sie in veyq hat. Ein Klick auf die Zeile selbst öffnet die Seite der Datei.
+- **Herunterladen** — die Herunterladen-Schaltfläche in der Zeile der Datei (oder oben auf ihrer Seite) gibt dir die
+  Datei genau so zurück, wie du sie abgelegt hast, unter dem Namen, den sie in veyq hat. Ein Klick auf die Zeile selbst öffnet die Seite der Datei.
 - **Ansehen** — klicke auf die Zeile der Datei, und ihre Seite öffnet sich mit der Datei selbst darauf: ein **Bild**
   wird angezeigt, ein **Text** (reiner Text, Markdown, Code, JSON, CSV …) wird als Text angezeigt (markiere ihn nach Belieben oder nutze
   die Schaltfläche **Kopieren**; mit **Zeilen umbrechen** schaltest du den Zeilenumbruch ein und aus), eine **PDF-Datei**
@@ -30,11 +30,12 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
   Scanner speichern die Seite in einem Bildformat, das veyq nicht zeichnet) können Lücken zeigen — und haben keinen
   Text zum Markieren, außer der Scanner hat ihn mitgespeichert. Wenn etwas nicht angezeigt werden kann, ist die
   Schaltfläche zum Herunterladen gleich daneben.
-- **Ersetzen** — lege eine neuere Fassung an die Stelle der Datei. Der Name bleibt. veyq **fragt vorher nach**, denn
-  es gibt **keinen Versionsverlauf**: Der alte Inhalt lässt sich nicht zurückholen. Dieselbe Frage kommt, wenn du eine
-  Datei hochlädst, deren Name in dem Ordner schon vergeben ist.
-- **Umbenennen und verschieben** — beides findest du im **⋯**-Menü der Zeile einer Datei. **Verschieben nach …** öffnet eine Liste von
-  Orten; wähle einen, und die Datei geht dorthin (mehr dazu unten).
+- **Ersetzen** — lege eine neuere Fassung an die Stelle der Datei: Lade eine Datei mit **demselben Namen** in ihren
+  Ordner hoch, oder öffne die Datei und nutze die Schaltfläche zum Ersetzen oben auf ihrer Seite. Der Name bleibt. veyq
+  **fragt vorher nach**, denn es gibt **keinen Versionsverlauf**: Der alte Inhalt lässt sich nicht zurückholen. Eine
+  Datei, deren Hochladen nie fertig wurde, wird einfach gefüllt, ohne Frage.
+- **Umbenennen und verschieben** — beides findest du im **⋯**-Menü der Zeile einer Datei. Mit **Verschieben nach …**
+  öffnest du den Ordner, in den die Datei soll, und wählst **Hierher verschieben** (mehr dazu unten).
 - **Löschen, mit Rückgängig** — eine gelöschte Datei kommt in den **Papierkorb**, und eine Meldung bietet dir sofort
   **Rückgängig** an. Später kannst du sie noch aus dem Papierkorb wiederherstellen, bis sie endgültig entfernt wird;
   der Papierkorb zeigt das Datum. Was im Papierkorb liegt, zählt weiter gegen deinen Speicherplatz, bis er geleert ist.
@@ -54,8 +55,12 @@ abgelehnt, statt mittendrin zu scheitern.
 ## Dinge verschieben
 
 **Verschieben nach …** funktioniert gleich bei einem Ordner, einer Erinnerung, einem Kapitel, einer Datei oder einem
-Briefkasten: Wähle den neuen Ort aus einer Liste, und alles darin kommt mit und bleibt lesbar. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken darfst, kannst du
-Dinge **darin** verschieben — aber nicht hinaus.
+Briefkasten. Es öffnet sich dort, wo der Eintrag gerade liegt, mit dem Pfad darüber: Klicke auf einen Ordner, um
+hineinzugehen, oder auf einen Teil des Pfads, um zurückzugehen, und wähle an dem Ort, an den er soll, **Hierher
+verschieben** — oder **Abbrechen**. Gezeigt werden nur Orte, die den Eintrag aufnehmen können (ein Kapitel zum Beispiel
+nur in eine Erinnerung), und **Hierher verschieben** ist ausgegraut, mit dem Grund, wo er nicht hinkann — etwa dort, wo
+er schon liegt. Alles darin kommt mit und bleibt lesbar. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken
+darfst, kannst du Dinge **darin** verschieben — aber nicht hinaus.
 
 ## Eine Liste für alles in einem Ordner
 

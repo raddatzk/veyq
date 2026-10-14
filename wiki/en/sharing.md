@@ -30,7 +30,8 @@ visitors of the link never see that name.
 
 Two honest details:
 
-- A guest with a "view + add" link on a folder can **replace** any file in it, yours included. veyq warns them first,
+- A guest with a "view + add" link on a folder can **replace** any file in it, yours included, by uploading a file
+  with the same name (or with the replace button on the file's page). veyq warns them first,
   and there is **no version history** — the old content is gone. Guests cannot **delete** files.
 - Someone who hands things in through a drop box sees what they just added only in that browser tab. It's for
   *handing things in*, not for managing a gallery. You see everything.

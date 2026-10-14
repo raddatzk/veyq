@@ -27,6 +27,11 @@ acceptanceCriteria:
       web:
         unit: [src/features/files/shareUpload.wire.test.ts, src/features/files/dropBox.wire.test.ts, src/features/files/levelRows.guest.test.ts]
         e2e: [src/features/files/filesShare.e2e.test.ts]
+  - id: a-contributor-replaces-by-uploading-the-same-name
+    text: No row offers a replace (owner decision 2026-10-14). A contributor's upload of a name a file of the folder holds asks the same question a member gets and, accepted, replaces that file with the blob the guest saw, before the guest is named; declined, nothing is sent and nobody is named; a file that holds no content is filled without the question; a name a folder, Memory or drop box holds is refused unsent (reverses inbox #392's refusal of a guest's same-name upload).
+    coverage:
+      web:
+        unit: [src/features/files/levelRows.guest.test.ts]
   - id: a-guest-writes-only-a-file-of-its-subtree
     text: A guest's completion targets only a FILE of its subtree in the FILE_CONTENT role; a folder (root or named) is share_not_contributable, a node outside the subtree is not found, another role is invalid_request, another node's session is upload_mismatch, a wrong token is refused.
     coverage:

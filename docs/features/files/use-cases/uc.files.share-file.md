@@ -21,7 +21,7 @@
 2. **The guest** opens the link; core's page renders the file's view — the member's `FileDetail`, handed the guest's
    access: the file's name, size, type and date, and a download.
 3. **Download:** the client presigns through the link (`resolveShareBlob`) and decrypts in the browser.
-4. **Replace (contributor):** the guest picks a file; the page asks first — the content changes for everyone who has
+4. **Replace (contributor):** the guest chooses the replace in the file page's header and picks a file; the page asks first — the content changes for everyone who has
    the link, the owner too, and no version is kept — then names the guest once per link, uploads through core's guest
    transport and completes with `completeShareFile`, carrying the blob it saw.
 5. The member sees the new content and its metadata in the file's view, like after their own replace.

@@ -39,7 +39,7 @@ acceptanceCriteria:
         unit: [src/features/files/uploadFile.wire.test.ts, src/features/files/levelRows.test.ts]
         e2e: [src/features/files/files.e2e.test.ts]
   - id: a-file-name-is-folded-as-a-file-name
-    text: A file's slug folds by fileNameSlug (NFC, lower case, punctuation kept), so a picked name a file of the folder already holds asks to replace it, a rename folds by the renamed node's kind, and a folder keeps slugify.
+    text: A file's slug folds by fileNameSlug (NFC, lower case, punctuation kept), so a picked name a file of the folder already holds asks to replace it (the one replace a row's file has, since no row offers one, owner decision 2026-10-14), a rename folds by the renamed node's kind, and a folder keeps slugify.
     coverage:
       web: { unit: [src/features/files/register.test.ts, src/features/files/levelRows.test.ts, src/core/node/FolderNameDialog.slug.test.ts] }
   - id: metadata-is-the-blobs-own

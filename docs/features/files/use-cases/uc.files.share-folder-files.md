@@ -23,8 +23,10 @@
    under the folder on screen (core's `createShareNode`), uploads through core's guest transport into that node, and
    completes with `completeShareFile`, which carries the file's sealed metadata.
 4. The server re-checks the link under the scope lock, attaches the blob and writes the metadata in one transaction.
-5. **Replace (contributor):** a row's replace uploads into that file, completing with the blob the guest saw; any file
-   of the subtree, a member's too.
+5. **Replace (contributor):** an upload of a name a file of the folder already holds — or the opened file's replace, a
+   header action of its page — asks first, then uploads into that file, completing with the blob the guest saw; any
+   file of the subtree, a member's too. A row offers no replace (owner decision 2026-10-14, reversing inbox #392's
+   refusal of a guest's same-name upload).
 6. The member sees the new file and its metadata in the folder, like any other.
 
 ## Alternate / exception flows
@@ -36,7 +38,9 @@
   completion is refused (`upload_not_found` / `node_not_found`), nothing is attached.
 - **E4 — a trashed file** (or one under a trashed folder): not listed, its blob `404`, an upload into it `404`.
 - **E5 — the link's storage limit is reached:** refused at the exact byte; the page says the link is full.
-- **E6 — a name a readable sibling already holds:** refused before anything is sent; the row's replace is the way.
+- **E6 — a name a readable sibling already holds:** a file's is the replace of step 5, after the question; a folder's,
+  a Memory's or a drop box's is refused before anything is sent, the sibling named by its kind. A sibling the guest
+  could not see is the server's `409 slug_taken`, said in the generic words.
 - **E7 — the target is a folder, outside the subtree, or the role is not `FILE_CONTENT`:** refused.
 - **A8 — the link is deleted:** a guest's identity stays while a file names it, so the member still knows who added
   it.

@@ -24,9 +24,10 @@
 4. The section lists the folder's files with name, size and modified time.
 5. **Download:** the client presigns the blob's chunks, opens them under the file node's key and saves the file under
    its name.
-6. **Replace:** a row's replace (or a picked name a file already holds, after the member confirms) uploads the new
-   bytes into the same node, completing with the blob the member saw (`expectedBlobId`); the old blob is freed in the
-   same transaction.
+6. **Replace:** a picked name a file of the folder already holds — after the member confirms — or the opened file's
+   replace (a header action of its page, also after the question) uploads the new bytes into the same node, completing
+   with the blob the member saw (`expectedBlobId`); the old blob is freed in the same transaction. A row offers no
+   replace (owner decision 2026-10-14).
 7. **Rename** opens core's name dialog; **delete** asks, then moves the node to core's trash, from which it is
    restored like any node.
 

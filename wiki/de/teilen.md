@@ -30,7 +30,8 @@ was beigesteuert hat. Andere, die den Link öffnen, sehen diesen Namen nie.
 
 Zwei ehrliche Einzelheiten:
 
-- Wer einen „Ansehen + mitwirken"-Link auf einen Ordner hat, kann darin **jede Datei ersetzen**, auch deine. veyq warnt
+- Wer einen „Ansehen + mitwirken"-Link auf einen Ordner hat, kann darin **jede Datei ersetzen**, auch deine — indem er
+  eine Datei mit demselben Namen hochlädt (oder über die Schaltfläche zum Ersetzen auf der Seite der Datei). veyq warnt
   vorher, und es gibt **keinen Versionsverlauf** — der alte Inhalt ist weg. Dateien **löschen** können Gäste nicht.
 - Wer etwas über einen Briefkasten abgibt, sieht das gerade Hinzugefügte nur in diesem Browser-Tab. Es geht ums
   *Abgeben*, nicht ums Verwalten einer Galerie. Du siehst alles.

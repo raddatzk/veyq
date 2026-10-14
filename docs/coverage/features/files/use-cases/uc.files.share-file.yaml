@@ -33,6 +33,6 @@ acceptanceCriteria:
       backend: { integration: [FileShareSliceTest.aGuestOfAFileLinkLosesTheFileWhenItIsTrashed] }
       web: { e2e: [src/features/files/fileSingleShare.e2e.test.ts] }
   - id: the-member-opens-and-shares-a-file
-    text: A member opens a file from a folder's list and sees its facts, downloads it, replaces it (after the question), and makes links from its header card — share, rename, move and delete each where the matrix grants them (not during a pending deletion, not for a guest's file in an identity folder).
+    text: A member opens a file from a folder's list and sees its facts; its header carries the file's actions — download, replace (after the question; no standing sentence about it, owner decision 2026-10-14), share, rename, move and delete — each where the matrix grants it (not during a pending deletion, not for a guest's file in an identity folder); a READ_WRITE guest's header carries the download and the replace.
     coverage:
-      web: { unit: [src/features/files/components/FileDetail.test.ts, src/features/files/capabilities.test.ts, src/features/files/register.test.ts, src/features/files/levelRows.test.ts] }
+      web: { unit: [src/features/files/components/FileDetail.test.ts, src/features/files/components/FileDetail.guest.test.ts, src/features/files/capabilities.test.ts, src/features/files/register.test.ts, src/features/files/levelRows.test.ts] }

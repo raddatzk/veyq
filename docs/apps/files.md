@@ -108,10 +108,12 @@ reads).
   possible, `files.emptyReadOnly`, `files.guest.empty`). Read-only during a pending deletion: download only. The same
   rows are a share guest's (§ Guests).
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
-  FILE sibling already holds by `fileNameSlug`, replace that file after the member confirmed — the row's replace asks
-  too, naming the file and the picked one, and both questions say the old content cannot be restored, there being no
-  version history (owner decision 2026-10-08, inbox #383); "replace anyway" after a peer's replace is itself the
-  answer and asks nothing), plan and pump the blob
+  FILE sibling already holds by `fileNameSlug`, replace that file after the uploader confirmed (`files.replaceConfirm`,
+  for a member and a contributor guest alike — the one way a row's file is replaced, owner decision 2026-10-14); the
+  opened file's replace asks too, naming the file and the picked one, and both questions say the old content cannot be
+  restored, there being no version history (owner decision 2026-10-08, inbox #383); a file that holds no content is
+  filled without the question, and "replace anyway" after a peer's replace is itself the answer and asks nothing), plan
+  and pump the blob
   under the node's own key with the file's metadata sealed under its `K_blob`, then `completeFile` with
   `expectedBlobId` — nothing is written after it. The status menu shows progress; a final refusal (`slug_taken`, `illegal_structure`, `stale_file` — the job's `isFinal`, core's queue) fails the item at once and the menu offers no retry for it; the level shows, above the list, why a file of its
   folder was not uploaded (a taken name, `stale_file` with "replace anyway", no space). **A name another kind holds is
@@ -123,11 +125,11 @@ reads).
   (inbox #384): failed after its
   retry or cancelled (core's queue calls the job's `abandon`), a job moves a node it created to the trash once
   `listFiles` shows it still holds no content — best effort; a node it cannot trash stays and its retry fills it. A file
-  that holds no content anyway (an upload cut off, e.g. a closed tab; a guest's, which a guest cannot delete) offers an
-  upload into it instead of a replace, and a picked file of its name fills it without the replace question; in core's
+  that holds no content anyway (an upload cut off, e.g. a closed tab; a guest's, which a guest cannot delete) is filled
+  by a picked file of its name without the replace question (its opened page offers an upload into it); in core's
   trash such a file (core's `attached` false on the trash row, Files' `emptyInTrash`) says it holds no content — its
-  restore stays offered (inbox #391). A failure the same file has since been uploaded over is no longer shown. The row's
-  replace keeps the file's name (its tooltip says so); a rename selects the name without its extension (`register.ts`
+  restore stays offered (inbox #391). A failure the same file has since been uploaded over is no longer shown. A
+  replace keeps the file's name (the opened file's action says so in its tooltip); a rename selects the name without its extension (`register.ts`
   `renameSelectionEnd`).
 - **The download** (`download.ts`) saves under core's `downloadName` (the node name, else the blob's sealed name, plus
   the sealed type's extension when the name has none — the save target itself stays `application/octet-stream`, so a
@@ -302,8 +304,9 @@ These are the matrix half; a right shows only where the session's data source al
 (`web/src/features/files/source.ts`, `sourceCapabilities`: the guest's source has no delete and no rename, and no upload
 or move unless the link is `READ_WRITE`), so the guest's columns are the most a guest page can ever offer. A move is
 core's (`core/node/MoveNodeDialog.vue`, the host's): the row's "Move to…" asks the host through the row factory's
-(or the detail's) `move` event, and the dialog offers only what `FilesNodeKindRules` takes — a file or a drop
-box at the root or in a folder (the kinds' `placement`), never into a drop box or a guest's folder.
+(or the detail's) `move` event, and the dialog's folder browser (`MoveBrowser.vue`, one place at a time with "Move
+here") lists only places that take what `FilesNodeKindRules` takes — a file or a drop box at the root or in a folder
+(the kinds' `placement`), never into a drop box or a guest's folder.
 
 - **The contract** (tag `share-files` in `files.openapi.yaml`, no auth, behind core's `ShareGuestGate`):
   `listShareFiles` — `GET /api/shares/{shareId}/files`: `{items: [{nodeId, fileBlob|null}]}` for every live `FILE` of
@@ -332,14 +335,15 @@ box at the root or in a folder (the kinds' `placement`), never into a drop box o
   (`source.ts`): the guest's lists through `listShareFiles`, downloads through the link's presign (`shareChunkUrls`)
   and, for a contributor, uploads one core-queue job per file (`shareUpload.ts`: guest create → guest transport with
   the blob meta → `completeShareFile`) and re-resolves the link afterwards (`access.reload`). So a guest sees the
-  member's rows — name, size and date opened under the chain's keys, the download — and a contributor the upload and a
-  row's replace (an upload into it, for a file that holds no content). No standing sentence above the list (removed by the
+  member's rows — name, size and date opened under the chain's keys, the download — and a contributor the upload. No
+  row offers a replace, for a guest as for a member. No standing sentence above the list (removed by the
   owner 2026-10-14): the link's role badge says a contributor can upload over any file, and the replace itself asks. An upload of a name a file there already holds
   **replaces that file after the same question a member gets** (owner decision 2026-10-14, reversing inbox #392's
-  "no replace by upload for a guest"): the guest's source turns it into a replace as the member's does, because the
-  row's replace it used to point to no longer exists. **Every replace asks first** (owner decision 2026-10-08, inbox #383) — the contributor's row replace, after
-  the file is picked and before the guest is named ("it changes for everyone who sees this folder, the owner too; the
-  old content cannot be restored"), as the member's does (§ The web); a file that holds no content asks nothing; after a
+  "no replace by upload for a guest"): the guest's source turns it into a replace as the member's does, through the
+  guest's replace door (an entry with `replace`, `shareUpload.ts`). **Every replace asks first** (owner decision
+  2026-10-08, inbox #383) — after the file is picked and before the guest is named, as the member's does (§ The web);
+  on an opened file the contributor's question says it changes for everyone who has the link, the owner too
+  (`files.guest.replaceFileConfirm`); a file that holds no content asks nothing; after a
   peer's replace (`stale_file`) the page offers "replace anyway" on the current blob, as a member's does. The guest names
   itself once per link through the page's one naming flow (`requestGuest`, the shell's dialog, core's `GuestNaming`).
   No rename and no delete on the guest page (nodes store no authorship); a contributor's move of a file is core's move
@@ -369,9 +373,12 @@ the member view with functions removed). Decided with it, small questions answer
   it served no guest anyway, and a restore is not a new share). A file trashed after its link exists serves nothing:
   not listed, its blob `404`, an upload refused.
 - **The page is the member's file view, `FileDetail`** (`components/FileDetail.vue`, FILE's registered `detail`): core's
-  header card (name; share, rename, move, delete where the matrix says), the file's size, type and date from its blob's
-  sealed meta, a download and a replace (asks first; the node keeps its name; a compare-and-set on the blob it read, with
-  "replace anyway" after a peer's replace; a file that holds no content offers an upload into it). A member opens it from
+  header (name; download, replace, share, rename, move, delete — each a header action where the matrix says, owner
+  decision 2026-10-14: the download and the replace used to be buttons below it), then the file and its size, type and
+  date from its blob's sealed meta. The replace asks first (the node keeps its name; a compare-and-set on the blob it
+  read, with "replace anyway" after a peer's replace; a file that holds no content offers an upload into it, which asks
+  nothing); no standing sentence says beforehand what a replace does. It is the one way a `READ_WRITE` link on a single
+  file writes: there is no folder above it to upload a file of the same name into. A member opens it from
   a click on its row in the folder's list (the row's primary opens it through the host); core's page of a public link
   (`ShareTreePage`) mounts it for the link's root — and for a file *inside* a folder link, which therefore also gets a
   page of its own. Its data source is the same `FilesSource` (`beginReplace` is its one addition: a replace names the
