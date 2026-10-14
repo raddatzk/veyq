@@ -1,7 +1,7 @@
 ---
 id: cr-move-browser-and-replace-by-upload
 title: Moving opens a folder browser with "Move here", and a file's content is replaced only by uploading its name again
-status: planned
+status: in-progress
 satisfies: [uc.memory.move-node]
 adrs: ["0079", "0080"]
 invariants: [operator-blind E2EE everywhere]

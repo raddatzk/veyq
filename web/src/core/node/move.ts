@@ -1,10 +1,18 @@
-// Moving a node elsewhere in the tree (inbox #358): what core's `MoveNodeDialog` offers as destinations, the one door it
-// moves through for whoever looks, and the refusals it explains by name. Core's, like the placement write itself
-// (`core/node/tree.ts` `moveNode`, `core/sharing/guestTree.ts` `placeShareNodeAsGuest`): a move carries no application
-// semantics — the node's own content key is unchanged, only its wrap, name and slug token are re-sealed under the
-// destination's key at the next placement version (ADR 0080 decision 3), so everything below it keeps opening.
+// Moving a node elsewhere in the tree (inbox #358): where core's move browser (`MoveBrowser.vue`, inside `MoveNodeDialog`) lets
+// a node go, the one door it moves through for whoever looks, and the refusals it explains by name. Core's, like the
+// placement write itself (`core/node/tree.ts` `moveNode`, `core/sharing/guestTree.ts` `placeShareNodeAsGuest`): a move
+// carries no application semantics — the node's own content key is unchanged, only its wrap, name and slug token are
+// re-sealed under the destination's key at the next placement version (ADR 0080 decision 3), so everything below it keeps
+// opening.
 //
-// **Destinations are a hint; the server decides.** The picker mirrors the server's rules so it offers only what would be
+// **The browser (owner decision 2026-10-14, replacing #358's list of every destination).** It opens at the moved nodes'
+// place ({@link moveStart}), shows one place at a time with a trail up to the top of what the session reads
+// ({@link moveTrail}: a member's scope root, a guest's link root), lists only the children a user may go into or move into
+// ({@link movePlaces}), and says per place whether "Move here" may be chosen ({@link moveHereBlock}). Every function takes
+// the moved nodes as a LIST: the selection of inbox #421 moves through the same browser, and a place is offered only where
+// it takes every one of them.
+//
+// **The places are a hint; the server decides.** The browser mirrors the server's rules so it offers only what would be
 // taken: the kind's `placement` (`registry.placementAllows`, the backend's `NodeKindRules`), never the node itself or
 // anything below it (a cycle), never a guest's identity folder or anything inside one (nothing is placed INTO one, ADR
 // 0080 decision 11), and for a guest only the share's subtree and only a `FOLDER` (core's `FolderGuestNodeRules`: the one
@@ -15,7 +23,7 @@
 // destination of the scope, the root included), a `READ_WRITE` guest through `placeShareNodeAsGuest` after the page's
 // one naming flow (`access.requestGuest`) — never to the scope root, which no guest holds a key of. Any other session has
 // no door, so no move control can fall through to a call.
-import type { Access, GuestAccess, MemberAccess, TreeSource } from '../access'
+import type { Access, GuestAccess, MemberAccess, SourceNode, TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { moveNode, PlacementConflictError } from './tree'
 import { loadTree, treeStore } from './treeStore'
@@ -25,64 +33,83 @@ import { guestTreeContext, GuestTreeError, placeShareNodeAsGuest } from '../shar
 import { decodeHttpError } from '../../shared/httpError'
 import { ShareRole } from '../../api/generated/sharing'
 
-/** Why a destination cannot be picked; null: it can. */
+/** Why "Move here" cannot be chosen at a place (or, for `self`/`inside`, why a listed place cannot be opened); null: it can. */
 export type MoveBlock = 'self' | 'inside' | 'current' | 'identityFolder' | 'kind'
-
-/** One row of the destination picker: a node (or the member's scope root, `id` null) at its depth in the tree. */
-export interface MoveDestination {
-  id: string | null
-  kind: NodeKind | null
-  name: string
-  depth: number
-  blocked: MoveBlock | null
-}
 
 type MovedNode = { id: string; kind: NodeKind; parentId: string | null }
 
+/** Whether `id` is one of `nodes` or lies below one (bounded: a served parent cycle stops instead of spinning). */
+function withinMoved(tree: TreeSource, nodes: readonly MovedNode[], id: string): 'self' | 'inside' | null {
+  if (nodes.some((n) => n.id === id)) return 'self'
+  const steps = new Set<string>()
+  for (let n = tree.node(id); n && !steps.has(n.id); n = n.parentId ? tree.node(n.parentId) : null) {
+    steps.add(n.id)
+    if (nodes.some((m) => m.id === n!.id)) return 'inside'
+  }
+  return null
+}
+
+/** Why `nodes` cannot be moved to the place `at` (null: the member's scope root), or null where they can. */
+export function moveHereBlock(tree: TreeSource, nodes: readonly MovedNode[], mode: Access['mode'], at: string | null): MoveBlock | null {
+  if (at !== null) {
+    const within = withinMoved(tree, nodes, at)
+    if (within) return within
+    if (tree.inIdentityFolder(at)) return 'identityFolder'
+  }
+  if (nodes.length > 0 && nodes.every((n) => (n.parentId ?? null) === at)) return 'current'
+  const kind = at === null ? null : (tree.node(at)?.kind ?? null)
+  if (!nodes.every((n) => registry.placementAllows(n.kind, kind))) return 'kind'
+  if (mode === 'guest' && kind !== FOLDER_KIND) return 'kind' // only a folder lets a guest's child in
+  return null
+}
+
+/** The top of what the session may browse: a guest's link root, a member's scope root (null). */
+export function moveTop(tree: TreeSource): string | null {
+  return tree.rootId
+}
+
+/** Where the browser opens: the place the nodes are in (every one the same), else the top. A place this session does not
+ *  read (a guest's node whose parent lies above the link) is the top too. */
+export function moveStart(tree: TreeSource, nodes: readonly MovedNode[]): string | null {
+  const parents = new Set(nodes.map((n) => n.parentId ?? null))
+  const [parent] = parents
+  return parents.size === 1 && parent && tree.node(parent) ? parent : moveTop(tree)
+}
+
+/** The trail from the top down to `at` (both included): the breadcrumb's places, as ids (null: the scope root). A chain
+ *  that does not reach the top (bounded against a served cycle) still starts there. */
+export function moveTrail(tree: TreeSource, at: string | null): (string | null)[] {
+  const top = moveTop(tree)
+  const trail: (string | null)[] = []
+  const seen = new Set<string>()
+  for (let id = at; id !== null && id !== top && !seen.has(id); id = tree.node(id)?.parentId ?? null) {
+    seen.add(id)
+    trail.unshift(id)
+  }
+  trail.unshift(top)
+  return trail
+}
+
+/** One place the browser lists: a child of the place on screen; `blocked` (`self`/`inside`) says it cannot be opened. */
+export interface MovePlace<N extends SourceNode = SourceNode> {
+  node: N
+  blocked: 'self' | 'inside' | null
+}
+
 /**
- * The picker's rows for moving `node`, depth-first from the view's root (`tree.rootId`; the member's scope root as a row
- * named `rootLabel`), siblings by name. A row is listed when it could take SOME node — a `FOLDER` — or this one (the
- * kind's `placement`, e.g. a Memory for a chapter); what it holds is listed below it only when it is listed itself, so a
- * drop box (no placed child) and its guests' folders are not offered at all. Every row says whether it can be picked.
+ * The places listed at `at`: the children a user may go into or move into, in the order served (the view sorts them as the
+ * level does). A `FOLDER` is always one (it is the way down, and takes every kind but a chapter-like one), for a member
+ * also a node of a kind whose placement takes every moved node (a Memory for a chapter); nothing else — no file, no drop
+ * box, no Memory that cannot take them, no guest's identity folder. The moved nodes themselves (and anything below them)
+ * are listed blocked: they cannot be opened.
  */
-export function moveDestinations(tree: TreeSource, node: MovedNode, mode: Access['mode'], rootLabel = ''): MoveDestination[] {
-  const out: MoveDestination[] = []
-  const inside = (id: string): boolean => {
-    for (let n = tree.node(id), steps = 0; n && steps < 10_000; n = n.parentId ? tree.node(n.parentId) : null, steps++) {
-      if (n.id === node.id) return true
-    }
-    return false
-  }
-  const holds = (kind: NodeKind | null) => kind === FOLDER_KIND || registry.placementAllows(node.kind, kind)
-  const blockOf = (id: string | null, kind: NodeKind | null): MoveBlock | null => {
-    if (id === node.id) return 'self'
-    if (id !== null && inside(id)) return 'inside'
-    if (id !== null && tree.inIdentityFolder(id)) return 'identityFolder'
-    if (id === (node.parentId ?? null)) return 'current'
-    if (!registry.placementAllows(node.kind, kind)) return 'kind'
-    if (mode === 'guest' && kind !== FOLDER_KIND) return 'kind' // only a folder lets a guest's child in
-    return null
-  }
-  const byName = (a: { id: string }, b: { id: string }) => tree.nameOf(a.id).localeCompare(tree.nameOf(b.id))
-  const visit = (id: string | null, depth: number, seen: Set<string>) => {
-    for (const child of [...tree.children(id)].sort(byName)) {
-      if (seen.has(child.id) || !holds(child.kind)) continue
-      seen.add(child.id)
-      out.push({ id: child.id, kind: child.kind, name: tree.nameOf(child.id), depth, blocked: blockOf(child.id, child.kind) })
-      visit(child.id, depth + 1, seen)
-    }
-  }
-  if (mode === 'member' && tree.rootId === null) {
-    out.push({ id: null, kind: null, name: rootLabel, depth: 0, blocked: blockOf(null, null) })
-    visit(null, 1, new Set())
-  } else if (tree.rootId !== null) {
-    // A guest's view: the share root and its subtree, nothing above it (the scope root least of all).
-    const root = tree.node(tree.rootId)
-    if (!root) return out
-    out.push({ id: root.id, kind: root.kind, name: tree.nameOf(root.id), depth: 0, blocked: blockOf(root.id, root.kind) })
-    visit(root.id, 1, new Set([root.id]))
-  }
-  return out
+export function movePlaces<N extends SourceNode>(tree: TreeSource<N>, nodes: readonly MovedNode[], mode: Access['mode'], at: string | null): MovePlace<N>[] {
+  const takes = (kind: NodeKind) =>
+    kind === FOLDER_KIND || (mode === 'member' && nodes.length > 0 && nodes.every((n) => registry.placementAllows(n.kind, kind)))
+  return tree
+    .children(at)
+    .filter((child) => takes(child.kind) && !tree.inIdentityFolder(child.id))
+    .map((child) => ({ node: child, blocked: withinMoved(tree, nodes, child.id) }))
 }
 
 /** The door a move goes through for the session on screen ({@link nodeMover}). */

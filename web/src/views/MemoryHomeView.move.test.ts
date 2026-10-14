@@ -65,6 +65,7 @@ import { isFavorite } from '../core/favorites/favoritesStore'
 import { stubApi } from '../test/apiMock'
 import { filesApi } from '../features/files/api'
 import { clickAction } from '../test/levelRows'
+import { browserOpen as dialogOpen, crumbs, goTo, moveHere, placeNames } from '../test/moveBrowser'
 
 const node = (id: string, kind: string, parentId: string | null, name: string, over: Partial<TreeNode> = {}): TreeNode =>
   treeNode({ id, kind, name, parentId, ...over })
@@ -90,14 +91,6 @@ async function click(el: Element) {
   await flushPromises()
 }
 const byLabel = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.getAttribute('aria-label') === label)
-const dialogOpen = () => document.body.querySelector('.move-destinations') !== null
-const rows = () => [...document.body.querySelectorAll('.move-destination')].map((l) => l.querySelector('.move-destination-name')!.textContent)
-async function pickAndMove(name: string) {
-  const label = [...document.body.querySelectorAll('.move-destination')].find((l) => l.querySelector('.move-destination-name')!.textContent === name)!
-  await click(label.querySelector('input')!)
-  await click([...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('node.move.submit'))!)
-}
-
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(isFavorite).mockReturnValue(false)
@@ -114,12 +107,16 @@ describe('a member moves a folder from its card', () => {
     expect(document.body.querySelector('.veyq-node-header-title')!.textContent).toBe('Rome')
     await click(byLabel(t('node.move.action'))!)
     expect(dialogOpen()).toBe(true)
-    expect(rows(), 'the space\'s root, the folders; no drop box, no guest folder').toEqual([t('shell.personal'), 'Archive', 'Trips', 'Rome'])
+    // it opens where the folder is (the Memory there takes no folder); up at the space's root: the folders, no drop box
+    expect(crumbs()).toEqual([t('shell.personal'), 'Trips'])
+    expect(placeNames()).toEqual(['Rome'])
+    await goTo(t('shell.personal'))
+    expect(placeNames(), 'no drop box, no guest folder').toEqual(['Archive', 'Trips'])
     // the server's answer, as the re-read tree then holds it
     vi.mocked(moveNode).mockImplementationOnce(async () => {
       treeStore.nodes = treeStore.nodes.map((n) => (n.id === 'rome' ? { ...n, parentId: 'archive' } : n))
     })
-    await pickAndMove('Archive')
+    await moveHere('Archive')
     expect(moveNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'rome', 'archive')
     expect(loadTree).toHaveBeenCalled()
     expect(dialogOpen(), 'closed after the move').toBe(false)
@@ -140,7 +137,7 @@ describe('a member moves a folder from its card', () => {
     const w = await mountAt('#~me/trips/')
     await clickAction(w, 'notes.txt', 'move')
     expect(document.body.textContent).toContain(t('node.move.title', { name: 'notes.txt' }))
-    await pickAndMove('Archive')
+    await moveHere(t('shell.personal'), 'Archive')
     expect(moveNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'notes', 'archive')
     expect(router.currentRoute.value.hash, 'a row moved away: the level stays').toBe('#~me/trips/')
 
@@ -148,7 +145,7 @@ describe('a member moves a folder from its card', () => {
     await flushPromises()
     await click(document.body.querySelector('.detail-move')!)
     expect(document.body.textContent).toContain(t('node.move.title', { name: 'Italy' }))
-    await pickAndMove(t('shell.personal'))
+    await moveHere(t('shell.personal'))
     expect(moveNode).toHaveBeenLastCalledWith('scope-1', expect.anything(), expect.any(Array), 'italy', null)
   })
 })
@@ -159,8 +156,9 @@ describe('a member moves a guest\'s folder out of a drop box', () => {
     const confirm = mountConfirmDialog()
     await mountAt('#~me/inbox')
     await click(byLabel(t('files.dropBox.moveFolder', { name: 'Anna' }))!)
-    expect(rows()).toEqual([t('shell.personal'), 'Archive', 'Trips', 'Rome'])
-    await pickAndMove('Archive')
+    expect(crumbs(), 'it opens in the drop box').toEqual([t('shell.personal'), 'Inbox'])
+    expect(placeNames(), 'no guest folder is offered').toEqual([])
+    await moveHere(t('shell.personal'), 'Archive')
     expect(confirm.text()).toContain(t('node.move.identityConfirm', { name: 'Anna' }))
     expect(moveNode, 'nothing before the answer').not.toHaveBeenCalled()
     confirm.click(t('node.move.identityAccept'))
@@ -179,7 +177,7 @@ describe('a member moves a guest\'s folder out of a drop box', () => {
   it('the drop box itself moves from its card, like any node', async () => {
     await mountAt('#~me/inbox')
     await click(byLabel(t('node.move.action'))!)
-    await pickAndMove('Trips')
+    await moveHere('Trips')
     expect(moveNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'inbox', 'trips')
   })
 })

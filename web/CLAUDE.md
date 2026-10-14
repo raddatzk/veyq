@@ -293,8 +293,9 @@ here; the server is blind.
   share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node -
   the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
   `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind; every node's move is
-  `core/node/MoveNodeDialog.vue` (inbox #358), mounted by both hosts when a row factory or a detail asks the host to move
-  the node, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
+  `core/node/MoveNodeDialog.vue` (inbox #358) around core's folder browser `core/node/MoveBrowser.vue` (one place at a time,
+  drawn with `LevelRowItem`; it takes a node list for inbox #421's selection), mounted by both hosts when a row factory or a
+  detail asks the host to move the node, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
   guest's `placeShareNodeAsGuest`, none otherwise) and explaining each server refusal by its code; and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application; none today - the Favorites section is core's, `core/favorites/PinnedNodes.vue`; write-once per (slot, id); the shell

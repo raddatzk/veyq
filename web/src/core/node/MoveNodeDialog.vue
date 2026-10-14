@@ -1,19 +1,23 @@
 <script setup lang="ts">
 // Core's move dialog (inbox #358): "Move to…" for a node of ANY kind, for a member and a `READ_WRITE` share guest alike —
 // one dialog, the session's own door (`move.ts` `nodeMover`, handed in by the host), never a guest-only copy (inbox #401).
-// Not drag and drop: a list of destinations is reachable by keyboard and screen reader, and testable by a click.
+// Not drag and drop: a folder browser (owner decision 2026-10-14), reachable by keyboard and screen reader, and testable by
+// a click.
 //
-// It lists the destinations `moveDestinations` derives from the tree the session reads (the member's whole scope with
-// its root, a guest's share subtree only), each that cannot be picked disabled with the reason beside it (the item
-// itself, inside it, where it is now, a guest's folder, a place that does not hold its kind). Before sending, a sibling
-// at the destination whose name folds to the same slug is named (core's `collidingSibling`, inbox #389); the server's
-// refusals are explained by their code (`moveRefusalOf`): `slug_taken`, `illegal_structure`, `illegal_scope`,
-// `stale_placement` (the tree is re-read, so a retry builds on the node as it now is), `stale_epoch`, … .
+// The browser is core's `MoveBrowser` (over the tree the session reads: the member's whole scope with its root, a guest's
+// share subtree only). It opens where the node is; the user opens the place it should go to and chooses **Move here**,
+// disabled with the reason where the node cannot go (`moveHereBlock`: where it is now, itself or inside it, a guest's
+// folder, a place that does not hold its kind), or **Cancel**. The browser takes a node LIST (inbox #421's selection);
+// this dialog's write moves the one node it is handed — what a write of several says and undoes is #421's to decide.
+//
+// Before sending, a sibling at the destination whose name folds to the same slug is named (core's `collidingSibling`,
+// inbox #389); the server's refusals are explained by their code (`moveRefusalOf`): `slug_taken`, `illegal_structure`,
+// `illegal_scope`, `stale_placement` (the tree is re-read, so a retry builds on the node as it now is), `stale_epoch`, … .
 //
 // A member's move of a drop-box guest's folder (ADR 0080 decision 11) ends its identity: asked first through the app's
 // confirm, and offered no undo — nothing moves back into a drop box. Every other move is said in a toast with an Undo
 // that moves the node back to where it was, through the same door (`useToast().showUndo`, as the trash's undo).
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
@@ -22,7 +26,8 @@ import type { Access, TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { registry } from '../applications/registry'
 import { collidingSibling } from './siblingCollision'
-import { endsIdentity, moveDestinations, moveRefusalOf, MoveDeclined, type NodeMover } from './move'
+import { endsIdentity, moveHereBlock, moveRefusalOf, moveStart, MoveDeclined, type NodeMover } from './move'
+import MoveBrowser from './MoveBrowser.vue'
 import { TRASH_UNDO_MS } from './trashUndo'
 import { useConfirm } from '../../shared/state/useConfirm'
 import { useToast } from '../../shared/state/useToast'
@@ -30,7 +35,7 @@ import { useToast } from '../../shared/state/useToast'
 const props = defineProps<{
   /** The node to move, of any kind. */
   node: TreeNode
-  /** Who looks: picks which destinations a session may take (a guest's: its subtree's folders). */
+  /** Who looks: picks which places a session may take (a guest's: its subtree's folders). */
   access: Access
   /** The tree as that session reads it. */
   tree: TreeSource<TreeNode>
@@ -50,24 +55,13 @@ const { ask } = useConfirm()
 const toast = useToast()
 
 const label = computed(() => props.nodeName ?? props.node.name)
-const rows = computed(() => moveDestinations(props.tree, props.node, props.access.mode, props.rootLabel ?? ''))
-const anyFree = computed(() => rows.value.some((r) => r.blocked === null))
-/** The picked destination: a node id, `null` for the scope root, `undefined` while none is picked. */
-const picked = ref<string | null | undefined>(undefined)
+const nodes = computed(() => [props.node])
+/** The place on screen: a node id, or null for the member's scope root. Opens where the node is. */
+const place = ref<string | null>(moveStart(props.tree, nodes.value))
+const hereBlock = computed(() => moveHereBlock(props.tree, nodes.value, props.access.mode, place.value))
 const error = ref('')
 const busy = ref(false)
-
-const rowKey = (id: string | null) => id ?? '\u0000root'
-/** A row's icon: its kind's (the scope root: a house). */
-function iconOf(kind: string | null): string {
-  if (kind === null) return 'pi pi-home'
-  const info = registry.kind(kind)
-  return info.supported ? info.icon : 'pi pi-question-circle'
-}
-function pick(id: string | null) {
-  picked.value = id
-  error.value = ''
-}
+watch(place, () => (error.value = ''))
 
 /** The loaded child of `to` the node's name collides with, folded by each node's own kind (never the node itself). */
 function takenBy(to: string | null): TreeNode | null {
@@ -79,8 +73,8 @@ function destinationName(to: string | null): string {
 }
 
 async function submit() {
-  const to = picked.value
-  if (to === undefined || busy.value) return
+  const to = place.value
+  if (hereBlock.value !== null || busy.value) return
   error.value = ''
   const sibling = takenBy(to)
   if (sibling) {
@@ -144,80 +138,32 @@ async function submit() {
     modal
     :closable="!busy"
     :close-on-escape="!busy"
+    class="move-dialog"
     @update:visible="emit('close')"
   >
     <form class="veyq-form" @submit.prevent="submit">
       <p class="veyq-form-copy">{{ t('node.move.hint') }}</p>
-      <p v-if="!anyFree" class="veyq-empty veyq-empty-inline">{{ t('node.move.nothing') }}</p>
-      <fieldset class="move-destinations" :disabled="busy">
-        <legend>{{ t('node.move.destinations') }}</legend>
-        <label
-          v-for="row in rows"
-          :key="rowKey(row.id)"
-          class="move-destination"
-          :class="{ 'is-blocked': row.blocked !== null, 'is-picked': picked === row.id }"
-          :style="{ paddingInlineStart: `${row.depth * 1.25 + 0.5}rem` }"
-        >
-          <input
-            type="radio"
-            name="move-destination"
-            :value="rowKey(row.id)"
-            :checked="picked === row.id"
-            :disabled="row.blocked !== null"
-            @change="pick(row.id)"
-          />
-          <span :class="iconOf(row.kind)" aria-hidden="true" />
-          <span class="move-destination-name">{{ row.name }}</span>
-          <small v-if="row.blocked" class="move-destination-why">{{ t(`node.move.blocked.${row.blocked}`) }}</small>
-        </label>
-      </fieldset>
-
+      <MoveBrowser v-model:place="place" :nodes="nodes" :access="access" :tree="tree" :root-label="rootLabel" :disabled="busy" />
+      <p v-if="hereBlock" id="move-here-why" class="move-here-why">{{ t(`node.move.here.${hereBlock}`) }}</p>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="emit('close')" />
-        <Button type="submit" :label="t('node.move.submit')" icon="pi pi-file-export" :loading="busy" :disabled="picked === undefined || busy" />
+        <Button
+          type="submit"
+          :label="t('node.move.submit')"
+          icon="pi pi-file-export"
+          :loading="busy"
+          :disabled="hereBlock !== null || busy"
+          :aria-describedby="hereBlock ? 'move-here-why' : undefined"
+        />
       </div>
     </form>
   </Dialog>
 </template>
 
 <style scoped>
-.move-destinations {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  max-height: 50vh;
-  overflow-y: auto;
+.move-here-why {
   margin: 0;
-  padding: 0;
-  border: 0;
-}
-.move-destinations legend {
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-}
-.move-destination {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding-block: 0.375rem;
-  padding-inline-end: 0.5rem;
-  border-radius: var(--app-radius-sm);
-  cursor: pointer;
-}
-.move-destination.is-picked {
-  background: var(--app-surface-muted);
-}
-.move-destination.is-blocked {
-  cursor: default;
-  color: var(--app-muted);
-}
-.move-destination-name {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.move-destination-why {
-  margin-inline-start: auto;
   color: var(--app-muted);
 }
 </style>

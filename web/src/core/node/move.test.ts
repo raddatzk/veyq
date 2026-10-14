@@ -1,4 +1,5 @@
-// Core's move (inbox #358, `move.ts`): the destination picker's rows, the door per session, and the refusals by name.
+// Core's move (inbox #358, `move.ts`): the move browser's model (where it opens, its trail, the places it lists and where
+// "Move here" may be chosen), the door per session, and the refusals by name.
 // Kinds other than FOLDER are made-up tokens with a `placement` like an application's (core knows none); the registry is
 // a fresh one per test behind a delegating export (as `access.test.ts`). The placement writes themselves are mocked here
 // — their wire is `tree.wire.test.ts` / `guestTree.wire.test.ts` and `MoveNodeDialog.wire.test.ts`.
@@ -27,7 +28,7 @@ vi.mock('../sharing/guestTree', async (o) => ({
   guestTreeContext: (head: unknown, ids: unknown) => ({ head, ids }),
 }))
 
-import { moveDestinations, moveRefusalOf, nodeMover, MoveDeclined, type MoveDestination } from './move'
+import { moveHereBlock, movePlaces, moveRefusalOf, moveStart, moveTrail, nodeMover, MoveDeclined, type MovePlace } from './move'
 import { createRegistry } from '../applications/registry'
 import { FOLDER_KIND } from './kind'
 import { PlacementConflictError, type TreeNode } from './tree'
@@ -54,7 +55,14 @@ const NODES = [
   n('item', ITEM, 'b'), n('part', PART, 'item'), n('item2', ITEM, null),
 ]
 const member = memberTreeOf(() => NODES)
-const rowsOf = (rows: MoveDestination[]) => rows.map((r) => `${'.'.repeat(r.depth)}${r.id ?? 'ROOT'}${r.blocked ? `:${r.blocked}` : ''}`)
+const byId = (id: string) => NODES.find((x) => x.id === id)!
+const placesOf = (places: MovePlace[]) => places.map((p) => `${p.node.id}${p.blocked ? `:${p.blocked}` : ''}`).sort()
+/** "Move here" at each of `ats` for `node`: `<at>` where it may be chosen, `<at>:<reason>` where not (ROOT: the scope root). */
+const hereAt = (tree: TreeSource, node: TreeNode, mode: Access['mode'], ats: (string | null)[]) =>
+  ats.map((at) => {
+    const block = moveHereBlock(tree, [node], mode, at)
+    return `${at ?? 'ROOT'}${block ? `:${block}` : ''}`
+  })
 
 beforeEach(() => {
   holder.reg = createRegistry()
@@ -64,70 +72,99 @@ beforeEach(() => {
   for (const f of Object.values(calls)) f.mockClear()
 })
 
-describe('moveDestinations: what the picker offers a member', () => {
-  it('a folder: the scope root and every folder, never itself, below itself, where it is, or a drop box\'s guest folder', () => {
-    expect(rowsOf(moveDestinations(member, NODES[1], 'member', 'Space'))).toEqual([
-      'ROOT',
-      '.home:current',
-      '..a:self', '...a1:inside', // itself and below it: listed (the tree stays readable), never pickable
-      '..b',
-    ])
+describe('the move browser: what a member is offered', () => {
+  it('a folder: opens where it is, lists the folders there (itself blocked), never a drop box or a Memory-like ITEM', () => {
+    const a = byId('a')
+    expect(moveStart(member, [a])).toBe('home')
+    expect(moveTrail(member, 'home')).toEqual([null, 'home'])
+    expect(placesOf(movePlaces(member, [a], 'member', 'home')), 'itself listed, never to be opened; the drop box not at all').toEqual(['a:self', 'b'])
+    expect(placesOf(movePlaces(member, [a], 'member', 'b')), 'an ITEM takes no folder').toEqual([])
+    expect(placesOf(movePlaces(member, [a], 'member', null)), 'item2 is an ITEM').toEqual(['home'])
+    // "Move here": the scope root and another folder yes; where it is, itself and below it no
+    expect(hereAt(member, a, 'member', [null, 'home', 'b', 'a', 'a1'])).toEqual(['ROOT', 'home:current', 'b', 'a:self', 'a1:inside'])
   })
 
-  it('names the scope root by the label the host gives, and every other row by the tree', () => {
-    const rows = moveDestinations(member, NODES[3], 'member', 'Familie')
-    expect(rows[0]).toMatchObject({ id: null, name: 'Familie', kind: null, blocked: null })
-    expect(rows.find((r) => r.id === 'a1')).toMatchObject({ name: 'a1', kind: FOLDER_KIND, depth: 3 })
+  it('the trail runs from the scope root (null) down to the place on screen, whatever its depth', () => {
+    expect(moveTrail(member, null)).toEqual([null])
+    expect(moveTrail(member, 'a1')).toEqual([null, 'home', 'a', 'a1'])
   })
 
-  it('an identity folder (a member\'s move out of a drop box): every folder outside, the drop box itself not listed', () => {
-    const rows = rowsOf(moveDestinations(member, NODES[5], 'member', 'S'))
-    expect(rows).toEqual(['ROOT', '.home', '..a', '...a1', '..b'])
+  it('an identity folder (a member\'s move out of a drop box): opens in the drop box, which lists nothing and is where it is', () => {
+    const g = byId('guest')
+    expect(moveStart(member, [g])).toBe('box')
+    expect(moveTrail(member, 'box')).toEqual([null, 'home', 'box'])
+    expect(placesOf(movePlaces(member, [g], 'member', 'box')), 'no identity folder is offered').toEqual([])
+    expect(hereAt(member, g, 'member', ['box', 'home', 'a', null])).toEqual(['box:current', 'home', 'a', 'ROOT'])
   })
 
-  it('a kind with a narrower placement (a chapter): only the containers that take it are pickable', () => {
-    const rows = rowsOf(moveDestinations(member, NODES[8], 'member', 'S'))
-    // folders are listed as the way down, but do not take a PART; the Memory-like ITEMs do, its own is where it is
-    expect(rows).toEqual(['ROOT:kind', '.home:kind', '..a:kind', '...a1:kind', '..b:kind', '...item:current', '.item2'])
+  it('a kind with a narrower placement (a chapter): the folders stay the way down, an ITEM is listed and takes it', () => {
+    const part = byId('part')
+    expect(moveStart(member, [part])).toBe('item')
+    expect(placesOf(movePlaces(member, [part], 'member', null))).toEqual(['home', 'item2'])
+    expect(placesOf(movePlaces(member, [part], 'member', 'b'))).toEqual(['item'])
+    expect(hereAt(member, part, 'member', ['item', null, 'home', 'b', 'item2'])).toEqual(['item:current', 'ROOT:kind', 'home:kind', 'b:kind', 'item2'])
   })
 
-  it('a kind without a placement hint is offered nowhere (fail closed)', () => {
-    const rows = moveDestinations(member, n('x', 'UNREGISTERED', 'a'), 'member', 'S')
-    expect(rows.every((r) => r.blocked !== null)).toBe(true)
+  it('a kind without a placement hint can go nowhere (fail closed), though the folders still open', () => {
+    const x = n('x', 'UNREGISTERED', 'a')
+    expect(hereAt(member, x, 'member', [null, 'home', 'b', 'a1', 'item2'])).toEqual(['ROOT:kind', 'home:kind', 'b:kind', 'a1:kind', 'item2:kind'])
+    expect(placesOf(movePlaces(member, [x], 'member', null)), 'no ITEM is listed for it').toEqual(['home'])
   })
 
-  it('never offers anything inside a guest\'s identity folder, even where it is listed', () => {
-    // a tree where an identity folder sits directly in a folder (listed, as a folder), with a folder inside it
+  it('never offers a guest\'s identity folder, nor "Move here" in one or below it', () => {
+    // a tree where an identity folder sits directly in a folder, with a folder inside it
     const odd = [n('f', FOLDER_KIND, null), n('idf', FOLDER_KIND, 'f', { shareIdentityId: 'id-2' }), n('deep', FOLDER_KIND, 'idf'), n('m', ITEM, null)]
-    const rows = rowsOf(moveDestinations(memberTreeOf(() => odd), odd[3], 'member', 'S'))
-    expect(rows).toEqual(['ROOT:current', '.f', '..idf:identityFolder', '...deep:identityFolder'])
+    const t = memberTreeOf(() => odd)
+    expect(placesOf(movePlaces(t, [odd[3]], 'member', 'f'))).toEqual([])
+    expect(hereAt(t, odd[3], 'member', [null, 'f', 'idf', 'deep'])).toEqual(['ROOT:current', 'f', 'idf:identityFolder', 'deep:identityFolder'])
+  })
+
+  it('a LIST of nodes (inbox #421): a place is offered only where it takes every one, each of them blocked', () => {
+    const [a, b] = [byId('a'), byId('b')]
+    expect(moveStart(member, [a, b])).toBe('home')
+    expect(placesOf(movePlaces(member, [a, b], 'member', 'home'))).toEqual(['a:self', 'b:self'])
+    expect(moveHereBlock(member, [a, b], 'member', 'home'), 'every one is here already').toBe('current')
+    expect(moveHereBlock(member, [a, b], 'member', 'a1'), 'one of them holds the place').toBe('inside')
+    expect(moveHereBlock(member, [a, byId('item2')], 'member', null), 'one is here, the other is not: it may be chosen').toBeNull()
+    expect(moveStart(member, [a, byId('item2')]), 'from two places: the top').toBeNull()
+    // an ITEM is listed for a chapter-like kind alone, never once a folder is among the moved
+    expect(placesOf(movePlaces(member, [byId('part'), a], 'member', null))).toEqual(['home'])
+    expect(moveHereBlock(member, [byId('part'), byId('a1')], 'member', 'item2')).toBe('kind')
   })
 })
 
-describe('moveDestinations: what the picker offers a guest (its subtree, its folders)', () => {
+describe('the move browser: what a guest is offered (its subtree, its folders)', () => {
   // A guest's view rooted at `home`: the served root carries parentId null; nothing above it exists.
   const sub = NODES.filter((x) => x.id !== 'item2').map((x) => (x.id === 'home' ? { ...x, parentId: null } : x))
   const guest: TreeSource<TreeNode> = { ...memberTreeOf(() => sub), rootId: 'home' }
+  const inSub = (id: string) => sub.find((x) => x.id === id)!
 
-  it('starts at the share root, never the scope root; only folders take a guest\'s child', () => {
-    expect(rowsOf(moveDestinations(guest, sub.find((x) => x.id === 'item')!, 'guest'))).toEqual([
-      'home', '.a', '..a1', '.b:current',
-    ])
+  it('the trail starts at the share root, never the scope root; only folders are listed and take a guest\'s child', () => {
+    const item = inSub('item')
+    expect(moveStart(guest, [item])).toBe('b')
+    expect(moveTrail(guest, 'b')).toEqual(['home', 'b'])
+    expect(moveTrail(guest, 'home')).toEqual(['home'])
+    expect(placesOf(movePlaces(guest, [item], 'guest', 'home'))).toEqual(['a', 'b'])
+    expect(placesOf(movePlaces(guest, [inSub('part')], 'guest', 'b')), 'an ITEM is no guest\'s place').toEqual([])
+    expect(hereAt(guest, item, 'guest', ['home', 'a', 'a1', 'b'])).toEqual(['home', 'a', 'a1', 'b:current'])
+  })
+
+  it('a node whose parent lies above the link opens at the share root', () => {
+    expect(moveStart(guest, [n('stray', FOLDER_KIND, 'elsewhere')])).toBe('home')
   })
 
   it('another ITEM that would take a PART for a member is no guest\'s destination (only a folder lets a guest\'s child in)', () => {
     const withTwo = [...sub, n('item3', ITEM, 'a')]
     const g: TreeSource<TreeNode> = { ...memberTreeOf(() => withTwo), rootId: 'home' }
     const part = withTwo.find((x) => x.id === 'part')!
-    expect(moveDestinations(g, part, 'guest').find((r) => r.id === 'item3')?.blocked).toBe('kind')
-    // control: the same row is a member's destination
-    expect(moveDestinations(memberTreeOf(() => withTwo), part, 'member', 'S').find((r) => r.id === 'item3')?.blocked).toBeNull()
+    expect(moveHereBlock(g, [part], 'guest', 'item3')).toBe('kind')
+    // control: the same place is a member's destination, and listed for it
+    expect(moveHereBlock(memberTreeOf(() => withTwo), [part], 'member', 'item3')).toBeNull()
+    expect(placesOf(movePlaces(memberTreeOf(() => withTwo), [part], 'member', 'a'))).toEqual(['a1', 'item3'])
   })
 
-  it('a chapter-like kind has nowhere to go for a guest: no folder takes it, no ITEM is a guest\'s destination', () => {
-    const rows = moveDestinations(guest, sub.find((x) => x.id === 'part')!, 'guest')
-    expect(rows.map((r) => r.id)).toContain('item')
-    expect(rows.every((r) => r.blocked !== null)).toBe(true)
+  it('a chapter-like kind has nowhere to go for a guest: no folder takes it', () => {
+    expect(hereAt(guest, inSub('part'), 'guest', ['home', 'a', 'a1', 'b', 'item'])).toEqual(['home:kind', 'a:kind', 'a1:kind', 'b:kind', 'item:current'])
   })
 })
 

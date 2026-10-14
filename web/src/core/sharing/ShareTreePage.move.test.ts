@@ -42,6 +42,7 @@ import { guestAccessFor } from '../../test/models'
 import { authenticatedCalls } from '../../test/guestMode'
 import { actionIdsOf, clickAction } from '../../test/levelRows'
 import type { LevelRowsFactory } from '../node/levelRow'
+import { crumbs, goTo, moveHere, moveHereButton, places, whyNotHere } from '../../test/moveBrowser'
 
 const SCOPE_ID = '55555555-5555-4555-8555-555555555555'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_2'
@@ -100,14 +101,6 @@ async function click(el: Element) {
   await flushPromises()
 }
 const moveCardButton = () => document.body.querySelector(`.veyq-node-header-actions button[aria-label="${t('node.move.action')}"]`)
-const rows = () => [...document.body.querySelectorAll('.move-destination')].map((l) => [
-  l.querySelector('.move-destination-name')!.textContent, l.querySelector('input')!.disabled,
-])
-async function pickAndMove(name: string) {
-  const label = [...document.body.querySelectorAll('.move-destination')].find((l) => l.querySelector('.move-destination-name')!.textContent === name)!
-  await click(label.querySelector('input')!)
-  await click([...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('node.move.submit'))!)
-}
 const guest: GuestIdentity = { identityId: 'g-1', contributorToken: 'contributor-token' } as GuestIdentity
 
 beforeEach(async () => {
@@ -128,9 +121,14 @@ describe('a READ_WRITE guest moves inside its share', () => {
     const reload = vi.fn(async () => {})
     await mountAt(ShareRole.ReadWrite, NESTED, { requestGuest, reload })
     await click(moveCardButton()!)
-    // the share root and its folders — never the scope root, never a guest's identity folder, never itself
-    expect(rows()).toEqual([['Familie', false], ['Briefe', true], ['Feldpost', true]])
-    await pickAndMove('Familie')
+    // it opens where the folder is; the trail runs up to the share root, never the scope root; itself is not to be opened
+    expect(crumbs()).toEqual(['Familie', 'Briefe'])
+    expect(places()).toEqual([['Feldpost', false, t('node.move.blocked.self')]])
+    expect(whyNotHere()).toBe(t('node.move.here.current'))
+    await goTo('Familie')
+    expect(places(), 'the share root lists its folder, not the note').toEqual([['Briefe', true, '']])
+    expect(moveHereButton().disabled).toBe(false)
+    await moveHere()
     expect(requestGuest, 'named through the page\'s one flow').toHaveBeenCalledTimes(1)
     expect(updateShareNode).toHaveBeenCalledTimes(1)
     const call = updateShareNode.mock.calls[0][0]
@@ -149,8 +147,9 @@ describe('a READ_WRITE guest moves inside its share', () => {
     const updateShareNode = stubApi(publicSharesApi, { updateShareNode: undefined }).updateShareNode
     const w = await mountAt(ShareRole.ReadWrite, undefined, { requestGuest: async () => guest })
     await clickAction(w, 'Notizen', 'move')
-    expect(rows()).toEqual([['Familie', true], ['Briefe', false], ['Feldpost', false]])
-    await pickAndMove('Briefe')
+    expect(crumbs()).toEqual(['Familie'])
+    expect(whyNotHere(), 'where it is now').toBe(t('node.move.here.current'))
+    await moveHere('Briefe')
     expect(updateShareNode.mock.calls[0][0].updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementVersion: 0 })
     expect(authenticatedCalls).toEqual([])
   })
@@ -161,7 +160,7 @@ describe('a READ_WRITE guest moves inside its share', () => {
     updateShareNode.mockRejectedValueOnce({ response: new Response(body, { status: 422, headers: { 'content-type': 'application/json' } }) })
     await mountAt(ShareRole.ReadWrite, NESTED, { requestGuest: async () => guest })
     await click(moveCardButton()!)
-    await pickAndMove('Familie')
+    await moveHere('Familie')
     expect(document.body.querySelector('.p-message-error')!.textContent!.trim()).toBe(t('node.move.refused.illegal_scope'))
   })
 
