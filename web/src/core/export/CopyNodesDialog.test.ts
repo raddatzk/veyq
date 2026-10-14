@@ -213,8 +213,7 @@ describe('CopyNodesDialog: the copy', () => {
 })
 
 describe('the applications\' kinds (the real registry)', () => {
-  it('a folder, a file and a drop box copy; a Memory and a chapter not yet - their import decodes whole originals (Decision 3)', () => {
-    expect([FOLDER_KIND, FILE_KIND, DROPBOX_KIND].map(copiesKind)).toEqual([true, true, true])
-    expect([MEMORY_KIND, CHAPTER_KIND].map(copiesKind)).toEqual([false, false])
+  it('every kind of both applications copies: a folder, a file, a drop box, a Memory and a chapter (ADR 0082 Addendum 2)', () => {
+    expect([FOLDER_KIND, FILE_KIND, DROPBOX_KIND, MEMORY_KIND, CHAPTER_KIND].map(copiesKind)).toEqual([true, true, true, true, true])
   })
 })

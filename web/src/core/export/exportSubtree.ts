@@ -25,7 +25,7 @@ import {
   MANIFEST_FORMAT, MANIFEST_PATH, MANIFEST_VERSION, ExportError, applicationOf, type Manifest, type ManifestApplication, type ManifestNode,
   type ManifestPayload,
 } from './manifest'
-import type { ExportPayloadSource } from './hooks'
+import type { ExportPayloadSource, WalkPurpose } from './hooks'
 
 export type SkippedNode = { name: string; kind: string; reason: 'unsupported_kind' | 'nothing_to_export' }
 
@@ -79,9 +79,10 @@ export type WalkedSubtree = {
   nodes: number
 }
 
-/** Walk the subtree under `rootId` as the session reads it, running every kind's export hook (see the header). */
-export async function walkSubtree(params: Omit<PrepareExportParams, 'appVersion' | 'now'>): Promise<WalkedSubtree> {
-  const { access, tree, rootId, signal } = params
+/** Walk the subtree under `rootId` as the session reads it, running every kind's export hook (see the header) - for a
+ *  download unless `purpose` says it is a copy's walk. */
+export async function walkSubtree(params: Omit<PrepareExportParams, 'appVersion' | 'now'> & { purpose?: WalkPurpose }): Promise<WalkedSubtree> {
+  const { access, tree, rootId, signal, purpose = 'download' } = params
   const scopeId = scopeOfAccess(access)
   const root = tree.node(rootId)
   const rootKey = root ? tree.keyOf(rootId) : null
@@ -113,7 +114,7 @@ export async function walkSubtree(params: Omit<PrepareExportParams, 'appVersion'
       const mark = pending.length
       const inside = new Set<string>()
       const content = await d.exportContent({
-        access, tree, scopeId, node, nodeKey: key, signal, cache,
+        purpose, access, tree, scopeId, node, nodeKey: key, signal, cache,
         addPayload(fileName, source) {
           if (asFile && pending.length > mark) throw new Error(`${node.kind} downloads as one file and declared a second payload`)
           const ref: ManifestPayload = { path: asFile ? path : `${path}/${archiveName(fileName, inside)}`, size: source.size, mediaType: source.mediaType }

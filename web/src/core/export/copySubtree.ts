@@ -5,6 +5,8 @@
 // losses). `run` then replays the manifests under the destination through the kinds' `importContent` hooks
 // (`replaySubtrees`): every node created fresh under a fresh key, every file read from the original by frame, decrypted on
 // the device and uploaded again under a fresh `K_blob` (`copySource.ts`). The server sees ordinary creates and uploads.
+// Both hooks are told it is a copy (`purpose: 'copy'`), so a kind may hand over what an archive never carries and its import
+// then needs no decode (Memories: each medium's existing tiers and sealed facts, ADR 0082 Addendum 2).
 //
 // What the archive path checks and this one does not (cr-copy-node Decision 2): the input is the member's own decrypted tree,
 // not untrusted bytes, so no manifest schema, no caps, no checksums and no kind's content check. What it does check: each
@@ -82,7 +84,7 @@ export async function prepareCopy(params: PrepareCopyParams): Promise<PreparedCo
   for (const rootId of rootIds) {
     let walked: Awaited<ReturnType<typeof walkSubtree>>
     try {
-      walked = await walkSubtree({ access, tree, rootId, signal })
+      walked = await walkSubtree({ access, tree, rootId, signal, purpose: 'copy' })
     } catch (e) {
       if (!(e instanceof ExportError && e.code === 'nothing_to_import')) throw e
       const node = tree.node(rootId)
@@ -113,6 +115,7 @@ export async function prepareCopy(params: PrepareCopyParams): Promise<PreparedCo
     items.push({
       manifest,
       plan,
+      purpose: 'copy',
       payload: async (ref, fileName) => {
         const frames = payloads.get(ref.path)?.source.frames
         if (!frames) throw new ExportError('payload_missing', `${ref.path} cannot be read by frame`, ref.path)

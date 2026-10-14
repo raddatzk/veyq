@@ -18,6 +18,7 @@ import { HttpStatus, isCodedError } from '../../../shared/httpError'
 import { createBrowserDeriver, type AddMediaSource, type MediaDeriver } from '../../../shared/image/mediaDeriver'
 import { authedReserve, authedWindow, planBlob, reserveAndPump } from '../../blob/transport'
 import type { BlobMeta } from '../../blob/meta'
+import type { BlobSource } from '../../blob/types'
 import { editField, unsealNodeMeta } from '../nodeMeta'
 import { writeNodeMeta } from '../nodeMetaWrite'
 import type { SealedMetaState } from '../sealedMetaWrite'
@@ -92,7 +93,23 @@ export async function uploadCoverImage(
   } else if (opts.strict) {
     throw new Error(COVER_UNREADABLE)
   }
-  const plan = planBlob(scopeId, { ownerId: nodeId, role: COVER_ROLE }, nodeKey, blob, meta)
+  return uploadCoverBlob(scopeId, nodeId, nodeKey, blob, meta, opts)
+}
+
+/**
+ * Seal `source` AS IT IS as the node's cover blob under `nodeKey` and upload it direct-to-store - no decode, no re-encode:
+ * [uploadCoverImage]'s last step, and the whole of a copied cover (ADR 0082 Addendum 2), whose source is the original
+ * cover read by frame (`core/export/copySource.ts`), never held whole. Open afterwards, as [uploadCoverImage]'s.
+ */
+export async function uploadCoverBlob(
+  scopeId: string,
+  nodeId: string,
+  nodeKey: Uint8Array,
+  source: BlobSource,
+  meta: BlobMeta,
+  opts: Pick<UploadCoverOptions, 'onProgress' | 'signal'> = {},
+): Promise<UploadedCover> {
+  const plan = planBlob(scopeId, { ownerId: nodeId, role: COVER_ROLE }, nodeKey, source, meta)
   const [uploadId] = await reserveAndPump([plan], (d) => authedReserve(scopeId, d), authedWindow(scopeId), opts.onProgress, opts.signal)
   const { blobId, chunkCount, byteSize, wrappedBlobKey, ownerId } = plan
   return { uploadId, plan: { blobId, chunkCount, byteSize, wrappedBlobKey, ownerId } }

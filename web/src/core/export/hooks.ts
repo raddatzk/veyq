@@ -31,11 +31,17 @@ export type ExportPayloadSource = {
 
 /** What an import hook is handed for a payload: a `File` (from a ZIP or a directory), or - in a copy - a source that reads
  *  the original by frame on demand (`copySource.ts`). Either is read only by `slice(...).arrayBuffer()`, as the upload pump
- *  reads; a hook that needs the bytes as a real `Blob` (to decode them) must check `instanceof Blob`, and its kind does not
- *  declare `importStreams`. */
+ *  reads; a hook that needs the bytes as a real `Blob` (to decode them) must check `instanceof Blob`, and its kind declares
+ *  `importStreams` only where a copy never needs that (Memories: a copy hands over the tiers it would otherwise derive). */
 export type PayloadFile = BlobSource & { readonly name: string; readonly lastModified: number }
 
+/** Why the walk runs: a `download` (an archive, ADR 0082 decision 3) or a `copy` (ADR 0082 Addendum 2), whose import is this
+ *  build's own and in the same space - a kind may then hand over what it keeps beside its payloads (Memories: each medium's
+ *  derived tiers and sealed facts), which an archive never carries. */
+export type WalkPurpose = 'download' | 'copy'
+
 export type ExportNodeContext = {
+  purpose: WalkPurpose
   /** Who downloads: a member, or a `READ`/`READ_WRITE` share guest (ADR 0082 decision 5). A hook reads through that
    *  session's own doors - a guest's never touch a member's API. */
   access: Access
@@ -56,6 +62,10 @@ export type ExportNodeContext = {
 }
 
 export type ImportNodeContext = {
+  /** What is replayed: a download (`import`, untrusted - only what an archive carries is read) or a `copy`, whose content
+   *  is what this build's own export hook wrote for a copy (`ExportNodeContext.purpose`). A hook reads a copy's extra
+   *  content only here, never from an archive. */
+  purpose: 'import' | 'copy'
   scopeId: string
   epochs: EpochKeys
   /** Where to create the node (null: the scope root). */

@@ -227,8 +227,9 @@ export type ImportSubtreeParams = {
 /** Hands an import hook one payload of its manifest (`ImportNodeContext.payload`). */
 export type PayloadResolver = (ref: ManifestPayload, fileName: string) => Promise<PayloadFile>
 
-/** One subtree to replay: its manifest, where its payloads come from, and how its dry run reads it. */
-export type ReplayItem = { manifest: Manifest; payload: PayloadResolver; plan?: PlanOptions }
+/** One subtree to replay: its manifest, where its payloads come from, how its dry run reads it, and what it is - a
+ *  download's (`import`, the default) or a copy's walk (`ImportNodeContext.purpose`). */
+export type ReplayItem = { manifest: Manifest; payload: PayloadResolver; plan?: PlanOptions; purpose?: 'import' | 'copy' }
 
 export type ReplayParams = Omit<ImportSubtreeParams, 'opened'> & { items: readonly ReplayItem[] }
 
@@ -310,7 +311,7 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
   const cache = new Map<string, unknown>()
   const tops: string[] = []
 
-  async function create(n: ManifestNode, at: NodeParent, payload: PayloadResolver): Promise<{ nodeId: string; nodeKey: Uint8Array }> {
+  async function create(n: ManifestNode, at: NodeParent, item: ReplayItem): Promise<{ nodeId: string; nodeKey: Uint8Array }> {
     const parentId = at?.id ?? null
     const used = takenIn(parentId)
     let lastError: unknown = null
@@ -329,7 +330,7 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
         if (!hook.supported || !hook.importContent) throw new ExportError('nothing_to_import', `no import for ${n.kind}`)
         const filesBefore = bytesDone
         const made = await hook.importContent({
-          scopeId, epochs, parent: at, name, node: n, signal, cache, payload,
+          purpose: item.purpose ?? 'import', scopeId, epochs, parent: at, name, node: n, signal, cache, payload: item.payload,
           onProgress: (fraction) => {
             bytesDone = filesBefore + Math.round(fraction * nodeBytes)
             report()
@@ -353,7 +354,7 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
 
   async function walk(n: ManifestNode, at: NodeParent, item: ReplayItem, leftOut: Set<ManifestNode>, top: boolean): Promise<string> {
     if (signal?.aborted) throw signal.reason ?? new DOMException('Import cancelled', 'AbortError')
-    const made = await create(n, at, item.payload)
+    const made = await create(n, at, item)
     if (top) tops.push(made.nodeId)
     nodesDone++
     report()

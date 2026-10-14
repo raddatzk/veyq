@@ -209,8 +209,10 @@ export interface KindDescriptor {
    *  the node's name and its children under it, and needs no `importContent`. Its content is still checked
    *  (`validateContent`) and still names its application and version (`contentSchema`); the manifest keeps the kind it was. */
   importsAsFolder?: boolean
-  /** This kind's `importContent` reads each payload only by `slice(...).arrayBuffer()` - as the upload pump does - so a copy
-   *  (ADR 0082 Addendum 2) can hand it the original read by frame, never held whole (cr-copy-node Decision 3). Absent: a
+  /** This kind's `importContent`, in a copy (`ImportNodeContext.purpose`), reads each payload only by
+   *  `slice(...).arrayBuffer()` - as the upload pump does - so a copy (ADR 0082 Addendum 2) can hand it the original read by
+   *  frame, never held whole (cr-copy-node Decision 3); a kind whose import decodes its bytes (Memories' tiers) hands over in
+   *  a copy's walk what it would otherwise decode for, and decodes nothing in the copy's import. Absent: a
    *  copy leaves a node of this kind out, with its subtree, and names it before anything is written - fail closed, so a kind
    *  whose import needs its bytes as a real `Blob` (to decode them) is never handed a file it would have to buffer. */
   importStreams?: boolean

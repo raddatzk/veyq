@@ -4,16 +4,17 @@ vi.mock('./media', async (orig) => ({
   ...(await orig<typeof import('./media')>()),
   listMedia: vi.fn(), listMediaPage: vi.fn(), unsealMeta: vi.fn(), originalBlobMeta: vi.fn(), originalMediaType: vi.fn(), loadMediaExif: vi.fn(),
   chunkProvider: vi.fn(), plaintextSize: vi.fn(), addMedia: vi.fn(), setMediaMeta: vi.fn(), backfillPlaceName: vi.fn(), openBlob: vi.fn(),
+  addCopiedMedia: vi.fn(), tierChunkProviders: vi.fn(), rawMediaMeta: vi.fn(), readByChunk: vi.fn(),
 }))
 vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), listShareMedia: vi.fn(), openSharedMemory: vi.fn(), shareChunkProvider: vi.fn() }))
 vi.mock('../../core/people/directory', () => ({ loadTenantPeople: vi.fn() }))
 vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import('../../core/node/tree')>()), createContentNode: vi.fn(), listTree: vi.fn() }))
-vi.mock('../../core/node/cover/coverWrite', () => ({ uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
+vi.mock('../../core/node/cover/coverWrite', () => ({ uploadCoverBlob: vi.fn(), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import {
-  addMedia, backfillPlaceName, chunkProvider, listMedia, listMediaPage, loadMediaExif, openBlob, originalBlobMeta, originalMediaType, plaintextSize, setMediaMeta,
-  unsealMeta, type MediaItem,
+  addCopiedMedia, addMedia, backfillPlaceName, chunkProvider, listMedia, listMediaPage, loadMediaExif, openBlob, originalBlobMeta, originalMediaType, plaintextSize,
+  rawMediaMeta, setMediaMeta, tierChunkProviders, unsealMeta, type MediaItem,
 } from './media'
 import { listShareMedia, openSharedMemory, shareChunkProvider } from './share'
 import { guestAccessOf, memberAccessOf } from '../../test/models'
@@ -21,7 +22,7 @@ import type { Access } from '../../core/access'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { loadTenantPeople, type Person } from '../../core/people/directory'
 import { createContentNode, listTree, type TreeNode } from '../../core/node/tree'
-import { writeNodeCover, uploadCoverImage } from '../../core/node/cover/coverWrite'
+import { writeNodeCover, uploadCoverBlob, uploadCoverImage } from '../../core/node/cover/coverWrite'
 import { sealNodeMeta, unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { ExportNodeContext, ImportNodeContext } from '../../core/export/hooks'
 import type { ManifestNode } from '../../core/export/manifest'
@@ -62,6 +63,12 @@ beforeEach(() => {
   vi.mocked(originalMediaType).mockReturnValue('image/jpeg')
   vi.mocked(chunkProvider).mockReturnValue({ chunkCount: 0, getPlaintextChunk: async () => new Uint8Array(0) } as unknown as ReturnType<typeof chunkProvider>)
   vi.mocked(loadMediaExif).mockResolvedValue({ make: 'Fuji', altitude: 12, imgDirection: 90 } as unknown as Awaited<ReturnType<typeof loadMediaExif>>)
+  // the copy's doors answer by default, so a test of the archive path goes red on its own assertion, not on a missing stub
+  vi.mocked(tierChunkProviders).mockReturnValue([])
+  vi.mocked(rawMediaMeta).mockReturnValue(null)
+  vi.mocked(addCopiedMedia).mockResolvedValue({ blobId: 'b', mediaId: 'copied' })
+  vi.mocked(uploadCoverBlob).mockResolvedValue({ uploadId: 'u', plan: { blobId: 'cb', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'k', ownerId: NEW } })
+  vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'u', plan: { blobId: 'cb', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'k', ownerId: NEW } })
   vi.mocked(originalBlobMeta).mockImplementation((_s, _k, it) => ({ v: 1, type: 'image/jpeg', name: `${it.mediaId}.jpg`, modifiedAt: 5 }))
   vi.mocked(unsealMeta).mockImplementation((_s, _k, it) =>
     it.mediaId === 'a'
@@ -116,6 +123,42 @@ describe('exportMemoryContent', () => {
     expect(a).toMatchObject({ location: { place: 'Lisbon' } })
     expect(a.exif).toBeUndefined()
     expect(a.contributor).toBeUndefined()
+  })
+
+  it('a download carries nothing a copy adds: no tiers, no listed tier, no blob meta - only the originals', async () => {
+    const { ctx, payloads } = exportCtx(meta)
+    ;(ctx as { purpose: string }).purpose = 'download'
+    const c = (await exportMemoryContent(ctx))!
+    expect((c.media as { copy?: unknown }[]).map((m) => m.copy)).toEqual([undefined, undefined])
+    expect(payloads.map((p) => p.name)).toEqual(['a.jpg', 'b.jpg'])
+    expect(tierChunkProviders).not.toHaveBeenCalled()
+    expect(rawMediaMeta).not.toHaveBeenCalled()
+  })
+
+  it('a copy\'s walk adds each medium\'s tiers as payloads read by frame, its blob meta and its listed tier verbatim', async () => {
+    const provider = { chunkCount: 1, getPlaintextChunk: async () => new Uint8Array(0) }
+    vi.mocked(tierChunkProviders).mockReturnValue([
+      { kind: 'THUMBNAIL', ref: { byteSize: 1, chunkCount: 1 }, meta: { v: 1, type: 'image/jpeg' }, provider },
+    ] as unknown as ReturnType<typeof tierChunkProviders>)
+    vi.mocked(rawMediaMeta).mockReturnValue({ v: 1, capturedAtOverride: 7, laterField: 'kept' })
+    const { ctx, payloads } = exportCtx(meta)
+    ;(ctx as { purpose: string }).purpose = 'copy'
+    const c = (await exportMemoryContent(ctx))!
+    expect(payloads.map((p) => p.name)).toEqual(['a.jpg', 'a.jpg.thumbnail', 'b.jpg', 'b.jpg.thumbnail'])
+    expect((c.media as { copy?: unknown }[])[0].copy).toEqual({
+      original: { type: 'image/jpeg', name: 'a.jpg', modifiedAt: 5 },
+      meta: { v: 1, capturedAtOverride: 7, laterField: 'kept' },
+      tiers: [{ kind: 'THUMBNAIL', file: { path: 'Lisbon/a.jpg.thumbnail', size: 100, mediaType: 'image/jpeg' }, meta: { type: 'image/jpeg' } }],
+    })
+  })
+
+  it('a copy\'s walk stops on an EXIF read that fails, where a download names no EXIF', async () => {
+    vi.mocked(tierChunkProviders).mockReturnValue([])
+    vi.mocked(loadMediaExif).mockRejectedValue(new Error('network'))
+    const { ctx } = exportCtx(meta)
+    expect(((await exportMemoryContent(ctx))!.media as { exif?: unknown }[])[0].exif).toBeUndefined()
+    ;(ctx as { purpose: string }).purpose = 'copy'
+    await expect(exportMemoryContent(ctx)).rejects.toThrow('network')
   })
 
   it('a chapter exports as memories.chapter', async () => {
@@ -201,6 +244,55 @@ describe('importMemoryContent', () => {
     await importMemoryContent(MEMORY_KIND)(ctx(n))
     expect(vi.mocked(uploadCoverImage)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(writeNodeCover)).toHaveBeenCalledWith(expect.objectContaining({ uploadId: 'u', cover: expect.objectContaining({ source: expect.objectContaining({ kind: 'upload' }) }) }))
+  })
+
+  it('an import of a download ignores a `copy` it finds: the original goes through the ordinary upload, a cover through the re-encode', async () => {
+    const tier = { kind: 'THUMBNAIL', file: { path: 'data/n3/t', size: 1, mediaType: 'image/jpeg' } }
+    const forged = node({
+      media: [{ file: { path: 'data/n3/a.jpg', size: 1, mediaType: 'image/jpeg' }, name: 'a.jpg', copy: { tiers: [tier], meta: { v: 1, gpsLat: 1 } } }],
+      cover: { file: { path: 'data/n3/cover', size: 1, mediaType: 'image/jpeg' }, crop: { x: 0, y: 0, width: 1, height: 1 } },
+    })
+    vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'u', plan: { blobId: 'cb', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'k', ownerId: NEW } })
+    const c = ctx(forged)
+    ;(c as { purpose: string }).purpose = 'import'
+    await importMemoryContent(MEMORY_KIND)(c)
+    expect(addMedia).toHaveBeenCalledTimes(1)
+    expect(addCopiedMedia).not.toHaveBeenCalled()
+    expect(uploadCoverBlob).not.toHaveBeenCalled()
+    expect(vi.mocked(c.payload).mock.calls.map(([ref]) => ref.path)).toEqual(['data/n3/a.jpg', 'data/n3/cover'])
+  })
+
+  it('a copy uploads each medium with its tiers and facts, decodes nothing, seals every fact at birth and copies the cover blob', async () => {
+    let n = 0
+    vi.mocked(addCopiedMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `c${++n}` }))
+    vi.mocked(uploadCoverBlob).mockResolvedValue({ uploadId: 'u', plan: { blobId: 'cb', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'k', ownerId: NEW } })
+    const tier = { kind: 'PREVIEW', file: { path: 'Lisbon/a.jpg.preview', size: 2, mediaType: 'image/jpeg' }, meta: { type: 'image/jpeg' } }
+    const copied = node({
+      media: [
+        { file: { path: 'Lisbon/a.jpg', size: 1, mediaType: 'image/jpeg' }, name: 'a.jpg', capturedAtCorrected: true, capturedAt: '2023-11-14T22:15:00.000Z', location: { place: 'Lisbon' },
+          exif: { v: 1, make: 'Fuji' }, copy: { original: { type: 'image/jpeg', name: 'a.jpg' }, meta: { v: 1, placeName: 'Lisbon' }, tiers: [tier] } },
+      ],
+      cover: { file: { path: 'Lisbon/cover.jpg', size: 3, mediaType: 'image/jpeg' }, crop: { x: 0, y: 0, width: 1, height: 1 } },
+    })
+    const c = ctx(copied)
+    ;(c as { purpose: string }).purpose = 'copy'
+    await importMemoryContent(MEMORY_KIND)(c)
+    expect(addMedia).not.toHaveBeenCalled()
+    const [, nodeId, , source] = vi.mocked(addCopiedMedia).mock.calls[0]
+    expect(nodeId).toBe(NEW)
+    expect(source).toMatchObject({ original: { meta: { type: 'image/jpeg', name: 'a.jpg' } }, meta: { v: 1, placeName: 'Lisbon' }, exif: { v: 1, make: 'Fuji' } })
+    expect(source.tiers.map((t) => [t.kind, t.meta])).toEqual([['PREVIEW', { type: 'image/jpeg' }]])
+    expect([setMediaMeta, backfillPlaceName, listMedia].map((f) => vi.mocked(f).mock.calls.length)).toEqual([0, 0, 0])
+    expect(uploadCoverImage).not.toHaveBeenCalled()
+    expect(vi.mocked(uploadCoverBlob).mock.calls[0][4]).toEqual({ type: 'image/jpeg' })
+    expect(vi.mocked(writeNodeCover)).toHaveBeenCalledWith(expect.objectContaining({ uploadId: 'u' }))
+  })
+
+  it('a copy\'s medium without its tiers and facts is refused, never decoded', async () => {
+    const c = ctx(node({ cover: undefined }))
+    ;(c as { purpose: string }).purpose = 'copy'
+    await expect(importMemoryContent(MEMORY_KIND)(c)).rejects.toThrow('copy_without_facts')
+    expect(addMedia).not.toHaveBeenCalled()
   })
 
   it('refuses content that is not a Memory\'s, and a newer schema', async () => {

@@ -29,7 +29,7 @@ import {
   reserveAndPump,
   throwIfAborted,
 } from '../../core/blob/transport'
-import type { BlobDeclare, BlobRef, ReservedUpload, WindowFn } from '../../core/blob/types'
+import type { BlobDeclare, BlobRef, BlobSource, ReservedUpload, WindowFn } from '../../core/blob/types'
 import type { BlobMeta, OpenedBlobMeta } from '../../core/blob/meta'
 import { sniffMediaType } from './download'
 import { newestItemsCursor } from '../../core/items/itemsLive'
@@ -245,6 +245,20 @@ export function unsealMeta(scopeId: string, memoryKey: Uint8Array, item: MediaIt
     /* not openable / malformed → treated as no metadata */
   }
   return null
+}
+
+/**
+ * A media's listed tier exactly as it was sealed — every field, known or not ([RawMediaMeta]) — for a copy, which seals it
+ * anew bound to the copied media ([addCopiedMedia]). Null when none was sealed or it does not open (the gallery then shows
+ * the media without metadata, and so does the copy).
+ */
+export function rawMediaMeta(scopeId: string, memoryKey: Uint8Array, item: MediaItem): Record<string, unknown> | null {
+  if (!item.wrappedMeta) return null
+  try {
+    return openMediaMetaForWrite(scopeId, memoryKey, item, item.wrappedMeta)
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -615,8 +629,7 @@ export async function uploadMediaVia(
   transport: MediaUploadTransport,
   opts: AddMediaOptions = {},
 ): Promise<{ blobId: string; mediaId: string }> {
-  const { onProgress, signal } = opts
-  throwIfAborted(signal)
+  throwIfAborted(opts.signal)
   const typed: AddMediaSource = { ...source, mediaType: await resolveMediaType(source) }
   // The client mints the media's id (ADR 0072): every blob wrap and both metadata tiers are sealed bound to it.
   const mediaId = crypto.randomUUID()
@@ -625,10 +638,33 @@ export async function uploadMediaVia(
   const { derivatives: tiers, dimensions } = await deriveTiers(typed, deriver)
   const { wrappedMeta, wrappedExif } = await sealMetadata(typed, deriver, memoryKey, { scopeId, mediaId }, dimensions)
   // index 0 = original, streamed from the source; the rest are the role-tagged derivatives — small, already in
-  // memory from the derivation — in order. Each blob's meta is sealed under its own K_blob as it is planned.
+  // memory from the derivation — in order.
+  return uploadSealedMedia(scopeId, memoryKey, mediaId, {
+    original: { source: typed.blob, meta: originalBlobMetaOf(typed) },
+    tiers: tiers.map((t) => ({ kind: t.kind, source: new Blob([t.bytes as BlobPart]), meta: DERIVED_META })),
+    wrappedMeta,
+    wrappedExif,
+  }, transport, opts)
+}
+
+/** A media's blobs and sealed tiers, ready to upload: the original and each role-tagged derivative with the meta its blob
+ *  declares, and the two metadata tiers already sealed bound to the media. */
+type SealedMedia = {
+  original: { source: BlobSource; meta?: BlobMeta }
+  tiers: { kind: MediaDerivativeKind; source: BlobSource; meta?: BlobMeta }[]
+  wrappedMeta: string | null
+  wrappedExif: string | null
+}
+
+/** Plan, reserve, pump and complete one media - the tail [uploadMediaVia] and [addCopiedMedia] share. */
+async function uploadSealedMedia(
+  scopeId: string, memoryKey: Uint8Array, mediaId: string, media: SealedMedia, transport: MediaUploadTransport, opts: AddMediaOptions,
+): Promise<{ blobId: string; mediaId: string }> {
+  const { onProgress, signal } = opts
+  // index 0 = the original, the rest the derivatives in order. Each blob's meta is sealed under its own K_blob as it is planned.
   const plans = [
-    planBlob(scopeId, { ownerId: mediaId, role: 'ORIGINAL' }, memoryKey, typed.blob, originalBlobMetaOf(typed)),
-    ...tiers.map((t) => planBlob(scopeId, { ownerId: mediaId, role: t.kind }, memoryKey, new Blob([t.bytes as BlobPart]), DERIVED_META)),
+    planBlob(scopeId, { ownerId: mediaId, role: 'ORIGINAL' }, memoryKey, media.original.source, media.original.meta),
+    ...media.tiers.map((t) => planBlob(scopeId, { ownerId: mediaId, role: t.kind }, memoryKey, t.source, t.meta)),
   ]
 
   // reserve one upload session per blob, then read → seal → PUT each chunk straight to the store (no base64, no
@@ -640,11 +676,47 @@ export async function uploadMediaVia(
   const done = await transport.complete({
     mediaId,
     originalUploadId: uploadIds[0],
-    derivatives: tiers.map((t, i) => ({ kind: t.kind, uploadId: uploadIds[i + 1] })),
-    wrappedMeta,
-    wrappedExif,
+    derivatives: media.tiers.map((t, i) => ({ kind: t.kind, uploadId: uploadIds[i + 1] })),
+    wrappedMeta: media.wrappedMeta,
+    wrappedExif: media.wrappedExif,
   })
   return { blobId: expectMintedId(plans[0].blobId, done.blobId), mediaId: expectMintedId(mediaId, done.mediaId) }
+}
+
+/**
+ * A media a COPY re-creates (ADR 0082 Addendum 2, uc.platform.copy-node): the original and each existing derivative tier
+ * as sources read by frame from the media it copies (`core/export/copySource.ts` - never a `Blob`, never held whole), the
+ * meta each of those blobs declared, and the two metadata tiers as plaintext - the listed tier verbatim ([rawMediaMeta]:
+ * geometry, capture time and its correction, coordinates, place name, and any field a newer client wrote) and the EXIF
+ * bundle. Nothing in it is decoded, derived or read again from the bytes.
+ */
+export type CopiedMediaSource = {
+  /** `meta` absent where the copied blob declared none: the copy declares none either. */
+  original: { source: BlobSource; meta?: BlobMeta }
+  tiers: { kind: MediaDerivativeKind; source: BlobSource; meta?: BlobMeta }[]
+  meta: Record<string, unknown> | null
+  exif: MediaExif | null
+}
+
+/**
+ * Re-create a copied media under `nodeId`: a fresh media id, every blob under a fresh `K_blob` wrapped under `memoryKey`
+ * and bound to the new media, both tiers sealed anew bound to it - the upload [addMedia] does, without [deriveTiers]
+ * and without reading EXIF (a copy hands over the tiers and facts the original already has; decoding the original would
+ * hold it whole, a video included). The same transport and order as [addMedia].
+ */
+export async function addCopiedMedia(
+  scopeId: string,
+  nodeId: string,
+  memoryKey: Uint8Array,
+  copied: CopiedMediaSource,
+  opts: AddMediaOptions = {},
+): Promise<{ blobId: string; mediaId: string }> {
+  throwIfAborted(opts.signal)
+  const mediaId = crypto.randomUUID()
+  const meta = copied.meta ? { ...copied.meta, v: finiteNum(copied.meta.v) ?? 1 } : null
+  const wrappedMeta = meta && metaHasContent(meta) ? sealJson(memoryKey, prune(meta), mediaMetaContext(scopeId, mediaId)) : null
+  const wrappedExif = copied.exif && hasExifPayload(copied.exif) ? sealExifTier(memoryKey, mediaExifContext(scopeId, mediaId), copied.exif) : null
+  return uploadSealedMedia(scopeId, memoryKey, mediaId, { original: copied.original, tiers: copied.tiers, wrappedMeta, wrappedExif }, mediaApiTransport(scopeId, nodeId), opts)
 }
 
 /** The authed upload transport — the internal Memory control plane (`startBlobUploads` + `presignBlobUploadWindows` + `completeMedia`). */
@@ -991,6 +1063,24 @@ export const openOriginal = (scopeId: string, memoryKey: Uint8Array, item: Media
 //
 // The provider itself is core's ([makeChunkProvider], `core/blob/transport.ts`); this is the authed app's wiring of it
 // over a media's original.
+
+/** A media's derivative tiers as the authed app reads them, by chunk: each tier's ref, the meta its blob declared and a
+ *  {@link ChunkProvider} over it under the key the media's origin fixes ([mediaKey]) - what a copy hands over instead of
+ *  deriving the tiers again (ADR 0082 Addendum 2). Nothing is fetched until a chunk is asked for. */
+export function tierChunkProviders(
+  scopeId: string, memoryKey: Uint8Array, item: MediaItem,
+): ({ kind: MediaDerivativeKind; ref: BlobRef } & ReadByChunk)[] {
+  const key = mediaKey(scopeId, memoryKey, item)
+  return item.derivatives.map(({ kind, ref }) => ({ kind, ref, ...readByChunk(scopeId, key, ref) }))
+}
+
+/** A blob as the authed app reads it by chunk: the meta it declared and a provider over its frames. */
+export type ReadByChunk = { meta: OpenedBlobMeta | null; provider: ChunkProvider }
+
+/** Any blob of the scope by chunk under `key` (its owner's key: a media's [mediaKey], a node's content key for its cover). */
+export function readByChunk(scopeId: string, key: Uint8Array, ref: BlobRef): ReadByChunk {
+  return { meta: readBlobMeta(scopeId, key, ref), provider: makeChunkProvider(scopeId, key, ref, () => presignAllChunks(scopeId, ref.blobId)) }
+}
 
 /** A {@link ChunkProvider} for the authed app over a media's original: presigns the whole blob via the media
  *  endpoint (bearer, `withRefresh`), and opens it under the key the media's origin fixes ([mediaKey]). */
