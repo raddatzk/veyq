@@ -139,7 +139,9 @@ class FilesContentSliceTest {
         assertEquals(owner to null, uploaderOf(file), "the member's upload records the member, no guest")
         list(peer, scopeId, null).statusCode(200)
             .body("items.find { it.nodeId == '$file' }.uploaderKey", equalTo("user:$owner"))
+            .body("items.find { it.nodeId == '$file' }.uploaderName", nullValue()) // a member is named by the people directory
             .body("items.find { it.nodeId == '$empty' }.uploaderKey", nullValue())
+            .body("items.find { it.nodeId == '$empty' }.uploaderName", nullValue())
 
         complete(peer, scopeId, file, start(peer, scopeId, file, TestBlob.SMALL), expected = first).statusCode(200)
         assertEquals(peer to null, uploaderOf(file), "the replacer is the uploader now")

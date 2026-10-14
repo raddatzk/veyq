@@ -57,7 +57,7 @@ of a deleted link stays named. Nothing reaches a share path. Decided by the coor
 ## Phases
 
 - [x] 1 contracts: Decision 1. Done when the trust-chain guards are green.
-- [ ] 2 backend: Decisions 2 and 4 (backend half). Done when `./gradlew check` is green; bitten.
+- [x] 2 backend: Decisions 2 and 4 (backend half). Done when `./gradlew check` is green; bitten.
 - [ ] 3 web: Decisions 3 and 4 (web half). Done when `npm run check` is green; bitten; a real browser showed a guest's name
   on a file page (the main session clicks it if this runs in a worktree).
 - [ ] 4 docs: uc.files.view-file step 0 (built), its coverage, `docs/apps/files.md`, ADR 0083's uploader decision, both

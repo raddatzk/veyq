@@ -9,6 +9,7 @@ import me.raddatz.veyq.files.generated.model.FileCompleteRequest
 import me.raddatz.veyq.files.generated.model.FileConflict
 import me.raddatz.veyq.files.generated.model.FileListItem
 import me.raddatz.veyq.files.generated.model.FileListPage
+import me.raddatz.veyq.files.generated.model.FileUploaderName
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -44,7 +45,10 @@ class FilesResource(
             is ListFilesOutcome.Ok -> Response.ok(
                 FileListPage(
                     items = o.files.map {
-                        FileListItem(nodeId = UUID.fromString(it.nodeId), fileBlob = it.blob?.let(::toRef), uploaderKey = it.uploaderKey)
+                        FileListItem(
+                            nodeId = UUID.fromString(it.nodeId), fileBlob = it.blob?.let(::toRef), uploaderKey = it.uploaderKey,
+                            uploaderName = it.uploaderName?.let { n -> FileUploaderName(sealedName = n.sealedName, shareId = n.shareId) },
+                        )
                     },
                 ),
             ).build()
