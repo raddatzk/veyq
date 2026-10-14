@@ -262,11 +262,20 @@ export function myIdentityPublicKeyB64(): string {
  * the human actually compared) — both at load and after any 409 re-base — else throws {@link IdentityMovedError}
  * (the key moved under the compare; nothing is written). `verified` wins a same-contact merge: the re-applied
  * upgrade re-asserts `verified` on top of a concurrent device's `pinned`. Requires an unlocked vault.
+ *
+ * `pinIfUnpinned` (ADR 0028 Addendum 2): the compare was against the DIRECTORY's key because there was no pin, so a
+ * contact still unpinned at the write is pinned with the compared key, already `verified` - in the same one sealed
+ * write, never a pin without the verification. A pin that appeared meanwhile (a concurrent device, the delivery
+ * worker's TOFU) is held to the same guard: its key must be the compared one.
  */
-export async function markVerified(userId: string, verifiedKey: string): Promise<void> {
+export async function markVerified(userId: string, verifiedKey: string, opts: { pinIfUnpinned?: boolean } = {}): Promise<void> {
   const store = await loadStore()
   await mutateAndSave(store, (pins) => {
     const prior = pins[userId]
+    if (!prior && opts.pinIfUnpinned) {
+      pins[userId] = { key: verifiedKey, state: 'verified', firstSeenAt: Date.now() }
+      return
+    }
     if (!prior || prior.key !== verifiedKey) throw new IdentityMovedError(userId)
     pins[userId] = { ...prior, state: 'verified' }
   })
@@ -277,8 +286,10 @@ export async function markVerified(userId: string, verifiedKey: string): Promise
  * - no pin → `unpinned`
  * - pin key ≠ directory key → `changed` (surfaced-not-trusted; wrap/delivery stays gated until reviewed)
  * - pin key = directory key → `verified` if the pin was verified out-of-band, else `pinned`
+ * Exported for a surface that already holds the pin ({@link getPin}) - the profile's compare - so it folds without a
+ * second store fetch.
  */
-function foldTrust(pin: Pin | undefined, directoryKey: string): TrustState {
+export function foldTrust(pin: Pin | null | undefined, directoryKey: string): TrustState {
   if (!pin) return 'unpinned'
   if (pin.key !== directoryKey) return 'changed'
   return pin.state === 'verified' ? 'verified' : 'pinned'

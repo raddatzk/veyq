@@ -75,6 +75,12 @@ key change is said as such and needs a new compare. Strict mode stays out. Owner
     throws `IdentityMovedError` and says so; the payload's size bound. Bitten.
   - Done when `npm run check` is green and a real browser showed my number and verified another member by digits
     on the dev instance (a second member of the tenant is needed: the dev seeder can create one).
+  - **Built and unit-proven, browser pass OPEN** (the implementer ran in a worktree the browser pane cannot serve):
+    `npm run check` green; the browser pass is the main session's after the merge, and its record goes into the use
+    case. Built as: `v1.fingerprintHash` (the digest the digits render from) in `@veyq/crypto`, `features/account/safetyCode.ts`
+    (`veyqid:1:<digest>`), `markVerified(…, { pinIfUnpinned })` (pin-at-verify in ONE sealed write instead of
+    `checkAndPin` + `markVerified`, so no pinned-but-unverified state can be left behind), `core/people/{MySafetyNumber,
+    PersonSafetyNumber,SafetyDigits}.vue`, `loadIdentityKey` in `core/people/directory.ts`.
 - [ ] 2 web: Decisions 3 and 4 (badges, the louder changed-key review).
   - Tests: the member panels show "verified"; a verified contact with a moved directory key reads as such in the
     badge and the review; accepting leaves `pinned` and the profile offers the compare again. Bitten.
