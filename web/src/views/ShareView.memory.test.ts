@@ -314,7 +314,8 @@ describe('a note that asks to be accepted before the share opens', () => {
   const NOTE = { en: 'Please **read** me first' }
   const asks = (h: PublicShareHead, digest = 'digest-v1'): PublicShareHead => ({ ...h, noteByLocale: NOTE, noteAcceptance: { digest } })
   const gate = (w: Page) => w.find('[data-testid="share-note-gate"]')
-  /** A reload: the link opened again in a fresh page (the router is the suite's, so the link is pushed again first). */
+  /** A reload: the link opened again in a fresh page. The router is the suite's, and after an unmount it sits on `/`,
+   *  so a remount without pushing the link again reads an EMPTY share id — and "asks again" for the wrong reason. */
   async function reload(h: PublicShareHead) {
     await router.push(`/s/${SHARE}${HASH}`)
     return mountPage(h)
