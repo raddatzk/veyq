@@ -42,7 +42,11 @@ class FilesResource(
     override fun listFiles(scopeId: UUID, parentId: UUID?): Response =
         when (val o = handler.list(identity.principal.name, scopeId.toString(), parentId?.toString())) {
             is ListFilesOutcome.Ok -> Response.ok(
-                FileListPage(items = o.files.map { FileListItem(nodeId = UUID.fromString(it.nodeId), fileBlob = it.blob?.let(::toRef)) }),
+                FileListPage(
+                    items = o.files.map {
+                        FileListItem(nodeId = UUID.fromString(it.nodeId), fileBlob = it.blob?.let(::toRef), uploaderKey = it.uploaderKey)
+                    },
+                ),
             ).build()
             is HttpFailure -> httpError(o)
         }

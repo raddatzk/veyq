@@ -405,8 +405,10 @@ CREATE UNIQUE INDEX ux_node_parent_identity ON veyq_node (parent_id, share_ident
 -- A sealed file on a node (ADR 0079 Consequences, cr-files-application P3): one blob per (node, slot). slot is a
 -- token the owning application names (Files' FILE_CONTENT, Memories' COVER — each equal to the blob role its wrap is
 -- sealed to); core
--- stores and compares it, never names one. share_identity_id is the guest identity that uploaded it, or null for a
--- member. blob_id is unique: one blob row has exactly one reference, so freeing the attachment frees the blob.
+-- stores and compares it, never names one. Who uploaded the slot's CURRENT blob (ADR 0083 Addendum; a replace moves it):
+-- share_identity_id for a link's guest, uploader_user_id for a member - exactly one of the two (ck_attachment_uploader).
+-- uploader_user_id is no foreign key, as Memories' owner_key is none: a member who left stays named (a "former member").
+-- blob_id is unique: one blob row has exactly one reference, so freeing the attachment frees the blob.
 -- No foreign key here cascades, on purpose: a cascade would drop the row without BlobUploadStore.deleteBlobRow,
 -- leaving its blob row and store objects orphaned with no sweep to find them. The erasers delete these rows first
 -- (AttachmentNodeSubtreeEraser, AttachmentScopeEraser); a path that forgets is refused by the database, loudly.
@@ -419,12 +421,15 @@ CREATE TABLE veyq_node_attachment (
     slot              VARCHAR(16) NOT NULL,
     blob_id           UUID NOT NULL,
     share_identity_id UUID NULL,
+    uploader_user_id  UUID NULL,
     CONSTRAINT ux_attachment_node_slot UNIQUE (node_id, slot),
     CONSTRAINT ux_attachment_blob UNIQUE (blob_id),
     CONSTRAINT fk_attachment_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id),
     CONSTRAINT fk_attachment_node FOREIGN KEY (node_id) REFERENCES veyq_node (id),
     CONSTRAINT fk_attachment_blob FOREIGN KEY (blob_id) REFERENCES veyq_blob (id),
-    CONSTRAINT fk_attachment_share_identity FOREIGN KEY (share_identity_id) REFERENCES veyq_share_identity (id)
+    CONSTRAINT fk_attachment_share_identity FOREIGN KEY (share_identity_id) REFERENCES veyq_share_identity (id),
+    CONSTRAINT ck_attachment_uploader CHECK ((uploader_user_id IS NULL AND share_identity_id IS NOT NULL)
+        OR (uploader_user_id IS NOT NULL AND share_identity_id IS NULL))
 );
 CREATE INDEX ix_attachment_scope ON veyq_node_attachment (scope_id);
 CREATE INDEX ix_attachment_share_identity ON veyq_node_attachment (share_identity_id);

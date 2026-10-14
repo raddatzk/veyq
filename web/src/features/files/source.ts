@@ -65,6 +65,13 @@ export interface FilesUpload {
   beginTree(folder: TreeNode | null): Promise<FilesTreeUpload | null>
 }
 
+/** One file of a member's listing: its blob (null: none yet) and who uploaded that blob — `user:<id>` | `share:<identity>`,
+ *  null with no blob (ADR 0083 Addendum). */
+export interface ListedFile {
+  blob: FileBlobRef | null
+  uploaderKey: string | null
+}
+
 /** Files' data source; see the header. */
 export interface FilesSource {
   /** The scope a blob's seals bind (its id, never a key): what `fileFacts` opens a row's facts under. */
@@ -75,6 +82,9 @@ export interface FilesSource {
   /** The blob of each file of the level `folderId` (null: a member's scope root): `null` for a file known to hold none.
    *  May list more files than the level's (a guest's listing is the whole subtree). Throws what the call throws. */
   listBlobs(folderId: string | null): Promise<Map<string, FileBlobRef | null>>
+  /** The same one listing as {@link listBlobs}, with who uploaded each file's current content (the file page's header, ADR
+   *  0083 Addendum). Absent: this session is shown no uploader — a guest's link listing carries none (inbox #190). */
+  readonly listWithUploaders?: (folderId: string | null) => Promise<Map<string, ListedFile>>
   /** Save one file: decrypted under `key`, saved as `name`. Starts its save picker before anything else is awaited (the
    *  click's activation). */
   download(key: Uint8Array, nodeId: string, blob: FileBlobRef, name: string): Promise<void>
@@ -125,15 +135,20 @@ export function memberFilesSource(from: {
   rename?: (node: TreeNode) => void
   move?: (node: TreeNode) => void
 }): FilesSource {
+  async function listWithUploaders(folderId: string | null): Promise<Map<string, ListedFile>> {
+    const scopeId = from.scopeId()
+    if (!scopeId) return new Map()
+    const page = await withRefresh(() => filesApi().listFiles({ scopeId, parentId: folderId ?? undefined }))
+    return new Map(page.items.map((i) => [i.nodeId, { blob: i.fileBlob ?? null, uploaderKey: i.uploaderKey ?? null }]))
+  }
   return {
     scopeId: from.scopeId,
     listKey: from.scopeId,
     async listBlobs(folderId) {
-      const scopeId = from.scopeId()
-      if (!scopeId) return new Map()
-      const page = await withRefresh(() => filesApi().listFiles({ scopeId, parentId: folderId ?? undefined }))
-      return new Map(page.items.map((i) => [i.nodeId, i.fileBlob ?? null]))
+      const listed = await listWithUploaders(folderId)
+      return new Map([...listed].map(([id, f]) => [id, f.blob]))
     },
+    listWithUploaders,
     download(key, nodeId, blob, name) {
       const scopeId = from.scopeId()
       return scopeId ? downloadFile(scopeId, key, nodeId, blob, name) : Promise.resolve()

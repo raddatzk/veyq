@@ -137,8 +137,8 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
   bucket/uploader **names stay sealed** under `K_mem` — a WRITE_ONLY guest's under its own key, [ADR 0034](../decisions/0034-media-uploader-buckets.md),
   [ADR 0031](../decisions/0031-uploader-public-share.md) point 7); a Files file's **uploader attribution** (the member
-  or guest identity that uploaded its current content, on its attachment; decided 2026-10-14, not yet built -
-  [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Addendum);
+  or guest identity that uploaded its current content, on its attachment - served to members only, as `uploaderKey`
+  `user:{id}` / `share:{id}`; [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Addendum);
   per-parent blinded tokens; to a **public share's guest**, the shared node's **scope id** — every `K_mem` seal the
   viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared

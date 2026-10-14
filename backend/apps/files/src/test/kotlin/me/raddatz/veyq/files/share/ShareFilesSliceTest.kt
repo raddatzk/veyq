@@ -18,6 +18,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.files.FilesNodeKinds
 import me.raddatz.veyq.files.content.FilesBlobRoles
 import io.quarkus.narayana.jta.QuarkusTransaction
+import com.fasterxml.jackson.databind.ObjectMapper
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
@@ -28,6 +29,7 @@ import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -160,6 +162,50 @@ class ShareFilesSliceTest {
         GuestTreeShare.place(link, file, t.folder, placementVersion = 0).statusCode(204)
         // A member's file is the guest's to replace too (the role applies to every node below the root).
         completeShare(link, t.file, guestStartStaged(link, t.file), expected = blobOf(t.file)).statusCode(200)
+    }
+
+    /**
+     * ADR 0083 Addendum, inbox #190: a guest's upload records its identity and no member; the member's listing names it
+     * as `share:<identity>`, a member's replace moves it back to `user:<id>` — and the guest's own listing carries no
+     * uploader at all. Read RAW (a parsed shape would drop a field the contract does not name), with the member's listing
+     * of the same file as the positive control.
+     */
+    @Test
+    fun aGuestsUploadIsAttributedToItsIdentityForMembersAndTheGuestListingNamesNoUploader() {
+        val t = tree()
+        val link = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
+        val identity = identityOf(link)
+
+        val guestBlob = completeShare(link, t.file, guestStartStaged(link, t.file), expected = blobOf(t.file)).statusCode(200)
+            .extract().path<String>("blobId")
+        assertEquals(null to identity, uploaderOf(t.file), "a guest's upload records the identity and no member")
+        memberList(t).body("items.find { it.nodeId == '${t.file}' }.uploaderKey", equalTo("share:$identity"))
+
+        // The guest's listing: the same file, no uploader field and neither id anywhere in the body.
+        val raw = listShare(link).statusCode(200)
+            .body("items.find { it.nodeId == '${t.file}' }.fileBlob.blobId", equalTo(guestBlob)) // control: the file is listed
+            .extract().asString()
+        assertFalse(raw.contains("uploader"), "the guest's listing carries no uploader field: $raw")
+        assertFalse(raw.contains(identity), "nor the identity id")
+        assertEquals(setOf("nodeId", "fileBlob"), ObjectMapper().readTree(raw)["items"][0].fieldNames().asSequence().toSet())
+
+        // A member's replace moves it back to the member, whose id never reaches the guest either.
+        given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
+            .body("""{"uploadId":"${memberStart(t.userId, t.scopeId, t.file)}","expectedBlobId":"$guestBlob"}""")
+            .`when`().post("/api/scopes/${t.scopeId}/files/${t.file}/content").then().statusCode(200)
+        assertEquals(t.userId to null, uploaderOf(t.file), "the member's replace clears the identity")
+        memberList(t).body("items.find { it.nodeId == '${t.file}' }.uploaderKey", equalTo("user:${t.userId}"))
+        assertFalse(listShare(link).statusCode(200).extract().asString().contains(t.userId), "the member's id never reaches the guest")
+    }
+
+    private fun memberList(t: Tree): ValidatableResponse =
+        given().header("Authorization", bearer(t.userId)).queryParam("parentId", t.folder)
+            .`when`().get("/api/scopes/${t.scopeId}/files").then().statusCode(200)
+
+    /** The attachment's recorded uploader: (member user id, guest identity id). */
+    private fun uploaderOf(node: String): Pair<String?, String?> = tx {
+        NodeAttachmentEntity.find("nodeId = ?1 and slot = ?2", node, FilesBlobRoles.FILE_CONTENT).firstResult()!!
+            .let { it.uploaderUserId to it.shareIdentityId }
     }
 
     /**

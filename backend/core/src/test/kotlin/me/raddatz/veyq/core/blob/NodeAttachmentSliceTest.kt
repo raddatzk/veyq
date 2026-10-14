@@ -205,11 +205,49 @@ class NodeAttachmentSliceTest {
         }
     }
 
+    /**
+     * ADR 0083 Addendum: an attachment names exactly one uploader — a member or a guest identity — and the database
+     * holds it (`ck_attachment_uploader`), so no writer can store an unattributed or doubly attributed blob. Each refused
+     * row differs from its accepted control only in the uploader columns (a fresh blob, a free slot, a real identity).
+     */
+    @Test
+    fun anAttachmentNamesExactlyOneUploader() {
+        val (userId, scopeId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val (_, guest) = seedDeletedLinkWithGuest(userId, scopeId, folder)
+        fun row(slot: String, member: String?, identity: String?) = QuarkusTransaction.requiringNew().run {
+            val blobId = UUID.randomUUID().toString()
+            BlobEntity().apply {
+                id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString().replace("-", "")
+                chunkCount = 1; byteSize = 100; wrappedBlobKey = "YXR0YWNobWVudA=="
+            }.persist()
+            BlobEntity.flush()
+            NodeAttachmentEntity().apply {
+                id = UUID.randomUUID().toString(); this.scopeId = scopeId; nodeId = folder; this.slot = slot
+                this.blobId = blobId; uploaderUserId = member; shareIdentityId = identity
+            }.persist()
+        }
+
+        assertThrows(Exception::class.java, { row("NOBODY", null, null) }, "neither uploader is refused")
+        assertThrows(Exception::class.java, { row("BOTH", userId, guest) }, "both uploaders are refused")
+        // controls: one of the two, in the same shape
+        row("MEMBER", userId, null)
+        row("GUEST", null, guest)
+        QuarkusTransaction.requiringNew().run {
+            assertEquals(setOf("MEMBER", "GUEST"), NodeAttachmentEntity.list("nodeId", folder).map { it.slot }.toSet())
+            assertEquals(
+                setOf("user:$userId", "share:$guest"),
+                NodeAttachmentEntity.list("nodeId", folder).map { it.uploaderKey }.toSet(),
+                "the wire's key: user:{id} | share:{identityId}",
+            )
+        }
+    }
+
     private fun attach(scopeId: String, nodeId: String, slot: String, blobId: String) =
         QuarkusTransaction.requiringNew().run {
             NodeAttachmentEntity().apply {
                 id = UUID.randomUUID().toString(); this.scopeId = scopeId; this.nodeId = nodeId; this.slot = slot
-                this.blobId = blobId
+                this.blobId = blobId; uploaderUserId = UUID.randomUUID().toString() // so only the unique key can refuse it
             }.persist()
         }
 

@@ -55,7 +55,8 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
      * Attach the verified [session] as the blob in [slot] of [nodeId] — a live node of [scopeId] of one of [kinds] — in
      * ONE transaction, the caller's if it has one. [expectedBlobId] is the blob the caller saw in the slot: null for a
      * first attach into an empty slot, else the blob a replace replaces. [manifest] is [BlobUploadHandler.verifyBlob]'s.
-     * The uploader recorded on the attachment is the session's own opener (a guest identity, or null for a member).
+     * The uploader recorded on the attachment is the session's own opener — a guest identity or a member (ADR 0083
+     * Addendum): exactly one, as the session holds exactly one; a replace moves it to the replacer.
      *
      * **Order** (each step decided where it writes, developer-styleguide §12):
      *  1. the scope row's lock ([NodesStore.lockScope]) — the lock every tree writer and both attachment erasers take
@@ -100,12 +101,13 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
         val kind = liveKind(scopeId, nodeId) ?: return refused(AttachOutcome.NodeNotFound)
         if (kind !in kinds) return refused(AttachOutcome.IllegalTarget)
 
+        val uploader = Uploader.of(session)
         val blobId = blobs.persistBlob(session, manifest)
         BlobEntity.flush()
         val swapped = if (expectedBlobId == null) {
-            insertIntoEmpty(scopeId, nodeId, slot, blobId, session.openerShareIdentityId)
+            insertIntoEmpty(scopeId, nodeId, slot, blobId, uploader)
         } else {
-            swapExpected(nodeId, slot, expectedBlobId, blobId, session.openerShareIdentityId)
+            swapExpected(nodeId, slot, expectedBlobId, blobId, uploader)
         }
         if (!swapped) {
             blobs.deleteBlobRow(blobId) // the loser's upload is freed, never left attached to nothing
@@ -159,7 +161,7 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
     fun slotBlobId(nodeId: String, slot: String): String? = currentBlobId(nodeId, slot)
 
     /** An insert, only while the slot is empty — read under the scope lock every writer of the table holds. */
-    private fun insertIntoEmpty(scopeId: String, nodeId: String, slot: String, blobId: String, shareIdentityId: String?): Boolean {
+    private fun insertIntoEmpty(scopeId: String, nodeId: String, slot: String, blobId: String, uploader: Uploader): Boolean {
         if (currentBlobId(nodeId, slot) != null) return false
         NodeAttachmentEntity().apply {
             id = UUID.randomUUID().toString()
@@ -167,24 +169,47 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
             this.nodeId = nodeId
             this.slot = slot
             this.blobId = blobId
-            this.shareIdentityId = shareIdentityId
+            shareIdentityId = (uploader as? Uploader.Guest)?.shareIdentityId
+            uploaderUserId = (uploader as? Uploader.Member)?.userId
         }.persist()
         return true
     }
 
     /**
      * The replace: a compare-and-set whose predicate is the expected blob — a bulk UPDATE, so it reads the row as
-     * committed when it writes, never a copy loaded before. The uploader moves with the blob. Panache binds no null
-     * parameter, so a member's (null) identity is spelled into the statement rather than bound.
+     * committed when it writes, never a copy loaded before. The uploader moves with the blob: the replacer's column is
+     * set and the other one cleared. Panache binds no null parameter, so the cleared column is spelled into the
+     * statement rather than bound.
      */
-    private fun swapExpected(nodeId: String, slot: String, expectedBlobId: String, blobId: String, shareIdentityId: String?): Boolean {
+    private fun swapExpected(nodeId: String, slot: String, expectedBlobId: String, blobId: String, uploader: Uploader): Boolean {
         val guard = "where nodeId = ?2 and slot = ?3 and blobId = ?4"
-        val rows = if (shareIdentityId == null) {
-            NodeAttachmentEntity.update("blobId = ?1, shareIdentityId = null $guard", blobId, nodeId, slot, expectedBlobId)
-        } else {
-            NodeAttachmentEntity.update("blobId = ?1, shareIdentityId = ?5 $guard", blobId, nodeId, slot, expectedBlobId, shareIdentityId)
+        val rows = when (uploader) {
+            is Uploader.Member -> NodeAttachmentEntity.update(
+                "blobId = ?1, shareIdentityId = null, uploaderUserId = ?5 $guard", blobId, nodeId, slot, expectedBlobId, uploader.userId,
+            )
+            is Uploader.Guest -> NodeAttachmentEntity.update(
+                "blobId = ?1, shareIdentityId = ?5, uploaderUserId = null $guard", blobId, nodeId, slot, expectedBlobId, uploader.shareIdentityId,
+            )
         }
         return rows == 1
+    }
+
+    /** Who an attachment names as its uploader: the session's one opener (`ck_attachment_uploader` holds exactly one). */
+    private sealed interface Uploader {
+        data class Member(val userId: String) : Uploader
+        data class Guest(val shareIdentityId: String) : Uploader
+
+        companion object {
+            fun of(session: UploadSessionEntity): Uploader {
+                val user = session.openerUserId
+                val guest = session.openerShareIdentityId
+                return when {
+                    user != null && guest == null -> Member(user)
+                    guest != null && user == null -> Guest(guest)
+                    else -> error("an upload session has exactly one opener (BlobUploadStore.createSession)")
+                }
+            }
+        }
     }
 
     /** The node's kind when it is live in [scopeId], read from the database (a scalar query is never a cached entity). */

@@ -36,6 +36,10 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
   Scanner speichern die Seite in einem Bildformat, das veyq nicht zeichnet) können Lücken zeigen — und haben keinen
   Text zum Markieren, außer der Scanner hat ihn mitgespeichert. Wenn etwas nicht angezeigt werden kann, ist die
   Schaltfläche zum Herunterladen gleich daneben.
+- **Sehen, wer sie hochgeladen hat** — oben auf der Seite einer Datei sehen Mitglieder des Bereichs, wer die aktuelle
+  Fassung hochgeladen hat: Name und Bild eines Mitglieds (ein Klick öffnet sein Profil), „Ehemaliges Mitglied“ für
+  jemanden, der den Bereich verlassen hat, oder „einem Gast“, wenn sie über einen Link kam. Nach dem Ersetzen steht dort,
+  wer ersetzt hat. Wer nur einen Link von dir hat, sieht das nie.
 - **Ersetzen** — lege eine neuere Fassung an die Stelle der Datei: Lade eine Datei mit **demselben Namen** in ihren
   Ordner hoch, oder öffne die Datei und nutze die Schaltfläche zum Ersetzen oben auf ihrer Seite. Der Name bleibt. veyq
   **fragt vorher nach**, denn es gibt **keinen Versionsverlauf**: Der alte Inhalt lässt sich nicht zurückholen. Eine

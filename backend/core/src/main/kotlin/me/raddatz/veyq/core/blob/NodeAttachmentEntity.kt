@@ -13,7 +13,9 @@ import org.hibernate.annotations.DynamicUpdate
  * [slot] of [nodeId]. Its `K_blob` is wrapped under the node's own key (ADR 0080 Decision 13) and sealed bound to the
  * blob id, the node id and the role (ADR 0072); the server keeps ids only. [slot] is a token the owning application
  * names — Files' is `FILE_CONTENT`, the same token as the blob role — and core compares it, never names one.
- * [shareIdentityId] is the guest identity that uploaded it (null for a member).
+ * Who uploaded the slot's CURRENT blob (ADR 0083 Addendum; a replace moves it): [shareIdentityId] for a link's guest,
+ * [uploaderUserId] for a member — exactly one of the two (`ck_attachment_uploader`), written from the upload's opener
+ * by [AttachmentStore.attach] alone. [uploaderKey] is the pair as the wire names it.
  *
  * The fourth arm that references a `veyq_blob` row (`scripts/validate_blob_reference_arity.py`). One blob, one
  * attachment (`ux_attachment_blob`), one attachment per slot (`ux_attachment_node_slot`). **Every** foreign key of
@@ -44,6 +46,13 @@ class NodeAttachmentEntity : PanacheEntityBase {
 
     @Column(name = "share_identity_id", columnDefinition = "uuid")
     var shareIdentityId: String? = null
+
+    @Column(name = "uploader_user_id", columnDefinition = "uuid")
+    var uploaderUserId: String? = null
+
+    /** The uploader as an opaque key — `user:{userId}` or `share:{shareIdentityId}`, Memories' `owner_key` shape — or null. */
+    val uploaderKey: String?
+        get() = uploaderUserId?.let { "user:$it" } ?: shareIdentityId?.let { "share:$it" }
 
     companion object : PanacheCompanionBase<NodeAttachmentEntity, String>
 }

@@ -18,8 +18,12 @@ data class FileBlobData(
     val wrappedBlobMeta: String?,
 )
 
-/** One live file under a parent and its blob (null: no upload of it has completed yet). */
-data class FileRow(val nodeId: String, val blob: FileBlobData?)
+/**
+ * One live file under a parent and its blob (null: no upload of it has completed yet), with who uploaded that blob:
+ * [uploaderKey] is `user:{id}` or `share:{identityId}` (ADR 0083 Addendum), null with no blob. Only a MEMBER's listing
+ * puts it on the wire; the guest's item has no such field (`ShareFilesResource`, inbox #190).
+ */
+data class FileRow(val nodeId: String, val blob: FileBlobData?, val uploaderKey: String?)
 
 /**
  * Files' reads of core's tables (cr-files-application F1a): a file's blob is the [FilesBlobRoles.FILE_CONTENT] slot of
@@ -67,10 +71,14 @@ class FilesStore(private val blobs: BlobUploadStore) {
     /** [nodeIds] (files, in order) each paired with its slot's blob: two reads bounded by the ids. */
     private fun withBlobs(nodeIds: List<String>): List<FileRow> {
         if (nodeIds.isEmpty()) return emptyList()
-        val blobOf = NodeAttachmentEntity.list("nodeId in ?1 and slot = ?2", nodeIds, FilesBlobRoles.FILE_CONTENT)
-            .associate { it.nodeId to it.blobId }
-        val blobRows = if (blobOf.isEmpty()) emptyMap() else BlobEntity.list("id in ?1", blobOf.values.toList()).associateBy { it.id }
-        return nodeIds.map { id -> FileRow(id, blobOf[id]?.let(blobRows::get)?.let(::toData)) }
+        val attachmentOf = NodeAttachmentEntity.list("nodeId in ?1 and slot = ?2", nodeIds, FilesBlobRoles.FILE_CONTENT)
+            .associateBy { it.nodeId }
+        val blobRows = if (attachmentOf.isEmpty()) emptyMap() else BlobEntity.list("id in ?1", attachmentOf.values.map { it.blobId }).associateBy { it.id }
+        return nodeIds.map { id ->
+            val attachment = attachmentOf[id]
+            val blob = attachment?.blobId?.let(blobRows::get)?.let(::toData)
+            FileRow(id, blob, attachment?.uploaderKey?.takeIf { blob != null })
+        }
     }
 
     /** The blob [nodeId]'s file slot holds now, read from the database (null: empty). */

@@ -10,7 +10,7 @@ import me.raddatz.veyq.files.content.FilesResource
 import me.raddatz.veyq.files.generated.api.ShareFilesApi
 import me.raddatz.veyq.files.generated.model.DropFolder
 import me.raddatz.veyq.files.generated.model.DropFolderRequest
-import me.raddatz.veyq.files.generated.model.FileListItem
+import me.raddatz.veyq.files.generated.model.ShareFileListItem
 import me.raddatz.veyq.files.generated.model.ShareFileListing
 import me.raddatz.veyq.files.generated.model.ShareFileCompleteRequest
 import jakarta.annotation.security.PermitAll
@@ -61,7 +61,8 @@ class ShareFilesResource(
     override fun listShareFiles(shareId: String, xSharePassword: String?): Response =
         when (val o = handler.list(shareId, xSharePassword)) {
             is ShareFilesListOutcome.Listed -> Response.ok(
-                ShareFileListing(items = o.files.map { FileListItem(nodeId = UUID.fromString(it.nodeId), fileBlob = it.blob?.let(FilesResource::toRef)) }),
+                // The guest's own item: no uploader (inbox #190, ADR 0083 Addendum) — FileRow.uploaderKey stops here.
+                ShareFileListing(items = o.files.map { ShareFileListItem(nodeId = UUID.fromString(it.nodeId), fileBlob = it.blob?.let(FilesResource::toRef)) }),
             ).build()
             is HttpFailure -> httpError(o)
         }

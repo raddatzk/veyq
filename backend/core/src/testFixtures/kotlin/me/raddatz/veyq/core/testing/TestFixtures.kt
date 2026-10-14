@@ -179,15 +179,17 @@ object TestFixtures {
 
     /**
      * Persist a blob in [scopeId] and attach it to [nodeId] in [slot] (core's `veyq_node_attachment`, cr-files-application
-     * P3), uploaded by the guest [shareIdentityId] or by a member (null). [slot] has no default for the reason
-     * [seedNode]'s kind has none: the slot is the owning application's token, and core's fixtures name none. Seeded,
-     * not uploaded: the rows are written directly.
+     * P3), uploaded by the guest [shareIdentityId] or, when that is null, by the member [uploaderUserId] (a fresh id by
+     * default: `ck_attachment_uploader` holds exactly one uploader). [slot] has no default for the reason [seedNode]'s
+     * kind has none: the slot is the owning application's token, and core's fixtures name none. Seeded, not uploaded:
+     * the rows are written directly.
      */
     fun seedAttachment(
         scopeId: String,
         nodeId: String,
         slot: String,
         shareIdentityId: String? = null,
+        uploaderUserId: String = UUID.randomUUID().toString(),
     ): SeededAttachment {
         val seeded = SeededAttachment(
             attachmentId = UUID.randomUUID().toString(),
@@ -203,6 +205,7 @@ object TestFixtures {
             NodeAttachmentEntity().apply {
                 id = seeded.attachmentId; this.scopeId = scopeId; this.nodeId = nodeId; this.slot = slot
                 blobId = seeded.blobId; this.shareIdentityId = shareIdentityId
+                this.uploaderUserId = if (shareIdentityId == null) uploaderUserId else null
             }.persist()
         }
         return seeded

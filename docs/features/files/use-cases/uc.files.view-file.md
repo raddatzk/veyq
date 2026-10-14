@@ -14,9 +14,10 @@
 
 ## Main flow
 
-0. **Who uploaded it** (decided 2026-10-14, not yet built; ADR 0083 Addendum): a member sees the uploader of the file's
-   current content in the header - a member by name, linking to the profile, a guest as "a guest"; a share guest sees
-   none.
+0. **Who uploaded it** (ADR 0083 Addendum): a member sees the uploader of the file's current content in the header -
+   "Uploaded by" a member's name and picture, linking to their profile; one who left the space as a greyed "former
+   member" without a link; a guest's upload as "a guest". A replace makes the replacer the uploader. A share guest sees
+   none: the link's listing carries no uploader.
 1. The page opens. Only now does the client read the file (not for a row in a list): it opens the first chunk under the
    file's key and **sniffs the bytes** (magic numbers) — the sealed type and the name only narrow, never decide.
 2. **Image** (JPEG, PNG, GIF, WebP, AVIF, BMP, SVG; HEIC is tried and falls back where the browser cannot decode it):
@@ -74,12 +75,14 @@
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** Open a picture, a text file, a video or a sound file and it is simply shown on its page — the same for you and
-for anyone you shared it with. It is decrypted on your device while you look; nothing is saved besides the file itself.
+for anyone you shared it with. Members of the space also see who uploaded the file's current version; people you share a
+link with do not. It is decrypted on your device while you look; nothing is saved besides the file itself.
 A PDF opens on its page too, page by page, and you can select and copy its text; a password-protected PDF asks for its
 password on the page. A format your browser cannot show comes with a clear note and the download instead.
 
 **DE —** Öffne ein Bild, eine Textdatei, ein Video oder eine Audiodatei, und sie wird einfach auf ihrer Seite angezeigt
-— für dich genauso wie für alle, denen du sie freigegeben hast. Sie wird auf deinem Gerät entschlüsselt, während du sie
+— für dich genauso wie für alle, denen du sie freigegeben hast. Mitglieder des Bereichs sehen außerdem, wer die aktuelle
+Fassung der Datei hochgeladen hat; wer nur einen Link hat, sieht das nicht. Sie wird auf deinem Gerät entschlüsselt, während du sie
 ansiehst; außer der Datei selbst wird nichts gespeichert. Auch eine PDF-Datei öffnet sich auf ihrer Seite, Seite für Seite, und ihren Text kannst du markieren und kopieren;
 eine passwortgeschützte PDF fragt direkt auf der Seite nach ihrem Passwort. Bei einem Format, das dein Browser nicht
 anzeigen kann, bekommst du stattdessen einen klaren Hinweis und den Download.

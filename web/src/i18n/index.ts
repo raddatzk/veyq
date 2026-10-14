@@ -1327,6 +1327,9 @@ const en = {
       typeUnknown: 'Unknown',
       modified: 'Modified',
       download: 'Download',
+      // Who uploaded the current content (ADR 0083 Addendum): "Uploaded by <name>", a guest's upload by "a guest".
+      uploadedBy: 'Uploaded by',
+      aGuest: 'a guest',
     },
     // The viewer on an opened file's page (components/FileViewer.vue, inbox #412).
     viewer: {
@@ -2959,6 +2962,9 @@ const de: typeof en = {
       typeUnknown: 'Unbekannt',
       modified: 'Geändert',
       download: 'Herunterladen',
+      // Wer den aktuellen Inhalt hochgeladen hat (ADR 0083 Addendum).
+      uploadedBy: 'Hochgeladen von',
+      aGuest: 'einem Gast',
     },
     // Die Ansicht auf der Seite einer geöffneten Datei (components/FileViewer.vue, Inbox #412).
     viewer: {
