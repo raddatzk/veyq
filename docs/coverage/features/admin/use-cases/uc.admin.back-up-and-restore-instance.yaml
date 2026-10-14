@@ -111,6 +111,17 @@ acceptanceCriteria:
       cannot survive under the backup's older history, and the application migrates the data up at its next
       start. The restore says that this is an upgrade, and that a rollback installs the backup's own release
       instead (A7).
+  - id: a-predecessors-backup-upgrades-with-its-content-intact
+    # Decided 2026-10-14 (inbox #419, ADR 0057 Addendum), not yet built: cr-upgrade-proof. No coverage on a surface:
+    # the observable is an orchestrator run that boots two builds - the predecessor's jar and suites, then the
+    # candidate's - which no single surface's test can be. The candidate's reading suite is a web e2e; once built,
+    # the run's own report names it, and the criterion says here how it is proven, as the two above do.
+    text: >-
+      A backup written by the predecessor's own build - its jar and its own e2e suites sealing real content - and
+      restored onto the candidate is migrated up at the candidate's start, reports configSecretState OK, and the
+      candidate's suites open the predecessor's content and assert it (names, media, files), not merely that
+      nothing failed. The predecessor is a configured git ref: the commit before the one under test until the first
+      release, the release on the pin file's release line from then on.
   - id: a-newer-backup-is-refused-naming-its-release
     # No coverage on a surface, for the same reason, in the same hook: `assert_newer_backup_is_refused` restores a
     # copy of the capture whose manifest claims a schema above the target's — chosen so that string order would

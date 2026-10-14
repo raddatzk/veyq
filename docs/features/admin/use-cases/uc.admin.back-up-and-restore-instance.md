@@ -100,6 +100,9 @@
   data-less target before loading, so the instance holds exactly the captured schema. The application then
   migrates it up at its next start, the same forward migration an ordinary upgrade runs. The restore says so as
   it finishes, because this is an upgrade, and that matters whenever the operator meant a rollback (A7).
+  **Proven over real data by the upgrade proof** ([ADR 0057](../../../decisions/0057-release-identity-and-deployment-recipe.md)
+  Addendum, inbox #419; decided 2026-10-14, not yet built): a predecessor's backup, written by its own client, restored
+  onto the candidate, migrated up, and read back by the candidate's suites.
 - **A10 — The backup is newer than the target.** Refused before anything is written, naming the release the
   backup came from. The older image would refuse to start on a migration history it does not know, so loading
   and failing at boot would leave the operator with neither instance.

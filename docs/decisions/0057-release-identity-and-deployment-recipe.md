@@ -189,6 +189,23 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
   removing a `required` field to fix a sentence of prose is an expensive remedy for a cheap defect, and it
   would have to be undone when a native client arrives (Decision 4).
 
+## Addendum (2026-10-14): an upgrade is proven before it is published
+
+Owner decision 2026-10-14 (inbox #419); decided, not yet built. A release does not only claim that it upgrades an instance of its predecessor;
+a run shows it. **The proof:** the predecessor's own build (its fast-jar and its own e2e suites, from a worktree of its
+ref) writes sealed content into a fresh instance; [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
+tool captures it; the capture is restored onto a freshly installed **candidate**, which migrates it up at its start
+(ADR 0056 §7); then the candidate must report `configSecretState: OK`, and the **candidate's** suites must open the
+predecessor's content and assert it - its names, its media, its files - not merely that nothing failed (a misread
+sealed field degrades to empty, not to an error). **The predecessor is configuration:** a git ref, by default the
+commit before the one under test (its first parent) until the first release, and the release named on
+`scripts/applied_migrations.sha256`'s `release:` line from then on - switching is that one default. **Before the first
+release** a baseline may still change (`backend/CLAUDE.md` § Migrations), so a red proof then is information - it
+names its cause, a changed baseline's checksum above all - and gates nothing. **In CI** the proof is a job that
+`publish` needs, written now and **disabled until the first release** (the release turns it on in the same change
+that sets `release:`). The Helm path (`helm upgrade`, immutable fields) is not part of it; it is an inbox row of its
+own.
+
 ## Related
 
 - [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) — the backup that an upgrade begins with, and the rollback that needs a name
