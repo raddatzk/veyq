@@ -44,7 +44,14 @@ parts.
    `resolveShare` (the share page unwraps it with the fragment `K_share`). It is **rendered as markdown** on the
    share page — reusing the safe escape-first renderer added for tenant terms (`web/src/shared/markdown.ts`,
    [ADR 0035](0035-server-terms-of-service.md) follow-up). For a WRITE_ONLY share (no gallery) it is the primary
-   instruction above the name field; for READ/READ_WRITE it is a banner under the title.
+   instruction above the name field; for READ/READ_WRITE it is a banner under the title. **The curator can ask the
+   visitor to accept the note before anything else is shown** (a per-share switch, owner decision 2026-10-14): the
+   switch travels **inside** the sealed note (its plaintext gains a field beside the per-locale texts), so the
+   operator does not learn which links ask for acceptance. The acceptance is recorded **on the visitor's device
+   only**, as the tenant terms' is (uc.sharing.share-accept): the server records nothing about an accountless
+   visitor, and a server-side flag would be a request anyone can send without reading anything. Rejected: a
+   server-stored acceptance gating `resolveShare`. It gates nothing a visitor cannot send, and would make the server
+   tell visitors apart.
 
 3. **In-place edit.** Add an **owner-gated `updateShare`** (`PATCH /api/shares/{shareId}`, `@Authenticated`,
    `owner_account`-checked, and only for an owner who is still a member of the share's scope —

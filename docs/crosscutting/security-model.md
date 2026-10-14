@@ -51,7 +51,8 @@ operator's view:
   explicitly disallowed.
 - **No veyq identity, no content context.** The provider receives only what its function needs — a bare
   coordinate (+ the client IP) — never a user id, a Memory id, or any veyq token.
-- **Opt-in + transparent — and opt-in is standing consent.** Off by default; enabling it is an explicit choice
+- **Opt-in + transparent — and opt-in is standing consent** (one stated exception: the breached-password check,
+  below). Off by default; enabling it is an explicit choice
   with a plain-language note that a request leaves the device. Once enabled it may run **automatically** (e.g. a
   reverse lookup on the first geotagged media of an auto-location) — enabling it *is* the consent to those
   requests; it **never** fires without opt-in. A blind, request-free alternative stays available (e.g. typing a
@@ -60,29 +61,36 @@ operator's view:
   other content — so it is shareable to other members **without their device making a request**, and the veyq
   operator still sees only ciphertext.
 
-**The breached-password check is the second instance.** The four dialogs that choose a password (set up the
-server, join a tenant, change a password, recover access) can ask the Have I Been Pwned range API whether the
-password appears in known breaches. The fences apply like this:
+**The breached-password check is the second instance, and the one exception to opt-in.** The four dialogs that
+choose a password (set up the server, join a tenant, change a password, recover access) ask the Have I Been Pwned
+range API whether the password appears in known breaches. The fences apply like this:
 
 - **Only a 5-hex SHA-1 prefix leaves the device** (k-anonymity, padded response); the match against the returned
   suffixes is computed locally.
-- **Only on submit, over the final password — never while typing.** A query at every typing pause sends the
-  prefix of each *partial* password. A short one, or a few keystrokes added to one already recovered, has so
-  few candidates that its 20-bit prefix all but identifies it, so the sequence hands over the password a few
-  keystrokes at a time.
-- **Consent is per dialog:** an unticked box with a one-sentence note saying what leaves the device. Nothing is
-  remembered — a password is chosen rarely, and a standing preference would consent to requests the user no
-  longer sees coming.
-- **It advises, never gates.** A hit, or a check that could not run, stops the first submit once with a message
-  saying which; submitting again goes ahead with the same password. The result is not stored.
+- **Over a finished password only — when the field is left, and on submit — never while typing.** A query at every
+  typing pause (a debounce) sends the prefix of each *partial* password. A short one, or a few keystrokes added to one
+  already recovered, has so few candidates that its 20-bit prefix all but identifies it, so the sequence hands over
+  the password a few keystrokes at a time. Leaving the field is when a person treats the password as done, so the
+  check runs then (owner decision 2026-10-14), and once more on submit when the password changed since; every query
+  is a whole candidate, never a fragment.
+- **Automatic, not opt-in** (owner decision 2026-10-14). It is the one third-party request that runs without consent,
+  and the reason is what crosses: a 5-hex prefix carries no content and no identity, where a geocoding request
+  carries the coordinate itself. **What it does disclose, stated:** the browser's `Origin` header names the veyq
+  instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
+  The wiki's privacy text says so. A one-sentence note under the password field says what leaves the device.
+- **It advises, never gates.** A hit shows a warning that needs an **explicit "Use it anyway"** before the dialog
+  submits that password; the result is not stored. **A check that could not run** (offline, firewalled, the admin
+  container with no route out) **does not stop anything**: the dialog submits and says, in one line, that the
+  password could not be checked. Stopping there would block every password choice on an instance with no
+  internet, for a check nobody opted into.
 
 **Verification:** [`passwordWarning.test.ts`](../../web/src/features/account/passwordWarning.test.ts) (identical
 in `admin-web/`) pins the rule on the request itself — nothing while typing, nothing unticked, one prefix of the
 final password, no second request on the second press — and each dialog's own test (`ChangePasswordPanel.policy`,
 `TenantJoinView.passwordPolicy`, `RecoverView`, admin-web's `SetupView`) pins that it awaits the check.
 
-So the veyq operator stays blind by construction; the only thing that ever crosses is a consented, identity-free
-request the **user** turned on, straight to the chosen provider.
+So the veyq operator stays blind by construction; what crosses goes straight to the provider, never through veyq: a
+consented, identity-free request the **user** turned on, or the breached-password check's 5-hex prefix.
 
 ## What is encrypted vs. server-visible
 

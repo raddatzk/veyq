@@ -6,7 +6,7 @@
 - **Goal:** Attach an **optional short note** to a share link (a greeting / instruction), **set when creating the
   share and editable in place afterward**, shown E2EE on the share page to whoever opens the link. One-way
   (curator → viewer).
-- **Preconditions:** A Memory the curator can share (personal-scope, v1); for an edit, an existing share of theirs.
+- **Preconditions:** A node the curator can share (a Memory or a folder, in any scope the curator is a member of); for an edit, an existing share of theirs.
   The curator holds the scope's epoch keys (the Memory is open) — the note seals under **`K_share`**, and `K_share`
   is recovered through `K_SC` for a later edit ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 - **Postconditions (success):** the share carries a **`sealed_note`** (sealed under `K_share`) + a
@@ -34,12 +34,16 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 
 ## Main flow
 
-1. The curator opens the Memory's **share dialog** and mints a share (READ / READ_WRITE / WRITE_ONLY), optionally
-   typing a **note**. The client seals it under `K_share` and stores `sealed_note` + `sealed_share_key` with the
-   share.
+1. The curator opens the node's **share dialog** and mints a share (READ / READ_WRITE / WRITE_ONLY), optionally
+   typing a **note** and, with a note, optionally ticking **"must be accepted before opening"** (off by default; a
+   greeting needs no acceptance). The client seals the note, the switch inside it, under `K_share` and stores
+   `sealed_note` + `sealed_share_key` with the share.
 2. A visitor opens `/s/{shareId}#k=<K_share>` → the anonymous `resolveShare` returns `sealed_note`; the share page
    unwraps it with the fragment `K_share` and **renders it** — a banner under the title (READ/READ_WRITE) or the
-   primary instruction above the name field (WRITE_ONLY).
+   primary instruction above the name field (WRITE_ONLY). **When the note asks for acceptance**, it is instead a gate
+   after the password and the tenant's terms and before anything of the share is drawn, for every role: the note and
+   **Accept**. Accepting is remembered on this device for this share and this note's text, so an edited note asks
+   again; where the device cannot remember (storage refused), it asks every time. Nothing is sent to the server.
 3. Later, the curator **edits** the note: in the Memory's share dialog (which holds the scope's epoch keys) they
    pick the share, the client **recovers `K_share`** from `sealed_share_key` at its epoch, re-seals the new note,
    and calls the owner-gated
@@ -48,6 +52,10 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 ## Alternate / exception flows
 
 - **No note** → nothing is sealed/stored; the share page shows no banner (the note is optional).
+- **A visitor goes past the gate by other means** (devtools, a cleared flag) → nothing stops them, and nothing
+  should: the content opens with the fragment key alone. Going past it is, in effect, not accepting, and that is the
+  visitor's to own. The gate makes sure an honest visitor has seen the note.
+- **A note written by an older client** (the plaintext without the switch) → no acceptance asked.
 - **WRITE_ONLY share** → the note is the write-only drop-box's instruction ("please upload your pics here"), shown
   above the name field (there is no gallery to banner).
 - **Revoked / expired share** → `resolveShare` is `404` (non-enumerable); the note is gone with the share.
