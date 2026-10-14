@@ -274,13 +274,73 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
 
+  # The upgrade proof (ADR 0057 Addendum, infra/README.md § An upgrade, step by step): the predecessor's own jar and e2e
+  # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
+  # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
+  # default of `scripts/run_web_e2e.py --upgrade`: the first parent of the commit until the first release, the newest
+  # `v<major>.<minor>` tag from then on — hence the full history and the tags.
+  #
+  # DISABLED UNTIL THE FIRST RELEASE (owner decision 2026-10-14). Before it a baseline may still change
+  # (backend/CLAUDE.md § Migrations), so a red proof informs and gates nothing. The change that sets the `release:` line
+  # of scripts/applied_migrations.sha256 enables it, in the same commit: it deletes `if: false` below AND the
+  # `"skipped"` that `publish` tolerates for this job. A disabled job claims no coverage (ADR 0040).
+  upgrade-proof:
+    name: Upgrade proof (the predecessor's backup, restored onto and read by this build)
+    runs-on: ubuntu-latest
+    if: false
+    needs:
+      - test
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Validate the Gradle wrapper JAR
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Build the candidate's fast-jar
+        working-directory: backend
+        run: ./gradlew --no-daemon quarkusBuild
+      - name: Install the candidate's dependencies
+        # The registry half is asked once per commit, by this workflow's `test`, which this job needs.
+        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+      # The orchestrator builds the predecessor itself, in a worktree of its ref inside the run directory, and removes
+      # it afterwards; its summary ends with the proof's own lines (predecessor, both highest migrations, the outcome).
+      - name: Run the upgrade proof
+        run: python3 scripts/run_web_e2e.py --upgrade
+      - name: Keep the e2e run directory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: upgrade-proof-out
+          path: .e2e-out/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
   publish:
     name: Publish the release (both images and the chart)
     runs-on: ubuntu-latest
     needs:
       - version
       - build
-    if: github.event_name == 'workflow_dispatch'
+      - upgrade-proof
+    # `always()` so that the upgrade proof being SKIPPED (disabled, above) does not skip the publish, as a skipped need
+    # otherwise would; the results then gate it explicitly. Its "skipped" goes with the job's `if: false`.
+    if: always() && github.event_name == 'workflow_dispatch' && needs.version.result == 'success' && needs.build.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.upgrade-proof.result)
     permissions:
       contents: write # create the one `v<major>.<minor>` ref a release is named by (ADR 0057 §2)
       packages: write

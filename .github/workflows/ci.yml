@@ -153,6 +153,11 @@ jobs:
       - name: Backup tool self-test (the restored key's owner)
         run: python3 scripts/instance_backup_selftest.py
 
+      # Docker-free: the upgrade proof's pure parts (which predecessor, both builds' migrations, Flyway's refusal named,
+      # the record both builds share). The proof itself is container.yml's `upgrade-proof`, disabled until a release.
+      - name: Upgrade proof self-test
+        run: python3 scripts/upgrade_proof_selftest.py
+
       - name: Run web E2E suites against a live backend
         run: python3 scripts/run_web_e2e.py
 
