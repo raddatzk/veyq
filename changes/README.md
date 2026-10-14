@@ -140,7 +140,12 @@ returned **25**, at the moment it was written. What makes this worth a rule rath
 mode: that CR's own work **adds one guard**, so the finished tree stands at exactly 26 — the wrong baseline
 would have been confirmed by the work it was meant to grade, and the "a red after this is mine" mechanism would
 have been disarmed with every check green. So: **a baseline ships as the command that produces it, and the
-implementer runs it before the first edit** — one line, before anything can be attributed to it.
+implementer runs it before the first edit** — one line, before anything can be attributed to it. **And it runs
+on a detached worktree of `HEAD`, not on the tree being edited:** the whole guard glob takes about fifteen minutes
+here and reads each file only when it reaches it, so an edit made while it runs lands in the later guards' reading
+of the "baseline" (`cr-release-pipeline-and-chart-oci`'s first baseline was spoiled exactly so, and had to be
+thrown away and re-run on `git worktree add --detach <dir> HEAD`). The same worktree is where a bite harness
+injects, so a half-restored injection can never reach the shared tree.
 
 **Find the sites from two angles keyed on different things — the easiest command encodes what you already
 believe.** The locator you reach for first is a paraphrase of your own model of the code, so it fails exactly
