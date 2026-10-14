@@ -85,7 +85,7 @@ file**. The import's dry-run reports nodes this build cannot read (an unknown ap
   - Tests: an archive written from a tree with hostile names unpacks (`unzip -l` in a node test, or the reader) to
     the safe paths, and the manifest maps every node.
   - Done when `npm run check` is green in `web/`.
-- [ ] 3 web, read: recognition (Decision 3), unknown/newer (Decision 4) and hardening (Decision 5).
+- [x] 3 web, read: recognition (Decision 3), unknown/newer (Decision 4) and hardening (Decision 5).
   - Tests cover:
     - an old-layout archive still imports;
     - a new-layout archive and its unpacked directory import to the same tree;

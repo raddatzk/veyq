@@ -17,7 +17,7 @@
 // pending deletion, the instance's sharing capabilities) and its `TreeSource` (the decrypted tree, fragment links) and
 // hands both to the level view and to an opened node's detail. What a view offers is its application's capability
 // function over them; the host decides no control itself.
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, ref, shallowRef, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { activeSpace, activeEpochKeys, enterScope } from '../app/activeSpace'
@@ -44,6 +44,7 @@ import PersonProfile from '../core/people/PersonProfile.vue'
 import { loadTenantPeople, personNow } from '../core/people/directory'
 import ExportSubtreeDialog from '../core/export/ExportSubtreeDialog.vue'
 import ImportSubtreeDialog from '../core/export/ImportSubtreeDialog.vue'
+import type { ImportOffer } from '../core/export/importSource'
 import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
 import { nodeMover } from '../core/node/move'
 import { registry } from '../core/applications/registry'
@@ -159,7 +160,7 @@ const moving = ref<{ node: TreeNode; shown: string | null } | null>(null)
 const mover = nodeMover(() => access.value)
 // ADR 0082: the node being downloaded as a ZIP (core's `ExportSubtreeDialog`), and the download being imported under the folder on screen.
 const exporting = ref<TreeNode | null>(null)
-const importing = ref<File | null>(null)
+const importing = shallowRef<ImportOffer | null>(null)
 const deleteVisible = ref(false)
 const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
 
@@ -424,7 +425,8 @@ async function onDeleteDone() {
     />
     <ImportSubtreeDialog
       v-if="importing"
-      :file="importing"
+      :input="importing.input"
+      :upload-as-file="importing.uploadAsFile"
       :access="access"
       :parent="currentNodeKey && currentNodeId ? { id: currentNodeId, key: currentNodeKey } : null"
       :target-name="currentFolderName ?? rootLabel"

@@ -26,7 +26,8 @@ import { sealNodeMeta, unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { ExportNodeContext, ImportNodeContext } from '../../core/export/hooks'
 import type { ManifestNode } from '../../core/export/manifest'
 import type { EpochKeys } from '../spaces/epochs'
-import { exportMemoryContent, importMemoryContent, MEMORY_CONTENT, CHAPTER_CONTENT } from './exportImport'
+import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_LIMITS, MEMORY_CONTENT, CHAPTER_CONTENT } from './exportImport'
+import { readFileSync } from 'node:fs'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
@@ -206,5 +207,47 @@ describe('importMemoryContent', () => {
     await expect(importMemoryContent(MEMORY_KIND)(ctx({ id: 'n', kind: MEMORY_KIND, name: 'x', content: { type: 'files.file' } } as ManifestNode))).rejects.toThrow('import_invalid_content')
     await expect(importMemoryContent(MEMORY_KIND)(ctx(node({ schema: 9 })))).rejects.toThrow('import_newer_content')
     expect(createContentNode).not.toHaveBeenCalled()
+  })
+})
+
+describe('validateMemoryContent: a download\'s Memory checked against its contract before anything is written', () => {
+  const medium = { file: { path: 'Trip/a.jpg', size: 1, mediaType: 'image/jpeg' }, name: 'a.jpg' }
+  const sound = { type: MEMORY_CONTENT, schema: 1, media: [medium], date: { mode: 'range', from: '2025-09-14', to: '2025-09-17' }, participants: ['Anna'], cover: { mediaIndex: 0, crop: {} } }
+
+  it('control: sound content passes, unknown fields are ignored', () => {
+    expect(validateMemoryContent({ ...sound, someday: 'a field a later build adds' })).toBeNull()
+    expect(validateMemoryContent({ type: CHAPTER_CONTENT, media: [] })).toBeNull()
+  })
+
+  it.each([
+    ['another kind\'s content', { ...sound, type: 'files.file' }, 'invalid_manifest'],
+    ['media that is no list', { ...sound, media: {} }, 'invalid_manifest'],
+    ['a medium without its file', { ...sound, media: [{ name: 'a.jpg' }] }, 'invalid_manifest'],
+    ['a capture time that is no time', { ...sound, media: [{ ...medium, capturedAt: 'yesterday' }] }, 'invalid_manifest'],
+    ['a latitude out of range', { ...sound, media: [{ ...medium, location: { lat: 91 } }] }, 'invalid_manifest'],
+    ['a date of another shape', { ...sound, date: { mode: 'someday' } }, 'invalid_manifest'],
+    ['a cover that is neither a medium nor a file', { ...sound, cover: { crop: {} } }, 'invalid_manifest'],
+    ['a medium name over its length', { ...sound, media: [{ ...medium, name: 'x'.repeat(MEMORIES_LIMITS.name + 1) }] }, 'too_large'],
+    ['a contributor over its length', { ...sound, media: [{ ...medium, contributor: 'x'.repeat(MEMORIES_LIMITS.contributor + 1) }] }, 'too_large'],
+    ['a place over its length', { ...sound, location: { name: 'x'.repeat(MEMORIES_LIMITS.place + 1) } }, 'too_large'],
+    ['a participant over its length', { ...sound, participants: ['x'.repeat(MEMORIES_LIMITS.participant + 1)] }, 'too_large'],
+    ['more participants than the cap', { ...sound, participants: Array.from({ length: MEMORIES_LIMITS.participants + 1 }, () => 'A') }, 'too_large'],
+  ])('refuses %s', (_what, content, code) => {
+    expect(validateMemoryContent(content as unknown as ManifestNode['content'] & object)).toMatchObject({ code })
+  })
+
+  it('each limit is the schema\'s maxLength / maxItems of that field', () => {
+    const schema = JSON.parse(readFileSync(new URL('../../../../contracts/export/veyq-subtree.schema.json', import.meta.url), 'utf8'))
+    const d = schema.$defs
+    expect({
+      name: d.memoriesMedium.properties.name.maxLength,
+      contributor: d.memoriesMedium.properties.contributor.maxLength,
+      place: d.memoriesPlace.properties.name.maxLength,
+      participant: d.memoriesMemory.properties.participants.items.maxLength,
+      participants: d.memoriesMemory.properties.participants.maxItems,
+    }).toEqual(MEMORIES_LIMITS)
+    expect(d.memoriesMedium.properties.location.properties.place.maxLength).toBe(MEMORIES_LIMITS.place)
+    expect(d.memoriesChapter.properties.participants.maxItems).toBe(MEMORIES_LIMITS.participants)
+    expect(d.memoriesChapter.properties.participants.items.maxLength).toBe(MEMORIES_LIMITS.participant)
   })
 })

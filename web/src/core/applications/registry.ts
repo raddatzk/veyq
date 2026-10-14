@@ -98,6 +98,7 @@ import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
 import { slugify } from '../../shared/naming'
 import type { ExportContentHook, ImportContentHook } from '../export/hooks'
+import type { ManifestContent } from '../export/manifest'
 
 // The platform's own share dialog for a FOLDER (cr-node-key-hierarchy 5b.3), FOLDER's `shareDialog` since P4c. LAZY for
 // a reason: the dialog's module graph reaches this registry again (measured: `shareLink` →
@@ -116,6 +117,10 @@ export interface PersonSectionProps {
 /** What core needs to know about a node kind. `detail` is the component the host renders when a node of the kind is
  *  opened. Only the platform's FOLDER has none (a folder browses, it does not open): an application kind that
  *  registers no `detail` renders the host's explicit unsupported state when opened. */
+/** What is wrong with a node's content from a download (`KindDescriptor.validateContent`): the shape (`invalid_manifest`) or a
+ *  field over its contract length (`too_large`). */
+export type ContentProblem = { code: 'invalid_manifest' | 'too_large'; message: string }
+
 export interface KindDescriptor {
   kind: NodeKind
   detail?: Component
@@ -191,6 +196,11 @@ export interface KindDescriptor {
    *  node whose content is newer as one it leaves out. `application` is the `<application>` part of every `content.type`
    *  the hook writes. Absent: the content carries no application and version 1. */
   contentSchema?: { application: string; version: number }
+  /** Check a node's content from a download against this kind's contract (decision 10: the archive is untrusted input) -
+   *  its shape and every field at its `maxLength` in `contracts/export/veyq-subtree.schema.json`. Called by the import's dry
+   *  run before anything is written; the answer names the problem, null when the content is sound. Core has already checked
+   *  the payload references inside it (their paths, sizes and checksums' shape). Absent: no check of the kind's own. */
+  validateContent?: (content: ManifestContent) => ContentProblem | null
   /** A node of this kind IS one file (Files' file): Download saves it as itself through the application's own action, so core
    *  offers no ZIP download for it, and inside an archive it is that one file at the node's path, not a directory. */
   downloadsAsFile?: boolean

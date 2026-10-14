@@ -57,6 +57,7 @@ import { stubApi } from '../../test/apiMock'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../test/models'
 import { mountConfirmDialog } from '../../test/confirmDialog'
 import { actionDisabled, actionIdsOf, clickAction, mountRows, rowOf, titlesOf, type RowsHarness } from '../../test/levelRows'
+import type { LevelRowsHost } from '../../core/node/levelRow'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
 const D = '5c09e000-0000-4000-8000-0000000000d0'
@@ -105,8 +106,9 @@ let harness: RowsHarness | null = null
 /** `pending`: the scope is pending deletion (the member's `access.readonly`); `identityFolder`: the level is a guest's
  *  identity folder in a drop box (what the member's tree answers for it). `siblings`: the level's children of other
  *  kinds - in the tree (what the any-kind pre-check reads, inbox #400), not in `nodes`, as core's level view hands them. */
-function mountSection({ pending = false, identityFolder = false, siblings = [], nodes, folder = DOCS }: {
+function mountSection({ pending = false, identityFolder = false, siblings = [], nodes, folder = DOCS, screenUpload }: {
   nodes: TreeNode[]; pending?: boolean; identityFolder?: boolean; folder?: TreeNode | null; siblings?: TreeNode[]
+  screenUpload?: LevelRowsHost['screenUpload']
 }) {
   const epochs = epochsOf(v1.randomBytes(32))
   const tree = memberTreeOf(() => [DOCS, ...nodes, ...siblings], { scopeId: SCOPE, epochs })
@@ -114,7 +116,7 @@ function mountSection({ pending = false, identityFolder = false, siblings = [], 
     folder, nodes, epochs, viewMode: 'grid', liveTick: undefined,
     access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: pending }),
     tree: { ...tree, inIdentityFolder: () => identityFolder },
-  })
+  }, 'list', { screenUpload })
   return harness
 }
 async function pick(index: number, files: File[]) {
@@ -252,6 +254,24 @@ describe('Files rows', () => {
       const h = mountSection({ nodes: [], pending: true })
       await flushPromises()
       expect(h.actions.get('files.upload')!.enabled()).toBe(false)
+    })
+
+    // ADR 0082 decision 7: what is picked passes core's screen first - a veyq download is core's to offer as an import, and
+    // "Upload as a file" hands it back here.
+    it('picked files pass the level\'s screen: what it keeps back is not uploaded until it is handed back', async () => {
+      let back: ((files: File[]) => void) | null = null
+      const screenUpload = vi.fn(async (files: File[], uploadAsFile: (files: File[]) => void) => {
+        back = uploadAsFile
+        return files.filter((f) => f.name !== 'trip.zip')
+      })
+      mountSection({ nodes: [], screenUpload })
+      await flushPromises()
+      await pick(MULTI, [new File(['a'], 'a.txt'), new File(['z'], 'trip.zip')])
+      expect(screenUpload).toHaveBeenCalledOnce()
+      expect(targets().map((x) => x.name)).toEqual(['a.txt'])
+      back!([new File(['z'], 'trip.zip')])
+      await flushPromises()
+      expect(targets().map((x) => x.name)).toEqual(['a.txt', 'trip.zip'])
     })
 
     it('takes dropped files as an upload into this level, exactly like a picked pick', async () => {

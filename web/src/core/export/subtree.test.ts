@@ -18,6 +18,7 @@ import { ImportFailed, importSubtree, openExport, planImport } from './importSub
 import { ExportError, parseManifest, type ManifestNode, type ManifestPayload } from './manifest'
 import { ZipWriter, openZip } from './zip'
 import { isArchivePath } from './archiveName'
+import type { ImportInput } from './importSource'
 import { memberAccessOf } from '../../test/models'
 import type { TreeSource } from '../access'
 import * as v1 from '@veyq/crypto/v1'
@@ -118,6 +119,8 @@ async function exported(tree = nodes, rootId = 'a') {
   const result = await exportSubtree({ access, tree: sourceOf(tree), rootId, sink: m.sink, appVersion: 'test', now: () => new Date('2026-10-13T10:00:00Z') })
   return { m, result, archive: m.blob() }
 }
+/** A ZIP as an import is handed it. */
+const zipOf = (b: Blob): ImportInput => ({ kind: 'zip', file: new File([b], 'download.zip') })
 /** Every entry of an archive as the reader lists it, in written order. */
 async function entriesOf(archive: Blob): Promise<string[]> {
   return (await openZip(archive)).entries.map((e) => e.name)
@@ -130,7 +133,7 @@ describe('download (format version 2: the archive reads as the tree)', () => {
     expect(result).toMatchObject({ nodes: 5, payloads: 3 })
     expect(result.skipped).toEqual([{ name: 'strange', kind: ODD, reason: 'unsupported_kind' }])
     expect(await entriesOf(archive)).toEqual(['Trip/', 'Trip/Sub/', 'Trip/one.txt', 'Trip/Sub/three.txt', 'Trip/two.txt', '.veyq/manifest.json'])
-    const { manifest, zip } = await openExport(archive)
+    const { manifest, source } = await openExport(zipOf(archive))
     expect(manifest).toMatchObject({ version: 2, applications: [{ id: 't', contentSchema: 1 }] })
     expect(manifest).not.toHaveProperty('options')
     expect(manifest.root).toMatchObject({ name: 'Trip', path: 'Trip' })
@@ -138,7 +141,7 @@ describe('download (format version 2: the archive reads as the tree)', () => {
     const f1 = manifest.root.children![0].content!.file as { path: string; sha256: string; size: number }
     expect(f1.path).toBe('Trip/one.txt') // a kind that IS one file is that file, at the node's own path
     expect(f1.sha256).toBe(hexOf(v1.sha256Digest(text('first file'))))
-    expect(new TextDecoder().decode(await zip.bytes(f1.path, 100))).toBe('first file')
+    expect(await source.blob(f1.path, '').text()).toBe('first file')
   })
 
   it('hostile names unpack to safe paths, numbered on a clash ignoring case, and the manifest maps every node to its path', async () => {
@@ -157,7 +160,7 @@ describe('download (format version 2: the archive reads as the tree)', () => {
       'Trip_ 2025/a_b/IMG.jpg', 'Trip_ 2025/a_b/img (2).JPG', 'Trip_ 2025/a_b/.._escape', 'Trip_ 2025/a_b/_CON.txt', '.veyq/manifest.json',
     ])
     expect(names.every((n) => n === '.veyq/manifest.json' || isArchivePath(n.replace(/\/$/, '')))).toBe(true)
-    const { manifest } = await openExport(archive)
+    const { manifest } = await openExport(zipOf(archive))
     const paths = new Map<string, string>()
     const walk = (n: ManifestNode) => {
       paths.set(n.name, n.path!)
@@ -190,7 +193,7 @@ describe('download (format version 2: the archive reads as the tree)', () => {
 describe('import', () => {
   it('recreates the tree under the target with the bytes intact, and skips what this build cannot import', async () => {
     const { archive } = await exported()
-    const opened = await openExport(archive)
+    const opened = await openExport(zipOf(archive))
     expect(planImport(opened.manifest)).toMatchObject({ nodes: 5, bytes: 10 + 6 + 23 })
     const progress = vi.fn()
     const res = await importSubtree({ scopeId: 's', epochs, tree: [], parent: null, opened, onProgress: progress })
@@ -206,14 +209,14 @@ describe('import', () => {
   it('names a clash "Name (2)", looking at the target siblings and at what this run created', async () => {
     const { archive } = await exported()
     const target = [node('t1', null, 'FOLDER', 'Trip'), node('t2', null, 'FOLDER', 'Trip (2)')]
-    await importSubtree({ scopeId: 's', epochs, tree: target, parent: null, opened: await openExport(archive) })
+    await importSubtree({ scopeId: 's', epochs, tree: target, parent: null, opened: await openExport(zipOf(archive)) })
     expect(imported[0].name).toBe('Trip (3)')
   })
 
   it('on a failure trashes the top-level node it created and says how far it got', async () => {
     const { archive } = await exported()
     failOn = 'three.txt'
-    const err = await importSubtree({ scopeId: 's', epochs, tree: [], parent: null, opened: await openExport(archive) }).catch((e) => e)
+    const err = await importSubtree({ scopeId: 's', epochs, tree: [], parent: null, opened: await openExport(zipOf(archive)) }).catch((e) => e)
     expect(err).toBeInstanceOf(ImportFailed)
     expect(err).toMatchObject({ done: 3, total: 5, rolledBack: true })
     expect(deleteNode).toHaveBeenCalledExactlyOnceWith('s', 'new1')
@@ -221,7 +224,7 @@ describe('import', () => {
 
   it('refuses a payload whose bytes do not match the manifest checksum', async () => {
     const { archive } = await exported()
-    const opened = await openExport(archive)
+    const opened = await openExport(zipOf(archive))
     const f1 = opened.manifest.root.children![0].content!.file as { sha256: string }
     f1.sha256 = '0'.repeat(64)
     const err = await importSubtree({ scopeId: 's', epochs, tree: [], parent: null, opened }).catch((e) => e)
@@ -231,17 +234,17 @@ describe('import', () => {
   })
 
   it('recognises an export by content only, and refuses a newer version', async () => {
-    await expect(openExport(new Blob([text('plain text, not a zip at all, long enough')]))).rejects.toMatchObject({ code: 'not_an_export' })
+    await expect(openExport(zipOf(new Blob([text('plain text, not a zip at all, long enough')])))).rejects.toMatchObject({ code: 'not_an_export' })
     const m = memorySink()
     const w = new ZipWriter(m.sink)
     await w.addBytes('other.txt', text('x'))
     await w.finish()
-    await expect(openExport(m.blob())).rejects.toMatchObject({ code: 'not_an_export' })
+    await expect(openExport(zipOf(m.blob()))).rejects.toMatchObject({ code: 'not_an_export' })
     const n = memorySink()
     const w2 = new ZipWriter(n.sink)
     await w2.addBytes('manifest.json', text(JSON.stringify({ format: 'veyq-subtree', version: 99, exportedAt: 'x', appVersion: 'x', root: { id: 'n1', kind: 'FOLDER', name: 'x' } })))
     await w2.finish()
-    await expect(openExport(n.blob())).rejects.toMatchObject({ code: 'newer_version' })
+    await expect(openExport(zipOf(n.blob()))).rejects.toMatchObject({ code: 'newer_version' })
   })
 })
 

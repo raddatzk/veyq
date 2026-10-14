@@ -79,7 +79,9 @@ import LevelRowItem from './components/LevelRowItem.vue'
 import LevelNotices from './components/LevelNotices.vue'
 import { standardNodeActions } from './nodeHeader'
 import { downloadHeaderActions, downloadRowActions } from '../export/downloadActions'
-import { openExport } from '../export/importSubtree'
+import { isDownloadArchive } from '../export/importSubtree'
+import { holdsManifest, readDroppedDirectory, type DroppedDirectory, type DroppedEntry, type ImportOffer } from '../export/importSource'
+import { useToast } from '../../shared/state/useToast'
 
 const props = defineProps<{
   folder: TreeNode | null
@@ -105,9 +107,10 @@ const emit = defineEmits<{
   moveNode: [node: TreeNode]
   /** A node to download as a ZIP (ADR 0082): a row's, or the folder on screen. The host mounts core's `ExportSubtreeDialog`. */
   downloadNode: [node: TreeNode]
-  /** A file the member picked or dropped that is a veyq export (recognised by its content, ADR 0082): the host mounts core's
-   *  `ImportSubtreeDialog` for it, under the folder on screen. */
-  importArchive: [file: File]
+  /** A veyq download the member picked or dropped - a ZIP, or the download unpacked into a directory, recognised by its
+   *  content (ADR 0082 decision 7): the host mounts core's `ImportSubtreeDialog` for it, under the folder on screen. A ZIP
+   *  from an upload carries `uploadAsFile`, the way back to the ordinary upload. */
+  importArchive: [offer: ImportOffer]
   /** A row's node renamed in place (a kind that does not open, e.g. Files' file): the host's `FolderNameDialog`. */
   renameNode: [node: TreeNode]
   deleteFolder: []
@@ -116,6 +119,7 @@ const emit = defineEmits<{
 }>()
 
 const { t, locale } = useI18n()
+const toast = useToast()
 const { viewMode } = useViewMode()
 const { levelTab } = useLevelTab()
 
@@ -164,7 +168,7 @@ function onImportPicked(e: Event): void {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = '' // the same file can be picked again
-  if (file) emit('importArchive', file)
+  if (file) emit('importArchive', { input: { kind: 'zip', file } })
 }
 // The folder header's actions: the capability answers for the folder on screen, in the header's fixed order.
 const folderActions = computed(() =>
@@ -247,6 +251,7 @@ const host: LevelRowsHost = {
   registerAction: (id, handler) => disposers.push(levelActions.register(id, handler)),
   covers: cover.covers,
   ensureCovers: cover.ensure,
+  screenUpload,
 }
 const epochs = computed(() => (props.access.mode === 'member' ? props.access.epochs : null))
 // One source per row factory, in `lists` order. Called once: a factory sets up its own watchers and loaders here.
@@ -342,29 +347,64 @@ const emptyText = computed<string | null>(() => {
   return t(tab?.emptyText?.(menuCtx.value) ?? 'node.tabEmpty')
 })
 
-// --- a drop onto the level -----------------------------------------------------------------------------------------------
-async function onDrop(e: DragEvent): Promise<void> {
-  const files = [...(e.dataTransfer?.files ?? [])]
-  if (files.length === 0) return
-  // A veyq export dropped onto a level where a member may create is offered as an import (ADR 0082 decision 7), decided
-  // by its content, never by its name; anywhere else - and for any other file - the drop is the ordinary upload.
-  if (canImport.value && menuCtx.value.epochs !== null) {
-    for (const file of files) {
-      if (await openExport(file).then(() => true, () => false)) {
-        emit('importArchive', file)
-        return
-      }
+// --- a veyq download in an upload, and a drop onto the level ---------------------------------------------------------------
+// ADR 0082 decision 7: a ZIP that holds a veyq manifest, picked for an upload or dropped, is recognised by its CONTENT - never by
+// its name - and, for a member who may create here, offered as an import with "Upload as a file" beside it. One import per pick
+// or drop: the first download found is offered, every other file (another download too) is the ordinary upload. A guest -
+// whatever the role - never imports: for a guest a download is an ordinary file.
+const importReady = computed(() => canImport.value && menuCtx.value.epochs !== null)
+
+async function screenUpload(files: File[], uploadAsFile: ((files: File[]) => void) | null): Promise<File[]> {
+  if (!importReady.value) return files
+  for (const [i, file] of files.entries()) {
+    if (await isDownloadArchive(file)) {
+      emit('importArchive', { input: { kind: 'zip', file }, ...(uploadAsFile ? { uploadAsFile: () => uploadAsFile([file]) } : {}) })
+      return files.filter((_, k) => k !== i)
     }
   }
+  return files
+}
+
+/** The upload a drop is handed to: the level action that takes dropped files, while it is allowed AND enabled (a drop is
+ *  never more than the menu entry). */
+function dropTarget(): ((files: File[]) => void) | null {
   for (const entry of registryMenu) {
     if (entry.create !== undefined || !entry.acceptsDrop || !entry.allowed(menuCtx.value)) continue
     if (entry.enabled && !entry.enabled(menuCtx.value)) continue
     const handler = levelActions.get(entry.id)
-    if (handler?.drop && handler.enabled()) {
-      handler.drop(files)
+    if (handler?.drop && handler.enabled()) return handler.drop
+  }
+  return null
+}
+
+async function onDrop(e: DragEvent): Promise<void> {
+  // The entries are read NOW: a drop's items are gone once the handler awaits anything.
+  const entries = [...(e.dataTransfer?.items ?? [])].map((item) => (item.kind === 'file' ? (item.webkitGetAsEntry?.() as DroppedEntry | null) : null))
+  const all = [...(e.dataTransfer?.files ?? [])]
+  if (all.length === 0) return
+  const upload = dropTarget()
+  // A dropped directory: the download unpacked (`.veyq/manifest.json` at its root) is offered as an import; any other is a
+  // folder upload, which does not exist yet (inbox #424) - said, never sent as a broken file.
+  const directories = entries.filter((x): x is DroppedEntry => !!x?.isDirectory) as DroppedDirectory[]
+  const files = all.filter((_, i) => !entries[i]?.isDirectory)
+  if (directories.length > 0) {
+    let offered = false
+    for (const dir of directories) {
+      if (!offered && importReady.value && (await holdsManifest(dir))) {
+        offered = true
+        emit('importArchive', { input: await readDroppedDirectory(dir) })
+      } else if (upload || importReady.value) {
+        toast.error(t('export.folderUploadUnavailable'))
+      }
+    }
+    if (offered || files.length === 0) {
+      if (files.length > 0 && upload) upload(files)
       return
     }
   }
+  // nowhere to upload (no upload entry here): a download is still an import where the member may create, with no way back
+  const rest = await screenUpload(files, upload)
+  if (rest.length > 0 && upload) upload(rest)
 }
 </script>
 

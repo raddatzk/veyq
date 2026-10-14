@@ -240,7 +240,11 @@ export function filesRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     input.value = '' // the same file can be picked again
     return files
   }
-  picker.addEventListener('change', () => void startUploads(takePicked(picker)))
+  // A veyq download among the picked files is core's to recognise (ADR 0082 decision 7): the level offers it as an import,
+  // and "Upload as a file" hands it back here. The rest is uploaded at once.
+  const screen = (files: File[]): Promise<File[]> =>
+    host.screenUpload ? host.screenUpload(files, (back) => void startUploads(back)) : Promise.resolve(files)
+  picker.addEventListener('change', () => void screen(takePicked(picker)).then((rest) => startUploads(rest)))
 
   // "Upload files" is an entry of core's level "New" menu (`register.ts`, inbox #406), and the level hands dropped files to
   // the same entry: both exist for as long as the level does, whichever tab is shown. A drop is only ever as enabled as the

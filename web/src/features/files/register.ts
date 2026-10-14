@@ -31,7 +31,7 @@ import FileShareDialog from './components/FileShareDialog.vue'
 import { filesCapabilities } from './capabilities'
 import { filesRows, UPLOAD_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
-import { exportFile, importFile, FILES_CONTENT_SCHEMA } from './exportImport'
+import { exportFile, importFile, validateFileContent, FILES_CONTENT_SCHEMA } from './exportImport'
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
  *  the last dot, unless the name starts with its only dot (`.env` stays whole). */
@@ -73,6 +73,7 @@ export function registerFiles(registry: Registry): void {
     exportContent: exportFile,
     importContent: importFile,
     contentSchema: FILES_CONTENT_SCHEMA,
+    validateContent: validateFileContent,
     downloadsAsFile: true,
     renameSelectionEnd: fileNameStemEnd,
     // A trashed file that holds no blob is one whose upload never finished (inbox #391): core's trash says so.

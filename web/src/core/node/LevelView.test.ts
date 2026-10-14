@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 const holder = vi.hoisted(() => ({ reg: null as null | import('../applications/registry').Registry }))
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
+vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }) }))
 vi.mock('../applications/registry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../applications/registry')>()
   const r = () => (holder.reg ??= actual.createRegistry())
@@ -32,7 +34,7 @@ import { realI18n, t } from '../../test/i18n'
 import { chooseNew, hasNewMenu, isDisabled, newMenuLabels, openNewMenu } from '../../test/newMenu'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
 import { ShareRole } from '../../api/generated/sharing'
-import { stubRows } from '../../test/stubRows'
+import { stubRows, type StubRows } from '../../test/stubRows'
 import { ZipWriter } from '../export/zip'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../../test/levelRows'
@@ -503,6 +505,7 @@ describe('LevelView: the "New" menu', () => {
   const ready = { value: true }
   const ran: string[] = []
   const dropped: string[][] = []
+  let rows: StubRows
   const allowed = (ctx: { access: { mode: string; role?: string } }) => grant.value && !(ctx.access.mode === 'guest' && ctx.access.role === ShareRole.Read)
   beforeEach(() => {
     grant.value = true
@@ -510,7 +513,8 @@ describe('LevelView: the "New" menu', () => {
     ran.length = 0
     dropped.length = 0
     // The row factory registers the handler while the LEVEL lives - not while a tab is shown (below).
-    const rows = stubRows('a', {
+    toastError.mockReset()
+    rows = stubRows('a', {
       action: { id: 'x.upload', handler: { enabled: () => ready.value, run: () => ran.push('upload'), drop: (files) => dropped.push(files.map((f) => f.name)) } },
     })
     reg().registerKind({
@@ -598,13 +602,16 @@ describe('LevelView: the "New" menu', () => {
       expect(dropped).toEqual([])
     })
 
-    // ADR 0082 decision 7: an export is recognised by its content and offered as an import to a member who may create here.
-    const exportFile = async (name = 'whatever.bin') => {
+    // ADR 0082 decision 7: a download is recognised by its content and offered as an import to a member who may create here,
+    // with "Upload as a file" beside it; a guest never gets the offer.
+    const downloadFile = async (name = 'whatever.bin', version: 1 | 2 = 2) => {
       const parts: Uint8Array[] = []
       const sink = { write: async (b: Uint8Array) => void parts.push(b.slice()), close: async () => {}, abort: async () => {} }
       const zip = new ZipWriter(sink)
-      const manifest = { format: 'veyq-subtree', version: 1, exportedAt: 'x', appVersion: 'x', root: { id: 'n1', kind: 'FOLDER', name: 'Trip' } }
-      await zip.addBytes('manifest.json', new TextEncoder().encode(JSON.stringify(manifest)))
+      const manifest = version === 1
+        ? { format: 'veyq-subtree', version: 1, exportedAt: 'x', appVersion: 'x', root: { id: 'n1', kind: 'FOLDER', name: 'Trip' } }
+        : { format: 'veyq-subtree', version: 2, exportedAt: 'x', appVersion: 'x', applications: [], root: { id: 'n1', kind: 'FOLDER', name: 'Trip', path: 'Trip' } }
+      await zip.addBytes(version === 1 ? 'manifest.json' : '.veyq/manifest.json', new TextEncoder().encode(JSON.stringify(manifest)))
       await zip.finish()
       return new File(parts as BlobPart[], name)
     }
@@ -612,42 +619,128 @@ describe('LevelView: the "New" menu', () => {
       await w.find('.veyq-level-view').trigger('drop', { dataTransfer: { files } })
       await flushPromises()
     }
+    type Offer = { input: { kind: string; file?: File; name?: string; files?: { path: string; file: File }[] }; uploadAsFile?: () => void }
+    const offers = (w: Level) => (w.emitted('importArchive') ?? []).map(([o]) => o as Offer)
 
-    it('an export dropped on a member level is offered as an import, whatever its name, and is not uploaded', async () => {
-      const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
-      const file = await exportFile('renamed.bin')
-      await dropFiles(w, file)
-      expect(w.emitted('importArchive')).toEqual([[file]])
-      expect(dropped).toEqual([])
+    it('a download dropped on a member level is offered as an import, whatever its name; "Upload as a file" uploads it', async () => {
+      for (const version of [1, 2] as const) {
+        dropped.length = 0
+        const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
+        const file = await downloadFile('renamed.bin', version)
+        await dropFiles(w, file)
+        const [offer] = offers(w)
+        expect(offer.input).toEqual({ kind: 'zip', file })
+        expect(dropped).toEqual([])
+        offer.uploadAsFile!()
+        expect(dropped).toEqual([['renamed.bin']])
+      }
     })
 
-    it('a zip that is no export stays an ordinary upload; a guest never gets the import offer', async () => {
+    it('one import per drop: the other files of the drop are uploaded at once', async () => {
+      const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
+      const download = await downloadFile('trip.zip')
+      await dropFiles(w, new File(['x'], 'a.txt'), download, await downloadFile('second.zip'))
+      expect(offers(w).map((o) => o.input.file)).toEqual([download])
+      expect(dropped).toEqual([['a.txt', 'second.zip']])
+    })
+
+    it('a zip that is no download stays an ordinary upload; a guest never gets the import offer and uploads it', async () => {
       const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
       await drop(w, 'photos.zip')
       expect(w.emitted('importArchive')).toBeUndefined()
       expect(dropped).toEqual([['photos.zip']])
       const g = mountGuest(ShareRole.ReadWrite)
-      await dropFiles(g, await exportFile())
+      await dropFiles(g, await downloadFile('trip.zip'))
+      expect(g.emitted('importArchive')).toBeUndefined()
+      expect(dropped).toEqual([['photos.zip'], ['trip.zip']])
+    })
+
+    it('files PICKED for an upload pass the same screen: a download is offered, the rest is uploaded', async () => {
+      const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
+      const host = rows.host()
+      const back: string[][] = []
+      const download = await downloadFile('trip.zip')
+      const rest = await host.screenUpload!([new File(['x'], 'a.txt'), download], (f) => back.push(f.map((x) => x.name)))
+      expect(rest.map((f) => f.name)).toEqual(['a.txt'])
+      const [offer] = offers(w)
+      expect(offer.input).toEqual({ kind: 'zip', file: download })
+      offer.uploadAsFile!()
+      expect(back).toEqual([['trip.zip']])
+      // a guest's picks are never screened
+      const g = mountGuest(ShareRole.ReadWrite)
+      expect((await rows.host().screenUpload!([download], () => {})).map((f) => f.name)).toEqual(['trip.zip'])
       expect(g.emitted('importArchive')).toBeUndefined()
     })
 
-    it('the New menu offers "Import an export" to a member, and choosing it opens the file picker', async () => {
+    // A dropped directory, as `DataTransferItem.webkitGetAsEntry` hands it out.
+    interface FakeFile { isFile: true; isDirectory: false; name: string; file(ok: (f: File) => void): void }
+    interface FakeDir {
+      isFile: false; isDirectory: true; name: string; children: (FakeFile | FakeDir)[]
+      createReader(): { readEntries(ok: (e: (FakeFile | FakeDir)[]) => void): void }
+      getFile(path: string, o: object | undefined, ok: (e: FakeFile | FakeDir) => void, fail: () => void): void
+    }
+    type Fake = FakeFile | FakeDir
+    const fileEntry = (name: string, body = 'x'): FakeFile => ({ isFile: true, isDirectory: false, name, file: (ok) => ok(new File([body], name)) })
+    function dirEntry(name: string, children: Fake[]): FakeDir {
+      const dir: FakeDir = {
+        isFile: false, isDirectory: true, name, children,
+        createReader() {
+          let given = false
+          return { readEntries: (ok) => { ok(given ? [] : children); given = true } }
+        },
+        getFile(path, _o, ok, fail) {
+          let at: Fake | undefined = dir
+          for (const seg of path.split('/')) at = at && !at.isFile ? at.children.find((c) => c.name === seg) : undefined
+          if (at) ok(at)
+          else fail()
+        },
+      }
+      return dir
+    }
+    const dropEntries = async (w: Level, ...entries: Fake[]) => {
+      const files = entries.map((e) => new File([], e.name))
+      const items = entries.map((e) => ({ kind: 'file', webkitGetAsEntry: () => e }))
+      await w.find('.veyq-level-view').trigger('drop', { dataTransfer: { files, items } })
+      await flushPromises()
+    }
+
+    it('a dropped directory holding .veyq/manifest.json (an unpacked download) is offered as an import from its files', async () => {
+      const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
+      const unpacked = dirEntry('Trip download', [dirEntry('.veyq', [fileEntry('manifest.json', '{}')]), dirEntry('Trip', [fileEntry('one.txt')])])
+      await dropEntries(w, unpacked)
+      const [offer] = offers(w)
+      expect(offer.input.kind).toBe('directory')
+      expect(offer.input.name).toBe('Trip download')
+      expect(offer.input.files!.map((f) => f.path).sort()).toEqual(['.veyq/manifest.json', 'Trip/one.txt'])
+      expect(offer.uploadAsFile).toBeUndefined()
+      expect(dropped).toEqual([])
+    })
+
+    it('a directory without the manifest is no import: folder upload is not available yet - said, nothing uploaded', async () => {
+      const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
+      await dropEntries(w, dirEntry('Holiday', [fileEntry('a.jpg')]))
+      expect(w.emitted('importArchive')).toBeUndefined()
+      expect(dropped).toEqual([])
+      expect(toastError).toHaveBeenCalledWith(t('export.folderUploadUnavailable'))
+    })
+
+    it('the New menu offers "Import…" to a member, and choosing it opens the file picker', async () => {
       const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
       const click = vi.spyOn(w.find<HTMLInputElement>('[data-testid="import-input"]').element, 'click').mockImplementation(() => {})
       await chooseNew(w, t('export.import'))
       expect(click).toHaveBeenCalled()
       const picker = w.find<HTMLInputElement>('[data-testid="import-input"]')
-      const file = await exportFile()
+      const file = await downloadFile()
       Object.defineProperty(picker.element, 'files', { value: [file], configurable: true })
       await picker.trigger('change')
-      expect(w.emitted('importArchive')).toEqual([[file]])
+      expect(offers(w)).toEqual([{ input: { kind: 'zip', file } }])
       expect(await newMenuLabels(mountGuest(ShareRole.ReadWrite))).not.toContain(t('export.import'))
     })
 
-    it('while the keys are locked the import entry is disabled and an export is dropped as a plain upload', async () => {
+    it('while the keys are locked the import entry is disabled and a download is dropped as a plain upload', async () => {
       const w = mountLevel([TRIPS], { folder: TRIPS })
       expect(isDisabled((await openNewMenu(w)).find((i) => i.textContent?.trim() === t('export.import'))!)).toBe(true)
-      await dropFiles(w, await exportFile('trip.zip'))
+      await dropFiles(w, await downloadFile('trip.zip'))
       expect(w.emitted('importArchive')).toBeUndefined()
       expect(dropped).toEqual([['trip.zip']])
     })

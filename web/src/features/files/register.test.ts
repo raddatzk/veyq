@@ -11,7 +11,7 @@ import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
 import FileDetail from './components/FileDetail.vue'
 import FileShareDialog from './components/FileShareDialog.vue'
-import { exportFile, importFile } from './exportImport'
+import { exportFile, importFile, validateFileContent } from './exportImport'
 
 describe('registerFiles', () => {
   it('registers the FILE kind: shareable (READ / READ_WRITE, a single-file link), a file icon, its rows, its own page and link dialog', () => {
@@ -31,6 +31,7 @@ describe('registerFiles', () => {
       importContent: importFile,
       // a file downloads as itself and is one file in a folder's ZIP (ADR 0082)
       contentSchema: { application: 'files', version: 1 },
+      validateContent: validateFileContent,
       downloadsAsFile: true,
       renameSelectionEnd: fileNameStemEnd,
       emptyInTrash: 'files.trashEmpty',

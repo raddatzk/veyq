@@ -112,6 +112,11 @@ export interface LevelRowsHost {
   covers: Readonly<Ref<ReadonlyMap<string, LoadedCover>>>
   /** Resolve the covers of further nodes the source draws that are not at this level (a map's pins across the subtree). */
   ensureCovers(nodes: readonly TreeNode[]): void
+  /** Look at files picked for an upload before they are uploaded (ADR 0082 decision 7): a veyq download among them is
+   *  recognised by its content and, for a member who may create here, offered as an import - "Upload as a file" hands it
+   *  back through `uploadAsFile`. Resolves the files to upload now (all of them for a guest, or where nothing is
+   *  recognised). Absent: upload them all. */
+  screenUpload?(files: File[], uploadAsFile: (files: File[]) => void): Promise<File[]>
 }
 
 /** A message the application shows above the list, e.g. why a file was not uploaded. */

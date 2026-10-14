@@ -6,7 +6,7 @@ import { computed, defineComponent, h, reactive, ref, type Ref } from 'vue'
 import LevelRowItem from '../core/node/components/LevelRowItem.vue'
 import LevelNotices from '../core/node/components/LevelNotices.vue'
 import { orderLevel } from '../core/node/levelList'
-import type { LevelNotice, LevelRowsContext, LevelRowsFactory, LevelRowSource } from '../core/node/levelRow'
+import type { LevelNotice, LevelRowsContext, LevelRowsFactory, LevelRowsHost, LevelRowSource } from '../core/node/levelRow'
 import type { LevelActionHandler } from '../core/node/levelActions'
 import type { TreeNode } from '../core/node/tree'
 import type { LoadedCover } from '../core/node/cover/coverModel'
@@ -32,7 +32,7 @@ export function mountRows(
   factory: LevelRowsFactory,
   ctx: LevelRowsContext,
   mode: 'grid' | 'list' = 'list',
-  options: { stubs?: Record<string, unknown> } = {},
+  options: { stubs?: Record<string, unknown>; screenUpload?: LevelRowsHost['screenUpload'] } = {},
 ): RowsHarness {
   const events = { open: [] as TreeNode[], rename: [] as TreeNode[], move: [] as TreeNode[], ensuredCovers: [] as TreeNode[] }
   const covers = ref(new Map<string, LoadedCover>())
@@ -48,6 +48,7 @@ export function mountRows(
         registerAction: (id, handler) => actions.set(id, handler),
         covers,
         ensureCovers: (nodes) => events.ensuredCovers.push(...nodes),
+        ...(options.screenUpload ? { screenUpload: options.screenUpload } : {}),
       })
       return () => {
         // The application's own presentation of the mode (Memories' map) replaces the list, as core's level view does.

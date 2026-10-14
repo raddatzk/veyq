@@ -258,8 +258,14 @@ export class ZipWriter {
 }
 
 // ---------------------------------------------------------------------------------------------------------- reading
+//
+// The archive is untrusted input (ADR 0082 decision 10): `openZip` checks the STRUCTURE before anything is read from an entry -
+// the end records and every ZIP64 field in range, the directory inside the file and before its end record, and for every entry
+// its local header (signature, the same name), its bytes inside the file and before the directory, the sizes and CRC the
+// header or the data descriptor declares equal to the directory's, and no two entries' spans overlapping. A refusal is a
+// `ZipError` with code `corrupt` / `truncated` / `unsupported` / `duplicate`; nothing here guesses.
 
-export type ZipEntry = { name: string; size: number; crc32: number; offset: number }
+export type ZipEntry = { name: string; size: number; crc32: number; offset: number; /** where its bytes start */ dataAt: number }
 
 /** How much of an entry one read takes - the memory bound of a streamed read. */
 export const READ_CHUNK = 1024 * 1024
@@ -275,10 +281,14 @@ async function readAt(file: Blob, start: number, end: number): Promise<Uint8Arra
   return new Uint8Array(await file.slice(start, end).arrayBuffer())
 }
 
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((x, i) => x === b[i])
+
+type Central = { name: string; nameBytes: Uint8Array; flags: number; crc: number; size: number; offset: number }
+
 /**
- * Open an archive without reading it: finds the end record, then reads the central directory (one line per entry) and
- * nothing else. Refuses what this format never produces - compressed or encrypted entries, a multi-disk archive, a name
- * given twice - instead of guessing.
+ * Open an archive without reading its entries' bytes: finds the end record, reads the central directory (one line per entry)
+ * and each entry's local header and data descriptor, and checks the structure (see the section header). Refuses what this
+ * format never produces - compressed or encrypted entries, a multi-disk archive, a name given twice - instead of guessing.
  */
 export async function openZip(file: Blob): Promise<ZipArchive> {
   if (file.size < 22) throw new ZipError('not_zip', 'too small to be an archive')
@@ -297,24 +307,30 @@ export async function openZip(file: Blob): Promise<ZipArchive> {
   let count = tv.getUint16(eocd + 10, true)
   let cdSize = tv.getUint32(eocd + 12, true)
   let cdOffset = tv.getUint32(eocd + 16, true)
+  // where the directory must end: the end record, or the ZIP64 record before it
+  let directoryEnd = tailStart + eocd
   if (count === U16_MAX || cdSize === U32_MAX || cdOffset === U32_MAX) {
     const at = tailStart + eocd - 20
-    const loc = await readAt(file, at, at + 20).catch(() => null)
+    const loc = at >= 0 ? await readAt(file, at, at + 20) : null
     const lv = loc && new DataView(loc.buffer, loc.byteOffset, loc.byteLength)
     if (!lv || lv.getUint32(0, true) !== SIG_LOCATOR64) throw new ZipError('corrupt', 'zip64 locator missing')
     const recAt = toNumber(lv.getBigUint64(8, true), 'zip64 record offset')
+    if (recAt + 56 > at) throw new ZipError('corrupt', 'zip64 record outside the file')
     const rec = await readAt(file, recAt, recAt + 56)
     const rv = new DataView(rec.buffer, rec.byteOffset, rec.byteLength)
     if (rv.getUint32(0, true) !== SIG_EOCD64) throw new ZipError('corrupt', 'zip64 record missing')
     count = toNumber(rv.getBigUint64(32, true), 'entry count')
     cdSize = toNumber(rv.getBigUint64(40, true), 'directory size')
     cdOffset = toNumber(rv.getBigUint64(48, true), 'directory offset')
+    directoryEnd = recAt
   }
-  if (cdOffset + cdSize > file.size) throw new ZipError('truncated', 'directory outside the file')
+  if (cdOffset + cdSize > directoryEnd) throw new ZipError('truncated', 'directory outside the file')
+  if (count * 46 > cdSize) throw new ZipError('corrupt', 'more entries than the directory holds')
   const cd = await readAt(file, cdOffset, cdOffset + cdSize)
   const cv = new DataView(cd.buffer, cd.byteOffset, cd.byteLength)
   const decoder = new TextDecoder('utf-8', { fatal: true })
-  const entries = new Map<string, ZipEntry>()
+  const centrals: Central[] = []
+  const names = new Set<string>()
   let p = 0
   for (let n = 0; n < count; n++) {
     if (p + 46 > cd.length || cv.getUint32(p, true) !== SIG_CENTRAL) throw new ZipError('corrupt', 'bad directory entry')
@@ -332,9 +348,10 @@ export async function openZip(file: Blob): Promise<ZipArchive> {
     if (next > cd.length) throw new ZipError('corrupt', 'directory entry runs past the directory')
     if (flags & FLAG_ENCRYPTED || method !== 0) throw new ZipError('unsupported', 'only plain stored entries are read')
     if (disk !== 0 && disk !== U16_MAX) throw new ZipError('unsupported', 'multi-disk archive')
+    const nameBytes = cd.slice(p + 46, p + 46 + nameLen)
     let name: string
     try {
-      name = decoder.decode(cd.subarray(p + 46, p + 46 + nameLen))
+      name = decoder.decode(nameBytes)
     } catch {
       throw new ZipError('corrupt', 'entry name is not UTF-8')
     }
@@ -365,15 +382,62 @@ export async function openZip(file: Blob): Promise<ZipArchive> {
     }
     if (usize === U32_MAX || csize === U32_MAX || offset === U32_MAX) throw new ZipError('corrupt', 'zip64 value missing')
     if (csize !== usize) throw new ZipError('unsupported', 'only plain stored entries are read')
-    if (entries.has(name)) throw new ZipError('duplicate', `entry listed twice: ${name}`)
-    entries.set(name, { name, size: usize, crc32: crc, offset })
+    if (usize > file.size || offset >= cdOffset) throw new ZipError('corrupt', `${name} lies outside the file`)
+    if (names.has(name)) throw new ZipError('duplicate', `entry listed twice: ${name}`)
+    names.add(name)
+    centrals.push({ name, nameBytes, flags, crc, size: usize, offset })
     p = next
   }
-  return new ZipArchive(file, entries, cdOffset)
+
+  // each entry's local header and data descriptor; then no two spans may overlap
+  const entries = new Map<string, ZipEntry>()
+  const spans: { start: number; end: number; name: string }[] = []
+  for (const c of centrals) {
+    const head = await readAt(file, c.offset, Math.min(c.offset + 30 + c.nameBytes.length, cdOffset)).catch(() => new Uint8Array(0))
+    if (head.length < 30 + c.nameBytes.length) throw new ZipError('corrupt', `${c.name}: local header outside the file`)
+    const lv = new DataView(head.buffer, head.byteOffset, head.byteLength)
+    if (lv.getUint32(0, true) !== SIG_LOCAL) throw new ZipError('corrupt', `${c.name}: bad local header`)
+    if (lv.getUint16(8, true) !== 0) throw new ZipError('unsupported', `${c.name}: not a stored entry`)
+    if (lv.getUint16(26, true) !== c.nameBytes.length || !sameBytes(head.subarray(30), c.nameBytes)) {
+      throw new ZipError('corrupt', `${c.name}: local name differs from the directory`)
+    }
+    const dataAt = c.offset + 30 + c.nameBytes.length + lv.getUint16(28, true)
+    const dataEnd = dataAt + c.size
+    let end = dataEnd
+    if (dataEnd > cdOffset) throw new ZipError('corrupt', `${c.name} runs into the directory`)
+    const localFlags = lv.getUint16(6, true)
+    if (localFlags & FLAG_DESCRIPTOR) {
+      // a descriptor follows the bytes: an optional signature, the CRC, then the sizes (8 bytes each in ZIP64)
+      const desc = await readAt(file, dataEnd, Math.min(dataEnd + 24, cdOffset))
+      const dv = new DataView(desc.buffer, desc.byteOffset, desc.byteLength)
+      const skip = desc.length >= 4 && dv.getUint32(0, true) === SIG_DESCRIPTOR ? 4 : 0
+      const wide = desc.length >= skip + 20 && dv.getBigUint64(skip + 4, true) === BigInt(c.size) && dv.getBigUint64(skip + 12, true) === BigInt(c.size)
+      const narrow = desc.length >= skip + 12 && dv.getUint32(skip + 4, true) === c.size && dv.getUint32(skip + 8, true) === c.size
+      if (desc.length < skip + 12 || dv.getUint32(skip, true) !== c.crc || !(wide || narrow)) {
+        throw new ZipError('corrupt', `${c.name}: the declared size or checksum is not the directory's`)
+      }
+      end = dataEnd + skip + (wide && !narrow ? 20 : 12)
+    } else {
+      const lcrc = lv.getUint32(14, true)
+      const lc = lv.getUint32(18, true)
+      const lu = lv.getUint32(22, true)
+      const zip64Local = lc === U32_MAX && lu === U32_MAX // its sizes are in the local ZIP64 extra: the directory's decide
+      if (lcrc !== c.crc || (!zip64Local && (lc !== c.size || lu !== c.size))) {
+        throw new ZipError('corrupt', `${c.name}: the declared size or checksum is not the directory's`)
+      }
+    }
+    spans.push({ start: c.offset, end, name: c.name })
+    entries.set(c.name, { name: c.name, size: c.size, crc32: c.crc, offset: c.offset, dataAt })
+  }
+  spans.sort((a, b) => a.start - b.start)
+  for (let i = 1; i < spans.length; i++) {
+    if (spans[i].start < spans[i - 1].end) throw new ZipError('corrupt', `${spans[i].name} overlaps ${spans[i - 1].name}`)
+  }
+  return new ZipArchive(file, entries)
 }
 
 export class ZipArchive {
-  constructor(private readonly file: Blob, private readonly byName: Map<string, ZipEntry>, private readonly directoryAt: number) {}
+  constructor(private readonly file: Blob, private readonly byName: Map<string, ZipEntry>) {}
 
   get entries(): ZipEntry[] {
     return [...this.byName.values()]
@@ -388,17 +452,16 @@ export class ZipArchive {
   }
 
   /**
-   * An entry's bytes, in chunks of at most {@link READ_CHUNK}; at the end the CRC-32 and the length are checked against
-   * the directory. The check runs after the last chunk was handed out, so a consumer must treat the thrown `crc_mismatch`
-   * as "everything you took from this entry is bad" - an import rolls back, it does not keep what it already wrote.
+   * An entry's bytes, in chunks of at most {@link READ_CHUNK}; at the end the CRC-32 is checked against the directory. The
+   * check runs after the last chunk was handed out, so a consumer must treat the thrown `crc_mismatch` as "everything you
+   * took from this entry is bad" - an import rolls back, it does not keep what it already wrote.
    */
   async *stream(name: string): AsyncGenerator<Uint8Array> {
     const e = this.byName.get(name)
     if (!e) throw new ZipError('missing', `no entry ${name}`)
-    const { start, end } = await this.span(name)
     let crc = crc32Start()
-    for (let at = start; at < end; at += READ_CHUNK) {
-      const chunk = await readAt(this.file, at, Math.min(at + READ_CHUNK, end))
+    for (let at = e.dataAt; at < e.dataAt + e.size; at += READ_CHUNK) {
+      const chunk = await readAt(this.file, at, Math.min(at + READ_CHUNK, e.dataAt + e.size))
       crc = crc32Update(crc, chunk)
       yield chunk
     }
@@ -409,21 +472,10 @@ export class ZipArchive {
    * An entry as a lazy, seekable `Blob` over the archive (no bytes are read). Its checksum is NOT checked - the caller that
    * needs it reads {@link stream} once first (an import verifies each payload's SHA-256 that way before it slices it).
    */
-  async blob(name: string, type = ''): Promise<Blob> {
-    const { start, end } = await this.span(name)
-    return this.file.slice(start, end, type)
-  }
-
-  private async span(name: string): Promise<{ start: number; end: number }> {
+  blob(name: string, type = ''): Blob {
     const e = this.byName.get(name)
     if (!e) throw new ZipError('missing', `no entry ${name}`)
-    const local = await readAt(this.file, e.offset, e.offset + 30)
-    const lv = new DataView(local.buffer, local.byteOffset, local.byteLength)
-    if (lv.getUint32(0, true) !== SIG_LOCAL) throw new ZipError('corrupt', `bad local header for ${name}`)
-    const start = e.offset + 30 + lv.getUint16(26, true) + lv.getUint16(28, true)
-    const end = start + e.size
-    if (end > this.directoryAt) throw new ZipError('corrupt', `${name} runs into the directory`)
-    return { start, end }
+    return this.file.slice(e.dataAt, e.dataAt + e.size, type)
   }
 
   /** A small entry (the manifest) read whole, refused above `maxBytes`. */

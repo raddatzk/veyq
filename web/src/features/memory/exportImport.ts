@@ -20,6 +20,7 @@
 // reads the tenant's member directory; and no EXIF copy, which the link does not serve.
 import { iterateBlob } from '../../core/blob/stream'
 import type { ExportContentHook, ExportNodeContext, ImportContentHook, ImportNodeContext } from '../../core/export/hooks'
+import type { ContentProblem } from '../../core/applications/registry'
 import type { ManifestContent, ManifestPayload } from '../../core/export/manifest'
 import { loadTenantPeople } from '../../core/people/directory'
 import { createContentNode, listTree } from '../../core/node/tree'
@@ -140,6 +141,65 @@ async function coverOf(
   if (!bytes) return undefined
   const file = ctx.addPayload('cover.jpg', { size: bytes.length, mediaType: 'image/jpeg', chunks: async function* () { yield bytes } })
   return { file, crop: cover.crop }
+}
+
+/** The contract's `maxLength` / `maxItems` of Memories' fields (`contracts/export/veyq-subtree.schema.json`, `memories*`
+ *  `$defs`); `exportImport.test.ts` pins each to the schema. */
+export const MEMORIES_LIMITS = { name: 1024, contributor: 1024, place: 1024, participant: 1024, participants: 100 } as const
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+const isPayload = (v: unknown): boolean => isObj(v) && typeof v.path === 'string' && typeof v.size === 'number'
+const isNum = (v: unknown, min: number, max: number) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max
+
+/** A `memories.memory` / `memories.chapter` content from a download, checked against its contract (decision 10) before the
+ *  import writes anything: the shape of every field the import reads, and each string at its `maxLength`. Unknown fields are
+ *  ignored, as the format promises. */
+export function validateMemoryContent(content: ManifestContent): ContentProblem | null {
+  const shape = (message: string): ContentProblem => ({ code: 'invalid_manifest', message })
+  const long = (what: string, v: unknown, max: number): ContentProblem | null =>
+    v === undefined ? null : typeof v !== 'string' ? shape(`${what} is not text`) : v.length > max ? { code: 'too_large', message: `${what} is longer than ${max}` } : null
+  if (content.type !== MEMORY_CONTENT && content.type !== CHAPTER_CONTENT) return shape(`not a Memory or chapter: ${content.type}`)
+  if (!Array.isArray(content.media)) return shape('media is not a list')
+  for (const [i, m] of content.media.entries()) {
+    if (!isObj(m) || !isPayload(m.file)) return shape(`medium ${i} has no file`)
+    const problem = long(`medium ${i} name`, m.name, MEMORIES_LIMITS.name) ?? long(`medium ${i} contributor`, m.contributor, MEMORIES_LIMITS.contributor)
+    if (problem) return problem
+    if (m.capturedAt !== undefined && (typeof m.capturedAt !== 'string' || Number.isNaN(Date.parse(m.capturedAt)))) return shape(`medium ${i} capturedAt`)
+    if (m.capturedAtCorrected !== undefined && m.capturedAtCorrected !== true) return shape(`medium ${i} capturedAtCorrected`)
+    if (m.exif !== undefined && !isObj(m.exif)) return shape(`medium ${i} exif`)
+    if (m.location !== undefined) {
+      const l = m.location
+      if (!isObj(l) || (l.lat !== undefined && !isNum(l.lat, -90, 90)) || (l.lon !== undefined && !isNum(l.lon, -180, 180))) return shape(`medium ${i} location`)
+      const p = long(`medium ${i} place`, l.place, MEMORIES_LIMITS.place)
+      if (p) return p
+    }
+  }
+  const d = content.date
+  if (d !== undefined && (!isObj(d) || !['auto', 'single', 'range', 'ongoing'].includes(d.mode as string)
+    || (d.from !== undefined && !(typeof d.from === 'string' && DATE.test(d.from))) || (d.to !== undefined && !(typeof d.to === 'string' && DATE.test(d.to))))) {
+    return shape('date')
+  }
+  const l = content.location
+  if (l !== undefined) {
+    if (!isObj(l)) return shape('location')
+    const p = long('place', l.name, MEMORIES_LIMITS.place)
+    if (p) return p
+  }
+  const people = content.participants
+  if (people !== undefined) {
+    if (!Array.isArray(people)) return shape('participants is not a list')
+    if (people.length > MEMORIES_LIMITS.participants) return { code: 'too_large', message: `more than ${MEMORIES_LIMITS.participants} participants` }
+    for (const [i, p] of people.entries()) {
+      const problem = long(`participant ${i}`, p, MEMORIES_LIMITS.participant)
+      if (problem) return problem
+    }
+  }
+  const c = content.cover
+  if (c !== undefined && (!isObj(c) || ('mediaIndex' in c ? !(Number.isSafeInteger(c.mediaIndex) && (c.mediaIndex as number) >= 0) : !isPayload(c.file)))) {
+    return shape('cover')
+  }
+  return null
 }
 
 const isoToMs = (v: unknown): number | undefined => {

@@ -25,7 +25,7 @@ import PersonMemories from './components/PersonMemories.vue'
 import { memoriesLifecycle } from './lifecycle'
 import { memoryCapabilities } from './capabilities'
 import { targetOf } from '../../core/access'
-import { exportMemoryContent, importMemoryContent, MEMORIES_CONTENT_SCHEMA } from './exportImport'
+import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_CONTENT_SCHEMA } from './exportImport'
 
 /** The places map of a level (cr-0071): Memories' own presentation — its pins span the level's whole subtree. */
 const MAP_VIEW: LevelViewOption = { mode: 'map', icon: 'pi pi-map', label: 'memory.viewMap' }
@@ -53,6 +53,7 @@ export function registerMemories(registry: Registry): void {
     cover: { load: loadMemoryPhotoCover, extraSource: memoryPhotoSource },
     exportContent: exportMemoryContent,
     contentSchema: MEMORIES_CONTENT_SCHEMA,
+    validateContent: validateMemoryContent,
   }
   // Where each may be moved (core's move dialog, inbox #358) mirrors the backend's `MemoryNodeKindRules`: a Memory at the
   // root or in a folder, a chapter only directly in a Memory.

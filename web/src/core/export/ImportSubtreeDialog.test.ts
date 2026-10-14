@@ -9,8 +9,10 @@ vi.mock('../node/treeStore', async (orig) => ({ ...(await orig<typeof import('..
 
 import ImportSubtreeDialog from './ImportSubtreeDialog.vue'
 import { ImportFailed, importSubtree, openExport, type OpenedExport } from './importSubtree'
-import { ExportError, type Manifest } from './manifest'
+import { ExportError, type ExportErrorCode, type Manifest } from './manifest'
+import type { ImportInput } from './importSource'
 import { realI18n, t } from '../../test/i18n'
+import { i18n } from '../../i18n'
 import { memberAccessOf } from '../../test/models'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { tenantStorageFits } from '../../features/tenant/tenantStorage'
@@ -20,11 +22,12 @@ const manifest: Manifest = {
   format: 'veyq-subtree', version: 1, exportedAt: 'x', appVersion: 'x',
   root: { id: 'n1', kind: 'FOLDER', name: 'Trip', content: { type: 'x.y', file: { path: 'data/n1/a', size: 2048, mediaType: 'x/y' } }, children: [{ id: 'n2', kind: 'ODD', name: 'strange' }] },
 }
-const opened = { zip: {}, manifest } as unknown as OpenedExport
+const opened = { source: {}, manifest } as unknown as OpenedExport
+const input: ImportInput = { kind: 'zip', file: new File(['x'], 'trip.zip') }
 
-async function mountDialog() {
+async function mountDialog(uploadAsFile?: () => void) {
   const w = mount(ImportSubtreeDialog, {
-    props: { file: new Blob(['x']), access: memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) }), parent: null, targetName: 'Home' },
+    props: { input, access: memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) }), parent: null, targetName: 'Home', uploadAsFile },
     global: { plugins: [realI18n(), PrimeVue] },
     attachTo: document.body,
   })
@@ -42,15 +45,34 @@ beforeEach(() => {
 })
 
 describe('ImportSubtreeDialog', () => {
-  it.each([
-    ['not_an_export', 'export.notExport'],
-    ['newer_version', 'export.newer'],
-    ['invalid_manifest', 'export.invalid'],
-  ] as const)('a file that cannot be read (%s) says why and offers no import', async (code, key) => {
-    vi.mocked(openExport).mockRejectedValue(new ExportError(code, 'x'))
+  const codes: ExportErrorCode[] = [
+    'not_an_export', 'newer_version', 'invalid_manifest', 'too_large', 'unsafe_path', 'damaged_archive', 'payload_missing', 'size_mismatch',
+    'checksum', 'nothing_to_import',
+  ]
+  it.each(codes)('a download refused before anything is written (%s) says why, with the place, and offers no import', async (code) => {
+    vi.mocked(openExport).mockRejectedValue(new ExportError(code, 'x', 'Trip/a.txt'))
     await mountDialog()
-    expect(alerts()).toContain(t(key))
+    expect(t(`export.refused.${code}`)).not.toBe(`export.refused.${code}`)
+    expect(alerts()).toContain(`${t(`export.refused.${code}`)} (Trip/a.txt)`)
     expect(body().querySelector('[data-testid="import-submit"]')).toBeNull()
+    expect(importSubtree).not.toHaveBeenCalled()
+  })
+
+  it('a recognised ZIP from an upload also offers "Upload as a file", which hands it back and closes', async () => {
+    vi.mocked(openExport).mockResolvedValue(opened)
+    const back = vi.fn()
+    const w = await mountDialog(back)
+    body().querySelector<HTMLButtonElement>('[data-testid="import-upload-as-file"]')!.click()
+    await flushPromises()
+    expect(back).toHaveBeenCalledTimes(1)
+    expect(w.emitted('close')).toBeTruthy()
+    expect(importSubtree).not.toHaveBeenCalled()
+  })
+
+  it('an input that did not come from an upload has no "Upload as a file"', async () => {
+    vi.mocked(openExport).mockResolvedValue(opened)
+    await mountDialog()
+    expect(body().querySelector('[data-testid="import-upload-as-file"]')).toBeNull()
   })
 
   it('shows what would be created and where, and what this build leaves out, before anything is written', async () => {
@@ -58,8 +80,24 @@ describe('ImportSubtreeDialog', () => {
     await mountDialog()
     expect(body().querySelector('[data-testid="import-summary"]')?.textContent).toContain('Trip')
     expect(body().querySelector('[data-testid="import-summary"]')?.textContent).toContain('Home')
-    expect(body().querySelector('[data-testid="import-skipped"]')?.textContent).toContain('strange')
+    // what is left out, per application and why (ADR 0082 decision 9) - and the action says it imports the REST
+    expect(body().querySelector('[data-testid="import-skipped"] li[data-reason="unknown_application"]')?.textContent?.trim())
+      .toBe(i18n.global.t('export.skipReason.unknown_application', { application: 'ODD', n: 1 }, 1))
+    expect(body().querySelector('[data-testid="import-submit"]')?.textContent).toContain(t('export.importRest'))
     expect(importSubtree).not.toHaveBeenCalled()
+  })
+
+  it('newer content is listed as newer; an archive with nothing importable offers only Cancel', async () => {
+    const nothing: Manifest = {
+      format: 'veyq-subtree', version: 2, exportedAt: 'x', appVersion: 'x', applications: [{ id: 'expenses', contentSchema: 1 }],
+      root: { id: 'n1', kind: 'EXPENSES', name: 'Budget', path: 'Budget', content: { type: 'expenses.sheet', schema: 1 }, children: [{ id: 'n2', kind: 'EXPENSES', name: 'May', path: 'Budget/May' }] },
+    }
+    vi.mocked(openExport).mockResolvedValue({ source: {}, manifest: nothing } as unknown as OpenedExport)
+    await mountDialog()
+    expect(body().querySelector('[data-testid="import-skipped"]')?.textContent).toContain(i18n.global.t('export.skipReason.unknown_application', { application: 'expenses', n: 2 }, 2))
+    expect(body().querySelector('[data-testid="import-summary"]')?.textContent).toContain(t('export.importNothing'))
+    expect(body().querySelector('[data-testid="import-submit"]')).toBeNull()
+    expect(body().querySelector('[data-testid="import-cancel"]')).not.toBeNull()
   })
 
   it('Import runs it under the folder with the member\'s keys, and a success closes with the new node', async () => {

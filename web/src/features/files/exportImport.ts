@@ -7,6 +7,8 @@
 // guest identities).
 import { iterateBlob } from '../../core/blob/stream'
 import type { ExportContentHook, ExportNodeContext, ImportContentHook } from '../../core/export/hooks'
+import type { ContentProblem } from '../../core/applications/registry'
+import type { ManifestContent } from '../../core/export/manifest'
 import type { FileBlobRef } from '../../api/generated/files'
 import { fileFacts } from './download'
 import { guestFilesSource, memberFilesSource, type FilesSource } from './source'
@@ -52,6 +54,16 @@ export const exportFile: ExportContentHook = async (ctx) => {
     chunks: () => iterateBlob(provider, { signal: ctx.signal }),
   })
   return { type: FILES_FILE_CONTENT, schema: SCHEMA, file }
+}
+
+/** A `files.file` content from a download is its one payload reference (core checks the reference itself). */
+export function validateFileContent(content: ManifestContent): ContentProblem | null {
+  const f = content.file as Record<string, unknown> | undefined
+  if (content.type !== FILES_FILE_CONTENT) return { code: 'invalid_manifest', message: `not a Files file: ${content.type}` }
+  if (typeof f !== 'object' || f === null || typeof f.path !== 'string' || typeof f.size !== 'number') {
+    return { code: 'invalid_manifest', message: 'a file without its payload' }
+  }
+  return null
 }
 
 export const importFile: ImportContentHook = async (ctx) => {
