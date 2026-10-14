@@ -80,7 +80,7 @@ file**. The import's dry-run reports nodes this build cannot read (an unknown ap
   - The old version stays describable, because the reader needs it.
   - Update the ADR's worked example to the new layout.
   - Done when the schema validates the new worked example and an old one, and the trust-chain guards are green.
-- [ ] 2 web, write: the writer and walker emit the new layout and manifest (Decision 1, and Decision 2 for the
+- [x] 2 web, write: the writer and walker emit the new layout and manifest (Decision 1, and Decision 2 for the
   download surfaces, including the guest's). The "Export" labels and the location option go.
   - Tests: an archive written from a tree with hostile names unpacks (`unzip -l` in a node test, or the reader) to
     the safe paths, and the manifest maps every node.

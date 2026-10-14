@@ -186,6 +186,14 @@ export interface KindDescriptor {
    *  neither: it has no content. */
   exportContent?: ExportContentHook
   importContent?: ImportContentHook
+  /** The application this kind's content belongs to and the highest version of its content schema this build writes and
+   *  reads (ADR 0082 decision 9): a download names it in the manifest's `applications`, and an import's dry run lists a
+   *  node whose content is newer as one it leaves out. `application` is the `<application>` part of every `content.type`
+   *  the hook writes. Absent: the content carries no application and version 1. */
+  contentSchema?: { application: string; version: number }
+  /** A node of this kind IS one file (Files' file): Download saves it as itself through the application's own action, so core
+   *  offers no ZIP download for it, and inside an archive it is that one file at the node's path, not a directory. */
+  downloadsAsFile?: boolean
 }
 
 /** What a kind that carries a cover may add to core's mechanism (inbox #411). Core reads one source, the uploaded image; a
@@ -325,8 +333,8 @@ export interface NodeDetailEmits {
   /** Move `node` (the opened node, or a child the detail lists — a drop box's guest folder): the host mounts core's
    *  `MoveNodeDialog` for it (inbox #358). */
   move: [node: TreeNode]
-  /** Export the opened node and its subtree (ADR 0082): the host mounts core's `ExportSubtreeDialog`. */
-  export: []
+  /** Download the opened node and its subtree as a ZIP (ADR 0082): the host mounts core's `ExportSubtreeDialog`. */
+  download: []
   createChild: [kind: NodeKind]
   openNode: [node: TreeNode]
   share: []

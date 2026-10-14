@@ -39,7 +39,7 @@ const encoder = new TextEncoder()
 
 // ---------------------------------------------------------------------------------------------------------- writing
 
-type DirectoryEntry = { name: Uint8Array; crc: number; size: number; offset: number; zip64: boolean; date: number; time: number }
+type DirectoryEntry = { name: Uint8Array; crc: number; size: number; offset: number; zip64: boolean; date: number; time: number; dir: boolean }
 
 export type ZipWriterOptions = {
   /** The modification time stamped on every entry (DOS format, UTC, 2-second resolution). Default: now. */
@@ -83,15 +83,8 @@ export class ZipWriter {
    * @throws ZipError `size_mismatch` when the chunks add up to anything but `size`, `duplicate` for a repeated path.
    */
   async addFile(path: string, size: number, chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>): Promise<{ crc32: number }> {
-    if (this.ended) throw new ZipError('corrupt', 'archive already finished')
     if (!Number.isSafeInteger(size) || size < 0) throw new ZipError('corrupt', `bad size for ${path}`)
-    if (path === '' || path.startsWith('/') || path.includes('\\') || path.split('/').some((s) => s === '..' || s === '')) {
-      throw new ZipError('corrupt', `unsafe path ${JSON.stringify(path)}`)
-    }
-    if (this.names.has(path)) throw new ZipError('duplicate', `path written twice: ${path}`)
-    const name = encoder.encode(path)
-    if (name.length > U16_MAX) throw new ZipError('corrupt', 'path too long')
-    this.names.add(path)
+    const name = this.claim(path, path)
     const zip64 = size >= this.limit
     const entryOffset = this.offset
 
@@ -143,8 +136,42 @@ export class ZipWriter {
       d.setUint32(12, size, true)
     }
     await this.put(desc)
-    this.entries.push({ name, crc: final, size, offset: entryOffset, zip64, ...this.stamp })
+    this.entries.push({ name, crc: final, size, offset: entryOffset, zip64, ...this.stamp, dir: false })
     return { crc32: final }
+  }
+
+  /**
+   * Add a directory entry (`path/`, no bytes), so a directory with nothing in it still unpacks. Written without a data
+   * descriptor: its CRC and sizes (all 0) are known up front.
+   */
+  async addDirectory(path: string): Promise<void> {
+    const name = this.claim(path, `${path}/`)
+    const head = new Uint8Array(30 + name.length)
+    const h = new DataView(head.buffer)
+    h.setUint32(0, SIG_LOCAL, true)
+    h.setUint16(4, VERSION_PLAIN, true)
+    h.setUint16(6, FLAG_UTF8, true)
+    h.setUint16(10, this.stamp.time, true)
+    h.setUint16(12, this.stamp.date, true)
+    h.setUint16(26, name.length, true)
+    head.set(name, 30)
+    const offset = this.offset
+    await this.put(head)
+    this.entries.push({ name, crc: 0, size: 0, offset, zip64: false, ...this.stamp, dir: true })
+  }
+
+  /** Check `path` is a plain relative path (this writer is the last line against an archive a reader would have to distrust)
+   *  and not yet written; returns the entry name `stored` as UTF-8. */
+  private claim(path: string, stored: string): Uint8Array {
+    if (this.ended) throw new ZipError('corrupt', 'archive already finished')
+    if (path === '' || path.startsWith('/') || path.includes('\\') || path.split('/').some((s) => s === '..' || s === '.' || s === '')) {
+      throw new ZipError('corrupt', `unsafe path ${JSON.stringify(path)}`)
+    }
+    if (this.names.has(stored)) throw new ZipError('duplicate', `path written twice: ${stored}`)
+    const name = encoder.encode(stored)
+    if (name.length > U16_MAX) throw new ZipError('corrupt', 'path too long')
+    this.names.add(stored)
+    return name
   }
 
   /** Convenience for the small in-memory entry (the manifest). */
@@ -178,7 +205,7 @@ export class ZipWriter {
       c.setUint32(0, SIG_CENTRAL, true)
       c.setUint16(4, fields ? VERSION_ZIP64 : VERSION_PLAIN, true)
       c.setUint16(6, fields ? VERSION_ZIP64 : VERSION_PLAIN, true)
-      c.setUint16(8, FLAG_DESCRIPTOR | FLAG_UTF8, true)
+      c.setUint16(8, e.dir ? FLAG_UTF8 : FLAG_DESCRIPTOR | FLAG_UTF8, true)
       c.setUint16(10, 0, true)
       c.setUint16(12, e.time, true)
       c.setUint16(14, e.date, true)
@@ -187,6 +214,7 @@ export class ZipWriter {
       c.setUint32(24, e.zip64 ? U32_MAX : e.size, true)
       c.setUint16(28, e.name.length, true)
       c.setUint16(30, extra.length, true)
+      if (e.dir) c.setUint32(38, 0x10, true) // MS-DOS directory attribute
       c.setUint32(42, bigOffset ? U32_MAX : e.offset, true)
       rec.set(e.name, 46)
       rec.set(extra, 46 + e.name.length)

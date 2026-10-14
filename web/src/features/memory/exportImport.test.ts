@@ -2,16 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./media', async (orig) => ({
   ...(await orig<typeof import('./media')>()),
-  listMedia: vi.fn(), unsealMeta: vi.fn(), originalBlobMeta: vi.fn(), originalMediaType: vi.fn(), loadMediaExif: vi.fn(),
-  chunkProvider: vi.fn(), plaintextSize: vi.fn(), addMedia: vi.fn(), setMediaMeta: vi.fn(), backfillPlaceName: vi.fn(),
+  listMedia: vi.fn(), listMediaPage: vi.fn(), unsealMeta: vi.fn(), originalBlobMeta: vi.fn(), originalMediaType: vi.fn(), loadMediaExif: vi.fn(),
+  chunkProvider: vi.fn(), plaintextSize: vi.fn(), addMedia: vi.fn(), setMediaMeta: vi.fn(), backfillPlaceName: vi.fn(), openBlob: vi.fn(),
 }))
+vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), listShareMedia: vi.fn(), openSharedMemory: vi.fn(), shareChunkProvider: vi.fn() }))
 vi.mock('../../core/people/directory', () => ({ loadTenantPeople: vi.fn() }))
-vi.mock('../../core/blob/transport', () => ({ openBlob: vi.fn() }))
 vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import('../../core/node/tree')>()), createContentNode: vi.fn(), listTree: vi.fn() }))
 vi.mock('../../core/node/cover/coverWrite', () => ({ uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
-import { addMedia, backfillPlaceName, chunkProvider, listMedia, loadMediaExif, originalBlobMeta, originalMediaType, plaintextSize, setMediaMeta, unsealMeta, type MediaItem } from './media'
+import {
+  addMedia, backfillPlaceName, chunkProvider, listMedia, listMediaPage, loadMediaExif, openBlob, originalBlobMeta, originalMediaType, plaintextSize, setMediaMeta,
+  unsealMeta, type MediaItem,
+} from './media'
+import { listShareMedia, openSharedMemory, shareChunkProvider } from './share'
+import { guestAccessOf, memberAccessOf } from '../../test/models'
+import type { Access } from '../../core/access'
+import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { loadTenantPeople, type Person } from '../../core/people/directory'
 import { createContentNode, listTree, type TreeNode } from '../../core/node/tree'
 import { writeNodeCover, uploadCoverImage } from '../../core/node/cover/coverWrite'
@@ -32,14 +39,15 @@ const KEY = v1.randomBytes(32)
 const item = (mediaId: string, ownerKey = `user:${U1}`): MediaItem => ({ mediaId, ownerKey, original: { byteSize: 1, chunkCount: 1 }, derivatives: [] }) as unknown as MediaItem
 const person = (displayName: string) => ({ displayName }) as unknown as Person
 
-function exportCtx(options: { includeLocation: boolean }, meta: Record<string, unknown> = {}, kind = MEMORY_KIND) {
+const member = memberAccessOf({ scopeId: SCOPE })
+function exportCtx(meta: Record<string, unknown> = {}, kind = MEMORY_KIND, access: Access = member) {
   const payloads: { name: string; modifiedAt?: number; mediaType: string }[] = []
   const node = { id: NODE, kind, name: 'Lisbon', wrappedMeta: sealNodeMeta(KEY, { scopeId: SCOPE, nodeId: NODE }, { v: 1, ...meta }) } as unknown as TreeNode
   const ctx = {
-    scopeId: SCOPE, node, nodeKey: KEY, options, cache: new Map(), epochs: {},
+    access, tree: { rootId: NODE }, scopeId: SCOPE, node, nodeKey: KEY, cache: new Map(),
     addPayload: (name: string, s: { size: number; mediaType: string; modifiedAt?: number }) => {
       payloads.push({ name, modifiedAt: s.modifiedAt, mediaType: s.mediaType })
-      return { path: `data/n1/${name}`, size: s.size, mediaType: s.mediaType }
+      return { path: `Lisbon/${name}`, size: s.size, mediaType: s.mediaType }
     },
   } as unknown as ExportNodeContext
   return { ctx, payloads }
@@ -48,7 +56,7 @@ function exportCtx(options: { includeLocation: boolean }, meta: Record<string, u
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(loadTenantPeople).mockResolvedValue(new Map([[U1, person('Anna Meyer')], [U2, person('Ben')]]))
-  vi.mocked(listMedia).mockResolvedValue([item('a'), item('b')])
+  vi.mocked(listMediaPage).mockResolvedValue({ notModified: false, items: [item('a'), item('b')], mediaRevision: 1, deleteRevision: 0, mediaIds: null })
   vi.mocked(plaintextSize).mockReturnValue(100)
   vi.mocked(originalMediaType).mockReturnValue('image/jpeg')
   vi.mocked(chunkProvider).mockReturnValue({ chunkCount: 0, getPlaintextChunk: async () => new Uint8Array(0) } as unknown as ReturnType<typeof chunkProvider>)
@@ -69,30 +77,48 @@ describe('exportMemoryContent', () => {
   }
 
   it('exports the media with capture time, correction flag, place and EXIF, and the node\'s date, place, cover and names', async () => {
-    const { ctx, payloads } = exportCtx({ includeLocation: true }, meta)
+    const { ctx, payloads } = exportCtx(meta)
     const c = (await exportMemoryContent(ctx))!
     expect(c).toMatchObject({ type: MEMORY_CONTENT, schema: 1, date: meta.date, participants: ['Anna Meyer', 'Ben'], cover: { mediaIndex: 1 } })
     expect(c.location).toMatchObject({ name: 'Lisbon', derived: { lat: 38.7, lng: -9.1 } })
     const [a, b] = c.media as { name: string; capturedAt: string; capturedAtCorrected?: true; location?: unknown; exif?: Record<string, unknown>; contributor?: string }[]
     expect(a).toMatchObject({ name: 'a.jpg', capturedAt: new Date(1_700_000_000_000).toISOString(), location: { lat: 38.7, lon: -9.1, place: 'Lisbon' }, contributor: 'Anna Meyer' })
     expect(a.capturedAtCorrected).toBeUndefined()
-    expect(a.exif).toMatchObject({ make: 'Fuji', altitude: 12 })
+    expect(a.exif).toEqual({ make: 'Fuji', altitude: 12, imgDirection: 90 }) // always whole: there is no location option
     expect(b).toMatchObject({ capturedAt: new Date(1_700_000_100_000).toISOString(), capturedAtCorrected: true })
     // the upload falls back to the modified time for a missing capture time: the capture time rides there
     expect(payloads.map((p) => p.modifiedAt)).toEqual([1_700_000_000_000, 1_700_000_100_000])
   })
 
-  it('opted out of location: no coordinates, no place anywhere in the manifest copies, no locating EXIF', async () => {
-    const { ctx } = exportCtx({ includeLocation: false }, meta)
+  it('an uploaded cover travels as a payload of its own, read through the session\'s source', async () => {
+    vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
+    const ref = { blobId: 'c', chunkCount: 1, byteSize: 3, wrappedBlobKey: 'k' }
+    const { ctx, payloads } = exportCtx({ cover: { source: { kind: 'upload', ref }, crop: { x: 0, y: 0, width: 1, height: 1 } } })
     const c = (await exportMemoryContent(ctx))!
-    expect(c.location).toBeUndefined()
-    const [a] = c.media as { location?: unknown; exif?: Record<string, unknown> }[]
-    expect(a.location).toBeUndefined()
-    expect(a.exif).toEqual({ make: 'Fuji' })
+    expect(payloads.at(-1)).toMatchObject({ name: 'cover.jpg', mediaType: 'image/jpeg' })
+    expect(c.cover).toMatchObject({ file: { path: 'Lisbon/cover.jpg', size: 3 } })
+  })
+
+  it('a READ guest downloads through the link: no member read, no names (never the member directory), no EXIF copy', async () => {
+    const guest = guestAccessOf('READ', { head: { scopeId: SCOPE } as unknown as PublicShareHead })
+    vi.mocked(listShareMedia).mockResolvedValue({ media: [] } as unknown as Awaited<ReturnType<typeof listShareMedia>>)
+    vi.mocked(openSharedMemory).mockReturnValue({ items: [{ item: item('a'), nodeId: NODE }, { item: item('x'), nodeId: 'other' }] } as unknown as ReturnType<typeof openSharedMemory>)
+    vi.mocked(shareChunkProvider).mockReturnValue({ chunkCount: 0, getPlaintextChunk: async () => new Uint8Array(0) } as unknown as ReturnType<typeof shareChunkProvider>)
+    const { ctx, payloads } = exportCtx(meta, MEMORY_KIND, guest)
+    const c = (await exportMemoryContent(ctx))!
+    expect(listMediaPage).not.toHaveBeenCalled()
+    expect(loadTenantPeople).not.toHaveBeenCalled()
+    expect(loadMediaExif).not.toHaveBeenCalled()
+    expect(payloads.map((p) => p.name)).toEqual(['a.jpg']) // this node's media only
+    expect(c.participants).toBeUndefined()
+    const [a] = c.media as { exif?: unknown; contributor?: string; location?: unknown }[]
+    expect(a).toMatchObject({ location: { place: 'Lisbon' } })
+    expect(a.exif).toBeUndefined()
+    expect(a.contributor).toBeUndefined()
   })
 
   it('a chapter exports as memories.chapter', async () => {
-    const { ctx } = exportCtx({ includeLocation: true }, {}, CHAPTER_KIND)
+    const { ctx } = exportCtx({}, CHAPTER_KIND)
     expect((await exportMemoryContent(ctx))!.type).toBe(CHAPTER_CONTENT)
   })
 })

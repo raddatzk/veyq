@@ -29,6 +29,9 @@ describe('registerFiles', () => {
       slug: fileNameSlug,
       exportContent: exportFile,
       importContent: importFile,
+      // a file downloads as itself and is one file in a folder's ZIP (ADR 0082)
+      contentSchema: { application: 'files', version: 1 },
+      downloadsAsFile: true,
       renameSelectionEnd: fileNameStemEnd,
       emptyInTrash: 'files.trashEmpty',
       nounWithArticle: 'files.aFile',

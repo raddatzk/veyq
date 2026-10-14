@@ -26,7 +26,7 @@ div.veyq-node-host
               span.p-button-icon.pi.pi-heart
             button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
               span.p-button-icon.pi.pi-share-alt
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Export"]
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
               span.p-button-icon.pi.pi-download
     ul.veyq-level-list
       li.is-folder.is-grid.veyq-level-item

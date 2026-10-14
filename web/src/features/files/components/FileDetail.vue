@@ -36,7 +36,6 @@ import type { NodeDetailEmits, NodeDetailProps } from '../../../core/application
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions, type NodeHeaderAction } from '../../../core/node/nodeHeader'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
-import { exportHeaderActions } from '../../../core/export/exportActions'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
@@ -56,7 +55,8 @@ const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 const { t, locale } = useI18n()
 // Core's heart (inbox #409): the same for every kind; a guest gets none.
-const coreActions = computed(() => [...favoriteHeaderActions(t, props.access, props.node), ...exportHeaderActions(t, props.access, props.node, () => emit('export'))])
+// A file downloads as itself (the header's own download): core adds no ZIP download for it (ADR 0082 decision 4).
+const coreActions = computed(() => favoriteHeaderActions(t, props.access, props.node))
 const { ask } = useConfirm()
 const toast = useToast()
 const { batches } = useUploadQueue()

@@ -31,7 +31,7 @@ import FileShareDialog from './components/FileShareDialog.vue'
 import { filesCapabilities } from './capabilities'
 import { filesRows, UPLOAD_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
-import { exportFile, importFile } from './exportImport'
+import { exportFile, importFile, FILES_CONTENT_SCHEMA } from './exportImport'
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
  *  the last dot, unless the name starts with its only dot (`.env` stays whole). */
@@ -69,8 +69,11 @@ export function registerFiles(registry: Registry): void {
     deleteTitle: 'files.deleteTitle',
     deleteCopy: 'files.deleteConfirm',
     slug: fileNameSlug,
+    // A file downloads as itself (its row's and page's own action) and is one file inside a folder's ZIP (ADR 0082).
     exportContent: exportFile,
     importContent: importFile,
+    contentSchema: FILES_CONTENT_SCHEMA,
+    downloadsAsFile: true,
     renameSelectionEnd: fileNameStemEnd,
     // A trashed file that holds no blob is one whose upload never finished (inbox #391): core's trash says so.
     emptyInTrash: 'files.trashEmpty',

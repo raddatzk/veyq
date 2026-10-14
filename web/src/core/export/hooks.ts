@@ -3,6 +3,7 @@
 // (`KindDescriptor.exportContent` / `importContent`), beside `createEntry`, so core reaches an application only through
 // the registry (ADR 0079).
 import type { EpochKeys } from '../../features/spaces/epochs'
+import type { Access, TreeSource } from '../access'
 import type { NodeParent, TreeNode } from '../node/tree'
 import type { ManifestContent, ManifestNode, ManifestPayload } from './manifest'
 
@@ -15,17 +16,22 @@ export type ExportPayloadSource = {
 }
 
 export type ExportNodeContext = {
+  /** Who downloads: a member, or a `READ`/`READ_WRITE` share guest (ADR 0082 decision 5). A hook reads through that
+   *  session's own doors - a guest's never touch a member's API. */
+  access: Access
+  /** The tree as that session reads it (the member's scope tree, the guest's subtree). */
+  tree: TreeSource<TreeNode>
+  /** The scope every seal binds (a guest's: the link's scope). */
   scopeId: string
-  epochs: EpochKeys
   node: TreeNode
   /** The node's own content key. */
   nodeKey: Uint8Array
-  options: { includeLocation: boolean }
   signal?: AbortSignal
   /** Scratch that lives for one export run: a hook caches what it reads once per folder here. */
   cache: Map<string, unknown>
-  /** Register a payload under `data/<node id>/<fileName>`; returns the reference to put into the returned content. The
-   *  file name is made safe and unique by core. */
+  /** Register a payload: a file named `fileName` in the node's directory (made safe and unique by core,
+   *  `archiveName`), or - for a kind that `downloadsAsFile` - the node's own path, once. Returns the reference to put into
+   *  the returned content. */
   addPayload(fileName: string, source: ExportPayloadSource): ManifestPayload
 }
 

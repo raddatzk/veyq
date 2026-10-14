@@ -9,15 +9,17 @@
 // What an import can and cannot restore (it adds each original through the ordinary upload, `addMedia`):
 //  - the file's own EXIF - GPS, camera, capture time - is read again from the bytes, as for any upload; the manifest's
 //    copies of them are for people and other tools to read. There is NO API to seal a coordinate the file lacks, so a
-//    coordinate that was only ever sealed (never in the file) does not come back. Likewise `includeLocation: false` drops
-//    the manifest's location fields but cannot reach into the original's bytes: a photo's own GPS tags travel with it.
+//    coordinate that was only ever sealed (never in the file) does not come back.
 //  - a capture time the file lacks is carried by the payload's modified time (the upload falls back to it); one the member
 //    CORRECTED (an override) is restored as an override in a second pass, and so is a place name the tier lacks.
 //  - the importer is the uploader of every medium; the exported contributor stays text. Participants are not restored:
 //    their ids mean nothing in the target (ADR 0083).
+//
+// A download reads through the downloading session's own source (`source.ts`): a member's, or a READ / READ_WRITE guest's
+// link reads. A guest's download carries no names - not the participants, not the contributors - because a guest never
+// reads the tenant's member directory; and no EXIF copy, which the link does not serve.
 import { iterateBlob } from '../../core/blob/stream'
-import { openBlob } from '../../core/blob/transport'
-import type { ExportContentHook, ImportContentHook, ImportNodeContext } from '../../core/export/hooks'
+import type { ExportContentHook, ExportNodeContext, ImportContentHook, ImportNodeContext } from '../../core/export/hooks'
 import type { ManifestContent, ManifestPayload } from '../../core/export/manifest'
 import { loadTenantPeople } from '../../core/people/directory'
 import { createContentNode, listTree } from '../../core/node/tree'
@@ -26,21 +28,20 @@ import { readCover, uploadedCover } from '../../core/node/cover/coverModel'
 import { uploadCoverImage, writeNodeCover } from '../../core/node/cover/coverWrite'
 import type { NodeKind } from '../../core/node/kind'
 import {
-  addMedia, backfillPlaceName, chunkProvider, effectiveCapturedAt, listMedia, loadMediaExif, originalBlobMeta, originalMediaType,
-  plaintextSize, setMediaMeta, unsealMeta, type MediaExif, type MediaItem,
+  addMedia, backfillPlaceName, effectiveCapturedAt, listMedia, originalMediaType, plaintextSize, setMediaMeta, type MediaItem,
 } from './media'
+import { guestMemorySource, memberMemorySource, type MemorySource } from './source'
 import { normalizeDate } from './memoryDate'
 import { normalizeLocation } from './memoryLocation'
 import { unsealMemoryParticipants } from './memoryParticipants'
 import { CHAPTER_KIND } from './kinds'
 import { memoryPhotoSource, normalizeMemoryCover } from './memoryCover'
 
-const SCHEMA = 1
 export const MEMORY_CONTENT = 'memories.memory'
 export const CHAPTER_CONTENT = 'memories.chapter'
-
-/** The camera fields that locate the photo; dropped from the manifest's EXIF copy when the location is opted out. */
-const LOCATING_EXIF: readonly (keyof MediaExif)[] = ['altitude', 'imgDirection', 'gpsAccuracy']
+/** The application id of both content types above, and the content schema this build writes and reads. */
+export const MEMORIES_CONTENT_SCHEMA = { application: 'memories', version: 1 } as const
+const SCHEMA = MEMORIES_CONTENT_SCHEMA.version
 
 export type ExportedMedium = {
   file: ManifestPayload
@@ -54,26 +55,44 @@ export type ExportedMedium = {
 
 type ExportedCover = { mediaIndex: number; crop: unknown } | { file: ManifestPayload; crop: unknown }
 
-async function contributorOf(item: MediaItem, people: Awaited<ReturnType<typeof loadTenantPeople>> | null): Promise<string | undefined> {
+function contributorOf(item: MediaItem, people: Awaited<ReturnType<typeof loadTenantPeople>> | null): string | undefined {
   const owner = item.ownerKey
   if (!owner?.startsWith('user:') || !people) return undefined
   return people.get(owner.slice('user:'.length))?.displayName
 }
 
+/** The session's Memories source, made once per run: a member's, or the link's for a guest. */
+function sourceOf(ctx: ExportNodeContext): MemorySource {
+  const hit = ctx.cache.get('memories:source') as MemorySource | undefined
+  if (hit) return hit
+  const a = ctx.access
+  const source = a.mode === 'member' ? memberMemorySource({ scopeId: () => a.scopeId }) : guestMemorySource(() => a, ctx.tree)
+  ctx.cache.set('memories:source', source)
+  return source
+}
+
+/** The tenant's people, read once per run, a member's only (a guest never reads the member directory). */
+async function peopleOf(ctx: ExportNodeContext): Promise<Awaited<ReturnType<typeof loadTenantPeople>> | null> {
+  if (ctx.access.mode !== 'member') return null
+  if (!ctx.cache.has('memories:people')) ctx.cache.set('memories:people', await loadTenantPeople().catch(() => null))
+  return ctx.cache.get('memories:people') as Awaited<ReturnType<typeof loadTenantPeople>> | null
+}
+
 export const exportMemoryContent: ExportContentHook = async (ctx) => {
   const { scopeId, node, nodeKey } = ctx
   const kind = node.kind
-  const items = await listMedia(scopeId, node.id)
-  const people = await loadTenantPeople().catch(() => null)
+  const source = sourceOf(ctx)
+  const { items } = await source.listMedia(node.id)
+  const people = await peopleOf(ctx)
   const media: ExportedMedium[] = []
   for (const item of items) {
-    if (ctx.signal?.aborted) throw ctx.signal.reason ?? new DOMException('Export cancelled', 'AbortError')
-    const meta = unsealMeta(scopeId, nodeKey, item)
-    const blobMeta = originalBlobMeta(scopeId, nodeKey, item)
+    if (ctx.signal?.aborted) throw ctx.signal.reason ?? new DOMException('Download cancelled', 'AbortError')
+    const meta = source.loaders.meta(item, nodeKey)
+    const blobMeta = source.loaders.blobMeta(item, nodeKey)
     const captured = effectiveCapturedAt(meta)
     const name = blobMeta?.name ?? `${item.mediaId}`
-    const exif = await loadMediaExif(scopeId, item, nodeKey).catch(() => null)
-    const provider = chunkProvider(scopeId, nodeKey, item)
+    const exif = source.loaders.exif ? await source.loaders.exif(item, nodeKey).catch(() => null) : null
+    const provider = source.loaders.chunk(item, nodeKey)
     const file = ctx.addPayload(name, {
       size: plaintextSize(item.original),
       mediaType: originalMediaType(scopeId, nodeKey, item) ?? 'application/octet-stream',
@@ -84,17 +103,11 @@ export const exportMemoryContent: ExportContentHook = async (ctx) => {
     const medium: ExportedMedium = { file, name }
     if (captured !== undefined) medium.capturedAt = new Date(captured).toISOString()
     if (meta?.capturedAtOverride !== undefined) medium.capturedAtCorrected = true
-    if (ctx.options.includeLocation) {
-      const lat = meta?.gpsLat
-      const lon = meta?.gpsLng
-      if (lat !== undefined || lon !== undefined || meta?.placeName) medium.location = { lat, lon, place: meta?.placeName }
-    }
-    if (exif) {
-      const copy: Record<string, unknown> = { ...exif }
-      if (!ctx.options.includeLocation) for (const k of LOCATING_EXIF) delete copy[k]
-      medium.exif = copy
-    }
-    const contributor = await contributorOf(item, people)
+    const lat = meta?.gpsLat
+    const lon = meta?.gpsLng
+    if (lat !== undefined || lon !== undefined || meta?.placeName) medium.location = { lat, lon, place: meta?.placeName }
+    if (exif) medium.exif = { ...exif }
+    const contributor = contributorOf(item, people)
     if (contributor) medium.contributor = contributor
     media.push(medium)
   }
@@ -104,28 +117,28 @@ export const exportMemoryContent: ExportContentHook = async (ctx) => {
   const date = normalizeDate(raw.date)
   if (date) content.date = date
   const location = normalizeLocation(raw.location)
-  if (location && ctx.options.includeLocation) content.location = location
+  if (location) content.location = location
   const names = unsealMemoryParticipants(scopeId, nodeKey, node)
     .map((id) => people?.get(id)?.displayName)
     .filter((n): n is string => !!n)
   if (names.length > 0) content.participants = names
 
   const cover = normalizeMemoryCover(raw.cover, node.id)
-  if (cover) content.cover = await coverOf(ctx, cover, items)
+  if (cover) content.cover = await coverOf(ctx, source, cover, items)
   return content
 }
 
 async function coverOf(
-  ctx: Parameters<ExportContentHook>[0], cover: NonNullable<ReturnType<typeof normalizeMemoryCover>>, items: MediaItem[],
+  ctx: ExportNodeContext, source: MemorySource, cover: NonNullable<ReturnType<typeof normalizeMemoryCover>>, items: MediaItem[],
 ): Promise<ExportedCover | undefined> {
   if (cover.source.kind === 'media') {
     const id = cover.source.mediaId
     const mediaIndex = items.findIndex((i) => i.mediaId === id)
     return mediaIndex >= 0 ? { mediaIndex, crop: cover.crop } : undefined
   }
-  const bytes = await openBlob(ctx.scopeId, ctx.nodeKey, cover.source.ref).catch(() => null)
+  const bytes = await source.loaders.coverBlob(cover.source.ref, ctx.nodeKey).catch(() => null)
   if (!bytes) return undefined
-  const file = ctx.addPayload('cover', { size: bytes.length, mediaType: 'image/jpeg', chunks: async function* () { yield bytes } })
+  const file = ctx.addPayload('cover.jpg', { size: bytes.length, mediaType: 'image/jpeg', chunks: async function* () { yield bytes } })
   return { file, crop: cover.crop }
 }
 

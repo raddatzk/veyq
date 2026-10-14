@@ -78,7 +78,7 @@ import NodeHeader from './components/NodeHeader.vue'
 import LevelRowItem from './components/LevelRowItem.vue'
 import LevelNotices from './components/LevelNotices.vue'
 import { standardNodeActions } from './nodeHeader'
-import { exportHeaderActions, exportRowActions } from '../export/exportActions'
+import { downloadHeaderActions, downloadRowActions } from '../export/downloadActions'
 import { openExport } from '../export/importSubtree'
 
 const props = defineProps<{
@@ -103,8 +103,8 @@ const emit = defineEmits<{
   /** A node to move (inbox #358): the folder on screen (its header) or a row's node (Files' row). The host mounts core's
    *  `MoveNodeDialog` for it. */
   moveNode: [node: TreeNode]
-  /** A node to export (ADR 0082): a row's, or the folder on screen. The host mounts core's `ExportSubtreeDialog`. */
-  exportNode: [node: TreeNode]
+  /** A node to download as a ZIP (ADR 0082): a row's, or the folder on screen. The host mounts core's `ExportSubtreeDialog`. */
+  downloadNode: [node: TreeNode]
   /** A file the member picked or dropped that is a veyq export (recognised by its content, ADR 0082): the host mounts core's
    *  `ImportSubtreeDialog` for it, under the folder on screen. */
   importArchive: [file: File]
@@ -307,13 +307,13 @@ function rawItem(node: TreeNode): Item {
 // The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" /
 // cover" / "Remove cover" in the row's menu, gated by `coverCapabilities` (a writer, a kind that opted in; a guest none).
 const coreRowActions = (item: Item): CoreRowAction[] =>
-  item.unsupported ? [] : [...favoriteRowActions(t, props.access, item.node), ...cover.rowActions(item.node), ...exportRowActions(t, props.access, item.node, () => emit('exportNode', item.node))]
+  item.unsupported ? [] : [...favoriteRowActions(t, props.access, item.node), ...cover.rowActions(item.node), ...downloadRowActions(t, props.access, item.node, () => emit('downloadNode', item.node))]
 // The folder on screen is a node too: its header carries the same heart and cover action (the scope root is no node and
 // has neither).
 const folderCoreActions = computed(() => [
   ...favoriteHeaderActions(t, props.access, props.folder),
   ...cover.headerActions(props.folder),
-  ...exportHeaderActions(t, props.access, props.folder, () => props.folder && emit('exportNode', props.folder)),
+  ...downloadHeaderActions(t, props.access, props.folder, () => props.folder && emit('downloadNode', props.folder)),
 ])
 const folderCover = computed(() => (props.folder ? (cover.covers.value.get(props.folder.id) ?? null) : null))
 const itemMode = computed<'grid' | 'list'>(() => (mode.value === 'list' ? 'list' : 'grid'))

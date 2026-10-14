@@ -27,7 +27,8 @@
 // A MOVE (inbox #358) is core's `MoveNodeDialog` through the guest's door (`nodeMover`: `placeShareNodeAsGuest` after the
 // naming flow), offered where the capability functions grant it — a node a `FOLDER` of the subtree holds, never the
 // link's root, never in or of an identity folder — and its destinations are the subtree's folders only. A `READ` link has
-// no door, so nothing it renders can move anything.
+// no door, so nothing it renders can move anything. A DOWNLOAD (ADR 0082 decision 5) is core's `ExportSubtreeDialog` over the
+// guest's tree and the applications' guest reads, for a folder, a Memory or a chapter of a `READ` / `READ_WRITE` link.
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -46,6 +47,7 @@ import { useGuestSession } from './guestIdentity'
 import { renderMarkdown } from '../../shared/markdown'
 import ShareNameDialog from './ShareNameDialog.vue'
 import MoveNodeDialog from '../node/MoveNodeDialog.vue'
+import ExportSubtreeDialog from '../export/ExportSubtreeDialog.vue'
 import { nodeMover } from '../node/move'
 import { useLevelLive } from '../node/useLevelLive'
 import type { TreeNode } from '../node/tree'
@@ -164,12 +166,14 @@ async function createNode(name: string) {
 // --- a move (READ_WRITE): core's dialog, the guest's door ----------------------------------------------------------
 const mover = nodeMover(() => props.access)
 const moving = ref<TreeNode | null>(null)
+// --- a download as a ZIP (READ / READ_WRITE, ADR 0082 decision 5): core's dialog over the guest's own tree and reads ------
+const downloading = ref<TreeNode | null>(null)
 
 // --- the live refresh (inbox #408): a folder level on screen picks up what others changed, without a reload --------------
 // Paused while a dialog of this page is open; the shell's `poll` swaps `head` (and with it the tree) only on a change.
 const { ticks: liveTick } = useLevelLive({
   active: () => atFolder.value && !!props.access.poll,
-  paused: () => !!creating.value || !!moving.value,
+  paused: () => !!creating.value || !!moving.value || !!downloading.value,
   read: (signal) => props.access.poll?.(signal) ?? Promise.resolve(false),
 })
 
@@ -204,6 +208,7 @@ function createError(e: unknown): string {
       @open-node="go($event.id)"
       @create="startCreate"
       @move-node="moving = $event"
+      @download-node="downloading = $event"
     />
     <!-- The member's detail of the node's kind, for a guest: what it offers is its capabilities and its data source. -->
     <component
@@ -219,6 +224,7 @@ function createError(e: unknown): string {
       :tree="tree"
       @open-node="go($event.id)"
       @move="moving = $event"
+      @download="downloading = current"
     />
     <p v-else class="veyq-empty">{{ t('share.folder.unsupportedKind') }}</p>
   </section>
@@ -231,6 +237,14 @@ function createError(e: unknown): string {
     :mover="mover"
     :node-name="tree.nameOf(moving.id)"
     @close="moving = null"
+  />
+  <ExportSubtreeDialog
+    v-if="downloading && tree"
+    :node="downloading"
+    :access="access"
+    :tree="tree"
+    :display-name="tree.nameOf(downloading.id)"
+    @close="downloading = null"
   />
   <ShareNameDialog
     v-if="creating"

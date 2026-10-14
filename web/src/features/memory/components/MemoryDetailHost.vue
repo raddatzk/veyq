@@ -16,7 +16,7 @@ import type { NodeDetailProps, NodeDetailEmits } from '../../../core/application
 import { CHAPTER_KIND } from '../kinds'
 import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
-import { exportHeaderActions } from '../../../core/export/exportActions'
+import { downloadHeaderActions } from '../../../core/export/downloadActions'
 import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
 import { FULL_FRAME } from '../../../core/node/cover/coverModel'
@@ -56,7 +56,7 @@ const { t } = useI18n()
 // The cover DIALOG is core's too (`CoverEditor`, mounted below); the Memory only adds its extra source to it - a photo chosen
 // in the gallery lightbox (`coverFromPhoto`) - through its descriptor's `cover.extraSource`.
 const cover = useNodeCover(() => props.access, () => props.tree, () => [props.node])
-const coreActions = computed(() => [...favoriteHeaderActions(t, props.access, props.node), ...cover.headerActions(props.node), ...exportHeaderActions(t, props.access, props.node, () => emit('export'))])
+const coreActions = computed(() => [...favoriteHeaderActions(t, props.access, props.node), ...cover.headerActions(props.node), ...downloadHeaderActions(t, props.access, props.node, () => emit('download'))])
 
 /** The lightbox's "Set as cover": crop that photo in the dialog; a photo with no thumbnail yet is set full-frame at once. */
 function onCoverFromPhoto(p: { mediaId: string; src: string | null }) {

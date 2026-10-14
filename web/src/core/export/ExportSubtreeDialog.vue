@@ -1,32 +1,32 @@
 <script setup lang="ts">
-// Export a node and everything under it (ADR 0082, uc.node.export). Three beats: the member chooses (and is warned that the
-// file is plain), the client walks the subtree and says what is in it, and the member picks where to save it - the save
-// picker wants the click's user activation, so it is the first thing the save click awaits, and everything slow
-// (the walk) happens before it. The bytes then stream to the chosen file; closing the dialog while it writes cancels it.
-import { computed, onBeforeUnmount, ref } from 'vue'
+// Download a node and everything under it as a ZIP (ADR 0082 decision 4, uc.platform.export-import): what "Download" on a
+// folder, a Memory or a chapter opens, for a member and a READ / READ_WRITE share guest alike. It asks nothing: opened, it
+// walks the subtree at once and says what is in it (items, files, bytes, what a hook left out), and "Save as ZIP…" picks
+// where to save - the save picker wants the click's user activation, so it is the first thing that click awaits, and
+// everything slow (the walk) happens before it. The bytes then stream to the chosen file; closing the dialog while it walks
+// or writes cancels it. (A file downloads as itself through its own action; it never reaches this dialog.)
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
 import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import ProgressBar from 'primevue/progressbar'
-import type { Access } from '../access'
+import type { Access, TreeSource } from '../access'
 import type { TreeNode } from '../node/tree'
-import { treeStore } from '../node/treeStore'
 import { formatBytes } from '../../shared/formatBytes'
 import { SaveTooLarge, isSaveCancelled, openSaveTarget } from '../../shared/saveStream'
 import { useToast } from '../../shared/state/useToast'
-import { prepareExport, safeFileName, type PreparedExport } from './exportSubtree'
+import { prepareExport, type PreparedExport } from './exportSubtree'
+import { archiveName } from './archiveName'
 import { ExportError } from './manifest'
 
-const props = defineProps<{ node: TreeNode; access: Access; displayName: string }>()
+const props = defineProps<{ node: TreeNode; access: Access; tree: TreeSource<TreeNode>; displayName: string }>()
 const emit = defineEmits<{ close: [] }>()
 const { t, locale } = useI18n()
 const toast = useToast()
 
-type Step = 'options' | 'preparing' | 'ready' | 'writing'
-const step = ref<Step>('options')
-const includeLocation = ref(true)
+type Step = 'preparing' | 'ready' | 'writing' | 'failed'
+const step = ref<Step>('preparing')
 const prepared = ref<PreparedExport | null>(null)
 const error = ref('')
 const fraction = ref(0)
@@ -35,33 +35,29 @@ onBeforeUnmount(() => control.abort())
 
 const busy = computed(() => step.value === 'preparing' || step.value === 'writing')
 const size = computed(() => formatBytes(prepared.value?.bytes ?? 0, locale.value))
-const fileName = computed(() => `${safeFileName(props.displayName)}.zip`)
+// The saved file's name: the node's name made safe, as the archive's own top directory is.
+const fileName = computed(() => `${archiveName(props.displayName, new Set())}.zip`)
 
-async function prepare() {
-  if (props.access.mode !== 'member' || !props.access.epochs) return
-  error.value = ''
-  step.value = 'preparing'
+onMounted(async () => {
   try {
     prepared.value = await prepareExport({
-      scopeId: props.access.scopeId,
-      epochs: props.access.epochs,
-      tree: treeStore.nodes,
+      access: props.access,
+      tree: props.tree,
       rootId: props.node.id,
-      options: { includeLocation: includeLocation.value },
       appVersion: __APP_VERSION__,
       signal: control.signal,
     })
     step.value = 'ready'
   } catch (e) {
     if (control.signal.aborted) return
-    error.value = e instanceof ExportError && e.code === 'invalid_manifest' ? t('export.nothing') : t('export.failed')
-    step.value = 'options'
+    error.value = e instanceof ExportError && e.code === 'nothing_to_import' ? t('export.nothing') : t('export.failed')
+    step.value = 'failed'
   }
-}
+})
 
 async function save() {
   const ready = prepared.value
-  if (!ready) return
+  if (!ready || step.value !== 'ready') return
   error.value = ''
   try {
     // FIRST await of the click: the save picker needs its user activation
@@ -87,18 +83,8 @@ function close() {
 
 <template>
   <Dialog :visible="true" :header="t('export.title', { name: displayName })" modal class="export-dialog" @update:visible="close">
-    <form class="veyq-form" data-testid="export-dialog" @submit.prevent="step === 'options' ? prepare() : save()">
-      <template v-if="step === 'options'">
-        <Message severity="warn" :closable="false" data-testid="export-warning">{{ t('export.warning') }}</Message>
-        <label class="export-option">
-          <Checkbox v-model="includeLocation" binary input-id="export-location" data-testid="export-location" />
-          <span>
-            {{ t('export.includeLocation') }}
-            <small class="export-hint">{{ t('export.includeLocationHint') }}</small>
-          </span>
-        </label>
-      </template>
-      <p v-else-if="step === 'preparing'" class="veyq-form-copy" role="status">{{ t('export.preparing') }}</p>
+    <form class="veyq-form" data-testid="export-dialog" @submit.prevent="save">
+      <p v-if="step === 'preparing'" class="veyq-form-copy" role="status">{{ t('export.preparing') }}</p>
       <template v-else-if="prepared">
         <p class="veyq-form-copy" data-testid="export-summary">{{ t('export.summary', { nodes: prepared.nodes, files: prepared.payloads, size }) }}</p>
         <div v-if="prepared.skipped.length > 0" data-testid="export-skipped">
@@ -115,8 +101,15 @@ function close() {
       <Message v-if="error" severity="error" :closable="false" role="alert">{{ error }}</Message>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined @click="close" />
-        <Button v-if="step === 'options' || step === 'preparing'" type="submit" :label="t('export.prepare')" icon="pi pi-arrow-right" :loading="step === 'preparing'" data-testid="export-prepare" />
-        <Button v-else type="submit" :label="t('export.save')" icon="pi pi-download" :loading="step === 'writing'" data-testid="export-save" />
+        <Button
+          v-if="step !== 'failed'"
+          type="submit"
+          :label="t('export.save')"
+          icon="pi pi-download"
+          :disabled="step === 'preparing'"
+          :loading="busy"
+          data-testid="export-save"
+        />
       </div>
     </form>
   </Dialog>
@@ -125,20 +118,6 @@ function close() {
 <style scoped>
 .export-dialog {
   max-width: min(28rem, 92vw);
-}
-.export-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  cursor: pointer;
-}
-.export-option :deep(.p-checkbox) {
-  flex: none;
-  margin-top: 0.15rem;
-}
-.export-hint {
-  display: block;
-  color: var(--app-muted);
 }
 .export-skipped {
   margin: 0;

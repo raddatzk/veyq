@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('./api', () => ({ filesApi: vi.fn() }))
+vi.mock('./api', () => ({ filesApi: vi.fn(), publicShareFilesApi: vi.fn() }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('./download', () => ({ fileFacts: vi.fn(), fileChunkProvider: vi.fn() }))
 vi.mock('./uploadFile', () => ({ fileUploadJob: vi.fn() }))
 
 import { exportFile, importFile, FILES_FILE_CONTENT } from './exportImport'
 import { fileUploadJob } from './uploadFile'
-import { filesApi } from './api'
+import { filesApi, publicShareFilesApi } from './api'
+import { guestAccessOf, memberAccessOf } from '../../test/models'
+import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { stubApi } from '../../test/apiMock'
 import type { FileListPage } from '../../api/generated/files'
 import { fileChunkProvider, fileFacts } from './download'
@@ -17,10 +19,11 @@ import type { ManifestNode } from '../../core/export/manifest'
 const ctx = (over: Partial<ExportNodeContext> = {}) => {
   const payloads: { name: string; source: Parameters<ExportNodeContext['addPayload']>[1] }[] = []
   const c = {
-    scopeId: 's', node: { id: 'f', parentId: 'p', name: 'a.txt' }, nodeKey: new Uint8Array(32), cache: new Map(), epochs: {}, options: { includeLocation: true },
+    access: memberAccessOf({ scopeId: 's' }), tree: { keyOf: () => new Uint8Array(32) },
+    scopeId: 's', node: { id: 'f', parentId: 'p', name: 'a.txt' }, nodeKey: new Uint8Array(32), cache: new Map(),
     addPayload: (name: string, source: Parameters<ExportNodeContext['addPayload']>[1]) => {
       payloads.push({ name, source })
-      return { path: `data/n1/${name}`, size: source.size, mediaType: source.mediaType }
+      return { path: `Trip/${name}`, size: source.size, mediaType: source.mediaType }
     },
     ...over,
   } as unknown as ExportNodeContext
@@ -45,7 +48,8 @@ describe('exportFile', () => {
   it('declares the blob as a payload with its type and modified time, and streams the plaintext chunks', async () => {
     const { c, payloads } = ctx()
     const content = await exportFile(c)
-    expect(content).toMatchObject({ type: FILES_FILE_CONTENT, schema: 1, file: { path: 'data/n1/a.txt', size: 5, mediaType: 'text/plain' } })
+    expect(content).toMatchObject({ type: FILES_FILE_CONTENT, schema: 1, file: { path: 'Trip/a.txt', size: 5, mediaType: 'text/plain' } })
+    expect(listFiles).toHaveBeenCalledWith({ scopeId: 's', parentId: 'p' })
     expect(payloads[0].source.modifiedAt).toBe(1700000000000)
     const got: number[] = []
     for await (const chunk of payloads[0].source.chunks()) got.push(...chunk)
@@ -56,6 +60,20 @@ describe('exportFile', () => {
     const { c, payloads } = ctx({ node: { id: 'empty', parentId: 'p', name: 'x' } as unknown as ExportNodeContext['node'] })
     expect(await exportFile(c)).toBeNull()
     expect(payloads).toEqual([])
+  })
+
+  it('a READ guest lists through its link, once for the whole subtree, and never calls a member\'s API', async () => {
+    const listShareFiles = stubApi(publicShareFilesApi, { listShareFiles: LISTING }).listShareFiles
+    const cache = new Map()
+    const guest = guestAccessOf('READ', { head: { scopeId: 's' } as unknown as PublicShareHead, pwToken: 'pw' })
+    const first = ctx({ cache, access: guest })
+    expect(await exportFile(first.c)).toMatchObject({ type: FILES_FILE_CONTENT })
+    await exportFile(ctx({ cache, access: guest, node: { id: 'f', parentId: 'other', name: 'a.txt' } as unknown as ExportNodeContext['node'] }).c)
+    expect(listShareFiles).toHaveBeenCalledTimes(1)
+    expect(listShareFiles).toHaveBeenCalledWith({ shareId: 's1', xSharePassword: 'pw' })
+    expect(listFiles).not.toHaveBeenCalled()
+    // the chunks come through the link's presign (a url resolver), not the member's
+    expect(vi.mocked(fileChunkProvider).mock.calls[0][4]).toEqual(expect.any(Function))
   })
 
   it('lists a folder once per run', async () => {

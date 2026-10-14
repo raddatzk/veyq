@@ -14,8 +14,10 @@ import { createContentNode, deleteNode, type NodeParent, type TreeNode } from '.
 import type { EpochKeys } from '../../features/spaces/epochs'
 import { ZipError, openZip, type ZipArchive } from './zip'
 import {
-  ExportError, MANIFEST_FILE, isSafePayloadPath, MANIFEST_MAX_BYTES, collectPayloads, parseManifest, type Manifest, type ManifestNode, type ManifestPayload,
+  ExportError, MANIFEST_MAX_BYTES, MANIFEST_PATH, MANIFEST_PATH_V1, collectPayloads, isSafePayloadPathV1, parseManifest, type Manifest,
+  type ManifestNode, type ManifestPayload,
 } from './manifest'
+import { isArchivePath } from './archiveName'
 import type { SkippedNode } from './exportSubtree'
 
 export type OpenedExport = { zip: ZipArchive; manifest: Manifest }
@@ -32,15 +34,19 @@ export async function openExport(file: Blob): Promise<OpenedExport> {
     if (e instanceof ZipError) throw new ExportError('not_an_export', 'not a ZIP archive')
     throw e
   }
-  if (!zip.has(MANIFEST_FILE)) throw new ExportError('not_an_export', 'no manifest.json')
+  // version 2 keeps it beside the tree, version 1 at the root; each version only where it belongs
+  const at = zip.has(MANIFEST_PATH) ? MANIFEST_PATH : zip.has(MANIFEST_PATH_V1) ? MANIFEST_PATH_V1 : null
+  if (!at) throw new ExportError('not_an_export', 'no manifest')
   let json: unknown
   try {
-    json = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await zip.bytes(MANIFEST_FILE, MANIFEST_MAX_BYTES)))
+    json = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await zip.bytes(at, MANIFEST_MAX_BYTES)))
   } catch (e) {
-    if (e instanceof ZipError && e.code === 'unsupported') throw new ExportError('invalid_manifest', 'manifest.json is too large')
-    throw new ExportError('not_an_export', 'manifest.json is not JSON')
+    if (e instanceof ZipError && e.code === 'unsupported') throw new ExportError('too_large', 'the manifest is too large')
+    throw new ExportError('not_an_export', 'the manifest is not JSON')
   }
-  return { zip, manifest: parseManifest(json) }
+  const manifest = parseManifest(json)
+  if ((at === MANIFEST_PATH) !== manifest.version >= 2) throw new ExportError('invalid_manifest', `a version ${manifest.version} manifest at ${at}`)
+  return { zip, manifest }
 }
 
 const importable = (kind: string): boolean => {
@@ -124,7 +130,7 @@ export async function importSubtree(params: ImportSubtreeParams): Promise<Import
   const skipped: SkippedNode[] = [...plan.skipped]
 
   async function payload(ref: ManifestPayload, fileName: string): Promise<File> {
-    if (!isSafePayloadPath(ref.path)) throw new ExportError('invalid_manifest', 'unsafe payload path')
+    if (!(manifest.version === 1 ? isSafePayloadPathV1(ref.path) : isArchivePath(ref.path))) throw new ExportError('unsafe_path', 'unsafe payload path', ref.path)
     const entry = zip.get(ref.path)
     if (!entry) throw new ExportError('payload_missing', `the archive lacks ${ref.path}`)
     if (entry.size !== ref.size) throw new ExportError('checksum', `${ref.path} is not the size the manifest says`)
