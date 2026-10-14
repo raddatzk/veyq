@@ -47,7 +47,7 @@ const rows: [string, Access, CapabilityTarget, Grant][] = [
   ['READ guest on a Memory', READ, at(MEMORY_KIND), { navigate: true, download: true }],
   ['READ guest on a chapter', READ, at(CHAPTER_KIND), { navigate: true, download: true }],
   // --- guest READ_WRITE ---
-  ['READ_WRITE guest in a folder: creates a Memory', RW, at(FOLDER_KIND), { navigate: true, createMemory: true }],
+  ['READ_WRITE guest in a folder: creates no Memory (owner decision 2026-10-14)', RW, at(FOLDER_KIND), { navigate: true }],
   ['READ_WRITE guest in an identity folder', RW, at(FOLDER_KIND, { inIdentityFolder: true }), { navigate: true }],
   ['READ_WRITE guest on a Memory link\'s root: uploads, deletes its own, no move', RW, at(MEMORY_KIND), { navigate: true, download: true, upload: true, deleteMedia: 'own' }],
   ['READ_WRITE guest on a Memory a folder holds: moves it (#358)', RW, at(MEMORY_KIND, { parentKind: FOLDER_KIND }), { navigate: true, download: true, upload: true, deleteMedia: 'own', move: true }],
@@ -78,10 +78,11 @@ describe('memoryCapabilities: the matrix', () => {
 })
 
 // Rule 2 of #401: item marks (K_SC at E_0), the node's sealed meta, the media trash, the organizer, the
-// links and the node's own rename/delete never reach a guest — in any role, at any kind, wherever it stands.
+// links and the node's own rename/delete never reach a guest — in any role, at any kind, wherever it stands. Nor does a
+// new Memory (owner decision 2026-10-14: the server lets no guest create one, core's `GuestCreatableKinds`).
 describe('memoryCapabilities: member-only functions', () => {
   const MEMBER_ONLY: (keyof MemoryCapabilities)[] = [
-    'mark', 'editMeta', 'setCover', 'share', 'shareUpload', 'rename', 'deleteNode', 'mediaTrash', 'buckets', 'createChapter',
+    'mark', 'editMeta', 'setCover', 'share', 'shareUpload', 'rename', 'deleteNode', 'mediaTrash', 'buckets', 'createChapter', 'createMemory',
   ]
   it('no guest role grants any of them', () => {
     for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {

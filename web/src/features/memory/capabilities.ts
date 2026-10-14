@@ -121,13 +121,12 @@ function guestCapabilities(role: string, at: CapabilityTarget): MemoryCapabiliti
       if (isLevel(at.kind)) return at.kind === FOLDER_KIND ? { ...NO_MEMORY_CAPABILITIES, navigate: true } : NO_MEMORY_CAPABILITIES
       return isMemoriesNode(at.kind) ? { ...NO_MEMORY_CAPABILITIES, navigate: true, download: true } : NO_MEMORY_CAPABILITIES
     case 'READ_WRITE':
-      // A folder link's contributor creates a Memory under a folder (core's `FolderGuestNodeRules`) and moves one a folder
-      // holds between the subtree's folders; a Memory or chapter link's, nothing of the tree (Memories declares no
-      // `GuestNodeRules`, so nothing moves out of or into a Memory, and the link's root has no parent the guest reads).
+      // A folder link's contributor creates no Memory (owner decision 2026-10-14: Memories declares no kind guest-creatable,
+      // core's `GuestCreatableKinds`, so the server refuses it) and moves one a folder holds between the subtree's folders;
+      // a Memory or chapter link's, nothing of the tree (Memories declares no `GuestNodeRules`, so nothing moves out of or
+      // into a Memory, and the link's root has no parent the guest reads).
       // Uploads go into the Memory or chapter on screen (`nodeId`), deletes reach its own media only.
-      if (isLevel(at.kind)) {
-        return at.kind === FOLDER_KIND ? { ...NO_MEMORY_CAPABILITIES, navigate: true, createMemory: !at.inIdentityFolder } : NO_MEMORY_CAPABILITIES
-      }
+      if (isLevel(at.kind)) return at.kind === FOLDER_KIND ? { ...NO_MEMORY_CAPABILITIES, navigate: true } : NO_MEMORY_CAPABILITIES
       return isMemoriesNode(at.kind)
         ? {
             ...NO_MEMORY_CAPABILITIES,
