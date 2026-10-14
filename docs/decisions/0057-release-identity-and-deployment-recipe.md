@@ -199,12 +199,15 @@ tool captures it; the capture is restored onto a freshly installed **candidate**
 (ADR 0056 §7); then the candidate must report `configSecretState: OK`, and the **candidate's** suites must open the
 predecessor's content and assert it - its names, its media, its files - not merely that nothing failed (a misread
 sealed field degrades to empty, not to an error). **The predecessor is configuration:** a git ref, by default the
-commit before the one under test (its first parent) until the first release, and the release named on
-`scripts/applied_migrations.sha256`'s `release:` line from then on - switching is that one default. **Before the first
+commit before the one under test (its first parent) until `scripts/applied_migrations.sha256`'s `release:` line is set,
+and from then on the newest `v<major>.<minor>` tag the first parent contains, by version order - `release:` names a
+migration, not a tag, and a set release with no such tag refuses the run rather than guess (owner confirmation
+2026-10-14) - switching is that one default (`default_predecessor` in `scripts/run_web_e2e.py`). **Before the first
 release** a baseline may still change (`backend/CLAUDE.md` § Migrations), so a red proof then is information - it
 names its cause, a changed baseline's checksum above all - and gates nothing. **In CI** the proof is a job that
 `publish` needs, written now and **disabled until the first release** (the release turns it on in the same change
-that sets `release:`). The Helm path (`helm upgrade`, immutable fields) is not part of it; it is an inbox row of its
+that sets `release:`). A skipped need would skip `publish` too, so until then `publish` accepts the proof's `skipped`;
+the enabling change drops that (owner confirmation 2026-10-14). The Helm path (`helm upgrade`, immutable fields) is not part of it; it is an inbox row of its
 own.
 
 ## Related

@@ -250,7 +250,9 @@ A refined CR nails **decisions, not keystrokes**:
   specific observable** (`isHttpStatus(e, notFound)`), never on "it threw" — a bare rejection is equally produced
   by a network error, a boot failure, or a crypto failure. All three gaps were sitting in the file the CR already
   pointed at. And **a crafted negative input fails exactly one check**: in cr-download-is-the-export four refusal
-  tests stayed green with their named check removed, because an earlier check refused the same input first.
+  tests stayed green with their named check removed, because an earlier check refused the same input first. And **a
+  proof of a transition says whether its recorded run must cross one**: cr-upgrade-proof's first green claimed a
+  migration that no build in the run carried.
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest
   names — an attacker who, with that same link and dump, decrypts every photo of the Memory. The owner took the
