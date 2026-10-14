@@ -2,8 +2,10 @@
 // uc.spaces.verify-identity A/E1/E2 (cr-0099) — review a CHANGED key. The directory key differs from the pin
 // (a legitimate rotation, E1, or an operator substitution, E2 — identical on the wire). Shows the expected
 // (pinned) vs current (directory) safety-numbers side by side; the caller compares out-of-band and either
-// accepts → `acceptChangedKey` (one scope-rotation worker pass, then re-pin as pinned; they may then run Verify to
-// reach verified) or refuses → leave it blocked (the wrap/delivery stays gated). Client-only, operator-blind.
+// accepts → `acceptChangedKey` (one scope-rotation worker pass, then re-pin as pinned; the member's profile then offers
+// the compare again, the only way back to verified) or refuses → leave it blocked (the wrap/delivery stays gated).
+// A VERIFIED contact's change is said louder (ADR 0028 Addendum 3): the caller compared that key in person before, so a
+// different one is the case the compare exists for. Client-only, operator-blind.
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -31,6 +33,8 @@ const currentUnreadable = ref(false)
 const expectedUnreadable = ref(false)
 /** The accept failed on a refused pin store — the error then links to the settings hub's reset. */
 const trustRefused = ref(false)
+/** The pin being replaced was `verified` — a key the caller compared out-of-band before (ADR 0028 Addendum 3). */
+const wasVerified = ref(false)
 
 watch(
   visible,
@@ -38,6 +42,7 @@ watch(
     if (!open) return
     error.value = ''
     const pin = await getPin(props.member.userId).catch(() => null)
+    wasVerified.value = pin?.state === 'verified'
     const expectedNumber = pin ? numberOf(pin.key) : ''
     expected.value = expectedNumber ?? ''
     expectedUnreadable.value = expectedNumber === null
@@ -80,7 +85,10 @@ async function accept() {
 <template>
   <Dialog v-model:visible="visible" :header="t('verify.reviewTitle', { name: '@' + member.username })" modal class="tenant-dialog" :closable="!busy" :close-on-escape="!busy">
     <div class="veyq-form review-body">
-      <Message severity="warn" :closable="false">{{ t('verify.reviewIntro') }}</Message>
+      <Message v-if="wasVerified" severity="error" :closable="false" data-testid="review-verified-changed">
+        {{ t('safety.reviewVerifiedIntro', { name: '@' + member.username }) }}
+      </Message>
+      <Message v-else severity="warn" :closable="false">{{ t('verify.reviewIntro') }}</Message>
       <p class="settings-muted">{{ t('verify.reviewPendingRekey') }}</p>
 
       <div class="review-grid">

@@ -390,8 +390,27 @@ describe('trustState (badge read)', () => {
       { userId: 'ch', directoryKey: 'bmV3' }, // directory moved away from the pin → changed
       { userId: 'new', directoryKey: 'a2V5' }, // never pinned → unpinned
     ])
-    expect(states).toEqual({ vf: 'verified', pn: 'pinned', ch: 'changed', new: 'unpinned' })
+    expect(states).toEqual({
+      vf: { state: 'verified', pinVerified: true },
+      pn: { state: 'pinned', pinVerified: false },
+      ch: { state: 'changed', pinVerified: false },
+      new: { state: 'unpinned', pinVerified: false },
+    })
     expect(srv.getIdentityPins).toHaveBeenCalledTimes(1) // one store fetch for the whole directory
+  })
+
+  it('a VERIFIED contact whose directory key moved reads as changed AND verified (ADR 0028 Addendum 3)', async () => {
+    fakeServer({ blob: seal({ vf: { key: 'a2V5', state: 'verified', firstSeenAt: 1 } }, 1), version: 1 })
+    expect(await trustStates([{ userId: 'vf', directoryKey: 'bmV3' }])).toEqual({ vf: { state: 'changed', pinVerified: true } })
+  })
+})
+
+describe('accepting a verified contact\'s changed key (ADR 0028 Addendum 3)', () => {
+  it('re-pins the new key as PINNED - verified returns only through a new compare', async () => {
+    const srv = fakeServer({ blob: seal({ vf: { key: 'b2xk', state: 'verified', firstSeenAt: 5 } }, 1), version: 1 })
+    await acceptKeyChange('vf', 'bmV3')
+    expect(unsealPins(srv.state.blob!, srv.state.version).vf).toEqual({ key: 'bmV3', state: 'pinned', firstSeenAt: 5 })
+    expect(await trustStates([{ userId: 'vf', directoryKey: 'bmV3' }])).toEqual({ vf: { state: 'pinned', pinVerified: false } })
   })
 })
 

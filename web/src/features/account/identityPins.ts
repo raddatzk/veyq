@@ -25,11 +25,20 @@ import { openAccountDocument, raiseMarks, type AccountDocumentStore } from './tr
 const pinsContext = (version: number) => ({ purpose: 'identity-pins', version }) as const
 
 /** A pin's trust state. `pinned` = trust-on-first-use; `verified` = an out-of-band safety-number compare
- *  succeeded (the human ceremony, cr-0099). `verified` rides inside the same Master-Key-sealed blob. */
+ *  succeeded (the ceremony on a member's profile, ADR 0028 Addendum). `verified` rides inside the same Master-Key-sealed blob. */
 export type PinState = 'pinned' | 'verified'
 
 /** The trust a contact reads as, folding the pin state against their *current* directory key (the badge read). */
 export type TrustState = 'verified' | 'pinned' | 'changed' | 'unpinned'
+
+/** One contact's badge read: the folded {@link TrustState}, and whether the pin it folded is `verified`. On `changed`
+ *  that second half is the louder case - **a verified contact's key changed** (ADR 0028 Addendum 3) - which the badge
+ *  and the review say. A separate flag rather than a fifth state, so every `state === 'changed'` check keeps
+ *  catching the verified case instead of silently missing it. */
+export interface ContactTrust {
+  state: TrustState
+  pinVerified: boolean
+}
 
 /** One pinned contact: their full identity public bundle (serialized, base64), the trust state, and first-seen. */
 export interface Pin {
@@ -175,8 +184,9 @@ export async function checkAndPin(userId: string, identityPublicKeyB64: string):
 
 /**
  * Accept a **changed** key for a contact (ADR 0028 human path): re-pin `userId := new key`, preserving the
- * original `firstSeenAt`. Drops back to `state: pinned` (the `verified` elevation via the QR safety-number compare
- * is the follow-up CR). Overwrites unconditionally — the human explicitly accepted this key.
+ * original `firstSeenAt`. Drops back to `state: pinned` even for a contact that was `verified` - `verified` returns
+ * only through a new compare on their profile (ADR 0028 Addendum 3), never with the accept. Overwrites
+ * unconditionally — the human explicitly accepted this key.
  *
  * **Two writes, because a re-pin alone does not deliver anything.** A worker that declined `identity_changed`
  * is excluded from that job permanently — nothing expires a decline — so before ADR 0060 Decision 7 the accept
@@ -302,13 +312,17 @@ export async function trustState(userId: string, directoryKey: string): Promise<
 
 /**
  * Batch badge read for a whole member directory in **one** store fetch — folds every contact against the key the
- * directory currently returns for them. Keyed by userId. Pure, no write; requires an unlocked vault.
+ * directory currently returns for them, and says whether the pin was `verified` ({@link ContactTrust}). Keyed by
+ * userId. Pure, no write; requires an unlocked vault.
  */
 export async function trustStates(
   contacts: ReadonlyArray<{ userId: string; directoryKey: string }>,
-): Promise<Record<string, TrustState>> {
+): Promise<Record<string, ContactTrust>> {
   const store = await loadStore()
-  const out: Record<string, TrustState> = {}
-  for (const c of contacts) out[c.userId] = foldTrust(store.pins[c.userId], c.directoryKey)
+  const out: Record<string, ContactTrust> = {}
+  for (const c of contacts) {
+    const pin = store.pins[c.userId]
+    out[c.userId] = { state: foldTrust(pin, c.directoryKey), pinVerified: pin?.state === 'verified' }
+  }
   return out
 }

@@ -40,6 +40,8 @@ type View =
       /** Whether a pin existed when this was read - a match on an unpinned member pins it (ADR 0028 Addendum 2). */
       pinned: boolean
       state: TrustState
+      /** The pin is `verified` - on `changed`, a verified contact's key changed (ADR 0028 Addendum 3). */
+      pinVerified: boolean
       /** The compared key's digits, or null when this device cannot decode it (nothing to compare then). */
       number: string | null
     }
@@ -59,7 +61,7 @@ async function load() {
     const pin = await getPin(props.userId)
     if (mine !== token) return
     const compareKey = pin?.key ?? directoryKey
-    view.value = { kind: 'ready', directoryKey, compareKey, pinned: Boolean(pin), state: foldTrust(pin, directoryKey), number: numberOf(compareKey) }
+    view.value = { kind: 'ready', directoryKey, compareKey, pinned: Boolean(pin), state: foldTrust(pin, directoryKey), pinVerified: pin?.state === 'verified', number: numberOf(compareKey) }
   } catch (e) {
     if (mine !== token) return
     view.value = e instanceof TrustStateRefused ? { kind: 'refused', messageKey: refusalMessageKey(e) } : { kind: 'error' }
@@ -152,7 +154,7 @@ watch(() => props.userId, () => {
             <i class="pi pi-verified" aria-hidden="true"></i>{{ t('safety.stateVerified') }}
           </span>
           <span v-else-if="ready.state === 'changed'" class="veyq-badge changed" data-testid="person-safety-state">
-            <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ t('verify.badgeChanged') }}
+            <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ ready.pinVerified ? t('safety.badgeVerifiedChanged') : t('verify.badgeChanged') }}
           </span>
           <span v-else class="veyq-badge muted" data-testid="person-safety-state">{{ t('safety.stateUnverified') }}</span>
         </template>
@@ -175,7 +177,7 @@ watch(() => props.userId, () => {
           <SafetyDigits v-if="!comparing" :number="ready.number" />
 
           <Message v-if="ready.state === 'changed'" severity="warn" :closable="false" data-testid="person-safety-changed">
-            {{ t('safety.changedNote', { name }) }}
+            {{ ready.pinVerified ? t('safety.changedVerifiedNote', { name }) : t('safety.changedNote', { name }) }}
             <div class="person-safety-inline">
               <Button type="button" :label="t('verify.review')" icon="pi pi-exclamation-triangle" severity="warn" text size="small" data-testid="person-safety-review" @click="reviewOpen = true" />
             </div>

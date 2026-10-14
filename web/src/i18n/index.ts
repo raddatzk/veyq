@@ -871,6 +871,12 @@ const en = {
     foreign: 'That is not a veyq safety number code. Scan the code on their profile page.',
     moved: 'The key you trust for {name} changed while you compared, so nothing was marked. Compare again.',
     failed: 'Could not mark as verified. Please try again.',
+    // A VERIFIED contact's key changed (ADR 0028 Addendum 3): the member lists, the profile and the review say it louder.
+    badgeVerifiedChanged: 'Verified key changed',
+    changedVerifiedNote:
+      'You verified {name}’s key before, and the server now lists a different one. Review the change before you compare: accepting it does not verify the new key.',
+    reviewVerifiedIntro:
+      'You verified {name}’s key by comparing it, and this is a different key. A real change happens when someone replaces their keys - ask {name} directly, outside veyq, before you accept. Accepting does not verify the new key: compare again on their profile afterwards.',
   },
   node: {
     folders: 'Folders',
@@ -2554,6 +2560,11 @@ const de: typeof en = {
     foreign: 'Das ist kein veyq-Sicherheitsnummern-Code. Scanne den Code auf der Profilseite.',
     moved: 'Der Schlüssel, dem du für {name} vertraust, hat sich während des Vergleichs geändert, daher wurde nichts markiert. Vergleicht erneut.',
     failed: 'Konnte nicht als verifiziert markiert werden. Bitte versuche es erneut.',
+    badgeVerifiedChanged: 'Verifizierter Schlüssel geändert',
+    changedVerifiedNote:
+      'Du hattest den Schlüssel von {name} verifiziert, und der Server zeigt jetzt einen anderen. Prüfe die Änderung, bevor du vergleichst: Annehmen verifiziert den neuen Schlüssel nicht.',
+    reviewVerifiedIntro:
+      'Du hattest den Schlüssel von {name} durch einen Vergleich verifiziert, und das hier ist ein anderer. Eine echte Änderung entsteht, wenn jemand die eigenen Schlüssel ersetzt - frag {name} direkt, außerhalb von veyq, bevor du annimmst. Annehmen verifiziert den neuen Schlüssel nicht: Vergleicht danach erneut im Profil.',
   },
   node: {
     folders: 'Ordner',

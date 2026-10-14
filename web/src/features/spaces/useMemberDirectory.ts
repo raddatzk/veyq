@@ -7,7 +7,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ScopeMember } from './members'
-import { trustStates, type TrustState } from '../account/identityPins'
+import { trustStates, type ContactTrust } from '../account/identityPins'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
 import { admissionVerifies } from './grant'
 import type { ScopeKind } from '../../api/generated/scopes'
@@ -35,10 +35,10 @@ export function useMemberDirectory(loadBody: () => Promise<MemberLoad>, admissio
 
   const members = ref<ScopeMember[]>([])
   const isOwner = ref(false)
-  // Identity trust (cr-0099): per-member trust state from the sealed pin store. Only the `changed` state is
-  // surfaced (a key differing from the pin — a rotation or a substitution); verified/recognized are intentionally
-  // not shown (proactive verify is gated behind scope-wide strict-mode, cr-0100). Drives the review dialog.
-  const trust = ref<Record<string, TrustState>>({})
+  // Identity trust (cr-0099, ADR 0028 Addendum 4): per-member trust from the sealed pin store - `verified` (compared on
+  // the member's profile) and `changed` (a key differing from the pin: a rotation or a substitution, louder when the
+  // pin was verified) are shown in the list; `changed` drives the review dialog.
+  const trust = ref<Record<string, ContactTrust>>({})
   // The i18n key naming why this device refused its own pin store (ADR 0028 Decision 7), or null. Every wrap to a
   // foreign key is blocked while it holds, so the panel says so rather than showing a directory with no flags.
   const trustRefusal = ref<string | null>(null)
@@ -49,8 +49,8 @@ export function useMemberDirectory(loadBody: () => Promise<MemberLoad>, admissio
   // the changed-key badge, the same way — the member would otherwise just sit "awaiting access" forever.
   const unadmitted = ref<Record<string, true>>({})
 
-  // Read every member's trust state in one fetch — used only to flag `changed` keys. Vault-gated: degrade to no
-  // flags rather than break the directory if the store/identity is unavailable.
+  // Read every member's trust state in one fetch. Vault-gated: degrade to no flags rather than break the directory if
+  // the store/identity is unavailable.
   async function refreshTrust() {
     try {
       trust.value = await trustStates(members.value.map((m) => ({ userId: m.userId, directoryKey: m.identityPublicKey })))

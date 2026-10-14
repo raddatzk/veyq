@@ -81,7 +81,7 @@ key change is said as such and needs a new compare. Strict mode stays out. Owner
     (`veyqid:1:<digest>`), `markVerified(…, { pinIfUnpinned })` (pin-at-verify in ONE sealed write instead of
     `checkAndPin` + `markVerified`, so no pinned-but-unverified state can be left behind), `core/people/{MySafetyNumber,
     PersonSafetyNumber,SafetyDigits}.vue`, `loadIdentityKey` in `core/people/directory.ts`.
-- [ ] 2 web: Decisions 3 and 4 (badges, the louder changed-key review).
+- [x] 2 web: Decisions 3 and 4 (badges, the louder changed-key review).
   - Tests: the member panels show "verified"; a verified contact with a moved directory key reads as such in the
     badge and the review; accepting leaves `pinned` and the profile offers the compare again. Bitten.
   - Done when `npm run check` is green.

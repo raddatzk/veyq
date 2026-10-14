@@ -22,6 +22,8 @@ vi.mock('./scopes', () => ({
   openMyTenantIcon: vi.fn(),
   revokeScopeShares: vi.fn(),
 }))
+// The pin store's badge read: {} (no badge) unless a test says otherwise - what the vault-less real one degraded to.
+vi.mock('../account/identityPins', async (orig) => ({ ...(await orig<typeof import('../account/identityPins')>()), trustStates: vi.fn() }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
 const { confirmAsk, confirmAskWithOption } = vi.hoisted(() => ({ confirmAsk: vi.fn(), confirmAskWithOption: vi.fn() }))
@@ -30,6 +32,7 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 import TenantMembersPanel from './TenantMembersPanel.vue'
 import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, memberError } from './members'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares } from './scopes'
+import { trustStates } from '../account/identityPins'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
 import type { PendingMemberInvite } from '../../api/generated/tenants'
@@ -45,6 +48,7 @@ const stubs = {
 }
 
 beforeEach(() => {
+  vi.mocked(trustStates).mockResolvedValue({})
   vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
   vi.mocked(openMyTenantIcon).mockResolvedValue(null)
 })
@@ -226,5 +230,35 @@ describe('TenantMembersPanel — removal and the links of the space (ADR 0075)',
   it('control: a member who does not own the space is not offered it', async () => {
     const wrapper = await mountPanel('MEMBER')
     expect(wrapper.findAll('button').some((b) => b.text() === t('spaceLinks.revokeAll'))).toBe(false)
+  })
+})
+
+describe('TenantMembersPanel - who is verified (ADR 0028 Addendum 3-4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = 't-1'
+    activeSpace.tenantId = 't-1'
+  })
+
+  const rowOf = (w: Awaited<ReturnType<typeof mountPanel>>, username: string) => w.findAll('.member-row').find((r) => r.text().includes('@' + username))!
+
+  it('shows "verified" in the member list, and a verified contact\'s changed key louder, with the review', async () => {
+    vi.mocked(trustStates).mockResolvedValue({
+      'u-own': { state: 'verified', pinVerified: true },
+      'u-pend': { state: 'changed', pinVerified: true },
+    })
+    const w = await mountPanel('MEMBER')
+    expect(rowOf(w, 'owner').get('[data-testid="member-trust-verified"]').text()).toBe(t('safety.stateVerified'))
+    expect(rowOf(w, 'partner').get('[data-testid="member-trust-changed"]').text()).toBe(t('safety.badgeVerifiedChanged'))
+    expect(rowOf(w, 'partner').text()).toContain(t('verify.review'))
+    expect(rowOf(w, 'owner').text()).not.toContain(t('verify.review'))
+  })
+
+  it('control: a pinned member carries no trust badge', async () => {
+    vi.mocked(trustStates).mockResolvedValue({ 'u-own': { state: 'pinned', pinVerified: false } })
+    const w = await mountPanel('MEMBER')
+    expect(rowOf(w, 'owner').find('[data-testid^="member-trust-"]').exists()).toBe(false)
   })
 })

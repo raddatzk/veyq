@@ -189,3 +189,31 @@ describe('another member’s safety number (main flow 1-3)', () => {
     expect(getPin).not.toHaveBeenCalled()
   })
 })
+
+describe('a verified contact\'s key changed, on the profile (ADR 0028 Addendum 3)', () => {
+  it('reads louder, and after the review\'s accept the profile reads pinned and offers the compare again', async () => {
+    vi.mocked(getPin).mockResolvedValue({ key: OTHER, state: 'verified', firstSeenAt: 1 })
+    const w = await mountTheirs()
+    expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.badgeVerifiedChanged'))
+    expect(w.get('[data-testid="person-safety-changed"]').text()).toContain(t('safety.changedVerifiedNote', { name: 'Anna Meyer' }))
+
+    // The review accepts: the store now pins the directory key as `pinned` (acceptKeyChange's own suite pins that).
+    vi.mocked(getPin).mockResolvedValue({ key: DIR, state: 'pinned', firstSeenAt: 1 })
+    await w.get('[data-testid="person-safety-review"]').trigger('click')
+    w.getComponent(Review).vm.$emit('accepted')
+    await flushPromises()
+    expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.stateUnverified'))
+    expect(digits(w)).toBe(safetyNumber(DIR))
+    expect(w.find('[data-testid="person-safety-scan"]').exists()).toBe(true)
+    expect(w.find('[data-testid="person-safety-compare-start"]').exists()).toBe(true)
+    await scan(w, safetyCodePayload(DIR))
+    expect(markVerified).toHaveBeenCalledWith(ANNA, DIR, { pinIfUnpinned: false })
+  })
+
+  it('control: an ordinary pinned contact\'s change reads as "Key changed"', async () => {
+    vi.mocked(getPin).mockResolvedValue({ key: OTHER, state: 'pinned', firstSeenAt: 1 })
+    const w = await mountTheirs()
+    expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('verify.badgeChanged'))
+    expect(w.get('[data-testid="person-safety-changed"]').text()).toContain(t('safety.changedNote', { name: 'Anna Meyer' }))
+  })
+})
