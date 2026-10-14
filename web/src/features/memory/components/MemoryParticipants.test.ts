@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 // The Memory header's participants row (ADR 0083, uc.memory.participants): overlapping avatars (three at most, past three
 // the third slot is "+N"), a popover with every name that links a member to their profile, a greyed "Former member"
-// without a link, the picker (checkboxes, search) over the scope's CURRENT members, and - the member / guest difference -
-// nothing at all (not even a request for the members) where the capability is off.
+// without a link, nothing at all with no participant, the picker (checkboxes, search) over the scope's CURRENT members -
+// opened through the exposed `openPicker` the header's "Participants" action calls (`MemoryDetail.caps.test.ts` clicks
+// that action) - and - the member / guest difference - nothing at all (not even a request for the members) where the
+// capability is off.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -71,10 +73,12 @@ const openPopover = async (w: VueWrapper) => {
 const saveButton = () => [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('Save'))!
 const rows = () => [...document.body.querySelectorAll<HTMLElement>('.memory-participants-option')]
 const boxes = () => [...document.body.querySelectorAll<HTMLInputElement>('.memory-participants-option input[type="checkbox"]')]
+/** What the header's "Participants" action does (`MemoryDetail`): the row's exposed `openPicker`. */
 const openPicker = async (w: VueWrapper) => {
-  await w.get('[data-testid="participants-edit"]').trigger('click')
+  await (w.vm as unknown as { openPicker: () => Promise<void> }).openPicker()
   await flushPromises()
 }
+const canEdit = (w: VueWrapper) => (w.vm as unknown as { canEdit: boolean }).canEdit
 
 describe('MemoryParticipants: the avatars in the header', () => {
   it.each([
@@ -106,20 +110,27 @@ describe('MemoryParticipants: the avatars in the header', () => {
     expect(g.attributes('aria-label')).toBe('Participants (4): Anna, Ben, Carl, Dora')
   })
 
-  it('offers "add" over an empty list and an edit control over a filled one, both labelled', async () => {
+  // Owner decision 2026-10-14: the way in is the header's action, so an empty list draws NOTHING here - no "nobody yet"
+  // text, no add link, no element at all - while the picker stays reachable through the action.
+  it('with no participant the row renders nothing at all, and the picker still opens', async () => {
     const empty = await mountRow()
-    expect(empty.get('[data-testid="participants-edit"]').attributes('aria-label')).toBe('Add participants')
-    expect(empty.text()).toContain('Nobody listed yet')
-    expect(empty.find('[data-testid="participants-group"]').exists()).toBe(false)
+    expect(empty.find('[data-testid="memory-participants"]').exists(), 'the row').toBe(false)
+    expect(empty.find('button').exists(), 'a control').toBe(false)
+    expect(empty.text()).toBe('')
     expect(people).not.toHaveBeenCalled() // nobody to name, nothing to look up until the picker opens
+    expect(canEdit(empty)).toBe(true)
+    await openPicker(empty)
+    expect(document.body.querySelector('[data-testid="participants-search"]'), 'the picker').not.toBeNull()
     const filled = await mountRow({ ids: [A] })
-    expect(filled.get('[data-testid="participants-edit"]').attributes('aria-label')).toBe('Edit participants')
+    expect(filled.find('[data-testid="memory-participants"]').exists()).toBe(true)
   })
 
-  it('without the right to write the meta (pending deletion) the avatars stay and no control is offered', async () => {
+  it('without the right to write the meta (pending deletion) the avatars stay and the picker is not offered', async () => {
     const w = await mountRow({ ids: [A], write: null })
     expect(w.findAll('[data-testid="participant-avatar"]')).toHaveLength(1)
-    expect(w.find('[data-testid="participants-edit"]').exists()).toBe(false)
+    expect(canEdit(w)).toBe(false)
+    await openPicker(w)
+    expect(document.body.querySelector('[data-testid="participants-search"]')).toBeNull()
   })
 })
 
@@ -290,7 +301,9 @@ describe('MemoryParticipants: the picker', () => {
 describe('MemoryParticipants: no capability (a share guest)', () => {
   it('renders nothing and reads nothing, even though the sealed meta carries participants', async () => {
     const w = await mountRow({ ids: [A, B], show: false })
-    expect(w.html()).toBe('<!--v-if-->')
+    expect(w.element.parentElement?.textContent ?? '').toBe('')
+    expect(w.find('[data-testid="memory-participants"]').exists()).toBe(false)
+    expect(canEdit(w)).toBe(false)
     expect(people).not.toHaveBeenCalled()
   })
 })

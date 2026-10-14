@@ -163,10 +163,10 @@ function expectGuestOnly(w: Page) {
   // though the sealed meta the share serves lists them (see the residual test below).
   expect(w.find('[data-testid="memory-participants"]').exists(), 'the participants row').toBe(false)
   expect(w.find('.memory-participant-chip').exists(), 'a participant chip').toBe(false)
-  expect(w.find('[data-testid="participants-edit"]').exists(), 'the participants control').toBe(false)
+  expect(w.find('[data-action="participants"]').exists(), 'the header\'s participants action').toBe(false)
+  expect(w.find('.memory-participants-dialog').exists(), 'the picker').toBe(false)
   expect(w.find('a[href*="people/"]').exists(), 'a profile link').toBe(false)
-  expect(byLabel(w, t('memory.participants.add')).exists(), 'add').toBe(false)
-  expect(byLabel(w, t('memory.participants.edit')).exists(), 'edit').toBe(false)
+  expect(byLabel(w, t('memory.participants.title')).exists(), 'anything labelled "Participants"').toBe(false)
   expect(authenticatedCalls).toEqual([])
   expect(memberReads).toEqual([])
   expect(isFavorite).not.toHaveBeenCalled()

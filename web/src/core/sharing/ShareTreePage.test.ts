@@ -388,6 +388,30 @@ describe('ShareTreePage: a READ_WRITE guest adds folders', () => {
     expect(authenticatedCalls).toEqual([])
   })
 
+  // uc.memory.participants, "at creation": "I was there" lives in Memories' member create dialog (the kind's `createDialog`).
+  // A guest's create of an application's kind is THIS page's name dialog - the kind's dialog is never mounted here - and the
+  // node is born with no meta, so a guest has no "I was there" and records no participant.
+  it("a guest's create of an application's kind is the page's name dialog, never the kind's createDialog, and sends no meta", async () => {
+    const KindCreateDialog = defineComponent({ name: 'KindCreateDialog', setup: () => () => h('label', { class: 'kind-create-stub' }, t('memory.participants.wasThere')) })
+    holder.reg!.registerKind({
+      kind: 'MEMO', icon: 'pi pi-images', shareable: true, list: { rows: stubRows }, createDialog: KindCreateDialog,
+      createEntry: { label: 'memory.create', icon: 'pi pi-images', order: 10, allowed: () => true },
+    })
+    saveGuestSession(SHARE_ID, { identityId: 'id-0', contributorToken: 'tok-0' })
+    const api = stubApi(publicSharesApi, { createShareNode: { nodeId: 'x' } })
+    api.createShareNode.mockImplementation(async ({ createShareNodeRequest }) => ({ nodeId: createShareNodeRequest.nodeId }))
+    const w = await mountBody(head(ShareRole.ReadWrite), { requestGuest: async () => ({ identityId: 'id-0', contributorToken: 'tok-0' }) })
+    await chooseNew(w, t('memory.create'))
+    expect(w.find('.dialog-stub .header').text(), "control: the page's name dialog is open").toBe(t('common.create'))
+    expect(w.findComponent(KindCreateDialog).exists(), "the kind's createDialog").toBe(false)
+    expect(w.text()).not.toContain(t('memory.participants.wasThere'))
+    await submitName(w, 'Rom')
+    const req = api.createShareNode.mock.calls[0][0].createShareNodeRequest as unknown as Record<string, unknown>
+    expect(req.kind).toBe('MEMO')
+    expect('wrappedMeta' in req, 'a meta').toBe(false)
+    expect(authenticatedCalls).toEqual([])
+  })
+
   it('a visitor who declines to name itself gets no folder dialog', async () => {
     const w = await mountBody(head(ShareRole.ReadWrite), { requestGuest: async () => null })
     await chooseNew(w, t('node.folderCreate'))

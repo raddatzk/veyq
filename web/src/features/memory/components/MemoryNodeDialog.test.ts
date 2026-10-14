@@ -14,8 +14,12 @@ import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { setMapsConsent, setTileUrl, setGeocoderUrl } from '../../../shared/state/useMapConfig'
 import { realI18n, t } from '../../../test/i18n'
+import { activeSpace } from '../../../app/activeSpace'
+import { account } from '../../../app/account'
+import { ScopeKind } from '../../../api/generated/scopes'
 
 const AUTO_PENDING = { name: '', nameSource: 'geocoded', derivedMode: 'auto' }
+const ME = 'aaaaaaaa-0000-4000-8000-000000000001'
 const stubs = {
   Dialog: { props: ['header'], template: '<div><h3 class="hdr">{{ header }}</h3><slot /></div>' },
   InputText: {
@@ -27,7 +31,7 @@ const stubs = {
   Checkbox: {
     props: ['modelValue', 'binary', 'inputId'],
     emits: ['update:modelValue'],
-    template: `<input type="checkbox" class="wants-location" :checked="modelValue" @change="$emit('update:modelValue', $event.target.checked)" />`,
+    template: `<input type="checkbox" :class="inputId" :checked="modelValue" @change="$emit('update:modelValue', $event.target.checked)" />`,
   },
 }
 
@@ -48,6 +52,11 @@ function mountDialog(props: Omit<DialogProps, 'scopeId' | 'epochs'>) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // the member's view of a PERSONAL scope by default: no "I was there" (the existing cases); the participants cases open a
+  // tenant or group scope
+  activeSpace.scopeId = SCOPE
+  activeSpace.kind = ScopeKind.Personal
+  account.userId = ME
   setMapsConsent(false) // default: maps opt-in off → no location step (existing create-memory behaviour)
   setTileUrl('https://tiles.example/{z}/{x}/{y}.png')
   setGeocoderUrl('') // geocoding off in these tests → names are typed (no network)
@@ -63,7 +72,7 @@ describe('MemoryNodeDialog', () => {
     await wrapper.find('input').setValue('Italy')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', { id: 'folder-1', key: parentKey }, null)
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', { id: 'folder-1', key: parentKey }, { location: null, participants: [] })
     expect(wrapper.emitted('done')).toBeTruthy()
     expect(wrapper.emitted('close')).toBeTruthy()
   })
@@ -74,7 +83,7 @@ describe('MemoryNodeDialog', () => {
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
     // maps opt-in is off in this test's i18n/config → no location step shown, location arg is null
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', null, null)
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', null, { location: null, participants: [] })
   })
 
   it('a MEMORY under a parent whose key is missing creates nothing', async () => {
@@ -117,7 +126,7 @@ describe('MemoryNodeDialog', () => {
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
 
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Climbing 2026', null, AUTO_PENDING)
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Climbing 2026', null, { location: AUTO_PENDING, participants: [] })
   })
 
   it('leaving the opt-in unchecked creates the Memory with no location', async () => {
@@ -127,7 +136,7 @@ describe('MemoryNodeDialog', () => {
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
 
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trip', null, null)
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trip', null, { location: null, participants: [] })
   })
 
   it('maps a 409 to the slug-taken message and stays open', async () => {
@@ -140,5 +149,66 @@ describe('MemoryNodeDialog', () => {
 
     expect(wrapper.text()).toContain(t('memory.slugTaken'))
     expect(wrapper.emitted('done')).toBeFalsy()
+  })
+})
+
+// uc.memory.participants, "at creation" (owner decision 2026-10-14): in a tenant or group scope a member's create offers
+// "I was there", ticked by default and not remembered; it never appears in a personal scope, on a chapter, or without the
+// member's own id and the open scope (a share guest's create is core's name dialog - `ShareView.naming.test.ts`).
+describe('MemoryNodeDialog: "I was there"', () => {
+  const wasThere = (w: ReturnType<typeof mountDialog>) => w.find('.was-there')
+  async function create(w: ReturnType<typeof mountDialog>, name = 'Rom') {
+    await w.find('input').setValue(name)
+    await w.find('form').trigger('submit')
+    await Promise.resolve()
+  }
+
+  for (const kind of [ScopeKind.Tenant, ScopeKind.Group]) {
+    it(`${kind}: offered ticked; kept, the creator's own id is the Memory's first participant`, async () => {
+      activeSpace.kind = kind
+      const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })
+      expect(wasThere(w).exists()).toBe(true)
+      expect((wasThere(w).element as HTMLInputElement).checked, 'ticked by default').toBe(true)
+      expect(w.text()).toContain(t('memory.participants.wasThere'))
+      await create(w)
+      expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [ME] })
+    })
+  }
+
+  it('unticked: no participants are written', async () => {
+    activeSpace.kind = ScopeKind.Tenant
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })
+    await wasThere(w).setValue(false)
+    await create(w)
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [] })
+  })
+
+  it('is not remembered: the next create offers it ticked again', async () => {
+    activeSpace.kind = ScopeKind.Tenant
+    const first = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })
+    await wasThere(first).setValue(false)
+    first.unmount()
+    const next = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })
+    expect((wasThere(next).element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('is absent in a personal scope, and nothing is recorded there', async () => {
+    activeSpace.kind = ScopeKind.Personal
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })
+    expect(wasThere(w).exists()).toBe(false)
+    expect(w.text()).not.toContain(t('memory.participants.wasThere'))
+    await create(w)
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [] })
+  })
+
+  it('is absent on a chapter, without the own id, and for a scope other than the open one', async () => {
+    activeSpace.kind = ScopeKind.Tenant
+    expect(wasThere(mountDialog({ kind: CHAPTER_KIND, parentId: 'italy', parentKey: new Uint8Array(32) })).exists(), 'chapter').toBe(false)
+    expect(wasThere(mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })).exists(), 'control').toBe(true)
+    account.userId = ''
+    expect(wasThere(mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })).exists(), 'no own id').toBe(false)
+    account.userId = ME
+    activeSpace.scopeId = null
+    expect(wasThere(mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })).exists(), 'no open scope').toBe(false)
   })
 })

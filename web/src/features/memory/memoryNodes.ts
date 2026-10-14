@@ -8,18 +8,34 @@ import type { EpochKeys } from '../spaces/epochs'
 import { createContentNode, type NodeAddress, type NodeParent } from '../../core/node/tree'
 import { sealNodeMeta } from '../../core/node/nodeMeta'
 import type { MemoryLocation } from './memoryLocation'
+import { normalizeParticipants } from './memoryParticipants'
+
+/** What a Memory's first `wrappedMeta` may carry. Each part is written only when given: a Memory with neither is born with
+ *  no meta at all. */
+export interface MemoryBirthMeta {
+  /** A pre-armed place (cr-0069): a `fixed` pin, or an `auto` name with no `derived` yet. */
+  location?: MemoryLocation | null
+  /** Who was there from the start (uc.memory.participants, "at creation"): opaque user ids - the creator's own when they
+   *  tick "I was there". Empty or absent writes NO `participants` key, which is exactly "no participants". */
+  participants?: readonly string[]
+}
 
 /**
  * Create a MEMORY — births a fresh random `K_mem` wrapped under its parent's content key (`parent.key`, a folder's;
- * the write key `E_current` at the scope root, ADR 0080 Decision 1). Returns the node id + the K_mem. An
- * optional `location` is **sealed at birth** into the node's `wrappedMeta` under that fresh `K_mem` (cr-0069
- * pre-arm) — a `fixed` pin, or an `auto` name with no `derived` yet (it re-medoids on the first geotagged media).
+ * the write key `E_current` at the scope root, ADR 0080 Decision 1). Returns the node id + the K_mem. The optional
+ * `birth` meta is **sealed at birth** into the node's `wrappedMeta` under that fresh `K_mem`, in the one create call:
+ * a pre-armed `location` (cr-0069; an `auto` one re-medoids on the first geotagged media) and the first `participants`
+ * (ADR 0083 - ids only, no second write, no version bump).
  */
 export async function createMemory(
   scopeId: string, epochs: EpochKeys, name: string, parent: NodeParent = null,
-  location: MemoryLocation | null = null,
+  birth: MemoryBirthMeta = {},
 ): Promise<{ nodeId: string; memoryKey: Uint8Array }> {
-  const metaSealer = location ? (key: Uint8Array, node: NodeAddress) => sealNodeMeta(key, node, { v: 1, location }) : undefined
+  const meta: Record<string, unknown> = {}
+  if (birth.location) meta.location = birth.location
+  const participants = normalizeParticipants({ userIds: birth.participants ?? [] })
+  if (participants.length > 0) meta.participants = { userIds: participants }
+  const metaSealer = Object.keys(meta).length > 0 ? (key: Uint8Array, node: NodeAddress) => sealNodeMeta(key, node, { v: 1, ...meta }) : undefined
   const { nodeId, contentKey } = await createContentNode(scopeId, epochs, parent, MEMORY_KIND, name, metaSealer)
   return { nodeId, memoryKey: contentKey }
 }

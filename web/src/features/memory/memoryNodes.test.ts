@@ -9,6 +9,7 @@ vi.mock('../../api/client', () => ({
 
 import { createMemory, createChapter } from './memoryNodes'
 import { createFolder, nodeContentKey, openMemory, openContentKey, type TreeNode } from '../../core/node/tree'
+import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { contentApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
@@ -54,6 +55,42 @@ describe('createMemory', () => {
       .toThrow(v1.OpenRefused)
     // slug token = blinded MAC under K_SC over the root parent slot (the scope id) + the slug
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, SCOPE_ID, 'italien-2026')))
+  })
+})
+
+// uc.memory.participants, "at creation": "I was there" puts the creator's id into the FIRST wrappedMeta - the one create
+// call, no second write - and unticked there is no `participants` key at all (absent, not an empty list).
+describe('createMemory: the meta it is born with', () => {
+  const ME = 'aaaaaaaa-0000-4000-8000-000000000001'
+  const AUTO = { name: '', nameSource: 'geocoded', derivedMode: 'auto' } as const
+  async function born(birth: Parameters<typeof createMemory>[4]) {
+    const create = echoCreate()
+    mockContent({ createNode: create })
+    const { nodeId, memoryKey } = await createMemory(SCOPE_ID, epochsOf(scopeKey), 'Rom', null, birth)
+    expect(create).toHaveBeenCalledTimes(1) // one create call carries it all
+    const req = create.mock.calls[0][0].createNodeRequest
+    return { wrappedMeta: req.wrappedMeta ?? null, meta: unsealNodeMeta(memoryKey, { scopeId: SCOPE_ID, nodeId }, req.wrappedMeta ?? null) }
+  }
+
+  it("with the creator's id, the first meta carries exactly `participants: { userIds: [id] }` - an id, nothing else", async () => {
+    const { meta } = await born({ participants: [ME] })
+    expect(meta.participants).toEqual({ userIds: [ME] })
+    expect(Object.keys(meta).sort()).toEqual(['participants', 'v'])
+  })
+
+  it('beside a pre-armed place, both ride in the same first meta', async () => {
+    const { meta } = await born({ location: AUTO, participants: [ME] })
+    expect(meta.participants).toEqual({ userIds: [ME] })
+    expect(meta.location).toEqual(AUTO)
+  })
+
+  it('unticked (no ids) writes no `participants` key: with a place the key is absent, with nothing the Memory has no meta', async () => {
+    const withPlace = await born({ location: AUTO, participants: [] })
+    expect(withPlace.meta.location).toEqual(AUTO)
+    expect('participants' in withPlace.meta, 'the key').toBe(false)
+    const bare = await born({ participants: [] })
+    expect(bare.wrappedMeta, 'no meta at all').toBeNull()
+    expect((await born({})).wrappedMeta).toBeNull()
   })
 })
 

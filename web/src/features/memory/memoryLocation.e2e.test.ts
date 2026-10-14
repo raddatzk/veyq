@@ -87,7 +87,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory location e2e (live, operator-blin
 
     // --- pre-arm an auto location at creation (no derived yet) ---
     const born = await createMemory(scopeId, epochsOf(scopeKey), `E2E prearm ${Date.now()}`, null, {
-      name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto',
+      location: { name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto' },
     })
     const bornNode = (await listTree(scopeId, epochsOf(scopeKey))).find((n) => n.id === born.nodeId)!
     const bornLoc = unsealMemoryLocation(scopeId, born.memoryKey, bornNode)

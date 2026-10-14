@@ -186,7 +186,7 @@ function expectGuestOnly(w: Page) {
   expect(w.find('.drop-stub, .share-add-button').exists(), "no drop page on a reading guest's page").toBe(false)
   // ADR 0083 decision 4: no participants in any share view - no row, no chip, no control, no link to a profile
   expect(w.find('[data-testid="memory-participants"]').exists(), 'the participants row').toBe(false)
-  expect(w.find('.memory-participant-chip, [data-testid="participants-edit"], a[href*="people/"]').exists(), 'a participant control or link').toBe(false)
+  expect(w.find('.memory-participant-chip, [data-action="participants"], a[href*="people/"]').exists(), 'a participant control or link').toBe(false)
 }
 
 describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {

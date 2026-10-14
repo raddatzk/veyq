@@ -105,6 +105,8 @@ const toast = useToast()
 /** What this view offers: the matrix's grant AND the source's door (see the header). */
 const can = computed(() => sourceCapabilities(props.caps, props.source))
 provideMemoryView({ source: props.source, caps: can })
+/** The participants row under the title (who was there): it owns the picker the header's action opens. */
+const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null)
 
 /** The header's actions (core's `NodeHeader`): each is shown only where `can` grants it; a share guest gets the same list
  *  with fewer entries. The uploader (drop-box) link is its own action with its own dialog (no role switcher). */
@@ -112,6 +114,10 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   { id: 'upload', label: t('media.upload'), icon: 'pi pi-cloud-upload', severity: 'primary', shown: can.value.upload, disabled: !props.memoryKey, onClick: () => triggerUpload() },
   { id: 'share', label: t('share.share'), icon: 'pi pi-share-alt', shown: can.value.share, disabled: !props.memoryKey, onClick: () => emit('share') },
   { id: 'shareUpload', label: t('share.uploadRequest'), icon: 'pi pi-user-plus', shown: can.value.shareUpload, disabled: !props.memoryKey, onClick: () => emit('shareUpload') },
+  // Who was there (ADR 0083, owner decision 2026-10-14): the picker opens from here, not from the row under the title. Shown by
+  // `participants` (a member's alone, fail-closed) where the list may be written - never in a personal scope, never during a
+  // pending deletion (E2) - which is the row's own `canEdit`.
+  { id: 'participants', label: t('memory.participants.title'), icon: 'pi pi-user-plus', shown: participantsRow.value?.canEdit === true, onClick: () => void participantsRow.value?.openPicker() },
   { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', shown: can.value.rename, onClick: () => emit('rename') },
   // Core's move dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
   { id: 'move', label: t('node.move.action'), icon: 'pi pi-file-export', shown: can.value.move, onClick: () => emit('move') },
@@ -501,8 +507,10 @@ watch(
           </button>
         </div>
         <!-- Who was there (ADR 0083): a member's alone - `can.participants` is false for every share role, so a guest's view
-             mounts the component with `show` false and it renders nothing. A personal scope has nobody to name. -->
+             mounts the component with `show` false and it renders nothing. A personal scope has nobody to name. With no
+             participant the row renders nothing either; its picker opens from the header's "Participants" action. -->
         <MemoryParticipants
+          ref="participantsRow"
           :scope-id="scopeId"
           :node="node"
           :memory-key="memoryKey"

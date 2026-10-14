@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // The Memory header's "who was there" row (uc.memory.participants, ADR 0083): the participants as overlapping avatars - up
-// to three; past three the third slot is a "+N" - and, where the meta may be written, an add / edit control that opens the
-// picker. The whole list (avatar + name, each a link to the member's profile `#people/<userId>`) is in a popover that
-// opens on hover, on keyboard focus and on click / tap (touch has no hover). A former member is greyed with no link. The
-// interface shows a guest NOTHING of this (the `participants` capability is a member's alone): the host passes `show`
-// false and this renders no element at all - not even an empty row.
+// to three; past three the third slot is a "+N". The whole list (avatar + name, each a link to the member's profile
+// `#people/<userId>`) is in a popover that opens on hover, on keyboard focus and on click / tap (touch has no hover). A
+// former member is greyed with no link. With NO participant the row renders nothing - no "nobody yet", no link: the way in
+// is the header's "Participants" action (owner decision 2026-10-14), which the host wires to `openPicker` (exposed) and
+// shows only where `canEdit` holds. The interface shows a guest NOTHING of this (the `participants` capability is a
+// member's alone): the host passes `show` false and this renders no element at all.
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -44,7 +45,9 @@ const p = useMemoryParticipants({
   write: () => props.write,
   onMetaUpdated: (payload) => emit('metaUpdated', payload),
 })
-const visible = computed(() => props.show && (p.ids.value.length > 0 || p.canEdit.value))
+const visible = computed(() => props.show && p.ids.value.length > 0)
+/** The host's header action opens the picker; the action is shown exactly where this holds. */
+defineExpose({ openPicker: p.openPicker, canEdit: p.canEdit })
 const chips = p.chips
 const shown = computed(() => (chips.value.length > SLOTS ? chips.value.slice(0, SLOTS - 1) : chips.value))
 const overflow = computed(() => (chips.value.length > SLOTS ? chips.value.length - (SLOTS - 1) : 0))
@@ -147,30 +150,18 @@ onBeforeUnmount(clear)
     </div>
     <span v-if="p.namesPending.value" class="memory-participants-muted" role="status">{{ t('people.loading') }}</span>
     <span v-else-if="p.loadFailed.value && p.ids.value.length > 0" class="memory-participants-muted">{{ t('memory.participants.loadError') }}</span>
-    <span v-else-if="p.ids.value.length === 0" class="memory-participants-muted">{{ t('memory.participants.none') }}</span>
-    <button
-      v-if="p.canEdit.value"
-      type="button"
-      class="memory-participants-edit"
-      :aria-label="p.ids.value.length ? t('memory.participants.edit') : t('memory.participants.add')"
-      :title="p.ids.value.length ? t('memory.participants.edit') : t('memory.participants.add')"
-      data-testid="participants-edit"
-      @click="p.openPicker()"
-    >
-      <span class="pi" :class="p.ids.value.length ? 'pi-pencil' : 'pi-user-plus'" />
-      <span v-if="!p.ids.value.length">{{ t('memory.participants.add') }}</span>
-    </button>
-    <MemoryParticipantsDialog
-      v-if="p.pickerOpen.value && p.canEdit.value"
-      :people="p.people.value"
-      :load-failed="p.loadFailed.value"
-      :selected="p.ids.value"
-      :max="p.max"
-      @save="p.onPickerSave"
-      @retry="p.ensurePeople(true)"
-      @close="p.pickerOpen.value = false"
-    />
   </div>
+  <!-- Outside the row: the picker opens from the header's action, also while the row (no participant yet) renders nothing. -->
+  <MemoryParticipantsDialog
+    v-if="p.pickerOpen.value && p.canEdit.value"
+    :people="p.people.value"
+    :load-failed="p.loadFailed.value"
+    :selected="p.ids.value"
+    :max="p.max"
+    @save="p.onPickerSave"
+    @retry="p.ensurePeople(true)"
+    @close="p.pickerOpen.value = false"
+  />
 </template>
 
 <style scoped>
@@ -199,7 +190,6 @@ onBeforeUnmount(clear)
   background: var(--app-hover);
 }
 .memory-participants-group:focus-visible,
-.memory-participants-edit:focus-visible,
 a.memory-participant-row:focus-visible {
   outline: 2px solid var(--app-focus);
   outline-offset: 2px;
@@ -248,23 +238,5 @@ a.memory-participant-row:hover {
   color: var(--app-muted);
   font-size: 0.9rem;
   padding: 0 0.45rem;
-}
-.memory-participants-edit {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0.45rem;
-  border: none;
-  border-radius: var(--app-radius-sm);
-  background: transparent;
-  color: var(--app-text);
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-.memory-participants-edit:hover {
-  background: var(--app-hover);
-}
-.memory-participants-edit .pi {
-  color: var(--app-accent);
 }
 </style>

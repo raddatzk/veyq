@@ -985,9 +985,8 @@ const en = {
     // Who was there (ADR 0083, uc.memory.participants): opaque member ids sealed in the Memory's details; members only.
     participants: {
       title: 'Participants',
-      add: 'Add participants',
-      edit: 'Edit participants',
-      none: 'Nobody listed yet',
+      wasThere: 'I was there',
+      wasThereHint: 'lists you among the participants',
       dialogTitle: 'Who was there?',
       dialogHint: 'Choose from the members of this space. Only members see this list.',
       loadError: 'Could not load the members. Please try again.',
@@ -2473,9 +2472,8 @@ const de: typeof en = {
     // Wer dabei war (ADR 0083, uc.memory.participants): anonyme Mitglieds-IDs, in den Details der Erinnerung versiegelt; nur für Mitglieder.
     participants: {
       title: 'Beteiligte',
-      add: 'Beteiligte hinzufügen',
-      edit: 'Beteiligte bearbeiten',
-      none: 'Noch niemand eingetragen',
+      wasThere: 'Ich war dabei',
+      wasThereHint: 'trägt dich bei den Beteiligten ein',
       dialogTitle: 'Wer war dabei?',
       dialogHint: 'Wähle aus den Mitgliedern dieses Bereichs. Nur Mitglieder sehen diese Liste.',
       loadError: 'Die Mitglieder konnten nicht geladen werden. Bitte versuche es erneut.',

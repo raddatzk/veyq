@@ -16,7 +16,8 @@ import * as v1 from '@veyq/crypto/v1'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
 import { addMedia, type MediaDeriver } from '../media'
-import { NO_MEMORY_CAPABILITIES, type MemoryCapabilities } from '../capabilities'
+import { NO_MEMORY_CAPABILITIES, memoryCapabilities, type MemoryCapabilities } from '../capabilities'
+import { ShareRole } from '../../../api/generated/sharing'
 import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { blobApi, contentApi } from '../../../api/client'
 import { mediaApi, itemFavoritesApi } from '../api'
@@ -24,7 +25,7 @@ import type { ContentApi } from '../../../api/generated/content'
 import { fakeApi, stubApi } from '../../../test/apiMock'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
-import { treeNode, memberMemoryCaps } from '../../../test/models'
+import { treeNode, memberMemoryCaps, guestAccessOf } from '../../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -61,17 +62,18 @@ async function seedDated(memoryKey: Uint8Array) {
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, deriver)
 }
 
-async function mountDetail(caps: MemoryCapabilities, kind = MEMORY_KIND) {
+async function mountDetail(caps: MemoryCapabilities, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean } = {}) {
   const w = mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: false, chapters: [chapter], caps },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: o.personalScope ?? false, chapters: [chapter], caps },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    ...(o.attach ? { attachTo: document.body } : {}),
   })
   await flushPromises()
   await flushPromises()
   return w
 }
 
-const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'node.rename', 'node.move.action', 'node.delete'] as const
+const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'memory.participants.title', 'node.rename', 'node.move.action', 'node.delete'] as const
 const header = (w: Awaited<ReturnType<typeof mountDetail>>) =>
   HEADER.filter((key) => w.find(`.veyq-node-header-actions button[aria-label="${t(key)}"]`).exists())
 const tabs = (w: Awaited<ReturnType<typeof mountDetail>>) => w.findAll('[role="tab"]').map((tab) => tab.text().replace(/\d+$/, ''))
@@ -147,6 +149,39 @@ describe('MemoryDetail follows caps', () => {
       expect(updateNode, 'this page writes no cover itself').not.toHaveBeenCalled()
       w.unmount()
     }
+  })
+
+  // uc.memory.participants (owner decision 2026-10-14): "Participants" is a header action, a member's alone, and the way into
+  // the picker; the line under the title has no link of its own.
+  it('the "Participants" action is shown for a member on a Memory and opens the picker', async () => {
+    const w = await mountDetail(memberMemoryCaps(), MEMORY_KIND, { attach: true })
+    const action = w.find('.veyq-node-header-actions button[data-action="participants"]')
+    expect(action.attributes('aria-label')).toBe(t('memory.participants.title'))
+    expect(action.find('.pi-user-plus').exists()).toBe(true)
+    const picker = () => document.body.querySelector('.memory-participants-dialog')
+    expect(picker(), 'no picker before the click').toBeNull()
+    await action.trigger('click')
+    await flushPromises()
+    expect(picker(), 'the picker').not.toBeNull()
+    expect(document.body.textContent).toContain(t('memory.participants.dialogTitle'))
+    w.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('the "Participants" action is absent for every share role, in a personal scope and on a chapter', async () => {
+    for (const role of Object.values(ShareRole)) {
+      const w = await mountDetail(memoryCapabilities(guestAccessOf(role), { kind: MEMORY_KIND, inIdentityFolder: false, shareable: true }))
+      expect(w.find('[data-action="participants"]').exists(), role).toBe(false)
+      w.unmount()
+    }
+    // the `participants` gate on its own, with the meta writable: a role that may write the meta still gets no action
+    const writerWithout = await mountDetail({ ...memberMemoryCaps(), participants: false })
+    expect(header(writerWithout), 'participants off, editMeta on').not.toContain('memory.participants.title')
+    const personal = await mountDetail(memberMemoryCaps(), MEMORY_KIND, { personalScope: true })
+    expect(header(personal), 'personal scope').not.toContain('memory.participants.title')
+    expect(header(personal), 'control: the rest of the header is there').toContain('node.rename')
+    const onChapter = await mountDetail(memberMemoryCaps({}, CHAPTER_KIND), CHAPTER_KIND)
+    expect(header(onChapter), 'chapter').not.toContain('memory.participants.title')
   })
 
   it('a pending deletion: share stays, every write goes', async () => {
