@@ -92,10 +92,13 @@ reads).
   the row, beside core's own favorite heart, which every kind's row has - `core/favorites`, ADR 0068 §10), and **rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**
   (into core's trash, restored from core's trash dialog — or at once from the "moved to the trash" toast's Undo, core's
   `trashUndo.ts`, inbox #385 (c)) sit in the row's one "more" menu, each `shown` by `filesCapabilities` narrowed to the
-  doors the session's source carries (fail closed: a guest gets the same row with fewer actions). **There is no
-  replace action** — not on a row, not on the opened file (owner decision 2026-10-14): a file's content is replaced by
-  uploading a file of the same name into its folder, which asks first (below), for a member and a contributor guest
-  alike; an upload of that name also fills a file that holds no content. Files, Memories and
+  doors the session's source carries (fail closed: a guest gets the same row with fewer actions). **A row has no
+  replace action** (owner decision 2026-10-14): in a folder, a file's content is replaced by uploading a file of the
+  same name, which asks first (below), for a member and a contributor guest alike; an upload of that name also fills a
+  file that holds no content. **The opened file keeps its replace** — the one way a `READ_WRITE` link on a single file
+  writes, which has no folder to upload into — as an action of its header beside the download (core's `NodeHeader`;
+  owner decision 2026-10-14: both used to be buttons below the header), with no standing sentence about what a replace
+  does: the replace asks when it happens. Files, Memories and
   drop boxes are listed together, folders first and then everything by name (core's order); the tab "Files" filters the
   list to FILE nodes, the folders stay. **Upload** is a level action (`files.upload`, the "New" menu's "Upload files"),
   registered with the level by the factory for the level's whole life — so it is available under every tab — and core
@@ -290,6 +293,7 @@ shows is `filesCapabilities(access, target)` (`web/src/features/files/capabiliti
 | move a file (core's move dialog, inbox #358) | ✓ | ✗ | ✓ out of it (inbox #377 (a)) | ✗ | ✓ between the subtree's folders (not in an identity folder) | ✗ |
 | move a guest's folder out of a drop box, move the drop box | ✓ | ✗ | — | ✗ | ✗ (a drop box below the link is read-only, #380) | ✗ |
 | delete a file, a guest's folder | ✓ | ✗ | ✓ (inbox #391) | ✗ | ✗ | ✗ |
+| the **opened file** (`FileDetail`): replace, a header action | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder) | ✗ |
 | the opened file: rename, share, delete, move | all ✓ (share with the instance's public links; not in an identity folder) | share only (links are a read) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
 | create a drop box | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | a drop box's links, delete it | links with the instance's public links; delete ✓ | links only | — | ✗ | ✗ | ✗ |
