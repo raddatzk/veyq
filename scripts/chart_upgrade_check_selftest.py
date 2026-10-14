@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Pin the chart upgrade check's pure parts on hand-written manifests, without `helm`, git or a chart
-(ADR 0064 Addendum, cr-helm-upgrade-check).
+(ADR 0064 § Decision, the chart-upgrade check; cr-helm-upgrade-check).
 
 `scripts/chart_upgrade_check.py` renders two charts and hands both renders to `compare`; whether its findings fail the
 build is `verdict`'s. This asserts each of them:

@@ -1,4 +1,4 @@
-// A Memory copy on the wire (uc.platform.copy-node, ADR 0082 Addendum 2): a folder holding a Memory with a chapter, copied to
+// A Memory copy on the wire (uc.platform.copy-node, ADR 0082 decision 11): a folder holding a Memory with a chapter, copied to
 // the scope root through core's `prepareCopy` and Memories' real hooks (`exportMemoryContent` / `importMemoryContent`,
 // `addCopiedMedia`, `uploadCoverBlob`, `writeNodeCover`), every request recorded at `fetch` - the JSON the real generated
 // clients serialize and the frames the real pump PUTs - against a fake control plane and store that serve the ORIGINALS as a

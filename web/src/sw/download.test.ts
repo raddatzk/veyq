@@ -1,4 +1,4 @@
-// The streamed download through the Service Worker (inbox #371; ADR 0047 § Addendum), end to end in one process: the
+// The streamed download through the Service Worker (inbox #371; ADR 0047 § The download route), end to end in one process: the
 // page's `registerDownload` talks to a fake `ServiceWorker` that hands its messages to the REAL SW-side `handleMessage`,
 // the "navigation" is the REAL `handleFetch`, and the bytes cross a real `MessageChannel`. What is pinned: the bytes
 // arrive whole and in order with the attachment headers; the handle serves one navigation; a page failure, a short or

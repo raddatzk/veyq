@@ -34,7 +34,7 @@ Docker and the database root credential. Every one of those sweeps also searches
 capability token the run handled, read out of the HTTP recording by the contract's `token` marker
 ([token_needles]) — and the database sweep proves it armed by finding the tokens' hashes ([db_token_findings]).
 
-**The upgrade proof — two builds in one run** (ADR 0057 Addendum, `--upgrade` / `--upgrade-from <ref>`). The
+**The upgrade proof — two builds in one run** (ADR 0057 Decision 7, `--upgrade` / `--upgrade-from <ref>`). The
 `upgrade` group's first member, the SEEDER, runs from a detached worktree of a PREDECESSOR ref built in the run
 directory ([prepare_predecessor]: its own `npm ci`, which generates its client, and its own fast-jar) and boots on the
 predecessor's jar; the group's hook captures that instance, destroys it and restores it onto a target installed by THIS
@@ -2694,7 +2694,7 @@ def rehearse_production_project(workdir: Path) -> None:
 
 
 # ----------------------------------------------------------------------------------------------------------
-# The upgrade proof — the predecessor's build seeds, the candidate's reads (ADR 0057 Addendum)
+# The upgrade proof — the predecessor's build seeds, the candidate's reads (ADR 0057 Decision 7)
 # ----------------------------------------------------------------------------------------------------------
 
 # The group the proof runs: its FIRST member is the seeder (run from the predecessor's tree), its LAST the reader (from

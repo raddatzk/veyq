@@ -8,7 +8,7 @@
 // operator-blindness (no plaintext is ever stored today), and it is the shortcut a later change is most tempted
 // to take, so it is forbidden here explicitly.
 //
-// The same worker serves streamed file downloads (`/__download/<handle>`, inbox #371, ADR 0047 § Addendum): the session,
+// The same worker serves streamed file downloads (`/__download/<handle>`, inbox #371, ADR 0047 § The download route): the session,
 // its credit protocol and the filename rules live in `downloadRoute.ts`; the routing and the response are here.
 //
 // The file typechecks under the app's DOM lib (no WebWorker lib, which collides with DOM on `self`/`fetch`): the
@@ -199,7 +199,7 @@ export function buildRangeResponse(session: PlaybackSession, rangeHeader: string
   return new Response(rangeBody(session, range), { status: parsed.kind === 'full' ? 200 : 206, headers })
 }
 
-/** The response to a `/__download/<handle>` navigation (ADR 0047 § Addendum): an attachment the browser saves and never
+/** The response to a `/__download/<handle>` navigation (ADR 0047 § The download route): an attachment the browser saves and never
  *  renders — octet-stream whatever the file is, the inert headers, the exact plaintext length, and no caching. */
 export function buildDownloadResponse(session: DownloadSession): Response {
   return new Response(session.body(), {

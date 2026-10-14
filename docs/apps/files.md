@@ -161,7 +161,7 @@ reads).
   peer's sealed type never decides how a browser renders the bytes), presigns the blob's chunks, opens them under the
   node key at most four at a time and streams them in order (`core/blob/stream.ts`) into the save target `shared/saveStream.ts` opens: a file the member
   picks (File System Access, where the browser has it), else the Service Worker's download route
-  ([ADR 0047 § Addendum](../decisions/0047-inline-video-playback-range-streaming.md#addendum-the-download-route)),
+  ([ADR 0047 § The download route](../decisions/0047-inline-video-playback-range-streaming.md#the-download-route)),
   else an in-memory `Blob` up to 512 MiB — above that, with no streaming target, the download is refused with a
   message rather than built as a multi-GB Blob. Proven in unit tests only; no real browser has streamed a large file yet
   (inbox #371).

@@ -56,7 +56,7 @@
 
 ## What an import does not carry, by design
 
-Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, members and the trash. The original contributor of a medium and a Memory's participants stay in the file as **names only** (a guest's download carries neither: a guest never reads the member directory). A coordinate comes back only if the photo file still carries it; the archive keeps each original's bytes, its own location tags included ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md) addendum).
+Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, members and the trash. The original contributor of a medium and a Memory's participants stay in the file as **names only** (a guest's download carries neither: a guest never reads the member directory). A coordinate comes back only if the photo file still carries it; the archive keeps each original's bytes, its own location tags included ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md) decisions 4 and 6).
 
 ## Quality notes
 

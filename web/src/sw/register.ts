@@ -175,7 +175,7 @@ export async function endAllPlaybacks(timeoutMs = 1000): Promise<void> {
   })
 }
 
-// --- streamed downloads (inbox #371; ADR 0047 § Addendum) --------------------------------------------------------
+// --- streamed downloads (inbox #371; ADR 0047 § The download route) --------------------------------------------------
 
 /** What the SW needs to serve a download: the exact plaintext size (its `Content-Length`) and the file name. */
 export type DownloadMeta = { name: string; size: number }

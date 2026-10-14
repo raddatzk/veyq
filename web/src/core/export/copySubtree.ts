@@ -1,4 +1,4 @@
-// Copy a node and everything under it to another place in the same space (uc.platform.copy-node, ADR 0082 Addendum 2): the
+// Copy a node and everything under it to another place in the same space (uc.platform.copy-node, ADR 0082 decision 11): the
 // download's walk handed straight to the import, without the archive. `prepareCopy` walks each copied subtree as the member
 // reads it (`walkSubtree`, every kind's `exportContent`) into an in-memory manifest whose payloads stay DECLARED - nothing is
 // read yet - and says what a copy would create, how many bytes, what it leaves out and which kinds it copies (the dialog's
@@ -6,7 +6,7 @@
 // (`replaySubtrees`): every node created fresh under a fresh key, every file read from the original by frame, decrypted on
 // the device and uploaded again under a fresh `K_blob` (`copySource.ts`). The server sees ordinary creates and uploads.
 // Both hooks are told it is a copy (`purpose: 'copy'`), so a kind may hand over what an archive never carries and its import
-// then needs no decode (Memories: each medium's existing tiers and sealed facts, ADR 0082 Addendum 2).
+// then needs no decode (Memories: each medium's existing tiers and sealed facts, ADR 0082 decision 11).
 //
 // What the archive path checks and this one does not (cr-copy-node Decision 2): the input is the member's own decrypted tree,
 // not untrusted bytes, so no manifest schema, no caps, no checksums and no kind's content check. What it does check: each

@@ -17,7 +17,7 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 
 // `hint` / `errorText` are what the overlay says; a scan that is no Emergency-Kit scan (the safety-number compare on a
-// member's profile, ADR 0028 Addendum) passes its own, every other caller keeps the kit's words.
+// member's profile, ADR 0028 Decision 3) passes its own, every other caller keeps the kit's words.
 const props = defineProps<{ accepts?: (text: string) => boolean; hint?: string; errorText?: string }>()
 const emit = defineEmits<{ found: [string]; close: [] }>()
 const { t } = useI18n()

@@ -359,7 +359,7 @@
 }
 
 /* Changed-identity warning badge (cr-0099): the directory key differs from the pin (a rotation or a substitution)
-   and needs review. A verified contact reads `.veyq-badge.success` (`MemberTrustBadge.vue`, ADR 0028 Addendum 4). */
+   and needs review. A verified contact reads `.veyq-badge.success` (`MemberTrustBadge.vue`, ADR 0028 Decision 3). */
 .veyq-badge.changed {
   border-color: var(--app-warning-line);
   background: var(--app-warning-soft);

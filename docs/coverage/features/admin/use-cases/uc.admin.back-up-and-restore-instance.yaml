@@ -115,7 +115,7 @@ acceptanceCriteria:
   - id: a-predecessors-backup-upgrades-with-its-content-intact
     # No coverage on a surface: the observable is an orchestrator run that boots two builds - the predecessor's jar
     # and suites, then the candidate's - which no single surface's test can be. `scripts/run_web_e2e.py --upgrade`
-    # (ADR 0057 Addendum, infra/README.md § An upgrade, step by step) runs the predecessor's
+    # (ADR 0057 Decision 7, infra/README.md § An upgrade, step by step) runs the predecessor's
     # `upgrade.a-seed.e2e.test.ts` from a worktree of its ref on its own jar, restores the capture onto an instance
     # installed by the candidate's jar, and the candidate's `upgrade.b-read.e2e.test.ts` asserts configSecretState
     # OK first and then every item of the record the seeder wrote, byte for byte; its summary names the predecessor,

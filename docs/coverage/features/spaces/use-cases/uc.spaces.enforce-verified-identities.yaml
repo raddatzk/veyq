@@ -1,7 +1,7 @@
 useCase: uc.spaces.enforce-verified-identities
 feature: spaces
 title: Actively verify a member's identity (safety number)
-# Built by cr-identity-verification (ADR 0028 Addendum, owner decisions 2026-10-14). Strict mode, which this file
+# Built by cr-identity-verification (ADR 0028 Decision 3, owner decisions 2026-10-14). Strict mode, which this file
 # used to carry as a planned criterion beside the ceremony, moved to uc.spaces.require-verified-identities: the
 # coverage model has no partially built file (ADR 0040), so the split is what lets the ceremony's criteria carry refs.
 # Every web ref below was bitten (the CR's retrospective names each injection). The real-browser pass of the ceremony

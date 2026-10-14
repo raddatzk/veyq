@@ -4,7 +4,7 @@
 // 1. **A file the user picks** (File System Access, `showSaveFilePicker` — Chromium desktop): the bytes go straight to
 //    disk. The picker needs the click's user activation, so it is the FIRST thing `openSaveTarget` awaits, and a caller
 //    must await nothing before `openSaveTarget` in its click path. Cancelling the picker is not a failure.
-// 2. **The Service Worker's download route** (`sw/register.ts` `registerDownload`, ADR 0047 § Addendum): an attachment
+// 2. **The Service Worker's download route** (`sw/register.ts` `registerDownload`, ADR 0047 § The download route): an attachment
 //    navigation whose body the SW pulls from the page — the browser's own download, any size.
 // 3. **An in-memory `Blob`**, saved by `saveBlob` — only up to [BLOB_SAVE_CAP]. Above it there is no streaming target in
 //    this browser, and a multi-GB Blob is a tab crash or a silent failure, so it is refused as [SaveTooLarge] for the

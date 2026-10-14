@@ -286,7 +286,7 @@ describe('GroupMembersPanel — a stuck compromise rotation, on an owner row (uc
   })
 })
 
-describe('GroupMembersPanel - who is verified (ADR 0028 Addendum 4)', () => {
+describe('GroupMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('shows "verified" beside the member, and the louder change on a verified contact', async () => {

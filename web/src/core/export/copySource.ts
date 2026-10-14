@@ -1,4 +1,4 @@
-// What a copy hands an import hook as a payload (ADR 0082 Addendum 2, cr-copy-node Decision 3): the original, read BY FRAME
+// What a copy hands an import hook as a payload (ADR 0082 decision 11, cr-copy-node Decision 3): the original, read BY FRAME
 // and decrypted on demand, never held whole. It is a `PayloadFile` - a size, a type, a name and `slice(start, end)` whose
 // `arrayBuffer()` reads only the frames that range covers - so the one upload pump (`core/blob/transport.ts`), which asks
 // one frame-sized slice at a time, re-encrypts the copy while it reads the original one frame at a time: what the tab holds

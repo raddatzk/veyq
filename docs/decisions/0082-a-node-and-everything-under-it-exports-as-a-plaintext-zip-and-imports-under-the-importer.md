@@ -27,10 +27,14 @@ covers the instance backup) and is left to its own inbox row (#413).
 Decided by the owner, 2026-10-13.
 
 **1. Scope.** Export and import apply to **any node and everything under it** — folder tree, Files, drop boxes, Memories
-with chapters. It is a **core** feature. Core knows only the tree, names, cover and plaintext metadata; each kind supplies
-and consumes its **content** through a hook on `KindDescriptor` (beside `createEntry`): `exportContent` yields a content
-object plus its payload streams, `importContent` creates the kind's content under a freshly created node. Files supplies
-the file bytes; Memories the media originals with EXIF, GPS, place and `capturedAt`. A Memory export (#379) is simply a
+with chapters. It is a **core** feature. **Core carries the tree, the names and the payload bytes; a kind's content
+carries everything else.** Each kind supplies and consumes its **content** through a hook on `KindDescriptor` (beside
+`createEntry`): `exportContent` yields a content object plus its payload streams, `importContent` creates the kind's
+content under a freshly created node. Files supplies the file bytes; Memories the media originals with EXIF, GPS, place
+and `capturedAt`. Core's walker neither reads nor writes a node's `cover` or `metadata` (the manifest fields stay in
+the schema), so a Memory's date, place, cover and participants travel inside its `content` (`memories.memory`), and **a
+chapter's media sit in the chapter's own content** (`memories.chapter`), not in the Memory's list: the chapter is a
+node of its own with its own key, and the Memory's hook returns before the chapter exists. A Memory export (#379) is simply a
 subtree rooted at a `MEMORY` node. Files reaches Memories only through the registry; a kind the importing build lacks is
 skipped with its subtree and reported, never guessed.
 
@@ -64,8 +68,9 @@ with each guest's folder under it; it imports as a plain folder, because nothing
 identity — owner decision 2026-10-14: the manifest keeps the kind it was, and that kind declares that it imports as a
 folder, so core names no application's kind). No plaintext warning and no
 location option: a downloaded file is as plaintext as a downloaded archive, and a photo's coordinates sit in its own
-EXIF, which the archive keeps byte for byte (Addendum 2), so an option that dropped only the manifest's copies promised
-more than it did.
+EXIF, which the archive keeps byte for byte, so an option that dropped only the manifest's copies promised more than it
+did. Re-encoding the originals to strip their GPS tags is deliberately not done: it would change the bytes the download
+promises to keep.
 
 **5. Rights.** Export needs **READ** on the node. Import is **a member flow only** (decisions 6 and 7): a guest — whatever
 the share role — never imports. A guest is otherwise the member view with rights removed (the principle of inbox #401): a
@@ -78,6 +83,11 @@ agreed). **Not carried over:** ids, keys and wraps (everything is created fresh 
 server-observed timestamps (uploaded/updated), item favorites, shares, members, trash. The **original contributor** of a
 medium stays in the manifest as **text only** ("originally by Anna"), never mapped to an identity. A name clash in the
 target parent gets a numeric suffix, `Name (2)`. An unknown newer `version` is **refused**; unknown fields are ignored.
+**What an import restores beyond the file:** the Memory's date and place, the capture time (via the payload's modified
+time, or as a correction when the member had corrected it), the per-medium place name, and the cover (a photo of the
+Memory by its position in the list, or an uploaded image, which the cover upload re-encodes). **A coordinate comes back
+only if the file still carries it:** the upload reads GPS and camera data from the file's bytes, and there is no way to
+seal a coordinate the file lacks. Participants are exported as display names and not restored.
 
 **7. Detected by content, offered only to members.** An archive is recognised by its **content** — the ZIP signature plus a
 `.veyq/manifest.json` whose `format` matches — never by file name. **A picked directory** that holds `.veyq/manifest.json`
@@ -103,6 +113,23 @@ node count, depth, name length and every metadata field at the API's own limits;
 inside the file, no overlapping entries, declared sizes equal to actual sizes, ZIP64 fields in range); each payload's
 `sha256`; and text that is rendered (a note, a description) only through the safe markdown renderer. Being store-only, an
 archive cannot be a compression bomb.
+
+**11. A copy is the same walk, without the archive** (owner decision 2026-10-14, inbox #423,
+[uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)). **Copy to…** re-creates a node and
+its subtree at another place in the same space by this ADR's walk and the kinds' `exportContent` / `importContent`
+hooks, handing each payload from the walk to the import by chunk instead of through a ZIP: the client decrypts and
+uploads every file again under fresh keys. It is a member flow, as the import is (decision 5), carries exactly what an
+import carries (decision 6), and reuses the import's quota question, `Name (2)`, progress and rollback (decision 8).
+Copying across spaces is not offered: the browser and the tree are one space's. **Rejected:** a server-side object copy
+(a new store operation and endpoints per application, and the operator learns which blob copies which) and a
+deduplicated blob shared by two nodes (it breaks one reference per blob, on which
+[ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)'s reclaim relies, and needs counting).
+**A Memory copies its derived tiers, not a re-derivation** (owner decision 2026-10-14): Memories' import decodes each
+original whole to derive its tiers — a video held whole in memory. So for a copy only, never in an archive, Memories'
+hooks hand over each medium's existing thumbnail and preview tiers as payloads read by frame, and its sealed per-medium
+facts (capture time and its correction, coordinates, place name) as plaintext content; the copy uploads those tiers
+under fresh keys bound to the new Memory and medium instead of decoding. A copied Memory therefore keeps corrections an
+archive's import loses.
 
 ## Worked example
 
@@ -172,46 +199,10 @@ shows it:
 }
 ```
 
-## Addendum (2026-10-13, while building the Memories hooks)
-
-Three things the build found that the decision above did not know, each decided here so the code and the contract agree.
-
-1. **Core carries the tree and the payload bytes; a kind's content carries everything else.** Core's walker neither reads
-   nor writes a node's `cover` or `metadata`. A Memory's date, place, cover and participants therefore travel inside its
-   `content` (`memories.memory`), and **a chapter's media sit in the chapter's own content** (`memories.chapter`), not in the
-   Memory's list: the chapter is a node of its own with its own key, and the Memory's hook returns before the chapter
-   exists. The per-medium `chapter` field is gone from the schema.
-2. **The archive keeps each original's bytes, its own GPS tags included.** Re-encoding the originals to remove them is
-   deliberately not done: it would change the bytes the download promises to keep. This is why decision 4 offers no location
-   option: one could drop only the manifest's copies, never the file's own EXIF.
-3. **An import restores a coordinate only if the file still carries it.** The upload reads GPS and camera data from the
-   file's bytes, and there is no way to seal a coordinate the file lacks. What an import restores beyond the file: the Memory's
-   date and place, the capture time (via the payload's modified time, or as a correction when the member had corrected it),
-   the per-medium place name, the cover (a photo of the Memory by its position in the list, or an uploaded image, which is
-   re-encoded by the cover upload). Participants are exported as display names and not restored.
-
-## Addendum 2 (2026-10-14): a copy is the same walk, without the archive
-
-Owner decision 2026-10-14 (inbox #423, [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)).
-**Copy to…** re-creates a node and its subtree at another place in the same space by this ADR's walk and the kinds'
-`exportContent` / `importContent` hooks, handing each payload from the walk to the import by chunk instead of through a
-ZIP: the client decrypts and uploads every file again under fresh keys. It is a member flow, as the import is (decision
-5), carries exactly what an import carries (decision 6), and reuses the import's quota question, `Name (2)`, progress and
-rollback (decision 8). **Rejected:** a server-side object copy (a new store operation and endpoints per application, and
-the operator learns which blob copies which) and a deduplicated blob shared by two nodes (it breaks one reference per
-blob, on which [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)'s reclaim relies, and needs counting).
-Copying across spaces is left for later: the browser and the tree are one space's.
-**A Memory copies its derived tiers, not a re-derivation** (owner decision 2026-10-14, when the build found that
-Memories' import decodes each original whole to derive its tiers - a video held whole in memory): for a copy only, never in
-an archive, Memories' hooks hand over each medium's existing thumbnail and preview tiers as payloads read by frame, and its
-sealed per-medium facts (capture time and its correction, coordinates, place name) as plaintext content; the copy uploads
-those tiers under fresh keys bound to the new Memory and medium instead of decoding. A copied Memory therefore keeps
-corrections an archive's import loses.
-
 ## Consequences
 
 - **A new core surface in the web**: the zip writer/reader, the walk, the dialogs (download, which asks nothing for a
-  single file; import with the dry-run), the `KindDescriptor` hook, and the drop detection in the Files level.
+  single file; import with the dry-run; copy), the `KindDescriptor` hook, and the drop detection in the Files level.
   Nothing in the backend or `contracts/api/` — the client uses the existing node, blob and quota endpoints. The schema
   under `contracts/export/` is the one new contract artefact.
 - **The format is a public promise.** `version` bumps only for a change an old reader would misread; kinds version their

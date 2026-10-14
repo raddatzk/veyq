@@ -117,7 +117,7 @@ describe('ChangedKeyReviewDialog — a key that cannot be read (inbox #246)', ()
   })
 })
 
-describe('ChangedKeyReviewDialog - a VERIFIED contact\'s key changed (ADR 0028 Addendum 3)', () => {
+describe('ChangedKeyReviewDialog - a VERIFIED contact\'s key changed (ADR 0028 Decision 3)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('says the contact was verified and that accepting does not verify the new key', async () => {

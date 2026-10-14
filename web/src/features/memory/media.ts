@@ -684,7 +684,7 @@ async function uploadSealedMedia(
 }
 
 /**
- * A media a COPY re-creates (ADR 0082 Addendum 2, uc.platform.copy-node): the original and each existing derivative tier
+ * A media a COPY re-creates (ADR 0082 decision 11, uc.platform.copy-node): the original and each existing derivative tier
  * as sources read by frame from the media it copies (`core/export/copySource.ts` - never a `Blob`, never held whole), the
  * meta each of those blobs declared, and the two metadata tiers as plaintext - the listed tier verbatim ([rawMediaMeta]:
  * geometry, capture time and its correction, coordinates, place name, and any field a newer client wrote) and the EXIF
@@ -1066,7 +1066,7 @@ export const openOriginal = (scopeId: string, memoryKey: Uint8Array, item: Media
 
 /** A media's derivative tiers as the authed app reads them, by chunk: each tier's ref, the meta its blob declared and a
  *  {@link ChunkProvider} over it under the key the media's origin fixes ([mediaKey]) - what a copy hands over instead of
- *  deriving the tiers again (ADR 0082 Addendum 2). Nothing is fetched until a chunk is asked for. */
+ *  deriving the tiers again (ADR 0082 decision 11). Nothing is fetched until a chunk is asked for. */
 export function tierChunkProviders(
   scopeId: string, memoryKey: Uint8Array, item: MediaItem,
 ): ({ kind: MediaDerivativeKind; ref: BlobRef } & ReadByChunk)[] {

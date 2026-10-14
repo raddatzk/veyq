@@ -512,7 +512,7 @@ export function fingerprint(pub: Identity['pub']): string {
 
 /**
  * The full 32-byte digest {@link fingerprint} renders its digits from — what a machine compares where a person
- * compares the digits: the safety-number QR carries it (ADR 0028 Addendum, `web/src/features/account/safetyCode.ts`),
+ * compares the digits: the safety-number QR carries it (ADR 0028 Decision 3, `web/src/features/account/safetyCode.ts`),
  * never the identity bundle itself. One derivation for both, so the QR and the digits cannot disagree about a key.
  */
 export function fingerprintHash(pub: Identity['pub']): Uint8Array {

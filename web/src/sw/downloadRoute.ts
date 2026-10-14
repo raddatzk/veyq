@@ -1,4 +1,4 @@
-// The Service Worker's download route (inbox #371; ADR 0047 § Addendum): the SW half of a streamed download. Like the
+// The Service Worker's download route (inbox #371; ADR 0047 § The download route): the SW half of a streamed download. Like the
 // playback shim it holds NO key, NO auth token and NO plaintext at rest. The page registers a download — an opaque
 // one-shot handle, the plaintext size, the file name and a MessagePort — then navigates to `/__download/<handle>`; the
 // SW answers that ONE navigation with an attachment whose body pulls the page's decrypted bytes over the port, one

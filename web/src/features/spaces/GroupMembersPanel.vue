@@ -501,7 +501,7 @@ async function onRestore() {
                 <span class="veyq-badge" :class="m.pendingConsent ? 'muted' : m.hasGrant ? 'success' : 'warning'">
                   {{ m.pendingConsent ? t('members.statusPendingConsent') : m.hasGrant ? t('members.statusActive') : t('members.statusAwaiting') }}
                 </span>
-                <!-- Identity trust (ADR 0028 Addendum 4): "Verified" after a compare on the member's profile, "Key changed"
+                <!-- Identity trust (ADR 0028 Decision 3): "Verified" after a compare on the member's profile, "Key changed"
                      when the directory key differs from the pin (a rotation or an operator substitution) - louder for a
                      verified contact. -->
                 <MemberTrustBadge :trust="trust[m.userId]" />
@@ -643,7 +643,7 @@ async function onRestore() {
          on-device and this panel seals + POSTs it (peeling the epoch chain to seal under the current epoch). -->
     <SpaceIconDialog v-if="iconDialogOpen" :busy="iconBusy" @save="onIconSave" @close="iconDialogOpen = false" />
 
-    <!-- Review a changed identity key (cr-0099); the proactive compare is on the member's profile (ADR 0028 Addendum). -->
+    <!-- Review a changed identity key (cr-0099); the proactive compare is on the member's profile (ADR 0028 Decision 3). -->
     <ChangedKeyReviewDialog v-if="reviewTarget" v-model:visible="reviewOpen" :member="reviewTarget" @accepted="refreshTrust" />
   </section>
 </template>

@@ -38,7 +38,7 @@ export function displayNameOf(username: string, name: MemberName | null | undefi
 let avatarSync: Promise<void> = Promise.resolve()
 const NAMES_TTL_MS = 60_000
 /** One tenant member as the roster read holds it: the username, the opened real name, and the identity bundle the directory
- *  serves for them (base64) - the key a profile's safety-number compare starts from (ADR 0028 Addendum). */
+ *  serves for them (base64) - the key a profile's safety-number compare starts from (ADR 0028 Decision 3). */
 interface TenantRow {
   username: string
   name: MemberName | null

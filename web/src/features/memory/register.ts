@@ -54,7 +54,7 @@ export function registerMemories(registry: Registry): void {
     validateContent: validateMemoryContent,
     // What a copy or an import does not carry of a Memory (core's copy dialog lists it). `importStreams`: a copy hands each
     // medium's existing tiers and sealed facts over and its import uploads them as they are, so it never decodes an original
-    // (ADR 0082 Addendum 2, `exportImport.ts`); a download's import still does.
+    // (ADR 0082 decision 11, `exportImport.ts`); a download's import still does.
     copyLosses: ['memory.copyLoss'],
     importStreams: true,
   }

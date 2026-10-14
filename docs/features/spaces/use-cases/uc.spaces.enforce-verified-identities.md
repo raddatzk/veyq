@@ -5,7 +5,7 @@
   their own safety number on their own device.
 - **Goal:** confirm out-of-band that a member's identity public key is really theirs — elevate the pin to
   **verified** — and see who is verified wherever members are listed. This is the proactive half of
-  [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (Decision 3 and the Addendum); the
+  [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (Decision 3); the
   passive half — pin on first sight, notice and review a changed key — is
   [uc.spaces.verify-identity](uc.spaces.verify-identity.md), which this use-case builds on rather than repeats.
   *Requiring* verification before sharing (strict mode) is
@@ -13,7 +13,7 @@
   that split; it names this ceremony now.)
 - **Preconditions:** an **authenticated, unlocked** caller; the target is a current member of the tenant (the
   tenant's member directory lists them and their identity key). A pin is not required: verifying an unpinned
-  member pins them with the confirmed key (ADR 0028 Addendum 2).
+  member pins them with the confirmed key (ADR 0028 Decision 3).
 - **Status:** **built** (cr-identity-verification, web). Real-browser pass: *to be recorded by the session that
   merges it* (the implementer's worktree could not be served to a browser).
 - **Postconditions (success):** the target's pin is **verified**, on the key the compare confirmed; the profile and
@@ -71,9 +71,9 @@ sequenceDiagram
 - **A3 — a verified contact's key changes:** the member lists and the profile say "Verified key changed", and the
   changed-key review ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)) says the contact was verified
   and that accepting does not verify the new key. Accepting re-pins as `pinned`; *Verified* returns only through a
-  new compare on the profile, which then offers it again (ADR 0028 Addendum 3).
+  new compare on the profile, which then offers it again (ADR 0028 Decision 3).
 - **E1 — the target has no pin yet:** the profile shows the directory's key; a match pins that key **already
-  verified** in the one write. Until a compare happens, a profile view pins nothing (ADR 0028 Addendum 2).
+  verified** in the one write. Until a compare happens, a profile view pins nothing (ADR 0028 Decision 3).
 - **E2 — the key moved under the compare:** a pin of a different key appeared between the read and the write (a
   concurrent device, the delivery worker's first-use pin, an accepted change) → `IdentityMovedError`: nothing is
   written, the profile says so and shows the key the store now holds, and the compare starts over.
@@ -86,7 +86,7 @@ sequenceDiagram
   write is the pin store's one opaque ciphertext, so the trust graph stays off the server
   ([en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)).
 - **It closes the first-use gap for those who compare.** TOFU cannot see a key substituted at first contact; a
-  compare out-of-band can — which is why the ceremony ships without strict mode (ADR 0028 Addendum).
+  compare out-of-band can — which is why the ceremony ships without strict mode (ADR 0028 Decision 3).
 - **Manual, so it protects those who do it.** Verification is optional trust elevation; requiring it is
   [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md). Stated, not oversold.
 - **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Holds against an active
@@ -119,7 +119,7 @@ erneut, bevor sie wieder verifiziert ist.
   (strict mode, which would require this), [uc.memory.participants](../../memory/use-cases/uc.memory.participants.md)
   (the profile page this lives on)
 - Decisions: [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (the authenticity
-  model, Decision 3 and the Addendum), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md)
+  model, Decision 3), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md)
   (the fingerprint / safety number), [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the trust tier
   this rides on)
 - End-user view (wiki): [Is my data safe?](../../../../wiki/en/is-my-data-safe.md)

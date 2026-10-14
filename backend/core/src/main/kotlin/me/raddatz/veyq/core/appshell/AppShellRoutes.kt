@@ -110,7 +110,7 @@ class AppShellRoutes(
         /** The playback Service Worker's own namespace (ADR 0047): a request it did not intercept is not a page. */
         const val MEDIA_PREFIX = "/__media"
 
-        /** The download route of the same Service Worker (ADR 0047 addendum): one-shot, so a second open is no page either. */
+        /** The same Service Worker's download route (ADR 0047 § The download route): one-shot, a second open is no page. */
         const val DOWNLOAD_PREFIX = "/__download"
         const val ASSETS_PREFIX = "/assets/"
 

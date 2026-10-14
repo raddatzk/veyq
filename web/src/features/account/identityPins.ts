@@ -25,14 +25,14 @@ import { openAccountDocument, raiseMarks, type AccountDocumentStore } from './tr
 const pinsContext = (version: number) => ({ purpose: 'identity-pins', version }) as const
 
 /** A pin's trust state. `pinned` = trust-on-first-use; `verified` = an out-of-band safety-number compare
- *  succeeded (the ceremony on a member's profile, ADR 0028 Addendum). `verified` rides inside the same Master-Key-sealed blob. */
+ *  succeeded (the ceremony on a member's profile, ADR 0028 Decision 3). `verified` rides inside the same Master-Key-sealed blob. */
 export type PinState = 'pinned' | 'verified'
 
 /** The trust a contact reads as, folding the pin state against their *current* directory key (the badge read). */
 export type TrustState = 'verified' | 'pinned' | 'changed' | 'unpinned'
 
 /** One contact's badge read: the folded {@link TrustState}, and whether the pin it folded is `verified`. On `changed`
- *  that second half is the louder case - **a verified contact's key changed** (ADR 0028 Addendum 3) - which the badge
+ *  that second half is the louder case - **a verified contact's key changed** (ADR 0028 Decision 3) - which the badge
  *  and the review say. A separate flag rather than a fifth state, so every `state === 'changed'` check keeps
  *  catching the verified case instead of silently missing it. */
 export interface ContactTrust {
@@ -185,7 +185,7 @@ export async function checkAndPin(userId: string, identityPublicKeyB64: string):
 /**
  * Accept a **changed** key for a contact (ADR 0028 human path): re-pin `userId := new key`, preserving the
  * original `firstSeenAt`. Drops back to `state: pinned` even for a contact that was `verified` - `verified` returns
- * only through a new compare on their profile (ADR 0028 Addendum 3), never with the accept. Overwrites
+ * only through a new compare on their profile (ADR 0028 Decision 3), never with the accept. Overwrites
  * unconditionally — the human explicitly accepted this key.
  *
  * **Two writes, because a re-pin alone does not deliver anything.** A worker that declined `identity_changed`
@@ -273,7 +273,7 @@ export function myIdentityPublicKeyB64(): string {
  * (the key moved under the compare; nothing is written). `verified` wins a same-contact merge: the re-applied
  * upgrade re-asserts `verified` on top of a concurrent device's `pinned`. Requires an unlocked vault.
  *
- * `pinIfUnpinned` (ADR 0028 Addendum 2): the compare was against the DIRECTORY's key because there was no pin, so a
+ * `pinIfUnpinned` (ADR 0028 Decision 3): the compare was against the DIRECTORY's key because there was no pin, so a
  * contact still unpinned at the write is pinned with the compared key, already `verified` - in the same one sealed
  * write, never a pin without the verification. A pin that appeared meanwhile (a concurrent device, the delivery
  * worker's TOFU) is held to the same guard: its key must be the compared one.

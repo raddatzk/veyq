@@ -543,7 +543,7 @@ to this target.
   upgrade; `Recreate` is what makes "one migrator at a time" true, at the cost of a short outage per upgrade.
   The day the update mechanism is decided (inbox #121) this is the constraint to revisit.
 - **What the chart change between two releases is checked for — and what not** ([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)
-  Addendum). `python3 scripts/chart_upgrade_check.py` reads the upgrade proof's predecessor's `charts/veyq` out of git
+  § Decision, the chart-upgrade check). `python3 scripts/chart_upgrade_check.py` reads the upgrade proof's predecessor's `charts/veyq` out of git
   (the commit before until the first release, the last `v<major>.<minor>` from then on; `--upgrade-from <ref>` names
   another), renders it and this checkout's chart with each of this chart's `ci/` values files, and refuses what
   `helm upgrade` cannot apply or would lose data over: a Deployment's or StatefulSet's `selector`, any StatefulSet
@@ -799,7 +799,7 @@ published**, so no other step here has ever run — not the stop, not the pull, 
 This is a procedure derived from the decisions that govern it, not from a rehearsal, and you are the one finding out
 where it is wrong. Read it that way.
 
-**The upgrade proof — what it covers, and what it does not** ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) Addendum).
+**The upgrade proof — what it covers, and what it does not** ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) Decision 7).
 `python3 scripts/run_web_e2e.py --upgrade` builds the **predecessor** in a worktree of its ref (its own fast-jar, its
 own web dependencies and client) and lets its own e2e seeder seal content of every application into a fresh instance;
 step 2's capture takes it, the restore puts it onto an instance freshly installed by **this** checkout's jar ("restore,

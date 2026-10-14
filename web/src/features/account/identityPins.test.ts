@@ -297,7 +297,7 @@ describe('markVerified (out-of-band compare → verified)', () => {
   })
 })
 
-// ADR 0028 Addendum 2: a member with no pin is pinned AT verification, with the key the compare confirmed - one user
+// ADR 0028 Decision 3: a member with no pin is pinned AT verification, with the key the compare confirmed - one user
 // action, one sealed write (or the store's merge on 409), never a pin without the verification.
 describe('markVerified with pinIfUnpinned (verifying an unpinned member pins them)', () => {
   /** A server whose FIRST put meets a concurrent device's store (`concurrent`), then behaves. */
@@ -399,13 +399,13 @@ describe('trustState (badge read)', () => {
     expect(srv.getIdentityPins).toHaveBeenCalledTimes(1) // one store fetch for the whole directory
   })
 
-  it('a VERIFIED contact whose directory key moved reads as changed AND verified (ADR 0028 Addendum 3)', async () => {
+  it('a VERIFIED contact whose directory key moved reads as changed AND verified (ADR 0028 Decision 3)', async () => {
     fakeServer({ blob: seal({ vf: { key: 'a2V5', state: 'verified', firstSeenAt: 1 } }, 1), version: 1 })
     expect(await trustStates([{ userId: 'vf', directoryKey: 'bmV3' }])).toEqual({ vf: { state: 'changed', pinVerified: true } })
   })
 })
 
-describe('accepting a verified contact\'s changed key (ADR 0028 Addendum 3)', () => {
+describe('accepting a verified contact\'s changed key (ADR 0028 Decision 3)', () => {
   it('re-pins the new key as PINNED - verified returns only through a new compare', async () => {
     const srv = fakeServer({ blob: seal({ vf: { key: 'b2xk', state: 'verified', firstSeenAt: 5 } }, 1), version: 1 })
     await acceptKeyChange('vf', 'bmV3')

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pin the upgrade proof's pure parts, without Docker, a jar or a second worktree (ADR 0057 Addendum, cr-upgrade-proof).
+"""Pin the upgrade proof's pure parts, without Docker, a jar or a second worktree (ADR 0057 Decision 7, cr-upgrade-proof).
 
 `scripts/run_web_e2e.py --upgrade` boots two builds - the predecessor's and the candidate's - and the parts of it that
 decide WHICH predecessor and WHAT a red run means are plain functions. This asserts each of them:

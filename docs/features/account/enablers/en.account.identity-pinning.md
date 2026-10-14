@@ -58,8 +58,8 @@ you verified in one space is verified everywhere.
    elevates a pin `pinned → verified` on a member's profile, after a safety-number compare (a scanned QR or the
    digits read aloud). `markVerified` stamps `verified` **only** if the pinned key still equals the compared key
    (else `IdentityMovedError`, nothing written); for a member with no pin it pins the compared key **already
-   verified** in the same one write (`pinIfUnpinned`, ADR 0028 Addendum 2) — so no profile view and no compare that
-   failed ever pins. It ships without strict mode on purpose (ADR 0028 Addendum): TOFU cannot see a key substituted
+   verified** in the same one write (`pinIfUnpinned`, ADR 0028 Decision 3) — so no profile view and no compare that
+   failed ever pins. It ships without strict mode on purpose (ADR 0028 Decision 3): TOFU cannot see a key substituted
    at first contact, and a compare out-of-band can. A **changed** key still opens the side-by-side review; **accept**
    re-pins as `pinned` (`acceptKeyChange`) even for a contact that was `verified` — *verified* returns only through
    a new compare — and **refuse** leaves it blocked. The badge read (`trustStates`) returns the folded state plus

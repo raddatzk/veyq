@@ -181,6 +181,21 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   The app runs one pod with `strategy: Recreate` — the schema migrates at boot with no gate, and RollingUpdate
   would start the new migrator before the old one stops. `scripts/chart_meta_check.py` holds all of this on
   the rendered manifests, outside the buildless `validate_*` glob because it needs `helm`.
+- **A chart upgrade is checked by rendering both versions** (decided by the coordinator on the owner's behalf,
+  2026-10-14, inbox #428; the owner delegated the decision). The app-level upgrade proof
+  ([ADR 0057](0057-release-identity-and-deployment-recipe.md) Decision 7) proves the data; what can break a
+  `helm upgrade` of this chart is an **immutable field** — a Deployment's or StatefulSet's `selector`, every
+  StatefulSet `spec` field outside the API server's mutable set (`replicas`, `ordinals`, `template`, `updateStrategy`,
+  `persistentVolumeClaimRetentionPolicy`, `minReadySeconds`) — its `serviceName` and whole `volumeClaimTemplates`,
+  their `metadata` included, among them — a PVC's `accessModes` / `storageClassName` or a shrinking size, a
+  RoleBinding's `roleRef`, a kind changing under a name — or an object (a StatefulSet, a PVC) disappearing with the
+  data behind it, or an operator's existing values no longer passing the candidate's schema. All of these are visible
+  **without a cluster**, so `scripts/chart_upgrade_check.py` (its pure parts pinned by
+  `chart_upgrade_check_selftest.py`) renders the predecessor's chart and the candidate's with the same values and
+  compares those fields, and renders the candidate with the predecessor's `ci/` values
+  ([infra/README](../../infra/README.md) § Upgrading with `helm upgrade`). The predecessor is the upgrade proof's
+  (`default_predecessor`); the check runs in `container.yml`'s `test` job and is **information until the first
+  release and red from it** (the same switch as the upgrade proof), so from then on it gates `publish`.
 - **Backup/restore stays explicitly out of this ADR's scope.** [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
   gap statement is accurate and stays accurate; a Kubernetes-native backup story (a `CronJob` running
   `scripts/instance_backup.py`, or a StatefulSet snapshot strategy) is deferred to its own future decision,
@@ -197,6 +212,11 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
 - **The upgrade runbook has its Kubernetes equivalent** — `infra/README.md` § Running on Kubernetes carries
   `helm upgrade` with the same migrate-at-start caveat (one pod, `Recreate`, the backup as the only way back)
   and the orphaned-TLS-`Secret` residue.
+- **A green chart-upgrade check renders; it never installs.** Not covered: a missing StorageClass or expansion
+  support, admission, image pulls, data surviving a real `helm upgrade`, and a `mariadbPassword` changed on upgrade
+  (the database keeps the old one). A cluster leg (kind) that would see those is a later step of its own
+  (inbox #430). The mutable set is the API server's refusal message as remembered, not measured on a cluster; a field
+  it wrongly leaves out is a false red, never a false green.
 - **Deferred, explicitly**: Kubernetes-native backup/restore; a `mariadb`-operator integration beyond the
   bundled StatefulSet; multi-cluster/multi-region topologies. None of these are self-hosting concerns — out
   of scope on the same grounds `docs/inbox.md` already uses for SaaS-era items.
@@ -210,24 +230,3 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   [ADR 0057](0057-release-identity-and-deployment-recipe.md) (the compose-side precedents this generalizes).
 - [ADR 0065](0065-admin-ui-cli-separate-service.md) (the admin container the chart also deploys).
 - [inbox #26](../inbox.md) (the reversed scope cut).
-
-## Addendum (2026-10-14): a chart upgrade is checked by rendering both versions
-
-Decided by the coordinator on the owner's behalf, 2026-10-14 (inbox #428; the owner delegated the decision); built as
-`scripts/chart_upgrade_check.py` (its pure parts pinned by `chart_upgrade_check_selftest.py`) in `container.yml`'s `test`
-job ([infra/README](../../infra/README.md) § Upgrading with `helm upgrade`). The app-level
-upgrade proof ([ADR 0057](0057-release-identity-and-deployment-recipe.md) Addendum) proves the data; what can break a
-`helm upgrade` of this chart is an **immutable field** - a Deployment's or StatefulSet's `selector`, every StatefulSet
-`spec` field outside the API server's mutable set (`replicas`, `ordinals`, `template`, `updateStrategy`,
-`persistentVolumeClaimRetentionPolicy`, `minReadySeconds`) - its `serviceName` and whole `volumeClaimTemplates`, their
-`metadata` included, among them - a PVC's `accessModes` / `storageClassName` or a shrinking size, a RoleBinding's
-`roleRef`, a kind changing under a name - or an object (a StatefulSet, a PVC) disappearing with the data behind it, or an
-operator's existing values no longer passing the candidate's schema. All of these are visible **without a cluster**: a
-check renders the predecessor's chart and the candidate's with the same values and compares those fields, and renders the
-candidate with the predecessor's `ci/` values. The predecessor is the upgrade proof's (`default_predecessor`); the check
-runs in the image `test` job, is **information until the first release and red from it** (the same switch as the upgrade
-proof), so from then on it gates `publish`. **Not covered, stated:** a missing StorageClass or expansion support,
-admission, image pulls, data surviving a real `helm upgrade`, and a `mariadbPassword` changed on upgrade (the database
-keeps the old one). A cluster leg (kind) that would see those is a later step of its own (inbox #430). The mutable set
-is the API server's refusal message as remembered, not measured on a cluster; a field it wrongly leaves out is a false
-red, never a false green.

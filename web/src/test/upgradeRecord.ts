@@ -1,4 +1,4 @@
-// The record the `upgrade` group's two members share (`scripts/run_web_e2e.py` § the upgrade proof, ADR 0057 Addendum):
+// The record the `upgrade` group's two members share (`scripts/run_web_e2e.py` § the upgrade proof, ADR 0057 Decision 7):
 // the SEEDER writes into `$VEYQ_GROUP_DIR` what it sealed into a fresh instance, the orchestrator captures that
 // instance, destroys it and restores it onto a freshly installed build, and the READER opens the restored content and
 // asserts every item the record names.

@@ -181,7 +181,7 @@ access pattern (which parts were watched, re-watched, skipped, seeked to), more 
 timestamps or sizes above. The owner accepted this for playback: hiding it would mean either downloading the whole
 original first or proxying bytes through the server (breaking operator-blindness). It is scoped to playback and
 changes nothing about content, which the server still never reads. A **file download** streams through the same
-key-free Service Worker ([ADR 0047 § Addendum](../decisions/0047-inline-video-playback-range-streaming.md#addendum-the-download-route))
+key-free Service Worker ([ADR 0047 § The download route](../decisions/0047-inline-video-playback-range-streaming.md#the-download-route))
 but reads every chunk in order, so it shows the operator no more than a whole-blob read.
 
 This split is written in *kinds*; the contracts are written in *field names*. [ADR 0044](../decisions/0044-field-visibility-declared-at-the-field.md)

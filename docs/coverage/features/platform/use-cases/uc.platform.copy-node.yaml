@@ -2,7 +2,7 @@ useCase: uc.platform.copy-node
 feature: platform
 title: Copy a node and everything under it to another place
 # cr-copy-node built it in the web: a copy is ordinary node creates and uploads, so the backend part is the existing endpoints'
-# slice tests, named in the gap below. A Memory copies its media's existing tiers and sealed facts (ADR 0082 Addendum 2).
+# slice tests, named in the gap below. A Memory copies its media's existing tiers and sealed facts (ADR 0082 decision 11).
 acceptanceCriteria:
   - id: copy-here-in-the-browser
     text: >-

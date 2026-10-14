@@ -2,7 +2,7 @@
 
 - **ID:** uc.platform.copy-node
 - **Status:** built 2026-10-14 (cr-copy-node), web only, for folders, files, drop boxes, Memories and chapters. A Memory's
-  media copy with their existing tiers and sealed facts, nothing decoded (ADR 0082 Addendum 2). Seen in a real browser on
+  media copy with their existing tiers and sealed facts, nothing decoded (ADR 0082 decision 11). Seen in a real browser on
   2026-10-14: "Reisen (2)" (sub-folders, files, the Memory "Lissabon" and the drop box "Postfach" with two guests' folders
   both named "Dr. Anna") copied into "Archiv (4)" - the copy opened with its files readable (`a_b.txt` showed its text),
   "Postfach" a plain folder holding "Dr. Anna" and "Dr. Anna (2)"; a file copied into its own folder became `a_b.txt (2)`;
@@ -33,7 +33,7 @@
    server whether those bytes still fit the tenant's quota, as the import does ([uc.platform.export-import](uc.platform.export-import.md) E7).
 4. **Copy** walks the subtree with the member's keys and re-creates it under the destination through each kind's own
    hooks - the same walk and hooks as a download followed by an import ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
-   Addendum 2), without a ZIP: each file is read from the original by chunk, decrypted on the device and uploaded again
+   decision 11), without a ZIP: each file is read from the original by chunk, decrypted on the device and uploaded again
    under a new key. A name taken among the destination's children becomes `Name (2)`. Progress says "N of M".
 5. The tree is re-read; a toast names the copy.
 
@@ -48,7 +48,7 @@
 
 What an import does not carry: shares, members, favourites, the trash, server-observed times; participants and a
 medium's original contributor stay names only (a medium's capture-time correction, coordinates and place name DO come
-along: a copy carries the sealed facts and the derived tiers, ADR 0082 Addendum 2); a folder's or a drop box's cover; a drop box becomes a plain folder with
+along: a copy carries the sealed facts and the derived tiers, ADR 0082 decision 11); a folder's or a drop box's cover; a drop box becomes a plain folder with
 plain folders inside (no drop key, no links, no guest identities).
 
 ## Quality notes
@@ -82,6 +82,6 @@ Neues gespeichert wird - nicht, dass es eine Kopie ist.
   [uc.memory.move-node](../../memory/use-cases/uc.memory.move-node.md) (the browser),
   [uc.memory.browse](../../memory/use-cases/uc.memory.browse.md) (the selection)
 - Decisions: [ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
-  Addendum 2, [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
+  decision 11, [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md) (one reference per blob)
 - End-user view (wiki): [Files — and finding your way around](../../../../wiki/en/files.md)

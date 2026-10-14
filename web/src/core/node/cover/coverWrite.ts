@@ -98,7 +98,7 @@ export async function uploadCoverImage(
 
 /**
  * Seal `source` AS IT IS as the node's cover blob under `nodeKey` and upload it direct-to-store - no decode, no re-encode:
- * [uploadCoverImage]'s last step, and the whole of a copied cover (ADR 0082 Addendum 2), whose source is the original
+ * [uploadCoverImage]'s last step, and the whole of a copied cover (ADR 0082 decision 11), whose source is the original
  * cover read by frame (`core/export/copySource.ts`), never held whole. Open afterwards, as [uploadCoverImage]'s.
  */
 export async function uploadCoverBlob(

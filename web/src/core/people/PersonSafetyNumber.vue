@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Another member's safety number on their profile page, and the compare that marks them verified
-// (uc.spaces.enforce-verified-identities main flow 1-3, A1, E1; ADR 0028 Addendum 1-2).
+// (uc.spaces.enforce-verified-identities main flow 1-3, A1, E1; ADR 0028 Decision 3).
 //
 // The number shown is the key this device would TRUST: the pin's when there is one, else the directory's. Two ways to
 // compare it with the number the other member's own device shows (`MySafetyNumber`): SCAN their QR - a code that is not a
@@ -37,10 +37,10 @@ type View =
       directoryKey: string
       /** The key the compare is about: the pin's, else the directory's. */
       compareKey: string
-      /** Whether a pin existed when this was read - a match on an unpinned member pins it (ADR 0028 Addendum 2). */
+      /** Whether a pin existed when this was read - a match on an unpinned member pins it (ADR 0028 Decision 3). */
       pinned: boolean
       state: TrustState
-      /** The pin is `verified` - on `changed`, a verified contact's key changed (ADR 0028 Addendum 3). */
+      /** The pin is `verified` - on `changed`, a verified contact's key changed (ADR 0028 Decision 3). */
       pinVerified: boolean
       /** The compared key's digits, or null when this device cannot decode it (nothing to compare then). */
       number: string | null

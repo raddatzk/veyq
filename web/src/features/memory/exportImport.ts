@@ -19,7 +19,7 @@
 // link reads. A guest's download carries no names - not the participants, not the contributors - because a guest never
 // reads the tenant's member directory; and no EXIF copy, which the link does not serve.
 //
-// A COPY (ADR 0082 Addendum 2, `purpose: 'copy'` on both hooks - a member's, within the space) is the same walk and the
+// A COPY (ADR 0082 decision 11, `purpose: 'copy'` on both hooks - a member's, within the space) is the same walk and the
 // same content plus what an archive never carries, per medium under `copy`: each existing derivative tier as a payload read
 // by frame, the meta each of its blobs declared, and the listed tier verbatim (capture time and its correction, geometry,
 // coordinates, place name). The copy's import uploads the original and those tiers as they are under fresh `K_blob`s bound to
@@ -70,7 +70,7 @@ export type ExportedMedium = {
   copy?: CopiedMedium
 }
 
-/** What a copy hands over of one medium beside its original (ADR 0082 Addendum 2): the meta the original's blob declared
+/** What a copy hands over of one medium beside its original (ADR 0082 decision 11): the meta the original's blob declared
  *  (absent: it declared none), the listed tier verbatim (absent: none sealed), each derivative tier as a payload read by
  *  frame with the meta its blob declared. The EXIF bundle rides the medium's own `exif`. */
 type CopiedMedium = {

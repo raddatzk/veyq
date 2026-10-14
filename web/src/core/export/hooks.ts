@@ -24,7 +24,7 @@ export type ExportPayloadSource = {
   mediaType: string
   modifiedAt?: number
   chunks: () => AsyncIterable<Uint8Array>
-  /** The same bytes by frame, for a reader that seeks (a copy, ADR 0082 Addendum 2). A payload without them cannot be
+  /** The same bytes by frame, for a reader that seeks (a copy, ADR 0082 decision 11). A payload without them cannot be
    *  copied: the copy leaves its node out and names it before anything is written. */
   frames?: PlaintextFrames
 }
@@ -35,7 +35,7 @@ export type ExportPayloadSource = {
  *  `importStreams` only where a copy never needs that (Memories: a copy hands over the tiers it would otherwise derive). */
 export type PayloadFile = BlobSource & { readonly name: string; readonly lastModified: number }
 
-/** Why the walk runs: a `download` (an archive, ADR 0082 decision 3) or a `copy` (ADR 0082 Addendum 2), whose import is this
+/** Why the walk runs: a `download` (an archive, ADR 0082 decision 3) or a `copy` (ADR 0082 decision 11), whose import is this
  *  build's own and in the same space - a kind may then hand over what it keeps beside its payloads (Memories: each medium's
  *  derived tiers and sealed facts), which an archive never carries. */
 export type WalkPurpose = 'download' | 'copy'

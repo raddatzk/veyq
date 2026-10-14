@@ -204,7 +204,7 @@ jobs:
           "${RUNNER_TEMP}/chart-venv/bin/pip" install --quiet pyyaml
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_meta_check.py
       # A `helm upgrade` from the upgrade proof's predecessor's chart to this one, checked on rendered manifests
-      # (ADR 0064 Addendum): immutable fields, claims that would go, values an operator already has. Information
+      # (ADR 0064 § Decision, the chart-upgrade check): immutable fields, claims that would go, values an operator already has. Information
       # while scripts/applied_migrations.sha256 says `release: none`, red from the first release - the script's own
       # verdict, so this step carries no switch of its own.
       - name: Chart upgrade check
@@ -286,7 +286,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
 
-  # The upgrade proof (ADR 0057 Addendum, infra/README.md § An upgrade, step by step): the predecessor's own jar and e2e
+  # The upgrade proof (ADR 0057 Decision 7, infra/README.md § An upgrade, step by step): the predecessor's own jar and e2e
   # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
   # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
   # default of `scripts/run_web_e2e.py --upgrade`: the first parent of the commit until the first release, the newest

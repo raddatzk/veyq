@@ -841,7 +841,7 @@ const en = {
     formerMember: 'Former member',
     formerMemberHint: 'No longer in this space.',
   },
-  // The safety number on a member's profile (uc.spaces.enforce-verified-identities, ADR 0028 Addendum): my own with its QR,
+  // The safety number on a member's profile (uc.spaces.enforce-verified-identities, ADR 0028 Decision 3): my own with its QR,
   // another member's with the scan / digit compare that marks them verified.
   safety: {
     mineTitle: 'Your safety number',
@@ -871,7 +871,7 @@ const en = {
     foreign: 'That is not a veyq safety number code. Scan the code on their profile page.',
     moved: 'The key you trust for {name} changed while you compared, so nothing was marked. Compare again.',
     failed: 'Could not mark as verified. Please try again.',
-    // A VERIFIED contact's key changed (ADR 0028 Addendum 3): the member lists, the profile and the review say it louder.
+    // A VERIFIED contact's key changed (ADR 0028 Decision 3): the member lists, the profile and the review say it louder.
     badgeVerifiedChanged: 'Verified key changed',
     changedVerifiedNote:
       'You verified {name}’s key before, and the server now lists a different one. Review the change before you compare: accepting it does not verify the new key.',

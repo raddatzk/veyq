@@ -11,7 +11,7 @@ import { useI18n } from 'vue-i18n'
 import Message from 'primevue/message'
 
 // `alt` / `failedText` let another screen that shows one of OUR codes reuse this plate (the safety-number QR on a
-// member's own profile, ADR 0028 Addendum); the pairing screens pass neither.
+// member's own profile, ADR 0028 Decision 3); the pairing screens pass neither.
 const props = defineProps<{ payload: string; alt?: string; failedText?: string }>()
 const { t } = useI18n()
 

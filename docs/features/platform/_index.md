@@ -29,7 +29,7 @@ what this instance can do, what version it speaks, and which optional features t
 - [uc.platform.export-import](use-cases/uc.platform.export-import.md) — **built (web)** (ADR 0082: a member takes any node and
   everything under it out as one plain ZIP, written on the device from decrypted data, and brings such a file back in as new
   content that belongs to the importer; Files and Memories supply their content through the registry.)
-- [uc.platform.copy-node](use-cases/uc.platform.copy-node.md) — **refined, not built** (inbox #423, ADR 0082 Addendum 2: a
+- [uc.platform.copy-node](use-cases/uc.platform.copy-node.md) — **built (web)** (inbox #423, ADR 0082 decision 11: a
   member copies a node and its subtree within a space; the client re-creates it through the export/import hooks and uploads
   every file again, so the server never learns it is a copy.)
 

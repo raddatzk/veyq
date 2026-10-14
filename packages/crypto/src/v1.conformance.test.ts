@@ -821,7 +821,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
   })
 
   it('the fingerprint hash is the digest the vector note names, and the digits are its 40-bit chunks', () => {
-    // The safety-number QR carries this digest (ADR 0028 Addendum). It is recomputed here from the note's formula
+    // The safety-number QR carries this digest (ADR 0028 Decision 3). It is recomputed here from the note's formula
     // with node's own sha256, so a change to the domain string or the input order reddens it apart from the digits.
     const f = vectors.fingerprint
     const pub = { kemX: unhex(f.kem_x), kemM: unhex(f.kem_m), sign: unhex(f.sign) }

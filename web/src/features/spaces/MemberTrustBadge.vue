@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// A member's identity-trust badge in the tenant's and groups' member lists (ADR 0028 Addendum 4, uc.spaces.verify-identity
+// A member's identity-trust badge in the tenant's and groups' member lists (ADR 0028 Decision 3, uc.spaces.verify-identity
 // and uc.spaces.enforce-verified-identities): "Verified" for a contact whose key was compared on their profile and still
-// holds, "Key changed" for a directory key that differs from the pin - said louder when the pin was VERIFIED (Addendum 3).
+// holds, "Key changed" for a directory key that differs from the pin - said louder when the pin was VERIFIED (ADR 0028 Decision 3).
 // A `pinned` (trust-on-first-use) or unpinned contact shows nothing: that is the ordinary state of every member.
 // One component for both panels, so the two lists cannot drift apart in what they say.
 import { useI18n } from 'vue-i18n'

@@ -7,7 +7,7 @@
 // is withheld from it (the sections still run - a former member can have been on a Memory), but nothing links to anything.
 // On a member's OWN page (`userId` is the signed-in account) an "Edit profile" control opens the shared name + picture editor
 // (`NamePictureFields`, the same one Settings > Your profile uses); on anyone else's page there is no edit control at all.
-// The safety number (ADR 0028 Addendum): my own page shows MY number and its QR (`MySafetyNumber`); a current member's page
+// The safety number (ADR 0028 Decision 3): my own page shows MY number and its QR (`MySafetyNumber`); a current member's page
 // shows theirs with the compare that marks them verified (`PersonSafetyNumber`). A former member's page shows neither.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

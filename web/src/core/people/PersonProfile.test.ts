@@ -192,7 +192,7 @@ describe('PersonProfile - editing one\'s own name and picture (ADR 0084 decision
   })
 })
 
-describe('PersonProfile - the safety number (ADR 0028 Addendum)', () => {
+describe('PersonProfile - the safety number (ADR 0028 Decision 3)', () => {
   const ME = '5c09e000-0000-4000-8000-0000000000b2'
   const me: Person = { userId: ME, username: 'kevin', realName: 'Kevin R', displayName: 'Kevin R' }
 

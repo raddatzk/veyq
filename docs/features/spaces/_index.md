@@ -116,7 +116,7 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   **built (web, cr-identity-verification)** (a member's own profile shows their safety number and its QR; on another
   member's profile you scan their QR or compare the digits, and a match marks them *verified* — pinning an unpinned
   member with the compared key; "Verified" shows on the profile and in the member lists, and a verified contact's
-  key change is said louder; [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md) Addendum)
+  key change is said louder; [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 3)
 - [Require verified identities before sharing (strict mode)](use-cases/uc.spaces.require-verified-identities.md) —
   **planned** (split out of the use-case above when its ceremony was built — the worker skips unverified members and
   a changed key is a hard block; needs a scope-wide redesign before it is buildable at all, a per-account toggle

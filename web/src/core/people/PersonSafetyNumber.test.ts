@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The safety number on a profile (uc.spaces.enforce-verified-identities main flow 0-3, A1, E1; ADR 0028 Addendum 1-2).
+// The safety number on a profile (uc.spaces.enforce-verified-identities main flow 0-3, A1, E1; ADR 0028 Decision 3).
 // The pin store's write door (`markVerified`) and its read (`getPin`) are mocked so each test can say exactly what was
 // written; the number, the fold and the QR codec are REAL (the vector-pinned `safetyNumber`, `foldTrust`, `safetyCode`),
 // so a scanned code is compared the way the app compares it. The store's own one-write/merge behaviour is
@@ -190,7 +190,7 @@ describe('another member’s safety number (main flow 1-3)', () => {
   })
 })
 
-describe('a verified contact\'s key changed, on the profile (ADR 0028 Addendum 3)', () => {
+describe('a verified contact\'s key changed, on the profile (ADR 0028 Decision 3)', () => {
   it('reads louder, and after the review\'s accept the profile reads pinned and offers the compare again', async () => {
     vi.mocked(getPin).mockResolvedValue({ key: OTHER, state: 'verified', firstSeenAt: 1 })
     const w = await mountTheirs()

@@ -49,12 +49,32 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
    ergonomic form is **QR** — scan the other device's fingerprint, the app **compares it against the pin and gives
    the user feedback** (matches / differs). Verification is optional trust elevation in the default flow, and it
    is the **way to accept a legitimately rotated key** (re-verify → re-pin as *verified*). Reuses the existing
-   QR-scan infrastructure (emergency kit).
+   QR-scan infrastructure (emergency kit). Its form is owner-decided (2026-10-14,
+   [uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)
+   main flow):
+   - **Show and compare.** Every member sees **their own** safety number (the per-identity 6x5 digits of the pinned
+     `fingerprint` vector — no pairwise number, no new crypto) and a QR of it on their own profile page; on another
+     member's profile they see that member's number, can **scan** the other's QR or compare the digits read aloud,
+     and **mark verified**. The QR carries a veyq marker plus the fingerprint hash, never the identity bundle (the
+     `jsqr` exception in `web/CLAUDE.md` is bounded by what our own payloads carry).
+   - **Verifying pins.** A member with no pin yet is pinned **at** verification, with the key the human compare
+     just confirmed; nothing else pins more than Decision 1 does (no pin on a directory read or a profile view).
+   - **A verified contact's key change is louder.** The changed-key review names it as a **verified** contact's
+     key; accepting re-pins as `pinned`, and `verified` returns only through a new compare — shown, never silent.
+   - **Where it shows:** the person's profile and the tenant's and groups' member lists (a "verified" mark beside
+     the existing "key changed").
+   - **It does not wait for strict mode (4).** A "verified" mark that nothing enforces is not advisory noise:
+     TOFU (2) detects only a key that changes **after** the first pin, so an operator that serves a substituted
+     key **at first contact** goes unnoticed — the first-use gap below — and an out-of-band compare is the one
+     thing in the tree that closes it until Key Transparency exists.
 
-4. **Opt-in strict mode.** A user (or a group owner) may require **verified-before-first-share** and turn the
-   change-notice into a **hard block**. Under strict mode the worker **skips unverified members** (they stay
-   *awaiting access*) until a human verifies them in the UI. This gives security-maximalists the pre-first-wrap
-   gate without imposing its friction — or breaking the async "awaiting-access" model — on the default flow.
+4. **Opt-in strict mode — decided in principle, not built.** A user (or a group owner) may require
+   **verified-before-first-share** and turn the change-notice into a **hard block**. Under strict mode the worker
+   **skips unverified members** (they stay *awaiting access*) until a human verifies them in the UI. This gives
+   security-maximalists the pre-first-wrap gate without imposing its friction — or breaking the async
+   "awaiting-access" model — on the default flow. It needs redesigning before it is wired (§ What is still open),
+   on its own use-case,
+   [uc.spaces.require-verified-identities](../features/spaces/use-cases/uc.spaces.require-verified-identities.md).
 
 5. **Rotation is the compromise-recovery operation this model enables.** A rotated identity is a key change
    that contacts accept via (2)+(3) — which is what lets a legitimate rotation exist at all without a blind
@@ -127,8 +147,8 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
   client holds a pin, so a later swap is surfaced (UI) or refused (worker). Verification closes it fully for those
   who compare.
 - **The first-use gap remains (honest).** If the operator substitutes a key **before** a client ever pinned the
-  real one — and re-wraps genuine content too — nothing looks wrong until **manual verification** or Key
-  Transparency. TOFU cannot detect a lie told before first sight. The gap is narrower since two later changes.
+  real one — and re-wraps genuine content too — nothing looks wrong until **manual verification** (the compare of
+  Decision 3) or Key Transparency. TOFU cannot detect a lie told before first sight. The gap is narrower since two later changes.
   It no longer lets the operator *invent* a member: every wrap to someone else needs an admission tag that only
   a key-holder can compute ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6). And it no longer reaches
   the personal scope at all (Decision 6).
@@ -140,8 +160,8 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
   (any device — including an attacker's — could veto delivery). The value is raised detection: everyone who knew
   the contact refuses, so the target stays *awaiting access* from them — a visible anomaly the flag surfaces.
 - **The advisory default trusts the human to actually check.** A user who reflexively accepts a change notice is
-  no safer than Plain for that contact; strict mode (4) is the answer for those who want enforcement. Stated, not
-  hidden.
+  no safer than Plain for that contact; strict mode (4), once built, is the answer for those who want enforcement.
+  Stated, not hidden.
 - **Operator-blindness preserved.** The pin store is sealed under the master key; the server never learns who
   pinned or verified whom. It gains only a small **grant-delivery decline** status (a worker refusing a job) —
   operational metadata, no trust graph.
@@ -160,13 +180,16 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
   ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 1). (e) *server-side global
   quarantine on a worker's decline* — DoS + the blind server cannot adjudicate the claim; a decline only removes
   that worker from the candidate set. (f) *Key Transparency now* — the correct end-state but far heavier; TOFU +
-  verification is the near-term step it later subsumes.
+  verification is the near-term step it later subsumes. (g) *holding the verification ceremony back until strict
+  mode exists* — it would leave the first-contact substitution, which TOFU cannot see, with no detector at all
+  (Decision 3).
 
 ## What is still open
 
 Decisions 1–3 are built: the sealed pin store and its sync
 ([en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md)), the TOFU gate at
-all three foreign-wrap surfaces, the grant-delivery **decline** seam, and the changed-key review. Decision 5 is
+all three foreign-wrap surfaces, the grant-delivery **decline** seam, the changed-key review, and the compare on a
+member's profile (`web/src/core/people/`) with the member lists' "verified" mark. Decision 5 is
 settled by [ADR 0060](0060-key-rotation-after-compromise.md). Decision 6 is built: every grant producer signs,
 each grant row stores the signature beside a copy of the granter's identity public bundle **as it was when the
 server wrote the grant**, the reads serve that copy, and the one unwrap path and the switcher's icon read verify
@@ -194,28 +217,5 @@ Decision 2's *"the wrap then proceeds"* holds ([ADR 0060](0060-key-rotation-afte
 thing remains:
 
 - **Decision 4, strict mode.** It needs redesigning before it is wired: an *account-global* toggle cannot protect
-  shared-scope content, because any co-member may key an unverified identity. The proactive verification ceremony no
-  longer waits for it (Addendum below).
-
-## Addendum (2026-10-14): the verification ceremony ships without strict mode
-
-Owner decisions 2026-10-14 ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)
-main flow; built in web by cr-identity-verification). The ceremony was held back on the argument that a "verified" mark nothing acts on
-is advisory noise. It is not: TOFU (Decision 2) only detects a key that changes **after** the first pin, so an operator
-that serves a substituted key **at first contact** goes unnoticed - the gap the security model lists as open - and an
-out-of-band compare is the one thing in the tree that closes it until key transparency exists. So:
-
-1. **Show and compare.** Every member sees **their own** safety number (Decision 3's per-identity 6x5 digits, the
-   pinned `fingerprint` vector - no pairwise number, no new crypto) and a QR of it on their own profile page; on another
-   member's profile they see that member's number, can **scan** the other's QR or compare the digits read aloud, and
-   **mark verified**. The QR carries a veyq marker plus the fingerprint hash, never the identity bundle (the
-   `jsqr` exception in `web/CLAUDE.md` is bounded by what our own payloads carry).
-2. **Verifying pins.** A member with no pin yet is pinned **at** verification, with the key the human compare just
-   confirmed; nothing else pins more than today (no pin on a directory read or a profile view).
-3. **A verified contact's key change is louder.** The changed-key review names it as a **verified** contact's key;
-   accepting re-pins as `pinned`, and `verified` returns only through a new compare (Decision 3) - shown, never silent.
-4. **Where it shows:** the person's profile and the tenant's and groups' member lists (a "verified" mark beside the
-   existing "key changed").
-
-Strict mode (Decision 4) stays open as above, on its own use-case,
-[uc.spaces.require-verified-identities](../features/spaces/use-cases/uc.spaces.require-verified-identities.md).
+  shared-scope content, because any co-member may key an unverified identity. The verification ceremony does not
+  wait for it (Decision 3).

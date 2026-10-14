@@ -1,4 +1,4 @@
-// The safety-number QR (uc.spaces.enforce-verified-identities, ADR 0028 Addendum 1). A member's own profile shows
+// The safety-number QR (uc.spaces.enforce-verified-identities, ADR 0028 Decision 3). A member's own profile shows
 // a QR of THEIR identity fingerprint; another member's device scans it and compares it with the key it would trust.
 //
 // **The payload is a marker, a version and the fingerprint digest - nothing else.** `veyqid:1:<base64 of the 32-byte

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The member lists' identity-trust badge (ADR 0028 Addendum 3-4): verified, changed, and a VERIFIED contact's change said
+// The member lists' identity-trust badge (ADR 0028 Decision 3): verified, changed, and a VERIFIED contact's change said
 // louder; the ordinary states (pinned, unpinned, not read) show nothing.
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'

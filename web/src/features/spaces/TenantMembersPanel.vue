@@ -353,7 +353,7 @@ async function revoke(invite: PendingMemberInvite) {
                 <span class="veyq-badge" :class="member.hasGrant ? 'success' : 'warning'">
                   {{ member.hasGrant ? t('members.statusActive') : t('members.statusAwaiting') }}
                 </span>
-                <!-- Identity trust (ADR 0028 Addendum 4): "Verified" after a compare on the member's profile, "Key changed"
+                <!-- Identity trust (ADR 0028 Decision 3): "Verified" after a compare on the member's profile, "Key changed"
                      when the directory key differs from the pin (a rotation or an operator substitution) - louder for a
                      verified contact. -->
                 <MemberTrustBadge :trust="trust[member.userId]" />
@@ -465,7 +465,7 @@ async function revoke(invite: PendingMemberInvite) {
          on-device and this panel seals + POSTs it. -->
     <SpaceIconDialog v-if="iconDialogOpen" :busy="iconBusy" @save="onIconSave" @close="iconDialogOpen = false" />
 
-    <!-- Review a changed identity key (cr-0099); the proactive compare is on the member's profile (ADR 0028 Addendum). -->
+    <!-- Review a changed identity key (cr-0099); the proactive compare is on the member's profile (ADR 0028 Decision 3). -->
     <ChangedKeyReviewDialog v-if="reviewTarget" v-model:visible="reviewOpen" :member="reviewTarget" @accepted="refreshTrust" />
   </section>
 </template>

@@ -121,20 +121,19 @@ to modest read-ahead. It is explicitly **not** a security parameter.
 ### `mediaType` is sealed — an application of ADR 0044, not its own decision
 
 Both the badge (#105) and the `<video>` branch need to know a medium is a video **without** fetching its original.
-The full MIME type is sealed inside the existing opaque `wrappedMeta` tier (`MediaMeta`, under `K_mem`), so the
-server never sees it. This is not a new decision to record separately — it is
+The full MIME type is sealed, so the server never sees it. This is not a new decision to record separately — it is
 [ADR 0044](0044-field-visibility-declared-at-the-field.md) applied: a **server-visible** `mediaType` would tell
 the operator photo-vs-video-vs-PDF for every medium, exactly the plaintext ADR 0044 forces someone to justify.
-The mechanics (which field, backfill of pre-field media) belong in the CR, not here. Note the synthetic SW route
-keys on an **opaque per-playback handle** (not `blobId`) plus range offsets; the "exposes nothing new about *what*
-a blob is" reasoning holds a fortiori — a random handle reveals even less than the `id`-class `blobId`.
+Note the synthetic SW route keys on an **opaque per-playback handle** (not `blobId`) plus range offsets; the
+"exposes nothing new about *what* a blob is" reasoning holds a fortiori — a random handle reveals even less than the
+`id`-class `blobId`.
 
-*Amended 2026-10-09 (inbox #397):* the type moved out of `wrappedMeta` into the original's **blob meta** — core's
-`blob-meta` seal under the original's own `K_blob`, declared with the upload and served on the listing beside the
-`K_blob` wrap ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 2). Same reasoning, same reader: still sealed,
-still written by the uploader's client, still read without fetching the original. Every upload now declares a type
-(the file's own, else sniffed from its first bytes, else `application/octet-stream`), so the lazy backfill of
-pre-field media is gone.
+The type lives in the original's **blob meta** (inbox #397), not in the Memory's `wrappedMeta` tier: core's
+`blob-meta` seal under the original's own `K_blob`, which every application's blobs carry, declared with the upload
+and served on the listing beside the `K_blob` wrap ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 2). Same
+reasoning, same reader: sealed, written by the uploader's client, read without fetching the original. Every upload
+declares a type (the file's own, else sniffed from its first bytes, else `application/octet-stream`), so no medium
+needs a backfill.
 
 ### The shim serves inert responses — ADR 0013 §6 applied
 
@@ -152,6 +151,46 @@ therefore applies [ADR 0013 §6](0013-blob-storage-presigned-direct-to-store.md)
 - every shim response carries `X-Content-Type-Options: nosniff` and
   `Content-Security-Policy: sandbox; default-src 'none'`.
 
+### The download route
+
+A download must not hold the whole decrypted file in one `Blob` in tab memory (inbox #371). So the page registers a
+download with the SW (an opaque one-shot handle, the plaintext size, the file name and a `MessagePort`), then navigates
+the tab to `/__download/<handle>`; the SW answers that navigation with an attachment whose body pulls the page's
+decrypted chunks over the port, one credit per chunk the browser consumed. The browser writes the file itself, so the
+tab holds a few chunks, not the file. The SW still holds no key and no token; the page presigns and opens every frame,
+as for playback. It is the second of three save targets (`web/src/shared/saveStream.ts`): a file picked through the
+File System Access API comes first where the browser has it, an in-memory `Blob` capped at 512 MiB last. Above the cap,
+with neither streaming target, the download is refused with a message. Rejected: a "stream saver" library, because its
+man-in-the-middle iframe is served from another origin by default (a self-hostability regression) and the app's CSP
+allows no frame at all (`frame-src 'none'`).
+
+This route is the first one on the app origin that a **navigation** reaches, the exact case the playback shim refuses.
+So it is held to the inert rules above and to more: it answers **only** a `GET` navigation (a `fetch()` of a handle
+is 404); the handle serves **one** navigation and expires after 30 s unfetched; the response is
+`Content-Disposition: attachment` with a sanitised `filename` and the exact name as `filename*=UTF-8''…` (controls,
+CR/LF, bidi overrides and path separators removed), `application/octet-stream` whatever the file is, `nosniff`, the
+sandbox CSP, `Cache-Control: no-store` and the exact `Content-Length`. A handle the SW does not hold answers **204**,
+which leaves the tab where it is (a 404 would replace the page holding the keys with an empty document). A page
+failure, a stream that ends short of or runs past the registered size, and an ended session **error** the body, so
+the browser marks the download failed and never keeps a truncated file as if it were whole; a cancelled download
+reaches the page as an abort.
+
+Both applications save through it: Files' download, and Memories' "download original" in the lightbox. A Memories
+original is saved under its own file name, the one sealed in its original's blob meta at upload and served on the
+listing (inbox #397); a media whose original carries no name has its name derived on device — the Memory name and its
+gallery position — its extension from the blob meta's type, else `.bin`. Both applications name a file by core's one
+rule (`core/blob/meta.ts` `downloadName`). The name is known synchronously, so nothing is read before the save target
+opens: the picker is always the click's first await, which a name that waited on a lazily fetched tier (or on a sniff
+of chunk 0) would break.
+
+### Audio, and Files (inbox #412)
+
+The media route also serves **audio**: a playback may be registered under one well-formed `audio/<subtype>` essence as
+well as a `video/<subtype>` one (the same one-essence rule, `isStreamableMediaType`). The SW protocol is versioned
+(`PROTOCOL_VERSION`, now 4), so a still-controlling worker that predates a change fails the handshake and the page falls
+back as before. Files' file page is a second caller: it registers the sniffed container of a file (never the claimed
+type) with the same page-side chunk provider the download uses. The worker still holds no key and no plaintext at rest.
+
 ## Consequences
 
 - **Slicing.** The SW range layer is substantial on its own — SW registration + lifecycle, the range↔chunk math,
@@ -166,54 +205,11 @@ therefore applies [ADR 0013 §6](0013-blob-storage-presigned-direct-to-store.md)
   it now is: the per-chunk fetch pattern of a *playing* medium is observable — an accepted intra-media
   access-pattern leak, scoped to range-streamed playback.
 - **No new crypto and no contract change for the field.** Playback reuses `K_blob`/`openFrame` verbatim; the
-  `mediaType` rode the already-opaque `wrappedMeta` (since inbox #397 it is the original's `wrappedBlobMeta`, a core
-  seal every application's blobs carry). The SW slice adds presign plumbing but no new key.
+  `mediaType` rides an already-opaque seal (the original's `wrappedBlobMeta`, a core seal every application's blobs
+  carry). The SW slice adds presign plumbing but no new key.
 - **Native surfaces.** A Service Worker is a web-only mechanism; a future native client feeds its own player the
   same decrypted ranges through the platform equivalent. This ADR governs the **web** playback path (the current
   V1 priority); it does not bind native to a SW.
-
-## Addendum: the download route
-
-*2026-10-08, inbox #371.* A file download held the whole decrypted file in one `Blob` in tab memory. The same
-key-free delegation now also **saves** a file: the page registers a download with the SW (an opaque one-shot handle,
-the plaintext size, the file name and a `MessagePort`), then navigates the tab to `/__download/<handle>`; the SW answers
-that navigation with an attachment whose body pulls the page's decrypted chunks over the port, one credit per chunk the
-browser consumed. The browser writes the file itself, so the tab holds a few chunks, not the file. The SW still holds
-no key and no token; the page presigns and opens every frame, as for playback. It is the second of three save targets
-(`web/src/shared/saveStream.ts`): a file picked through the File System Access API comes first where the browser has
-it, an in-memory `Blob` capped at 512 MiB last. Above the cap, with neither streaming target, the download is refused
-with a message. Rejected: a "stream saver" library, because its man-in-the-middle iframe is served from another
-origin by default (a self-hostability regression) and the app's CSP allows no frame at all (`frame-src 'none'`).
-
-This route is the first one on the app origin that a **navigation** reaches, the exact case the playback shim refuses.
-So it is held to the inert rules above and to more: it answers **only** a `GET` navigation (a `fetch()` of a handle
-is 404); the handle serves **one** navigation and expires after 30 s unfetched; the response is
-`Content-Disposition: attachment` with a sanitised `filename` and the exact name as `filename*=UTF-8''…` (controls,
-CR/LF, bidi overrides and path separators removed), `application/octet-stream` whatever the file is, `nosniff`, the
-sandbox CSP, `Cache-Control: no-store` and the exact `Content-Length`. A handle the SW does not hold answers **204**,
-which leaves the tab where it is (a 404 would replace the page holding the keys with an empty document). A page
-failure, a stream that ends short of or runs past the registered size, and an ended session **error** the body, so
-the browser marks the download failed and never keeps a truncated file as if it were whole; a cancelled download
-reaches the page as an abort. The protocol is version 3.
-
-Both applications save through it: Files' download, and Memories' "download original" in the lightbox (S4, the same
-day). A Memories original is saved under its own file name, the one sealed in its original's blob meta at upload and
-served on the listing (inbox #397, 2026-10-09; for a day before that it rode the lazy EXIF tier and the download
-button waited for it, #395 F10); a media whose original carries no name has its name derived on device — the Memory
-name and its gallery position — its extension from the blob meta's type, else `.bin`. Both applications name a file
-by core's one rule (`core/blob/meta.ts` `downloadName`). The name is known synchronously, so nothing is read before
-the save target opens: the picker is always the click's first await (the chunk-0 read and sniff that once named an
-untyped media are gone with the backfill).
-
-The download is whole-blob and sequential, so it adds no access pattern beyond what a whole-blob read already shows.
-The page must stay open while it runs, since it holds the key. What only a browser can prove (memory flat at
-gigabyte scale, the SW's lifetime during a long download, Safari and iOS) is still open in inbox #371.
-
-
-## Addendum: audio, and Files (inbox #412)
-
-The media route also serves **audio**: a playback may be registered under one well-formed `audio/<subtype>` essence as well as a
-`video/<subtype>` one (the same one-essence rule, `isStreamableMediaType`), and `PROTOCOL_VERSION` is 4, so a still-controlling
-worker that predates it fails the handshake and the page falls back as before. Files' file page is a second caller: it
-registers the sniffed container of a file (never the claimed type) with the same page-side chunk provider the download uses.
-Nothing else of this decision changes - the worker holds no key and no plaintext at rest.
+- **A download is whole-blob and sequential**, so it adds no access pattern beyond what a whole-blob read already
+  shows. The page must stay open while it runs, since it holds the key. What only a browser can prove (memory flat at
+  gigabyte scale, the SW's lifetime during a long download, Safari and iOS) is still open in inbox #371.

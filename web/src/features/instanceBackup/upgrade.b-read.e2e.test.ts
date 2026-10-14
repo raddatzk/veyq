@@ -1,4 +1,4 @@
-// The READER of the upgrade proof (ADR 0057 Addendum, uc.admin.back-up-and-restore-instance criterion
+// The READER of the upgrade proof (ADR 0057 Decision 7, uc.admin.back-up-and-restore-instance criterion
 // `a-predecessors-backup-upgrades-with-its-content-intact`) - the `upgrade` group's second member. It always runs from
 // the CANDIDATE's tree, against the candidate's jar, on an instance the orchestrator restored from the seeder's capture:
 // under `--upgrade` that capture is the PREDECESSOR's, written by its own jar and its own suite, so the first boot of

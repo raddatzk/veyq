@@ -135,6 +135,28 @@ nothing about what actually runs. So:
 
 Bumping a pin is part of cutting a release, not something that happens on its own.
 
+**7. An upgrade is proven before it is published** (owner decision 2026-10-14, inbox #419). A release does not only
+claim that it upgrades an instance of its predecessor; a run shows it — `scripts/run_web_e2e.py --upgrade` locally and
+`container.yml`'s `upgrade-proof` job ([infra/README](../../infra/README.md) § An upgrade, step by step).
+
+- **The proof.** The predecessor's own build (its fast-jar and its own e2e suites, from a worktree of its ref) writes
+  sealed content into a fresh instance; [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s tool
+  captures it; the capture is restored onto a freshly installed **candidate**, which migrates it up at its start
+  (ADR 0056 §7); then the candidate must report `configSecretState: OK`, and the **candidate's** suites must open the
+  predecessor's content and assert it — its names, its media, its files — not merely that nothing failed, because a
+  misread sealed field degrades to empty, not to an error.
+- **The predecessor is configuration:** a git ref, by default the commit before the one under test (its first parent)
+  until `scripts/applied_migrations.sha256`'s `release:` line is set, and from then on the newest `v<major>.<minor>`
+  tag the first parent contains, by version order. `release:` names a migration, not a tag, so a set release with no
+  such tag refuses the run rather than guess (owner confirmation 2026-10-14). Switching is that one default
+  (`default_predecessor` in `scripts/run_web_e2e.py`).
+- **In CI** the proof is a job that `publish` needs, written now and **disabled until the first release**; the release
+  turns it on in the same change that sets `release:`. A skipped need would skip `publish` too, so until then
+  `publish` accepts the proof's `skipped`, and the enabling change drops that (owner confirmation 2026-10-14).
+- **The Helm path is a check of its own**: what can break a `helm upgrade` of the chart is an immutable field, not the
+  data, and [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s chart-upgrade check renders it against the same
+  predecessor.
+
 ## Consequences
 
 - **A release becomes a deliberate act.** Dispatching the publish as a release is the release; bumping
@@ -172,6 +194,9 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
   one `repo:tag` to one digest everywhere, which turns a bump that misses one of its sites red. It is remembered, not measured, that Dependabot does not regenerate Gradle's
   verification metadata, so a Gradle bump regenerates it by hand. The metadata holds checksums only, trusted
   on first write, which is the same trust the generator JAR's pin has.
+- **Before the first release an upgrade proof gates nothing.** A baseline migration may still change then
+  ([backend/CLAUDE.md](../../backend/CLAUDE.md) § Migrations), so a red proof is information — it names its cause, a
+  changed baseline's checksum above all — and the CI job stays off (Decision 7).
 - **Rejected — deriving the version from the registry.** It makes the released artifact the authority on its own
   name, which is circular; it cannot be checked without the network; and its error path republishes silently
   (Context 3). A version that a `git checkout` cannot answer is not an identity.
@@ -188,27 +213,6 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
 - **Rejected — removing `build` from the wire.** It gates nothing, so its staleness costs nothing observable;
   removing a `required` field to fix a sentence of prose is an expensive remedy for a cheap defect, and it
   would have to be undone when a native client arrives (Decision 4).
-
-## Addendum (2026-10-14): an upgrade is proven before it is published
-
-Owner decision 2026-10-14 (inbox #419); built as `scripts/run_web_e2e.py --upgrade` and `container.yml`'s
-`upgrade-proof` job ([infra/README](../../infra/README.md) § An upgrade, step by step). A release does not only claim that it upgrades an instance of its predecessor;
-a run shows it. **The proof:** the predecessor's own build (its fast-jar and its own e2e suites, from a worktree of its
-ref) writes sealed content into a fresh instance; [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
-tool captures it; the capture is restored onto a freshly installed **candidate**, which migrates it up at its start
-(ADR 0056 §7); then the candidate must report `configSecretState: OK`, and the **candidate's** suites must open the
-predecessor's content and assert it - its names, its media, its files - not merely that nothing failed (a misread
-sealed field degrades to empty, not to an error). **The predecessor is configuration:** a git ref, by default the
-commit before the one under test (its first parent) until `scripts/applied_migrations.sha256`'s `release:` line is set,
-and from then on the newest `v<major>.<minor>` tag the first parent contains, by version order - `release:` names a
-migration, not a tag, and a set release with no such tag refuses the run rather than guess (owner confirmation
-2026-10-14) - switching is that one default (`default_predecessor` in `scripts/run_web_e2e.py`). **Before the first
-release** a baseline may still change (`backend/CLAUDE.md` § Migrations), so a red proof then is information - it
-names its cause, a changed baseline's checksum above all - and gates nothing. **In CI** the proof is a job that
-`publish` needs, written now and **disabled until the first release** (the release turns it on in the same change
-that sets `release:`). A skipped need would skip `publish` too, so until then `publish` accepts the proof's `skipped`;
-the enabling change drops that (owner confirmation 2026-10-14). The Helm path (`helm upgrade`, immutable fields) is not part of it; it is an inbox row of its
-own.
 
 ## Related
 

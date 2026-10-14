@@ -1,4 +1,4 @@
-// The safety-number QR payload (ADR 0028 Addendum 1, Decision 5 of cr-identity-verification). Un-mocked on purpose:
+// The safety-number QR payload (ADR 0028 Decision 3, Decision 5 of cr-identity-verification). Un-mocked on purpose:
 // the payload is drawn by the real `qrcode` encoder and read back by the real `jsqr` decoder, so the round trip is
 // the libraries', not a stub's - and the size bound is measured on the QR version `qrcode` actually picks.
 import { describe, it, expect } from 'vitest'

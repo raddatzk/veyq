@@ -278,7 +278,7 @@ export async function importSubtree(params: ImportSubtreeParams): Promise<Import
 
 /**
  * Re-create each item's subtree under `parent`, one after the other, through the kinds' import hooks: what an import does
- * with a download, and what a copy does with the subtrees it walked (ADR 0082 Addendum 2). A name taken among the target's
+ * with a download, and what a copy does with the subtrees it walked (ADR 0082 decision 11). A name taken among the target's
  * siblings - the tree's, and those this run created - gets `Name (2)`. A failure trashes every top-level node the run
  * created (their subtrees go with them, ADR 0061) and reports how far it got.
  * @throws ExportError `nothing_to_import` when the plans hold nothing (nothing is written); {@link ImportFailed} part-way.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// My own safety number on my own profile page (uc.spaces.enforce-verified-identities main flow 0, ADR 0028 Addendum 1):
+// My own safety number on my own profile page (uc.spaces.enforce-verified-identities main flow 0, ADR 0028 Decision 3):
 // the 6x5 digits and a QR of my fingerprint, for another member to read aloud or scan on their device. Nothing to edit.
 // The key is MY vault's (`myIdentityPublicKeyB64`), never a directory round-trip: the number I show is the one my own
 // device holds, which is exactly what the other side needs to compare against what the server served them.

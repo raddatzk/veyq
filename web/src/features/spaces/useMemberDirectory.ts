@@ -35,7 +35,7 @@ export function useMemberDirectory(loadBody: () => Promise<MemberLoad>, admissio
 
   const members = ref<ScopeMember[]>([])
   const isOwner = ref(false)
-  // Identity trust (cr-0099, ADR 0028 Addendum 4): per-member trust from the sealed pin store - `verified` (compared on
+  // Identity trust (cr-0099, ADR 0028 Decision 3): per-member trust from the sealed pin store - `verified` (compared on
   // the member's profile) and `changed` (a key differing from the pin: a rotation or a substitution, louder when the
   // pin was verified) are shown in the list; `changed` drives the review dialog.
   const trust = ref<Record<string, ContactTrust>>({})

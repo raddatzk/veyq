@@ -4,7 +4,7 @@
 // (pinned) vs current (directory) safety-numbers side by side; the caller compares out-of-band and either
 // accepts → `acceptChangedKey` (one scope-rotation worker pass, then re-pin as pinned; the member's profile then offers
 // the compare again, the only way back to verified) or refuses → leave it blocked (the wrap/delivery stays gated).
-// A VERIFIED contact's change is said louder (ADR 0028 Addendum 3): the caller compared that key in person before, so a
+// A VERIFIED contact's change is said louder (ADR 0028 Decision 3): the caller compared that key in person before, so a
 // different one is the case the compare exists for. Client-only, operator-blind.
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -33,7 +33,7 @@ const currentUnreadable = ref(false)
 const expectedUnreadable = ref(false)
 /** The accept failed on a refused pin store — the error then links to the settings hub's reset. */
 const trustRefused = ref(false)
-/** The pin being replaced was `verified` — a key the caller compared out-of-band before (ADR 0028 Addendum 3). */
+/** The pin being replaced was `verified` — a key the caller compared out-of-band before (ADR 0028 Decision 3). */
 const wasVerified = ref(false)
 
 watch(

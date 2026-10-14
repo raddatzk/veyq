@@ -16,7 +16,7 @@ key change is said as such and needs a new compare. Strict mode stays out. Owner
 
 ## Context & constraints
 
-- [ADR 0028](../docs/decisions/0028-identity-authenticity-tofu-verification.md) Addendum (2026-10-14) owns the
+- [ADR 0028](../docs/decisions/0028-identity-authenticity-tofu-verification.md) Decisions 3-4 own the
   decisions; [uc.spaces.enforce-verified-identities](../docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)
   (main flow 0-3, A1, A3, E1) the flow; [uc.spaces.verify-identity](../docs/features/spaces/use-cases/uc.spaces.verify-identity.md)
   the changed-key review this extends.
@@ -87,8 +87,8 @@ key change is said as such and needs a new compare. Strict mode stays out. Owner
   - Done when `npm run check` is green.
 - [x] 3 docs: both use cases (the ceremony's criteria move from `enforce-verified-identities`' planned coverage to
   refs, with strict mode left planned - split the file if the coverage rules require it), the enabler
-  `en.account.identity-pinning` (its "descoped" reasoning replaced by the Addendum's), the stale "cr-0100" references,
-  ADR 0028 Addendum's "not yet built", both wikis' safety page (`wiki/en/is-my-data-safe.md` and its DE twin).
+  `en.account.identity-pinning` (its "descoped" reasoning replaced by ADR 0028's), the stale "cr-0100" references,
+  ADR 0028's "not yet built", both wikis' safety page (`wiki/en/is-my-data-safe.md` and its DE twin).
   - Done when every `scripts/validate_*.py` is green.
   - Split as the coverage rules require (a file is planned or every criterion has a ref, ADR 0040): the ceremony kept
     the id `uc.spaces.enforce-verified-identities` (as this CR's `satisfies:` reads it) and strict mode moved verbatim
@@ -119,8 +119,8 @@ key change is said as such and needs a new compare. Strict mode stays out. Owner
   "Split the file if the coverage rules require it" was measurable at refine (they always do), and left which half
   keeps the id to the implementer: the ceremony now lives under an id that says "enforce".
 - **Process - the ADR's "Addendum" section contradicts `docs/ai`'s "durable state is edited in place - no
-  addendums".** Only its "not yet built" was updated, as the CR asked; folding it into Decisions 3-4 is the owner's
-  call. And the phase-1 browser pass could not run in a worktree (the CR's done-when assumed the main checkout); the
+  addendums".** Only its "not yet built" was updated, as the CR asked; folding it into Decisions 3-4 was the owner's
+  call, and it is folded now (no Addendum section remains). And the phase-1 browser pass could not run in a worktree (the CR's done-when assumed the main checkout); the
   pass and its record in the use case are open for the merging session.
 - **Next time:** a refine whose done-when names a browser pass says which session clicks it, and a refine that
   names a payload or a split runs the one command that shows whether the source exists and whether the split is

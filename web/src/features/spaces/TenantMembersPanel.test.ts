@@ -233,7 +233,7 @@ describe('TenantMembersPanel — removal and the links of the space (ADR 0075)',
   })
 })
 
-describe('TenantMembersPanel - who is verified (ADR 0028 Addendum 3-4)', () => {
+describe('TenantMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     clearActiveSpace()

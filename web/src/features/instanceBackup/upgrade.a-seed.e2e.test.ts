@@ -1,4 +1,4 @@
-// The SEEDER of the upgrade proof (ADR 0057 Addendum, uc.admin.back-up-and-restore-instance criterion
+// The SEEDER of the upgrade proof (ADR 0057 Decision 7, uc.admin.back-up-and-restore-instance criterion
 // `a-predecessors-backup-upgrades-with-its-content-intact`) - a GROUP member, so it only means anything under
 // `scripts/run_web_e2e.py`. Under `--upgrade` / `--upgrade-from <ref>` it runs from the PREDECESSOR's worktree against
 // the predecessor's jar; the orchestrator then captures the instance, destroys it, restores it onto a freshly installed

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A `helm upgrade` of the chart from the upgrade predecessor's to this checkout's, checked without a cluster.
 
-**What it asserts** ([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md) Addendum). It reads the
+**What it asserts** ([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md) § Decision, the chart-upgrade check). It reads the
 predecessor's `charts/veyq` out of git (`git archive`, no worktree, no build) and renders it and this checkout's chart
 with the same values - each of the CANDIDATE's `ci/*.yaml`, like for like - then compares the two renders object by
 object, keyed by `(kind, metadata.name)`. It refuses, each with a reason naming the object and the field:
@@ -25,7 +25,7 @@ renders the candidate with each of the PREDECESSOR's `ci/*.yaml`: an operator's 
 candidate's schema and render, or the upgrade fails before it starts.
 
 **The predecessor** is the upgrade proof's ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)
-Addendum): `run_web_e2e.default_predecessor_ref()`, so the commit before the one under test while
+Decision 7): `run_web_e2e.default_predecessor_ref()`, so the commit before the one under test while
 `scripts/applied_migrations.sha256` says `release: none`, then the newest `v<major>.<minor>` tag the first parent
 contains. `--upgrade-from <ref>` names another one, as it does for the proof. A predecessor without `charts/veyq` is said and skipped - nothing to
 upgrade from.
@@ -40,7 +40,7 @@ that of these risks only `strategy: Recreate` was checked (`chart_meta_check.py`
 versions. Each refusal was bitten by deleting its check against `chart_upgrade_check_selftest.py`, and the real run by
 an uncommitted edit of `veyq.selector` and of a claim template's size (cr-helm-upgrade-check).
 
-**Its limits - what a green run does NOT prove.** It renders; it never installs. Not covered, as ADR 0064's Addendum
+**Its limits - what a green run does NOT prove.** It renders; it never installs. Not covered, as ADR 0064's Consequences
 states: a missing StorageClass or one that cannot expand a growing claim, admission under `restricted`, image pulls,
 data surviving a real `helm upgrade`, and a `mariadbPassword` changed on upgrade (the database keeps the old one) -
 the kind cluster leg (inbox #430) is what would see those. Beyond that list: the StatefulSet mutable set above is
