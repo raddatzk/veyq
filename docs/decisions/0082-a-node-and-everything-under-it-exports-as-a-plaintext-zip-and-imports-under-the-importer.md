@@ -190,6 +190,18 @@ Three things the build found that the decision above did not know, each decided 
    the per-medium place name, the cover (a photo of the Memory by its position in the list, or an uploaded image, which is
    re-encoded by the cover upload). Participants are exported as display names and not restored.
 
+## Addendum 2 (2026-10-14): a copy is the same walk, without the archive
+
+Owner decision 2026-10-14 (inbox #423, [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)).
+**Copy to…** re-creates a node and its subtree at another place in the same space by this ADR's walk and the kinds'
+`exportContent` / `importContent` hooks, handing each payload from the walk to the import by chunk instead of through a
+ZIP: the client decrypts and uploads every file again under fresh keys. It is a member flow, as the import is (decision
+5), carries exactly what an import carries (decision 6), and reuses the import's quota question, `Name (2)`, progress and
+rollback (decision 8). **Rejected:** a server-side object copy (a new store operation and endpoints per application, and
+the operator learns which blob copies which) and a deduplicated blob shared by two nodes (it breaks one reference per
+blob, on which [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)'s reclaim relies, and needs counting).
+Copying across spaces is left for later: the browser and the tree are one space's.
+
 ## Consequences
 
 - **A new core surface in the web**: the zip writer/reader, the walk, the dialogs (download, which asks nothing for a
