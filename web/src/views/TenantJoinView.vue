@@ -151,7 +151,7 @@ function sealedAvatarFor(scopeRootKey: Uint8Array, userId: string): string | und
 
 /** The unlocked vault's identity as the tenant's birth needs it: the grant is sealed to its public bundle and signed
  *  by its signing half (ADR 0028 Decision 6), under the owner's own account id. */
-function ownerOf(userId: string, priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }): TenantOwner {
+function ownerOf(userId: string, priv: { kemSeed: Uint8Array; sign: Uint8Array }): TenantOwner {
   return { userId, identity: { pub: identityPublicFromPrivate(priv), priv } }
 }
 

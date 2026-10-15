@@ -48,8 +48,7 @@ export function wrapNameKeyToInvitee(
   nameKey: Uint8Array, scopeId: string, nameEpoch: number, inviteeIdentityPublicKeyB64: string,
 ): string {
   const pub = v1.deserializeIdentityPublic(fromB64std(inviteeIdentityPublicKeyB64))
-  const hybridPub: v1.HybridPublic = { x: pub.kemX, m: pub.kemM }
-  return b64std(v1.sealTo(nameKeyContext(scopeId, nameEpoch), hybridPub, nameKey))
+  return b64std(v1.sealTo(nameKeyContext(scopeId, nameEpoch), pub.kem, nameKey))
 }
 
 /**
@@ -71,14 +70,13 @@ export function openInviteeName(invitation: {
     // Both seals are bound to the invitation's (scope, name epoch) — the row's scope is the one the invitee accepts
     // or declines by, so a name-key or a name moved from another group's invitation does not open here.
     const { scopeId, nameEpoch } = invitation
-    nameKey = v1.openAs(nameKeyContext(scopeId, nameEpoch), v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(invitation.sealedNameKey))
+    nameKey = v1.openAs(nameKeyContext(scopeId, nameEpoch), v1.hybridSecret(priv), fromB64std(invitation.sealedNameKey))
     return openGroupNameWith(nameKey, scopeId, nameEpoch, invitation.encryptedName)
   } catch {
     return null
   } finally {
     nameKey?.fill(0)
-    priv.kemX.fill(0)
-    priv.mlkemSeed.fill(0)
+    priv.kemSeed.fill(0)
     priv.sign.fill(0)
   }
 }

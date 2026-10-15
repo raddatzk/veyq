@@ -20,8 +20,7 @@ const OTHER_GROUP = '5c09e000-0000-4000-8000-0000000000b2'
 // A fresh copy of the recipient's private bundle (openInviteeName wipes what the vault hands it).
 function cloneRecipientPriv() {
   return {
-    kemX: recipient.priv.kemX.slice(),
-    mlkemSeed: recipient.priv.mlkemSeed.slice(),
+    kemSeed: recipient.priv.kemSeed.slice(),
     sign: recipient.priv.sign.slice(),
   }
 }
@@ -73,7 +72,7 @@ describe('group invite name-key (cr-0096, ADR 0027)', () => {
     // independent: a mutated purpose or binding at the source makes this open refuse and the assertion red.
     const opened = v1.openAs(
       { purpose: 'group-name-key', scopeId: GROUP, nameEpoch: 2 },
-      v1.hybridSecret(recipient.priv), v1.hybridPublic(recipient.priv), fromB64std(sealed),
+      v1.hybridSecret(recipient.priv), fromB64std(sealed),
     )
     expect(b64std(opened)).toBe(b64std(nameKey))
   })
@@ -81,12 +80,11 @@ describe('group invite name-key (cr-0096, ADR 0027)', () => {
   it('is domain-separated from scope-grant and bound to its group + name epoch', () => {
     const sealed = fromB64std(wrapNameKeyToInvitee(deriveGroupNameKey(v1.randomBytes(32)), GROUP, 0, recipientPubB64))
     const sk = v1.hybridSecret(recipient.priv)
-    const pk = v1.hybridPublic(recipient.priv)
     // Pin the refusal, not a bare .toThrow(): each is the seal refusing the wrong address, not a structural error.
-    expect(() => v1.openAs({ purpose: 'scope-grant', scopeId: GROUP, epoch: 0 }, sk, pk, sealed)).toThrow(new v1.OpenRefused('scope-grant'))
-    expect(() => v1.openAs({ purpose: 'group-name-key', scopeId: OTHER_GROUP, nameEpoch: 0 }, sk, pk, sealed))
+    expect(() => v1.openAs({ purpose: 'scope-grant', scopeId: GROUP, epoch: 0 }, sk, sealed)).toThrow(new v1.OpenRefused('scope-grant'))
+    expect(() => v1.openAs({ purpose: 'group-name-key', scopeId: OTHER_GROUP, nameEpoch: 0 }, sk, sealed))
       .toThrow(new v1.OpenRefused('group-name-key'))
-    expect(() => v1.openAs({ purpose: 'group-name-key', scopeId: GROUP, nameEpoch: 1 }, sk, pk, sealed))
+    expect(() => v1.openAs({ purpose: 'group-name-key', scopeId: GROUP, nameEpoch: 1 }, sk, sealed))
       .toThrow(new v1.OpenRefused('group-name-key'))
   })
 
@@ -135,8 +133,7 @@ describe('group invite name-key (cr-0096, ADR 0027)', () => {
     expect(openInviteeName(inv)).toBe('Wird gewischt') // succeeds → finally ran on success
 
     const allZero = (u: Uint8Array) => Array.from(u).every((byte) => byte === 0)
-    expect(allZero(held.kemX)).toBe(true)
-    expect(allZero(held.mlkemSeed)).toBe(true)
+    expect(allZero(held.kemSeed)).toBe(true)
     expect(allZero(held.sign)).toBe(true)
     expect(capturedNameKey).not.toBeNull()
     expect(allZero(capturedNameKey!)).toBe(true)

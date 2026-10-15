@@ -30,7 +30,7 @@ describe('the grant signature (ADR 0028 Decision 6)', () => {
   it('sealGrant wraps to the recipient at (scope, epoch) and signs exactly that grant', () => {
     const key = v1.randomBytes(32)
     const g = sealGrant(key, scope, to, granter.priv.sign)
-    const opened = v1.openAs(grantContext(S, 3), v1.hybridSecret(recipient.priv), v1.hybridPublic(recipient.priv), fromB64std(g.wrappedGrant))
+    const opened = v1.openAs(grantContext(S, 3), v1.hybridSecret(recipient.priv), fromB64std(g.wrappedGrant))
     expect(Array.from(opened)).toEqual(Array.from(key))
     expect(g.grantSignature).toBe(signGrant(granter.priv.sign, scope, to, g.wrappedGrant))
     expect(grantSignatureVerifies(granter.pub.sign, scope, to, g.wrappedGrant, g.grantSignature)).toBe(true)

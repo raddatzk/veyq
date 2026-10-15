@@ -245,7 +245,7 @@ describe('JoinDeviceCard — the device being let in (uc.account.onboard-device,
 
       const relayGrant = { v: 1, email: 'kevin@example.com', masterKey: b64std(new Uint8Array(32).fill(6)), refreshToken: 'the-relays-token', label: 'x' }
       const pub = relayReadsTheKey(answer.mock.calls[0][1])
-      const sealed = v1.sealTo({ purpose: 'pairing-grant' }, { x: pub.kemX, m: pub.kemM }, v1.utf8(JSON.stringify(relayGrant)))
+      const sealed = v1.sealTo({ purpose: 'pairing-grant' }, pub.kem, v1.utf8(JSON.stringify(relayGrant)))
       const tag = v1.pairingMac(fromB64std(CHANNEL.handle), { purpose: 'pairing-envelope', envelope: sealed })
       const envelope = variant === 'bare seal' ? b64std(sealed) : b64std(v1.concat(v1.lp(sealed), v1.lp(tag)))
       await grantArrives(w, envelope)

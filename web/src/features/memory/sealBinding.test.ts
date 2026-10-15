@@ -89,7 +89,7 @@ describe('a thumbnail ref moved from media A to media B', () => {
 
 describe('a scope grant served in another scope\'s row', () => {
   const ID = v1.generateIdentity()
-  const copyPriv = () => ({ kemX: ID.priv.kemX.slice(), mlkemSeed: ID.priv.mlkemSeed.slice(), sign: ID.priv.sign.slice() })
+  const copyPriv = () => ({ kemSeed: ID.priv.kemSeed.slice(), sign: ID.priv.sign.slice() })
   // Scope A's own grant, sealed as A's (scope A, epoch 0).
   const grantOf = (key: Uint8Array) =>
     b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: SCOPE, epoch: 0 }, v1.hybridPublic(ID.priv), key))

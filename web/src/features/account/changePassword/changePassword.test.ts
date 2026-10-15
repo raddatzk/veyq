@@ -23,7 +23,7 @@ vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) 
 
 const EMAIL = 'change-pw@example.com'
 const held: { mk: Uint8Array | null } = vi.hoisted(() => ({ mk: null }))
-const IDENTITY_PRIV = vi.hoisted(() => ({ kemX: new Uint8Array(1), mlkemSeed: new Uint8Array(1), sign: new Uint8Array(1) }))
+const IDENTITY_PRIV = vi.hoisted(() => ({ kemSeed: new Uint8Array(1), sign: new Uint8Array(1) }))
 const setUnlocked = vi.hoisted(() => vi.fn())
 vi.mock('../../../app/vault', () => ({
   masterKey: () => held.mk,

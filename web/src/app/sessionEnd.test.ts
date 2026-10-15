@@ -95,7 +95,7 @@ describe('the session ending (uc.account.sign-out, ADR 0070)', () => {
   it('zeroes the vault before the document load — hygiene for the heap the old page leaves behind', async () => {
     const tab = await freshTab()
     const { setUnlocked } = await import('./vault')
-    setUnlocked(new Uint8Array(32).fill(7), { kemX: new Uint8Array(1), mlkemSeed: new Uint8Array(1), sign: new Uint8Array(1) }, 'cold')
+    setUnlocked(new Uint8Array(32).fill(7), { kemSeed: new Uint8Array(1), sign: new Uint8Array(1) }, 'cold')
     let unlockedAtLoad: boolean | null = null
     replace.mockImplementation(() => void (unlockedAtLoad = tab.vaultState.unlocked))
 

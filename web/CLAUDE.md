@@ -392,7 +392,7 @@ here; the server is blind.
   the two-character-longer `veyqsignin:`; `veyqid:1:` plus a 32-byte fingerprint digest is 53 characters, **version 4**,
   pinned by `features/account/safetyCode.test.ts`). **The bound is a property of what the payloads CARRY, not of how
   many markers there are:** a marker plus a 32-byte secret or digest is ~55 characters, while the transport key
-  `veyqsignin:` deliberately does not carry would be 1260 bytes and **version 28**, and the identity bundle `veyqid:`
+  `veyqsignin:` deliberately does not carry would be 1256 bytes and **version 34** (qrcode's default level M, measured 2026-10-15), and the identity bundle `veyqid:`
   deliberately does not carry is past version 23 too — so the thing that would void this exception is a payload
   growing a key, not another marker. Pure JS is memory-safe
   so a decoder bug is a wrong string rather than an exploit, and the decoded value is validated immediately

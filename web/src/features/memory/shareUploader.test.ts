@@ -161,7 +161,7 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
     )
     const kUp = v1.openAs(
       { purpose: 'upload-identity-key', scopeId: SCOPE_ID, nodeId: NODE_ID, identityId: identity.identityId },
-      v1.dropKeySecret(drop), v1.dropKeyPublic(drop), fromB64std(identity.wrappedIdentityKey!),
+      v1.dropKeySecret(drop), fromB64std(identity.wrappedIdentityKey!),
     )
     expect(v1.open(blobKeyCtx, kUp, wrappedBlobKey)).toHaveLength(32)
     // and the display name is the guest's too, not the Memory's

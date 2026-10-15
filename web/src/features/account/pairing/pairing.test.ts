@@ -164,7 +164,7 @@ describe('the sealed grant (ADR 0059 §3, §11)', () => {
   it('refuses a bare seal with no MAC at all as unreadable, by name', () => {
     const transport = mintTransportKey()
     const { key } = aChannel()
-    const bare = b64std(v1.sealTo({ purpose: 'pairing-grant' }, { x: transport.pub.kemX, m: transport.pub.kemM }, v1.utf8('{}')))
+    const bare = b64std(v1.sealTo({ purpose: 'pairing-grant' }, transport.pub.kem, v1.utf8('{}')))
 
     expect(refusal(() => openGrant(key, transport.priv, bare))).toBe('envelope_unreadable')
   })

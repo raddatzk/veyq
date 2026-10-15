@@ -74,7 +74,7 @@ decision and its rejected alternatives.
       changed (the Kotlin vector readers use none of the regenerated groups — confirm, don't assume); bites:
       one flipped byte in an `xwing` vector's `ss` turns the conformance test red, and the removed combiner's
       output no longer opens a regenerated `seal.asym` vector.
-- [ ] 2 web + admin-web — every caller in the locators moves to the new bundle and drop-key shapes: the vault,
+- [x] 2 web + admin-web — every caller in the locators moves to the new bundle and drop-key shapes: the vault,
       identity pins, pairing, grant delivery, invite names, scopes, uploader shares and the cold account birth in
       `admin-web`. · Done when: `npm run check` green in `web/` and `admin-web/`; the web e2e suites that create
       identities, admit members, deliver grants and open uploader shares green (`scripts/run_web_e2e.py`, with the

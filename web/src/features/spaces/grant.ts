@@ -28,8 +28,7 @@ export function wrapScopeKeyToMember(
   scopeKey: Uint8Array, scopeId: string, epoch: number, targetIdentityPublicKeyB64: string,
 ): string {
   const pub = v1.deserializeIdentityPublic(fromB64std(targetIdentityPublicKeyB64))
-  const hybridPub: v1.HybridPublic = { x: pub.kemX, m: pub.kemM }
-  return b64std(v1.sealTo(grantContext(scopeId, epoch), hybridPub, scopeKey))
+  return b64std(v1.sealTo(grantContext(scopeId, epoch), pub.kem, scopeKey))
 }
 
 /** The object a grant is: its scope, that scope's kind (signed, so a group's grant cannot pose as the personal

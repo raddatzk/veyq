@@ -96,7 +96,7 @@ const SECRET_KEY_B64 = b64std(SECRET_KEY)
 const MK = v1.randomBytes(32)
 /** The account's *current* identity — the one its scope grants are wrapped to, and the vault still holds. */
 const OLD_ID = v1.generateIdentity()
-const oldPriv = () => ({ kemX: OLD_ID.priv.kemX.slice(), mlkemSeed: OLD_ID.priv.mlkemSeed.slice(), sign: OLD_ID.priv.sign.slice() })
+const oldPriv = () => ({ kemSeed: OLD_ID.priv.kemSeed.slice(), sign: OLD_ID.priv.sign.slice() })
 /** Two scopes the caller holds — canonical ids, since every grant and chain link is sealed bound to its scope. */
 const SCOPE_PERSONAL = '5c09e000-0000-4000-8000-0000000000e1'
 const SCOPE_SHARED = '5c09e000-0000-4000-8000-0000000000e2'
@@ -434,7 +434,6 @@ describe('what a rotation leaves behind', () => {
     const opened = v1.openAs(
       { purpose: 'scope-grant', scopeId: SCOPE_PERSONAL, epoch: 1 },
       v1.hybridSecret(priv),
-      v1.hybridPublic(priv),
       fromB64std(grants[0].wrappedGrant),
     )
     expect(opened).toHaveLength(32)

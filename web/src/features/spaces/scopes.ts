@@ -235,10 +235,10 @@ const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: 
  * the epoch is authentic because the grant is bound to it and signed, so the device now knows it exists.
  */
 async function openOwnGrant(
-  scope: ScopeSummary, priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }, self: Me,
+  scope: ScopeSummary, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
 ): Promise<Uint8Array> {
   await verifyOwnGrant({ scopeId: scope.id, kind: scope.kind, epoch: scope.grantedEpoch }, scope.wrappedGrant, scope, self)
-  const key = v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(scope.wrappedGrant))
+  const key = v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), fromB64std(scope.wrappedGrant))
   await raiseEpochFloor(scope.id, scope.grantedEpoch)
   return key
 }
@@ -279,7 +279,7 @@ async function orAwaitingAccess<T>(open: () => Promise<T | null>): Promise<T | n
  *  state an epoch this device knows already exists. Reads are refused with it (owner decision, 2026-09-28): one
  *  closed state for both halves, never a read-only open. */
 async function toOpenedScope(
-  scope: ScopeSummary, priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }, self: Me,
+  scope: ScopeSummary, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
   staleGrant: 'refuse' | 'open' = 'refuse',
 ): Promise<OpenedScope> {
   if (staleGrant === 'refuse' && scope.grantedEpoch < scope.currentEpoch) throw new AwaitingCurrentKey(scope.id)
@@ -340,7 +340,7 @@ async function openById(scopeId: string, staleGrant: 'refuse' | 'open'): Promise
  *  Decrypts under the peeled name-epoch chain and zeroes those keys per call (the name stays operator-blind). */
 async function groupSlug(
   g: ScopeSummary,
-  priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array },
+  priv: { kemSeed: Uint8Array; sign: Uint8Array },
   self: Me,
 ): Promise<string | null> {
   if (!g.encryptedName) return null
@@ -508,7 +508,7 @@ export async function openMyTenantIcon(tenant: MyTenant): Promise<Uint8Array | n
       { scopeId: tenant.tenantId, kind: ScopeKind.Tenant, epoch: tenant.grantedEpoch }, tenant.wrappedGrant, tenant, await me(priv),
     )
     scopeKey = v1.openAs(
-      grantContext(tenant.tenantId, tenant.grantedEpoch), v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(tenant.wrappedGrant),
+      grantContext(tenant.tenantId, tenant.grantedEpoch), v1.hybridSecret(priv), fromB64std(tenant.wrappedGrant),
     )
     iconKey = deriveSpaceIconKey(scopeKey)
     return openIcon(iconKey, { scopeId: tenant.tenantId, iconEpoch: tenant.iconEpoch }, tenant.sealedIcon)
@@ -698,8 +698,7 @@ export async function admissionFor(
 }
 
 /** Best-effort wipe of the transient identity-private copy the vault handed us. */
-function zero(priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }): void {
-  priv.kemX.fill(0)
-  priv.mlkemSeed.fill(0)
+function zero(priv: { kemSeed: Uint8Array; sign: Uint8Array }): void {
+  priv.kemSeed.fill(0)
   priv.sign.fill(0)
 }

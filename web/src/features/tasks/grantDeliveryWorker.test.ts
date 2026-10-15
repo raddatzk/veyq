@@ -32,7 +32,7 @@ const worker = v1.generateIdentity()
 const S1 = '5c09e000-0000-4000-8000-0000000000a1'
 /** Open a delivered grant as the target would: on `S1`'s row, at `epoch`. */
 const openAsTarget = (wrap: string, epoch: number) =>
-  v1.openAs({ purpose: 'scope-grant', scopeId: S1, epoch }, v1.hybridSecret(target.priv), v1.hybridPublic(target.priv), fromB64std(wrap))
+  v1.openAs({ purpose: 'scope-grant', scopeId: S1, epoch }, v1.hybridSecret(target.priv), fromB64std(wrap))
 
 /** The target's admission, tagged by a genuine key-holder of `key` at `epoch` (a group add: bound to the target). */
 const admitted = (key: Uint8Array, epoch: number) => tagAdmission(key, { scopeId: S1, kind: 'GROUP' }, epoch, TARGET)
@@ -66,7 +66,7 @@ beforeEach(() => {
   // Default: the target is new or unchanged → the worker proceeds with the wrap (TOFU). Overridden per test.
   vi.mocked(checkAndPin).mockResolvedValue('firstUse')
   vi.mocked(identityPrivate).mockImplementation(() => ({
-    kemX: worker.priv.kemX.slice(), mlkemSeed: worker.priv.mlkemSeed.slice(), sign: worker.priv.sign.slice(),
+    kemSeed: worker.priv.kemSeed.slice(), sign: worker.priv.sign.slice(),
   }))
 })
 

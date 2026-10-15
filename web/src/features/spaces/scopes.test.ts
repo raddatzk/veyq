@@ -44,7 +44,7 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 // A real identity for the test; the mocked vault hands out a FRESH copy each call (the data layer zeroes
 // the copy it receives), while we keep this master to verify the grants it produces.
 const ID = v1.generateIdentity()
-const copyPriv = () => ({ kemX: ID.priv.kemX.slice(), mlkemSeed: ID.priv.mlkemSeed.slice(), sign: ID.priv.sign.slice() })
+const copyPriv = () => ({ kemSeed: ID.priv.kemSeed.slice(), sign: ID.priv.sign.slice() })
 const ID_PUB = b64std(v1.serializeIdentityPublic(ID.pub))
 /** The caller's account id, as its own key material names it. */
 const ME = '0e000000-0000-4000-8000-0000000000e0'
@@ -83,7 +83,7 @@ const ownGrant = (scopeId: string, key: Uint8Array, epoch: number | string = 0) 
   b64std(v1.sealTo({ purpose: 'scope-grant', scopeId, epoch: Number(epoch) }, v1.hybridPublic(copyPriv()), key))
 /** Open a grant as the one on `scopeId`'s row at `epoch`, with `priv` (our own identity by default). */
 const openOwn = (scopeId: string, epoch: number, blob: string, priv: v1.Identity['priv'] = copyPriv()) =>
-  v1.openAs({ purpose: 'scope-grant', scopeId, epoch }, v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(blob))
+  v1.openAs({ purpose: 'scope-grant', scopeId, epoch }, v1.hybridSecret(priv), fromB64std(blob))
 /** The chain link stored at `epoch`: `prev` sealed under `key`. */
 const linkUnder = (scopeId: string, epoch: number, key: Uint8Array, prev: Uint8Array) =>
   b64std(v1.seal(epochLinkContext(scopeId, epoch), key, prev))

@@ -47,8 +47,7 @@ export function unlockOrigin(): UnlockOrigin | null {
  *  no copy was made, but it shortens the window for a heap snapshot to recover a key after sign-out). */
 export function clearVault(): void {
   keys.masterKey?.fill(0)
-  keys.identityPrivate?.kemX.fill(0)
-  keys.identityPrivate?.mlkemSeed.fill(0)
+  keys.identityPrivate?.kemSeed.fill(0)
   keys.identityPrivate?.sign.fill(0)
   keys.masterKey = null
   keys.identityPrivate = null
@@ -72,5 +71,5 @@ export function masterKey(): Uint8Array | null {
 /** The unlocked identity private key as a fresh copy, or null while locked. */
 export function identityPrivate(): Identity['priv'] | null {
   const p = keys.identityPrivate
-  return p ? { kemX: p.kemX.slice(), mlkemSeed: p.mlkemSeed.slice(), sign: p.sign.slice() } : null
+  return p ? { kemSeed: p.kemSeed.slice(), sign: p.sign.slice() } : null
 }

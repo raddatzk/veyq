@@ -147,7 +147,7 @@ export const parsePairingPayload = (text: string): string | null => parseMarked(
 
 /**
  * The displayed code's whole payload in *sign in with a QR code* (D1): the second marker and the secret, and
- * still no key — a serialized transport bundle is 1260 bytes, which is a QR version 28 nobody scans off a
+ * still no key — a serialized transport bundle is 1256 bytes, which is a QR version 34 nobody scans off a
  * laptop screen and which sits past the decoder bound `web/CLAUDE.md`'s jsQR exception rests on.
  *
  * Nothing is lost by relaying the key instead: the relayed key is MACed under the channel key this payload's
@@ -188,10 +188,10 @@ export function mintPairingCode(): string {
 }
 
 /**
- * The onboarded device's single-use transport key: a full identity bundle rather than a bare hybrid pair, so
+ * The onboarded device's single-use transport key: a full identity bundle rather than a bare KEM key, so
  * the wire serialization AND the digest input are the ones already pinned (`serializeIdentityPublic`,
- * `fingerprint`). The Ed25519 half is unused by the wrap and exists for exactly that reason — a bare hybrid
- * pair would save 36 bytes and owe two new pinned forms. (That unused half is also what the relay would vary to
+ * `fingerprint`). The Ed25519 half is unused by the wrap and exists for exactly that reason — a bare KEM
+ * key would save 36 bytes and owe two new pinned forms. (That unused half is also what the relay would vary to
  * grind the check number; the answer's MAC is why that no longer buys it anything.)
  */
 export const mintTransportKey = (): v1.Identity => v1.generateIdentity()
@@ -328,7 +328,7 @@ export function sealGrant(key: Uint8Array, pub: v1.Identity['pub'], grant: Pairi
       ...(grant.marks ? { marks: grant.marks } : {}),
     }),
   )
-  const sealed = v1.sealTo(PAIRING_GRANT, { x: pub.kemX, m: pub.kemM }, plaintext)
+  const sealed = v1.sealTo(PAIRING_GRANT, pub.kem, plaintext)
   return b64std(v1.concat(v1.lp(sealed), v1.lp(v1.pairingMac(key, { purpose: 'pairing-envelope', envelope: sealed }))))
 }
 
@@ -344,7 +344,7 @@ export function openGrant(key: Uint8Array, priv: v1.Identity['priv'], envelope: 
   if (!v1.pairingMacVerifies(key, { purpose: 'pairing-envelope', envelope: sealed }, mac)) {
     throw new PairingRefused('envelope_refused')
   }
-  const plaintext = v1.openAs(PAIRING_GRANT, v1.hybridSecret(priv), v1.hybridPublic(priv), sealed)
+  const plaintext = v1.openAs(PAIRING_GRANT, v1.hybridSecret(priv), sealed)
   const o = JSON.parse(decoder.decode(plaintext)) as Partial<Record<keyof PairingGrant | 'v', unknown>>
   if (o.v !== 1 || typeof o.email !== 'string' || typeof o.masterKey !== 'string'
     || typeof o.refreshToken !== 'string' || typeof o.label !== 'string') {

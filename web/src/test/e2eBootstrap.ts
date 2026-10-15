@@ -106,7 +106,7 @@ export async function become(a: Actor): Promise<void> {
   // identity, or a suite that locks the vault (a password-only session) would wipe the actor for every later
   // `become()`, and its grants would stop verifying under an all-zero key.
   const p = a.built.identity.priv
-  setUnlocked(masterKey, { kemX: p.kemX.slice(), mlkemSeed: p.mlkemSeed.slice(), sign: p.sign.slice() }, 'cold')
+  setUnlocked(masterKey, { kemSeed: p.kemSeed.slice(), sign: p.sign.slice() }, 'cold')
 }
 
 export type BirthedInstance = {

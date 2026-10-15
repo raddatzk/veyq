@@ -40,8 +40,7 @@ export async function runGrantDeliveryWorker(scope: ScopeKeyHolder): Promise<num
   try {
     return await drain(scope, priv.sign)
   } finally {
-    priv.kemX.fill(0)
-    priv.mlkemSeed.fill(0)
+    priv.kemSeed.fill(0)
     priv.sign.fill(0)
   }
 }

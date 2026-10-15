@@ -67,7 +67,7 @@ export function mintIdentityKey(
 export function openIdentityKey(
   scopeId: string, nodeId: string, drop: v1.DropKey, identityId: string, wrappedIdentityKey: string,
 ): Uint8Array {
-  return v1.openAs(uploadIdentityContext(scopeId, nodeId, identityId), v1.dropKeySecret(drop), v1.dropKeyPublic(drop), fromB64std(wrappedIdentityKey))
+  return v1.openAs(uploadIdentityContext(scopeId, nodeId, identityId), v1.dropKeySecret(drop), fromB64std(wrappedIdentityKey))
 }
 
 /** The key an identity folder's directory entry (name, slug, content-key wrap) lives under (ADR 0080 decision 11):

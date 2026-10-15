@@ -33,7 +33,7 @@ import { resolve } from 'node:path'
 
 const vectors = JSON.parse(
   readFileSync(resolve(__dirname, '../../../../contracts/crypto/vectors/v1.json'), 'utf8'),
-) as { fingerprint: { kem_x: string; kem_m: string; sign: string; digits: string } }
+) as { fingerprint: { kem: string; sign: string; digits: string } }
 const unhex = (h: string) => Uint8Array.from(h.match(/../g)!.map((b) => parseInt(b, 16)))
 
 // One fixed Master Key for the suite; the mocked vault hands out a FRESH copy each call because the data layer
@@ -194,8 +194,7 @@ describe('acceptKeyChange (human accept → re-pin)', () => {
 // The safety-number the ceremony compares out-of-band; must match the pinned `fingerprint` conformance vector.
 const IDENTITY_FROM_VECTOR = b64std(
   v1.serializeIdentityPublic({
-    kemX: unhex(vectors.fingerprint.kem_x),
-    kemM: unhex(vectors.fingerprint.kem_m),
+    kem: unhex(vectors.fingerprint.kem),
     sign: unhex(vectors.fingerprint.sign),
   }),
 )
@@ -210,8 +209,7 @@ describe('myIdentityPublicKeyB64', () => {
   it('reconstructs my own identity bundle from the vault private key → a stable safety-number', () => {
     const id = v1.generateIdentity()
     vi.mocked(identityPrivate).mockReturnValue({
-      kemX: id.priv.kemX.slice(),
-      mlkemSeed: id.priv.mlkemSeed.slice(),
+      kemSeed: id.priv.kemSeed.slice(),
       sign: id.priv.sign.slice(),
     })
     // The reconstructed public bundle's safety-number equals the fingerprint of the generated public bundle.

@@ -260,8 +260,7 @@ export function myIdentityPublicKeyB64(): string {
   try {
     return b64std(v1.serializeIdentityPublic(v1.identityPublicFromPrivate(priv)))
   } finally {
-    priv.kemX.fill(0)
-    priv.mlkemSeed.fill(0)
+    priv.kemSeed.fill(0)
     priv.sign.fill(0)
   }
 }

@@ -127,7 +127,7 @@ beforeEach(() => {
   globalThis.indexedDB = new IDBFactory()
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
   vi.mocked(identityPrivate).mockImplementation(() => ({
-    kemX: WORKER.priv.kemX.slice(), mlkemSeed: WORKER.priv.mlkemSeed.slice(), sign: WORKER.priv.sign.slice(),
+    kemSeed: WORKER.priv.kemSeed.slice(), sign: WORKER.priv.sign.slice(),
   }))
 })
 

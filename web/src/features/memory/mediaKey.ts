@@ -39,7 +39,7 @@ export function uploaderOriginOf(
   return wrappedIdentityKey ? { nodeId, sealedDropPrivateKey, identityId, wrappedIdentityKey } : undefined
 }
 
-// K_up per (K_mem, origin): opening it costs an ML-KEM decapsulation, and a gallery asks for every tile. Keyed by
+// K_up per (K_mem, origin): opening it costs an X-Wing decapsulation, and a gallery asks for every tile. Keyed by
 // the K_mem ARRAY so a cached key never outlives the key that opened it; a mismatched K_mem simply misses.
 const opened = new WeakMap<Uint8Array, Map<string, Uint8Array>>()
 
