@@ -15,27 +15,31 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * Conformance pin (ADR 0032, ADR 0088): every capability id the backend ships as a constant must be a real entry in
- * the catalog (`contracts/platform/capabilities.json`) — the same drift-proofing
- * [me.raddatz.veyq.core.tasks.CapabilityTags] gets against its registry. It stays one-directional (code ⊆ catalog):
- * a catalog id may be reserved ahead of code (ADR 0032 §6). Plus the [CapabilityRegistry] arithmetic, the AND along
- * the path, against switches handed in directly. Pure JVM — no CDI needed.
+ * The [CapabilityRegistry] arithmetic, the AND along the path, against switches handed in directly (ADR 0088), and the
+ * one check on the register's generation: [CapabilityIds] and [CapabilityTexts] are built from the catalog
+ * (`contracts/platform/capabilities.json`, buildSrc's `GenerateCapabilityRegister`), so nothing here pins an id by
+ * hand — the test reads the catalog and asks that the build wired the generator to it: every entry, in its order, each
+ * with its words. Pure JVM — no CDI needed.
  */
 class CapabilityRegistryTest {
 
-    private val catalogIds: Set<String> =
-        ObjectMapper().readTree(File("../contracts/platform/capabilities.json"))
-            .path("capabilities").fieldNames().asSequence().toSet()
+    private val catalog = ObjectMapper().readTree(File("../contracts/platform/capabilities.json")).path("capabilities")
+
+    private val catalogIds: List<String> = catalog.fieldNames().asSequence().toList()
 
     private fun registry(vararg off: String) = CapabilityRegistry { off.toSet() }
 
     @Test
-    fun everyAdvertisedIdIsARealCatalogEntry() {
-        // The code's ids must all exist in the catalog (which may hold reserved-ahead ids the code does not yet
-        // reference). A failure means a shipped constant drifted from the registry.
-        assertTrue(catalogIds.isNotEmpty(), "the catalog was read") // an unread file would make the loop vacuous
-        CapabilityIds.ADVERTISED.forEach { id ->
-            assertTrue(id in catalogIds, "pinned capability id '$id' is missing from contracts/platform/capabilities.json")
+    fun theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords() {
+        // Every catalog entry is built (validate_capabilities.py), so every one is advertised, in the catalog's order —
+        // the manifest's and the console's. A red here is a generator that read another file or dropped an entry.
+        assertTrue(catalogIds.isNotEmpty(), "the catalog was read") // an unread file would make the comparison vacuous
+        assertEquals(catalogIds, CapabilityIds.ADVERTISED)
+        assertEquals(catalogIds.toSet(), CapabilityTexts.BY_ID.keys)
+        catalogIds.forEach { id ->
+            val texts = CapabilityTexts.BY_ID.getValue(id)
+            assertEquals(catalog.path(id).path("whenOff").path("de").asText(), texts.whenOff.de, "$id: whenOff.de")
+            assertEquals(catalog.path(id).path("title").path("en").asText(), texts.title.en, "$id: title.en")
         }
     }
 
@@ -91,7 +95,7 @@ class CapabilityRegistryTest {
         val registry = CapabilityRegistry { off }
         assertTrue(registry.isActive(DEVICE_LINKING))
         off = setOf(DEVICE_LINKING)
-        assertFalse(registry.isActive(DEVICE_LINKING), "a switch acts without a new registry (inbox #443 needs that)")
+        assertFalse(registry.isActive(DEVICE_LINKING), "a switch acts without a new registry, so without a restart")
         assertFalse(DEVICE_LINKING in registry.active)
     }
 }

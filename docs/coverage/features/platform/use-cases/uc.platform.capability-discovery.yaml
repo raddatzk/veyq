@@ -52,7 +52,7 @@ acceptanceCriteria:
     text: A capability is a coarser projection over use-cases, not a 1:1 rename (ADR 0032 §6). Each catalog entry in contracts/platform/capabilities.json declares a serves [uc.…] back-ref (catalog-only, NOT on the wire), and a validator enforces every serves resolves to a real use-case — so the catalog can't be a typo or drift from the graph. The catalog is append-only; an id may be reserved ahead of first advertisement and is advertised active only once its use-cases are built. The catalog file is the list; the entries and the use-cases each serves are not counted here.
     coverage:
       backend:
-        unit: [CapabilityRegistryTest.everyAdvertisedIdIsARealCatalogEntry]
+        unit: [CapabilityRegistryTest.theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords]
       web:
         unit: [src/features/platform/capabilities.test.ts]
   - id: register-path-and

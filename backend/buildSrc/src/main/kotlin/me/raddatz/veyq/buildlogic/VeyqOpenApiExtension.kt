@@ -15,7 +15,8 @@ import javax.inject.Inject
  * `:core` → the specs at the top level of `contracts/api/`, `:apps:<app>` → those in `contracts/api/<app>/`) and
  * registers its tasks:
  * `openApiGenerate<Owner>`, the aggregate `openApiGenerateSpecs` (`./gradlew openApiGenerateSpecs` from `backend/` runs
- * every owner's) and, for core, `generateAdminChannelOperations`. A method, not a property: the task names depend on
+ * every owner's) and, for core, `generateAdminChannelOperations` and `generateCapabilityRegister` (the capability ids and
+ * their texts, from `contracts/platform/capabilities.json`). A method, not a property: the task names depend on
  * the owner, so it is read once, while the project is configured — never in an `afterEvaluate`.
  */
 abstract class VeyqOpenApiExtension @Inject constructor(private val project: Project) {
@@ -44,6 +45,7 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
             val apiDir = generated.map { it.dir("api") }
             val modelsDir = generated.map { it.dir("models") }
             val channelDir = project.layout.buildDirectory.dir("generated/admin-channel")
+            val capabilitiesDir = project.layout.buildDirectory.dir("generated/capabilities")
 
             if (isCore) {
                 // A module the settings include whose build never calls `generateOwnSpecs()` would leave its directory's
@@ -97,6 +99,14 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
                     contractsDir.set(sets.contractsDir)
                     outputDir.set(channelDir)
                 }
+                project.tasks.register<GenerateCapabilityRegister>("generateCapabilityRegister") {
+                    group = "openapi tools"
+                    description = "Generate the capability ids and their EN/DE texts from contracts/platform/capabilities.json."
+                    // Beside the specs, read from the Gradle root as they are; absent during the Dockerfile's warm-up,
+                    // which only configures.
+                    catalog.set(project.rootDir.resolve("../contracts/platform/capabilities.json"))
+                    outputDir.set(capabilitiesDir)
+                }
             }
 
             project.extensions.getByType<SourceSetContainer>().named("main") {
@@ -104,12 +114,18 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
             }
             project.extensions.getByType<KotlinJvmProjectExtension>().sourceSets.named("main") {
                 kotlin.srcDir(modelsDir.map { it.dir("src/main/kotlin") })
-                if (isCore) kotlin.srcDir(channelDir.map { it.dir("src/main/kotlin") })
+                if (isCore) {
+                    kotlin.srcDir(channelDir.map { it.dir("src/main/kotlin") })
+                    kotlin.srcDir(capabilitiesDir.map { it.dir("src/main/kotlin") })
+                }
             }
 
             project.tasks.named("compileKotlin") {
                 dependsOn(project.tasks.named("openApiGenerateSpecs"))
-                if (isCore) dependsOn(project.tasks.named("generateAdminChannelOperations"))
+                if (isCore) {
+                    dependsOn(project.tasks.named("generateAdminChannelOperations"))
+                    dependsOn(project.tasks.named("generateCapabilityRegister"))
+                }
             }
             project.tasks.named("compileJava") { dependsOn(project.tasks.named("openApiGenerateSpecs")) }
         }

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.buildlogic
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.ConfigurableFileCollection
@@ -189,5 +190,123 @@ abstract class GenerateAdminChannelOperations : DefaultTask() {
             |}
             |""".trimMargin(),
         )
+    }
+}
+
+/**
+ * The capability register as code (ADR 0032, ADR 0088 decisions 12 and 13): `CapabilityIds` — one constant per entry
+ * of `contracts/platform/capabilities.json` and `ADVERTISED`, every entry in catalog order — and `CapabilityTexts`, each
+ * entry's `title`, `purpose` and `whenOff` in English and German, which `GET /api/instance/capabilities` serves. The
+ * catalog is the one place an id and its words are written, so the backend never keeps a copy that could drift from it:
+ * an entry added there is a constant here on the next compile.
+ *
+ * A constant's name is the id without its `core.` root, upper-cased, `.` and `-` turned into `_`
+ * (`core.public-shares.drop-box` → `PUBLIC_SHARES_DROP_BOX`); an entry under another root keeps the root in its name.
+ * Every entry is advertised, because `scripts/validate_capabilities.py` holds every catalog entry to a built use-case
+ * (ADR 0032 §6); the lifecycle that reserves an id ahead of its use-cases would add the skip here and there together.
+ * The build refuses an id that is not lowercase-dotted, two ids that name one constant and an entry without its six
+ * texts, rather than generate a register with a hole in it; the guard says the same about the catalog before any build.
+ */
+@CacheableTask
+abstract class GenerateCapabilityRegister : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val catalog: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val file = catalog.get().asFile
+        val entries = ObjectMapper().readTree(file).path("capabilities")
+        if (!entries.isObject || entries.isEmpty) throw GradleException("${file.name}: no `capabilities` entries")
+        val problems = mutableListOf<String>()
+        val register = entries.properties().map { (id, entry) ->
+            if (!ID.matches(id)) problems += "$id: not a lowercase-dotted id"
+            val texts = TEXT_FIELDS.associateWith { field ->
+                LANGUAGES.associateWith { lang ->
+                    entry.path(field).path(lang).takeIf { it.isTextual }?.asText()?.takeIf { it.isNotBlank() }
+                        ?: "".also { problems += "$id: $field.$lang is missing or blank" }
+                }
+            }
+            Entry(id, constantName(id), entry.path("description").asText(""), texts)
+        }
+        register.groupBy { it.constant }.filterValues { it.size > 1 }.forEach { (name, clash) ->
+            problems += "${clash.joinToString { it.id }}: all name the constant $name"
+        }
+        if (problems.isNotEmpty()) throw GradleException("${file.name}:\n" + problems.joinToString("\n"))
+
+        val dir = outputDir.get().asFile.resolve("src/main/kotlin/${PACKAGE.replace('.', '/')}")
+        dir.deleteRecursively()
+        dir.mkdirs()
+        dir.resolve("CapabilityIds.kt").writeText(
+            """
+            |package $PACKAGE
+            |
+            |/**
+            | * Generated from contracts/platform/capabilities.json (buildSrc's GenerateCapabilityRegister) — never edited, never
+            | * listed by hand. The client-facing capability ids (ADR 0032, ADR 0088): instance-wide and pre-auth, a tree of
+            | * dotted paths that [CapabilityRegistry] ANDs along. Each is advertised on `GET /api/setup` while it is active and
+            | * enforced at its feature's gate (`422 capability_disabled`).
+            | */
+            |object CapabilityIds {
+            |${register.joinToString("\n") { "    /** ${kdoc(it.description)} */\n    const val ${it.constant} = ${literal(it.id)}\n" }}
+            |    /** Every entry, in catalog order, a parent before its children: the register this build serves. */
+            |    val ADVERTISED: List<String> = listOf(
+            |${register.joinToString("") { "        ${it.constant},\n" }}    )
+            |}
+            |""".trimMargin(),
+        )
+        dir.resolve("CapabilityTexts.kt").writeText(
+            """
+            |package $PACKAGE
+            |
+            |/** One text of a register entry, in each language the catalog carries (ADR 0088 decision 13). */
+            |data class CapabilityText(val en: String, val de: String)
+            |
+            |/** An entry's words for the Server Owner: what it is, what it is for, and what switching it off does. */
+            |data class CapabilityEntryTexts(val title: CapabilityText, val purpose: CapabilityText, val whenOff: CapabilityText)
+            |
+            |/** Generated from contracts/platform/capabilities.json (buildSrc's GenerateCapabilityRegister) — never edited. */
+            |object CapabilityTexts {
+            |    /** Every entry of [CapabilityIds.ADVERTISED] to its words. */
+            |    val BY_ID: Map<String, CapabilityEntryTexts> = mapOf(
+            |${register.joinToString("") { e -> "        CapabilityIds.${e.constant} to CapabilityEntryTexts(\n${TEXT_FIELDS.joinToString("") { f -> "            CapabilityText(${literal(e.texts.getValue(f).getValue("en"))}, ${literal(e.texts.getValue(f).getValue("de"))}),\n" }}        ),\n" }}    )
+            |}
+            |""".trimMargin(),
+        )
+    }
+
+    private data class Entry(val id: String, val constant: String, val description: String, val texts: Map<String, Map<String, String>>)
+
+    private companion object {
+        const val PACKAGE = "me.raddatz.veyq.core.platform.capabilities"
+        const val CORE_ROOT = "core."
+        val ID = Regex("^[a-z0-9]+(\\.[a-z0-9-]+)+$")
+        val TEXT_FIELDS = listOf("title", "purpose", "whenOff")
+        val LANGUAGES = listOf("en", "de")
+
+        fun constantName(id: String): String = id.removePrefix(CORE_ROOT).uppercase().replace('.', '_').replace('-', '_')
+
+        /** [value] as a Kotlin string literal: a catalog text may hold a quote, a dollar sign or a backslash. */
+        fun literal(value: String): String = buildString {
+            append('"')
+            value.forEach { c ->
+                when {
+                    c == '\\' -> append("\\\\")
+                    c == '"' -> append("\\\"")
+                    c == '$' -> append("\\$")
+                    c == '\n' -> append("\\n")
+                    c < ' ' -> append("\\u%04x".format(c.code))
+                    else -> append(c)
+                }
+            }
+            append('"')
+        }
+
+        /** [value] on one KDoc line: Kotlin comments nest, so neither an opener nor a closer may survive in it. */
+        fun kdoc(value: String): String =
+            value.replace(Regex("\\s+"), " ").replace("*/", "* /").replace("/*", "/ *").trim()
     }
 }

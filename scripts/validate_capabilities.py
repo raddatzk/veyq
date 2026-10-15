@@ -35,8 +35,10 @@ was four flat ids under no common root, and run against that untouched catalog t
 id. The re-cut fixed it; these checks keep a flat id or an orphaned child from re-entering.
 
 Its limit: it reads the catalog alone. It does not prove that the server gates an id, that it ANDs along the path,
-or that the backend and web constants match the catalog: those are `CapabilityRegistryTest` and the web's
-`capabilities.test.ts`. Nor does it see an inheritance that is not a path prefix (an application's share entry
+or that the clients follow the catalog: the backend's ids and texts are generated from it (buildSrc's
+`GenerateCapabilityRegister`, which also refuses an entry without its six texts, and whose wiring
+`CapabilityRegistryTest` reads back), the arithmetic is `CapabilityRegistryTest`'s, and the web's constants are held
+by its `capabilities.test.ts`. Nor does it see an inheritance that is not a path prefix (an application's share entry
 inheriting `core.public-shares`): no such entry exists yet, and the CR that adds one owns that rule. Of the texts it
 proves only that both languages are there and not blank: not that `whenOff` matches what the server does when the
 entry is off, and not that the German says what the English says. Those are read by a person, against the gate

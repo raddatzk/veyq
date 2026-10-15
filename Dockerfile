@@ -68,6 +68,9 @@ FROM backend-build-base AS backend-build-jvm
 # Was `COPY docs/api ../docs/api`. The specs live in contracts/ (API-first, CLAUDE.md), and buildSrc's `veyq.openapi`
 # reads them from `../contracts/api` (`VeyqOpenApiExtension`) — absent during the warm-up above, which it tolerates.
 COPY contracts/api ../contracts/api
+# The capability catalog: buildSrc's `generateCapabilityRegister` builds :core's CapabilityIds and their EN/DE texts
+# from it (ADR 0088 decision 13), so without it the compile has no register.
+COPY contracts/platform/capabilities.json ../contracts/platform/capabilities.json
 COPY backend/src ./src
 COPY backend/core/src ./core/src
 COPY backend/apps/memories/src ./apps/memories/src
