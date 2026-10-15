@@ -115,10 +115,20 @@ store credentials from the operator.
       `site/.../run/backup-and-restore.md` (lines naming `VEYQ_BLOB_STORE_*`), `run/kubernetes.md` (the `s3AccessKey`
       sentence), and `infra/.env.example`'s `VEYQ_S3_*` lines (inert now, still listed; the file was not editable in the phase-4 session). Not run: the production compose stack end to end (needs published images and a real domain) — its app environment is `docker compose config`-checked and the same hint drives the e2e stack that uploads.
 
-- [ ] 5 docs — ADR 0067 decision 3 and ADR 0050 edited to what is built; `uc.admin.configure-object-store`'s
+- [x] 5 docs — ADR 0067 decision 3 and ADR 0050 edited to what is built; `uc.admin.configure-object-store`'s
       coverage refs; the restore use-case's store and credential steps; the Run pages' store and backup sections
       (unless `cr-run-area-content` is past them, then that CR's pages). · Done when: trust-chain green and
       `npm run check` in `site/` green.
+      *Built:* ADR 0067 decision 3 (the store never gates the boot), its Consequences (the Garage token's two homes, the
+      runtime-editable store), ADR 0050 (per-value fingerprint, scope) and ADR 0013's fail-loud sentence say what is
+      built; ADR 0089 reads "built". `uc.admin.configure-object-store` carries backend refs (`admin-web`'s suites wait under
+      `gaps` until that job has run); the restore use-case and the Run backup and Kubernetes pages (store and backup
+      sections only) carry the operator-supplied credentials and the store setting in the restored database;
+      `infra/.env.example` lost its `VEYQ_S3_*` lines. The two guards red before this CR's phase 4 were both this CR's:
+      four coverage refs renamed in the phase-2 commit (`validate_guard_gaps.py` fails on an un-forged copy that is red).
+      **Owed, not done:** a test of `SwitchingBlobStore`'s non-hermetic branch (every test runs under `%test`; named as a gap
+      on `no-store-refuses-uploads-with-a-reason`); ADR 0063's three `veyq.blob-store.public-endpoint` mentions and
+      0013's remaining `veyq.blob-store.*` names are historical prose, left.
 
 ## Definition of done
 
