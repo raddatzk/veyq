@@ -78,3 +78,5 @@ Garage, so using one means editing the compose file, and under Helm it is not po
   (a surface whose only job is to leak a secret).
 
 For Server Owners, on the docs site: [First-run setup and the admin console](../../site/src/content/docs/run/first-run.mdx).
+
+For Server Owners, on the docs site: [Configuration reference](../../site/src/content/docs/run/configuration.md).

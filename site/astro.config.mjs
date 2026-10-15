@@ -106,6 +106,7 @@ export default defineConfig({
             'run/new-instance',
             'run/first-run',
             'run/kubernetes',
+            'run/configuration',
             'run/upgrade',
             'run/backup-and-restore',
             'run/hardening',

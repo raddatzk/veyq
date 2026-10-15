@@ -1,0 +1,182 @@
+---
+title: Configuration reference
+description: Every setting an operator gives veyq — the Compose variables, the Helm values, the console's settings and the backend keys meant for tuning.
+sources:
+  - docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md
+  - docs/decisions/0064-kubernetes-helm-deployment-target.md
+---
+
+veyq splits its configuration in two
+([ADR 0089](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)):
+
+- **The environment** carries only what the process needs before it can reach the database or serve its first
+  request: the database connection, the public domain and the proxy posture, the path of the config-secret key file,
+  the images and the admin listener. On Compose that is `infra/.env`; on Kubernetes, the chart's values.
+- **Everything else is set in the admin console** and stored in the database. Today that is the object store.
+
+`scripts/validate_run_config_reference.py` fails when a variable of the production compose file or of
+`infra/.env.example`, or a key of the chart's `values.yaml`, is missing from this page.
+
+## Docker Compose: `infra/.env`
+
+Copy `infra/.env.example` to `infra/.env` and fill it in. Every required variable has no default: a missing one
+fails `docker compose up` with its name. Generate the secrets with `openssl rand -hex 32` (the Garage RPC secret) and
+`openssl rand -base64 24` (the others).
+
+| Variable | Required | Default | Meaning |
+|---|---|---|---|
+| `VEYQ_DOMAIN` | Yes | — | The instance's domain. It is written into every invitation and recovery link, so changing it later is not supported, and a restore must target the same domain |
+| `VEYQ_IMAGE` | Yes | — | The application image, as `ghcr.io/raddatzk/veyq:<major>.<minor>@sha256:<digest>` — the line [Verify a release](/veyq/run/verify-a-release/) prints |
+| `VEYQ_ADMIN_IMAGE` | Yes | — | The admin image of the same release, pinned the same way |
+| `MARIADB_PASSWORD` | Yes | — | The application's database password |
+| `MARIADB_ROOT_PASSWORD` | Yes | — | MariaDB's root password; a backup capture uses it |
+| `GARAGE_RPC_SECRET` | Yes | — | The bundled Garage's node secret, exactly 64 hex characters |
+| `GARAGE_ADMIN_TOKEN` | Yes | — | The bundled Garage's admin token. The application reads it too: it sets the bundled store up with it and derives the store's access keys from it, so there is no store key to set |
+| `VEYQ_ACME_EMAIL` | Yes | — | The Let's Encrypt account email |
+| `ADMIN_DOMAIN` | No | unset | A hostname of the admin surface's own. Unset, the console is reachable from the host only ([First-run setup](/veyq/run/first-run/#reach-the-console)); set it only after the Server Owner exists |
+| `ADMIN_PORT` | No | `8081` | The host port the admin surface is published on, on `127.0.0.1` only |
+| `VEYQ_ACME_CASERVER` | No | Let's Encrypt production | The ACME directory; point it at the staging directory while testing |
+| `VEYQ_HSTS_ENABLED` | No | `true` | HSTS on the instance and the admin surface ([Hardening](/veyq/run/hardening/#tls-hsts-and-csp)) |
+| `VEYQ_MEM_LIMIT` | No | `1g` | The application container's memory limit; the JVM heap is 60 % of it |
+
+The compose file sets the rest of the application's environment itself (the database URL, the bundled store's
+internal addresses, the config-secret key path, the routing file). Leave those to it.
+
+## Kubernetes: the chart's values
+
+Run `helm show values` for the chart and its comments. The chart generates no secret, and `values.schema.json`
+refuses an install that leaves a required value unset, naming it. Required: `domain`, `storeDomain`, every key under
+`secrets` (or `secrets.existingSecret`), `networkPolicy.ingressFrom` while network policy is on,
+`externalDatabase.jdbcUrl` when `mariadb.enabled` is `false`, `ingress.tls.secretName` in `shared` mode, and
+`ingress.tls.acme.email` when the ACME issuer is on.
+
+### Domains, images, HSTS
+
+| Value | Default | Meaning |
+|---|---|---|
+| `domain` | — | The instance's domain, as `VEYQ_DOMAIN` above |
+| `storeDomain` | — | The bundled store's own host; browsers upload to and download from it |
+| `hsts.enabled` | `true` | HSTS on the instance and the admin surface |
+| `image.repository` | `ghcr.io/raddatzk/veyq` | The application image |
+| `image.tag` | the chart's `appVersion` | The release; set it when installing from a checkout |
+| `image.digest` | — | The digest you verified; the image is then pulled by digest |
+| `image.pullPolicy` | `IfNotPresent` | |
+| `admin.image.repository` | `ghcr.io/raddatzk/veyq-admin` | The admin image |
+| `admin.image.tag` | the chart's `appVersion` | Pin the same release as the application |
+| `admin.image.digest` | — | Its verified digest |
+| `admin.image.pullPolicy` | `IfNotPresent` | |
+| `admin.domain` | — | A hostname of the admin surface's own; unset, it is reached by port-forward only |
+
+### The application
+
+| Value | Default | Meaning |
+|---|---|---|
+| `app.trustedProxies` | — | Addresses whose forwarded header is trusted; set it only for a proxy with a stable address ([Hardening](/veyq/run/hardening/#trust-only-a-stable-proxy-address)) |
+| `app.resources.limits.memory` | `1Gi` | The memory limit; the JVM heap is 60 % of it |
+| `app.resources.requests.cpu` | `250m` | |
+| `app.resources.requests.memory` | `512Mi` | |
+| `app.startupProbe.periodSeconds` | `5` | The startup probe reads `/api/setup`; 5 × 36 covers a slow first start |
+| `app.startupProbe.failureThreshold` | `36` | |
+| `app.readinessProbe.periodSeconds` | `15` | |
+| `app.readinessProbe.timeoutSeconds` | `5` | |
+| `app.livenessProbe.enabled` | `false` | Off on purpose: a liveness probe turns garbage-collection pauses into restart loops, and the JVM exits on its own when out of memory |
+| `app.livenessProbe.periodSeconds` | `30` | |
+| `app.livenessProbe.timeoutSeconds` | `5` | |
+| `app.livenessProbe.failureThreshold` | `6` | |
+| `app.persistence.size` | `100Mi` | The claim for the config-secret key; kept on uninstall |
+| `app.persistence.storageClass` | — | |
+| `app.persistence.accessMode` | `ReadWriteOnce` | |
+| `admin.resources.limits.memory` | `128Mi` | |
+| `admin.resources.requests.cpu` | `50m` | |
+| `admin.resources.requests.memory` | `32Mi` | |
+
+### Network policy, ingress and TLS
+
+| Value | Default | Meaning |
+|---|---|---|
+| `networkPolicy.enabled` | `true` | Default-deny plus the paths the stack uses. `false` removes every policy, the admin listener's included |
+| `networkPolicy.ingressFrom` | — | The NetworkPolicy peers that match your ingress controller's pods; required while policy is on |
+| `ingress.className` | — | The ingress class of every Ingress, the tenants' included |
+| `ingress.annotations` | — | Stamped on every Ingress, the tenants' included; how a certificate issuer of your own is wired |
+| `ingress.tls.mode` | `none` | `none` (TLS ends before the ingress), `per-domain` (one certificate per Ingress, cert-manager's shape) or `shared` (one wildcard certificate, no custom tenant domains) |
+| `ingress.tls.secretName` | — | The wildcard certificate's Secret in `shared` mode |
+| `ingress.tls.acme.enabled` | `false` | Let the chart create a cert-manager issuer (HTTP-01) and use it; needs `per-domain` |
+| `ingress.tls.acme.email` | — | The ACME account email |
+| `ingress.tls.acme.server` | Let's Encrypt production | The ACME directory |
+
+### Secrets
+
+| Value | Default | Meaning |
+|---|---|---|
+| `secrets.existingSecret` | — | The name of a Secret of your own holding the four keys below; the chart then renders none |
+| `secrets.mariadbPassword` | — | The application's database password |
+| `secrets.mariadbRootPassword` | — | MariaDB's root password |
+| `secrets.garageRpcSecret` | — | Exactly 64 hex characters |
+| `secrets.garageAdminToken` | — | The bundled Garage's admin token; the application derives the store's access keys from it |
+
+### Database and store
+
+| Value | Default | Meaning |
+|---|---|---|
+| `mariadb.enabled` | `true` | `false` uses a database of your own |
+| `mariadb.image` | `mariadb:11.4@sha256:…` | Pinned by digest |
+| `mariadb.persistence.size` | `10Gi` | |
+| `mariadb.persistence.storageClass` | — | |
+| `mariadb.resources.limits.memory` | `1Gi` | |
+| `mariadb.resources.requests.cpu` | `250m` | |
+| `mariadb.resources.requests.memory` | `256Mi` | |
+| `externalDatabase.jdbcUrl` | — | `jdbc:mariadb://…` of your own database; the password is still `secrets.mariadbPassword` |
+| `externalDatabase.username` | `veyq` | |
+| `garage.image` | `dxflrs/garage:v2.0.0@sha256:…` | Pinned by digest |
+| `garage.persistence.storageClass` | — | |
+| `garage.persistence.meta.size` | `1Gi` | |
+| `garage.persistence.data.size` | `50Gi` | The stored media |
+| `garage.persistence.snapshots.size` | `1Gi` | Kept apart from the metadata on purpose |
+| `garage.resources.limits.memory` | `512Mi` | |
+| `garage.resources.requests.cpu` | `100m` | |
+| `garage.resources.requests.memory` | `128Mi` | |
+
+## Settings in the admin console
+
+| Setting | Where | Meaning |
+|---|---|---|
+| The object store | **Server → Object store**, or `veyq-admin store set` | The bundled store, an S3-compatible store of your own, or a Garage of your own, with its endpoint, bucket, region and keys. It applies at once and is checked before a tenant can be created ([First-run setup](/veyq/run/first-run/#connect-the-object-store)) |
+| A tenant's storage quota | the tenant's panel, or `veyq-admin tenant quota` | The most a tenant may keep on the store ([Plan your instance](/veyq/run/plan/#storage-and-quotas)) |
+
+A tenant's mail server, terms and per-link upload limit are its owner's, set in the app, not here.
+
+## The admin image and the CLI
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `BACKEND_URL` | `http://app:8090` | Where the admin surface and the CLI reach the application's admin listener; the recipes set it |
+| `VEYQ_ADMIN_EMAIL`, `VEYQ_ADMIN_PASSWORD` | — | The Server Owner's credentials for one `veyq-admin` call; pass them on the invocation, never in a file |
+| `VEYQ_STORE_SECRET_KEY`, `VEYQ_STORE_GARAGE_ADMIN_TOKEN` | — | The secrets `veyq-admin store set` seals; unset keeps the stored ones |
+
+## Backend keys for tuning
+
+The backend reads more keys, each with a default that suits a household instance. They are named here so an
+operator who needs one knows it exists; neither recipe passes them, so setting one means adding it to the
+application's environment yourself (on Compose with a compose file of your own beside the production one). The
+environment-variable form is the key in upper case with `.` and `-` turned into `_`
+(`veyq.tenant.invite.ttl` → `VEYQ_TENANT_INVITE_TTL`).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `veyq.tenant.invite.ttl` | `P7D` | How long a tenant owner's invitation is valid |
+| `veyq.recovery.token.ttl` | `PT1H` | How long a password-recovery link is valid |
+| `veyq.email-confirmation.token.ttl` | `PT24H` | How long an address-confirmation link is valid |
+| `veyq.pairing.channel.ttl` | `PT10M` | How long a device-linking code is valid |
+| `veyq.node.trash.retention` | `P30D` | How long trashed folders and Memories can be restored |
+| `veyq.media.trash.retention` | `P30D` | How long trashed photos and videos can be restored |
+| `veyq.scope.delete.retention` | `P30D` | How long a deleted group stays restorable |
+| `veyq.blob.max-bytes` | 20 GiB | The largest single file |
+| `veyq.blob.upload.retention` | `PT1H` | When an abandoned upload is cleaned up; must be longer than the presigned-link lifetime |
+| `veyq.blob-store.presign-ttl-seconds` | `600` | The lifetime of a presigned upload or download link |
+| `veyq.blob-store.garage.node-capacity` | `1G` | The capacity veyq declares when it lays out a Garage it sets up |
+| `veyq.ratelimit.*` | see [cc.security.rate-limit](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.rate-limit.md) | The rate limits of the public endpoints, per address and per account |
+| `veyq.http.hsts.max-age` | `P180D` | The HSTS lifetime |
+| `veyq.admin-channel.port` | `8090` | The admin listener's port. The recipes assume 8090; do not change it |
+
+**How far this is proven.** The variables and values on this page are read from the recipes as committed, and the
+guard above keeps the list complete. Their meanings are not tested beyond the recipes' own checks.
