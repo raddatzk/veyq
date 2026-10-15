@@ -124,6 +124,6 @@ genannt, der Rest wird verschoben. Ein Verschieben lässt sich sofort rückgäng
 - Decisions: [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   (decisions 1, 3, 4, 6, 10, 11), [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
   (one view per kind, capabilities)
-- End-user view (docs site): [Move things](../../../../site/src/content/docs/depot/move-things.mdx)
-- End-user view (docs site): [Select several things at once](../../../../site/src/content/docs/depot/select-several.mdx)
+- End-user view (docs site): [Move things](../../../../site/src/content/docs/spaces/move-things.mdx)
+- End-user view (docs site): [Select several things at once](../../../../site/src/content/docs/spaces/select-several.mdx)
 

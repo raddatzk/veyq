@@ -1,0 +1,51 @@
+---
+title: "Menschen in einer Gruppe"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.add-group-member.md
+  - docs/features/spaces/use-cases/uc.spaces.manage-group-members.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Wer in einer Gruppe ist, verwalten nur die, die sie besitzen. Öffne sie unter **Einstellungen**: das Menü unten in der
+Seitenleiste, dann **Einstellungen**, dann den Namen der Gruppe unter **Gruppen**. Dort stehen nur die Gruppen, die dir
+gehören.
+
+## Jemanden hinzufügen
+
+Wen du hinzufügst, muss schon Mitglied des geteilten Bereichs sein.
+
+1. Tippe unter **Mitglieder** den **Benutzernamen** ein und wähle **Hinzufügen**.
+2. Die Person erscheint in der Liste. **Wartet auf Zugang** heißt, ihr Schlüssel erreicht sie, sobald du oder ein
+   anderes Mitglied der Gruppe online ist; dann steht dort **Aktiv**.
+
+<Screenshot id="spaces-group-members" shows="Die Einstellungen einer Gruppe mit Name und Icon oben, dem Feld für den Benutzernamen mit der Schaltfläche Hinzufügen und einer Mitgliederliste mit Aktiv und Wartet auf Zugang" />
+
+Hat die Person **Frag mich, bevor du mich zu Gruppen hinzufügst** gewählt, bekommt sie stattdessen eine Einladung, und
+die Liste zeigt **Wartet auf Zustimmung**, bis sie annimmt: [Eine Gruppeneinladung annehmen](/veyq/de/spaces/group-invitations/).
+**Zurückziehen** nimmt die Einladung zurück.
+
+Sagt veyq **Der Sicherheitsschlüssel dieses Mitglieds hat sich seit dem letzten Teilen geändert**, prüfe mit der
+Person, dass sie es wirklich ist, bevor du weitermachst: [Eine Person verifizieren](/veyq/de/account/verify-a-person/).
+
+## Jemandem Mitbesitz geben
+
+Wähle **Mitbesitz geben** in ihrer Zeile. Wer die Gruppe mitbesitzt, kann alles, was du kannst, auch Menschen
+hinzufügen und entfernen. **Mitbesitz entfernen** nimmt es zurück; eine Gruppe behält immer mindestens eine besitzende
+Person.
+
+## Jemanden entfernen
+
+1. Wähle **Entfernen** in ihrer Zeile.
+2. veyq fragt **Entfernen und Schlüssel rotieren?** Könnte die Person Links zu Dingen in der Gruppe kopiert haben, setze
+   den Haken bei **Auch alle Links dieser Gruppe abschalten**.
+3. Wähle **Entfernen**.
+
+Die Gruppe bekommt dann einen neuen Schlüssel, den die entfernte Person nicht hat, also erreicht sie nichts, was ab
+jetzt hinzukommt. Was sie schon gesehen hat, kann sie behalten haben.
+
+Eine Gruppe selbst verlassen kannst du nicht; eine andere besitzende Person entfernt dich. Dich selbst entfernen kannst
+du auch nicht.
+
+Der Schlüssel einer Gruppe reist von Gerät zu Gerät, für jedes Mitglied verschlossen; der Server reicht ihn weiter,
+kann ihn aber nicht öffnen: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

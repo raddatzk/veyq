@@ -162,3 +162,4 @@ der Preis dafür, dass der Server niemanden hinter deinem Rücken in deine Grupp
   (once granted, the member switches into the group)
 - Concept: [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md), [Security Model → key-directory
   trust](../../../crosscutting/security-model.md)
+- End-user view (docs site): [People in a group](../../../../site/src/content/docs/spaces/group-members.mdx)

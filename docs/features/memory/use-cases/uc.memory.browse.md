@@ -142,5 +142,5 @@ späteren Schritt; vorerst ist dies das Zuhause, das deinen verschlüsselten Ber
 - Related use-cases: [login](../../account/use-cases/uc.account.login.md), unlock — done; the **Memory detail
   view** — [gallery](uc.memory.gallery.md) and [chapters](uc.memory.chapters.md) built, the journal planned;
   [multi-space switching](../../spaces/use-cases/uc.spaces.switch-spaces.md) built; search — planned
-- End-user view (docs site): [Views, tabs and favorites](../../../../site/src/content/docs/depot/views-and-favorites.mdx)
-
+- End-user view (docs site): [Views, tabs and favorites](../../../../site/src/content/docs/spaces/views-and-favorites.mdx)
+- End-user view (docs site): [Folders](../../../../site/src/content/docs/spaces/folders.mdx)

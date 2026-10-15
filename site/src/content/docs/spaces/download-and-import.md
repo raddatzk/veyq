@@ -10,7 +10,8 @@ another one.
 
 ## What you can do
 
-- **Download.** Open the ⋯ menu of a folder, a Memory or a drop box (or the page of one) and choose **Download**. veyq
+- **Download.** Open the ⋯ menu of a folder, a Memory or a drop box (or the page of one) and choose **Download**. A
+  whole space cannot be downloaded in one go; download its folders. veyq
   gathers what is inside, tells you how much it is, and lets you pick where to save the ZIP. A file's **Download** saves the
   file itself. A drop box comes with a folder for each person who sent something, named as the drop box shows them (two
   people called Anna: "Anna" and "Anna (2)").

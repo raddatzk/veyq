@@ -8,7 +8,9 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 **Move to…** works the same on a folder, a Memory, a chapter, a file and a drop box.
 
-1. Open the **⋯** menu of the thing, or the buttons at the top of its page, and choose **Move to…**.
+1. Open the **⋯** menu of the thing, or the buttons at the top of its page, and choose **Move to…**. A folder is
+   moved from the buttons at the top of the folder itself, or several things at once with
+   [Select](/veyq/spaces/select-several/).
 2. A window opens where the thing is now, with the path above it (**Where you are**). Click a folder to go into it, or
    a part of the path to go back up.
 3. In the place it should go, choose **Move here**. Or choose **Cancel**.
@@ -16,8 +18,9 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 <Screenshot id="depot-move-dialog" shows="The Move dialog with the path above the list of places and the Cancel and Move here buttons" />
 
-Only places that can take the thing are shown. A chapter, for example, only goes into a Memory. **Move here** is greyed
-out, with the reason, where it cannot go: into itself, or where it already is. If something with the same name is
+A chapter only goes into a Memory, and everything stays in the space it is in. The thing itself and what is inside it
+are listed but cannot be opened. **Move here** is greyed out, with the reason, where it cannot go: into itself, or
+where it already is. If something with the same name is
 already there, veyq says so and nothing moves; rename one of them first.
 
 Everything inside comes along and stays readable. If somebody shared a folder with you and lets you contribute, you can

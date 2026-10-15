@@ -98,6 +98,16 @@ phase closes only after the owner has read its pages in conversation. Done when,
 - [ ] 4 Spaces — personal, group and shared space, and who sees what; groups (create, invite by username, accept
       an invitation, co-owner, remove, rename, delete and restore, icon); organising (folders, favorites, move,
       copy, select several, trash, views); download and import.
+      *Built and checked live, waiting for the owner's read:* `spaces/` — Your spaces (landing), Folders, The trash,
+      Create a group, People in a group, Accept a group invitation, Rename/decorate/delete a group, plus the five
+      organising pages phase 6 had put under `depot/` (move, copy, select several, views and favorites, folder covers),
+      moved here because they are the platform's, not Depot's (owner, 2026-10-15), and corrected against the code (a
+      folder moves from its own header or Select, never its row's menu; the map shows wherever the tab shows Memories;
+      Favorites lists the current space's). Walked: a group created, a member added, co-owner given, removed with
+      the key rotation, renamed, deleted and restored; the consent invitation from both sides; folder create, rename,
+      delete and restore from the trash; select, move with Undo, copy into the same place. Not walked: the group and
+      space icon (the same cropper as the profile picture). Found: the move dialog says "1 Einträge verschieben"; a
+      folder row's ⋯ menu offers no move, rename or delete.
 - [ ] 5 Applications and Memories — an *Applications* overview page (what an application is: one kind of sealed
       thing in your spaces; Memories and Depot side by side; short, no jargon), then the *Memories* group: a landing page
       that says what Memories is for (photos, videos and journals that belong to an occasion) and links one page per
@@ -113,7 +123,7 @@ phase closes only after the owner has read its pages in conversation. Done when,
       or dropped. Every function page opens with the task, in the UI's words.
       *Built, waiting for the owner's read:* `depot/` (landing + eleven pages; replace, rename and delete are three
       pages, move/copy/select three, covers and views two, plus drop boxes, which the old page lacked); the old
-      `depot.md` is gone and its links follow. Written from `web/src/i18n/index.ts`, the old page and the use-cases,
+      `depot.md` is gone and its links follow. (Phase 4 moved the five organising pages to `spaces/`.) Written from `web/src/i18n/index.ts`, the old page and the use-cases,
       **not yet checked live in the web client**. `validate_guard_gaps.py` forged `account-keys-and-recovery.md`,
       not `depot.md`, so it needed no re-anchoring.
 - [ ] 7 Sharing and For space owners — share with people who have no account (roles, note, password, expiry,

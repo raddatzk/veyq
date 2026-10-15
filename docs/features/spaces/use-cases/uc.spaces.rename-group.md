@@ -113,3 +113,4 @@ entfernt hast, kann den neuen Namen nicht lesen, nur den alten, den er ohnehin s
 - Decisions: [ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md) (the derived name-key + the
   rename-under-current-epoch mechanism), [ADR 0024](../../../decisions/0024-scope-key-rotation.md) (epochs + the
   per-name epoch index), [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4 (owner-gate)
+- End-user view (docs site): [Rename, decorate and delete a group](../../../../site/src/content/docs/spaces/manage-a-group.mdx)

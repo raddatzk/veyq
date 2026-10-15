@@ -101,7 +101,7 @@ schon geladen haben, lassen sich nicht zurückholen. Wer nur einen Link bekommt,
 
 - Feature: [Platform](../_index.md)
 - End-user view (docs site): [Choose a cover](../../../../site/src/content/docs/memories/set-a-cover.mdx)
-- End-user view (docs site): [Give a folder a cover](../../../../site/src/content/docs/depot/give-a-folder-a-cover.mdx)
+- End-user view (docs site): [Give a folder a cover](../../../../site/src/content/docs/spaces/give-a-folder-a-cover.mdx)
 - Use-cases: [uc.memory.cover](../../memory/use-cases/uc.memory.cover.md) (a Memory's own second source and its gallery flow),
   [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) (a drop box carries one),
   [uc.memory.delete-node](../../memory/use-cases/uc.memory.delete-node.md) (the trash keeps a cover for a restore, the purge frees it)

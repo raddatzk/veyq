@@ -12,7 +12,8 @@ ZIP-Datei** — und ein solches ZIP wieder hineinladen, in dasselbe veyq oder in
 
 - **Herunterladen.** Öffne das ⋯-Menü eines Ordners, einer Erinnerung oder eines Briefkastens (oder deren Seite) und wähle
   **Herunterladen**. veyq sammelt, was darin ist, sagt dir, wie viel es ist, und lässt dich wählen, wo das ZIP gespeichert
-  wird. **Herunterladen** bei einer Datei speichert die Datei selbst. Ein Briefkasten kommt mit einem Ordner für jede Person,
+  wird. Einen ganzen Bereich kannst du nicht auf einmal herunterladen; lade seine Ordner herunter. **Herunterladen** bei
+  einer Datei speichert die Datei selbst. Ein Briefkasten kommt mit einem Ordner für jede Person,
   die etwas eingeworfen hat, so benannt, wie der Briefkasten sie zeigt (zwei Personen namens Anna: „Anna“ und „Anna (2)“).
 - **Pack es aus wie jedes ZIP.** Darin findest du deine Ordner als Ordner und deine Dateien und Fotos unter ihren eigenen
   Namen, im Original. Namen, die manche Computer nicht erlauben (etwa mit `:` oder `?`), werden leicht geändert, damit das ZIP

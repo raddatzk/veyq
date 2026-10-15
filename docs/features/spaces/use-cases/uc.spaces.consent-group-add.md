@@ -173,3 +173,4 @@ wird der Schlüssel zur Gruppe **nie** herausgegeben — nichts aus der Gruppe e
   Plain-authenticity seam), [ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md) (grant-delivery,
   which skips soft memberships), [ADR 0023](../../../decisions/0023-per-tenant-member-identity.md) (per-tenant username),
   [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the client trust tier the consent guarantee rides on)
+- End-user view (docs site): [Accept a group invitation](../../../../site/src/content/docs/spaces/group-invitations.mdx)

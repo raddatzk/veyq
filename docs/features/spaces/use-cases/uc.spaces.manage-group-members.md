@@ -105,3 +105,4 @@ Eine Gruppe behält immer mindestens eine:n Owner, kann also nie führungslos zu
   owners), [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) / [ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)
   (re-grant on rotation)
 - Sibling use-case: [uc.spaces.add-group-member](uc.spaces.add-group-member.md) (add — the roster's other half)
+- End-user view (docs site): [People in a group](../../../../site/src/content/docs/spaces/group-members.mdx)

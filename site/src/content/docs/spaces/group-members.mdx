@@ -1,0 +1,48 @@
+---
+title: "People in a group"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.add-group-member.md
+  - docs/features/spaces/use-cases/uc.spaces.manage-group-members.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+Only owners of a group manage who is in it. Open it under **Settings**: the menu at the bottom of the sidebar, then
+**Settings**, then the group's name under **Groups**. Only the groups you own are listed there.
+
+## Add someone
+
+Anyone you add must already be a member of the shared space.
+
+1. Under **Members**, type their **username** and choose **Add**.
+2. They appear in the list. **Awaiting access** means their key reaches them the next time you or another member of
+   the group is online; then it says **Active**.
+
+<Screenshot id="spaces-group-members" shows="A group's settings with the name and icon at the top, the username field with the Add button, and a member list with Active and Awaiting access" />
+
+If they chose **Ask before adding me to groups**, they get an invitation instead, and the list says **Awaiting
+consent** until they accept: [Accept a group invitation](/veyq/spaces/group-invitations/). **Withdraw** takes the
+invitation back.
+
+If veyq says **This member's security key changed since you last shared with them**, check with them that it is
+really them before you continue: [Verify a person](/veyq/account/verify-a-person/).
+
+## Make someone a co-owner
+
+Choose **Make co-owner** on their row. Co-owners can do everything you can, including adding and removing people.
+**Remove co-owner** takes it back; a group always keeps at least one owner.
+
+## Remove someone
+
+1. Choose **Remove** on their row.
+2. veyq asks **Remove and rotate the key?** If they might have copied links to things in the group, tick **Also turn
+   off every link on this group**.
+3. Choose **Remove**.
+
+The group then gets a new key that the removed person does not have, so nothing added from now on reaches them. What
+they already saw, they may have kept.
+
+You cannot leave a group yourself; another owner removes you. You cannot remove yourself either.
+
+A group's key travels from device to device, locked to each member; the server passes it on but cannot open it:
+[Is my data safe?](/veyq/privacy/is-my-data-safe/)

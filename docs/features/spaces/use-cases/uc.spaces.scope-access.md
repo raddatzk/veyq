@@ -129,3 +129,5 @@ was im Hintergrund läuft — bis er genau so zurückkommt, wie er war.
   [consent-group-add](uc.spaces.consent-group-add.md), [remove-tenant-member](uc.spaces.remove-tenant-member.md),
   [switch-spaces](uc.spaces.switch-spaces.md), [suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md),
   [share-shared-scope](../../sharing/use-cases/uc.sharing.share-shared-scope.md)
+- End-user view (docs site): [Your spaces](../../../../site/src/content/docs/spaces/index.mdx)
+- End-user view (docs site): [Create a group](../../../../site/src/content/docs/spaces/create-a-group.mdx)

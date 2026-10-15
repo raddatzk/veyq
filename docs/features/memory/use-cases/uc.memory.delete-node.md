@@ -157,5 +157,6 @@ nur, dass etwas gelöscht wurde, und entfernt später verschlüsselte Dateien, d
   store the purge reclaims from), [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6 (the
   group grace period)
 - End-user view (docs site): [Delete a file, and bring it back](../../../../site/src/content/docs/depot/delete-a-file.mdx)
-- End-user view (docs site): [Select several things at once](../../../../site/src/content/docs/depot/select-several.mdx)
-
+- End-user view (docs site): [Select several things at once](../../../../site/src/content/docs/spaces/select-several.mdx)
+- End-user view (docs site): [Folders](../../../../site/src/content/docs/spaces/folders.mdx)
+- End-user view (docs site): [The trash](../../../../site/src/content/docs/spaces/trash.mdx)

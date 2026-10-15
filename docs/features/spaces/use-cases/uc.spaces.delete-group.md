@@ -125,3 +125,4 @@ ihm — aber die geteilte Gruppe ist wirklich fort.
 - Sibling use-cases: [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) (roster — the other owner
   power), [uc.spaces.add-group-member](uc.spaces.add-group-member.md), [uc.spaces.scope-access](uc.spaces.scope-access.md)
   (what "read-only" means for every operation, and what non-members are told)
+- End-user view (docs site): [Rename, decorate and delete a group](../../../../site/src/content/docs/spaces/manage-a-group.mdx)
