@@ -300,3 +300,4 @@ serves uploader-chosen bytes on the app origin applies it, and the playback Serv
   the decrypted bytes it serves).
 - Enabler: [en.memory.media](../features/memory/enablers/en.memory.media.md) (the blob/media data layer this
   transport carries). Feature: [Memory](../features/memory/_index.md).
+- Security area of the docs site: [Cryptography](../../site/src/content/docs/security/cryptography.md)
