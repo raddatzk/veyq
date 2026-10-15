@@ -35,18 +35,21 @@ is bundled. The pre-auth `/api/setup` still advertises the major and nothing mor
 CVEs an instance still carries (ADR 0057 §4, unchanged). `build` stays what ADR 0057 §4 makes it, a hand-kept
 diagnostic that gates nothing.
 
-**2. The major moves only when something is removed, and only after deprecation.** Everything additive is a minor.
-A removal is announced first: what will go is marked deprecated in the manifest, the lifecycle ADR 0032 deferred,
-which becomes a precondition of the first removal. It is deprecated at least six months before the major that
-removes it: deprecated before **1 November**, it goes at the next train; later, at the one after.
+**2. The major moves only when something is removed.** Everything additive is a minor. Once a removal is decided,
+what will go is marked `deprecated: true` in its contract, so the generated clients flag every use of it, and it
+leaves with the next train. There is no minimum deprecation period. An operator has to upgrade either way, and
+the clients are not who a period would protect, because the window of decision 5 keeps the old major's adapter in
+every client for two more trains. What has to come first is the release order: the clients that speak the new
+major are published **before** the server major, so on 1 May the apps in the stores already speak it. A change
+an operator must act on (a removed config key or variable) is named in that release's notes.
 
-**3. The train leaves on 1 May.** Once a year, on 1 May, a new major is released **if** something deprecated is
-due. A year with nothing due has no major. Operators can plan for one date instead of watching for one.
+**3. The train leaves on 1 May.** Once a year, on 1 May, a new major is released **if** a removal is pending.
+A year with nothing to remove has no major. Operators can plan for one date instead of watching for one.
 
 **4. A security problem is fixed inside the major first.** A minor fix is the default whenever the API shape and
 the write formats existing clients rely on stay intact, which holds for most server-side fixes. Only when that is
-impossible is an **unscheduled major** released. It removes the insecure piece and nothing else, so other due
-deprecations wait for the train.
+impossible is an **unscheduled major** released. It removes the insecure piece and nothing else, so other pending
+removals wait for the train.
 
 **5. A client speaks every major released since the train before last.** Planned, that is the current major and
 the two before it (N, N-1, N-2). An unscheduled major does not move the window, it widens it: with one emergency
@@ -91,8 +94,8 @@ database migrations. They answer other questions and stay independent of the maj
   - the two majors are still two (`VERSION` `0`, `veyq.version.major=1`);
   - the web gate compares for equality (`grep -n 'EXPECTED_MAJOR' web/src/shared/state/useCapabilities.ts` →
     lines 24-25), which stays right for the web client (decision 6), so no web change is due;
-  - the deprecation lifecycle in the manifest is not built (ADR 0032 § Consequences, deferred), and the
-    `setup.openapi.yaml` `Version.major` text still describes the removal-only rule without train or window;
+  - the `setup.openapi.yaml` `Version.major` text still describes the removal-only rule without train or window;
+    the manifest's deprecation lifecycle stays deferred (ADR 0032 § Consequences) and is not needed for this;
   - no CI job runs a client against older server majors. None can be needed before a native client exists.
 - **Major 0 is pre-release** (ADR 0057). The window counts released majors only, so no client carries a `0`
   adapter, and at V1 `VERSION` and the advertised major both become `1`.
@@ -120,6 +123,9 @@ database migrations. They answer other questions and stay independent of the maj
   drift. They already differ (`0` and `1`).
 - **A client denylist of servers with a known flaw.** Rejected: it decides for operators what is theirs to decide
   (decision 7). Where the flaw is the client's own, the fix is in the client, not a list.
+- **A minimum deprecation period (six months, with a cutoff date for the next train).** Rejected: it buys an
+  operator nothing, since they upgrade either way, and the clients are already covered by the window. The only
+  ordering that matters is that clients ship before the server (decision 2).
 - **A year as the major (calendar versioning).** Rejected: a year with no removal has no major, and the window
   counts trains, not years.
 - **Bundling the payload format into the major.** Rejected: formats are per node kind, owned by the application,

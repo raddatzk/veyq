@@ -36,7 +36,7 @@ response and a client-side gate that reads them.
 ### 1. `version: { major, build }` — the hard compatibility gate
 
 - **`major`** is the **only** hard gate, and it is the platform's one major: the same number as the release major
-  in `VERSION`, moved only by a removal after deprecation, on the yearly train or in an unscheduled security
+  in `VERSION`, moved only by a removal, on the yearly train or in an unscheduled security
   major ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) owns when and why). Everything additive (a new
   capability, field or endpoint) is a minor and never moves `major`.
 - Each client is **compiled with the majors it speaks**. On reaching `/api/setup` it checks the server's `major`:
@@ -97,7 +97,7 @@ a plausible reason to switch off. Two computation sources feed the same active m
 | `sharing.public-links` | share-public-viewer, share-contributor | operator policy | Share affordance hidden; `createShare(READ/READ_WRITE)` and re-activating such a share → `422` |
 | `sharing.uploader-links` | share-uploader | operator policy | Uploader option hidden; `createShare(WRITE_ONLY)` and re-activating such a share → `422` |
 | `spaces.groups` | add-group-member, manage-group-members, rename-group, delete-group, consent-group-add | operator policy | group-space UI hidden; the group-create endpoint → `422` |
-| `account.device-trust` | trust-device, remember-this-device, auto-unlock, set-device-security | operator policy | the "remember this device" toggle hidden; enrolling a device wrap → `422` |
+| `account.device-trust` | trust-device, remember-this-device | operator policy | the "remember this device" toggle hidden; enrolling a device wrap → `422` |
 
 **Sharing is the worked end-to-end proof** (manifest → client soft-gate → server `422`) since it is fully built
 (web). `spaces.groups` and `account.device-trust` are seeded + advertised + client-soft-gated on the **same**
