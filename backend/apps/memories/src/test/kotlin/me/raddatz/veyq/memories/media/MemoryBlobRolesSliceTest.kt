@@ -28,7 +28,7 @@ import me.raddatz.veyq.memories.testing.mediaId
  * The blob role is an open token on the wire since cr-files-application P3-S2. Core's member start takes only a role
  * some application declares ([MemoriesMemberBlobRoles], inbox #366) — here, with Memories alone, Memories' four — and
  * Memories' completion attaches a medium's blobs only in the roles it names for a medium ([MemoryBlobRoles]):
- * `upload_mismatch`, the item refused whole and nothing attached. A session in another application's role (Files'
+ * `upload_mismatch`, the item refused whole and nothing attached. A session in another application's role (Depot's
  * `FILE_CONTENT`, which the composed application starts) is opened through the store here, since this application's
  * start refuses it. (A guest's start, which refuses a role up front, is
  * `ShareContributorSliceTest.guestUploadInARoleMemoriesTakesFromNoGuestIs400`.)

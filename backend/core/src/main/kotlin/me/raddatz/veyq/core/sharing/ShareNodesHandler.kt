@@ -131,7 +131,7 @@ class ShareNodesHandler(
             if (!GuestNodeRules.readWriteAllows(rules, parentKind, GuestNodeOp.CreateChild(kind))) {
                 return@createOrConflict CreateShareNodeOutcome.IllegalScope
             }
-            // A WRITE_ONLY guest creates only the kinds its root's application lets it (Files' drop box: `FILE`s only,
+            // A WRITE_ONLY guest creates only the kinds its root's application lets it (Depot's drop box: `FILE`s only,
             // inbox #377 (c)) — kinds never change, so this needs no lock of its own.
             if (writeOnly && !WriteOnlyGuestKinds.allows(writeOnlyKinds, gated.rootKind, kind)) {
                 return@createOrConflict CreateShareNodeOutcome.IllegalScope

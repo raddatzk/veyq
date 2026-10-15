@@ -58,11 +58,11 @@ import org.junit.jupiter.api.Test
  *    through, the beans ArC deployed equal the concrete implementations in the compiled main outputs of every backend
  *    project ([MainOutputs], the posture sweeps' walk) — derived, so a third module's implementations are expected the
  *    day they compile, and an unindexed module's are missing by name. Anchored: the union holds core's own,
- *    Memories' and Files' implementations, so a walk that read nothing cannot pass — and a root build that drops an
+ *    Memories' and Depot's implementations, so a walk that read nothing cannot pass — and a root build that drops an
  *    application's module (`backend/build.gradle.kts`) is red here, not only in that module's own tests.
  * 2. **Every module's routes are deployed.** Each generated JAX-RS interface (`@Path`) of every module has a deployed
  *    resource bean implementing it — the 404s of step 7's packaged jar, asked of the container. Anchored on every
- *    module's generated API package (core's, Memories', Files').
+ *    module's generated API package (core's, Memories', Depot's).
  * 3. **The seams fail closed in the composed application.** A kind no application claims is placed nowhere, measured
  *    by no admission, takes no upload (`illegal_target`) and is shared by no one (`illegal_scope`), each beside a
  *    positive control on a `MEMORY` — the kind Memories claims — through the same code path. Core alone, where every
@@ -133,7 +133,7 @@ class ModuleCompositionTest {
         val union = seams().values.flatten().map(::beanClass)
         assertTrue(union.any { it.startsWith("me.raddatz.veyq.core.") }, "core's own implementations are collected: $union")
         assertTrue(union.any { it.startsWith("me.raddatz.veyq.memories.") }, "Memories' implementations are collected: $union")
-        assertTrue(union.any { it.startsWith("me.raddatz.veyq.files.") }, "Files' implementations are collected: $union")
+        assertTrue(union.any { it.startsWith("me.raddatz.veyq.depot.") }, "Depot's implementations are collected: $union")
     }
 
     @Test
@@ -144,7 +144,7 @@ class ModuleCompositionTest {
         val routes = compiled.filter { it.isInterface && it.isAnnotationPresent(Path::class.java) }
         val unserved = routes.filter { api -> deployed.none { api.isAssignableFrom(it) } }.map { it.name }
         assertEquals(emptyList<String>(), unserved, "a generated API no deployed resource implements answers 404")
-        for (pkg in listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api", "me.raddatz.veyq.files.generated.api")) {
+        for (pkg in listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api", "me.raddatz.veyq.depot.generated.api")) {
             assertTrue(routes.any { it.packageName == pkg }, "the walk saw $pkg: ${routes.map { it.name }}")
         }
     }
@@ -160,16 +160,16 @@ class ModuleCompositionTest {
     @Test
     fun theRulesOfCoreAndEveryApplicationPartitionTheKinds() {
         val file = "FILE"
-        val dropBox = "FILES_DROPBOX"
+        val dropBox = "DEPOT_DROPBOX"
         val kinds = listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", file, dropBox)
         for (kind in kinds) {
             val claiming = kindRules.filter { it.handles(kind) }.map(::beanClass)
             assertEquals(1, claiming.size, "node kind $kind must be handled by exactly one NodeKindRules: $claiming")
         }
-        assertEquals("me.raddatz.veyq.files.FilesNodeKindRules", beanClass(kindRules.single { it.handles(file) }), "FILE is Files'")
+        assertEquals("me.raddatz.veyq.depot.DepotNodeKindRules", beanClass(kindRules.single { it.handles(file) }), "FILE is Depot's")
         assertTrue(beanClass(kindRules.single { it.handles("MEMORY") }).startsWith("me.raddatz.veyq.memories."), "MEMORY is Memories'")
 
-        assertEquals("me.raddatz.veyq.files.FilesNodeKindRules", beanClass(kindRules.single { it.handles(dropBox) }), "FILES_DROPBOX is Files'")
+        assertEquals("me.raddatz.veyq.depot.DepotNodeKindRules", beanClass(kindRules.single { it.handles(dropBox) }), "DEPOT_DROPBOX is Depot's")
         for (child in kinds) {
             assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(file)), "a $child inside a file")
             // ADR 0080 decision 11: nothing is placed into a drop box — its identity folders are core's own placement
@@ -185,12 +185,12 @@ class ModuleCompositionTest {
 
     /**
      * Which kinds take a cover (inbox #411), across core and every application: each kind's own rule opts it in -
-     * core's `FOLDER`, Memories' two, Files' drop box - and a file does not (its one blob is its content). A kind no
+     * core's `FOLDER`, Memories' two, Depot's drop box - and a file does not (its one blob is its content). A kind no
      * rule claims takes none, so core never needs to name an application kind.
      */
     @Test
     fun everyKindThatTakesACoverIsOptedInByItsOwnRule() {
-        for (kind in listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", "FILES_DROPBOX")) {
+        for (kind in listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", "DEPOT_DROPBOX")) {
             assertTrue(NodeKindRules.takesCover(kindRules, kind), "$kind takes a cover")
         }
         for (kind in listOf("FILE", "NOT_A_KIND")) {
@@ -200,19 +200,19 @@ class ModuleCompositionTest {
 
     /**
      * What a folder's `READ_WRITE` guest may create, across core and every application (owner decision 2026-10-14): a
-     * folder, and the kinds their own applications declare guest-creatable — Files' `FILE`, declared once and by Files;
+     * folder, and the kinds their own applications declare guest-creatable — Depot's `FILE`, declared once and by Depot;
      * never a Memory, a chapter or a drop box. Only here does a kind two applications declare show (it would fail the
      * boot of this very test: `GuestCreatableKinds.requireDisjoint`). Moving and renaming any kind stay core's to allow.
      */
     @Test
     fun aFolderGuestCreatesFoldersAndTheDeclaredKindsOnly() {
         val declared = guestCreatableKinds.flatMap { bean -> bean.kinds().map { it to beanClass(bean) } }
-        assertEquals(listOf("FILE" to "me.raddatz.veyq.files.FilesGuestCreatableKinds"), declared, "the kinds the applications declare guest-creatable")
+        assertEquals(listOf("FILE" to "me.raddatz.veyq.depot.DepotGuestCreatableKinds"), declared, "the kinds the applications declare guest-creatable")
         fun creates(kind: String) = GuestNodeRules.readWriteAllows(guestNodeRules, NodeEntity.FOLDER, GuestNodeOp.CreateChild(kind))
         assertTrue(creates(NodeEntity.FOLDER), "a folder")
         assertTrue(creates("FILE"), "a file")
-        for (kind in listOf("MEMORY", "CHAPTER", "FILES_DROPBOX", "NOT_A_KIND")) assertFalse(creates(kind), "a guest creates a $kind in a folder")
-        for (op in listOf(GuestNodeOp.MoveChildOut("MEMORY"), GuestNodeOp.MoveChildIn("MEMORY"), GuestNodeOp.RenameChild("FILES_DROPBOX"))) {
+        for (kind in listOf("MEMORY", "CHAPTER", "DEPOT_DROPBOX", "NOT_A_KIND")) assertFalse(creates(kind), "a guest creates a $kind in a folder")
+        for (op in listOf(GuestNodeOp.MoveChildOut("MEMORY"), GuestNodeOp.MoveChildIn("MEMORY"), GuestNodeOp.RenameChild("DEPOT_DROPBOX"))) {
             assertTrue(GuestNodeRules.readWriteAllows(guestNodeRules, NodeEntity.FOLDER, op), "unchanged: $op")
         }
     }
@@ -226,7 +226,7 @@ class ModuleCompositionTest {
      */
     @Test
     fun theUploadSeamsOfEveryApplicationPartitionTheKinds() {
-        val owners = mapOf("MEMORY" to "me.raddatz.veyq.memories.", "CHAPTER" to "me.raddatz.veyq.memories.", "FILE" to "me.raddatz.veyq.files.")
+        val owners = mapOf("MEMORY" to "me.raddatz.veyq.memories.", "CHAPTER" to "me.raddatz.veyq.memories.", "FILE" to "me.raddatz.veyq.depot.")
         for ((kind, owner) in owners) {
             val accepting = completions.filter { it.accepts(kind) }.map(::beanClass)
             assertEquals(1, accepting.size, "an upload into a $kind must have exactly one completion: $accepting")
@@ -244,7 +244,7 @@ class ModuleCompositionTest {
     }
 
     /**
-     * An application's own completion route never hands an upload to another application's completion: Files'
+     * An application's own completion route never hands an upload to another application's completion: Depot's
      * `completeFile` on a `MEMORY` is refused before core's dispatcher would pick Memories' — which would otherwise
      * read the item as a medium whose id is the node's, and attach it, had the upload been started as that medium's
      * original. Only the composed application holds both, so only here can it show.
@@ -272,7 +272,7 @@ class ModuleCompositionTest {
     }
 
     /**
-     * Inbox #366: a member's start takes every role an application declares — Memories' four and Files' one, which only
+     * Inbox #366: a member's start takes every role an application declares — Memories' four and Depot's one, which only
      * this composition holds together — and refuses a well-formed token none declares, whole and before any session.
      */
     @Test
@@ -305,11 +305,11 @@ class ModuleCompositionTest {
         assertFalse(GuestNodeRules.readWriteAllows(guestNodeRules, memory, create), "a guest creates inside a Memory")
         assertTrue(GuestNodeRules.readWriteAllows(guestNodeRules, NodeEntity.FOLDER, create), "control: inside a folder")
         // A WRITE_ONLY guest's create: a root kind no application declares lets it create nothing — a Memory root
-        // neither (its guests' uploads are media, not nodes); Files' drop box takes FILEs (wire tokens, as this test
-        // spells Files' kinds).
+        // neither (its guests' uploads are media, not nodes); Depot's drop box takes FILEs (wire tokens, as this test
+        // spells Depot's kinds).
         assertFalse(WriteOnlyGuestKinds.allows(writeOnlyGuestKinds, unclaimed, NodeEntity.FOLDER), "a write-only guest creates under an unclaimed root")
         assertFalse(WriteOnlyGuestKinds.allows(writeOnlyGuestKinds, memory, NodeEntity.FOLDER), "a write-only guest creates under a Memory link")
-        assertTrue(WriteOnlyGuestKinds.allows(writeOnlyGuestKinds, "FILES_DROPBOX", "FILE"), "control: a FILE in a drop box")
+        assertTrue(WriteOnlyGuestKinds.allows(writeOnlyGuestKinds, "DEPOT_DROPBOX", "FILE"), "control: a FILE in a drop box")
 
         // A link's usage: no admission measures it, so the link start is refused.
         assertNull(quota.admissionFor(unclaimed), "an unclaimed kind's link is measured")

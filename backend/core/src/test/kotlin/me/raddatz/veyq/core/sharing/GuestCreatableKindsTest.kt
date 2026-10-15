@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test
  *
  * Plain JUnit, not `@QuarkusTest`: a failed boot cannot be asserted from inside the application it failed to be
  * (`AdminListenerBindTest`'s reason). So the observer is called as ArC calls it, beside the control of a disjoint set.
- * Files' own kind against a second claimant is `FilesNodeKindRulesTest`'s.
+ * Depot's own kind against a second claimant is `DepotNodeKindRulesTest`'s.
  */
 class GuestCreatableKindsTest {
 

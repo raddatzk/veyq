@@ -17,8 +17,8 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s an
   `:apps:<name>` (an application, ADR 0079 Decision 1): rule (b)'s direction is defined for exactly those, so a third
   kind is red until the direction is decided for it. And every included module **ships**: a module the root reaches
   over no runtime edge compiles and passes its own tests while the fast-jar holds none of it — Gradle and Quarkus
-  build that without a word (measured cr-files-application F0: with `implementation(project(":apps:files"))` dropped
-  from the root, this guard was green and only the root's `ModuleCompositionTest` went red, on its Files anchor).
+  build that without a word (measured cr-files-application F0: with `implementation(project(":apps:depot"))` dropped
+  from the root, this guard was green and only the root's `ModuleCompositionTest` went red, on its Depot anchor).
 - **(b) The dependency direction (ADR 0079 Decision 4).** Every project edge, any configuration — a module's
   `testFixtures*` configurations included: `:core` depends on no project (its fixtures neither: an edge to an
   application would put that application into `:core`'s tests, which must boot core alone); an application depends
@@ -100,7 +100,7 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s an
   `:core`'s is pinned by a test (`ScheduledJobsHaltedInTestTest`): a copy deleted from another module lets every
   `@Scheduled` purge fire after each of that module's app starts and race its fixtures, with nothing red (inbox
   #331). Derived from the classpaths above, so a new application's tests are held to it the day they exist. Its
-  bite: the key deleted from `apps/files`' `application-test.properties` → red on `test of :apps:files` (2026-10-10).
+  bite: the key deleted from `apps/depot`' `application-test.properties` → red on `test of :apps:depot` (2026-10-10).
 
 **The defect that bought it.** None: built with cr-platform-gradle-modules (steps 6 and 8b), which split the
 backend into `:core`, `:apps:memories` and a `:test-support` project that `:core`'s test fixtures later replaced.

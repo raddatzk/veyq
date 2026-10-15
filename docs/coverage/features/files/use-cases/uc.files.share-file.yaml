@@ -2,14 +2,14 @@ useCase: uc.files.share-file
 feature: files
 title: Share one file — a guest sees, downloads and (as a contributor) replaces that file
 # Built for inbox #378 (a single FILE as a share root). Backend: FileShareSliceTest (core + Files) and the share-root
-# assertions of FilesNodeSliceTest / FilesNodeKindRulesTest; web: the member's file view (`FileDetail`) mounted by core's
+# assertions of DepotNodeSliceTest / DepotNodeKindRulesTest; web: the member's file view (`FileDetail`) mounted by core's
 # page of a public link for a guest (real router and registry, guarded clients), the member's own mount, the link dialog
 # worded for a file, the mint on the wire; fileSingleShare.e2e.test.ts runs in the web-e2e job (unverified when written).
 acceptanceCriteria:
   - id: a-file-is-shared-read-or-read-write-never-write-only
     text: A FILE is a share root with READ and READ_WRITE; a WRITE_ONLY link on a file is refused (422 illegal_scope) and stores nothing, and so is a role change to WRITE_ONLY; a file in the trash is shared by nobody (404 node_not_found).
     coverage:
-      backend: { integration: [FileShareSliceTest.aFileIsSharedReadOrReadWriteNeverWriteOnly, FileShareSliceTest.aFilesLinkChangesBetweenReadAndReadWriteAndNeverToWriteOnly, FileShareSliceTest.aTrashedFileIsSharedByNobody, FilesNodeSliceTest.aFileIsTheRootOfAReadAndAReadWriteShareOnly] }
+      backend: { integration: [FileShareSliceTest.aFileIsSharedReadOrReadWriteNeverWriteOnly, FileShareSliceTest.aDepotLinkChangesBetweenReadAndReadWriteAndNeverToWriteOnly, FileShareSliceTest.aTrashedFileIsSharedByNobody, DepotNodeSliceTest.aFileIsTheRootOfAReadAndAReadWriteShareOnly] }
       web:
         unit: [src/features/files/components/FileShareDialog.test.ts]
         e2e: [src/features/files/fileSingleShare.e2e.test.ts]

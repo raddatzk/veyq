@@ -201,7 +201,7 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [ShareNodesSliceTest.insideAMemoryAGuestWritesNothingAndReadsEverything, ShareNodesSliceTest.aGuestCannotMoveAChapterOutOfAMemory, ShareNodesSliceTest.aMemoryRootedLinkGainsNoTreeOperation, ShareNodesSliceTest.aGuestCreatesNoMemoryInAFolder, ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox, ChapterShareSliceTest.aChapterGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused, CoreAloneSliceTest.aFolderGuestCreatesFoldersOnly, ModuleCompositionTest.aFolderGuestCreatesFoldersAndTheDeclaredKindsOnly, ShareNodesCoreSliceTest.aWriteOnlyOrAReadGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.theGateRefusesAsTheOtherGuestWritesDo]
-        unit: [GuestNodeRulesPartitionTest.inAFolderAGuestCreatesAFolderOrADeclaredKindAndMovesAnyKind, GuestCreatableKindsTest.twoDeclarationsOfOneKindFailStartupNamingTheKindAndBoth, FilesNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
+        unit: [GuestNodeRulesPartitionTest.inAFolderAGuestCreatesAFolderOrADeclaredKindAndMovesAnyKind, GuestCreatableKindsTest.twoDeclarationsOfOneKindFailStartupNamingTheKindAndBoth, DepotNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
       web:
         unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memory/capabilities.test.ts]
         e2e: [src/features/memory/folderShareGuest.e2e.test.ts]

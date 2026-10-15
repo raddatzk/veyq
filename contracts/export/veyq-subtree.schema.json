@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://veyq.dev/contracts/export/veyq-subtree.schema.json",
   "title": "veyq-subtree manifest",
-  "description": "The manifest of a veyq node-subtree download (ADR 0082): the plaintext tree of one node and everything under it. Version 2 (written today) sits at `.veyq/manifest.json` beside the tree, which the store-only ZIP holds as itself: a directory per node that holds others, each file under its own name, every name made safe for every file system. Version 1 (still read, never written) sat at `manifest.json` with every payload under `data/<node id>/`. Core owns the envelope and the node shape; each kind owns the shape of its `content` (the `$defs` below document Files' and Memories'). Readers ignore unknown fields and refuse a `version` newer than they know. Beyond what JSON Schema can say, a reader caps the tree at 200000 nodes and a depth of 100, the manifest at 128 MiB, and refuses a payload path that does not lie at or under its node's `path`.",
+  "description": "The manifest of a veyq node-subtree download (ADR 0082): the plaintext tree of one node and everything under it. Version 2 (written today) sits at `.veyq/manifest.json` beside the tree, which the store-only ZIP holds as itself: a directory per node that holds others, each file under its own name, every name made safe for every file system. Version 1 (still read, never written) sat at `manifest.json` with every payload under `data/<node id>/`. Core owns the envelope and the node shape; each kind owns the shape of its `content` (the `$defs` below document Depot's and Memories'). Readers ignore unknown fields and refuse a `version` newer than they know. Beyond what JSON Schema can say, a reader caps the tree at 200000 nodes and a depth of 100, the manifest at 128 MiB, and refuses a payload path that does not lie at or under its node's `path`.",
   "type": "object",
   "required": [
     "format",
@@ -63,7 +63,7 @@
         "id": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]{0,63}$",
-          "description": "The application's id: the part of a `content.type` before the dot (`files`, `memories`)."
+          "description": "The application's id: the part of a `content.type` before the dot (`depot`, `memories`)."
         },
         "contentSchema": {
           "type": "integer",
@@ -117,7 +117,7 @@
         },
         "modifiedAt": {
           "type": "integer",
-          "description": "Optional, Files: the file's modified time at export, in milliseconds since the epoch; restored on import."
+          "description": "Optional, Depot: the file's modified time at export, in milliseconds since the epoch; restored on import."
         }
       }
     },
@@ -136,7 +136,7 @@
         },
         "kind": {
           "type": "string",
-          "description": "The node kind (FOLDER, FILE, FILES_DROPBOX, MEMORY, CHAPTER, ...). An importing build that lacks the kind skips that node and its subtree and reports it.",
+          "description": "The node kind (FOLDER, FILE, DEPOT_DROPBOX, MEMORY, CHAPTER, ...). An importing build that lacks the kind skips that node and its subtree and reports it.",
           "maxLength": 64
         },
         "name": {
@@ -147,7 +147,7 @@
         },
         "path": {
           "$ref": "#/$defs/archivePath",
-          "description": "Version 2: where the node sits in the archive. A node that holds others (a folder, a Memory, a chapter) is a directory and its payloads lie in it; a node of a kind that IS one file (a Files file) is that file, its one payload at this very path. The exported node's own path is its safe name. Required in version 2."
+          "description": "Version 2: where the node sits in the archive. A node that holds others (a folder, a Memory, a chapter) is a directory and its payloads lie in it; a node of a kind that IS one file (a Depot file) is that file, its one payload at this very path. The exported node's own path is its safe name. Required in version 2."
         },
         "cover": {
           "anyOf": [
@@ -197,10 +197,10 @@
       },
       "oneOf": [
         {
-          "$ref": "#/$defs/filesFile"
+          "$ref": "#/$defs/depotFile"
         },
         {
-          "$ref": "#/$defs/filesDropBox"
+          "$ref": "#/$defs/depotDropBox"
         },
         {
           "$ref": "#/$defs/memoriesMemory"
@@ -213,8 +213,8 @@
             "type": {
               "not": {
                 "enum": [
-                  "files.file",
-                  "files.drop-box",
+                  "depot.file",
+                  "depot.drop-box",
                   "memories.memory",
                   "memories.chapter"
                 ]
@@ -224,11 +224,11 @@
         }
       ]
     },
-    "filesFile": {
-      "description": "Files: the one blob of a FILE node. The file's name is the node's name.",
+    "depotFile": {
+      "description": "Depot: the one blob of a FILE node. The file's name is the node's name.",
       "properties": {
         "type": {
-          "const": "files.file"
+          "const": "depot.file"
         },
         "file": {
           "$ref": "#/$defs/payload"
@@ -239,11 +239,11 @@
         "file"
       ]
     },
-    "filesDropBox": {
-      "description": "Files: a FILES_DROPBOX node. It carries nothing but what it was: its guests' folders are its FOLDER children (each under the name the drop box shows it by, a repeated name numbered), their files theirs. An importing build creates it as a plain FOLDER - a drop key, guests' identities and links cannot be rebuilt from a download.",
+    "depotDropBox": {
+      "description": "Depot: a DEPOT_DROPBOX node. It carries nothing but what it was: its guests' folders are its FOLDER children (each under the name the drop box shows it by, a repeated name numbered), their files theirs. An importing build creates it as a plain FOLDER - a drop key, guests' identities and links cannot be rebuilt from a download.",
       "properties": {
         "type": {
-          "const": "files.drop-box"
+          "const": "depot.drop-box"
         },
         "schema": {
           "type": "integer",

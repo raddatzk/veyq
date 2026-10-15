@@ -31,7 +31,7 @@ import java.util.UUID
  * often ciphertext or an opaque id, and the operator-blind boundary applies to errors too (styleguide §7). The
  * endpoints are core's, chosen for reaching body binding with no more than a session: `claimTasks` (a list of
  * patterned scalars, inbox #354), `enqueueTask` (a uuid), `setMemberRole` (an enum). The same shape for an
- * application's own generated resource is `:apps:files`' `FilesContentSliceTest`.
+ * application's own generated resource is `:apps:depot`' `DepotContentSliceTest`.
  */
 @QuarkusTest
 class MalformedRequestSliceTest {

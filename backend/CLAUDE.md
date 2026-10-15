@@ -6,16 +6,16 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 - `./gradlew check` (compile + slice tests) — runs on **in-memory H2** (`%test`, hermetic + fast). Run from
   `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`),
   `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`),
-  `:apps:files` (`backend/apps/files`, the Files application — the `FILE` and `FILES_DROPBOX` kinds, a file's blob for members and guests, the drop box; its tests boot core plus
-  Files and run as `:apps:files:test`), the root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
+  `:apps:depot` (`backend/apps/depot`, the Depot application — the `FILE` and `DEPOT_DROPBOX` kinds, a file's blob for members and guests, the drop box; its tests boot core plus
+  Depot and run as `:apps:depot:test`), the root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
   and entity sweeps, `ModuleCompositionTest`). A new
   application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the `veyq.module` plugin,
   its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `testFixtures(project(":core"))` over a test
   configuration — never another application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list.
   **What no guard derives, a new application adds by hand**, and forgetting it turns nothing red: its node kinds and
   blob roles to `validate_kernel_imports_no_slices.py`'s lists (and its web kinds to
-  `validate_web_core_imports_no_applications.py`'s `KIND`), and its seam anchors to `ModuleCompositionTest` — Files' tokens
-  were missing from the kind lists (all of them on the backend, `FILES_DROPBOX` on the web) until its CR closed. Its
+  `validate_web_core_imports_no_applications.py`'s `KIND`), and its seam anchors to `ModuleCompositionTest` — Depot's tokens
+  were missing from the kind lists (all of them on the backend, `DEPOT_DROPBOX` on the web) until its CR closed. Its
   generated API is **not** on that list: `OperatorBlindProbeTest` gets the packages from the root build, which hands
   over `SpecSets`' own derivation, and reads its classpath against them both ways (inbox #368) — so a new
   application's operations are red there, unclassified, the day its spec lands. `:core`'s tests boot core
@@ -50,7 +50,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   insert race-free and the revision row a leaf (a bump after a node row, with no scope lock, is the lock-order inversion
   `NodesStore.applyUpdate` documents). It is the listing's `ETag`, so a write that forgets is a live view that never
   learns of a change, with no failing request to show it. `backend/src/test/.../TreeRevisionBumpsTest` reads the sources and
-  is red on a writer of those rows that is neither listed nor exempt; `TreeRevisionCoreSliceTest` / `FilesTreeRevisionSliceTest`
+  is red on a writer of those rows that is neither listed nor exempt; `TreeRevisionCoreSliceTest` / `DepotTreeRevisionSliceTest`
   pin each path's one bump and a refusal's none. A guest's `resolveShare` tag is NOT this revision (it would leak the rest
   of the space's activity): `ShareETag` digests what the response serves.
 - **A list of records inside a node is core's primitive** (inbox #410, [ADR 0033](../docs/decisions/0033-live-media-updates-revision-polling.md),

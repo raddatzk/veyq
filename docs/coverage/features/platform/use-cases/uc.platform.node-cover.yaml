@@ -17,14 +17,14 @@ acceptanceCriteria:
     text: Which kinds take a cover is each kind's own rule (FOLDER core's, a drop box Files', a Memory and a Chapter Memories'; a file and an unknown kind take none), asked of the one rule that handles the kind; core names no application kind.
     coverage:
       backend:
-        integration: [CoreAloneSliceTest.onlyAFolderTakesACoverWithCoreAlone, ModuleCompositionTest.everyKindThatTakesACoverIsOptedInByItsOwnRule, NodeCoverCoreSliceTest.aKindNoRuleOptedInTakesNoCover, NodeCoverFilesSliceTest.aFileTakesNoCoverAndAnUploadThatDoesNotFitTheDeclarationIsRefused]
+        integration: [CoreAloneSliceTest.onlyAFolderTakesACoverWithCoreAlone, ModuleCompositionTest.everyKindThatTakesACoverIsOptedInByItsOwnRule, NodeCoverCoreSliceTest.aKindNoRuleOptedInTakesNoCover, NodeCoverDepotSliceTest.aFileTakesNoCoverAndAnUploadThatDoesNotFitTheDeclarationIsRefused]
       web:
         unit: [src/core/node/cover/capabilities.test.ts]
   - id: writers-only-fail-closed
     text: Only a member who may write the scope sets or removes a cover - never a reader, a guest of any role, a pending deletion, locked keys or a guest's identity folder; the server refuses a stranger, an anonymous caller, another tenant's member and another member's upload.
     coverage:
       backend:
-        integration: [NodeCoverFilesSliceTest.aMemberWhoMayOnlyReadSetsNoCover, NodeCoverCoreSliceTest.aStrangerAnAnonymousCallerAndAnotherTenantsMemberReachNothing, NodeCoverCoreSliceTest.anotherMembersOpenUploadIsNotFound, NodeCoverCoreSliceTest.aSpacePendingDeletionIsReadOnlyForACover, NodeCoverMemoriesSliceTest.noGuestRouteSetsOrRemovesACover]
+        integration: [NodeCoverDepotSliceTest.aMemberWhoMayOnlyReadSetsNoCover, NodeCoverCoreSliceTest.aStrangerAnAnonymousCallerAndAnotherTenantsMemberReachNothing, NodeCoverCoreSliceTest.anotherMembersOpenUploadIsNotFound, NodeCoverCoreSliceTest.aSpacePendingDeletionIsReadOnlyForACover, NodeCoverMemoriesSliceTest.noGuestRouteSetsOrRemovesACover]
       web:
         unit: [src/core/node/cover/capabilities.test.ts, src/core/node/cover/cover.dom.test.ts]
   - id: one-write-no-half-state

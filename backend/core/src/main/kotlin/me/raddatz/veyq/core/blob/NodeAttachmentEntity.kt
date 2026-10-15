@@ -12,7 +12,7 @@ import org.hibernate.annotations.DynamicUpdate
  * A sealed file on a node (ADR 0079 Consequences: attachments are core's; cr-files-application P3): the blob in one
  * [slot] of [nodeId]. Its `K_blob` is wrapped under the node's own key (ADR 0080 Decision 13) and sealed bound to the
  * blob id, the node id and the role (ADR 0072); the server keeps ids only. [slot] is a token the owning application
- * names — Files' is `FILE_CONTENT`, the same token as the blob role — and core compares it, never names one.
+ * names — Depot's is `FILE_CONTENT`, the same token as the blob role — and core compares it, never names one.
  * Who uploaded the slot's CURRENT blob (ADR 0083 Decision 8; a replace moves it): [shareIdentityId] for a link's guest,
  * [uploaderUserId] for a member — exactly one of the two (`ck_attachment_uploader`), written from the upload's opener
  * by [AttachmentStore.attach] alone. [uploaderKey] is the pair as the wire names it.

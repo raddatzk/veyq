@@ -76,7 +76,7 @@ class NodeEntity : PanacheEntityBase {
     var sealedDropPrivateKey: String? = null
 
     /** Set on a guest's **identity folder** only (ADR 0080 decision 11): the `FOLDER` a `WRITE_ONLY` guest's identity
-     *  holds in its link's root (a drop box, e.g. Files' `FILES_DROPBOX`), created by the application's own operation
+     *  holds in its link's root (a drop box, e.g. Depot's `DEPOT_DROPBOX`), created by the application's own operation
      *  through [me.raddatz.veyq.core.sharing.IdentityFolders] — one per (parent, identity), `ux_node_parent_identity`.
      *  Its name, slug and key wrap are under that identity's key `K_up`, not the parent's; a reader opens the parent's
      *  [sealedDropPrivateKey], then the identity's wrapped `K_up`, then the entry. Inside such a folder only that

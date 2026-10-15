@@ -33,8 +33,8 @@ import org.junit.jupiter.api.Test
  * revision must have moved by exactly one — and, as the control, a refused or no-op write must move it by none.
  * A forgotten bump is a live view that never learns of a change, which nothing else here would notice.
  *
- * The Files and drop-box paths (a file upload, a replace, a file delete, a guest's upload, an identity folder) need an
- * application and are `FilesTreeRevisionSliceTest`'s. The race is `TreeRevisionRaceCoreSliceTest`.
+ * The Depot and drop-box paths (a file upload, a replace, a file delete, a guest's upload, an identity folder) need an
+ * application and are `DepotTreeRevisionSliceTest`'s. The race is `TreeRevisionRaceCoreSliceTest`.
  */
 @QuarkusTest
 class TreeRevisionCoreSliceTest {

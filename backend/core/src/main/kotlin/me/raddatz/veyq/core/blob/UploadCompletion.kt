@@ -16,7 +16,7 @@ data class DerivativeDeclare(val kind: String, val uploadId: String)
  * (ADR 0079, cr-platform-contract-split D8). Core's dispatcher ([UploadCompletions]) reads [nodeId] only, to resolve
  * the live target and pick the one implementation that accepts its kind; it hands the item on unchanged. Everything
  * else is the application's to interpret: what [ownerId] names, which [derivatives] kinds exist, and what each of
- * [payloads] holds. Memories and Files implement it today — e.g. Memories' member completion (`MediaResource`) and its guest
+ * [payloads] holds. Memories and Depot implement it today — e.g. Memories' member completion (`MediaResource`) and its guest
  * one on a share link (`ShareMediaHandler`) map their own request items onto this one and its result back onto
  * theirs, so no wire names a field of it.
  */

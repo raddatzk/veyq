@@ -205,9 +205,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   74 a `core/node/` file re-exporting `features/files` — rejected: core's import rule reads every application of
      `APPLICATIONS`, not only the first one
   75 a `core/node/` file naming the Files node kind `'FILE'` — rejected: the kind rule lists every application's kinds
-  76 `:apps:files`' build file depending on `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) on the
+  76 `:apps:depot`' build file depending on `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) on the
      real second application (case 50 forges one); Gradle accepts the edge without complaint
-  77 the root build no longer composing `:apps:files` (its `implementation(project(…))` line gone) — rejected:
+  77 the root build no longer composing `:apps:depot` (its `implementation(project(…))` line gone) — rejected:
      `validate_backend_module_graph` rule (a) requires every included module to ship. Before F0 this passed every
      guard; the module compiled and its tests ran green while the fast-jar held none of it
   78 a `core/node/` dialog reading Memories' message key `'memory.deleteMemoryTitle'` — rejected:
@@ -1047,19 +1047,19 @@ def forge_web_core_reads_application_i18n(root: pathlib.Path) -> str:
     return "a core/node file reading Memories' i18n key 'memory.deleteMemoryTitle' (must be REJECTED — core names no application)"
 
 
-FILES_BUILD = "backend/apps/files/build.gradle.kts"
+DEPOT_BUILD = "backend/apps/depot/build.gradle.kts"
 
 
-def forge_files_depends_on_memories(root: pathlib.Path) -> str:
-    f = root / FILES_BUILD
+def forge_depot_depends_on_memories(root: pathlib.Path) -> str:
+    f = root / DEPOT_BUILD
     if not f.is_file():
-        raise ForgeError(f"{FILES_BUILD} is missing — the Files module moved or was deleted")
+        raise ForgeError(f"{DEPOT_BUILD} is missing — the Depot module moved or was deleted")
     text = f.read_text()
     anchor = '    implementation(project(":core"))\n'
     if anchor not in text:
-        raise ForgeError(f"{FILES_BUILD} no longer declares `implementation(project(\":core\"))` — re-anchor")
+        raise ForgeError(f"{DEPOT_BUILD} no longer declares `implementation(project(\":core\"))` — re-anchor")
     f.write_text(text.replace(anchor, anchor + '    implementation(project(":apps:memories"))\n', 1))
-    return ":apps:files depending on :apps:memories (must be REJECTED — no application → application)"
+    return ":apps:depot depending on :apps:memories (must be REJECTED — no application → application)"
 
 
 def _compose_in_root(root: pathlib.Path, project: str) -> None:
@@ -1072,13 +1072,13 @@ def _compose_in_root(root: pathlib.Path, project: str) -> None:
                               CORE_BUILD_DEPS_ANCHOR + f'    implementation(project("{project}"))\n', 1))
 
 
-def forge_root_drops_files_module(root: pathlib.Path) -> str:
+def forge_root_drops_depot_module(root: pathlib.Path) -> str:
     f = root / ROOT_BUILD
-    edge = '    implementation(project(":apps:files"))\n'
+    edge = '    implementation(project(":apps:depot"))\n'
     if not f.is_file() or edge not in f.read_text():
-        raise ForgeError(f"{ROOT_BUILD} no longer composes :apps:files with `implementation(...)` — re-anchor")
+        raise ForgeError(f"{ROOT_BUILD} no longer composes :apps:depot with `implementation(...)` — re-anchor")
     f.write_text(f.read_text().replace(edge, "", 1))
-    return "the root build no longer composing :apps:files (must be REJECTED — an included module that never ships)"
+    return "the root build no longer composing :apps:depot (must be REJECTED — an included module that never ships)"
 
 
 def forge_unmounted_config_secret(root: pathlib.Path) -> str:
@@ -1453,8 +1453,8 @@ CASES = [
     ("73", WEB_GUARD, forge_web_application_imports_application_client, False),
     ("74", WEB_GUARD, forge_web_core_imports_second_application, False),
     ("75", WEB_GUARD, forge_web_core_names_file_kind, False),
-    ("76", "validate_backend_module_graph.py", forge_files_depends_on_memories, False),
-    ("77", "validate_backend_module_graph.py", forge_root_drops_files_module, False),
+    ("76", "validate_backend_module_graph.py", forge_depot_depends_on_memories, False),
+    ("77", "validate_backend_module_graph.py", forge_root_drops_depot_module, False),
     ("78", WEB_GUARD, forge_web_core_reads_application_i18n, False),
     ("79", "validate_web_contrast.py", forge_admin_web_primary_lightened, False),
     ("80", "validate_request_bounds.py", forge_request_list_elements_unbounded, False),

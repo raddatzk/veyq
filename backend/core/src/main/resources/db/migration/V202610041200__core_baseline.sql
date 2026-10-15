@@ -403,7 +403,7 @@ ALTER TABLE veyq_node ADD CONSTRAINT fk_node_share_identity FOREIGN KEY (share_i
 CREATE UNIQUE INDEX ux_node_parent_identity ON veyq_node (parent_id, share_identity_id);
 
 -- A sealed file on a node (ADR 0079 Consequences, cr-files-application P3): one blob per (node, slot). slot is a
--- token the owning application names (Files' FILE_CONTENT, Memories' COVER — each equal to the blob role its wrap is
+-- token the owning application names (Depot's FILE_CONTENT, Memories' COVER — each equal to the blob role its wrap is
 -- sealed to); core
 -- stores and compares it, never names one. Who uploaded the slot's CURRENT blob (ADR 0083 Addendum; a replace moves it):
 -- share_identity_id for a link's guest, uploader_user_id for a member - exactly one of the two (ck_attachment_uploader).

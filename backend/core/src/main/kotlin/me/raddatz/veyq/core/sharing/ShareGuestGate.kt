@@ -184,7 +184,7 @@ class ShareGuestGate(
      * no node, so they all complete into its root, and every such attach locks that root's node row anyway (Memories'
      * primary-bucket resolve and revision bump, in the same transaction) — they run one after another with or
      * without the scope lock. What the lock adds is waiting for tree writes and for completes into other nodes of the
-     * scope, one short transaction each; Files names its node on every complete, so it takes the lock regardless. One
+     * scope, one short transaction each; Depot names its node on every complete, so it takes the lock regardless. One
      * lock order for every complete is worth more than that.
      */
     fun admittedInto(gated: ShareWriteGate.Admitted, target: ShareWriteTarget.Node): () -> Boolean = {

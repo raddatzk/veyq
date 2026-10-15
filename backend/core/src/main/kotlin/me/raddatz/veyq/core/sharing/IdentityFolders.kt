@@ -29,7 +29,7 @@ sealed interface IdentityFolderOutcome {
  * uploads into its nodes (`ShareGuestGate.target`).
  *
  * The **mechanism** is core's — it names no kind. Which roots take identity folders is the root kind's application's
- * question, asked before this (Files: a `FILES_DROPBOX`); a placement outside `NodeKindRules` happens only here (no
+ * question, asked before this (Depot: a `DEPOT_DROPBOX`); a placement outside `NodeKindRules` happens only here (no
  * rule admits a `FOLDER` under an application's drop box, so nobody else can place one there, and a rename or a move
  * inside is refused by the same rules — a member's move out is the folder's one placement, which ends its identity
  * link, `NodesStore.applyUpdate`).

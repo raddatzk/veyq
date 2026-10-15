@@ -20,7 +20,7 @@ acceptanceCriteria:
     text: "Core's move dialog is a folder browser over what the session can see — a member's whole space up to its root, a guest's subtree up to the link's root, never above it. It opens where the node is, lists only the places that can take its kind (folders as the way down, a Memory for a chapter; no file, no drop box, no guest's identity folder), lists the node itself as not to be opened, and disables Move here, with the reason, where the node is now, inside itself, in a guest's identity folder and wherever its kind's placement does not take it (a mirror of NodeKindRules: a folder, Memory, file or drop box at the root or in a folder, a chapter only in a Memory; a guest only into a folder). Every place and crumb is a button, and focus goes to the list of a place opened. The browser takes a node list, a place offered only where it takes every one. A node at the destination whose name folds to the same slug is named before anything is sent."
     coverage:
       backend:
-        integration: [NodeKindMatrixSliceTest.moveFollowsTheMatrix, FilesNodeSliceTest.aFileIsRenamedAndMovedBetweenFolders]
+        integration: [NodeKindMatrixSliceTest.moveFollowsTheMatrix, DepotNodeSliceTest.aFileIsRenamedAndMovedBetweenFolders]
       web:
         unit: [src/core/node/move.test.ts, src/core/node/MoveNodeDialog.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/memory/register.test.ts, src/features/files/register.test.ts]
 

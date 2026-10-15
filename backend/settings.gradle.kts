@@ -5,5 +5,5 @@ rootProject.name = "veyq-backend"
 include(":core")
 // The Memories application, the first of them (ADR 0079): depends on `:core`, never the reverse, never on another application.
 include(":apps:memories")
-// The Files application, the second (cr-files-application): the same direction — `:core` only, never another application.
-include(":apps:files")
+// The Depot application, the second (cr-files-application): the same direction — `:core` only, never another application.
+include(":apps:depot")

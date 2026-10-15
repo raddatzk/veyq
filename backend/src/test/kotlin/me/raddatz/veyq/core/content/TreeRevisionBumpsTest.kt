@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test
 /**
  * Every write a level view shows moves the scope's tree revision (ADR 0081), and a write that forgets is a change the
  * live view never learns of — a defect no request fails on and no page shows, until a user wonders why a peer's
- * upload needs a reload. The per-path tests (`TreeRevisionCoreSliceTest`, `FilesTreeRevisionSliceTest`) pin the sites
+ * upload needs a reload. The per-path tests (`TreeRevisionCoreSliceTest`, `DepotTreeRevisionSliceTest`) pin the sites
  * that exist; this pins the **set**: reading the sources, it fails on the day someone adds a writer of node or
  * attachment rows that is not classified here, or deletes a bump from one that is.
  *

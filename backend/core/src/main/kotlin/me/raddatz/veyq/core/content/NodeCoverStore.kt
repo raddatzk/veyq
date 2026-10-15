@@ -14,7 +14,7 @@ import jakarta.transaction.Transactional
  * the OLD cover, meta and blob exactly as they were (inbox #411).
  *
  * **Order: the slot first, then the meta.** The slot's compare-and-set can miss ([NodeCoverOutcome.CoverStale]); that
- * outcome COMMITS (the loser's upload is spent and its blob freed, as a Files replace is). The meta's can miss too
+ * outcome COMMITS (the loser's upload is spent and its blob freed, as a Depot replace is). The meta's can miss too
  * ([NodeCoverOutcome.StaleMeta]); that one rolls the whole transaction back - the attach, its freed predecessor and the
  * spent session included - so the upload is still open for the client's retry on the fresh meta (ADR 0077). Lock order
  * is the tree's: the scope row first (inside [AttachmentStore]), then the node row (the meta UPDATE).

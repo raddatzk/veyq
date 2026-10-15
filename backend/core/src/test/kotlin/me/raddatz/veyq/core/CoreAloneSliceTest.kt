@@ -177,7 +177,7 @@ class CoreAloneSliceTest {
     @Test
     fun onlyAFolderTakesACoverWithCoreAlone() {
         assertTrue(NodeKindRules.takesCover(kindRules, NodeEntity.FOLDER), "core's own kind takes a cover")
-        for (kind in listOf("MEMORY", "CHAPTER", "FILE", "FILES_DROPBOX", "NOT_A_KIND")) {
+        for (kind in listOf("MEMORY", "CHAPTER", "FILE", "DEPOT_DROPBOX", "NOT_A_KIND")) {
             assertFalse(NodeKindRules.takesCover(kindRules, kind), "$kind: no rule here opts it in (fail closed)")
         }
     }
@@ -197,7 +197,7 @@ class CoreAloneSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val link = GuestTreeShare.seed(userId, scopeId, folder)
-        for (kind in kinds - NodeEntity.FOLDER + listOf("FILE", "FILES_DROPBOX")) {
+        for (kind in kinds - NodeEntity.FOLDER + listOf("FILE", "DEPOT_DROPBOX")) {
             GuestTreeShare.create(link, folder, kind).statusCode(422).body("code", equalTo("illegal_scope"))
         }
         GuestTreeShare.create(link, folder, NodeEntity.FOLDER).statusCode(201) // control

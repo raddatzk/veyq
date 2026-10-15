@@ -19,7 +19,7 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   store still its only writer. Every `KERNEL` entry must be declared by some main file, so the list cannot rot into
   names that guard nothing, and a run in which no file is kernel is red.
 - **Node-kind rule (ADR 0079).** Core knows the node kind `FOLDER` only; the kinds an application owns
-  (`APPLICATION_KINDS`: Memories' `MEMORY` and `CHAPTER`, Files' `FILE` and `FILES_DROPBOX`) are named only by that application's code, which answers
+  (`APPLICATION_KINDS`: Memories' `MEMORY` and `CHAPTER`, Depot's `FILE` and `DEPOT_DROPBOX`) are named only by that application's code, which answers
   for them through core's `NodeKindRules`, `ShareRoots`, `GuestNodeRules`, `WriteOnlyGuestKinds`, `GuestCreatableKinds`, `ShareGuestWrites`,
   `UploadCompletion` and `UploadAdmission` (the guest seams by declaring nothing: a kind no
   one declares allows a guest no tree operation). A
@@ -32,11 +32,11 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   generated type lists a kind, so a literal or an application's constant is the only way core could name one — and
   both are what this rule reads. Each kind must still be named in code by some application main file, so the list
   cannot rot into names that guard nothing. **The blob roles an application owns** (`APPLICATION_BLOB_ROLES`:
-  Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, Files' `FILE_CONTENT`; `COVER` is core's own since inbox #411, `NodeCover`) are read by the same rule since the contract's `BlobRole`
+  Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, Depot's `FILE_CONTENT`; `COVER` is core's own since inbox #411, `NodeCover`) are read by the same rule since the contract's `BlobRole`
   opened to the same kind of token (cr-files-application P3-S2): core stores a role and compares it
-  (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`, `FilesBlobRoles`),
+  (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`, `DepotBlobRoles`),
   declared to core's member start through `MemberBlobRoles` (inbox #366).
-  The lists are by hand (a token is a value, not a path): a new application adds its kinds and roles here — Files'
+  The lists are by hand (a token is a value, not a path): a new application adds its kinds and roles here — Depot's
   sat out of them for its whole build until its harvest, and nothing turned red, because a missing entry guards nothing
   silently. A
   node's cover is core's attachment slot `COVER` (inbox #341, core's own feature since #411): core names the token because
@@ -124,7 +124,7 @@ APPLICATION_KINDS = [
     "MEMORY",
     "CHAPTER",
     "FILE",
-    "FILES_DROPBOX",
+    "DEPOT_DROPBOX",
 ]
 # The blob roles the applications own (cr-files-application P3-S2): the contract's `BlobRole` is an open token like the kind,
 # so core stores and compares a role and names none. Read by the same rule as the kinds.

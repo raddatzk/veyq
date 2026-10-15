@@ -25,7 +25,7 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [ShareFilesSliceTest.aContributorCreatesAFileUploadsReplacesAndRenamesIt, ShareFilesSliceTest.aGuestsAndAMembersBlobMetaAreServedToTheGuestUnchanged, ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox]
-        unit: [FilesNodeKindRulesTest.aFolderGuestCreatesFilesAndNoDropBox, FilesNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
+        unit: [DepotNodeKindRulesTest.aFolderGuestCreatesFilesAndNoDropBox, DepotNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
       web:
         unit: [src/features/files/shareUpload.wire.test.ts, src/features/files/dropBox.wire.test.ts, src/features/files/levelRows.guest.test.ts]
         e2e: [src/features/files/filesShare.e2e.test.ts]

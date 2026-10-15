@@ -67,7 +67,7 @@ the tags `files` / `share-files`, the paths `/files`, the generated `FilesApi` /
 
 ## Phases
 
-- [ ] 1 contracts + backend — `contracts/api/files/` → `contracts/api/depot/` (spec file and the prose that names
+- [x] 1 contracts + backend — `contracts/api/files/` → `contracts/api/depot/` (spec file and the prose that names
       the application) together with `:apps:files` → `:apps:depot` and `me.raddatz.veyq.files` → `me.raddatz.veyq.depot`
       in one commit (settings, root composition, `Dockerfile` COPY lines, `ModuleCompositionTest`, `Composition.kt`);
       the app-prefixed seams `Files…` → `Depot…`; `FILES_DROPBOX` → `DEPOT_DROPBOX` in the module, core's comments
@@ -75,7 +75,8 @@ the tags `files` / `share-files`, the paths `/files`, the generated `FilesApi` /
       application id; the backend guards (`validate_kernel_imports_no_slices.py`, `validate_guard_gaps.py`'s
       anchors); the coverage YAMLs' backend test-class citations follow the renamed tests. · Done when:
       `./gradlew check` green, the contracts guards and `validate_backend_module_graph.py` green; bite: a
-      `contracts/api/files/` directory restored beside `depot/` turns the build red on the missing module.
+      `contracts/api/files/` directory restored beside `depot/` turns the build red on the missing module. (Ticked 2026-10-15 with one red outside
+      this CR: `CapabilityRegistryTest`, from `cr-capability-register-recut` phase 1's catalog ids.)
 - [ ] 2 web — `web/src/features/files` → `web/src/features/depot`, `generate:api` input and output
       (`generated/depot`), `registerFiles` and every app-prefixed symbol, the export ids in `exportImport.ts` and its
       import validators, the i18n namespace `files:` → `depot:` (EN and DE) with the application's tab label

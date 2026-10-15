@@ -15,7 +15,7 @@
     "core.public-shares.drop-box": {
       "serves": ["uc.sharing.share-uploader"],
       "source": "operator-policy",
-      "description": "Public share links in the WRITE_ONLY access mode (a drop box: a guest adds and cannot read what others added; what it adds is the application's). Off => createShare, reactivateShare and reissueShare of a WRITE_ONLY link are refused with 422 capability_disabled, and so is creating a drop-box node (Files' FILES_DROPBOX, createNode); the client hides the write-only option and the drop box. Links that already exist keep working until a share switch reaches them (inbox #442), and an existing drop box stays (a feature switch refuses only what is new, ADR 0088 decision 5)."
+      "description": "Public share links in the WRITE_ONLY access mode (a drop box: a guest adds and cannot read what others added; what it adds is the application's). Off => createShare, reactivateShare and reissueShare of a WRITE_ONLY link are refused with 422 capability_disabled, and so is creating a drop-box node (Depot's DEPOT_DROPBOX, createNode); the client hides the write-only option and the drop box. Links that already exist keep working until a share switch reaches them (inbox #442), and an existing drop box stays (a feature switch refuses only what is new, ADR 0088 decision 5)."
     },
     "core.group-space": {
       "serves": ["uc.spaces.add-group-member", "uc.spaces.manage-group-members", "uc.spaces.rename-group", "uc.spaces.delete-group", "uc.spaces.consent-group-add"],

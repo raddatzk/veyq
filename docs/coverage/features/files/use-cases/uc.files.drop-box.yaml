@@ -21,13 +21,13 @@ acceptanceCriteria:
     text: Inside its own identity folder a drop-box guest creates FILE nodes only (and uploads into them); a sub-folder, a drop box or any other kind is refused with 422 illegal_scope and stores nothing (owner decision 2026-10-08, inbox #377 (c)).
     coverage:
       backend:
-        unit: [FilesNodeKindRulesTest.aDropBoxGuestCreatesFilesOnly, WriteOnlyGuestKindsPartitionTest.aRootKindNobodyHandlesAllowsNothing]
+        unit: [DepotNodeKindRulesTest.aDropBoxGuestCreatesFilesOnly, WriteOnlyGuestKindsPartitionTest.aRootKindNobodyHandlesAllowsNothing]
         integration: [DropBoxSliceTest.aDropBoxGuestCreatesOnlyFilesInItsFolder]
   - id: members-place-nothing-and-only-delete-or-move-out
     text: No member, and no READ_WRITE guest of a link above, creates, renames or moves anything into a drop box or a guest's folder; a member deletes a guest's folder or moves it out, which clears its identity so the next call of that identity makes a new folder; the web shows a level inside an identity folder read-only.
     coverage:
       backend:
-        unit: [FilesNodeKindRulesTest.aDropBoxLivesWhereAFileDoesAndNothingIsPlacedInIt]
+        unit: [DepotNodeKindRulesTest.aDropBoxLivesWhereAFileDoesAndNothingIsPlacedInIt]
         integration: [DropBoxSliceTest.aMemberPlacesNothingInADropBoxAndOnlyDeletesOrMovesOut]
       web: { unit: [src/features/files/components/DropBoxDetail.test.ts, src/views/MemoryHomeView.test.ts] }
   - id: members-open-every-guest-folder

@@ -53,7 +53,7 @@ interface GuestNodeRules {
 
 /**
  * Core's own container (ADR 0080 decision 6): inside a `FOLDER` a `READ_WRITE` guest **creates** a `FOLDER`, or a kind
- * its own application declares guest-creatable ([GuestCreatableKinds]: Files' `FILE`) — never a Memory, a drop box or
+ * its own application declares guest-creatable ([GuestCreatableKinds]: Depot's `FILE`) — never a Memory, a drop box or
  * any other application's node (owner decision 2026-10-14); it **moves in, moves out and renames** any kind. Either way
  * `NodeKindRules` then decides whether that kind may live there.
  *

@@ -68,9 +68,9 @@ acceptanceCriteria:
           - TreeRevisionCoreSliceTest.aChangeOutsideTheSharedSubtreeDoesNotMoveAGuestsTag
           - TreeRevisionCoreSliceTest.aRevokedOrUnknownLinkIs404ForAPollingGuest
           - TreeRevisionRaceCoreSliceTest.createsRacingForAScopesFirstBumpAllCount
-          - FilesTreeRevisionSliceTest.aMembersFirstUploadAReplaceAndAFileDeleteEachMoveIt
-          - FilesTreeRevisionSliceTest.aGuestsIdentityFolderAndItsUploadMoveIt
-          - FilesTreeRevisionSliceTest.anUploadMovesAGuestsResolveTagThoughNoNodeRowChanged
+          - DepotTreeRevisionSliceTest.aMembersFirstUploadAReplaceAndAFileDeleteEachMoveIt
+          - DepotTreeRevisionSliceTest.aGuestsIdentityFolderAndItsUploadMoveIt
+          - DepotTreeRevisionSliceTest.anUploadMovesAGuestsResolveTagThoughNoNodeRowChanged
           - TreeRevisionBumpsTest.everyListedWriterBumps
       web:
         unit:

@@ -3,7 +3,7 @@ package me.raddatz.veyq.core.sharing
 /**
  * Which of an application's kinds a `READ_WRITE` guest may create under a `FOLDER` (ADR 0080 decision 6, owner decision
  * 2026-10-14): core's [FolderGuestNodeRules] lets a guest create a `FOLDER`, and any other kind **only when its own
- * application declares it here** — Files declares `FILE` (a contributor's upload lands in one), Memories declares
+ * application declares it here** — Depot declares `FILE` (a contributor's upload lands in one), Memories declares
  * nothing, so a guest creates no Memory, no drop box and no node of an application that says nothing. Core names no
  * application kind (ADR 0079): the declaration is the application's, and core only reads it.
  *
