@@ -236,7 +236,7 @@ sealed under the member's Master Key.
 A public share link is a bearer capability: `/s/{shareId}#k=K_share`, with the key in the fragment. Every member can
 rebuild every link of a Memory from its recovery copy, so a member removed from a group or the tenant may hold every
 link that existed on its Memories while they belonged. Using one needs no dump: against an honest server the link
-alone works, and a Memory's content key `K_mem` never re-keys.
+alone works, and a Memory's content key `K_node` never re-keys.
 
 What is built: a **re-issue** (one request, one transaction: a new id and a fresh `K_share` carrying the old settings,
 the old link deleted) cuts a departed member off. Re-activating a link a departed member may hold is refused
@@ -249,18 +249,18 @@ once.
   id.
 - **Until a link is re-issued, the departed member can keep using it**, with no dump.
 - **With a dump**, they also read the old share's later password, label or note edits, and the Memory's content under
-  `K_mem` stays readable whatever the link does.
+  `K_node` stays readable whatever the link does.
 
 **Decided in:** [ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md).
 
 **Closed by:** a re-issue, against an honest server. The dump case is the class
   [ADR 0012](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0012-content-key-hierarchy.md) accepts:
-  `K_mem` is not re-keyed.
+  `K_node` is not re-keyed.
 
 ## Guest names and an operator holding a link
 
 No share link is served the name any guest gave; members read the names. But the names stay sealed as they are — a
-contributor's under `K_mem`, an uploader's under its own key, which a link opens through the Memory's drop key. So a
+contributor's under `K_node`, an uploader's under its own key, which a link opens through the Memory's drop key. So a
 viewer or contributor link **plus a database dump** reads every guest's name; in practice, that is an operator
 holding a link. Accepted: that link already decrypts every medium of the Memory, and a name is less than the photos
 it is attached to. A key only members hold would close it and was rejected as more machinery than that difference is
@@ -295,7 +295,7 @@ can retract content a recipient already downloaded and decrypted; rotation prote
 - **Layer 2 is a per-scope policy.** Groups rotate on removal; the **tenant** uses layer 1 alone by default and
   rotates only on an explicit re-key; a personal scope has one member. A revoked tenant member who both hoarded the
   key and ciphertext **and** colludes with a malicious operator keeps that narrow residual until an explicit re-key.
-- **A scope rotation does not revoke a share.** A shared `K_mem` is wrapped independently of the scope key, so links
+- **A scope rotation does not revoke a share.** A shared `K_node` is wrapped independently of the scope key, so links
   are revoked separately ([above](#departed-members-and-the-links-they-could-copy)).
 - **Account-key rotation after a compromise is forward secrecy, not repair.** What was already read stays read.
 

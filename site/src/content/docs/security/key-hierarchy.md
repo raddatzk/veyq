@@ -237,11 +237,11 @@ never learnt of a newer epoch at all (a withheld rotation, a fork) is outside th
 ## Layer 3: content keys
 
 Every node, whether a folder, a Memory, a chapter or an application's own kind, carries its own random content key.
-In Memories the key of a Memory or a chapter is called `K_mem`.
+In Memories the key of a Memory or a chapter is called `K_node`.
 
 | Key | How it is made | What wraps it | Who holds it | When it rotates | What losing or leaking it means |
 |---|---|---|---|---|---|
-| **Node key** (`K_mem`, a folder's key) | 32 random bytes from the client that creates the node; never derived from `K_SC` or the parent | Its **parent's** content key, or `K_SC` at the node's epoch for a scope-root node. A share adds independent wraps of the same key (Layer 4) | Every scope member, down the chain; every viewer or contributor link at or above the node | **Never.** A move or rename re-wraps it under the (new) parent's key, an `O(1)` write that leaves the subtree untouched | Leaked: the node's whole subtree, including names and everything created under it later |
+| **Node key** (`K_node`, a folder's key) | 32 random bytes from the client that creates the node; never derived from `K_SC` or the parent | Its **parent's** content key, or `K_SC` at the node's epoch for a scope-root node. A share adds independent wraps of the same key (Layer 4) | Every scope member, down the chain; every viewer or contributor link at or above the node | **Never.** A move or rename re-wraps it under the (new) parent's key, an `O(1)` write that leaves the subtree untouched | Leaked: the node's whole subtree, including names and everything created under it later |
 | **`K_blob`** | Random, one per blob | The content key of the blob's **direct** owning node (a chapter's media under the chapter's key). Media a public uploader added sit under that uploader's own key instead (Layer 4) | Whoever holds that node's key | Never. Moving media between a chapter and its Memory re-wraps only `K_blob` | That one blob |
 | **Chunk frames** | The blob's bytes, encrypted in frames under `K_blob` with AES-256-GCM | — | — | — | — |
 
@@ -271,13 +271,13 @@ server.
 
 | Key | How it is made | What wraps it | Who holds it | When it rotates | What losing or leaking it means |
 |---|---|---|---|---|---|
-| **`K_share`** | 32 random bytes, minted by the client per share | Not wrapped for the link: it travels in the URL fragment. Members recover it from the recovery copy below. Under it sit the share root's node key (`symWrap(K_share, K_mem)`, viewer and contributor links only), the root's name, the note, the private label and the password's reveal copy | Anyone with the link; every member of the scope | **Never** for the life of a link. Cutting someone off a link means **re-issuing** it: a new id and a fresh `K_share` ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | Leaked: the shared subtree. Revoking the share stops new access on an honest server; what was already downloaded stays read |
+| **`K_share`** | 32 random bytes, minted by the client per share | Not wrapped for the link: it travels in the URL fragment. Members recover it from the recovery copy below. Under it sit the share root's node key (`symWrap(K_share, K_node)`, viewer and contributor links only), the root's name, the note, the private label and the password's reveal copy | Anyone with the link; every member of the scope | **Never** for the life of a link. Cutting someone off a link means **re-issuing** it: a new id and a fresh `K_share` ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | Leaked: the shared subtree. Revoking the share stops new access on an honest server; what was already downloaded stays read |
 | **Recovery copy** (`sealed_share_key`) | `K_share` sealed under `K_SC` at the scope's **current** epoch, bound to scope, node, share and epoch; mandatory on every share | `K_SC` | Every scope member; **no link** | Not re-sealed by a rotation: a copy older than the scope's current epoch makes its link re-issue-only ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | — |
 | **Drop keypair** (hybrid post-quantum KEM) | Minted by the owner's client when a Memory's first uploader link is created; one per Memory (a chapter has its own), not per share | Private half: under the node's key. Public half: under `K_share` on each uploader share | Private: everyone who reads the node. Public: uploader guests | No rotation is defined | Private half leaked: what uploaders added to that node |
 | **Uploader identity key** | Random, minted by an uploader guest's client | Wrapped to the drop public key | That guest, and every reader of the node | — | That identity's uploads: their blob keys, metadata and display name |
 
-**Why the recovery copy is sealed under `K_SC` and not `K_mem`.** A viewer or contributor link holds `K_mem`;
-that is what the link exists to hand over. A copy under `K_mem` would let that link's holder, with a database dump,
+**Why the recovery copy is sealed under `K_SC` and not `K_node`.** A viewer or contributor link holds `K_node`;
+that is what the link exists to hand over. A copy under `K_node` would let that link's holder, with a database dump,
 open every sibling share of the same Memory: its `K_share`, and through it the password, the private label, the note
 and the whole link, since the dump holds every share id in clear. `K_SC` is the one key no share carries
 ([ADR 0036](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0036-editable-share-note-recoverable-share-key.md)
@@ -286,7 +286,7 @@ not already read. A member removed later may still hold the old links; re-issuin
 
 **Why an uploader link carries no content key.** An uploader link is the one link handed to people who are meant not
 to see. A write-only role enforced only by the server would not survive a dump. So the link carries the node's drop
-public key instead of a wrap of `K_mem`. Each guest seals under an identity key of its own, wrapped to that drop key:
+public key instead of a wrap of `K_node`. Each guest seals under an identity key of its own, wrapped to that drop key:
 one asymmetric wrap per identity, not per blob. A link plus a full dump reads only what that link's guests uploaded
 ([ADR 0031](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0031-uploader-public-share.md) point 7). The
 drop key belongs to the node rather than to the share so that every reader finds the private half where they

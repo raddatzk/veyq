@@ -39,7 +39,7 @@ This page claims nothing beyond it.
 | Identity key | A hybrid post-quantum encryption key and an Ed25519 signing key. Others seal scope keys to the public half; its owner signs every grant it issues. See [Cryptography](/veyq/security/cryptography/). |
 | Secret Key | 256 random bits, held by the user in the Emergency Kit. The server never stores it. |
 | `K_SC` / epoch key | A scope's content key. It is a forward chain of epochs, and a grant carries the latest epoch the member is entitled to. |
-| `K_mem` | A random per-Memory content key, wrapped independently, which makes it the unit a share hands out. |
+| `K_node` | A random per-Memory content key, wrapped independently, which makes it the unit a share hands out. |
 | `K_share` | A random per-link key. It travels in the URL fragment. |
 | Seal | Authenticated encryption that binds its purpose and the object it is stored as ([ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md)), so the server cannot serve one object's ciphertext as another's. |
 
@@ -315,18 +315,18 @@ the link.
 
 **Steps (public viewer link).**
 
-1. The curator's client draws a random `K_share` and a random 256-bit share id. It wraps the node's `K_mem` under
+1. The curator's client draws a random `K_share` and a random 256-bit share id. It wraps the node's `K_node` under
    `K_share` and seals the node's name under `K_share`.
 2. It also writes a **recovery copy** of `K_share`, sealed under the scope key at the scope's current epoch
    ([ADR 0036](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0036-editable-share-note-recoverable-share-key.md)
    point 4). This lets any member of the scope reveal, edit or re-copy the link later. It is deliberately not sealed
-   under `K_mem`, because a viewer link carries `K_mem`.
+   under `K_node`, because a viewer link carries `K_node`.
 3. It writes a **write verifier**: the SHA-256 of a write token derived with HKDF from `K_share` and bound to the
    share id ([ADR 0076](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)).
 4. It posts the record. The link is `/s/{shareId}#k=…`, with `K_share` in the **URL fragment**, which browsers do
    not send to the server.
 5. The guest's client resolves the share without authentication and receives the record and the sealed subtree. It
-   unwraps `K_mem` with the fragment key and decrypts everything locally. For media it asks a share-scoped endpoint,
+   unwraps `K_node` with the fragment key and decrypts everything locally. For media it asks a share-scoped endpoint,
    which issues a presigned object-store URL only for a blob attached under the shared node. The client fetches the
    ciphertext directly from the store.
 
@@ -336,13 +336,13 @@ sequenceDiagram
   participant S as Server
   participant O as Object store
   actor V as Guest
-  C->>C: K_share and shareId random<br>wrap K_mem under K_share, seal name under K_share
+  C->>C: K_share and shareId random<br>wrap K_node under K_share, seal name under K_share
   C->>C: recovery copy: K_share sealed under scope key (current epoch)<br>write verifier = SHA-256 of token derived from K_share
   C->>S: create share: id, node, role, wrap, sealed name,<br>recovery copy, write verifier
   C-->>V: link with K_share in the URL fragment (out of band)
   V->>S: resolve share (no auth, fragment never sent)
   S-->>V: record and sealed subtree
-  V->>V: unwrap K_mem with K_share, decrypt locally
+  V->>V: unwrap K_node with K_share, decrypt locally
   V->>S: request blob (allowed only under the shared node)
   S-->>V: presigned store URL
   V->>O: fetch ciphertext, decrypt locally
@@ -358,11 +358,11 @@ sequenceDiagram
   ([ADR 0030](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0030-contributor-public-share.md)). The guest
   can view and add media. Naming yourself presents the write token, which the server checks against the stored hash,
   and returns a contributor token that gates every later upload. The guest seals uploads and their display name under
-  `K_mem`, exactly as a member would.
+  `K_node`, exactly as a member would.
 - **Uploader link (WRITE_ONLY)**
   ([ADR 0031](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0031-uploader-public-share.md) point 7). The
-  link carries **no** wrap of `K_mem`. It carries only the Memory's **drop public key** (a hybrid post-quantum
-  keypair whose private half is sealed under `K_mem`), sealed under `K_share`. Each guest draws an identity key of
+  link carries **no** wrap of `K_node`. It carries only the Memory's **drop public key** (a hybrid post-quantum
+  keypair whose private half is sealed under `K_node`), sealed under `K_share`. Each guest draws an identity key of
   its own, wraps it to the drop key, and seals its uploads and name under it. Members open those uploads through the
   drop private key; the guest sees nothing but what it added in the current session.
 - **Password-protected link**
@@ -375,7 +375,7 @@ sequenceDiagram
 **What the server learns.** The raw share id (it is the primary key, and members rebuild links from it), the node
 id, the role, enabled and expiry state, whether a password is required, the creation time, opaque wraps and sealed
 fields, hashes of the write, contributor and password tokens, and, for a guest, which share and which blobs are
-requested. A public share's guest is also served the scope id. It never receives `K_share`, `K_mem` or a name in
+requested. A public share's guest is also served the scope id. It never receives `K_share`, `K_node` or a name in
 clear.
 
 **What it cannot do.**
@@ -393,7 +393,7 @@ clear.
 - The password and the write token are layer-1 controls. They stop a leaked link or a database copy against an
   honest server, not the operator, who can skip the check.
 - Revocation is soft. Disabling, expiring or deleting a link stops new access, but what a guest already downloaded
-  stays downloaded. A scope-key rotation does not revoke a share, because `K_mem` does not change.
+  stays downloaded. A scope-key rotation does not revoke a share, because `K_node` does not change.
 - Every member can rebuild every link of a Memory, so a member removed from a space may hold those links until they
   are **re-issued** (a new id and a new `K_share`;
   [ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)).
