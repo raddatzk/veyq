@@ -86,7 +86,7 @@ changes nothing in the image.
       `wiki/`, `wiki-sync.yml`, and `Home.md` becomes the site's landing page. · Done when: trust-chain green,
       `npm run check` green in `web/` and `site/`; bites: a German page with one source fewer than its English
       pair, and a declared doc with its back-link removed, each turn the rebuilt guard red.
-- [ ] 3 Run area — the production sections of `infra/README.md` and `site/src/content/docs/run/index.md` (the wiki's
+- [x] 3 Run area — the production sections of `infra/README.md` and `site/src/content/docs/run/index.md` (the wiki's
       `running-your-instance.md`, moved there as-is in phase 2 so `wiki/` could go) become
       the Run pages (verify a release, new instance, Kubernetes, upgrade, backup & restore), Compose and Helm side
       by side where both apply. The release-verification page stays `.md` with its commands in plain fenced
