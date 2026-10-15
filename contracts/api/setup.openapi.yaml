@@ -164,7 +164,8 @@ components:
       type: object
       description: >
         The instance's advertised version (ADR 0032). Two parts with different roles: `major` is the hard
-        compatibility gate, `build` is informational only.
+        compatibility gate, `build` is informational only. Nothing more precise is advertised before login: the
+        release `<major>.<minor>` is Server-Owner-only (ADR 0057 §4).
       required: [major, build]
       properties:
         major:
@@ -172,11 +173,16 @@ components:
           type: integer
           format: int32
           description: >
-            The ONLY hard-compatibility gate. Incremented exclusively when a capability is REMOVED (a breaking
-            removal an older client might rely on). A client compares this to the `major` it was compiled
-            against: equal => proceed; server > client => a blocking "update your app" state; server < client =>
-            a blocking "update this server" state — any mismatch stops before login, never a silent partial
-            failure. Everything additive (a new capability, field or endpoint) bumps `build`, never `major`.
+            The ONLY hard-compatibility gate, and the platform's one major (ADR 0085 decision 1): the same number
+            as the major of the release this server runs, taken from the repository's VERSION file when the
+            server was built. It moves only when something an older client might rely on is REMOVED, on the
+            yearly train that leaves on 1 May, or in an unscheduled major that removes only an insecure piece.
+            Everything additive (a new capability, field or endpoint) is a minor and never moves it. A client
+            checks it before login against the majors it speaks: the web client and the admin console ship in
+            the server's own image and speak exactly its major; a store-shipped client speaks every major
+            released since the train before last (ADR 0085 decision 5). A server major newer than any the client
+            speaks => a blocking "update your app" state; older than any it speaks => a blocking "update this
+            server" state — never a silent partial failure. `0` is pre-release: no released client speaks it.
           minimum: 0
           example: 1
         build:
@@ -187,7 +193,8 @@ components:
             Hand-maintained build counter, informational only (diagnostics, "what's new") — nothing bumps it
             automatically and it gates nothing, so a stale value costs nothing observable. It is NOT the
             release version: which bits are running is a different question, answered by the Server-Owner-only
-            `GET /api/instance/release` and deliberately never merged with this one (ADR 0057 §4).
+            `GET /api/instance/release`. That release shares this response's `major`; only its precision stays
+            off the pre-auth surface (ADR 0057 §4).
           minimum: 0
           example: 1
 
