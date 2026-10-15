@@ -17,15 +17,16 @@ info:
     Nothing here is user content: a release version is a property of the software. Operator-blindness is
     untouched — this value ends up disclosed to *fewer* parties than the capability manifest already is.
 
-    The object store is the one **setting** here (ADR 0089): the Server Owner sets and checks it on the admin
-    channel instead of in environment variables. It describes the operator's own infrastructure; the store it
-    names holds ciphertext only, and its secrets are sealed server-side and never returned.
+    The object store and the capability switches are the **settings** here (ADR 0089): the Server Owner sets
+    them on the admin channel instead of in environment variables. The store describes the operator's own
+    infrastructure; the store it names holds ciphertext only, and its secrets are sealed server-side and never
+    returned. A capability switch is instance configuration and carries no member data (ADR 0088 decision 12).
     Authorization is enforced by code annotations, not this spec (ADR 0008).
 tags:
   - name: instance
     description: >
       Server-Owner reads and settings of the running instance (release identity, store provisioning,
-      config-secret state, the object-store setting and its check). One tag = one
+      config-secret state, the object-store setting and its check, the capability switches). One tag = one
       resource interface owning the whole `/api/instance` subtree.
 
 # x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
@@ -420,6 +421,151 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: store_not_configured }
 
+  /api/instance/capabilities:
+    get:
+      tags: [instance]
+      operationId: listInstanceCapabilities
+      x-veyq-channel: admin
+      summary: List the capability register with each entry's words and its switch.
+      description: >
+        Returns every entry of the capability register (`contracts/platform/capabilities.json`, ADR 0088) in
+        catalog order, where a parent comes before its children. Server-Owner only.
+
+        Each entry carries its words as the catalog holds them, in English and German (decision 13): its
+        `title`, what it is for (`purpose`), and what switching it off does to what is new and to what exists
+        (`whenOff`). A client renders them in its own locale and keeps no copy of its own.
+
+        `off` is the entry's own switch, as the Server Owner set it. `effective` is whether the entry is active:
+        it and every ancestor entry are on (the AND along the path, decision 2). So a child of a switched-off
+        parent reads `off: false, effective: false`, and switching the parent back on brings it back. An entry is
+        listed in `GET /api/setup`'s manifest exactly when it is `effective` here.
+
+        The register is instance configuration: nothing here is member data, and every entry is listed whether
+        or not any member uses it.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Every entry of the register, in catalog order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InstanceCapability" }
+              example:
+                - id: core.public-shares
+                  title: { en: "Public links", de: "Öffentliche Links" }
+                  purpose: { en: "Members can share what is in a space through a link …", de: "Mitglieder können Inhalte eines Bereichs über einen Link teilen …" }
+                  whenOff: { en: "No new public link of any kind can be made …", de: "Es lässt sich kein neuer öffentlicher Link mehr anlegen …" }
+                  "off": true
+                  effective: false
+                - id: core.public-shares.contribute
+                  title: { en: "Links to look and add", de: "Links zum Ansehen und Hinzufügen" }
+                  purpose: { en: "A public link whose guests can add to what they see …", de: "Ein öffentlicher Link, über den Gäste …" }
+                  whenOff: { en: "No new link of this kind can be made …", de: "Es lässt sich kein neuer Link dieser Art anlegen …" }
+                  "off": false
+                  effective: false
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+  /api/instance/capabilities/{capabilityId}:
+    put:
+      tags: [instance]
+      operationId: setInstanceCapability
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the write carries one entry's own switch, never the whole set, so two
+          console tabs switching different entries cannot overwrite each other, and on the same entry the later
+          write is the one the owner made last.
+      x-veyq-channel: admin
+      summary: Switch one capability entry off or back on.
+      description: >
+        Sets the entry's own switch and applies it at once, without a restart (ADR 0088 decision 12): the
+        manifest of `GET /api/setup` follows it, and so does every gate on the entry and, by the AND along the
+        path, on its children. Writing the state the entry already has changes nothing and answers the same.
+        Server-Owner only.
+
+        What off does is the entry's `whenOff` (decision 5). A feature switch refuses only what is new
+        (`422 capability_disabled` at the creating endpoint) and leaves what exists alone. A device switch acts at
+        once: while `core.remember-device` is effectively off, `GET /api/account/key-material` withholds every
+        `DEVICE` wrap, and while `core.remember-device.passwordless` is effectively off, every `DEVICE_KEY` wrap.
+        Nothing is deleted, so switching back on restores what was there, and the `PASSWORD` wrap is always
+        served, so no member is locked out.
+
+        Only the switch is stored, never who uses the entry. The entry as it now stands is returned, with
+        `effective` computed as `listInstanceCapabilities` does.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          description: The entry's id, as the catalog spells it.
+          schema:
+            type: string
+            maxLength: 64
+            example: core.remember-device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceCapabilityUpdate" }
+            examples:
+              switchOff:
+                summary: Switch the entry off
+                value: { "off": true }
+              switchOn:
+                summary: Switch it back on
+                value: { "off": false }
+      responses:
+        "200":
+          description: The switch was stored and applied; the entry as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceCapability" }
+              example:
+                id: core.remember-device
+                title: { en: "Remembered devices", de: "Gemerkte Geräte" }
+                purpose: { en: "A device a member has signed in on can keep a key of its own …", de: "Ein Gerät, auf dem sich ein Mitglied angemeldet hat …" }
+                whenOff: { en: "No device can be newly remembered …", de: "Kein Gerät lässt sich neu merken …" }
+                "off": true
+                effective: false
+        "400":
+          description: The request was malformed, or `off` is missing. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No catalog entry has this id. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: capability_not_found }
+
 components:
   schemas:
     InstanceRelease:
@@ -751,6 +897,76 @@ components:
             operator's own store, never about anything in it. Null when there is nothing to add.
           maxLength: 1024
           example: null
+
+    InstanceCapability:
+      type: object
+      description: >
+        One entry of the capability register, with its words and its switch (ADR 0088). Instance configuration
+        and server self-description: the texts are the catalog's, and nothing here is member data.
+      # `off` is quoted wherever it is a key or a list item, in this schema, InstanceCapabilityUpdate and the
+      # examples: a YAML 1.1 parser reads a bare `off` as the boolean false. PyYAML, which every contracts guard
+      # reads the specs with, did exactly that, and saw a property named "false".
+      required: [id, title, purpose, whenOff, "off", effective]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            The entry's lowercase-dotted id, a path in the register tree (e.g. "core.remember-device.passwordless").
+            Its parent is the id without its last segment; an id of two segments hangs from the root alone.
+          maxLength: 64
+          example: core.remember-device
+        title:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        purpose:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        whenOff:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        "off":
+          x-veyq-visibility: flag
+          type: boolean
+          description: The entry's own switch, as the Server Owner set it. A parent's switch does not change it.
+          example: false
+        effective:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether the entry is active: it and every ancestor entry are on (the AND along the path). This is what
+            the gates and the manifest follow.
+          example: true
+
+    InstanceCapabilityText:
+      type: object
+      description: >
+        One text of a register entry in each language the catalog carries (ADR 0088 decision 13). Both are
+        always present.
+      required: [en, de]
+      properties:
+        en:
+          x-veyq-visibility: public
+          type: string
+          description: The English text.
+          maxLength: 1024
+          example: Remembered devices
+        de:
+          x-veyq-visibility: public
+          type: string
+          description: The German text.
+          maxLength: 1024
+          example: Gemerkte Geräte
+
+    InstanceCapabilityUpdate:
+      type: object
+      description: The entry's own switch to store.
+      required: ["off"]
+      properties:
+        "off":
+          x-veyq-visibility: flag
+          # nullable type + @NotNull: a required primitive binds a missing field to false (backend/CLAUDE.md)
+          type: [boolean, "null"]
+          description: True switches the entry off, false switches it back on.
+          example: true
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

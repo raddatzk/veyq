@@ -257,6 +257,7 @@ class OperatorBlindProbeTest {
             "getInstanceStoreProvisioning",
             "getInstanceConfigSecret",
             "getInstanceStore", "setInstanceStore", "checkInstanceStore",
+            "listInstanceCapabilities", "setInstanceCapability",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +

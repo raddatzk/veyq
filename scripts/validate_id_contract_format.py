@@ -36,10 +36,13 @@ import contract_specs
 ID_NAME = re.compile(r"(^|[a-z0-9])(Id|Ids)$|^(id|ids)$")
 HTTP_METHODS = {"get", "put", "post", "delete", "patch", "options", "head"}
 
-# input name -> why it is not a UUID column. A share id is a 256-bit token; a suite id names a crypto suite.
+# input name -> why it is not a UUID column. A share id is a 256-bit token; a suite id names a crypto suite; a
+# capability id is a path in the catalog's tree.
 NOT_A_ROW_ID = {
     "shareId": "the share id is a 256-bit URL-safe token (ADR 0029), column veyq_share.id VARCHAR(64), not a UUID",
     "suiteId": "names a crypto suite (e.g. `v1`), a label the conformance vectors pin, not a row id",
+    "capabilityId": "a capability register id, the lowercase-dotted catalog path (e.g. `core.remember-device`, "
+                    "contracts/platform/capabilities.json), not a row id",
 }
 
 errors: list[str] = []

@@ -80,6 +80,16 @@ paths:
         the Master-Key-wrapped identity private key, and the crypto suite id. All opaque ciphertext — the
         client derives the unlock KEK and unwraps locally. Resolved from the bearer access token; a missing,
         malformed, expired, or revoked token is a single generic 401.
+
+        Some wraps are **withheld, never deleted**.
+        The `RECOVERY` wrap is always withheld: it opens with the Secret Key alone, so it is released only through
+        the mailed recovery flow ([ADR 0054](../../docs/decisions/0054-password-recovery-two-factor-release.md)).
+        A device switch of the Server Owner withholds the wraps it covers, at once (ADR 0088 decision 5): every
+        `DEVICE` wrap while `core.remember-device` is effectively off, and every `DEVICE_KEY` wrap while
+        `core.remember-device.passwordless` is effectively off, which it also is while its parent
+        `core.remember-device` is off. The stored wraps are untouched, so switching back on serves them again.
+        The `PASSWORD` wrap is never withheld, so a withheld wrap never locks a member out: the unlock falls back
+        to the password and the Secret Key.
       security:
         - bearerAuth: []
       responses:
@@ -1076,7 +1086,9 @@ components:
           example: v1
         wraps:
           type: array
-          description: One wrap per unlock method the account has; PASSWORD is the floor used by this flow.
+          description: >
+            One wrap per unlock method the account has and this endpoint serves (`getAccountKeyMaterial` names the
+            ones withheld); PASSWORD is the floor used by this flow and is never withheld.
           minItems: 1
           items: { $ref: "#/components/schemas/MasterKeyWrap" }
         wrappedIdentityPrivateKey:
