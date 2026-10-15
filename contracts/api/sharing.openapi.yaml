@@ -369,7 +369,8 @@ paths:
         under the nodes' content keys. What an application attached under those nodes is that application's own
         guest read (ADR 0079). The viewer unwraps the root's content key with the fragment key, derives each
         descendant's from `wrappedContentKey`, and decrypts names / payloads **locally**. A disabled, expired, or
-        unknown share is a non-enumerable `404` (same shape in every case). Without the fragment key the response is inert — the wrap cannot be opened.
+        unknown share, and one whose role's instance capability is switched off (ADR 0088 decision 5), is a
+        non-enumerable `404` (same shape in every case). Without the fragment key the response is inert — the wrap cannot be opened.
         **Password-protected shares (cr-0118, ADR 0037):** with **no** `X-Share-Password` the response is
         **locked** — only `passwordRequired` + `pwSalt` (no `wrap`/`sealedName`/subtree); the client prompts,
         derives the token, and re-resolves with the header. A **wrong** token → `403 share_password_incorrect`.
@@ -407,7 +408,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
         "404":
-          description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4) — non-enumerable, identical in every case.
+          description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4), or the instance capability of its role is switched off (ADR 0088 decision 5 — `core.public-shares`, `.contribute` or `.drop-box`; the link serves again once it is back on) — non-enumerable, identical in every case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
     patch:
@@ -459,9 +460,13 @@ paths:
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "422":
           description: >
-            An illegal role change (cr-0119) — `role = WRITE_ONLY`, a role change on a share whose current role is
-            WRITE_ONLY, or a role the shared node's kind may not be a share root with (`ShareRoots`, ADR 0080). The
-            write-only drop-box is a separate action and its role is not editable in place.
+            Unprocessable. Two codes: `invalid_role_change` (cr-0119) — `role = WRITE_ONLY`, a role change on a share
+            whose current role is WRITE_ONLY, or a role the shared node's kind may not be a share root with
+            (`ShareRoots`, ADR 0080); the write-only drop-box is a separate action and its role is not editable in
+            place. `capability_disabled` — a change INTO a role whose instance capability is not active (READ →
+            READ_WRITE while `core.public-shares.contribute` or its parent is off, ADR 0088): the change would publish
+            a link of that role, so it checks what `createShare` checks. A request that names the share's current
+            role changes no role and is not refused for it.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_role_change } }
     delete:
