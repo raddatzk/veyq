@@ -13,8 +13,8 @@ invariants:
 
 Turn the Use area of the docs site from nine moved wiki pages, which mostly explain why data is safe, into
 **task-first guides** for non-technical users and for space owners: numbered steps in the web client's own words,
-English and German, grouped as Getting started · Your account · Spaces · Memories · Depot · Sharing · For space
-owners · Privacy · Help. Pictures are **screenshot placeholders** the owner fills in later. This CR comes before
+English and German, grouped as Getting started · Your account · Spaces · Applications (an overview, then Memories and Depot as
+sub-groups) · Sharing · For space owners · Privacy · Help. Pictures are **screenshot placeholders** the owner fills in later. This CR comes before
 phase 5 of `cr-published-docs-site`, which cuts the use-cases' end-user sections only after these pages have taken
 in what they hold. ADR 0087 decision 1 (the Use bullet) holds the decisions.
 
@@ -79,9 +79,16 @@ phase closes only after the owner has read its pages in conversation. Done when,
 - [ ] 4 Spaces — personal, group and shared space, and who sees what; groups (create, invite by username, accept
       an invitation, co-owner, remove, rename, delete and restore, icon); organising (folders, favorites, move,
       copy, select several, trash, views); download and import.
-- [ ] 5 Memories — create a Memory and chapters; add photos; gallery; date and location (with the map consent);
+- [ ] 5 Applications and Memories — an *Applications* overview page (what an application is: one kind of sealed
+      thing in your spaces; Memories and Depot side by side; short, no jargon), then the *Memories* group: a landing page
+      that says what Memories is for (photos, videos and journals that belong to an occasion) and links one page per
+      function, never one long page: create a Memory and chapters; add photos; gallery; date and location (with the map consent);
       who was there; cover; marked photos; contributions; the photo trash.
-- [ ] 6 Depot — upload files and folders, view, replace, rename, delete; drop boxes.
+- [ ] 6 Depot — a *Depot* landing page that says what Depot is for (documents, PDFs, any file you want to keep;
+      the goal, not the feature list), then one page per function: upload files and folders, view a file, replace,
+      rename, delete, move and copy, select several, covers and views, drop boxes. The single `depot.md` is split
+      along its sections and goes away; an unexplained aside (the copy-of-a-shown-part parenthesis) is written out
+      or dropped. Every function page opens with the task, in the UI's words.
 - [ ] 7 Sharing and For space owners — share with people who have no account (roles, note, password, expiry,
       renew, revoke); turn off every link in a space; what a guest sees. For owners: invite and manage members,
       remove a member, terms, email settings, storage and the upload-link limit.
