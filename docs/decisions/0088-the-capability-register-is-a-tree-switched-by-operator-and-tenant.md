@@ -69,6 +69,9 @@ instance and tenant layers.
     - Handing the key from one of the user's own native apps to another on the same device (inbox #438) is not
       linking: it needs no network and no confirmation. Each app enrols its own wrap, and that wrap is governed by
       `remember-device`.
+12. **A tenant owner switches in the tenant settings in `web/`,** beside terms and mail (owner, 2026-10-15). The
+    tenant owner is an ordinary member, and ADR 0065 keeps what a member can reach out of `admin-web`. The
+    operator's `*` stays configuration.
 
 ### The register
 
@@ -133,14 +136,6 @@ both off a place still works, named by hand. The user's own consent to the two
 - **Parameters, not switches:** quotas, the per-link storage limit, a file-size cap, retention periods.
 - **Admin channel only:** creating, suspending and moving tenants, custom domains, backup.
 
-## Open
-
-- **Guests and videos.** If guests stream video from the `ORIGINAL` ([ADR 0047](0047-inline-video-playback-range-streaming.md)),
-  `download-originals` off also stops video playback for guests until a video preview tier exists. This must be
-  measured before that entry is built.
-- **Where a tenant owner switches.** Probably the tenant settings in `web/`, beside terms and mail. That is
-  member-reachable per ADR 0065, so it stays out of `admin-web`.
-
 ## Consequences
 
 - **Built today** (measured: `contracts/platform/capabilities.json`): four flat ids. They map onto the tree as
@@ -153,6 +148,9 @@ both off a place still works, named by hand. The user's own consent to the two
     the catalog names five use-cases.
   - Depot lets a member create a drop box while uploader links are off (`web/src/features/files/capabilities.ts`
     `createDropBox: place`), and the drop box's Share button checks `publicLinks`, so the box can never be shared.
+- **`download-originals` waits for a measurement** (owner, 2026-10-15). If guests stream video from the
+  `ORIGINAL` ([ADR 0047](0047-inline-video-playback-range-streaming.md)), switching it off also stops video
+  playback for guests until a video preview tier exists. This must be measured before the entry is built.
 - **Cost:** every switch doubles the states a feature must be tested in, and inheritance multiplies that. Decision
   4 is the brake.
 
