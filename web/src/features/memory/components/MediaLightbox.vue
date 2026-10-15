@@ -6,7 +6,7 @@
 // fetched as ciphertext and decrypted on device; the decrypted preview becomes an object URL that is **revoked** on
 // navigation / close / unmount.
 // The detail panel (cr-0064) shows the lazily-loaded EXIF tier and lets the user **correct the capture time**
-// (cr-0065, sealed under K_mem).
+// (cr-0065, sealed under K_node).
 // **Zoom** (cr-lightbox-zoom-slideshow, uc.memory.gallery 3a): double-click/tap, pinch, ctrl+wheel and `+`/`-`/`0` on a
 // photo (`shared/ui/usePanZoom.ts`, a drag or the arrow keys pan while zoomed); past the preview's resolution the ORIGINAL replaces it in
 // place where `../lightboxZoom.ts` allows - fetched as ciphertext through the source's `originalLoader`, decrypted here, its

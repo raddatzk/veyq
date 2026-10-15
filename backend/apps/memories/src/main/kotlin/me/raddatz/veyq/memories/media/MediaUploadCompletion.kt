@@ -111,7 +111,7 @@ class MediaUploadCompletion(
         )
 
         /**
-         * Allow-list, not a FOLDER deny-list: media attaches only to a node that owns a `K_mem` and a gallery.
+         * Allow-list, not a FOLDER deny-list: media attaches only to a node that owns a `K_node` and a gallery.
          * Behaviour-neutral while `NodesHandler.parentAllows` ends `else -> false` (the kinds are closed: FOLDER,
          * MEMORY, CHAPTER). It stops being neutral the day a kind is added — which is the point: a new kind then
          * refuses media until someone opts it in here, instead of silently inheriting it. (Core's dispatcher refuses

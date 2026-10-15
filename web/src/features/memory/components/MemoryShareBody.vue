@@ -57,7 +57,7 @@ const renderedNote = computed(() => {
   return note ? renderMarkdown(note) : ''
 })
 
-// The drop public key and the node it belongs to (ADR 0031 point 7) — never a `K_mem`. Opened from the shell's head on
+// The drop public key and the node it belongs to (ADR 0031 point 7) — never a `K_node`. Opened from the shell's head on
 // mount and after every re-resolve; a head this page cannot open is the shell's honest unavailable state.
 const keyAccess = ref<ShareAccess | null>(null)
 watch(

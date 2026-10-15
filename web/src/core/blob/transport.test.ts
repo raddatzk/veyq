@@ -149,7 +149,7 @@ describe('reserveAndPump over the authed control plane', () => {
 // Moved unchanged from `features/memory/media.test.ts` with the code it tests (cr-files-application B1).
 describe('makeChunkProvider — the page-side plaintext chunk seam (Slice 2, ADR 0047)', () => {
   // The SW never sees a key; it asks the page for one chunk's plaintext by index. Build a real chunked-AEAD blob
-  // (K_blob wrapped under K_mem, each frame bound to `index‖total`) so the seam runs the true seal/open path.
+  // (K_blob wrapped under K_node, each frame bound to `index‖total`) so the seam runs the true seal/open path.
   // The wrap is sealed with a HARDCODED blob-key context (== transport.ts blobKeyContext); if the purpose or a bound
   // field ever changes, this test breaks loudly.
   const BLOB = { blobId: '5c09e000-0000-4000-8000-000000000b01', ownerId: '5c09e000-0000-4000-8000-000000000b02', role: 'PREVIEW' as const }

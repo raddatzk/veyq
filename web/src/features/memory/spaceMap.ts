@@ -1,6 +1,6 @@
 // en.memory.node-meta (web) — the space map's pure model (uc.memory.place, cr-0071). Collects the pins for the
 // read-only "Karte" view: every content node (MEMORY or CHAPTER) in a folder's subtree whose sealed `location`
-// carries a `derived` position, unsealed **on device** under its own `K_mem`. Operator-blind by construction —
+// carries a `derived` position, unsealed **on device** under its own `K_node`. Operator-blind by construction —
 // there is no locations API; the pins come from the `wrappedMeta` that `listNodes` already returns (the loaded
 // `treeStore`), so no coordinate ever crosses the blind server.
 //
@@ -107,7 +107,7 @@ export function collectLocatedPinsBy(
       const nodeKey = keyOf(node.id)
       if (!nodeKey) continue // unchainable key — skip, never break the map
       location = unsealMemoryLocation(scopeId, nodeKey, node)
-      date = unsealMemoryDate(scopeId, nodeKey, node) // same K_mem, same blob — free alongside the location
+      date = unsealMemoryDate(scopeId, nodeKey, node) // same K_node, same blob — free alongside the location
     } catch {
       continue // locked node — silently skipped
     }

@@ -61,7 +61,7 @@ const keyOf = (label: string): Uint8Array => {
 const wrapFor = (id: string, under: Uint8Array, key: Uint8Array) =>
   b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }, under, key))
 
-/** A located Memory whose K_mem is wrapped under its parent's key (`scopeKey` at the root, its folder's key inside
+/** A located Memory whose K_node is wrapped under its parent's key (`scopeKey` at the root, its folder's key inside
  *  one: ADR 0080) and location sealed under it (mirrors tree.ts), both bound to the node. `id`/`parentId` are
  *  labels, resolved to their UUIDs. */
 function locatedMemory(label: string, parentLabel: string | null, loc: MemoryLocation): TreeNode {

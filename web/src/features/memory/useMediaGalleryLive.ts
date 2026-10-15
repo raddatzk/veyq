@@ -1,7 +1,7 @@
 // uc.memory.gallery (web) — the live-gallery core of MemoryDetail, extracted into a composable (cr-0151, audit
 // #77/P4a). Owns the listed media, the thumbnail pipeline (cr-0150) + optimistic tiles (cr-0074), the cr-0107
 // live poll (load/merge/upsert), the justified layout, and the optimistic-delete/undo. MemoryDetail keeps only
-// orchestration + the template. Operator-blind: thumbnails decrypt on device under K_mem; nothing plaintext crosses.
+// orchestration + the template. Operator-blind: thumbnails decrypt on device under K_node; nothing plaintext crosses.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '../../shared/state/useToast'
@@ -51,7 +51,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const listedMediaIds = computed(() => new Set(items.value.map((it) => it.mediaId)))
   const { optimisticTiles, donorPreviewFor } = useOptimisticTiles(computed(() => ctx.source.batchKey(ctx.node().id)), listedMediaIds)
   // The gallery thumbnail pipeline (cr-0150) — decrypt-per-tile → object-URL map, the single revoke owner of every
-  // thumbnail (incl. a donated optimistic preview). Decrypt = the grid tier under K_mem (operator-blind).
+  // thumbnail (incl. a donated optimistic preview). Decrypt = the grid tier under K_node (operator-blind).
   const pipeline = useThumbnailPipeline<MediaItem>({
     idOf: (m) => m.mediaId,
     isDerivable: hasDerivatives,
@@ -228,7 +228,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     if (!key) {
       pipeline.revokeAll()
       items.value = []
-      mediaRevision.value = null // E4: no K_mem (locked / not openable) → gallery unavailable, no live poll
+      mediaRevision.value = null // E4: no K_node (locked / not openable) → gallery unavailable, no live poll
       deleteRevision.value = 0
       status.value = 'error'
       return
@@ -320,7 +320,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   }
 
   // The live-gallery lifecycle: on a Memory/chapter switch tear down the previous poll, clear the grid, reload, and
-  // (re)start the poll — but only for an open, unlocked gallery (E4: no K_mem ⇒ no polling).
+  // (re)start the poll — but only for an open, unlocked gallery (E4: no K_node ⇒ no polling).
   watch(
     () => [ctx.node().id, ctx.memoryKey()] as const,
     () => {

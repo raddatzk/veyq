@@ -1,7 +1,7 @@
 // en.memory.node-meta (web) — a Memory's curated **location**, the `location` sub-object of the sealed node-meta
 // blob (uc.memory.place, cr-0069). One named place: a map position (the **medoid** of the Memory's own photo GPS,
 // or a hand-dropped pin) plus a **mandatory name** (reverse-geocoded from the framed anchor, or typed). Sealed on
-// the NODE under its `K_mem` beside the `date` (operator-blind, ADR 0012) — the server only ever holds ciphertext.
+// the NODE under its `K_node` beside the `date` (operator-blind, ADR 0012) — the server only ever holds ciphertext.
 //
 // The seal is **read-modify-write** (shared `nodeMeta.ts`): `setMemoryLocation` unseals the current
 // `{ v, date?, location? }`, swaps in (or drops) only the `location`, and re-seals — so it never clobbers the
@@ -91,7 +91,7 @@ export function isLocationPending(loc: MemoryLocation | null | undefined): boole
 }
 
 /**
- * Unseal a Memory's location from a node's `wrappedMeta` under `nodeKey` (`K_mem`). Best-effort (E3): null when
+ * Unseal a Memory's location from a node's `wrappedMeta` under `nodeKey` (`K_node`). Best-effort (E3): null when
  * the node carries no meta/location, the wrap doesn't open, or the payload is malformed — the header then shows
  * the "set location" affordance rather than break.
  */
@@ -168,7 +168,7 @@ export function computeMedoid(points: LatLng[]): LatLng | null {
 
 /**
  * Collect the GPS points from a Memory's **own** media (its listed `wrappedMeta` tier, cr-0068) under `nodeKey`
- * (`K_mem`) — the raw input to [computeMedoid] for the `auto` position. Items without a GPS tier are skipped;
+ * (`K_node`) — the raw input to [computeMedoid] for the `auto` position. Items without a GPS tier are skipped;
  * reads only the already-listed metadata, no per-item fetch.
  */
 export function mediaGpsPoints(scopeId: string, items: MediaItem[], nodeKey: Uint8Array): LatLng[] {

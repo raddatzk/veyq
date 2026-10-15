@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The kind-independent half of resolving a public share. What matters here is what it does NOT need: it reads the root
 // node's kind and nothing else about the shared object, and it opens no seal the application owns. The Memories half
-// (K_mem, chapters, media, drop key) is `openSharedMemory`, covered with the full flow in features/memory/share.test.ts.
+// (K_node, chapters, media, drop key) is `openSharedMemory`, covered with the full flow in features/memory/share.test.ts.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'

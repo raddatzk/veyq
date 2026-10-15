@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Web data-layer tests for uploader buckets (uc.memory.buckets, en.memory.buckets, cr-0113): the K_mem name
+// Web data-layer tests for uploader buckets (uc.memory.buckets, en.memory.buckets, cr-0113): the K_node name
 // unseal (operator-blind — a wrong AAD context can never open a name) + the bucket wrappers' request shaping.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { stubApi } from '../../test/apiMock'
@@ -22,7 +22,7 @@ const SHARE = 'S'.repeat(43) // a share id: 43 base64url chars
 const IDENTITY = '5c09e000-0000-4000-8000-0000000000b7'
 const BUCKET = '5c09e000-0000-4000-8000-0000000000b8'
 
-/** Seal a name under K_mem with a given seal context, exactly as the sealing sites do. */
+/** Seal a name under K_node with a given seal context, exactly as the sealing sites do. */
 function sealName(key: Uint8Array, name: string, ctx: v1.SealContext): string {
   return b64std(v1.seal(ctx, key, v1.utf8(name)))
 }
@@ -114,7 +114,7 @@ describe('media buckets (cr-0113)', () => {
   })
 
   describe('createBucket', () => {
-    it('seals the folder name under K_mem before sending — the server never sees the cleartext', async () => {
+    it('seals the folder name under K_node before sending — the server never sees the cleartext', async () => {
       const key = v1.randomBytes(32)
       const { createBucket: createBucketFn } = stubApi(bucketsApi, {
         createBucket: { bucketId: 'b3', ownerKey: 'user:u1', isPrimary: false, mediaCount: 0, parentBucketId: 'b1', sealedName: 'x' },
@@ -124,7 +124,7 @@ describe('media buckets (cr-0113)', () => {
       expect(req.sealedName).not.toContain('Urlaub') // ciphertext, never the cleartext name
       // the client mints the bucket id and binds the name to it (ADR 0072)
       expect(req.bucketId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
-      expect(openBucketName(SCOPE, NODE, key, subRow(req.sealedName, req.bucketId))).toBe('Urlaub 2026') // round-trips only via K_mem
+      expect(openBucketName(SCOPE, NODE, key, subRow(req.sealedName, req.bucketId))).toBe('Urlaub 2026') // round-trips only via K_node
       expect(openBucketName(SCOPE, NODE, key, subRow(req.sealedName, BUCKET))).toBeNull() // …and only at its own bucket
     })
   })

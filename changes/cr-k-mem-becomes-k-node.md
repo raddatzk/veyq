@@ -44,7 +44,7 @@ on the wire carries the name, so this is a vocabulary change with no crypto or f
 
 ## Phases
 
-- [ ] 1 contracts + code — the contract descriptions, regenerated clients, `kMem` → `kNode` and every code comment;
+- [x] 1 contracts + code (green: web check, gradlew check; vectors untouched) — the contract descriptions, regenerated clients, `kMem` → `kNode` and every code comment;
       the generated code is regenerated, not edited. · Done when: `npm run check` in `web/` and `./gradlew check`
       green; `git grep -nw kMem` returns nothing; the vectors file is byte-identical to `main`.
 - [x] 2 docs + site (42036b0b, 2d8505d2; trust-chain and site check green — the final `git grep` waits for phase 1) — ADRs, use-cases, enablers, coverage texts, crosscutting docs, inbox, the docs site (EN and

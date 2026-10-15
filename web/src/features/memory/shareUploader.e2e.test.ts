@@ -1,4 +1,4 @@
-// uc.sharing.share-uploader live e2e (VEYQ_E2E=1) — the WRITE_ONLY guest never holds K_mem (ADR 0031 point 7),
+// uc.sharing.share-uploader live e2e (VEYQ_E2E=1) — the WRITE_ONLY guest never holds K_node (ADR 0031 point 7),
 // against a REAL backend + MariaDB + the bundled store, with REAL crypto.
 //
 // Two actors on one instance, serialized (the `shareContributor.e2e` shape):
@@ -57,8 +57,8 @@ function heldBytes(value: unknown, seen = new Set<unknown>()): Uint8Array[] {
 }
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i])
 
-describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, the guest never holds K_mem)', () => {
-  it('a guest uploads through a WRITE_ONLY link without K_mem, and every reader of the Memory opens it', async () => {
+describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, the guest never holds K_node)', () => {
+  it('a guest uploads through a WRITE_ONLY link without K_node, and every reader of the Memory opens it', async () => {
     // --- A: cold-birth the instance, personal scope, one Memory, one WRITE_ONLY share --------------------------
     await birthInstance(TENANT_NAME)
     await ensurePersonalScope()
@@ -68,27 +68,27 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     const scopeKey = (await openPersonalScope())!
     const memory = await createMemory(scopeId, epochsOf(scopeKey), MEMORY_NAME)
     const nodeId = memory.nodeId
-    const kMem = memory.memoryKey
+    const kNode = memory.memoryKey
 
-    const minted = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.WriteOnly)
+    const minted = await createShare(scopeId, nodeId, kNode, epochsOf(scopeKey), MEMORY_NAME, ShareRole.WriteOnly)
     const fragmentKey = b64url(minted.kShare)
 
     // --- anonymous: what the server sends the guest carries no wrap, only the sealed drop public key ----------
     const raw = await publicSharesApi().resolveShare({ shareId: minted.shareId })
     expect(raw.role, 'the share resolves as WRITE_ONLY').toBe(ShareRole.WriteOnly)
-    expect(raw.wrap ?? null, 'the resolve the guest received carries no K_mem wrap').toBeNull()
+    expect(raw.wrap ?? null, 'the resolve the guest received carries no K_node wrap').toBeNull()
     expect(raw.sealedDropPublicKey, 'it carries the sealed drop public key instead').toBeTruthy()
 
     const resolved = await resolveShare(minted.shareId, fragmentKey)
     expect(resolved.memoryName, 'the guest still reads the title under K_share').toBe(MEMORY_NAME)
     expect(resolved.access.kind, 'the guest holds the drop public key').toBe('drop')
-    expect(heldBytes(resolved).some((b) => sameBytes(b, kMem)), 'the resolved session holds no Memory key').toBe(false)
+    expect(heldBytes(resolved).some((b) => sameBytes(b, kNode)), 'the resolved session holds no Memory key').toBe(false)
 
     // --- anonymous: name yourself (under your own key) and upload through the share transport ----------------
     const session = await createContributorIdentity(minted.shareId, resolved.scopeId, resolved.access, UPLOADER_NAME, fragmentKey)
     const sealKey = sessionSealKey(session, resolved.access)
     expect(sealKey, 'the uploader session carries its own key').not.toBeNull()
-    expect(sameBytes(sealKey!, kMem), 'and that key is not the Memory key').toBe(false)
+    expect(sameBytes(sealKey!, kNode), 'and that key is not the Memory key').toBe(false)
     const photo = bytes(7)
     const uploaded = await addSharePhoto(
       { ...session, shareId: minted.shareId, scopeId: resolved.scopeId, sealKey: sealKey! },
@@ -101,21 +101,21 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     const item = curatorItems.find((i) => i.mediaId === uploaded.mediaId)
     expect(item, "the upload is in the curator's gallery").toBeDefined()
     expect(item!.uploader, 'the listing served the path that opens it').toBeDefined()
-    expect(Array.from(await openOriginal(scopeId, kMem, item!)), 'the curator opens the guest upload').toEqual(Array.from(photo))
+    expect(Array.from(await openOriginal(scopeId, kNode, item!)), 'the curator opens the guest upload').toEqual(Array.from(photo))
 
     // the curator's buckets: the guest's primary name opens through its wrapped key
     const primary = (await listBuckets(scopeId, nodeId)).find((b) => b.isPrimary && b.uploader)
     expect(primary, "the uploader's primary bucket carries its wrapped key").toBeDefined()
-    const recoveredName = openBucketName(scopeId, nodeId, kMem, primary!)
+    const recoveredName = openBucketName(scopeId, nodeId, kNode, primary!)
     expect(recoveredName, 'the curator recovered the uploader display name').toBe(UPLOADER_NAME)
 
     // a second WRITE_ONLY link on the same Memory seals to the drop key the Memory already has
-    const second = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.WriteOnly)
+    const second = await createShare(scopeId, nodeId, kNode, epochsOf(scopeKey), MEMORY_NAME, ShareRole.WriteOnly)
     const secondResolved = await resolveShare(second.shareId, b64url(second.kShare))
     expect(secondResolved.access.kind, 'the second uploader link resolves to a drop key too').toBe('drop')
 
     // --- a viewer link of the same Memory opens the guest's upload too --------------------------------------
-    const viewer = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.Read)
+    const viewer = await createShare(scopeId, nodeId, kNode, epochsOf(scopeKey), MEMORY_NAME, ShareRole.Read)
     const viewed = await resolveShare(viewer.shareId, b64url(viewer.kShare))
     const shared = viewed.items.find((i) => i.item.mediaId === uploaded.mediaId)
     expect(shared, "the upload is in the viewer link's gallery").toBeDefined()

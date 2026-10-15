@@ -1,7 +1,7 @@
-// uc.memory.date (web) — a Memory's curated date, sealed on the NODE under its `K_mem` (cr-0067).
+// uc.memory.date (web) — a Memory's curated date, sealed on the NODE under its `K_node` (cr-0067).
 // Operator-blind: the effective day range travels in one client-versioned JSON blob `wrappedMeta`
 // `{ v, date: { mode, from?, to? }, location? }` (the place slice rides the same blob — no contract change),
-// AEAD-sealed under `K_mem` (AAD context `node-meta`) so the server only ever holds ciphertext. The range is
+// AEAD-sealed under `K_node` (AAD context `node-meta`) so the server only ever holds ciphertext. The range is
 // **materialized** for every mode — the browse card grid shows + sorts by it WITHOUT loading a Memory's media.
 //
 // The seal is **read-modify-write** (cr-0069): `setMemoryDate` unseals the current `{ v, date?, location? }`,
@@ -37,13 +37,13 @@ export function normalizeDate(raw: unknown): MemoryDate | null {
   return { mode: d.mode as MemoryDateMode, from: isoDayOrUndef(d.from), to: isoDayOrUndef(d.to) }
 }
 
-/** Seal a **fresh** date-only `wrappedMeta` blob under `nodeKey` (`K_mem`) → base64 (a node born with only a date). */
+/** Seal a **fresh** date-only `wrappedMeta` blob under `nodeKey` (`K_node`) → base64 (a node born with only a date). */
 export function sealMemoryDate(nodeKey: Uint8Array, node: NodeMetaAddress, date: MemoryDate): string {
   return sealNodeMeta(nodeKey, node, { v: 1, date })
 }
 
 /**
- * Unseal the Memory date from a node's `wrappedMeta` under `nodeKey` (`K_mem`). Best-effort (E3): null when the
+ * Unseal the Memory date from a node's `wrappedMeta` under `nodeKey` (`K_node`). Best-effort (E3): null when the
  * node carries no meta, the wrap doesn't open, the JSON is malformed, or the mode is unrecognized — the header
  * then falls back to the neutral `auto`/no-date state rather than break.
  */
@@ -101,7 +101,7 @@ export async function reconcileMemoryDate(
  * Materialize a Memory's `auto` range from its **own** media, day-truncated (local `YYYY-MM-DD`). Counts only
  * **trustworthy** capture times — a user `capturedAtOverride`, or an EXIF-sourced `capturedAt` — so a
  * file-modification-date fallback can't stretch the range (cr-0067). An empty result ⇒ `{ mode: 'auto' }` (the
- * "no date yet" state). `nodeKey` = the Memory's `K_mem` (each media's capture-time tier is sealed under it).
+ * "no date yet" state). `nodeKey` = the Memory's `K_node` (each media's capture-time tier is sealed under it).
  */
 export function computeAutoRange(scopeId: string, items: MediaItem[], nodeKey: Uint8Array): MemoryDate {
   const days: number[] = []
@@ -122,8 +122,8 @@ export function sameMemoryDate(a: MemoryDate | null, b: MemoryDate | null): bool
 }
 
 /**
- * A card node's own date for the browse grid (cr-0067): open its `K_mem` under `parentKey` (`K_SC` for a
- * scope-root Memory, the folder's key for one inside a folder, the parent Memory's `K_mem` for a chapter), then unseal its `wrappedMeta`. Best-effort:
+ * A card node's own date for the browse grid (cr-0067): open its `K_node` under `parentKey` (`K_SC` for a
+ * scope-root Memory, the folder's key for one inside a folder, the parent Memory's `K_node` for a chapter), then unseal its `wrappedMeta`. Best-effort:
  * null when the key/meta is absent or won't open — **without loading the Memory's media**.
  */
 export function unsealNodeDate(scopeId: string, parentKey: Uint8Array | null, node: TreeNode): MemoryDate | null {
@@ -141,7 +141,7 @@ export function unsealNodeDate(scopeId: string, parentKey: Uint8Array | null, no
  * group). Each node's date is unsealed under the key `keyFor(node)` returns — a **per-node** resolver so a browse
  * grid spanning several epochs opens each scope-root Memory under its own epoch's `K_SC` (ADR 0024) and one inside
  * a folder under the folder's key (ADR 0080), while a
- * Memory's chapters all resolve under that Memory's single `K_mem`. The result pairs every node with its date so
+ * Memory's chapters all resolve under that Memory's single `K_node`. The result pairs every node with its date so
  * the card can show the range without a second unseal. Reads only `wrappedMeta` — never a Memory's media.
  */
 export function sortNodesByDate(

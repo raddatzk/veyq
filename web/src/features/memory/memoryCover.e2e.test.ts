@@ -36,7 +36,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
 
     const { nodeId, memoryKey } = await createMemory(scopeId, epochsOf(scopeKey), `Cover smoke ${Date.now()}`)
 
-    // Read back the node's SERVER-persisted wrappedMeta (operator-blind — decrypted here under K_mem).
+    // Read back the node's SERVER-persisted wrappedMeta (operator-blind — decrypted here under K_node).
     const readBack = async () => {
       const node = (await listTree(scopeId, epochsOf(scopeKey))).find((n) => n.id === nodeId)
       expect(node).toBeDefined()

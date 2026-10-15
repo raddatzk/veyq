@@ -46,7 +46,7 @@ import me.raddatz.veyq.core.sharing.SharingStore
  * against the in-memory store. Covers the drop-box's two structural guarantees + the delete-own:
  *  - **write-only:** the anonymous reads of a WRITE_ONLY share serve no media **even with existing media**
  *    (and no identities) — "cannot see others" is enforced by the `canView` gate, never gallery filtering;
- *  - **never `K_mem` (ADR 0031 point 7):** it serves the Memory's drop public key instead of the wrap, the drop
+ *  - **never `K_node` (ADR 0031 point 7):** it serves the Memory's drop public key instead of the wrap, the drop
  *    private key is set on the Memory once, a WRITE_ONLY identity must hand over its wrapped key, and every reader
  *    of the Memory — a viewer link, a member's media page and buckets — is served what opens an upload;
  *  - **contribute:** an uploader names itself + uploads, and the media **attaches to the shared root stamped
@@ -87,7 +87,7 @@ class ShareUploaderSliceTest {
 
         // the anonymous reads of a WRITE_ONLY share are write-only: NO nodes, NO wrap, NO media, NO identities —
         // only the drop public key (the guest seals its own identity key to it, ADR 0031 point 7), the node it binds
-        // that wrap to, and the sealed title. The guest is never handed K_mem.
+        // that wrap to, and the sealed title. The guest is never handed K_node.
         given().`when`().get("/api/shares/$shareId")
             .then().statusCode(200)
             .body("role", equalTo("WRITE_ONLY"))
@@ -95,7 +95,7 @@ class ShareUploaderSliceTest {
             .body("sealedDropPublicKey", equalTo(DROP_PUBLIC_KEY))
             .body("nodeId", equalTo(memory))
             .body("sealedName", equalTo(sealedName))
-            .body("nodes.size()", equalTo(0)) // not even the root node — no K_mem-decryptable node metadata leaks
+            .body("nodes.size()", equalTo(0)) // not even the root node — no K_node-decryptable node metadata leaks
         ShareMediaRead.of(shareId).then().statusCode(200)
             .body("media.size()", equalTo(0)) // the existing photo is NOT served
             .body("identities.size()", equalTo(0))
@@ -127,7 +127,7 @@ class ShareUploaderSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val drop = "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\",\"sealedDropPrivateKey\":\"$DROP_PRIVATE_KEY\""
 
-        // a WRITE_ONLY share that carries a wrap is refused — the guest would hold K_mem — and nothing is written
+        // a WRITE_ONLY share that carries a wrap is refused — the guest would hold K_node — and nothing is written
         postShare(userId, memory, "WRITE_ONLY", "\"wrap\":\"$wrap\",$drop").then().statusCode(400).body("code", equalTo("invalid_request"))
         postShare(userId, memory, "WRITE_ONLY", "\"wrap\":\"$wrap\"").then().statusCode(400).body("code", equalTo("invalid_request"))
         QuarkusTransaction.requiringNew().run { assertNull(NodeEntity.findById(memory)!!.sealedDropPrivateKey) }
@@ -171,7 +171,7 @@ class ShareUploaderSliceTest {
         postIdentity(uploader, "").then().statusCode(400).body("code", equalTo("invalid_request"))
         val id = postIdentity(uploader, keyed).then().statusCode(201).extract().path<String>("identityId")
         QuarkusTransaction.requiringNew().run { assertEquals(WRAPPED_UPLOADER_KEY, ShareIdentityEntity.findById(id)!!.wrappedIdentityKey) }
-        // a READ_WRITE identity seals under K_mem and has no key to hand over — refused with one; control: without, accepted
+        // a READ_WRITE identity seals under K_node and has no key to hand over — refused with one; control: without, accepted
         postIdentity(contributor, keyed).then().statusCode(400).body("code", equalTo("invalid_request"))
         postIdentity(contributor, "").then().statusCode(201)
     }

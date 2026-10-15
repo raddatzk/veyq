@@ -143,7 +143,7 @@ here; the server is blind.
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
   **People and participants (ADR 0083, `uc.memory.participants`).** A Memory lists who was there as OPAQUE USER IDS in its sealed meta
   (`participants: { userIds }`, `features/memory/memoryParticipants.ts`; cap 100 - `wrappedMeta` is limited to 8192 chars). The id list is the only
-  thing stored: **never a name or a snapshot of one** - a share serves the node's meta unchanged and its guest holds `K_mem`, so the
+  thing stored: **never a name or a snapshot of one** - a share serves the node's meta unchanged and its guest holds `K_node`, so the
   guest exclusion is the interface's (`memoryCapabilities().participants` is false for every share role, fail-closed) and the ids are what keep the
   residual harmless; if participants ever carry names, ADR 0083 decision 4 is open again. The write merges on `409` through
   `editParticipantsOf` (`core/node/nodeMeta.ts`), not `editField`. Names come from `core/people/directory.ts` (real name, else username, from the

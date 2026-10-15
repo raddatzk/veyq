@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test
  *  - **write-only:** the anonymous reads of a WRITE_ONLY share serve nothing of the subtree **even with existing
  *    media** (the resolve no node; Memories' media read, `ShareUploaderSliceTest`, no media and no identity) —
  *    "cannot see others" is enforced by the `canView` gate, never gallery filtering;
- *  - **never `K_mem` (ADR 0031 point 7):** it serves the Memory's drop public key instead of the wrap, the drop
+ *  - **never `K_node` (ADR 0031 point 7):** it serves the Memory's drop public key instead of the wrap, the drop
  *    private key is set on the Memory once, a WRITE_ONLY identity must hand over its wrapped key, and every reader
  *    of the Memory — a viewer link, a member's media page and buckets — is served what opens an upload;
  *  - **contribute:** an uploader names itself + uploads, and the media **attaches to the shared root stamped

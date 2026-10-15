@@ -75,7 +75,7 @@ data class BucketRow(
      *  share, identity) (ADR 0072). Null for every other bucket. */
     val shareId: String? = null,
     /** A WRITE_ONLY identity's primary: the identity's key wrapped to the Memory's drop key — its name is sealed
-     *  under that key, not `K_mem` (ADR 0031 point 7). Null for every other bucket. */
+     *  under that key, not `K_node` (ADR 0031 point 7). Null for every other bucket. */
     val wrappedIdentityKey: String? = null,
 )
 
@@ -361,7 +361,7 @@ class MediaStore(
     /**
      * The wrapped identity key of every WRITE_ONLY identity that owns one of [rows] (identity id → wrap): a row such a
      * guest added is sealed under the guest's own key, which only this wrap — opened through the Memory's drop key —
-     * yields (ADR 0031 point 7). A READ_WRITE identity has none: its rows are under `K_mem`.
+     * yields (ADR 0031 point 7). A READ_WRITE identity has none: its rows are under `K_node`.
      */
     fun uploaderKeys(rows: List<MediaRow>): Map<String, String> =
         uploaderKeysOf(rows.mapNotNull { r -> r.ownerKey?.let { (OwnerKey.parse(it) as? OwnerKey.Share)?.shareIdentityId } }.toSet())

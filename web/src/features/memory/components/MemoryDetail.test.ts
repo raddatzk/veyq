@@ -297,7 +297,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     expect(store.blob.presignBlobDownloads).not.toHaveBeenCalled()
   })
 
-  it('shows the unavailable state when K_mem is absent (E2: locked / not openable)', async () => {
+  it('shows the unavailable state when K_node is absent (E2: locked / not openable)', async () => {
     const wrapper = mountDetail(null as unknown as Uint8Array, { memoryKey: null })
     await flushPromises()
     expect(wrapper.find('.veyq-empty').text()).toBe(t('media.unavailable'))

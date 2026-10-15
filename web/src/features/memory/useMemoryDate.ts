@@ -1,5 +1,5 @@
 // uc.memory.date (web) — the Memory-date reactive slice of MemoryDetail, extracted into a composable
-// (cr-0145, audit #77/P4a). The effective range is sealed on the NODE under K_mem (operator-blind) and shown in
+// (cr-0145, audit #77/P4a). The effective range is sealed on the NODE under K_node (operator-blind) and shown in
 // the header; an editor sets a manual mode or `auto`. `auto` is **materialized** from the Memory's own media and
 // self-heals on open + after an upload batch. Pure date maths live in `./memoryDate`; this composable owns only
 // the reactive wiring the component used to inline (editor open-state, the header label, save + self-heal).
@@ -47,11 +47,11 @@ export function useMemoryDate(ctx: MemoryDateContext) {
     if (d.mode === 'ongoing') return d.from ? t('memory.date.since', { day: formatDay(d.from, locale.value) }) : ''
     return formatClosedRange(d.from, d.to, locale.value)
   })
-  // Chapters ordered by their own sealed start date — a chapter's K_mem opens under THIS Memory's K_mem (cr-0067),
+  // Chapters ordered by their own sealed start date — a chapter's K_node opens under THIS Memory's K_node (cr-0067),
   // epoch-independent (only the top-level wrap keys off the epoch), so every chapter resolves under the one memoryKey.
   const datedChapters = computed(() => sortNodesByDate(ctx.scopeId(), ctx.memoryKey, ctx.chapters() ?? []))
 
-  /** Save an edited date: re-seal under K_mem, PATCH version-checked, and let the host update the tree. A peer's
+  /** Save an edited date: re-seal under K_node, PATCH version-checked, and let the host update the tree. A peer's
    *  date written meanwhile re-opens the editor on it (ADR 0077); other failures stay best-effort. */
   async function onDateSave(date: MemoryDate) {
     const key = ctx.memoryKey()

@@ -38,7 +38,7 @@ object TestFixtures {
     /** The opaque wrapped grant a seeded membership carries. */
     const val GRANT = "Z3JhbnQ="
 
-    /** The opaque wrapped content key (`K_mem`) a seeded Memory or Chapter carries. */
+    /** The opaque wrapped content key (`K_node`) a seeded Memory or Chapter carries. */
     const val CONTENT_KEY = "a21lbQ=="
 
     /**

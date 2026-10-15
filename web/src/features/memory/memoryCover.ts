@@ -2,7 +2,7 @@
 // (uc.memory.cover, cr-0072 + cr-0073). One deliberately chosen image plus a crop, from one of two **sources**:
 // an existing Memory media (referenced by `mediaId`), or a **brand-new uploaded image** committed as a standalone
 // cover blob with no gallery row (`{ kind: 'upload', ref }`, cr-0073). Either source is framed by a **normalized
-// `0..1` crop** and rendered by the same display formula. Sealed on the NODE under its `K_mem` beside the
+// `0..1` crop** and rendered by the same display formula. Sealed on the NODE under its `K_node` beside the
 // `date`/`location` (operator-blind, ADR 0012) — the server only ever holds ciphertext, never which image, the
 // source, or the crop.
 //
@@ -80,7 +80,7 @@ function normalizeCoverSource(c: { source?: unknown; mediaId?: unknown }, nodeId
 }
 
 /**
- * Unseal a Memory's cover from a node's `wrappedMeta` under `nodeKey` (`K_mem`). Best-effort (E3/E4): null when
+ * Unseal a Memory's cover from a node's `wrappedMeta` under `nodeKey` (`K_node`). Best-effort (E3/E4): null when
  * the node carries no meta/cover, the wrap doesn't open, or the payload is malformed — every surface then shows
  * the placeholder rather than break.
  */

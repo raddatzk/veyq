@@ -44,8 +44,8 @@ function expectRefused(fn: () => unknown, purpose: string): void {
 }
 
 const epochsOf = (key: Uint8Array) => ({ current: 0, keys: new Map([[0, key]]) })
-const kmemWrap = (scopeKey: Uint8Array, nodeId: string, kMem: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, scopeKey, kMem))
+const kNodeWrap = (scopeKey: Uint8Array, nodeId: string, kNode: Uint8Array) =>
+  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, scopeKey, kNode))
 const memoryRow = (id: string, wrappedContentKey: string): TreeNode => treeNode({
   id, parentId: null, kind: MEMORY_KIND, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0,
 })
@@ -54,8 +54,8 @@ describe('the upload chain: a Memory key wrap served on another Memory\'s row', 
   const scopeKey = v1.randomBytes(32)
   const kS = v1.randomBytes(32)
   const kX = v1.randomBytes(32)
-  const wrapS = kmemWrap(scopeKey, MEMORY_S, kS)
-  const wrapX = kmemWrap(scopeKey, MEMORY_X, kX)
+  const wrapS = kNodeWrap(scopeKey, MEMORY_S, kS)
+  const wrapX = kNodeWrap(scopeKey, MEMORY_X, kX)
 
   it('refuses to resolve X\'s key from S\'s wrap — else every upload into X lands under S\'s key', () => {
     const tree = [memoryRow(MEMORY_S, wrapS), memoryRow(MEMORY_X, wrapS)]
@@ -124,21 +124,21 @@ describe('a scope grant served in another scope\'s row', () => {
 })
 
 describe('node meta sealed at one node, served for another', () => {
-  const kMem = v1.randomBytes(32)
+  const kNode = v1.randomBytes(32)
   const meta = { v: 1, date: { mode: 'fixed', start: '2026-07-01' } }
 
-  const sealedAtS = sealNodeMeta(kMem, { scopeId: SCOPE, nodeId: MEMORY_S }, meta)
+  const sealedAtS = sealNodeMeta(kNode, { scopeId: SCOPE, nodeId: MEMORY_S }, meta)
 
   it('does not open for the other node — the reader sees no meta at all, not the moved one', () => {
-    expect(unsealNodeMeta(kMem, { scopeId: SCOPE, nodeId: MEMORY_X }, sealedAtS)).toEqual({ v: 1 })
+    expect(unsealNodeMeta(kNode, { scopeId: SCOPE, nodeId: MEMORY_X }, sealedAtS)).toEqual({ v: 1 })
     // …and underneath the best-effort reader it is the specific refusal, not a parse error.
     expectRefused(
-      () => v1.open({ purpose: 'node-meta', scopeId: SCOPE, nodeId: MEMORY_X }, kMem, fromB64std(sealedAtS)),
+      () => v1.open({ purpose: 'node-meta', scopeId: SCOPE, nodeId: MEMORY_X }, kNode, fromB64std(sealedAtS)),
       'node-meta',
     )
   })
 
   it('control: its own node opens it', () => {
-    expect(unsealNodeMeta(kMem, { scopeId: SCOPE, nodeId: MEMORY_S }, sealedAtS)).toEqual(meta)
+    expect(unsealNodeMeta(kNode, { scopeId: SCOPE, nodeId: MEMORY_S }, sealedAtS)).toEqual(meta)
   })
 })

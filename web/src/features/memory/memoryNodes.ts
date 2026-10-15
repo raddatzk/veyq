@@ -1,7 +1,7 @@
 // The Memories application's two content-node births — a Memory (wrapped under its parent's key: a folder's, or the
-// write key at the scope root) and a Chapter (wrapped under its parent's K_mem) — over core's kind-agnostic
+// write key at the scope root) and a Chapter (wrapped under its parent's K_node) — over core's kind-agnostic
 // `createContentNode` (ADR 0079, ADR 0080 Decision 1). The name and slug token go under the same parent key (ADR 0080
-// Decision 2): a Memory's under the folder's key (K_SC at the root), a chapter's under its Memory's K_mem — so a guest
+// Decision 2): a Memory's under the folder's key (K_SC at the root), a chapter's under its Memory's K_node — so a guest
 // of the Memory's share reads its chapter titles.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import type { EpochKeys } from '../spaces/epochs'
@@ -21,9 +21,9 @@ export interface MemoryBirthMeta {
 }
 
 /**
- * Create a MEMORY — births a fresh random `K_mem` wrapped under its parent's content key (`parent.key`, a folder's;
- * the write key `E_current` at the scope root, ADR 0080 Decision 1). Returns the node id + the K_mem. The optional
- * `birth` meta is **sealed at birth** into the node's `wrappedMeta` under that fresh `K_mem`, in the one create call:
+ * Create a MEMORY — births a fresh random `K_node` wrapped under its parent's content key (`parent.key`, a folder's;
+ * the write key `E_current` at the scope root, ADR 0080 Decision 1). Returns the node id + the K_node. The optional
+ * `birth` meta is **sealed at birth** into the node's `wrappedMeta` under that fresh `K_node`, in the one create call:
  * a pre-armed `location` (cr-0069; an `auto` one re-medoids on the first geotagged media) and the first `participants`
  * (ADR 0083 - ids only, no second write, no version bump).
  */
@@ -41,9 +41,9 @@ export async function createMemory(
 }
 
 /**
- * Create a CHAPTER inside a Memory (or another chapter) — births a fresh random `K_mem` wrapped under the
- * **parent node's `K_mem`** (`parentKey`), so the chapter is a sharing unit of its own (ADR 0012, cr-0060).
- * Returns the node id + the chapter's K_mem.
+ * Create a CHAPTER inside a Memory (or another chapter) — births a fresh random `K_node` wrapped under the
+ * **parent node's `K_node`** (`parentKey`), so the chapter is a sharing unit of its own (ADR 0012, cr-0060).
+ * Returns the node id + the chapter's K_node.
  */
 export async function createChapter(
   scopeId: string, epochs: EpochKeys, parentKey: Uint8Array, name: string, parentId: string,

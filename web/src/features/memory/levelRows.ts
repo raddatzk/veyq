@@ -57,7 +57,7 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
   /** Only this application's nodes, whatever the level hands in. */
   const memoryNodes = computed(() => ctx.value.nodes.filter((n) => n.kind === MEMORY_KIND || n.kind === CHAPTER_KIND))
 
-  // Each Memory's sealed date and place - each K_mem opened under its parent's key: E_{node.epoch} at the scope root, the folder's
+  // Each Memory's sealed date and place - each K_node opened under its parent's key: E_{node.epoch} at the scope root, the folder's
   // key inside a folder (ADR 0080 Decision 1); read from wrappedMeta, no media load. They are the row's DETAILS.
   const facts = computed(() => {
     const parentKey = (node: TreeNode): Uint8Array | null =>

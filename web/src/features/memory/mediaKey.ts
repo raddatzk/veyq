@@ -1,20 +1,20 @@
 // uc.sharing.share-uploader (web) — the key a media is sealed under is fixed by WHERE IT CAME FROM (ADR 0031
-// point 7). A member, a READ_WRITE guest and a viewer link all seal and open under the Memory's `K_mem`. A
-// WRITE_ONLY guest never holds `K_mem`: it mints its own identity key `K_up`, seals its name and every upload under
+// point 7). A member, a READ_WRITE guest and a viewer link all seal and open under the Memory's `K_node`. A
+// WRITE_ONLY guest never holds `K_node`: it mints its own identity key `K_up`, seals its name and every upload under
 // it, and hands `K_up` over wrapped to the Memory's drop public key. Every reader of the Memory opens such a media
-// through the drop PRIVATE key, which the Memory keeps sealed under `K_mem`:
+// through the drop PRIVATE key, which the Memory keeps sealed under `K_node`:
 //
-//   K_mem → drop private key (`drop-private-key`, on the node) → K_up (`upload-identity-key`, on the identity)
+//   K_node → drop private key (`drop-private-key`, on the node) → K_up (`upload-identity-key`, on the identity)
 //
 // The call sites do not branch on this. A media (or a bucket) that a WRITE_ONLY identity added carries its
-// [UploaderOrigin], attached where the row was listed; [mediaKey] is the one place that turns `K_mem` + a row into
+// [UploaderOrigin], attached where the row was listed; [mediaKey] is the one place that turns `K_node` + a row into
 // the key the row's seals are under. A member who edits such a media's metadata re-seals under that same `K_up`,
 // so no media ever changes path.
 import * as v1 from '@veyq/crypto/v1'
 import { dropKeysForShare, mintIdentityKey, openDropKey, openDropPublicKey, openIdentityKey } from '../../core/sharing/dropKey'
 
 /**
- * Where a WRITE_ONLY guest's row opens from: the Memory it was added to, that Memory's `K_mem`-sealed drop private
+ * Where a WRITE_ONLY guest's row opens from: the Memory it was added to, that Memory's `K_node`-sealed drop private
  * key, and the identity with its wrapped `K_up` — all as the listing served them, so every field is addressed by
  * where it was fetched (ADR 0072 Decision 1).
  */
@@ -26,7 +26,7 @@ export type UploaderOrigin = {
 }
 
 /** The uploader origin a listing row carries, when its owner (`share:{identityId}`) is a WRITE_ONLY identity the
- *  listing served a wrapped key for; undefined for every other row — which then opens under `K_mem`. */
+ *  listing served a wrapped key for; undefined for every other row — which then opens under `K_node`. */
 export function uploaderOriginOf(
   ownerKey: string | undefined | null,
   nodeId: string,
@@ -39,13 +39,13 @@ export function uploaderOriginOf(
   return wrappedIdentityKey ? { nodeId, sealedDropPrivateKey, identityId, wrappedIdentityKey } : undefined
 }
 
-// K_up per (K_mem, origin): opening it costs an X-Wing decapsulation, and a gallery asks for every tile. Keyed by
-// the K_mem ARRAY so a cached key never outlives the key that opened it; a mismatched K_mem simply misses.
+// K_up per (K_node, origin): opening it costs an X-Wing decapsulation, and a gallery asks for every tile. Keyed by
+// the K_node ARRAY so a cached key never outlives the key that opened it; a mismatched K_node simply misses.
 const opened = new WeakMap<Uint8Array, Map<string, Uint8Array>>()
 
 /**
  * THE resolver: the key a row's seals are under — `K_up` for a row a WRITE_ONLY guest added (opened through the
- * Memory's drop key), `K_mem` for every other. Throws [v1.OpenRefused] when an uploader row's chain does not open
+ * Memory's drop key), `K_node` for every other. Throws [v1.OpenRefused] when an uploader row's chain does not open
  * (a moved or tampered wrap), exactly as the AEAD open the caller was about to do would.
  */
 export function mediaKey(scopeId: string, memoryKey: Uint8Array, row: { uploader?: UploaderOrigin }): Uint8Array {

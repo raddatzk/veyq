@@ -301,7 +301,7 @@ describe('MemoryHomeView over the real registry', () => {
   })
 
   // A chapter is a share root of its own (ADR 0080 Decision 13): the same detail offers the share affordances, and both
-  // dialogs open for the chapter itself — its id, its own K_mem (the key chain's, not the Memory's) and its name as the
+  // dialogs open for the chapter itself — its id, its own K_node (the key chain's, not the Memory's) and its name as the
   // tree opened it, which the dialog re-seals under K_share.
   it('opens a chapter to the same detail, shareable, and shares the chapter itself (both dialogs)', async () => {
     const w = await mountAt('#~me/trips/memories/italy/day1')

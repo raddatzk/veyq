@@ -1,7 +1,7 @@
 // Test kit for the gallery component tests (cr-0049). A tiny in-process object store that — unlike the
 // single-media fake in media.test.ts — **accumulates** several media per node, so MemoryDetail/MediaLightbox
 // can list a real multi-item grid and round-trip each tier (original + derivatives) through a real v1
-// seal/open under a K_blob wrapped by K_mem. Operator-blind: the "store" only ever holds ciphertext.
+// seal/open under a K_blob wrapped by K_node. Operator-blind: the "store" only ever holds ciphertext.
 // Not a test file (no test cases); imported by the *.test.ts that mount the components.
 //
 // Like the real server it keeps the ids the CLIENT minted (ADR 0072): each blob under the `blobId` it was declared

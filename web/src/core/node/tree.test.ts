@@ -49,8 +49,8 @@ function echoCreate() {
 }
 const nameCtx = (nodeId: string, epoch = 0) => ({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch, placementVersion: 0 }) as const
 const PARENT = '5c09e000-0000-4000-8000-000000000f09'
-const kmemCtx = (nodeId: string, epoch = 0) => ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch, placementVersion: 0 }) as const
-const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array, epoch = 0) => b64std(v1.seal(kmemCtx(nodeId, epoch), kek, k))
+const kNodeCtx = (nodeId: string, epoch = 0) => ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch, placementVersion: 0 }) as const
+const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array, epoch = 0) => b64std(v1.seal(kNodeCtx(nodeId, epoch), kek, k))
 const opened = (key: Uint8Array, nodeId: string, blob: string, epoch = 0) =>
   new TextDecoder().decode(v1.open(nameCtx(nodeId, epoch), key, fromB64(blob)))
 
@@ -61,7 +61,7 @@ describe('nodeContentKey — resolve a chapter key down the chain', () => {
   const node = (id: string, parentId: string | null, kind: string, wrappedContentKey: string): TreeNode =>
     treeNode({ id, parentId, kind: kind as TreeNode['kind'], orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
 
-  it('walks K_SC → folder key → Memory K_mem → chapter K_mem: a folder is a link of the chain (ADR 0080)', () => {
+  it('walks K_SC → folder key → Memory K_node → chapter K_node: a folder is a link of the chain (ADR 0080)', () => {
     const folderKey = v1.randomBytes(32)
     const memKey = v1.randomBytes(32)
     const chapKey = v1.randomBytes(32)
@@ -112,7 +112,7 @@ describe('createFolder', () => {
     const req = create.mock.calls[0][0].createNodeRequest
     expect(req.kind).toBe('FOLDER')
     expect(req.parentId).toBeUndefined()
-    expect(v1.open(kmemCtx(id), scopeKey, fromB64(req.wrappedContentKey))).toHaveLength(32)
+    expect(v1.open(kNodeCtx(id), scopeKey, fromB64(req.wrappedContentKey))).toHaveLength(32)
     expect(req.nodeId).toMatch(UUID)
     expect(id).toBe(req.nodeId)
     expect(opened(scopeKey, id, req.encryptedName)).toBe('Trips')
@@ -127,8 +127,8 @@ describe('createFolder', () => {
     const id = await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey })
     const req = create.mock.calls[0][0].createNodeRequest
     expect(req.parentId).toBe(PARENT)
-    expect(v1.open(kmemCtx(id), parentKey, fromB64(req.wrappedContentKey))).toHaveLength(32)
-    expect(() => v1.open(kmemCtx(id), scopeKey, fromB64(req.wrappedContentKey))).toThrow(v1.OpenRefused)
+    expect(v1.open(kNodeCtx(id), parentKey, fromB64(req.wrappedContentKey))).toHaveLength(32)
+    expect(() => v1.open(kNodeCtx(id), scopeKey, fromB64(req.wrappedContentKey))).toThrow(v1.OpenRefused)
     expect(opened(parentKey, id, req.encryptedName)).toBe('Day trips')
     expect(() => opened(scopeKey, id, req.encryptedName)).toThrow(v1.OpenRefused)
   })

@@ -33,7 +33,7 @@ class ShareNoteSliceTest {
     private val shareKey = "cmVjb3ZlcmFibGUta2V5" // K_share under K_SC(epoch), opaque here
     private val name1 = "Rm9yIEdyYW5kbWE=" // "For Grandma" sealed (opaque here)
     private val name2 = "cmVuYW1lZA==" // "renamed"
-    private val sealedDisplayName = "c2VhbGVkLWNvbnRyaWJ1dG9yLW5hbWU=" // a contributor's K_mem-sealed name (opaque here)
+    private val sealedDisplayName = "c2VhbGVkLWNvbnRyaWJ1dG9yLW5hbWU=" // a contributor's K_node-sealed name (opaque here)
 
     @Test
     fun createWithNoteThenAnonymousResolveReturnsIt() {

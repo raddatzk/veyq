@@ -108,7 +108,7 @@ const currentNodeKey = computed(() =>
     ? nodeContentKey(activeSpace.scopeId!, epochs.value, treeStore.nodes, currentNodeId.value)
     : null,
 )
-// The open node's K_mem: the same key, for a kind that opens (a folder browses and is never opened).
+// The open node's K_node: the same key, for a kind that opens (a folder browses and is never opened).
 const memoryKey = computed(() => (isOpenable.value ? currentNodeKey.value : null))
 
 // The current node's share dialog: its kind's (`KindDescriptor.shareDialog`; FOLDER's is core's own, pre-registered).

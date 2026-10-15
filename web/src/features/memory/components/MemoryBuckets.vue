@@ -7,7 +7,7 @@
 // bar with a select-all toggle + visible Move/Delete. Delete is a straight soft-delete to trash with a local undo
 // bar (no confirm modal), and names every medium the server refused to trash (inbox #427) or, on Undo, to restore
 // (#429). The primary bucket is VIRTUAL until the first sub-bucket or upload materializes it (the
-// server's lazy ensurePrimaryBucket). Names are sealed under K_mem — the client unseals; the server never sees one.
+// server's lazy ensurePrimaryBucket). Names are sealed under K_node — the client unseals; the server never sees one.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Select from 'primevue/select'
@@ -198,7 +198,7 @@ const filteredMedia = computed<MediaItem[]>(() => {
   return props.media.filter((m) => m.bucketId === b.id)
 })
 
-// Unseal each tile's listed metadata once (operator-blind, under K_mem) for the aspect ratio (cr-0059), and its
+// Unseal each tile's listed metadata once (operator-blind, under K_node) for the aspect ratio (cr-0059), and its
 // original's blob meta for the video signal (#105, the sealed type, inbox #397).
 const layoutItems = computed(() =>
   filteredMedia.value.map((m, index) => {

@@ -5,7 +5,7 @@
 // identically on the browse card, the detail header, the map pin and the sidebar's Favorites tile. No `src` ⇒
 // the placeholder — the soft-accent
 // `pi pi-images` tile, or a `placeholder` slot the host supplies. Ported component-for-component from the design
-// source's `MemoryCoverImage`; only the `src` (a decrypted object URL under K_mem) and the crop model are ours.
+// source's `MemoryCoverImage`; only the `src` (a decrypted object URL under K_node) and the crop model are ours.
 import { computed } from 'vue'
 import { coverImageStyle, type CoverCrop } from '../memoryCover'
 

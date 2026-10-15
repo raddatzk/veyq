@@ -126,13 +126,13 @@ describe('normalizeMemoryCover', () => {
 })
 
 describe('unsealMemoryCover', () => {
-  it('round-trips a media cover sealed under K_mem', () => {
+  it('round-trips a media cover sealed under K_node', () => {
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-7' }, crop: { x: 0.2, y: 0.1, width: 0.6, height: 0.34 } }
     const sealed = sealMeta({ v: 1, cover })
     expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(cover)
   })
 
-  it('round-trips an upload cover (standalone blob ref) sealed under K_mem', () => {
+  it('round-trips an upload cover (standalone blob ref) sealed under K_node', () => {
     const cover: MemoryCover = { source: { kind: 'upload', ref: UPLOAD_REF }, crop: FULL_FRAME }
     const sealed = sealMeta({ v: 1, cover: { source: { kind: 'upload', ref: UPLOAD_REF_RAW }, crop: FULL_FRAME } })
     expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(cover)
@@ -172,7 +172,7 @@ const setMemoryCover = async (
 }
 
 describe('setMemoryCover', () => {
-  it('re-seals under K_mem and PATCHes wrappedMeta via updateNode', async () => {
+  it('re-seals under K_node and PATCHes wrappedMeta via updateNode', async () => {
     const { updateNode } = stubApi(contentApi, { updateNode: undefined })
 
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28 } }

@@ -36,7 +36,7 @@ import { CHAPTER_KIND } from '../kinds'
 
 // Memories' `shareDialog` for MEMORY and CHAPTER (cr-files-application P4c), so it takes the platform's share-dialog
 // props: the scope (every share's recovery copy of `K_share` is bound to it, ADR 0072, and opens under `K_SC` at its
-// epoch), the node and its `K_mem` (`nodeKey`), its name, its kind (a chapter link says "chapter", not "Memory", 5b.5)
+// epoch), the node and its `K_node` (`nodeKey`), its name, its kind (a chapter link says "chapter", not "Memory", 5b.5)
 // and `uploader` — the drop-box variant: list only uploader shares, create with no role switcher. Identical otherwise.
 // `contribute` (the capability function's answer, handed on by the host) lets the create form offer READ_WRITE.
 const props = defineProps<NodeShareDialogProps>()

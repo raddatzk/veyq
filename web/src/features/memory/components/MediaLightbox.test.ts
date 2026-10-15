@@ -650,7 +650,7 @@ describe('MediaLightbox — delete (cr-0110)', () => {
 describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
   it('lazily loads the EXIF tier via getMediaExif and renders the decoded detail rows', async () => {
     const memoryKey = v1.randomBytes(32)
-    // the source carries readable EXIF → addMedia seals it under K_mem into the (lazy) Tier-2 blob
+    // the source carries readable EXIF → addMedia seals it under K_node into the (lazy) Tier-2 blob
     vi.mocked(exifr.parse).mockResolvedValue({
       DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)),
       Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm', FocalLength: 50, FNumber: 1.8, ExposureTime: 0.008, ISO: 200,
@@ -670,7 +670,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
 
-    // the panel fetched the exif endpoint once and unsealed it under K_mem
+    // the panel fetched the exif endpoint once and unsealed it under K_node
     expect(store.api.getMediaExif).toHaveBeenCalledWith({ scopeId: SCOPE_ID, mediaId: items[0].mediaId })
     const dds = wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())
     expect(dds).toContain('Canon EOS R')

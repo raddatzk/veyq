@@ -99,9 +99,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
 
     const memory = await createMemory(scopeId, epochsOf(scopeKey), MEMORY_NAME)
     nodeId = memory.nodeId
-    const kMem = memory.memoryKey
+    const kNode = memory.memoryKey
 
-    const minted = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.ReadWrite, null, { texts: NOTE, mustAccept: false }, SHARE_NAME)
+    const minted = await createShare(scopeId, nodeId, kNode, epochsOf(scopeKey), MEMORY_NAME, ShareRole.ReadWrite, null, { texts: NOTE, mustAccept: false }, SHARE_NAME)
     shareId = minted.shareId
     expect(shareId, 'the client minted an opaque shareId (ADR 0072)').toMatch(/^[A-Za-z0-9_-]{43}$/)
 
@@ -119,7 +119,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     const session = await createContributorIdentity(shareId, resolved.scopeId, resolved.access, CONTRIBUTOR_NAME, fragmentKey)
     expect(session.contributorToken, 'the server minted a capability token for this session').toBeTruthy()
     const sealKey = sessionSealKey(session, resolved.access)
-    expect(sealKey, 'a contributor seals under the K_mem its link holds').not.toBeNull()
+    expect(sealKey, 'a contributor seals under the K_node its link holds').not.toBeNull()
 
     const upload = { ...session, shareId, scopeId: resolved.scopeId, sealKey: sealKey! }
     // raw bytes with no MIME ⇒ the original-only path (nothing derivable) — the byte transport is what this gates
@@ -166,12 +166,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
       .toEqual([first.mediaId, second.mediaId].sort())
 
     // The cross-actor unseal: the server copied the identity's sealed display name onto the contributor's primary
-    // bucket, and the curator opens it under K_mem. This is the assertion the whole role exists for — a name the
+    // bucket, and the curator opens it under K_node. This is the assertion the whole role exists for — a name the
     // operator relayed as ciphertext, sealed by an anonymous stranger, recovered by someone who never met them.
     const buckets = await listBuckets(scopeId, nodeId)
     const primary = buckets.find((b) => b.isPrimary && b.sealedName)
     expect(primary, "the contributor's primary bucket carries a sealed name").toBeDefined()
-    const recoveredName = openBucketName(scopeId, nodeId, kMem, primary!)
+    const recoveredName = openBucketName(scopeId, nodeId, kNode, primary!)
     expect(recoveredName, 'the curator recovered the contributor display name through the bucket').toBe(CONTRIBUTOR_NAME)
     expect(primary!.mediaCount, 'both contributions are attributed to that one contributor').toBe(2)
 
@@ -181,7 +181,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     const recoveredShareName = readShareName(epochsOf(scopeKey), managed!, managed!, managed!.sealedShareName)
     expect(recoveredShareName, "the curator recovered the share's private name").toBe(SHARE_NAME)
     // …and the Memory key every viewer or contributor link hands over recovers nothing of it (ADR 0036 point 4).
-    expect(readShareName(epochsOf(kMem), managed!, managed!, managed!.sealedShareName), 'K_mem opens no recovery copy').toBe('')
+    expect(readShareName(epochsOf(kNode), managed!, managed!, managed!.sealedShareName), 'K_node opens no recovery copy').toBe('')
 
     // The wire assertion's derivation (ADR 0053) — every value below was recovered by UNSEALING what the server
     // returned, so nothing has to be remembered and none can be forgotten out of the set. Note what is NOT here:
@@ -201,7 +201,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
       resolved.noteByLocale,
       recoveredName,
       recoveredShareName,
-      unsealMeta(scopeId, kMem, curatorItems[0]),
+      unsealMeta(scopeId, kNode, curatorItems[0]),
     )
   }, 240_000)
 

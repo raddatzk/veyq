@@ -5,7 +5,7 @@ info:
   description: >
     Encrypted media **blobs** attached to a Memory tree (en.memory.media, cr-0028). A blob is a fixed-size
     sequence of **chunked-AEAD** ciphertext objects, sealed client-side under a fresh random **`K_blob`**
-    (wrapped under the target Memory's `K_mem`, [ADR 0012](../../../docs/decisions/0012-content-key-hierarchy.md)),
+    (wrapped under the target Memory's `K_node`, [ADR 0012](../../../docs/decisions/0012-content-key-hierarchy.md)),
     transferred **direct-to-store** via short-TTL presigned URLs
     ([ADR 0013](../../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)) — bytes never flow through
     the backend. The blob transfer itself — start, next windows, downloads — is core's (`../blob.openapi.yaml`,
@@ -16,7 +16,7 @@ info:
     **Operator-blind:** the server + object store hold only ciphertext chunks + opaque metadata
     (`chunkCount`, `byteSize`, the per-chunk size `manifest`), the `K_blob` wrap, and the media→node link; never
     a plaintext byte, a content key, or a filename in clear. Guards (enforced by code, ADR 0008): the caller
-    holds a grant for the scope; a media target must be a **MEMORY** or **CHAPTER** (a FOLDER owns no `K_mem`);
+    holds a grant for the scope; a media target must be a **MEMORY** or **CHAPTER** (a FOLDER owns no `K_node`);
     declare-then-verify on `complete` enforces the byte budget against the stored objects. **No content dedup**
     ([ADR 0013 §5](../../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)).
 tags:
@@ -31,7 +31,7 @@ tags:
       Per-uploader **buckets** within a Memory node — the attribution axis
       ([en.memory.buckets](../../../docs/features/memory/enablers/en.memory.buckets.md), ADR 0034). A lazy virtual
       **primary** bucket per uploader (keyed by an opaque `owner_key`) plus optional **one-level sub-buckets** with
-      `K_mem`-sealed names; media link via `bucketId` + a denormalized `createdBy`. Operator-blind — opaque
+      `K_node`-sealed names; media link via `bucketId` + a denormalized `createdBy`. Operator-blind — opaque
       `owner_key` + structure, sealed names, **own-bucket authz** (`owner_key == caller`). A distinct resource
       interface from `media`, sharing the node subtree.
 
@@ -112,7 +112,7 @@ paths:
         advanced `deleteRevision`** past the client's echoed `sinceDelete` — the node's current **`mediaIds`** set,
         so the client drops any id it no longer sees (catching a delete and a net-zero delete+add); pure adds/edits
         stay delta-only. First load: omit `If-None-Match`/`since` for the full list. The client unwraps each
-        `K_blob` under `K_mem`, presigns the downloads (`blob-downloads-batch`), and opens the chunks with
+        `K_blob` under `K_node`, presigns the downloads (`blob-downloads-batch`), and opens the chunks with
         `openFrame`. **Operator-blind** — opaque counters, opaque ids, exact timestamps (`updatedAt` to the millisecond); never
         content, never a key.
       security:
@@ -161,7 +161,7 @@ paths:
       description: >
         Returns the node's materialized buckets for the Beiträge tab: one lazy **primary** per uploader (keyed by
         `owner_key`) plus any **sub-buckets**, each with its opaque `ownerKey`, `parentBucketId` (null = primary),
-        `isPrimary`, the `K_mem`-sealed `sealedName` (null for a member's primary — the client shows the operator-
+        `isPrimary`, the `K_node`-sealed `sealedName` (null for a member's primary — the client shows the operator-
         visible username; present for a contributor primary + every sub-bucket), and a per-bucket `mediaCount`. The
         client groups by uploader, unseals names client-side, and filters the gallery grid. Operator-blind — opaque
         `owner_key` + structure only, never a cleartext name, never content.
@@ -195,7 +195,7 @@ paths:
         **that** root — so a member can add sub-buckets under a **contributor's** root to organize contributions —
         and the new bucket inherits **that root's** `ownerKey`. The parent must be a primary (`403` otherwise). The
         client mints the bucket's id (`bucketId`, [ADR 0072](../../../docs/decisions/0072-a-seal-binds-its-object.md)) and supplies the `sealedName` (sealed under
-        `K_mem`, bound to that id); the server never sees it in clear. Sub-buckets do not nest further.
+        `K_node`, bound to that id); the server never sees it in clear. Sub-buckets do not nest further.
         Operator-blind — the name is stored as ciphertext. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
         - bearerAuth: []
@@ -248,7 +248,7 @@ paths:
           re-sent, so a concurrent rename loses only to another rename of the same bucket.
       summary: Rename a sub-bucket (uc.memory.buckets).
       description: >
-        Re-store a **sub-bucket's** `K_mem`-sealed name. Any scope **member** may rename a sub-bucket (incl. a
+        Re-store a **sub-bucket's** `K_node`-sealed name. Any scope **member** may rename a sub-bucket (incl. a
         contributor's, to organize contributions); a **primary** is not renameable (`illegal_target`). Operator-blind
         — the new name is ciphertext.
       security:
@@ -376,7 +376,7 @@ paths:
       summary: A media's sealed EXIF bundle (lazy, opaque) — for the lightbox detail.
       description: >
         Returns the media's `wrappedExif`: the **lazy, panel-only** metadata bundle sealed client-side under the
-        Memory's `K_mem` (opaque base64), or null when none was sealed at upload. Its contents are a versioned
+        Memory's `K_node` (opaque base64), or null when none was sealed at upload. Its contents are a versioned
         **client-only** shape and deliberately not enumerated here — the server never parses it, so listing the
         fields would only go stale. What defines the tier is where it is read (one item's detail panel, on
         demand) and not what is in it. Deliberately **not** part of `listNodeMedia` (which stays constant-small): the lightbox
@@ -415,7 +415,7 @@ paths:
       summary: Overwrite a media's sealed listed-metadata blob (e.g. a corrected date) — opaque.
       description: >
         Re-store the media's `wrappedMeta` verbatim: the client re-seals the listed blob
-        `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,gpsLat,gpsLng}` under `K_mem` (a date correction
+        `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,gpsLat,gpsLng}` under `K_node` (a date correction
         added/removed) and PUTs the new opaque base64 (or null to clear it). The only user-editable field is the
         date correction; geometry and GPS are derived-only. Operator-blind — the server overwrites the ciphertext
         it holds and never inspects the fields inside. Guards: the caller holds a grant for the scope; a media
@@ -637,7 +637,7 @@ components:
           type: [string, "null"]
           description: >
             The original's **listed-metadata tier** `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,
-            gpsLat,gpsLng}` sealed under the Memory's `K_mem` (opaque base64) — geometry (for the justified
+            gpsLat,gpsLng}` sealed under the Memory's `K_node` (opaque base64) — geometry (for the justified
             grid), capture time (for date sort/edit), and GPS (for the Memory's place medoid). Small and
             **returned with every list** so the gallery can lay out + sort and the place medoid can read GPS
             without the blind server ever seeing a coordinate or a timestamp, and without a per-item fetch.
@@ -650,7 +650,7 @@ components:
         wrappedExif:
           type: [string, "null"]
           description: >
-            The original's **lazy, panel-only** metadata bundle sealed under the Memory's `K_mem` (opaque
+            The original's **lazy, panel-only** metadata bundle sealed under the Memory's `K_node` (opaque
             base64) — a versioned client-only shape, not enumerated here because the server never parses it.
             Stored verbatim, **not** returned by `listNodeMedia` (kept constant-small); the lightbox lazy-loads
             it via `getMediaExif`. Absent when the source carried nothing to seal. The listed essentials — capture time and GPS — live in `wrappedMeta`, not here. Larger,
@@ -718,7 +718,7 @@ components:
       description: >
         A media's read-back view: the **original** blob ref plus its role-tagged `derivatives`. A gallery
         fetches `derivatives[THUMBNAIL]` for the grid, `derivatives[PREVIEW]` for the lightbox, and the
-        original blob only on download. Its seals (blob keys, `wrappedMeta`, EXIF) are under `K_mem`, except for a
+        original blob only on download. Its seals (blob keys, `wrappedMeta`, EXIF) are under `K_node`, except for a
         row a WRITE_ONLY guest added: that row's are under the guest's identity key, which the page's
         `uploaderKeys` carries (ADR 0031 point 7) — including after a member edits its metadata.
       required: [mediaId, blobId, chunkCount, byteSize, wrappedBlobKey, updatedAt]
@@ -742,7 +742,7 @@ components:
           items: { type: integer, format: int64, example: 65536 }
         wrappedBlobKey:
           type: string
-          description: The original blob's `K_blob` wrapped under `K_mem` (opaque base64).
+          description: The original blob's `K_blob` wrapped under `K_node` (opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
@@ -763,7 +763,7 @@ components:
           type: [string, "null"]
           description: >
             The original's listed-metadata tier `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,gpsLat,
-            gpsLng}` sealed under `K_mem` (opaque base64); the gallery unwraps it to lay out the justified grid
+            gpsLng}` sealed under `K_node` (opaque base64); the gallery unwraps it to lay out the justified grid
             (geometry) and sort tiles by effective capture time (`override ?? capturedAt`), and the place medoid
             reads its GPS. Null when none was sealed at upload (the grid uses a default aspect, the media sorts
             last). The heavier EXIF tier is lazy via `getMediaExif`.
@@ -865,7 +865,7 @@ components:
         sealedDropPrivateKey:
           type: [string, "null"]
           description: >
-            The node's drop private key sealed under its `K_mem` (as `NodeSummary.sealedDropPrivateKey`; opaque
+            The node's drop private key sealed under its `K_node` (as `NodeSummary.sealedDropPrivateKey`; opaque
             base64), served with the media so every row a WRITE_ONLY guest added can be opened from this page alone
             (ADR 0031 point 7). Null while the node has none.
           contentEncoding: base64
@@ -876,7 +876,7 @@ components:
           description: >
             One entry per WRITE_ONLY identity that added a row of this page (`ownerKey` `share:{identityId}`): its
             identity key wrapped to the node's drop key. A row whose identity is listed here is sealed under that
-            identity's key; every other row under `K_mem` (ADR 0031 point 7).
+            identity's key; every other row under `K_node` (ADR 0031 point 7).
           items: { $ref: "#/components/schemas/UploaderKey" }
 
     UploaderKey:
@@ -916,7 +916,7 @@ components:
           items: { type: integer, format: int64, example: 65536 }
         wrappedBlobKey:
           type: string
-          description: The derivative blob's own `K_blob` wrapped under `K_mem` (opaque base64).
+          description: The derivative blob's own `K_blob` wrapped under `K_node` (opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
@@ -939,7 +939,7 @@ components:
         wrappedExif:
           type: [string, "null"]
           description: >
-            The original's lazy, panel-only metadata bundle sealed under `K_mem` (opaque base64); the lightbox
+            The original's lazy, panel-only metadata bundle sealed under `K_node` (opaque base64); the lightbox
             unwraps it to fill the detail panel. Null when none was sealed at upload. The listed essentials —
             geometry, capture time, GPS and the resolved place name — live in `wrappedMeta`, not here.
           contentEncoding: base64
@@ -949,7 +949,7 @@ components:
     MediaMetaUpdate:
       type: object
       description: >
-        Overwrite a media's sealed listed-metadata blob (re-sealed client-side under `K_mem`), e.g. to persist a
+        Overwrite a media's sealed listed-metadata blob (re-sealed client-side under `K_node`), e.g. to persist a
         corrected date. Null clears it. Opaque to the server. `metaVersion` is the `MediaSummary.metaVersion` the
         blob was built from (ADR 0077).
       required: [metaVersion]
@@ -996,7 +996,7 @@ components:
         sealedDropPrivateKey:
           type: [string, "null"]
           description: >
-            The node's drop private key sealed under its `K_mem` (as `NodeSummary.sealedDropPrivateKey`; opaque
+            The node's drop private key sealed under its `K_node` (as `NodeSummary.sealedDropPrivateKey`; opaque
             base64) — what opens a WRITE_ONLY primary's name through its `wrappedIdentityKey` (ADR 0031 point 7),
             served with the buckets so the list is readable on its own. Null while the node has none.
           contentEncoding: base64
@@ -1007,7 +1007,7 @@ components:
       type: object
       description: >
         One uploader bucket in a node. `ownerKey` is the opaque uploader key (`user:{id}` / `share:{id}`);
-        `parentBucketId` is null for a **primary**. `sealedName` is the `K_mem`-sealed name — null for a member's
+        `parentBucketId` is null for a **primary**. `sealedName` is the `K_node`-sealed name — null for a member's
         primary (the client shows the operator-visible username), present for a contributor primary + every
         sub-bucket. A contributor primary's name is its share identity's own sealed display name, so the row
         carries that identity's `shareId` — the seal is bound to it (ADR 0072). `mediaCount` is the live
@@ -1045,7 +1045,7 @@ components:
         sealedName:
           type: [string, "null"]
           description: >
-            The bucket name sealed under `K_mem` (opaque base64) — null for a member's primary (the client shows
+            The bucket name sealed under `K_node` (opaque base64) — null for a member's primary (the client shows
             the operator-visible username), present for a contributor primary + every sub-bucket.
           contentEncoding: base64
           maxLength: 512
@@ -1055,7 +1055,7 @@ components:
           description: >
             For a **WRITE_ONLY** identity's primary only: the identity's key wrapped to the node's (a Memory's or
             chapter's) drop public key (AAD `upload-identity-key`; opaque base64). That primary's `sealedName` is sealed under the identity's
-            key, not `K_mem` (ADR 0031 point 7). Null otherwise.
+            key, not `K_node` (ADR 0031 point 7). Null otherwise.
           contentEncoding: base64
           maxLength: 2048
           example: null
@@ -1071,7 +1071,7 @@ components:
       type: object
       description: >
         Create a sub-bucket. Without `parentBucketId` it nests under the caller's own primary; with it, under that
-        primary root (e.g. a contributor's). The name is sealed client-side under `K_mem`, bound to the
+        primary root (e.g. a contributor's). The name is sealed client-side under `K_node`, bound to the
         client-minted `bucketId`.
       required: [bucketId, sealedName]
       properties:
@@ -1084,7 +1084,7 @@ components:
           example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
         sealedName:
           type: string
-          description: The sub-bucket's name sealed under `K_mem` (opaque base64).
+          description: The sub-bucket's name sealed under `K_node` (opaque base64).
           contentEncoding: base64
           maxLength: 512
           example: YnVja2V0LW5hbWUtY2lwaGVy
@@ -1098,12 +1098,12 @@ components:
 
     RenameBucketRequest:
       type: object
-      description: Re-store a sub-bucket's `K_mem`-sealed name.
+      description: Re-store a sub-bucket's `K_node`-sealed name.
       required: [sealedName]
       properties:
         sealedName:
           type: string
-          description: The new name sealed under `K_mem` (opaque base64).
+          description: The new name sealed under `K_node` (opaque base64).
           contentEncoding: base64
           maxLength: 512
           example: cmVuYW1lZC1jaXBoZXI=

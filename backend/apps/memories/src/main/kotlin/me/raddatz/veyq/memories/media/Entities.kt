@@ -10,7 +10,7 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * A media (cr-0028): links a blob to a node (MEMORY/CHAPTER). The share grain stays the Memory's `K_mem`;
+ * A media (cr-0028): links a blob to a node (MEMORY/CHAPTER). The share grain stays the Memory's `K_node`;
  * this row is only the blob→node link. `blobId` is the **original** (pristine) blob; role-tagged derivative
  * tiers link via [MediaDerivativeEntity] (cr-0045).
  */
@@ -31,7 +31,7 @@ class MediaEntity : PanacheEntityBase {
     @Column(name = "blob_id", nullable = false, columnDefinition = "uuid")
     lateinit var blobId: String
 
-    /** The original's `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,gpsLat,gpsLng}` listed-metadata tier sealed under `K_mem` (opaque base64); always listed, for grid layout + date sorting + the place medoid (cr-0068, consolidates cr-0059/cr-0064 layout + cr-0066 capturedAt). */
+    /** The original's `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,gpsLat,gpsLng}` listed-metadata tier sealed under `K_node` (opaque base64); always listed, for grid layout + date sorting + the place medoid (cr-0068, consolidates cr-0059/cr-0064 layout + cr-0066 capturedAt). */
     @Column(name = "wrapped_meta")
     var wrappedMeta: String? = null
 
@@ -41,7 +41,7 @@ class MediaEntity : PanacheEntityBase {
     var metaVersion: Long = 0
 
     /**
-     * The original's **lazy, panel-only** metadata bundle sealed under `K_mem` (opaque base64); fetched per item
+     * The original's **lazy, panel-only** metadata bundle sealed under `K_node` (opaque base64); fetched per item
      * when a detail panel opens, never listed (cr-0064). A versioned **client-only** shape the server never
      * parses, so what belongs in it is decided client-side and is deliberately not enumerated here — an
      * enumeration in a place that cannot read the thing only goes stale. The listed essentials (geometry,
@@ -114,7 +114,7 @@ class MediaDerivativeEntity : PanacheEntityBase {
  * A per-uploader **bucket** in a Memory node (en.memory.buckets, cr-0113): the attribution axis (who contributed
  * a medium), orthogonal to Chapters. Keyed by an opaque [ownerKey] (`user:{userId}` | `share:{shareIdentityId}`).
  * A lazy virtual **primary** ([isPrimary] = true, [parentBucketId] null) per uploader + optional one-level
- * **sub-buckets** ([parentBucketId] = the primary). The name is sealed under `K_mem` ([sealedName], opaque
+ * **sub-buckets** ([parentBucketId] = the primary). The name is sealed under `K_node` ([sealedName], opaque
  * base64) — null for a member's primary (the client shows the operator-visible username). Primary uniqueness
  * `(node_id, owner_key)` is held by the node row's lock in `MediaStore.ensurePrimaryBucket` (ADR 0034 §4).
  */

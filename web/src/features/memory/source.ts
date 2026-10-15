@@ -15,7 +15,7 @@
 // the guest source uploads and deletes for a `READ_WRITE` link only.
 //
 // Operator-blind as the views: every byte is fetched as ciphertext and opened on the device under the key the caller
-// hands in (the node's `K_mem` from the tree's chain); the sources move ids, wraps and ciphertext.
+// hands in (the node's `K_node` from the tree's chain); the sources move ids, wraps and ciphertext.
 import { computed, inject, provide, ref, type ComputedRef, type InjectionKey } from 'vue'
 import type { GuestAccess } from '../../core/access'
 import { openBlobFromUrls } from '../../core/blob/transport'
@@ -88,7 +88,7 @@ export type MediaListing = { items: MediaItem[]; revision: { media: number; dele
 /** Where a live poll continues from (uc.memory.live-updates, cr-0107). */
 export type PollCursor = { mediaRevision: number; since?: string; deleteRevision: number }
 
-/** How a media's bytes and its listed seals open — every one under `key`, the node's `K_mem` from the chain. */
+/** How a media's bytes and its listed seals open — every one under `key`, the node's `K_node` from the chain. */
 export interface MediaLoaders {
   /** The grid tier (thumbnail). */
   grid(item: MediaItem, key: Uint8Array): Promise<Uint8Array>

@@ -64,7 +64,7 @@ describe('sealMemoryDate / unsealMemoryDate', () => {
     { mode: 'ongoing', from: '2026-01-01' },
   ]
 
-  it.each(cases)('round-trips %o under K_mem', (date) => {
+  it.each(cases)('round-trips %o under K_node', (date) => {
     const sealed = sealMemoryDate(nodeKey, NODE, date)
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(date)
   })
@@ -96,7 +96,7 @@ const fresh = (wrappedMeta: string | null = null, metaVersion = 0) => ({ wrapped
 const LISBON = { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed' }
 
 describe('setMemoryDate', () => {
-  it('re-seals under K_mem and PATCHes wrappedMeta via updateNode, stating the version it was built from', async () => {
+  it('re-seals under K_node and PATCHes wrappedMeta via updateNode, stating the version it was built from', async () => {
     const { updateNode } = stubApi(contentApi, { updateNode: undefined })
 
     const date: MemoryDate = { mode: 'range', from: '2026-05-01', to: '2026-05-09' }
@@ -108,7 +108,7 @@ describe('setMemoryDate', () => {
     expect(req.updateNodeRequest.wrappedMeta).toBe(state.wrappedMeta)
     expect(req.updateNodeRequest.metaVersion).toBe(3)
     expect(state.metaVersion).toBe(4) // the server stores version + 1, so the client derives it
-    // what we sealed opens back to the date under K_mem (operator-blind round-trip), bound to the patched node
+    // what we sealed opens back to the date under K_node (operator-blind round-trip), bound to the patched node
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(date)
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: OTHER_NODE_ID, wrappedMeta: state.wrappedMeta })).toBeNull()
   })
@@ -264,7 +264,7 @@ describe('computeAutoRange', () => {
 describe('unsealNodeDate / sortNodesByDate (browse card grid, cr-0067)', () => {
   const scopeKey = v1.randomBytes(32)
 
-  /** A top-level Memory node: a fresh K_mem wrapped under `scopeKey`, its date sealed under that K_mem — both bound
+  /** A top-level Memory node: a fresh K_node wrapped under `scopeKey`, its date sealed under that K_node — both bound
    *  to the node (a fresh UUID; the readable label rides in `name`). */
   function memoryNode(label: string, date: MemoryDate | null): TreeNode {
     const id = crypto.randomUUID()
@@ -283,12 +283,12 @@ describe('unsealNodeDate / sortNodesByDate (browse card grid, cr-0067)', () => {
     })
   }
 
-  it('unseals a node’s own date by opening its K_mem under the parent key', () => {
+  it('unseals a node’s own date by opening its K_node under the parent key', () => {
     const n = memoryNode('m', { mode: 'single', from: '2026-06-15', to: '2026-06-15' })
     expect(unsealNodeDate(SCOPE_ID, scopeKey, n)).toEqual({ mode: 'single', from: '2026-06-15', to: '2026-06-15' })
     expect(unsealNodeDate(SCOPE_ID, null, n)).toBeNull() // no key (locked) → no date
     expect(unsealNodeDate(SCOPE_ID, v1.randomBytes(32), n)).toBeNull() // wrong parent key → best-effort null, no throw
-    // a K_mem wrap served on another node's row → best-effort null, never the other Memory's date
+    // a K_node wrap served on another node's row → best-effort null, never the other Memory's date
     expect(unsealNodeDate(SCOPE_ID, scopeKey, { ...n, id: crypto.randomUUID() })).toBeNull()
   })
 

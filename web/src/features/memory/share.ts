@@ -1,18 +1,18 @@
 // uc.sharing.share-public-viewer (web) — the public viewer share data layer (cr-0100, ADR 0029). Operator-blind:
 // a member turns ONE Memory of their scope into an anonymous, revocable link `/s/{shareId}#k=<K_share>`.
-// The share adds an INDEPENDENT second wrap of that Memory's `K_mem` — sealed under `K_share` (ADR 0012) —
+// The share adds an INDEPENDENT second wrap of that Memory's `K_node` — sealed under `K_share` (ADR 0012) —
 // whose secret `K_share` rides the URL **fragment** (ADR 0015) and never reaches the server. The Memory name is
 // re-sealed under `K_share` so a viewer with only the fragment key can show the title without `K_SC`.
 //
 // Two sides live here:
 //  - **curator** (authed): mint and re-issue a share of a Memory — composed on the platform's share management
 //    (`core/sharing/manageShares.ts`), which also lists, revokes and edits it; this file adds the drop key.
-//  - **viewer** (anonymous, no session): resolve a share, unwrap `K_mem` from the fragment key, derive each
-//    chapter's `K_mem` down the subtree and open each chapter's title under its parent's key (ADR 0080 Decision 2 —
+//  - **viewer** (anonymous, no session): resolve a share, unwrap `K_node` from the fragment key, derive each
+//    chapter's `K_node` down the subtree and open each chapter's title under its parent's key (ADR 0080 Decision 2 —
 //    a guest of a Memory reads its chapter titles), and open blobs via the gated share-scoped presign endpoint.
 //
 // A WRITE_ONLY share is the exception to the second wrap (ADR 0031 point 7): its guest is the one party the link
-// exists to keep out, so it gets no `K_mem` at all — only the Memory's drop PUBLIC key under `K_share`. The guest
+// exists to keep out, so it gets no `K_node` at all — only the Memory's drop PUBLIC key under `K_share`. The guest
 // seals under an identity key of its own, wrapped to that drop key; `./mediaKey.ts` owns that chain.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
@@ -93,7 +93,7 @@ export {
 
 /**
  * Mint a public viewer share of one Memory (curator side): the platform's [mintShare] — a fresh `K_share`, the
- * Memory's `K_mem` wrapped under it, the name re-sealed under it, the recovery copy under the scope's write key (ADR
+ * Memory's `K_node` wrapped under it, the name re-sealed under it, the recovery copy under the scope's write key (ADR
  * 0036 point 4), one `stale_epoch` retry — plus, for a WRITE_ONLY share, this application's drop key. The caller turns
  * the returned `shareId` + `K_share` into a link with [buildShareLink].
  *
@@ -170,7 +170,7 @@ export type ContributorSession = GuestIdentity & { uploaderKey?: string }
 
 /**
  * Name yourself on a READ_WRITE or WRITE_ONLY share (operator-blind) and create an anonymous share identity.
- * A READ_WRITE guest is the platform's {@link createGuestIdentity}: the display name under `K_mem`. A WRITE_ONLY guest, which never holds `K_mem`, mints its own key
+ * A READ_WRITE guest is the platform's {@link createGuestIdentity}: the display name under `K_node`. A WRITE_ONLY guest, which never holds `K_node`, mints its own key
  * `K_up`, seals the name under it and hands `K_up` over wrapped to the Memory's drop public key. Returns the
  * identity id + a capability token that authorizes this session's uploads (+ `K_up`). The server never sees the
  * name (only the ciphertext), the key, or the person.
@@ -186,7 +186,7 @@ export async function createContributorIdentity(
   fragmentKey: string,
   pwToken?: string,
 ): Promise<ContributorSession> {
-  // A READ_WRITE guest names itself as on any link: the platform's identity, the name under the root's key (`K_mem`).
+  // A READ_WRITE guest names itself as on any link: the platform's identity, the name under the root's key (`K_node`).
   if (access.kind === 'read') return createGuestIdentity({ shareId, scopeId }, access.memoryKey, { name: displayName, fragmentKey, pwToken })
   const identityId = crypto.randomUUID() // client-minted: the name and the key wrap are sealed bound to it (ADR 0072)
   const minted = mintUploaderKey(scopeId, access.nodeId, identityId, access.dropPublicKey)
@@ -201,7 +201,7 @@ export async function createContributorIdentity(
 }
 
 /**
- * The key a named session's uploads are sealed under: a WRITE_ONLY identity's own `K_up`, a READ_WRITE identity's `K_mem`.
+ * The key a named session's uploads are sealed under: a WRITE_ONLY identity's own `K_up`, a READ_WRITE identity's `K_node`.
  * Null when the session cannot seal for this share — a WRITE_ONLY session saved without its key, which must name
  * itself again rather than fall back to a key it does not hold.
  */
@@ -248,7 +248,7 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
 
 /**
  * Add one photo to a READ_WRITE or WRITE_ONLY share (anonymous): seal it under the session's key ([sessionSealKey]:
- * `K_mem` for a contributor, the guest's own `K_up` for an uploader) with its derivatives + metadata and upload it
+ * `K_node` for a contributor, the guest's own `K_up` for an uploader) with its derivatives + metadata and upload it
  * via the share-scoped endpoints — the exact same operator-blind pipeline as the curator's `addMedia`, only the
  * transport is share-gated. Returns the new blob + media ids.
  *
@@ -279,7 +279,7 @@ export async function deleteSharePhoto(shareId: string, contributorToken: string
 
 // --- viewer (anonymous, no session) ----------------------------------------
 
-/** One shared media resolved for a guest: the media + the `K_mem` of the node it sits on + the shared Memory's scope,
+/** One shared media resolved for a guest: the media + the `K_node` of the node it sits on + the shared Memory's scope,
  *  which every one of its seals is bound to (ADR 0072). A media a WRITE_ONLY guest added carries its origin, so
  *  [mediaKey] opens it through that node's drop key instead (ADR 0031 point 7). `nodeId` is the node it sits on — the
  *  guest's data source lists each node's own media by it (`source.ts`). */
@@ -287,7 +287,7 @@ export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: strin
 
 /**
  * What a resolved link lets its guest do with keys (ADR 0031 point 7):
- *  - `read` (READ, READ_WRITE): the shared Memory's root `K_mem` — to open its media, and for a contributor to
+ *  - `read` (READ, READ_WRITE): the shared Memory's root `K_node` — to open its media, and for a contributor to
  *    seal their name + uploads under;
  *  - `drop` (WRITE_ONLY): the Memory's drop PUBLIC key and the node it belongs to — enough to wrap an identity key
  *    of its own to, nothing to open anything with.
@@ -297,7 +297,7 @@ export type ShareAccess =
   | { kind: 'drop'; nodeId: string; dropPublicKey: v1.HybridPublic }
 
 /** The decrypted shared Memory, ready to render: its name, the grant `role`, what its [access] holds, and every
- *  media (each with its own node's `K_mem` — none for a WRITE_ONLY link, which is served no media). */
+ *  media (each with its own node's `K_node` — none for a WRITE_ONLY link, which is served no media). */
 export type ResolvedShare = {
   memoryName: string
   noteByLocale: LocaleMap
@@ -330,7 +330,7 @@ function shareMediaToItem(m: ShareMedia, uploader: MediaItem['uploader']): Media
 }
 
 /** The Memories half of a resolved share: what its link lets the guest do with keys and every media (each with its own
- *  node's `K_mem` — none for a WRITE_ONLY link, which is served no media). */
+ *  node's `K_node` — none for a WRITE_ONLY link, which is served no media). */
 export type OpenedMemory = { access: ShareAccess; items: ShareItem[] }
 
 /** No media and no uploader key: what a WRITE_ONLY link is served, and the listing before it is read. */
@@ -352,8 +352,8 @@ export async function listShareMedia(shareId: string, role: ShareRole, pwToken?:
 }
 
 /**
- * Open the Memories half of a public share: unwrap the Memory's `K_mem` with the fragment key, derive every chapter's
- * `K_mem`, and return a flat, read-only list of the [listing]'s media (each tagged with the exact `K_mem` its blobs open
+ * Open the Memories half of a public share: unwrap the Memory's `K_node` with the fragment key, derive every chapter's
+ * `K_node`, and return a flat, read-only list of the [listing]'s media (each tagged with the exact `K_node` its blobs open
  * under). The platform half (fetch, password, name, note, root kind) is `resolvePublicShare` (core/sharing); the shell
  * calls it and hands this its head, and the media are Memories' own read ([listShareMedia]). Without a listing it opens
  * the keys alone — what the drop page needs (its name gate reads the access). Throws [ShareUnavailableError] when the
@@ -362,7 +362,7 @@ export async function listShareMedia(shareId: string, role: ShareRole, pwToken?:
  */
 export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListing = NO_SHARE_MEDIA): OpenedMemory {
   const { share, kShare, scopeId } = head
-  // ADR 0031 point 7: a WRITE_ONLY link opens the drop public key and nothing else. It never unwraps `K_mem`, even
+  // ADR 0031 point 7: a WRITE_ONLY link opens the drop public key and nothing else. It never unwraps `K_node`, even
   // from a row that still carries a wrap, and it is served no media to key.
   if (share.role === ShareRole.WriteOnly) {
     if (!share.sealedDropPublicKey || !share.nodeId) throw new ShareUnavailableError('not_found')
@@ -385,7 +385,7 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
   const items: ShareItem[] = []
   for (const m of listing.media) {
     const memoryKey = keys.get(m.nodeId)
-    if (!memoryKey) continue // a media under a chapter whose K_mem didn't open — skip
+    if (!memoryKey) continue // a media under a chapter whose K_node didn't open — skip
     const owner = m.identityId ? `share:${m.identityId}` : undefined
     const uploader = uploaderOriginOf(owner, m.nodeId, dropKeyOf.get(m.nodeId), wrapped)
     items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId, nodeId: m.nodeId })
@@ -406,7 +406,7 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
   return { memoryName: head.name, noteByLocale: head.noteByLocale, role: head.role, scopeId: head.scopeId, access, items }
 }
 
-/** Open a shared blob via the gated, share-scoped presign endpoint (no auth), then decrypt it under its `K_mem`.
+/** Open a shared blob via the gated, share-scoped presign endpoint (no auth), then decrypt it under its `K_node`.
  *  A password-protected share needs the same guest token (cr-0118) as the resolve. */
 async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string): Promise<Uint8Array> {
   const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId: ref.blobId, xSharePassword: pwToken })

@@ -6,7 +6,7 @@
 // role — a WRITE_ONLY share too, though it is served no node (inbox #329) — and which the head passes on so the shell
 // can ask the registry which application's body renders the share.
 //
-// What this half does NOT do is read or open anything the application owns: the root `K_mem` (the share's `wrap`),
+// What this half does NOT do is read or open anything the application owns: the root `K_node` (the share's `wrap`),
 // the chapters' keys and an uploader's drop key are the application's to open (`openSharedMemory` in
 // features/memory/share.ts), and what it attached under the nodes is its own guest read (`listShareMedia`) — the
 // resolve serves no application data. The head hands the application the unlocked response and `K_share`, nothing else.

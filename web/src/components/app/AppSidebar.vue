@@ -7,7 +7,7 @@
 //
 // The rail also carries the **groups** section and, below the space switcher, the **Favorites** section (core's
 // `PinnedNodes`: every pinned node, each with its kind's icon - inbox #409) and whatever an application pins into the
-// `sidebarPins` list slot (none today — ADR 0079: the shell names no application kind). It imports no key API at all — the epoch chain that opens a node's `K_mem` has no business in an
+// `sidebarPins` list slot (none today — ADR 0079: the shell names no application kind). It imports no key API at all — the epoch chain that opens a node's `K_node` has no business in an
 // always-mounted rail, and keeping it out is a property worth preserving, not an accident of one diff.
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 // A Memory's detail surface = its **gallery** (cr-0049, uc.memory.gallery). Opens the Memory's media as a
 // thumbnail grid, each tile's thumbnail fetched as ciphertext via presigned GET and decrypted on device under
-// K_mem (operator-blind); clicking a tile opens the lightbox (preview, prev/next, download original). The host
+// K_node (operator-blind); clicking a tile opens the lightbox (preview, prev/next, download original). The host
 // (`MemoryDetailHost`) resolves the node's key from the tree, the pin and the item-mark key; the page around it owns the
 // rename/delete/share/create dialogs and the navigation (every link through the tree's `linkTo`).
 // Ported presentation from the design source (legacy/frontend-noe2ee); only the data layer is ours. Decrypted
 // thumbnails become object URLs that are **revoked** on reload / unmount (no lingering plaintext blob URLs).
-// Tabs: the Gallery, the Chapters (each opens to the same detail under its own `K_mem`), the Contributions organizer
+// Tabs: the Gallery, the Chapters (each opens to the same detail under its own `K_node`), the Contributions organizer
 // (buckets) and the media Trash — the last two a member's only; the header carries upload, the share actions, the pin,
 // rename and delete, the cover, date and place. Journal, tracks and playlists are not built.
 //
@@ -242,7 +242,7 @@ const activeTab = ref<'gallery' | 'chapters' | 'beitraege' | 'trash'>('gallery')
 const fileInput = ref<HTMLInputElement | null>(null)
 
 // --- Memory date (cr-0067, uc.memory.date) → extracted into `useMemoryDate` (cr-0145). The effective range
-// is sealed on the NODE under K_mem (operator-blind) and shown in the header; `auto` materializes from the
+// is sealed on the NODE under K_node (operator-blind) and shown in the header; `auto` materializes from the
 // Memory's own media and self-heals on open + after an upload batch (via `reconcileAuto`, called at the settle
 // points below). Props are passed as getters so the composable stays reactive to them.
 const { dateEditorOpen, storedDate, autoRange, dateLabel, datedChapters, onDateSave, reconcileAuto } = useMemoryDate({
@@ -628,7 +628,7 @@ watch(
 
         <TabPanel v-if="can.navigate" value="chapters">
           <!-- Chapters as a MemoryCard grid + a create card, like the level's Memories (design source).
-               Each chapter opens to its own gallery; its media is sealed under the chapter's own K_mem. -->
+               Each chapter opens to its own gallery; its media is sealed under the chapter's own K_node. -->
           <div class="chapters-toolbar">
             <ViewModeToggle :views="[GRID_VIEW, LIST_VIEW]" />
           </div>

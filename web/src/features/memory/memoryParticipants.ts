@@ -1,6 +1,6 @@
 // uc.memory.participants (web) — who was there: the `participants` sub-object of the sealed node-meta blob (ADR 0083).
 // `{ userIds: string[] }` — OPAQUE USER IDS ONLY. Never a name, never a snapshot of one: the list sits in the blob a
-// share serves unchanged (a guest holds `K_mem`), so the interface is what hides it from a guest (`capabilities.ts`), and
+// share serves unchanged (a guest holds `K_node`), so the interface is what hides it from a guest (`capabilities.ts`), and
 // ids are what keeps the residual harmless (ADR 0083 decision 4). If this ever carries a name, that decision is open again.
 //
 // The write is a read-modify-write through `writeNodeMeta` (ADR 0077) with its OWN edit function, not `editField`: the
@@ -51,7 +51,7 @@ export function mergeParticipants(stored: readonly string[], wanted: readonly st
   return out.slice(0, MAX_PARTICIPANTS)
 }
 
-/** A Memory's participants from its `wrappedMeta` under `nodeKey` (`K_mem`). Best-effort: `[]` when absent or unreadable. */
+/** A Memory's participants from its `wrappedMeta` under `nodeKey` (`K_node`). Best-effort: `[]` when absent or unreadable. */
 export function unsealMemoryParticipants(
   scopeId: string, nodeKey: Uint8Array, node: { id: string; wrappedMeta: string | null },
 ): string[] {

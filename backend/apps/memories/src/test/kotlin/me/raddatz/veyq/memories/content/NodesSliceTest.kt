@@ -68,14 +68,14 @@ class NodesSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zm9sZGVy","slugToken":"Zm9sZGVyLXNsdWc=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
         val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bWVtb3J5","slugToken":"bWVtLXNsdWc=","orderIndex":0,"wrappedContentKey":"a21lbS13cmFw"}""")
-        // a chapter carries its OWN K_mem, wrapped under the parent Memory's K_mem (recursive K_mem, cr-0060 / ADR 0012)
+        // a chapter carries its OWN K_node, wrapped under the parent Memory's K_node (recursive K_node, cr-0060 / ADR 0012)
         val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Y2hhcHRlcg==","slugToken":"Y2hhcC1zbHVn","orderIndex":0,"wrappedContentKey":"a2NoYXAtd3JhcA=="}""")
 
         given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200)
             .body("kind", hasItems("FOLDER", "MEMORY", "CHAPTER"))
-            // operator-blind: both the Memory's and the chapter's wrapped K_mem come back verbatim; folder at root.
+            // operator-blind: both the Memory's and the chapter's wrapped K_node come back verbatim; folder at root.
             .body("find { it.id == '$memory' }.wrappedContentKey", equalTo("a21lbS13cmFw"))
             .body("find { it.id == '$chapter' }.wrappedContentKey", equalTo("a2NoYXAtd3JhcA=="))
             .body("find { it.id == '$folder' }.parentId", equalTo(null))

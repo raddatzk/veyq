@@ -444,7 +444,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.mocked(exifr.parse).mockResolvedValue(undefined)
   })
 
-  it('seals the layout tier {v,w,h} (geometry only) under K_mem and round-trips it through listMedia', async () => {
+  it('seals the layout tier {v,w,h} (geometry only) under K_node and round-trips it through listMedia', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
@@ -464,7 +464,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
     const meta = unsealMeta(SCOPE_ID, memoryKey, item)
     expect(meta).toMatchObject({ v: 1, w: 1920, h: 1080 }) // geometry rides the listed metadata tier (cr-0068)
-    // a wrong K_mem can't open it (bound to the Memory key)
+    // a wrong K_node can't open it (bound to the Memory key)
     expect(unsealMeta(SCOPE_ID, v1.randomBytes(32), item)).toBeNull()
   })
 
@@ -882,7 +882,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     expect(decodeMeta(memoryKey, sealed!)).toEqual({ v: 1, w: 800, h: 600, capturedAt: ORIG, gpsLat: 48.1, gpsLng: 11.5, capturedAtOverride: CORRECTED })
     // effective time now prefers the correction
     expect(effectiveCapturedAt(updated.tier)).toBe(CORRECTED)
-    // a wrong K_mem can't open it
+    // a wrong K_node can't open it
     expect(() => decodeMeta(v1.randomBytes(32), sealed!)).toThrow()
   })
 
@@ -1136,7 +1136,7 @@ describe('the upload pump — read, seal and send one frame at a time (ADR 0013 
 })
 
 describe('read-back — operator-blind round-trip + tier selection', () => {
-  it('round-trips the original through chunked AEAD under a K_blob wrapped by K_mem', async () => {
+  it('round-trips the original through chunked AEAD under a K_blob wrapped by K_node', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
@@ -1199,7 +1199,7 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
     expect(downloadRef(item).blobId).toBe('orig')
   })
 
-  it('the original wrap opens back to a real 32-byte K_blob under K_mem', async () => {
+  it('the original wrap opens back to a real 32-byte K_blob under K_node', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)

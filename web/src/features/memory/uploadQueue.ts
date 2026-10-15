@@ -174,7 +174,7 @@ export function enqueueUploads(
   selections: { file: File; mediaType: string }[],
   opts: { label: string; onComplete?: (batch: UploadBatch) => void; onFileDone?: (file: UploadFile) => void } = { label: '' },
 ): string | null {
-  // the batch's transport: the share-scoped upload fn, or the authed addMedia over scope/node/K_mem (default).
+  // the batch's transport: the share-scoped upload fn, or the authed addMedia over scope/node/K_node (default).
   // the file's creation date is passed so a source with no EXIF date can fall back to it (cr-0066).
   const upload: UploadFn =
     target.upload ?? ((source, o) => addMedia(target.scopeId!, target.nodeId!, target.memoryKey!, source, undefined, o))

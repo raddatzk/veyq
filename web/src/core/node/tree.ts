@@ -13,7 +13,7 @@
 // decrypts fully. Below the root an entry is under its parent's key (epoch-independent) — only scope-root entries key
 // off the epoch, although every seal still binds the node's epoch (ADR 0072).
 //
-// **Every seal names its node (ADR 0072).** A name and a `K_mem` wrap are bound to (scope, node, epoch, placement
+// **Every seal names its node (ADR 0072).** A name and a `K_node` wrap are bound to (scope, node, epoch, placement
 // version) — the node id the client mints at creation, the epoch it is sealed at, and the version of its placement
 // the wire stores them at (0 at birth, n+1 after a move or rename built on n; ADR 0080 Decision 3) — so a server that
 // serves one node's wrap on another's row, or a wrap a move superseded, gets a refusal, never the other Memory's key
@@ -55,7 +55,7 @@ export type TreeNode = {
   epoch: number
   name: string
   wrappedContentKey: string
-  /** Curated metadata (date now, place later) sealed under this node's `K_mem` (cr-0067); null when unset. */
+  /** Curated metadata (date now, place later) sealed under this node's `K_node` (cr-0067); null when unset. */
   wrappedMeta: string | null
   /** The version [wrappedMeta] is at — what a meta write states it was built from (ADR 0077). */
   metaVersion: number
@@ -259,7 +259,7 @@ export async function createContentNode(
   const parentSlot = parentId ?? scopeId
   const entryKey = parent?.key ?? writeKey(epochs)
   const contentKey = v1.randomBytes(32)
-  // The client mints the node's id, so its name, K_mem wrap and meta are all sealed bound to it (ADR 0072), at the
+  // The client mints the node's id, so its name, K_node wrap and meta are all sealed bound to it (ADR 0072), at the
   // placement version a new node has (0, ADR 0080 Decision 3).
   const node = { scopeId, nodeId: crypto.randomUUID(), epoch: epochs.current, placementVersion: 0 }
   const wrappedContentKey = wrapContentKey(entryKey, node, contentKey)
@@ -275,7 +275,7 @@ export async function createContentNode(
         orderIndex: 0,
         epoch: epochs.current,
         wrappedContentKey,
-        wrappedMeta: metaSealer?.(contentKey, node), // sealed under the just-minted K_mem (e.g. a pre-armed location)
+        wrappedMeta: metaSealer?.(contentKey, node), // sealed under the just-minted K_node (e.g. a pre-armed location)
       },
     }),
   )

@@ -34,7 +34,7 @@ function mockContent(over: { createNode: ReturnType<typeof echoCreate> }) {
 const nameCtx = (nodeId: string, epoch = 0) => ({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch, placementVersion: 0 }) as const
 
 describe('createMemory', () => {
-  it('seals the name, blinds the slug, and wraps a K_mem that opens back (operator-blind)', async () => {
+  it('seals the name, blinds the slug, and wraps a K_node that opens back (operator-blind)', async () => {
     const create = echoCreate()
     mockContent({ createNode: create })
 
@@ -48,7 +48,7 @@ describe('createMemory', () => {
     expect(nodeId).toBe(req.nodeId)
     // name round-trips under K_SC, bound to this node; the server only ever saw ciphertext
     expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Italien 2026')
-    // wrapped K_mem opens to exactly the returned key
+    // wrapped K_node opens to exactly the returned key
     expect(Array.from(openMemory(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
     // ...and is refused on any other node's row (a server moving the wrap gets no key)
     expect(() => openMemory(SCOPE_ID, scopeKey, { id: crypto.randomUUID(), epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey }))
@@ -111,7 +111,7 @@ describe('a Memory inside a folder (ADR 0080 Decision 1)', () => {
 
     const req = create.mock.calls[1][0].createNodeRequest
     expect(req.parentId).toBe(folderId)
-    // the Memory's K_mem opens under the folder's key, and not under K_SC…
+    // the Memory's K_node opens under the folder's key, and not under K_SC…
     expect(Array.from(openContentKey(SCOPE_ID, folderKey, { id: nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
     expect(() => openContentKey(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey })).toThrow(v1.OpenRefused)
     // …and the browse's walk from the scope root opens it through the folder
@@ -119,11 +119,11 @@ describe('a Memory inside a folder (ADR 0080 Decision 1)', () => {
   })
 })
 
-describe('createChapter — recursive K_mem (cr-0060)', () => {
-  it('wraps the chapter K_mem under the PARENT Memory key, not K_SC', async () => {
+describe('createChapter — recursive K_node (cr-0060)', () => {
+  it('wraps the chapter K_node under the PARENT Memory key, not K_SC', async () => {
     const create = echoCreate()
     mockContent({ createNode: create })
-    const parentKey = v1.randomBytes(32) // the parent Memory's K_mem
+    const parentKey = v1.randomBytes(32) // the parent Memory's K_node
     const MEM = '5c09e000-0000-4000-8000-00000000000a'
 
     const { nodeId, chapterKey } = await createChapter(SCOPE_ID, epochsOf(scopeKey), parentKey, 'Tag 1', MEM)
@@ -133,13 +133,13 @@ describe('createChapter — recursive K_mem (cr-0060)', () => {
     expect(req.parentId).toBe(MEM)
     expect(req.nodeId).toMatch(UUID)
     expect(nodeId).toBe(req.nodeId)
-    // the chapter's entry is its parent's (ADR 0080 Decision 2): name and slug under the Memory's K_mem, not K_SC —
+    // the chapter's entry is its parent's (ADR 0080 Decision 2): name and slug under the Memory's K_node, not K_SC —
     // so a guest of the Memory's share reads the chapter titles
     expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), parentKey, fromB64(req.encryptedName)))).toBe('Tag 1')
     expect(() => v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName))).toThrow(v1.OpenRefused)
     expect(req.slugToken).toBe(b64std(v1.slugToken(parentKey, MEM, 'tag-1')))
     const row = { id: nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey }
-    // the K_mem opens under the PARENT key…
+    // the K_node opens under the PARENT key…
     expect(Array.from(openContentKey(SCOPE_ID, parentKey, row)!)).toEqual(Array.from(chapterKey))
     // …and NOT under K_SC (a wrong KEK can't open it — crypto-enforced least privilege)
     expect(() => openContentKey(SCOPE_ID, scopeKey, row)).toThrow(v1.OpenRefused)

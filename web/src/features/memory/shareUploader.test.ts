@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// uc.sharing.share-uploader — the guest of a WRITE_ONLY link never holds K_mem (ADR 0031 point 7). The two negatives
-// were seen red on the tree before the drop key (the resolve handed the guest K_mem, and its blob keys opened under
+// uc.sharing.share-uploader — the guest of a WRITE_ONLY link never holds K_node (ADR 0031 point 7). The two negatives
+// were seen red on the tree before the drop key (the resolve handed the guest K_node, and its blob keys opened under
 // it); each is anchored on the refusal the fixed tree answers with and carries a positive control. The last case is
 // the positive that proves the key path reaches every reader: the curator's gallery and a viewer link both open
 // what the guest uploaded, through the real read functions.
@@ -48,13 +48,13 @@ function heldBytes(value: unknown, seen = new Set<unknown>()): Uint8Array[] {
 }
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i])
 
-/** The Memory as its owner set it up: K_mem, a drop keypair (private half on the node), one WRITE_ONLY share. */
+/** The Memory as its owner set it up: K_node, a drop keypair (private half on the node), one WRITE_ONLY share. */
 function uploaderShare() {
-  const kMem = v1.randomBytes(32)
+  const kNode = v1.randomBytes(32)
   const kShare = v1.randomBytes(32)
   const drop = v1.generateDropKey()
   const sealedDropPrivateKey = b64std(
-    v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kMem, v1.serializeDropKey(drop)),
+    v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kNode, v1.serializeDropKey(drop)),
   )
   const resolve: PublicShare = {
     role: ShareRole.WriteOnly,
@@ -65,11 +65,11 @@ function uploaderShare() {
     sealedDropPublicKey: b64std(
       v1.seal({ purpose: 'drop-public-key' }, kShare, v1.serializeHybridPublic(v1.dropKeyPublic(drop))),
     ),
-    // A row stored before the drop key still carries the K_mem wrap. The guest must not open it.
-    wrap: b64std(v1.seal({ purpose: 'share-key' }, kShare, kMem)),
+    // A row stored before the drop key still carries the K_node wrap. The guest must not open it.
+    wrap: b64std(v1.seal({ purpose: 'share-key' }, kShare, kNode)),
     nodes: [],
   }
-  return { kMem, kShare, sealedDropPrivateKey, resolve }
+  return { kNode, kShare, sealedDropPrivateKey, resolve }
 }
 
 /** The object store the guest PUTs frames into and a reader GETs them back from. */
@@ -132,32 +132,32 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
-describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
+describe('a WRITE_ONLY guest never holds K_node (ADR 0031 point 7)', () => {
   it('the resolved session holds no Memory key — even when the server still serves the wrap', async () => {
-    const { kMem, kShare, resolve } = uploaderShare()
+    const { kNode, kShare, resolve } = uploaderShare()
     guestApi(resolve)
 
     const resolved = await resolveShare(UPLOADER_SHARE, b64url(kShare))
 
     expect(resolved.role).toBe(ShareRole.WriteOnly)
-    expect(heldBytes(resolved).some((b) => sameBytes(b, kMem))).toBe(false)
+    expect(heldBytes(resolved).some((b) => sameBytes(b, kNode))).toBe(false)
     // control, same predicate: what the guest does hold is the drop public key, to wrap its own key to
     expect(resolved.access.kind).toBe('drop')
     expect(heldBytes(resolved).length).toBeGreaterThan(0)
   })
 
-  it('a blob key the guest sealed does not open under K_mem — it opens through the drop key and the guest\'s key', async () => {
-    const { kMem, kShare, sealedDropPrivateKey, resolve } = uploaderShare()
+  it('a blob key the guest sealed does not open under K_node — it opens through the drop key and the guest\'s key', async () => {
+    const { kNode, kShare, sealedDropPrivateKey, resolve } = uploaderShare()
     const api = guestApi(resolve)
 
     const { identity, declared } = await guestUploads(kShare, api)
 
     const blobKeyCtx = { purpose: 'blob-key', scopeId: SCOPE_ID, ownerId: declared.ownerId, blobId: declared.blobId, role: 'ORIGINAL' } as const
     const wrappedBlobKey = fromB64std(declared.wrappedBlobKey)
-    expect(() => v1.open(blobKeyCtx, kMem, wrappedBlobKey)).toThrow(new v1.OpenRefused('blob-key'))
-    // control: K_mem → drop private key → K_up opens it
+    expect(() => v1.open(blobKeyCtx, kNode, wrappedBlobKey)).toThrow(new v1.OpenRefused('blob-key'))
+    // control: K_node → drop private key → K_up opens it
     const drop = v1.deserializeDropKey(
-      v1.open({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kMem, fromB64std(sealedDropPrivateKey)),
+      v1.open({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kNode, fromB64std(sealedDropPrivateKey)),
     )
     const kUp = v1.openAs(
       { purpose: 'upload-identity-key', scopeId: SCOPE_ID, nodeId: NODE_ID, identityId: identity.identityId },
@@ -166,12 +166,12 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
     expect(v1.open(blobKeyCtx, kUp, wrappedBlobKey)).toHaveLength(32)
     // and the display name is the guest's too, not the Memory's
     const nameCtx = { purpose: 'share-identity-name', scopeId: SCOPE_ID, shareId: UPLOADER_SHARE, identityId: identity.identityId } as const
-    expect(() => v1.open(nameCtx, kMem, fromB64std(identity.sealedDisplayName))).toThrow(new v1.OpenRefused('share-identity-name'))
+    expect(() => v1.open(nameCtx, kNode, fromB64std(identity.sealedDisplayName))).toThrow(new v1.OpenRefused('share-identity-name'))
     expect(new TextDecoder().decode(v1.open(nameCtx, kUp, fromB64std(identity.sealedDisplayName)))).toBe('Gast')
   })
 
   it('the curator\'s gallery and a viewer link both open the guest\'s upload, and a member edit keeps its path', async () => {
-    const { kMem, kShare, sealedDropPrivateKey, resolve } = uploaderShare()
+    const { kNode, kShare, sealedDropPrivateKey, resolve } = uploaderShare()
     const api = guestApi(resolve)
     const { identity, declared, completed } = await guestUploads(kShare, api)
     const identityId: string = identity.identityId
@@ -196,16 +196,16 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
     const page = await listMediaPage(SCOPE_ID, NODE_ID)
     if (page.notModified) throw new Error('unreachable')
     const [item] = page.items
-    expect(await openOriginal(SCOPE_ID, kMem, item)).toEqual(PHOTO)
+    expect(await openOriginal(SCOPE_ID, kNode, item)).toEqual(PHOTO)
     // the guest's upload carries its blob meta (inbox #397), opened through the same chain as its K_blob — the guest's
-    // key, never K_mem directly
-    expect(originalBlobMeta(SCOPE_ID, kMem, item)).toMatchObject({ type: 'application/pdf', name: 'Gast-Scan.pdf' })
+    // key, never K_node directly
+    expect(originalBlobMeta(SCOPE_ID, kNode, item)).toMatchObject({ type: 'application/pdf', name: 'Gast-Scan.pdf' })
 
-    // a member edits its capture time: the re-seal is under the guest's key, never K_mem — no media changes path
-    const edited = await setMediaMeta(SCOPE_ID, item, kMem, 1_700_000_000_000)
+    // a member edits its capture time: the re-seal is under the guest's key, never K_node — no media changes path
+    const edited = await setMediaMeta(SCOPE_ID, item, kNode, 1_700_000_000_000)
     const metaCtx = { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: item.mediaId } as const
-    expect(() => v1.open(metaCtx, kMem, fromB64std(edited.wrappedMeta!))).toThrow(new v1.OpenRefused('media-meta'))
-    expect(unsealMeta(SCOPE_ID, kMem, { ...item, wrappedMeta: edited.wrappedMeta! })?.capturedAtOverride).toBe(1_700_000_000_000)
+    expect(() => v1.open(metaCtx, kNode, fromB64std(edited.wrappedMeta!))).toThrow(new v1.OpenRefused('media-meta'))
+    expect(unsealMeta(SCOPE_ID, kNode, { ...item, wrappedMeta: edited.wrappedMeta! })?.capturedAtOverride).toBe(1_700_000_000_000)
 
     // the curator's buckets: the guest's primary carries its wrapped key, and its name opens through it
     stubApi(bucketsApi, {
@@ -218,7 +218,7 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
       },
     })
     const [primary] = await listBuckets(SCOPE_ID, NODE_ID)
-    expect(openBucketName(SCOPE_ID, NODE_ID, kMem, primary)).toBe('Gast')
+    expect(openBucketName(SCOPE_ID, NODE_ID, kNode, primary)).toBe('Gast')
 
     // a viewer link of the same Memory: the resolve's node carries the drop key, Memories' media read the row and the
     // guest's wrapped key — and no name, which the contract has no field for (ADR 0030 point 8). Typed, so a shape
@@ -226,7 +226,7 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
     const kViewer = v1.randomBytes(32)
     const viewerResolve = {
       role: ShareRole.Read, passwordRequired: false, scopeId: SCOPE_ID, nodeId: NODE_ID,
-      wrap: b64std(v1.seal({ purpose: 'share-key' }, kViewer, kMem)),
+      wrap: b64std(v1.seal({ purpose: 'share-key' }, kViewer, kNode)),
       sealedName: b64std(v1.seal({ purpose: 'share-memory-name' }, kViewer, v1.utf8('Hochzeit'))),
       nodes: [{ id: NODE_ID, kind: MEMORY_KIND, epoch: 0, sealedDropPrivateKey }],
     } satisfies PublicShare

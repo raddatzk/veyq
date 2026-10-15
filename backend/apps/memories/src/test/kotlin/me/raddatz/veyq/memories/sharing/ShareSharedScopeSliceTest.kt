@@ -44,7 +44,7 @@ import me.raddatz.veyq.core.sharing.SharingStore
  * member soft-revokes the shares that member created **in that scope** (their links then 404), leaving other
  * members' shares untouched; any remaining member may re-activate a deactivated share, which **transfers its
  * ownership** — unless a departed member may hold its link, which is then only re-issued (ADR 0075: a new id and
- * key, the old one off, one transaction), and a removal can opt to turn off every link of the group. `K_mem` is
+ * key, the old one off, one transaction), and a removal can opt to turn off every link of the group. `K_node` is
  * untouched — deactivation is the honest-server revocation layer. Distinct domains keep the JVM-lived H2 mem DB
  * from bleeding state between tests.
  *

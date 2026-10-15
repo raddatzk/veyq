@@ -7,10 +7,10 @@ import jakarta.enterprise.context.ApplicationScoped
 
 /** The node kinds Memories owns (ADR 0079 Decision 3) — the values of `veyq_node.kind` core does not interpret. */
 object MemoriesNodeKinds {
-    /** The content unit: holds media, carries its own `K_mem` under `K_SC`, the root of a share. */
+    /** The content unit: holds media, carries its own `K_node` under `K_SC`, the root of a share. */
     const val MEMORY = "MEMORY"
 
-    /** A part of a Memory: holds media, carries its own `K_mem` wrapped under the parent Memory's, the root of a share
+    /** A part of a Memory: holds media, carries its own `K_node` wrapped under the parent Memory's, the root of a share
      *  (a smaller Memory link: its key opens nothing of the parent, ADR 0080 decisions 9 and 13). */
     const val CHAPTER = "CHAPTER"
 

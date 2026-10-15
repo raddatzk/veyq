@@ -1,7 +1,7 @@
 // en.memory.node-meta (web) — the sealed `wrappedMeta` blob on a node, the single home for a node's curated
 // node-level metadata: a Memory's `date` and `location`, and any node's `cover` (inbox #411 moved this envelope from
 // Memories to core, so a folder's and a drop box's cover use the very one a Memory's does). AEAD-sealed
-// under the node's `K_mem` (purpose `node-meta`, bound to (scope, node) — ADR 0072) so the blind server only ever
+// under the node's `K_node` (purpose `node-meta`, bound to (scope, node) — ADR 0072) so the blind server only ever
 // holds ciphertext it cannot move to another node (cr-0067 / cr-0069 / cr-0072).
 //
 // The blob is **client-versioned** and grows without a contract change: `{ v, date?, location?, cover? }`. Because a
@@ -29,7 +29,7 @@ const metaContext = (a: NodeMetaAddress) => ({ purpose: 'node-meta', scopeId: a.
 export type RawNodeMeta = { v: number; cover?: unknown; [field: string]: unknown }
 
 /**
- * Unseal a node's whole `wrappedMeta` under `nodeKey` (`K_mem`) into the raw envelope **for display**.
+ * Unseal a node's whole `wrappedMeta` under `nodeKey` (`K_node`) into the raw envelope **for display**.
  * **Best-effort (E3):** an absent, wrong-key, another node's, or malformed blob yields an empty `{ v: 1 }` (never a
  * throw), so a header or card degrades instead of breaking. **Never the base of a write** — that empty envelope,
  * re-sealed with one field, is exactly how a write erased every sibling (#273); writers open with
@@ -47,7 +47,7 @@ export function unsealNodeMeta(nodeKey: Uint8Array, node: NodeMetaAddress, wrapp
   return { v: 1 }
 }
 
-/** Seal a whole node-metadata blob under `nodeKey` (`K_mem`), bound to its node → opaque base64. */
+/** Seal a whole node-metadata blob under `nodeKey` (`K_node`), bound to its node → opaque base64. */
 export function sealNodeMeta(nodeKey: Uint8Array, node: NodeMetaAddress, meta: RawNodeMeta): string {
   const bytes = new TextEncoder().encode(JSON.stringify({ ...meta, v: 1 }))
   return b64std(v1.seal(metaContext(node), nodeKey, bytes))

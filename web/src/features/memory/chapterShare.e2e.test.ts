@@ -141,7 +141,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('chapter share e2e (live, real crypto, th
     const wire = (await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json()) as RawResolve
     expect(wire.rootKind).toBe('CHAPTER')
     expect(wire.nodeId, "the drop key the guest seals to is the chapter's").toBe(chapterId)
-    expect(wire.wrap ?? null, 'an uploader link carries no K_mem wrap').toBeNull()
+    expect(wire.wrap ?? null, 'an uploader link carries no K_node wrap').toBeNull()
     expect(wire.sealedDropPublicKey, 'only the sealed drop public key').toBeTruthy()
 
     const resolved = await resolveShare(shareId, fragmentKey)

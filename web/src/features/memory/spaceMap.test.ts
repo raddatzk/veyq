@@ -38,7 +38,7 @@ const located = (lat: number, lng: number): MemoryLocation => ({
 // A pending auto place: armed at creation, no geotagged media yet → no `derived` position.
 const pendingAuto: MemoryLocation = { name: '', nameSource: 'geocoded', derivedMode: 'auto' }
 
-/** Build a content node (MEMORY/CHAPTER): mint a K_mem, wrap it under `parentKey`, seal the location under it —
+/** Build a content node (MEMORY/CHAPTER): mint a K_node, wrap it under `parentKey`, seal the location under it —
  *  each bound to the node (the same contexts tree.ts / nodeMeta.ts open with). `metaFor` seals the meta as if it
  *  belonged to another node (a server moving one node's wrappedMeta onto another's row). */
 function content(
@@ -78,7 +78,7 @@ describe('collectLocatedPins', () => {
   const memPending = content('memPending', MEMORY_KIND, null, scopeKey, { location: pendingAuto })
   const memLocked = content('memLocked', MEMORY_KIND, null, scopeKey, {
     location: located(9, 9),
-    wrapUnder: v1.randomBytes(32), // K_mem sealed under a key we don't have → nodeContentKey can't chain it
+    wrapUnder: v1.randomBytes(32), // K_node sealed under a key we don't have → nodeContentKey can't chain it
   })
   const memMoved = content('memMoved', MEMORY_KIND, null, scopeKey, { location: located(7, 7), metaFor: 'memRoot' })
   const tree: TreeNode[] = [

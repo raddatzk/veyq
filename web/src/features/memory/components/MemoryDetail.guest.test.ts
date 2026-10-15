@@ -89,7 +89,7 @@ function head(role: ShareRole): PublicShareHead {
       role, scopeId: SCOPE, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
       nodes: [
         { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
-        // a share serves the node's `wrappedMeta` UNCHANGED: the Memory's carries its participants, the guest holds its `K_mem`
+        // a share serves the node's `wrappedMeta` UNCHANGED: the Memory's carries its participants, the guest holds its `K_node`
         { ...child(MEMORY, ROOT, keys.root, keys.memory, 'Rom 2026', MEMORY_KIND), wrappedMeta: sealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, { v: 1, participants: { userIds: PARTICIPANTS } }) },
         child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND),
       ],
@@ -220,7 +220,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
   }
 
   // The ACCEPTED RESIDUAL of ADR 0083 decision 4, pinned so the docs stay honest: the share serves the node's meta as the member
-  // sealed it and the guest holds `K_mem`, so the blob a link holder can open DOES list the participants - as opaque user ids,
+  // sealed it and the guest holds `K_node`, so the blob a link holder can open DOES list the participants - as opaque user ids,
   // never a name. The interface (above) is what shows a guest none; if the list ever carries names, that decision is open again.
   it('the meta a share serves lists the participants as opaque ids only - the residual the interface hides', async () => {
     const served = head(ShareRole.Read).share.nodes.find((n) => n.id === MEMORY)!

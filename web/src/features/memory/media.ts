@@ -1,6 +1,6 @@
 // en.memory.media + en.memory.derivatives (web) — the encrypted media-blob data layer (cr-0028, cr-0045).
 // Operator-blind, direct-to-store: a blob is sealed client-side as chunked AEAD under a fresh random K_blob
-// (wrapped under the Memory's K_mem, ADR 0012), the ciphertext chunks travel straight to the object store via
+// (wrapped under the Memory's K_node, ADR 0012), the ciphertext chunks travel straight to the object store via
 // short-TTL presigned URLs (ADR 0013) — never through the backend — and the backend records only opaque
 // metadata + the wrap + the media→node link.
 //
@@ -58,7 +58,7 @@ export type { BlobRef, BlobDeclare, ChunkPut, ReservedUpload, WindowFn } from '.
 // that attaches a blob under another media, or serves a thumbnail in another's slot, gets a wrap that does not open
 // there.
 //
-// A media's seals are under `K_mem`, except for one a WRITE_ONLY guest added: that one's are under the guest's own
+// A media's seals are under `K_node`, except for one a WRITE_ONLY guest added: that one's are under the guest's own
 // key (ADR 0031 point 7). A function handed the MEDIA resolves the key itself ([mediaKey]); one handed only an id
 // or a blob ref is handed the key, which its caller asks [mediaKey] for.
 
@@ -82,7 +82,7 @@ export type { MemoryBlobRole } from './blobRole'
 export type MediaDerivative = { kind: MediaDerivativeKind; ref: BlobRef }
 
 /**
- * The **listed-metadata tier** sealed under `K_mem` (cr-0068) — one always-listed blob (returned with every
+ * The **listed-metadata tier** sealed under `K_node` (cr-0068) — one always-listed blob (returned with every
  * `listMedia`) carrying everything the gallery + place need at list-level, kept small:
  * - **geometry** `w,h` — the justified grid's aspect (cr-0059);
  * - **capture time** `capturedAt` (EXIF date or the file's creation date) + any user `capturedAtOverride` — date
@@ -121,7 +121,7 @@ export type MediaMeta = {
 }
 
 /**
- * The heavy **EXIF bundle** sealed under `K_mem`, lazy-loaded per item for the lightbox (cr-0064). A client-only,
+ * The heavy **EXIF bundle** sealed under `K_node`, lazy-loaded per item for the lightbox (cr-0064). A client-only,
  * versioned shape (never a contract field), so it can grow without the operator ever learning a field. Every
  * field is optional (best-effort extraction). The listed essentials — capture time (cr-0066) and GPS (cr-0068) —
  * live in the [MediaMeta] tier, not here; the original's file name and type in its blob's meta ([originalBlobMeta]).
@@ -167,7 +167,7 @@ export type MediaItem = {
   mediaId: string
   original: BlobRef
   derivatives: MediaDerivative[]
-  /** The original's listed-metadata tier sealed under `K_mem` (opaque base64); unwrap with [unsealMeta]. Absent when none. */
+  /** The original's listed-metadata tier sealed under `K_node` (opaque base64); unwrap with [unsealMeta]. Absent when none. */
   wrappedMeta?: string
   /** The version [wrappedMeta] is at — what a meta write states it was built from (ADR 0077). Absent in the
    *  public-share viewer, which never writes; a write that lacks it states 0 and re-bases on the `409`. */
@@ -186,7 +186,7 @@ export type MediaItem = {
   /** cr-0113: the bucket this media lives in, or undefined = the uploader's primary. */
   bucketId?: string
   /** Set when a WRITE_ONLY guest added this media: its seals are under that guest's own key, which [mediaKey]
-   *  opens from here (ADR 0031 point 7). Undefined for every other media, whose seals are under `K_mem`. */
+   *  opens from here (ADR 0031 point 7). Undefined for every other media, whose seals are under `K_node`. */
   uploader?: UploaderOrigin
 }
 
@@ -229,7 +229,7 @@ function pageItems(nodeId: string, page: MediaListPage): MediaItem[] {
 }
 
 /**
- * Unwrap a media's sealed listed-metadata tier under `K_mem` (cr-0068; operator-blind — the server only ever
+ * Unwrap a media's sealed listed-metadata tier under `K_node` (cr-0068; operator-blind — the server only ever
  * holds the ciphertext). Best-effort: null when none was sealed or the wrap doesn't open. Geometry `w,h` is
  * validated (positive, finite) so a bad payload falls back to a default aspect rather than break the grid; the
  * other fields are coerced to finite numbers. Use [effectiveCapturedAt] for the sort/display date.
@@ -356,7 +356,7 @@ export async function readCaptureTime(file: Blob, mediaType: string, lastModifie
 
 // --- add-media -------------------------------------------------------------
 
-/** Seal a small JSON payload under `K_mem` as the object `context` names (a short AEAD blob) → opaque base64. */
+/** Seal a small JSON payload under `K_node` as the object `context` names (a short AEAD blob) → opaque base64. */
 function sealJson(memoryKey: Uint8Array, value: unknown, context: v1.SealContext): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value))
   return b64std(v1.seal(context, memoryKey, bytes))
@@ -475,7 +475,7 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
 }
 
 /**
- * Seal the two metadata tiers under `K_mem` (best-effort, operator-blind): the always-listed **metadata** tier
+ * Seal the two metadata tiers under `K_node` (best-effort, operator-blind): the always-listed **metadata** tier
  * (`{v,w,h,capturedAt,capturedAtSource,gpsLat,gpsLng}` — geometry + the EXIF date, else the file's creation date,
  * + GPS + a resolved place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle). Each tier is null when
  * its source is absent — a video, a screenshot or a PDF seals no EXIF tier; its name and type ride its blob's meta.
@@ -612,8 +612,8 @@ export type MediaUploadTransport = {
 /**
  * Seal the original + its derivatives (each under its own `K_blob`), upload all ciphertext chunks direct-to-store,
  * and complete + attach — via an injected [MediaUploadTransport]. Shared by the authed [addMedia] and the
- * anonymous contributor upload. `memoryKey` is the key the new media is sealed under: `K_mem`, or a WRITE_ONLY
- * guest's own identity key, since that guest never holds `K_mem` (ADR 0031 point 7). `deriver` is injectable for
+ * anonymous contributor upload. `memoryKey` is the key the new media is sealed under: `K_node`, or a WRITE_ONLY
+ * guest's own identity key, since that guest never holds `K_node` (ADR 0031 point 7). `deriver` is injectable for
  * tests; `opts` carries `onProgress` (0..1) + an `AbortSignal`.
  *
  * The seam to core (cr-files-application B1): planning each blob ([planBlob]) and reserving + pumping them
@@ -880,7 +880,7 @@ export type MediaMetaWrite = { tier: MediaMeta | null; wrappedMeta: string | nul
 
 /**
  * Set (or clear, with `null`) a media's **capturedAt override** (cr-0065/0066/0068) — a corrected capture time.
- * Operator-blind: the whole listed-metadata tier is re-sealed under `K_mem` with the override added/removed and
+ * Operator-blind: the whole listed-metadata tier is re-sealed under `K_node` with the override added/removed and
  * PUT verbatim (geometry, GPS and the place name ride along unchanged — only the date is user-editable). The base
  * is the tier the media was listed with, at its `metaVersion` (ADR 0077); a peer's correction written meanwhile
  * throws `MetaConflictError` so the lightbox re-opens on it, while a peer's backfill merges silently. Clearing the
@@ -964,7 +964,7 @@ function metaHasContent(m: RawMediaMeta): boolean {
  * one, or null for no write; on a `409 stale_version` it re-runs on the tier the conflict handed back. A present
  * tier that does not open is refused (`MetaUnreadableError`), never rebuilt from empty (#273). The key is the one
  * the media's origin fixes ([mediaKey]): a member editing what a WRITE_ONLY guest added re-seals under that guest's
- * key, never under `K_mem`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is
+ * key, never under `K_node`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is
  * left worth sealing.
  */
 async function persistMeta(

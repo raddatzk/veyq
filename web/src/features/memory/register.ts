@@ -33,7 +33,7 @@ export const MEMORIES_ROUTE_SLUG = 'memories'
 export function registerMemories(registry: Registry): void {
   // A Memory (cr-0104) and a chapter (ADR 0080 Decision 13) are both share roots for every role — the backend's
   // `MemoryShareRoots` — and both open the same detail, to the gallery (cr-0060). A chapter's share wraps its own
-  // `K_mem`: its guest holds nothing of the Memory above it.
+  // `K_node`: its guest holds nothing of the Memory above it.
   // Both name the one row source (called once, handed the nodes of both; a CHAPTER sits only inside a MEMORY, so at a folder
   // level that is the Memories).
   // One create dialog and one share dialog serve both kinds: the create's `kind` prop picks Memory or chapter, the

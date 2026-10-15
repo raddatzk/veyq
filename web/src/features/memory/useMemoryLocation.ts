@@ -79,7 +79,7 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
     if (mapsAvailable.value) locationEditorOpen.value = true
   }
 
-  /** Save (or, for null, remove) the location: read-modify-write under K_mem — the date is preserved either way. */
+  /** Save (or, for null, remove) the location: read-modify-write under K_node — the date is preserved either way. */
   async function onLocationSave(location: MemoryLocation | null) {
     const key = ctx.memoryKey()
     const write = ctx.write()
