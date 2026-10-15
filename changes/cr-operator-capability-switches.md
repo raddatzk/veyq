@@ -251,7 +251,7 @@ deleting them. Inbox #443 asked for this, and **it must land before V1**.
   - Tests: the panel's tree and the three states, the confirmation showing `whenOff` in both locales, the CLI's
     commands, its locale choice and its exit codes.
   - **Done when:** `npm run check` in `admin-web/` is green.
-- [ ] **4 web: the withheld wrap (D6).**
+- [x] **4 web: the withheld wrap (D6).** Done in 9e1710cf; the measurement in 300d5bf3.
   - **Measured (2026-10-15, before any change; the six suites on it green, 54 tests):**
     - **The unlock modules already keep the local key on a missing wrap.** `unlockWithDevice`
       (`web/src/features/account/unlock/unlock.ts:177`) looks its DEVICE wrap up by the trust record's `wrapId` and
@@ -281,8 +281,50 @@ deleting them. Inbox #443 asked for this, and **it must land before V1**.
       says why. The pre-auth capability manifest is the one thing that tells them apart, and only one way: with
       the switch on, an absent wrap was removed; with it off, it may be withheld or also removed. Keeping the
       local key in that second case is harmless (it opens nothing without its wrap), so the switch decides.
-  - Then the fallback, with its tests: `DEVICE` withheld → password + Secret Key; `DEVICE_KEY` withheld →
-    password; local key kept; switched on again → the device unlocks as before.
+  - **Built (`LoginView.vue` only; the unlock modules needed no change).**
+    - `enrolConvenienceWrap` no longer replaces a withheld tier: with `core.remember-device.passwordless` off and a
+      DEVICE_KEY record for the entered email (`rememberedWhileOff()`, read from `rememberedWrapId`), the toggle-off
+      branch caches the session vault but neither clears the DEVICE_KEY wrap nor enrols a DEVICE one. The skip is
+      keyed on the switch, not the record: with the switch on, an absent wrap was removed and the sign-in replaces
+      the stale record as before (uc.account.remember-this-device E2).
+    - `resolveDeviceState` asks a trusted device for the Secret Key up front while `core.remember-device` is off,
+      instead of letting `unlockWithDevice` fail over to it after a first submit. The race (a manifest read before
+      a switch-off) still lands on the old reveal at `:176-181`.
+    - **The explanatory line is built**, as a one-liner in the existing idiom: the Secret-Key field's hint reads
+      `unlock.deviceHeldBack` instead of `unlock.secretKeyHint` (which says "first time on this device … you won't
+      need it here again", false here) when the device holds a record whose switch is off. EN + DE.
+    - Untouched on purpose: the session vault (sessionStorage, the "off" tier) is still cached on the fallback
+      sign-in with `core.remember-device` off, as before this CR (`LoginView.test.ts`'s existing
+      "remember-device off" case pins it). It is no server wrap, so no switch withholds it; whether
+      `core.remember-device` should also stop it is a question for the owner, not this phase.
+  - **Deviation from D6's wording.** Without `DEVICE_KEY` the fallback is password **and Secret Key**, not the
+    password: measured above, and confirmed by phase 1's `whenOff` text. A2 of the use-case still says otherwise;
+    phase 6 corrects it.
+  - **Bites.** Live defect first: on the unfixed view, the passwordless case was red at `clearDeviceKey`
+    (called once), and the trusted case at the Secret-Key field (absent). Then each red once by injection, restored
+    byte for byte from a snapshot, `git status --porcelain` unchanged over the run:
+    - withheld DEVICE_KEY replaced by DEVICE again (guard removed) → "passwordless off: a remembered device …" red;
+    - the trusted device asking no Secret Key up front → "remember-device off: a trusted device …" red;
+    - no hint (`heldBack = false`) → both of those red, each run on its own;
+    - the skip keyed on the record, not the switch → "control: with its switch on …" red;
+    - the device re-enrolling after its wrap is served again → "remember-device on again …" red;
+    - `restoreDeviceKey` dropping the record on a withheld wrap → `deviceKeyWrap.test.ts` "a withheld wrap keeps
+      the record …" red;
+    - `unlockWithDevice` clearing the trust on a withheld wrap → `unlock.device.test.ts` "a withheld DEVICE wrap
+      falls back …" red;
+    - `clearDeviceKey` keeping the local key → "an explicit forget still clears a record whose wrap is withheld" red;
+    - `untrustThisDevice` keeping the local key → `trustDevice.test.ts` "untrust removes the server wrap and the
+      local key" red.
+  - **Measured:** `npm run check` in `web/` green, 343 files / 3952 tests (31 skipped), 7 new (4 in
+    `LoginView.test.ts`, 2 in `deviceKeyWrap.test.ts`, 1 in `unlock.device.test.ts`). The guard glob, run on a
+    clean worktree of this commit (the shared tree carries a neighbour's uncommitted `site/` move, which reddens
+    `validate_wiki_sources.py`), is green, 58 guards.
+  - **For phase 5:** a trusted device (DEVICE) is a sign-in with "Stay signed in" off, then a browser close; a
+    remembered device (DEVICE_KEY) is a sign-in with it on. Switching off then shows the Secret-Key field with
+    the `unlock.deviceHeldBack` hint, the sign-in with password and Secret Key works, and the device's row in
+    the sessions view still says trusted / remembered. Switching on again: the trusted device signs in with the
+    password alone, and the remembered one opens at a restart with no prompt. A reload inside the same browser
+    session opens from the session vault and shows neither, so close the browser between steps.
   - **Done when:** `npm run check` in `web/` is green.
 - [ ] **5 browser pass, the off states the re-cut could not run.**
   - Set up by changes/README.md § the browser pass: a separate DB, the fast-jar under the e2e profile,
