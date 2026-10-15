@@ -136,7 +136,62 @@ deleting them. Inbox #443 asked for this, and **it must land before V1**.
   - **Done when:** the guard's bite is recorded, `python3 scripts/validate_capabilities.py` is green, and the full
     `scripts/validate_*.py` glob is green. `./gradlew check` is red only where the generated `InstanceApi` gains
     methods (expected, changes/README.md § contracts phases).
-- [ ] **2 backend: generator, state, API, withholding.**
+- [x] **2 backend: generator, state, API, withholding.** Done in the commits after d73b50db (generator; switches, API,
+  withholding and the seam's retirement; the restore gate; the contract texts).
+  - **Generator (D2).** buildSrc's `GenerateCapabilityRegister` (`OpenApiTasks.kt`, registered for `:core` beside
+    `generateAdminChannelOperations`, catalog as `@InputFile`) writes `CapabilityIds` (constants + `ADVERTISED`, catalog
+    order) and `CapabilityTexts.BY_ID` into `:core`'s `me.raddatz.veyq.core.platform.capabilities`, so no import moved.
+    It refuses a non-dotted id, two ids naming one constant and a missing or blank text. The hand-pinned file and its
+    one-way drift test are gone. `CapabilityRegistryTest.theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords`
+    takes the drift test's coverage ref: it proves the build reads the catalog, not a copy (a generator that reversed
+    the order was red there). **Web constants: phase 3/4's question, untouched.** The Dockerfile now copies
+    `contracts/platform/capabilities.json` (it copied only `contracts/api`, so the image build would have had no
+    register; not rebuilt here).
+  - **State (D3).** `veyq_capability_switch (id VARCHAR(64) PK, switched_off_at TIMESTAMP NOT NULL)` in the core
+    baseline, pin line updated. `StoredCapabilitySwitches` caches the set, and its `invalidate()` after commit bumps a
+    generation that the cached set is tagged with. A plain null-out, as `StoreSettings` does it, lets a reader that
+    queried just before the commit re-cache the old set after the invalidate; the same window exists in
+    `StoreSettings` and is left alone here. A write takes `VeyqInstance`'s row lock, so two first switch-offs of one
+    entry cannot both insert. `NoCapabilitySwitchedOff` retired. `EveryStoredTimeHasAReaderTest` names
+    `switched_off_at`'s reader as a person reading the database, as the terms acceptance time is named; it is not
+    served. If the owner would rather not store the time, drop the column and the entry.
+  - **API (D4).** `CapabilitySwitchHandler` (commit → invalidate → read back, as `StoreHandler.set` does);
+    `CapabilityRegistry.register()` gives `off` and `effective` from one read of the switches.
+  - **Withholding (D5).** `KeyMaterialHandler.forUser`, where RECOVERY was already withheld.
+  - **Seam (D9).** Before: 3 classes, 12 tests on `SwitchableCapabilities` + `CapabilitySwitchesProfile`
+    (`CapabilityDisabledSliceTest` 7, `DropBoxCapabilitySliceTest` 3, `ReactivateShareCapabilitySliceTest` 2). After:
+    0. All three run on the default profile through `CapabilitySwitchFixtures.with(...)`, which writes the row through
+    `CapabilitySwitchStore` and invalidates; the Admin API path is `InstanceCapabilitiesSliceTest`'s. The seam and its
+    profile are deleted. The leak bite stays in `CapabilityManifestSliceTest`, now asserting `StoredCapabilitySwitches`.
+  - **Beyond the brief, because the table made it wrong.** `scripts/instance_backup.py`'s restore emptiness gate
+    (`NOT_DATA`) now also skips `veyq_capability_switch`: a switch set on the new install before a restore is
+    configuration, not data, and must not refuse the restore. Its selftest and one sentence of
+    `site/.../run/backup-and-restore.md` follow.
+  - **Bites, each red once by injection, restored byte for byte:**
+    - cache ignores the store → `aSwitchOffLeavesTheManifest…` red;
+    - switch-on never deletes → same test red;
+    - no invalidate after the write → same test red;
+    - `effective` without the AND → `aParentOffSwitchesItsChildrenOff…` red;
+    - `off` following the parent → same test red;
+    - unknown-id check removed → `anUnknownIdIsRefusedAndStoresNothing` red (500);
+    - a row stored before the 404 → same test red (`[core]` stored);
+    - `@PermitAll` on the list → `onlyTheServerOwnerReadsOrSwitches` red (200);
+    - DEVICE not withheld → `rememberDeviceOff…` red;
+    - DEVICE_KEY not withheld → `passwordlessOff…` red;
+    - DEVICE deleted on read → `rememberDeviceOff…` red on the restore;
+    - PASSWORD withheld → same test red;
+    - the write lock removed → `twoSimultaneousSwitchOffs…` red (`[500, 200]`);
+    - the generator reversing the order → `CapabilityRegistryTest` red;
+    - catalog: an injected entry re-ran the task and appeared as `BITE_PROBE`, compiling with a `$` and a `"` in its
+      text and `*/ /*` in its description; a blank `de` failed the build naming the entry.
+  - **Measured:** `./gradlew check` green, 1596 tests (root 105, core 1069, memories 355 / 2 skipped, depot 67). The
+    three switch classes are green on MariaDB 11.4 (`run_backend_races_on_mariadb.py --tests …`, 20 tests). The guard
+    glob is green, 58 guards.
+  - **For phase 3:** the wire is `InstanceCapability { id, title, purpose, whenOff, off, effective }` in catalog order,
+    a parent before its children, so the tree is the id prefix. PUT answers the entry as it now stands and is
+    idempotent, an unknown id is `404 capability_not_found`, and a missing `off` is `400 invalid_request`.
+  - **For phase 4:** a withheld wrap is simply absent from `wraps` in the key material. Nothing tells the client why,
+    so what it does with an absent wrap that matches its local device key is the measurement D6 asks for.
   - The work: D2's generator, D3's table, switches and cache, D4's handler on `InstanceResource`, D5 in the
     key-material handler, D9.
   - Tests that must bite:
