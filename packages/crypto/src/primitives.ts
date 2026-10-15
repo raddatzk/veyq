@@ -2,8 +2,9 @@
 // list this module, so `web/` and `admin-web/` cannot import it — every seal they write goes through the typed
 // `seal`/`open`/`sealTo`/`openAs` in ./seal.ts, which binds the object a ciphertext is stored as (ADR 0072
 // Decision 6: the structure is the guard). Only this package's own modules and its conformance test reach here.
-import { x25519 } from '@noble/curves/ed25519.js'
-import { ml_kem768 } from '@noble/post-quantum/ml-kem.js'
+// X-Wing (draft-connolly-cfrg-xwing-kem-11, ADR 0017 decision 2). noble names it `ml_kem768_x25519` and keeps
+// `XWing` only as a legacy alias of that name, so the suite imports the name noble maintains.
+import { ml_kem768_x25519 as xwing } from '@noble/post-quantum/hybrid.js'
 import { hkdf } from '@noble/hashes/hkdf.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { gcm } from '@noble/ciphers/aes.js'
@@ -33,46 +34,27 @@ export const u32be = (n: number): Uint8Array => {
 /** length-prefixed: u32(len) || bytes */
 export const lp = (x: Uint8Array): Uint8Array => concat(u32be(x.length), x)
 
-export type HybridPublic = { x: Uint8Array; m: Uint8Array }
-export type HybridSecret = { x: Uint8Array; m: Uint8Array }
+/** An X-Wing encapsulation key: `pk_M ‖ pk_X`, 1216 bytes. */
+export type HybridPublic = Uint8Array
+/** An X-Wing decapsulation key: the 32-byte seed itself — the draft's private key, expanded on every use. */
+export type HybridSecret = Uint8Array
 
 export const aeadSeal = (key: Uint8Array, nonce: Uint8Array, pt: Uint8Array, aad: Uint8Array): Uint8Array =>
   gcm(key, nonce, aad).encrypt(pt)
 export const aeadOpen = (key: Uint8Array, nonce: Uint8Array, ct: Uint8Array, aad: Uint8Array): Uint8Array =>
   gcm(key, nonce, aad).decrypt(ct)
 
-function combiner(
-  ssM: Uint8Array,
-  ssX: Uint8Array,
-  ctM: Uint8Array,
-  epkX: Uint8Array,
-  pkM: Uint8Array,
-  pkX: Uint8Array,
-): Uint8Array {
-  const ikm = concat(lp(ssM), lp(ssX))
-  const salt = sha256(concat(lp(ctM), lp(epkX), lp(pkM), lp(pkX)))
-  return hkdf(sha256, ikm, salt, utf8('veyq/v1/kem'), 32)
+/** The encapsulation key of a decapsulation key (X-Wing's `GenerateKeyPairDerand(seed)`). */
+export const kemPublic = (sk: HybridSecret): HybridPublic => xwing.getPublicKey(sk)
+
+/** X-Wing encapsulation. `eseed` (64 bytes) makes it deterministic for the vectors; omitted, noble draws it. */
+export function kemEncap(pk: HybridPublic, opts: { eseed?: Uint8Array } = {}): { ct: Uint8Array; ss: Uint8Array } {
+  const { cipherText, sharedSecret } = xwing.encapsulate(pk, opts.eseed)
+  return { ct: cipherText, ss: sharedSecret }
 }
 
-export function kemEncap(
-  pk: HybridPublic,
-  opts: { eskX?: Uint8Array; mlkemMsg?: Uint8Array } = {},
-): { ct: Uint8Array; ss: Uint8Array } {
-  const esk = opts.eskX ?? crypto.getRandomValues(new Uint8Array(32))
-  const epkX = x25519.getPublicKey(esk)
-  const ssX = x25519.getSharedSecret(esk, pk.x)
-  const enc = ml_kem768.encapsulate(pk.m, opts.mlkemMsg)
-  const ss = combiner(enc.sharedSecret, ssX, enc.cipherText, epkX, pk.m, pk.x)
-  return { ct: concat(epkX, enc.cipherText), ss }
-}
-
-export function kemDecap(sk: HybridSecret, pk: HybridPublic, ct: Uint8Array): Uint8Array {
-  const epkX = ct.slice(0, 32)
-  const ctM = ct.slice(32)
-  const ssX = x25519.getSharedSecret(sk.x, epkX)
-  const ssM = ml_kem768.decapsulate(ctM, sk.m)
-  return combiner(ssM, ssX, ctM, epkX, pk.m, pk.x)
-}
+/** X-Wing decapsulation: the combiner binds `pk_X`, which the seed re-derives, so no public key is passed. */
+export const kemDecap = (sk: HybridSecret, ct: Uint8Array): Uint8Array => xwing.decapsulate(ct, sk)
 
 // AAD binds the envelope TYPE byte (0x02 sym / 0x01 asym) alongside the suite marker and the context bytes, so a
 // ciphertext authenticated for one wrap type can never be reinterpreted as the other (defense in depth vs
@@ -93,12 +75,12 @@ export function symUnwrap(kek: Uint8Array, blob: Uint8Array, context: Uint8Array
 const asymKek = (ss: Uint8Array, context: Uint8Array): Uint8Array =>
   hkdf(sha256, ss, new Uint8Array(0), concat(utf8('veyq/v1/wrap'), context), 32)
 
-/** §5a asymmetric wrap: 0x01 || ct(1120) || nonce(12) || aead */
+/** §5a asymmetric wrap: 0x01 || ct(1120) || nonce(12) || aead, where ct is X-Wing's `ct_M ‖ ct_X` */
 export function asymWrap(
   pk: HybridPublic,
   targetKey: Uint8Array,
   context: Uint8Array,
-  opts: { eskX?: Uint8Array; mlkemMsg?: Uint8Array; nonce: Uint8Array },
+  opts: { eseed?: Uint8Array; nonce: Uint8Array },
 ): Uint8Array {
   const { ct, ss } = kemEncap(pk, opts)
   return concat(
@@ -108,10 +90,10 @@ export function asymWrap(
     aeadSeal(asymKek(ss, context), opts.nonce, targetKey, wrapAad(ASYM_TYPE, context)),
   )
 }
-export function asymUnwrap(sk: HybridSecret, pk: HybridPublic, blob: Uint8Array, context: Uint8Array): Uint8Array {
+export function asymUnwrap(sk: HybridSecret, blob: Uint8Array, context: Uint8Array): Uint8Array {
   const ct = blob.slice(1, 1 + 1120)
   const nonce = blob.slice(1 + 1120, 1 + 1120 + 12)
   const aead = blob.slice(1 + 1120 + 12)
-  const ss = kemDecap(sk, pk, ct)
+  const ss = kemDecap(sk, ct)
   return aeadOpen(asymKek(ss, context), nonce, aead, wrapAad(ASYM_TYPE, context))
 }

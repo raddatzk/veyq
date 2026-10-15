@@ -18,32 +18,32 @@ describe('drop key', () => {
     const served = v1.deserializeHybridPublic(v1.serializeHybridPublic(v1.dropKeyPublic(drop)))
     const kUp = v1.randomBytes(32)
     const wrapped = v1.sealTo(ctx, served, kUp)
-    expect(v1.openAs(ctx, v1.dropKeySecret(stored), v1.dropKeyPublic(stored), wrapped)).toEqual(kUp)
+    expect(v1.openAs(ctx, v1.dropKeySecret(stored), wrapped)).toEqual(kUp)
   })
 
   it('another Memory\'s drop key does not open it', () => {
     const drop = v1.generateDropKey()
     const other = v1.generateDropKey()
     const wrapped = v1.sealTo(ctx, v1.dropKeyPublic(drop), v1.randomBytes(32))
-    expect(() => v1.openAs(ctx, v1.dropKeySecret(other), v1.dropKeyPublic(other), wrapped)).toThrow(v1.OpenRefused)
+    expect(() => v1.openAs(ctx, v1.dropKeySecret(other), wrapped)).toThrow(v1.OpenRefused)
   })
 
   it('the serializations are the fixed-size length-prefixed forms', () => {
     const drop = v1.generateDropKey()
-    expect(v1.serializeDropKey(drop).length).toBe(4 + 32 + 4 + 64)
-    expect(v1.serializeHybridPublic(v1.dropKeyPublic(drop)).length).toBe(4 + 32 + 4 + 1184)
+    expect(v1.serializeDropKey(drop).length).toBe(4 + 32)
+    expect(v1.serializeHybridPublic(v1.dropKeyPublic(drop)).length).toBe(4 + 1216)
   })
 
   // Each mangle is refused with its OWN message. A match on /drop key/ alone cannot tell a truncation from a
   // malformed field from trailing bytes, and that looseness let two of readFixedLp's bounds checks be deleted with
-  // every case still green: the read past the end just fell through to the next check's message.
+  // every case still green: the read past the end just fell through to the next check's message. Both forms are one
+  // field now (the X-Wing seed, the X-Wing encapsulation key); the identity bundles pin the multi-field reads.
   it.each([
-    ['cut inside the first length prefix', (b: Uint8Array) => b.slice(0, 2), 'truncated'],
-    ['cut inside the second length prefix', (b: Uint8Array) => b.slice(0, 4 + 32 + 2), 'truncated'],
-    ['cut right after the second length prefix', (b: Uint8Array) => b.slice(0, 4 + 32 + 4), 'malformed'],
+    ['cut inside the length prefix', (b: Uint8Array) => b.slice(0, 2), 'truncated'],
+    ['cut right after the length prefix', (b: Uint8Array) => b.slice(0, 4), 'malformed'],
     ['short by its last byte', (b: Uint8Array) => b.slice(0, b.length - 1), 'malformed'],
     ['followed by trailing bytes', (b: Uint8Array) => v1.concat(b, Uint8Array.of(0)), 'trailing bytes'],
-    ['a wrong field length', (b: Uint8Array) => v1.concat(v1.lp(new Uint8Array(31)), b.slice(4 + 32)), 'malformed'],
+    ['a self-consistent wrong field length', (b: Uint8Array) => v1.lp(b.slice(4, b.length - 1)), 'malformed'],
   ])('a serialization %s is refused as %s', (_name, mangle, verdict) => {
     const drop = v1.generateDropKey()
     expect(() => v1.deserializeDropKey(mangle(v1.serializeDropKey(drop)))).toThrow(

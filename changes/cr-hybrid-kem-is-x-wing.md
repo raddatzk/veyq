@@ -62,7 +62,7 @@ decision and its rejected alternatives.
 
 ## Phases
 
-- [ ] 1 contracts + `packages/crypto` — vectors first: add an `xwing` group to `contracts/crypto/vectors/v1.json`
+- [x] 1 contracts + `packages/crypto` — vectors first: add an `xwing` group to `contracts/crypto/vectors/v1.json`
       carrying draft -11's Appendix C vectors verbatim (seed, sk, pk, eseed, ct, ss) with a note naming the draft
       revision, and a conformance case that runs `XWing` against them; it is red until the suite uses `XWing`.
       Then replace `combiner` / `kemEncap` / `kemDecap` with `XWing`, the identity bundle with

@@ -1,13 +1,12 @@
 // veyq v1 crypto suite (TS), shared by web/ and admin-web/. Conformance: contracts/crypto/vectors/v1.json.
 // Everything here is NOT a seal (KDFs, identity, fingerprint, tokens, frames) — plus the typed seal API
 // re-exported from ./seal.ts, which is the only way this package lets a consumer seal (ADR 0072 Decision 6).
-import { x25519, ed25519 } from '@noble/curves/ed25519.js'
-import { ml_kem768 } from '@noble/post-quantum/ml-kem.js'
+import { ed25519 } from '@noble/curves/ed25519.js'
 import { hkdf } from '@noble/hashes/hkdf.js'
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { argon2id } from '@noble/hashes/argon2.js'
-import { aeadOpen, aeadSeal, concat, lp, u32be, utf8, type HybridPublic, type HybridSecret } from './primitives'
+import { aeadOpen, aeadSeal, concat, kemPublic, lp, u32be, utf8, type HybridPublic, type HybridSecret } from './primitives'
 import { encodeStatement, type ScopeKind, type StatementContext } from './seal'
 
 export { concat, lp, utf8, type HybridPublic, type HybridSecret }
@@ -472,58 +471,46 @@ export function identityVerify(
   }
 }
 
-/** The user's identity: a hybrid KEM keypair (X25519 + ML-KEM-768) + an Ed25519 signing keypair. */
+/** The user's identity: an X-Wing KEM keypair (X25519 + ML-KEM-768, ADR 0017 decision 2) + an Ed25519 signing
+ *  keypair. The KEM's private half is its 32-byte seed — X-Wing's decapsulation key — and its public half the
+ *  1216-byte encapsulation key derived from it. */
 export type Identity = {
-  pub: { kemX: Uint8Array; kemM: Uint8Array; sign: Uint8Array }
-  priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }
+  pub: { kem: Uint8Array; sign: Uint8Array }
+  priv: { kemSeed: Uint8Array; sign: Uint8Array }
 }
 
-/**
- * Build a HybridSecret usable for `openAs` from a stored private bundle. noble decapsulates
- * with the *expanded* ML-KEM secret key, so we re-derive it from the stored 64-byte seed (the other
- * stacks reconstruct from the seed directly).
- */
-export const hybridSecret = (priv: Identity['priv']): HybridSecret => ({
-  x: priv.kemX,
-  m: ml_kem768.keygen(priv.mlkemSeed).secretKey,
-})
+/** The KEM secret `openAs` takes, from a stored private bundle: the seed itself, which X-Wing expands on use. */
+export const hybridSecret = (priv: Identity['priv']): HybridSecret => priv.kemSeed
 
-/** The hybrid KEM PUBLIC bundle re-derived from a stored private bundle — for sealing (`sealTo`) to one's
- *  own identity (e.g. an owner's first scope grant). Pure derivation; mirrors [hybridSecret]. */
-export const hybridPublic = (priv: Identity['priv']): HybridPublic => ({
-  x: x25519.getPublicKey(priv.kemX),
-  m: ml_kem768.keygen(priv.mlkemSeed).publicKey,
-})
+/** The KEM PUBLIC half re-derived from a stored private bundle — for sealing (`sealTo`) to one's own identity
+ *  (e.g. an owner's first scope grant). Pure derivation; mirrors [hybridSecret]. */
+export const hybridPublic = (priv: Identity['priv']): HybridPublic => kemPublic(priv.kemSeed)
 
-/** The full identity PUBLIC bundle re-derived from a stored private bundle — kemX, kemM (from the ML-KEM seed)
- *  and the Ed25519 signing key. For rendering one's OWN safety-number / QR in the verify ceremony (cr-0099)
- *  without re-fetching from the directory. Mirrors [hybridPublic] but also carries the signing key. */
+/** The full identity PUBLIC bundle re-derived from a stored private bundle — the KEM's encapsulation key and the
+ *  Ed25519 signing key. For rendering one's OWN safety-number / QR in the verify ceremony (cr-0099) without
+ *  re-fetching from the directory. Mirrors [hybridPublic] but also carries the signing key. */
 export const identityPublicFromPrivate = (priv: Identity['priv']): Identity['pub'] => ({
-  kemX: x25519.getPublicKey(priv.kemX),
-  kemM: ml_kem768.keygen(priv.mlkemSeed).publicKey,
+  kem: kemPublic(priv.kemSeed),
   sign: ed25519.getPublicKey(priv.sign),
 })
 
 export function generateIdentity(): Identity {
-  const kemX = randomBytes(32)
-  const mlkemSeed = randomBytes(64)
-  const mk = ml_kem768.keygen(mlkemSeed)
+  const kemSeed = randomBytes(KEM_SEED_BYTES)
   const sign = randomBytes(32)
   return {
-    pub: { kemX: x25519.getPublicKey(kemX), kemM: mk.publicKey, sign: ed25519.getPublicKey(sign) },
-    priv: { kemX, mlkemSeed, sign },
+    pub: { kem: kemPublic(kemSeed), sign: ed25519.getPublicKey(sign) },
+    priv: { kemSeed, sign },
   }
 }
 
-/** Canonical identity PUBLIC serialization: lp(kemX) || lp(kemM) || lp(sign) — mirrors the private form. */
-export const serializeIdentityPublic = (pub: Identity['pub']): Uint8Array =>
-  concat(lp(pub.kemX), lp(pub.kemM), lp(pub.sign))
+/** Canonical identity PUBLIC serialization: lp(kem) || lp(sign) — mirrors the private form. */
+export const serializeIdentityPublic = (pub: Identity['pub']): Uint8Array => concat(lp(pub.kem), lp(pub.sign))
 
 /**
  * Identity fingerprint ("safety number"): a deterministic, human-readable digest of a user's FULL identity
- * public key (hybrid KEM + signing), so two users can compare it out-of-band (read aloud / QR) and detect an
- * active-operator key-substitution — a swapped kemX, kemM or sign changes the digits. All three components are
- * covered via the length-prefixed canonical serialization (no field-boundary ambiguity). The digest is sha256
+ * public key (X-Wing KEM + signing), so two users can compare it out-of-band (read aloud / QR) and detect an
+ * active-operator key-substitution — a swapped kem or sign changes the digits. Both components are covered via the
+ * length-prefixed canonical serialization (no field-boundary ambiguity). The digest is sha256
  * over a domain-separated input, rendered as 6 groups of 5 decimal digits (Signal-parity, language-neutral):
  * each group is a 40-bit big-endian hash chunk mod 100000. 30 digits carry ~99 bits, so grinding a substitute
  * key whose fingerprint matches the display is infeasible.
@@ -552,10 +539,11 @@ export function fingerprintHash(pub: Identity['pub']): Uint8Array {
 }
 
 /** Serialize the identity private bundle (wrapped under the master key). */
-export const serializeIdentityPrivate = (id: Identity): Uint8Array =>
-  concat(lp(id.priv.kemX), lp(id.priv.mlkemSeed), lp(id.priv.sign))
+export const serializeIdentityPrivate = (id: Identity): Uint8Array => concat(lp(id.priv.kemSeed), lp(id.priv.sign))
 
-const ML_KEM_768_PUBLIC_BYTES = 1184
+/** X-Wing's encapsulation key (`pk_M ‖ pk_X`) and decapsulation key (the seed), draft -11 § 5. */
+const KEM_PUBLIC_BYTES = 1216
+const KEM_SEED_BYTES = 32
 
 /** Read exactly one length-prefixed field per entry of `sizes`, each of exactly that size, and nothing after them.
  *  Every v1 length-prefixed codec reads through this, so each has ONE encoding per value: the server serves the
@@ -578,45 +566,42 @@ function readFixedLp(bytes: Uint8Array, sizes: readonly number[], what: string):
 /** Inverse of serializeIdentityPublic → a public identity bundle. Used to seal a scope key to *another* member's
  *  published identity (`sealTo` a foreign identity — cr-0076), so its bytes are the server's. */
 export function deserializeIdentityPublic(bytes: Uint8Array): Identity['pub'] {
-  const [kemX, kemM, sign] = readFixedLp(bytes, [32, ML_KEM_768_PUBLIC_BYTES, 32], 'identity public key')
-  return { kemX, kemM, sign }
+  const [kem, sign] = readFixedLp(bytes, [KEM_PUBLIC_BYTES, 32], 'identity public key')
+  return { kem, sign }
 }
 
 /** Inverse of serializeIdentityPrivate. */
 export function deserializeIdentityPrivate(bytes: Uint8Array): Identity['priv'] {
-  const [kemX, mlkemSeed, sign] = readFixedLp(bytes, [32, 64, 32], 'identity private key')
-  return { kemX, mlkemSeed, sign }
+  const [kemSeed, sign] = readFixedLp(bytes, [KEM_SEED_BYTES, 32], 'identity private key')
+  return { kemSeed, sign }
 }
 
 /**
- * A Memory's **drop keypair** (ADR 0031 point 7): a hybrid X25519 + ML-KEM-768 KEM keypair with no signing half.
- * Its private half is sealed under the Memory's `K_mem` (`drop-private-key`), its public half under each WRITE_ONLY
- * share's `K_share` (`drop-public-key`). A WRITE_ONLY guest wraps its own identity key to the public half
+ * A Memory's **drop keypair** (ADR 0031 point 7): an X-Wing KEM keypair with no signing half, held as its 32-byte
+ * seed. Its private half is sealed under the Memory's `K_mem` (`drop-private-key`), its public half under each
+ * WRITE_ONLY share's `K_share` (`drop-public-key`). A WRITE_ONLY guest wraps its own identity key to the public half
  * (`upload-identity-key`), so the guest never holds `K_mem` and every reader of the Memory opens what it uploaded.
  */
-export type DropKey = { kemX: Uint8Array; mlkemSeed: Uint8Array }
+export type DropKey = { kemSeed: Uint8Array }
 
-export const generateDropKey = (): DropKey => ({ kemX: randomBytes(32), mlkemSeed: randomBytes(64) })
+export const generateDropKey = (): DropKey => ({ kemSeed: randomBytes(KEM_SEED_BYTES) })
 
 /** The drop key's public half, re-derived from the private half (the Memory stores only the private half). */
-export const dropKeyPublic = (k: DropKey): HybridPublic => ({
-  x: x25519.getPublicKey(k.kemX),
-  m: ml_kem768.keygen(k.mlkemSeed).publicKey,
-})
+export const dropKeyPublic = (k: DropKey): HybridPublic => kemPublic(k.kemSeed)
 
-/** The drop key as `openAs` takes it — noble decapsulates with the expanded ML-KEM secret (cf. [hybridSecret]). */
-export const dropKeySecret = (k: DropKey): HybridSecret => ({ x: k.kemX, m: ml_kem768.keygen(k.mlkemSeed).secretKey })
+/** The drop key as `openAs` takes it — the seed itself (cf. [hybridSecret]). */
+export const dropKeySecret = (k: DropKey): HybridSecret => k.kemSeed
 
-/** Drop private serialization: lp(kemX) || lp(mlkemSeed) — the plaintext of a `drop-private-key` seal. */
-export const serializeDropKey = (k: DropKey): Uint8Array => concat(lp(k.kemX), lp(k.mlkemSeed))
+/** Drop private serialization: lp(kemSeed) — the plaintext of a `drop-private-key` seal. */
+export const serializeDropKey = (k: DropKey): Uint8Array => lp(k.kemSeed)
 export function deserializeDropKey(bytes: Uint8Array): DropKey {
-  const [kemX, mlkemSeed] = readFixedLp(bytes, [32, 64], 'drop key')
-  return { kemX, mlkemSeed }
+  const [kemSeed] = readFixedLp(bytes, [KEM_SEED_BYTES], 'drop key')
+  return { kemSeed }
 }
 
-/** Hybrid public serialization: lp(x) || lp(m) — the plaintext of a `drop-public-key` seal. */
-export const serializeHybridPublic = (p: HybridPublic): Uint8Array => concat(lp(p.x), lp(p.m))
+/** KEM public serialization: lp(kem) — the plaintext of a `drop-public-key` seal. */
+export const serializeHybridPublic = (p: HybridPublic): Uint8Array => lp(p)
 export function deserializeHybridPublic(bytes: Uint8Array): HybridPublic {
-  const [x, m] = readFixedLp(bytes, [32, ML_KEM_768_PUBLIC_BYTES], 'hybrid public key')
-  return { x, m }
+  const [kem] = readFixedLp(bytes, [KEM_PUBLIC_BYTES], 'hybrid public key')
+  return kem
 }

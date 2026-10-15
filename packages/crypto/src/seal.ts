@@ -98,7 +98,7 @@ export const SEAL_PURPOSES = {
   'identity-priv': [],
 } as const satisfies Schema
 
-/** Asymmetric purposes (`sealTo`/`openAs`) — a seal to one identity's hybrid public key. */
+/** Asymmetric purposes (`sealTo`/`openAs`) — a seal to one X-Wing encapsulation key. */
 export const SEAL_TO_PURPOSES = {
   'scope-grant': [['scopeId', 'id'], ['epoch', 'uint']],
   'group-name-key': [['scopeId', 'id'], ['nameEpoch', 'uint']],
@@ -298,15 +298,15 @@ export function open(context: SealContext, key: Uint8Array, blob: Uint8Array): U
   }
 }
 
-/** Seal `plaintext` to one identity's hybrid public key as the object `context` names. */
+/** Seal `plaintext` to one X-Wing encapsulation key (an identity's or a drop key's) as the object `context` names. */
 export const sealTo = (context: SealToContext, recipient: HybridPublic, plaintext: Uint8Array): Uint8Array =>
   asymWrap(recipient, plaintext, encodeSealToContext(context), { nonce: randomNonce() })
 
 /** Open a seal addressed to this identity as the object `context` names. */
-export function openAs(context: SealToContext, sk: HybridSecret, pk: HybridPublic, blob: Uint8Array): Uint8Array {
+export function openAs(context: SealToContext, sk: HybridSecret, blob: Uint8Array): Uint8Array {
   const aad = encodeSealToContext(context)
   try {
-    return asymUnwrap(sk, pk, blob, aad)
+    return asymUnwrap(sk, blob, aad)
   } catch {
     throw new OpenRefused(context.purpose)
   }

@@ -23,10 +23,8 @@ type SymVector = { context: Record<string, string | number>; context_bytes: stri
 type AsymVector = {
   context: Record<string, string | number>
   context_bytes: string
-  pk_x25519: string
-  pk_mlkem: string
-  esk_x25519: string
-  mlkem_msg: string
+  pk: string
+  eseed: string
   nonce: string
   plaintext: string
   blob: string
@@ -170,14 +168,33 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
-  it('KEM-v1 decap (hybrid X25519 + ML-KEM-768)', () => {
-    const d = vectors.kem_v1.decap_kat
-    const ss = raw.kemDecap(
-      { x: unhex(d.sk_x25519), m: unhex(d.sk_mlkem) },
-      { x: unhex(d.pk_x25519), m: unhex(d.pk_mlkem) },
-      unhex(d.ct),
-    )
-    expect(hex(ss)).toBe(d.shared_secret)
+  // The one cross-implementation anchor (ADR 0017 decision 4): the suite's KEM is held to X-Wing's published vectors,
+  // which other implementations produced, so this stays red while the suite drifts from X-Wing.
+  describe(`the hybrid KEM is X-Wing (${vectors.xwing.draft} Appendix C)`, () => {
+    type XWingVector = { seed: string; sk: string; pk: string; eseed: string; ct: string; ss: string }
+    const xwingVectors: XWingVector[] = vectors.xwing.vectors
+    it('carries the draft\'s three vectors', () => {
+      expect(xwingVectors).toHaveLength(3)
+    })
+    describe.each(xwingVectors.map((v, i) => [i, v] as const))('vector %i', (_, v) => {
+      it('the decapsulation key is the seed, and the encapsulation key derives from it', () => {
+        expect(v.sk).toBe(v.seed)
+        expect(hex(raw.kemPublic(unhex(v.seed)))).toBe(v.pk)
+      })
+      it('encapsulates deterministically to the vector ciphertext and shared secret', () => {
+        const { ct, ss } = raw.kemEncap(unhex(v.pk), { eseed: unhex(v.eseed) })
+        expect(hex(ct)).toBe(v.ct)
+        expect(hex(ss)).toBe(v.ss)
+      })
+      it('decapsulates the vector ciphertext to the vector shared secret', () => {
+        expect(hex(raw.kemDecap(unhex(v.sk), unhex(v.ct)))).toBe(v.ss)
+      })
+      it('a ciphertext with one flipped byte decapsulates to another secret', () => {
+        const ct = unhex(v.ct)
+        ct[ct.length - 1] ^= 0x01
+        expect(hex(raw.kemDecap(unhex(v.sk), ct))).not.toBe(v.ss)
+      })
+    })
   })
 
   // ── Typed seal (ADR 0072) ──────────────────────────────────────────────────────────────────────────────────
@@ -187,8 +204,8 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
   describe('typed seal (ADR 0072)', () => {
     const symVectors: Record<string, SymVector> = vectors.seal.sym
     const asymVectors: Record<string, AsymVector> = vectors.seal.asym
-    const d = vectors.kem_v1.decap_kat
-    const sk = { x: unhex(d.sk_x25519), m: unhex(d.sk_mlkem) }
+    // The recipient of every asym vector is X-Wing vector 0 (seal.note): its sk decapsulates their ct.
+    const sk = unhex(vectors.xwing.vectors[0].sk)
     const symCtx = (purpose: string): v1.SealContext =>
       ({ purpose, ...symVectors[purpose].context }) as v1.SealContext
     const asymCtx = (purpose: string): v1.SealToContext =>
@@ -241,31 +258,30 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
 
     describe.each(Object.keys(asymVectors))('%s (asymmetric)', (purpose) => {
       const v = asymVectors[purpose]
-      const pk = { x: unhex(v.pk_x25519), m: unhex(v.pk_mlkem) }
+      const pk = unhex(v.pk)
       it('encodes its context canonically', () => {
         expect(hex(v1.encodeSealToContext(asymCtx(purpose)))).toBe(v.context_bytes)
       })
       it('seals to the vector blob (deterministic KEM), and opens it back', () => {
         const blob = raw.asymWrap(pk, unhex(v.plaintext), unhex(v.context_bytes), {
-          eskX: unhex(v.esk_x25519),
-          mlkemMsg: unhex(v.mlkem_msg),
+          eseed: unhex(v.eseed),
           nonce: unhex(v.nonce),
         })
         expect(hex(blob)).toBe(v.blob)
-        expect(hex(v1.openAs(asymCtx(purpose), sk, pk, unhex(v.blob)))).toBe(v.plaintext)
+        expect(hex(v1.openAs(asymCtx(purpose), sk, unhex(v.blob)))).toBe(v.plaintext)
       })
       it('sealTo round-trips through openAs', () => {
-        expect(hex(v1.openAs(asymCtx(purpose), sk, pk, v1.sealTo(asymCtx(purpose), pk, unhex(v.plaintext))))).toBe(
+        expect(hex(v1.openAs(asymCtx(purpose), sk, v1.sealTo(asymCtx(purpose), pk, unhex(v.plaintext))))).toBe(
           v.plaintext,
         )
       })
       it.each(Object.keys(v.context))('does not open with a different %s', (field) => {
         const moved = { ...asymCtx(purpose), [field]: otherValue(v.context[field]) } as v1.SealToContext
-        expect(() => v1.openAs(moved, sk, pk, unhex(v.blob))).toThrow(refusal(purpose))
+        expect(() => v1.openAs(moved, sk, unhex(v.blob))).toThrow(refusal(purpose))
       })
       it('does not open as any other purpose', () => {
         for (const other of Object.keys(asymVectors).filter((p) => p !== purpose)) {
-          expect(() => v1.openAs(asymCtx(other), sk, pk, unhex(v.blob))).toThrow(refusal(other))
+          expect(() => v1.openAs(asymCtx(other), sk, unhex(v.blob))).toThrow(refusal(other))
         }
       })
     })
@@ -713,7 +729,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     const pub = unhex(g.sign_public)
 
     it('the signing key is the identity bundle\'s Ed25519 half', () => {
-      const id = v1.identityPublicFromPrivate({ kemX: new Uint8Array(32).fill(1), mlkemSeed: new Uint8Array(64).fill(2), sign: priv })
+      const id = v1.identityPublicFromPrivate({ kemSeed: new Uint8Array(32).fill(1), sign: priv })
       expect(hex(id.sign)).toBe(g.sign_public)
     })
 
@@ -863,17 +879,17 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
 
   it('identity fingerprint / safety number', () => {
     const f = vectors.fingerprint
-    expect(v1.fingerprint({ kemX: unhex(f.kem_x), kemM: unhex(f.kem_m), sign: unhex(f.sign) })).toBe(f.digits)
+    expect(v1.fingerprint({ kem: unhex(f.kem), sign: unhex(f.sign) })).toBe(f.digits)
   })
 
   it('the fingerprint hash is the digest the vector note names, and the digits are its 40-bit chunks', () => {
     // The safety-number QR carries this digest (ADR 0028 Decision 3). It is recomputed here from the note's formula
     // with node's own sha256, so a change to the domain string or the input order reddens it apart from the digits.
     const f = vectors.fingerprint
-    const pub = { kemX: unhex(f.kem_x), kemM: unhex(f.kem_m), sign: unhex(f.sign) }
+    const pub = { kem: unhex(f.kem), sign: unhex(f.sign) }
     const lp = (b: Uint8Array) => Buffer.concat([Buffer.from([0, 0, 0, 0].map((_, i) => (b.length >>> (24 - 8 * i)) & 0xff)), Buffer.from(b)])
     const expected = createHash('sha256')
-      .update(Buffer.concat([Buffer.from('veyq/v1/fingerprint', 'utf8'), lp(pub.kemX), lp(pub.kemM), lp(pub.sign)]))
+      .update(Buffer.concat([Buffer.from('veyq/v1/fingerprint', 'utf8'), lp(pub.kem), lp(pub.sign)]))
       .digest('hex')
     const h = v1.fingerprintHash(pub)
     expect(hex(h)).toBe(expected)
