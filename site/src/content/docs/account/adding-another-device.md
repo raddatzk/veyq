@@ -4,7 +4,7 @@ sources:
   - docs/features/account/use-cases/uc.account.onboard-device.md
 ---
 
-A plain-language companion to [Account keys & recovery](/veyq/account-keys-and-recovery/). You can let a new
+You can let a new
 phone or laptop in without digging out your Emergency Kit: **one device you are already signed in on hands
 the other everything it needs.**
 

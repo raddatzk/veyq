@@ -11,7 +11,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-note.md
 ---
 
-A plain-language companion to [Is my data safe?](/veyq/privacy/is-my-data-safe/) and [Depot](/veyq/depot/). You can hand
+You can hand
 something to anyone — a grandparent, a friend, a group chat — as a **link**. They open it in a browser: no
 account, nothing to install.
 

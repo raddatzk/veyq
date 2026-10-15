@@ -5,7 +5,7 @@ sources:
   - docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md
 ---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/). Dein gemeinsamer Bereich
+Dein gemeinsamer Bereich
 gehört zuerst nur dir. Auf dieser Seite geht es um die eine Entscheidung, die das ändert — jemanden einzuladen —
 und darum, was danach von allein passiert.
 

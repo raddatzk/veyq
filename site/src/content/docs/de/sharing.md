@@ -11,7 +11,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-note.md
 ---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/) und [Depot](/veyq/de/depot/). Du
+Du
 kannst etwas an irgendwen weitergeben — Oma, eine Freundin, einen Gruppenchat — als **Link**. Die Person öffnet ihn im
 Browser: ohne Konto, ohne Installation.
 

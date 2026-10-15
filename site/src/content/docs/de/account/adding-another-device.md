@@ -4,7 +4,6 @@ sources:
   - docs/features/account/use-cases/uc.account.onboard-device.md
 ---
 
-Eine verständliche Ergänzung zu [Konto-Schlüssel & Wiederherstellung](/veyq/de/account-keys-and-recovery/).
 Du kannst ein neues Handy oder einen neuen Laptop hereinlassen, ohne dein Notfall-Kit herauszusuchen: **ein
 Gerät, an dem du schon angemeldet bist, gibt dem anderen alles Nötige.**
 

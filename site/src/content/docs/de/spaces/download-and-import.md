@@ -4,7 +4,7 @@ sources:
   - docs/features/platform/use-cases/uc.platform.export-import.md
 ---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/). Du kannst einen Ordner, eine Datei,
+Du kannst einen Ordner, eine Datei,
 eine Erinnerung oder einen Briefkasten aus veyq herunterladen — eine Datei als sie selbst, alles Größere als **eine
 ZIP-Datei** — und ein solches ZIP wieder hineinladen, in dasselbe veyq oder in ein anderes.
 

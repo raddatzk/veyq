@@ -12,7 +12,7 @@ sources:
   - docs/features/account/use-cases/uc.account.change-email.md
 ---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/). Weil veyq
+Weil veyq
 Ende-zu-Ende-verschlüsselt ist, **schützen deine Schlüssel — nicht der Server — deine Daten.** So
 funktioniert das, ganz ohne Krypto-Vorwissen.
 
@@ -70,9 +70,8 @@ Erinnerungen brauchen ihn **zusätzlich** zum Passwort. Ein erratenes Passwort a
 ## Ein Passwort wählen
 
 Wenn du ein neues Passwort wählst, gleicht veyq es mit Passwörtern aus bekannten Datenlecks ab — von selbst,
-sobald du das Feld verlässt, nie während du tippst. Nur die ersten 5 Zeichen eines daraus berechneten
-Hashwerts gehen dabei direkt von deinem Gerät an den kostenlosen Dienst *Have I Been Pwned*; dein Browser teilt
-diesem Dienst außerdem mit, welchen veyq-Server du nutzt. Taucht das Passwort in einem Datenleck auf, kannst du es
+sobald du das Feld verlässt. Nur die ersten 5 Zeichen eines daraus berechneten
+Hashwerts gehen dabei direkt von deinem Gerät an den kostenlosen Dienst *Have I Been Pwned*. Taucht das Passwort in einem Datenleck auf, kannst du es
 trotzdem verwenden — kreuze **„Trotzdem verwenden“** an —, und wenn die Prüfung nicht laufen kann, wird nichts
 blockiert. Die Einzelheiten: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/#die-eine-prüfung-die-dein-gerät-von-selbst-verlässt)
 

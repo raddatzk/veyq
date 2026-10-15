@@ -10,7 +10,7 @@ sources:
   - docs/features/platform/use-cases/uc.platform.copy-node.md
 ---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/). veyq ist eine Plattform
+veyq ist eine Plattform
 für verschlüsselte, teilbare Dinge und wächst durch **Anwendungen**. **Erinnerungen** ist die Anwendung für Fotos,
 Videos und Tagebuch. **Depot** ist die für alles andere: Dokumente, PDFs, jede Datei, die du aufbewahren willst.
 Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
@@ -36,7 +36,7 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
   gespeichert, und wer die Datei von dir freigegeben bekommen hat, sieht genau dasselbe. Manches zeigt die Seite nicht
   an: ein Format,
   das dein Browser nicht darstellen kann, und sehr große Bilder oder PDFs (über 64 MB) — und von einem langen Text
-  erscheint nur das erste Megabyte (**Kopieren** kopiert dann nur den angezeigten Teil und sagt es dazu). Eine PDF, die
+  erscheint nur das erste Megabyte. Eine PDF, die
   **mit einem Passwort geschützt** ist, fragt direkt auf der Seite danach: Das Passwort wird nur auf deinem Gerät zum
   Öffnen der PDF verwendet und weder gespeichert noch irgendwohin gesendet; brichst du ab, wird stattdessen der Download
   angeboten. In einer PDF kannst du den **Text** der Seiten auf dem Bildschirm mit Maus oder Tastatur **markieren und

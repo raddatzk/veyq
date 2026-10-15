@@ -5,7 +5,7 @@ sources:
   - docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md
 ---
 
-A plain-language companion to [Is my data safe?](/veyq/privacy/is-my-data-safe/). Your shared space starts as just yours.
+Your shared space starts as just yours.
 This page is about the one decision that changes that — inviting someone — and what happens on its own
 afterwards.
 

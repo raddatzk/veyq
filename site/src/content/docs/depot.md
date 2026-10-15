@@ -10,7 +10,7 @@ sources:
   - docs/features/platform/use-cases/uc.platform.copy-node.md
 ---
 
-A plain-language companion to [Is my data safe?](/veyq/privacy/is-my-data-safe/). veyq is a platform for sealed, shareable
+veyq is a platform for sealed, shareable
 things, and it grows by **applications**. **Memories** is the one for photos, videos and journals. **Depot** is
 the one for everything else: documents, PDFs, any file you want to keep. Both live in the same folders of your
 space, side by side.
@@ -32,8 +32,7 @@ space, side by side.
   count and buttons to zoom in and out and to fit it to the width), and a **video** or a **sound file** plays,
   with a button for **full screen**. The file is unlocked on your device while you look, nothing extra is stored,
   and someone you shared the file with sees exactly the same. Some things are not shown on the page: a format your browser cannot display, and very large
-  pictures or PDFs (over 64 MB) — and a long text shows only its first megabyte (**Copy** then copies just the part that
-  is shown, and says so). A PDF that is **protected by a password** asks for it right on the page: the password is only
+  pictures or PDFs (over 64 MB) — and a long text shows only its first megabyte. A PDF that is **protected by a password** asks for it right on the page: the password is only
   used on your device to open the PDF and is neither stored nor sent anywhere; if you cancel, the download is offered
   instead. In a PDF you can **select and copy the text** of the pages on screen with the mouse or the keyboard; links
   inside it do nothing (they are not clickable, so a PDF can never take you somewhere else), notes and form fields are

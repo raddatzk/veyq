@@ -4,7 +4,7 @@ sources:
   - docs/crosscutting/security-model.md
 ---
 
-A plain-language companion to [Is my data safe?](/veyq/privacy/is-my-data-safe/). Short version: **your memories are
+Short version: **your memories are
 locked today with protection chosen to survive tomorrow's quantum computers** — and the design leaves room
 for stronger locks later.
 
