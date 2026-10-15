@@ -109,10 +109,10 @@ changes nothing in the image.
       - **What the server sees** — server-visible metadata by category, with the deliberate concessions (range
         streaming, plaintext account email, node `kind`, member enumeration, share linkability). Sources:
         § What is encrypted vs. server-visible, ADR 0044, ADR 0047.
-      - **Cryptography** — primitives, the hybrid KEM and its combiner **with its rationale**, the fixed KDF
-        profile, AEAD framing and chunking, what a seal binds, suite agility. Sources: ADR 0017, ADR 0072,
-        ADR 0013. **Entry condition:** the combiner's rationale (why its own HKDF combiner, not RFC 9180 HPKE or
-        X-Wing) is in ADR 0017 first; the owner supplies it, the page does not invent it.
+      - **Cryptography** — primitives, the hybrid KEM (X-Wing, its draft status and why it was chosen), the
+        KEM-DEM wrap above it (HPKE-like, not RFC 9180), the fixed KDF profile, AEAD framing and chunking, what a
+        seal binds, suite agility. Sources: ADR 0017, ADR 0072, ADR 0013. **Entry condition:**
+        `cr-hybrid-kem-is-x-wing` is done, so the page describes X-Wing as built.
       - **Key hierarchy** — account (one KEK per unlock method → Master Key → identity keypair; separately the
         auth and Secret-Key-proof keypairs), scope (`K_SC` epochs, signed grants, admission tag), content
         (`K_mem` per node incl. folders and chapters → `K_blob` → frames), sharing (`K_share` in the fragment,
