@@ -81,10 +81,10 @@ phase closes only after the owner has read its pages in conversation. Done when,
       that checkbox said it is "never needed again" either way; the owner chose to keep the behaviour (one wrap per
       device, ADR 0005 §9) and correct the hint, which now says so. The German UI says *geteilter Bereich*, not
       *gemeinsamer*. `account-keys-and-recovery` stays until phase 3 takes in the rest.
-- [ ] 3 Your account — stay signed in and trust a device; add another device; devices and sessions; change
+- [x] 3 Your account — stay signed in and trust a device; add another device; devices and sessions; change
       password; change email; forgot password; replace your keys; profile and picture; appearance and language;
       verify a person (safety number by scan or digits, reviewing a changed key).
-      *Built and checked live, waiting for the owner's read:* `account/` — Devices and sessions (which also carries
+      *Built and checked live, read by the owner (2026-10-15):* `account/` — Devices and sessions (which also carries
       stay-signed-in/trust and the locked entry), Add another device (rewritten task-first: the scan is an icon in
       the Secret Key field, five digits one way and six the other, the name and the slide), Change your password,
       Forgot your password, Your email address (confirm and change), Replace your keys, Your profile, Appearance and
