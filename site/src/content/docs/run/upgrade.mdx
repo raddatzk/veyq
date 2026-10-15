@@ -54,30 +54,10 @@ fields and claims are compared on rendered manifests by `scripts/chart_upgrade_c
    with the app down the database gains no rows, so a row whose object was never captured is impossible and
    there is no ordering to get right.
 
-2. **Capture, then check the capture.** [Backup and restore](/veyq/run/backup-and-restore/) owns the commands and the credentials; two arguments
-   differ here from the dev examples there. The network is `veyq_edge`, the one the store is on: the production
-   compose file declares `name: veyq`, so that is the project, and nothing has to be passed on the command line to
-   make it so. And
-   leg (c) lives on a **volume**, not on your filesystem, so it has to be addressed there — and it is copied to a
-   destination of its own, never into the capture:
-
-   ```sh
-   sudo -E python3 scripts/instance_backup.py capture \
-       --compose-file infra/docker-compose.prod.yml \
-       --docker-network veyq_edge \
-       --config-secret-file "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key" \
-       --key-into /media/usb-stick/veyq-<stamp>.key
-   sudo python3 scripts/instance_backup.py verify infra/backups/<stamp> --key-from /media/usb-stick/veyq-<stamp>.key
-   ```
-
-   **Both run as root.** The key is the application's — uid `10001`, mode `0600`, on a volume under Docker's data
-   root — so no other user can read it, and a capture without root cannot take leg (c). `-E` keeps the credential
-   variables, as in [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance). What a root capture writes is root's, owner-only: the capture directory and the
-   key file. So `verify` runs as root too, and so does the encryption in [Capture](/veyq/run/backup-and-restore/#capture) — or hand both to yourself
-   first: `sudo chown -R "$(id -u):$(id -g)" infra/backups/<stamp> /media/usb-stick/veyq-<stamp>.key`.
-   **Derived, not rehearsed in this form.** The e2e rehearsal captures a key file it owns, not the production
-   volume. A root capture from that volume ran once, for the restore rehearsal in [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance), as root in a
-   container that mounted the volume, not with `sudo` on a host.
+2. **Capture, then check the capture,** exactly as [Backup and restore § Capture](/veyq/run/backup-and-restore/#capture)
+   shows for the production recipe: as root, on the `veyq_edge` network, with leg (c) read from the
+   `veyq-config-secret` volume and copied to a medium of its own. The application is already stopped (step 1), so
+   skip that page's first step and do not start it again at its last.
 
    Do not skip `verify`. A capture that silently missed objects and one that is complete look identical until
    the day you need it, which is the day you find out. Encrypt it before it leaves this host ([Capture](/veyq/run/backup-and-restore/#capture)).
@@ -88,7 +68,7 @@ fields and claims are compared on rendered manifests by `scripts/chart_upgrade_c
    names one fixed set of bits for good — which is what makes it a rollback target rather than a label. A
    `<major>.<minor>-SNAPSHOT` is not: its tag moves, so roll back to the digest you pinned instead. If the
    manifest records no release, the backup is still valid and still restorable; what it cannot tell you is which
-   image to start it under, so write that down yourself now, from **Settings → Server → Release**, while the
+   image to start it under, so write that down yourself now, from the admin console's **Server → Release**, while the
    instance you are leaving still exists to be asked. And keep a copy of `infra/.env`'s `VEYQ_IMAGE` and
    `VEYQ_ADMIN_IMAGE` lines: they name, by the digest you verified when you installed them, the pair you roll
    back to.

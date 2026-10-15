@@ -10,6 +10,11 @@ sources:
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
+:::note[How far this is proven]
+No published release has been installed on either target yet. What is checked is the files: the production compose
+recipe's hardening by `scripts/validate_compose_posture.py`, and the rendered chart by `scripts/chart_meta_check.py`.
+:::
+
 ## Install
 
 <Tabs syncKey="target">
@@ -41,8 +46,9 @@ the stack names one of them.
   <TabItem label="Kubernetes">
 
 `charts/veyq` is the second deployment target ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)):
-the same five services as the production compose file — the app, its administration surface, MariaDB, Garage
-— on an operator's own cluster, with the ingress controller as the operator's choice. It deploys published
+the same four workloads as the production compose file — the app, its administration surface, MariaDB and
+Garage — on an operator's own cluster, with the ingress controller in place of the compose file's Traefik, and
+the operator's choice. It deploys published
 images and builds nothing; it **generates nothing** either, so every secret is yours to supply and an install
 that leaves one unset is refused by name (`values.schema.json`). One release per namespace: the app projects
 tenant domains as `Ingress` objects into its own namespace and lists them by label, so two releases there

@@ -187,7 +187,7 @@ services:
   #
   # Two exposure modes, one image, chosen by whether ADMIN_DOMAIN is set. Unset (the DEFAULT): no router at all,
   # and the port below binds to 127.0.0.1, so the surface is reachable only from the host itself —
-  # `ssh -L 8443:127.0.0.1:${ADMIN_PORT} the-host` and browse localhost. That is also what makes first-run setup
+  # `ssh -L 8081:127.0.0.1:${ADMIN_PORT} the-host` and browse localhost:8081. That is also what makes first-run setup
   # independent of DNS and TLS. Set: the app renders an own-domain router with its own certificate.
   #
   # The port is bound to 127.0.0.1 explicitly — the first `ports:` entry in this file besides Traefik's own.

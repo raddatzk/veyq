@@ -14,25 +14,27 @@ If you are here to find out whether your memories are safe, you want
 
 ## The honest state, first
 
-**There is no supported production deployment yet.** veyq is pre-V1. There are now two Compose files — a
-*development* stack (database, an S3-compatible object store, a throwaway mailbox, the latter two opt-in
-*profiles*) and a *production* one that adds the application itself, the separate administration surface
-(reachable from the host only, by default), and terminates TLS in front of them — plus a Helm chart for Kubernetes. Do not
-read "optional profile" as "optional in a real instance": without a store there is no media, and a space whose
-owner has not set up email can invite nobody and none of its members can reset a password.
+**There is no supported production deployment yet.** veyq is pre-V1, and no release has been published. There
+is a production Compose recipe (the application, its separate administration surface, MariaDB, the Garage object
+store and a Traefik that terminates TLS in front of them) and a Helm chart for Kubernetes. Without the store there
+is no media, and a space whose owner has not set up email can invite nobody and none of its members can reset a
+password, so neither is optional in a real instance.
 
-A **backup-and-restore procedure is written down and tested**, and there is now an **upgrade runbook** beside
-it — but the two are not equally proven, and the difference matters more than either heading. The backup is
-rehearsed automatically: every CI run captures a real instance, destroys it, restores it, and checks that what
-came back works. The upgrade runbook has been **performed by nobody**, because no version of veyq has been
-published yet, so there is no second release to move between. It is a careful procedure derived from how the
-system is built, not a path anyone has walked.
+Every procedure in this area says how far it has been proven. In short:
 
-What has not changed is the shape of the risk: veyq migrates its database on start with no way back, so moving
-to a newer version means taking a backup first and restoring it if the new version does not work out.
+| Procedure | Rehearsed | Not rehearsed |
+|---|---|---|
+| [Backup and restore](/veyq/run/backup-and-restore/) | Capture, destroy, restore and a test suite against the result, on every run of the end-to-end orchestrator; a root restore from the production key volume once, in containers | The `sudo -E` form on a Linux host; a capture or restore under Helm |
+| [Upgrade](/veyq/run/upgrade/) | The data half: the upgrade proof seals content with the previous build, restores it under this one, lets it migrate and reads it back — from jars, not images | Pulling a published image, the recipe diff, the `up`, a rollback; `helm upgrade` in a cluster |
+| [Kubernetes](/veyq/run/kubernetes/) | The rendered chart, and what a chart upgrade could not apply (`chart_meta_check.py`, `chart_upgrade_check.py`) | An install, an upgrade or a backup in a cluster |
+| [Verify a release](/veyq/run/verify-a-release/) | The commands against another keyless-signed image, and the chart half against a local registry | A real veyq release |
 
-So running veyq still means reading the repository and making your own operational decisions. Please do not put
-memories you cannot afford to lose on an instance you set up from the dev stack.
+None of this has run in CI: the repository has no remote yet, so every rehearsal above is a run on a developer
+machine. The shape of the risk is fixed: veyq migrates its database on start with no way back, so moving to a
+newer version means taking a backup first and restoring it if the new version does not work out.
+
+So running veyq still means making your own operational decisions. Please do not put memories you cannot afford
+to lose on an instance you are not prepared to back up and restore yourself.
 
 ## What you are responsible for
 
@@ -87,16 +89,11 @@ every [upgrade](/veyq/run/upgrade/).
 - [Upgrade](/veyq/run/upgrade/) — with the backup as the way back.
 - [Backup and restore](/veyq/run/backup-and-restore/) — the three legs, captured cold and checked.
 
-## Where the material is
+## Further reading
 
-These are the real sources:
-
-- **[`infra/README.md`](https://github.com/raddatzk/veyq/blob/main/infra/README.md)** — the development stack: the
-  dev profiles, the object store, a mail smoke test against the throwaway mailbox, and how a release is cut.
 - **[`README.md`](https://github.com/raddatzk/veyq/blob/main/README.md)** — repository shape and what is built.
-- **[`docs/architecture/README.md`](https://github.com/raddatzk/veyq/blob/main/docs/architecture/README.md)** —
-  deployment topology and the runtime view.
-- **[`SECURITY.md`](https://github.com/raddatzk/veyq/blob/main/SECURITY.md)** — how to report a vulnerability.
+- **[Security](/veyq/security/start-here/)** — what the operator can and cannot see, and
+  [how to report a vulnerability](/veyq/security/reporting/).
 
 ## Moderation
 
