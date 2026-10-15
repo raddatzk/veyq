@@ -82,11 +82,20 @@ store credentials from the operator.
       and a dev or e2e instance **must now choose the bundled store** (admin-web or `PUT /api/instance/store`)
       before an upload works. Under `%test` an unset store is the in-memory stub and tenant creation is open
       without a check; any other profile refuses both. The check's CORS origin is `https://<bootstrap-domain>`.
-- [ ] 3 admin-web + CLI — Server → Store: the type list, the fields, *Use the bundled store* where a hint exists,
+- [x] 3 admin-web + CLI — Server → Store: the type list, the fields, *Use the bundled store* where a hint exists,
       save, check with each step's result, the re-entry prompt when credentials cannot be opened; create-tenant
       closed with the reason until a check passed; `veyq-admin store show | set | check`. · Done when: `npm run check`
       in `admin-web/` green; a browser pass sets the bundled store, checks it, creates a tenant, and shows a failing
       check against a wrong bucket.
+      *Built (what phases 4–5 start from):* `features/instance/StorePanel.vue` replaces the read-only store panel in
+      the console (the Garage provisioning read stays beneath it, for a Garage store only); one source list (the
+      bundled store only where `bundledAvailable`, S3-compatible, Garage); a secret left empty is omitted (keep),
+      required only where nothing usable is stored (first entry, a switch from the bundled store, `unreadable`);
+      `CreateTenantDialog` takes `storeBlocked` from the console's last read and shows the reason with a way to the
+      store page (the server's `409 store_not_ready` is the authority). `veyq-admin store set` takes the secrets
+      from `VEYQ_STORE_SECRET_KEY` / `VEYQ_STORE_GARAGE_ADMIN_TOKEN`, never flags; `store check` prints every step
+      and exits 1 on a failed check. Browser pass (own scratch DB + jar of c0c73a6a, e2e profile): bundled store
+      chosen, checked, a tenant created, then a wrong bucket failed at `BUCKET` with the server's detail.
 - [ ] 4 recipes + tooling — compose, `.env.example`, Helm values, schema and templates keep only the bundled hint
       (Garage still gets its own secrets); `.run/Run Backend.run.xml`, the dev and e2e profiles and
       `scripts/run_web_e2e.py` set the store through the hint or the API; `instance_backup.py` takes the store
