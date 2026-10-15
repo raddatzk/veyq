@@ -176,7 +176,7 @@ First-run **setup** is deliberately not a command: it mints key material and sho
 it stays on the screen above, where a person can actually save the kit.
 
 **TLS is a precondition, not a preference.** `veyq.session.cookie.secure=true` is the shipped default, so over
-plain HTTP the refresh cookie is set and never sent back and "remember me" breaks silently; and every invitation
+plain HTTP the refresh cookie is set and never sent back and **Stay signed in on this device** breaks silently; and every invitation
 link is built as `https://<domain>/tenant/accept#<token>`, so an HTTP-only instance mails links pointing at a
 scheme it does not answer. Traefik obtains a Let's Encrypt certificate over the HTTP-01 challenge, which needs
 port 80 reachable from the internet and `VEYQ_DOMAIN` resolving to this host. While you are still testing a
