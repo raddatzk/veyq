@@ -1,7 +1,11 @@
-<!-- speaks-for: docs/features/memory/use-cases/uc.memory.participants.md, docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md; pair: de/personen-in-deinen-erinnerungen.md -->
-# People in your Memories
+---
+title: "People in your Memories"
+sources:
+  - docs/features/memory/use-cases/uc.memory.participants.md
+  - docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md
+---
 
-A plain-language companion to [Is my data safe?](is-my-data-safe.md) and [Sharing](sharing.md). In a Memory you can
+A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/) and [Sharing](/veyq/sharing/). In a Memory you can
 say **who was there** — the people of a trip, a wedding, a birthday — and open a person to see every Memory they
 took part in.
 

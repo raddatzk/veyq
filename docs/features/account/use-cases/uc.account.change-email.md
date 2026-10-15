@@ -80,7 +80,7 @@ funktioniert weiter, zeigt aber die alte Adresse.
 ## Related
 
 - Feature: [Account](../_index.md)
-- **End-user view (wiki):** [Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)
+- **End-user view (docs site):** [Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)
 - Use-cases: [uc.account.confirm-email-address](uc.account.confirm-email-address.md) (the confirmation record this sets),
   [uc.account.change-password](uc.account.change-password.md) (the proof and the session revocation it mirrors),
   [uc.account.recover-access](uc.account.recover-access.md) (what the address is for)

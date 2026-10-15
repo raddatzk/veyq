@@ -92,9 +92,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   29 a `web/src` comment citing a use-case id under a real feature that names no doc — rejected:
      `validate_doc_citations` resolves `uc.`/`en.`/`cc.` ids, not only `ADR NNNN`. Before it, 7 such ids dangled
      at 12 sites across the client, the backend and a spec, and two agents followed them into nothing (inbox #122)
-  31 a German wiki page declaring one doc fewer than its English pair — rejected: `validate_wiki_sources` holds a
-     pair to the same `speaks-for` set, so a change to one doc cannot reach one language's page and not the other
-  32 a declared doc's every link back to its wiki page removed — rejected: `validate_wiki_sources` requires each
+  31 a German site page declaring one doc fewer than its English page — rejected: `validate_wiki_sources` holds a
+     translation to the same `sources:` set, so a change to one doc cannot reach one language's page and not the other
+  32 a declared doc's every link back to its site page removed — rejected: `validate_wiki_sources` requires each
      `docs/` source to link the page, so whoever edits the doc sees the published page that restates it. Before
      it, a page told users the opposite of its doc and was found because a user asked (inbox #120)
   34 `:core`'s build file depending on `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) holds
@@ -309,7 +309,7 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      passes `validate_node_subtree_erasure`, which proves each node-keyed table is named, never that what its rows
      referenced goes with them. The blob rows and their store objects would outlive every purged file, unreferenced
      and with no sweep; `NodeAttachmentSliceTest` holds it. Pinned so the limit is executable
-  33 a wiki page whose prose contradicts the doc it declares passes `validate_wiki_sources`, which checks the
+  33 a site page whose prose contradicts the doc it declares passes `validate_wiki_sources`, which checks the
      address and never the claim. **Left open on purpose** — whether two sentences in two registers say the same
      thing is not decidable by a grep; the forgery is the sentence that bought that guard, put back. Pinned so
      the limit in that guard's docstring is executable rather than a sentence.
@@ -1211,29 +1211,37 @@ def forge_feature_id_under_unknown_feature(root: pathlib.Path) -> str:
     return "a web/src comment citing a use-case id under a feature that does not exist (the anchor open gap)"
 
 
-def _wiki_header(page: pathlib.Path) -> tuple[list[str], str]:
-    m = re.match(r"<!--\s*speaks-for:\s*([^;]*?)\s*;\s*pair:\s*(.*?)\s*-->", page.read_text())
+SITE_PAGES = pathlib.Path("site/src/content/docs")
+
+
+def _site_sources(page: pathlib.Path) -> list[str]:
+    # Read as text, in the block-list shape the pages use (`sources:` then `  - <path>` lines); a page written
+    # another way is a re-anchor, never a silently skipped case.
+    m = re.match(r"---\n(?:.*\n)*?sources:\n((?:  - .+\n)+)(?:.*\n)*?---\n", page.read_text())
     if not m:
-        raise ForgeError(f"{page.name} has no speaks-for header — re-anchor this forgery")
-    return [s.strip() for s in m.group(1).split(",")], m.group(2)
+        raise ForgeError(f"{page.name} declares no `sources:` block list — re-anchor this forgery")
+    return [line[len("  - "):] for line in m.group(1).splitlines()]
 
 
 def forge_wiki_pair_declares_fewer(root: pathlib.Path) -> str:
-    # The page is read out of the tree, not named: any German page whose header declares two docs or more.
-    for page in sorted((root / "wiki" / "de").glob("*.md")):
-        sources, _pair = _wiki_header(page)
+    # The page is read out of the tree, not named: any German page whose frontmatter declares two docs or more.
+    for page in sorted((root / SITE_PAGES / "de").rglob("*.md")):
+        if page.name == "index.md" and page.parent == root / SITE_PAGES / "de":
+            continue  # the landing page declares nothing
+        sources = _site_sources(page)
         if len(sources) >= 2:
-            text = page.read_text()
-            page.write_text(_sub(text, ", " + sources[-1], ""))
-            return f"wiki/de/{page.name} declares one doc fewer than its English pair"
-    raise ForgeError("no wiki/de page declares two docs or more — re-anchor this forgery")
+            page.write_text(_sub(page.read_text(), f"\n  - {sources[-1]}\n", "\n"))
+            return f"{SITE_PAGES}/de/{page.relative_to(root / SITE_PAGES / 'de')} declares one doc fewer than its English page"
+    raise ForgeError(f"no {SITE_PAGES}/de page declares two docs or more — re-anchor this forgery")
 
 
 def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
     # Every markdown link from the first declared docs/ source back to its English page is unlinked (kept as
     # text): one link left standing would keep the guard green, which is a bite that never landed.
-    for page in sorted((root / "wiki" / "en").glob("*.md")):
-        for s in _wiki_header(page)[0]:
+    for page in sorted((root / SITE_PAGES).glob("*.md")):
+        if page.name == "index.md":
+            continue  # the landing page declares nothing
+        for s in _site_sources(page):
             doc = root / s
             if not (s.startswith("docs/") and doc.is_file()):
                 continue
@@ -1246,18 +1254,18 @@ def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
             text = doc.read_text()
             stripped = link.sub(unlink, text)
             if stripped == text:
-                raise ForgeError(f"{s} carries no link to wiki/en/{page.name} to remove")
+                raise ForgeError(f"{s} carries no link to {SITE_PAGES}/{page.name} to remove")
             doc.write_text(stripped)
-            return f"{s} no longer links back to wiki/en/{page.name}"
-    raise ForgeError("no wiki/en page declares a docs/ source — re-anchor this forgery")
+            return f"{s} no longer links back to {SITE_PAGES}/{page.name}"
+    raise ForgeError(f"no English page under {SITE_PAGES} declares a docs/ source — re-anchor this forgery")
 
 
 def forge_wiki_prose_contradicts_doc(root: pathlib.Path) -> str:
-    page = root / "wiki" / "en" / "account-keys-and-recovery.md"
+    page = root / SITE_PAGES / "account-keys-and-recovery.md"
     if not page.is_file():
-        raise ForgeError("wiki/en/account-keys-and-recovery.md is gone — re-anchor this forgery")
+        raise ForgeError(f"{SITE_PAGES}/account-keys-and-recovery.md is gone — re-anchor this forgery")
     page.write_text(page.read_text() + "\nTo log in, your password is sent to the server.\n")
-    return "a wiki page claiming the password is sent to the server, against the key model it declares"
+    return "a site page claiming the password is sent to the server, against the key model it declares"
 
 
 WRITE_CONCURRENCY = "validate_write_concurrency.py"

@@ -77,7 +77,7 @@ WRAPPER_VALIDATION = "gradle/actions/wrapper-validation"
 GRADLEW = re.compile(r"(^|[\s/])gradlew(\s|$)", re.MULTILINE)
 VERIFIER = "scripts/verify_openapi_generator_jar.mjs"
 
-SKIP_PREFIXES = ("changes/", "docs/", "wiki/")
+SKIP_PREFIXES = ("changes/", "docs/", "site/src/content/")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 GRADLE_COORD = re.compile(r"""["']org\.openapitools:openapi-generator:([^"'$]+)["']""")
 NS = "{https://schema.gradle.org/dependency-verification}"

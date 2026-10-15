@@ -180,7 +180,7 @@ das?"-Link erklärt die Details.
 
 ## Related
 
-- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
 - Feature: [Sharing](../_index.md)
 - Decisions: [ADR 0030](../../../decisions/0030-contributor-public-share.md) (this contributor share — the sealed
   anonymous identity + the share-scoped upload path), [ADR 0029](../../../decisions/0029-public-viewer-share.md)
@@ -193,4 +193,4 @@ das?"-Link erklärt die Details.
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md).
 - Related: [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md) (the read-only viewer share this
   builds on), [Memory](../../memory/_index.md) (what a Memory is — the thing being shared + contributed to).
-- End-user view (wiki): [Is my data safe?](../../../../wiki/en/is-my-data-safe.md)
+- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md)

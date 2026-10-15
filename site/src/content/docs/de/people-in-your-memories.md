@@ -1,7 +1,11 @@
-<!-- speaks-for: docs/features/memory/use-cases/uc.memory.participants.md, docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md; pair: en/people-in-your-memories.md -->
-# Personen in deinen Erinnerungen
+---
+title: "Personen in deinen Erinnerungen"
+sources:
+  - docs/features/memory/use-cases/uc.memory.participants.md
+  - docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md
+---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md) und [Teilen](teilen.md). In einer
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/) und [Teilen](/veyq/de/sharing/). In einer
 Erinnerung kannst du festhalten, **wer dabei war** – die Menschen einer Reise, einer Hochzeit, eines Geburtstags – und
 eine Person öffnen, um alle Erinnerungen zu sehen, an denen sie beteiligt war.
 

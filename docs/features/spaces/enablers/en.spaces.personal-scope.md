@@ -106,7 +106,7 @@ sequenceDiagram
 > **No end-user section.** As an enabler this has no standalone "what this means for you" story — the
 > private-space promise reaches the user through the [Memory](../../memory/_index.md) use-cases it serves
 > (their bilingual sections carry the wiki text). The plain-language "your data is safe" angle lives in the
-> [security wiki](../../../../wiki) safety pages.
+> docs site's [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md).
 
 ## Related
 

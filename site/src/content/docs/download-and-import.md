@@ -1,7 +1,10 @@
-<!-- speaks-for: docs/features/platform/use-cases/uc.platform.export-import.md; pair: de/herunterladen-und-importieren.md -->
-# Download and import
+---
+title: "Download and import"
+sources:
+  - docs/features/platform/use-cases/uc.platform.export-import.md
+---
 
-A plain-language companion to [Is my data safe?](is-my-data-safe.md). You can download a folder, a file, a Memory or a drop
+A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/). You can download a folder, a file, a Memory or a drop
 box from veyq — a file as itself, anything bigger as **one ZIP file** — and bring such a ZIP back in, into the same veyq or
 another one.
 

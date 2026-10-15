@@ -1,7 +1,18 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/account/use-cases/uc.account.confirm-email-address.md, docs/features/account/use-cases/uc.account.change-email.md; pair: de/konto-schluessel-und-wiederherstellung.md -->
-# Account keys & recovery
+---
+title: "Account keys & recovery"
+sources:
+  - docs/crosscutting/security-model.md
+  - docs/features/account/enablers/en.account.key-model.md
+  - docs/features/account/use-cases/uc.account.remember-this-device.md
+  - docs/features/account/use-cases/uc.account.trust-device.md
+  - docs/features/account/use-cases/uc.account.sessions.md
+  - docs/features/account/use-cases/uc.account.rotate-keys.md
+  - docs/features/account/use-cases/uc.account.recover-access.md
+  - docs/features/account/use-cases/uc.account.confirm-email-address.md
+  - docs/features/account/use-cases/uc.account.change-email.md
+---
 
-A plain-language companion to [Is my data safe?](is-my-data-safe.md). Because veyq is end-to-end
+A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/). Because veyq is end-to-end
 encrypted, **your keys — not the server — guard your data.** Here's how that works, no crypto
 background needed.
 
@@ -58,7 +69,7 @@ When you pick a new password, veyq checks it against passwords known from data b
 you leave the field, never while you type. Only the first 5 characters of a fingerprint (a hash) worked out from it go,
 straight from your device, to the free service *Have I Been Pwned*; your browser also tells that service which
 veyq server you're on. If the password turns up in a breach you can still use it — tick **"Use it anyway"** — and
-if the check can't run, nothing is blocked. The details: [Is my data safe?](is-my-data-safe.md#the-one-check-that-leaves-your-device-by-itself)
+if the check can't run, nothing is blocked. The details: [Is my data safe?](/veyq/is-my-data-safe/#the-one-check-that-leaves-your-device-by-itself)
 
 ## If a device is lost
 

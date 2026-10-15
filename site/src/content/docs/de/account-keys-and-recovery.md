@@ -1,7 +1,18 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/account/use-cases/uc.account.confirm-email-address.md, docs/features/account/use-cases/uc.account.change-email.md; pair: en/account-keys-and-recovery.md -->
-# Konto-Schlüssel & Wiederherstellung
+---
+title: "Konto-Schlüssel & Wiederherstellung"
+sources:
+  - docs/crosscutting/security-model.md
+  - docs/features/account/enablers/en.account.key-model.md
+  - docs/features/account/use-cases/uc.account.remember-this-device.md
+  - docs/features/account/use-cases/uc.account.trust-device.md
+  - docs/features/account/use-cases/uc.account.sessions.md
+  - docs/features/account/use-cases/uc.account.rotate-keys.md
+  - docs/features/account/use-cases/uc.account.recover-access.md
+  - docs/features/account/use-cases/uc.account.confirm-email-address.md
+  - docs/features/account/use-cases/uc.account.change-email.md
+---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Weil veyq
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/). Weil veyq
 Ende-zu-Ende-verschlüsselt ist, **schützen deine Schlüssel — nicht der Server — deine Daten.** So
 funktioniert das, ganz ohne Krypto-Vorwissen.
 
@@ -63,7 +74,7 @@ sobald du das Feld verlässt, nie während du tippst. Nur die ersten 5 Zeichen e
 Hashwerts gehen dabei direkt von deinem Gerät an den kostenlosen Dienst *Have I Been Pwned*; dein Browser teilt
 diesem Dienst außerdem mit, welchen veyq-Server du nutzt. Taucht das Passwort in einem Datenleck auf, kannst du es
 trotzdem verwenden — kreuze **„Trotzdem verwenden“** an —, und wenn die Prüfung nicht laufen kann, wird nichts
-blockiert. Die Einzelheiten: [Sind meine Daten sicher?](sind-meine-daten-sicher.md#die-eine-prüfung-die-dein-gerät-von-selbst-verlässt)
+blockiert. Die Einzelheiten: [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/#die-eine-prüfung-die-dein-gerät-von-selbst-verlässt)
 
 ## Wenn ein Gerät weg ist
 

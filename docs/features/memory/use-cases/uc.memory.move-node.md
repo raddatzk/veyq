@@ -113,7 +113,7 @@ genannt, der Rest wird verschoben. Ein Verschieben lässt sich sofort rückgäng
 
 ## Related
 
-- End-user view (wiki): [Files — and finding your way around](../../../../wiki/en/files.md)
+- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the placement write)
 - Use-cases: [uc.memory.browse](uc.memory.browse.md) (the tree a move acts on, its rename the same write),

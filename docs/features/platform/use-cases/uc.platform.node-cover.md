@@ -100,7 +100,7 @@ schon geladen haben, lassen sich nicht zurückholen. Wer nur einen Link bekommt,
 ## Related
 
 - Feature: [Platform](../_index.md)
-- End-user view (wiki): [Files — and finding your way around](../../../../wiki/en/files.md)
+- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
 - Use-cases: [uc.memory.cover](../../memory/use-cases/uc.memory.cover.md) (a Memory's own second source and its gallery flow),
   [uc.files.drop-box](../../files/use-cases/uc.files.drop-box.md) (a drop box carries one),
   [uc.memory.delete-node](../../memory/use-cases/uc.memory.delete-node.md) (the trash keeps a cover for a restore, the purge frees it)

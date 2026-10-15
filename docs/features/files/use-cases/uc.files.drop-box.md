@@ -73,7 +73,7 @@ den Link ab, bleibt alles erhalten, was schon angekommen ist.
 
 ## Related
 
-- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/files.md](../../../apps/files.md).
 - **Use-cases:** [uc.files.share-folder-files](uc.files.share-folder-files.md),
   [uc.sharing.share-uploader](../../sharing/use-cases/uc.sharing.share-uploader.md) (Memories' write-only link, whose

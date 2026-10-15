@@ -96,7 +96,7 @@ anzeigen kann, bekommst du stattdessen einen klaren Hinweis und den Download.
 
 ## Related
 
-- End-user view (wiki): [Files — and finding your way around](../../../../wiki/en/files.md)
+- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/files.md](../../../apps/files.md).
 - **Use-cases:** [uc.files.member-files](uc.files.member-files.md) (the page's download and replace),
   [uc.files.share-file](uc.files.share-file.md), [uc.files.share-folder-files](uc.files.share-folder-files.md).

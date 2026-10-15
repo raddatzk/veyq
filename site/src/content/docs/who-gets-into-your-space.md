@@ -1,7 +1,11 @@
-<!-- speaks-for: docs/features/spaces/use-cases/uc.spaces.add-member.md, docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md; pair: de/wer-in-deinen-bereich-kommt.md -->
-# Who gets into your space
+---
+title: "Who gets into your space"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.add-member.md
+  - docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md
+---
 
-A plain-language companion to [Is my data safe?](is-my-data-safe.md). Your shared space starts as just yours.
+A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/). Your shared space starts as just yours.
 This page is about the one decision that changes that — inviting someone — and what happens on its own
 afterwards.
 

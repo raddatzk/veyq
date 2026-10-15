@@ -98,4 +98,4 @@ bei der Einladung.
   [ADR 0050](../../../decisions/0050-operator-config-secret-encryption.md) (the password sealed at rest),
   [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) (the invite link is an admission token,
   not a key).
-- Operator view (wiki): [Running your own instance](../../../../wiki/en/running-your-instance.md)
+- Operator view (docs site): [Running your own instance](../../../../site/src/content/docs/run/index.md)

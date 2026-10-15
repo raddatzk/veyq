@@ -1,5 +1,15 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/spaces/use-cases/uc.spaces.require-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md; pair: de/sind-meine-daten-sicher.md -->
-# Is my data safe?
+---
+title: "Is my data safe?"
+sources:
+  - docs/crosscutting/security-model.md
+  - docs/features/memory/use-cases/uc.memory.gallery.md
+  - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
+  - docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md
+  - docs/features/spaces/use-cases/uc.spaces.require-verified-identities.md
+  - docs/features/account/use-cases/uc.account.recover-access.md
+  - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
+  - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
+---
 
 **In one sentence:** veyq is **end-to-end encrypted** — your photos, videos, journal text and the
 sensitive details around them are locked on your own device *before* they ever reach the server, and
@@ -19,7 +29,7 @@ database:
 
 - your **photos and videos** (and the smaller preview versions),
 - your **journal text**,
-- your **files** — documents, PDFs, anything you keep in [Files](files.md) — and their **names**,
+- your **files** — documents, PDFs, anything you keep in [Files](/veyq/files/) — and their **names**,
 - the **sensitive details**: titles, captions, descriptions, places, the people in them, tags,
 - **where** a photo was taken (GPS) and **when** it was captured,
 - the **file's own name**, and everything the camera wrote into the picture: the camera and lens, how it was
@@ -72,7 +82,7 @@ Sharing is the one moment you **choose** to lower the wall — always by your ex
   a link that lets guests add photos, their app first has to prove it holds the secret, so someone who
   only has the address (say, from a copy of our database) cannot upload anything through it.
 
-How the different links work — view only, view and add, drop box — is in [Sharing](sharing.md).
+How the different links work — view only, view and add, drop box — is in [Sharing](/veyq/sharing/).
 
 Three honest limits:
 - **Un-sharing doesn't un-download.** Revoking access stops *future* access; it can't reach back and
@@ -106,7 +116,7 @@ room to add stronger locks later for new things you save, while what you already
 is. That also means your existing memories **don't move to new locks by themselves** — today there is only
 one set of locks, so nothing has needed to.
 
-More: [What happens to my photos when quantum computers arrive?](quantum-computers-and-your-photos.md)
+More: [What happens to my photos when quantum computers arrive?](/veyq/quantum-computers-and-your-photos/)
 
 ## Making sure it's really *their* key — and an honest gap
 
@@ -136,7 +146,7 @@ otherwise.
 - **Forgot your password?** You won't lose your memories — they're tied to your *key*, not your
   password. Your Emergency Kit is what gets you back in; a device you are still signed in on keeps
   working meanwhile. Resetting takes two things at once: a link we mail you, and the secret key from
-  your kit. Neither works alone — see [Account keys & recovery](account-keys-and-recovery.md).
+  your kit. Neither works alone — see [Account keys & recovery](/veyq/account-keys-and-recovery/).
 - **Lost everything** — no signed-in device and no Emergency Kit? Then it's **gone.** There is
   **no backdoor and no escrow**: the same thing that stops *us* from reading your data stops us from
   rescuing it. That's the deal, stated up front.

@@ -316,4 +316,4 @@ bleibt es unbenannt.
   wraps a revoked session deliberately does **not** touch),
   [onboard-device](uc.account.onboard-device.md) (the flow whose locked entry E3 hosts, and whose grants this
   screen contains)
-- End-user view (wiki): [Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)
+- End-user view (docs site): [Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)

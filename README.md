@@ -44,7 +44,7 @@ just a sovereignty preference here; anything that erodes it is a security regres
 | [`backend/`](backend/CLAUDE.md) | Quarkus / Kotlin. Performs no content crypto, never sees a password |
 | [`web/`](web/CLAUDE.md) | Vue 3 client. All content crypto runs here |
 | [`docs/`](docs/README.md) | Internal engineering state — architecture, ADRs, features, coverage |
-| [`wiki/`](wiki/Home.md) | The published end-user wiki (EN + DE), plain language |
+| [`site/`](site/src/content/docs/index.md) | The published documentation site: using veyq (EN + DE, plain language), running an instance, security |
 | [`infra/`](infra/README.md) | Local dev stack (Docker Compose) |
 
 Start at [`docs/architecture/README.md`](docs/architecture/README.md) for the whole-system view, or

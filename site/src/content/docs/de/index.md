@@ -1,9 +1,25 @@
 ---
 title: veyq
-description: Selbst hostbares, Ende-zu-Ende-verschlüsseltes Teilen von Erinnerungen.
+description: Eine verständliche Einführung, was veyq kann und warum deine Erinnerungen privat bleiben.
 ---
 
-Diese Seite entsteht gerade. Als Nächstes ziehen die Anleitungen zur Nutzung von veyq hierher um; die Anleitung
-zum Betrieb einer Instanz und der Leseweg für Sicherheitsforschende folgen.
+Eine verständliche Einführung, was veyq kann und warum deine Erinnerungen privat bleiben. Kein technisches
+Vorwissen nötig.
 
-Wenn du eine Instanz betreibst, beginne mit dem [Betrieb einer Instanz](/veyq/de/run/).
+## Für dich
+
+- [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/)
+- [Dateien — und wie du dich zurechtfindest](/veyq/de/files/)
+- [Teilen mit Menschen ohne Konto](/veyq/de/sharing/)
+- [Personen in deinen Erinnerungen](/veyq/de/people-in-your-memories/)
+- [Herunterladen und Importieren](/veyq/de/download-and-import/)
+- [Konto-Schlüssel & Wiederherstellung](/veyq/de/account-keys-and-recovery/)
+- [Wer in deinen Bereich kommt](/veyq/de/who-gets-into-your-space/)
+- [Ein weiteres Gerät hinzufügen](/veyq/de/adding-another-device/)
+- [Quantencomputer & deine Fotos](/veyq/de/quantum-computers-and-your-photos/)
+
+## Eine Instanz betreiben
+
+Technisch und nur auf Englisch — für alle, die einen Server *betreiben* statt ihn zu nutzen.
+
+- [Running your own instance](/veyq/de/run/)

@@ -24,7 +24,18 @@ export default defineConfig({
         {
           label: 'Use',
           translations: { de: 'Benutzen' },
-          items: [{ slug: 'index', label: 'Start', translations: { de: 'Start' } }],
+          items: [
+            { slug: 'index', label: 'Start', translations: { de: 'Start' } },
+            'is-my-data-safe',
+            'files',
+            'sharing',
+            'people-in-your-memories',
+            'download-and-import',
+            'account-keys-and-recovery',
+            'who-gets-into-your-space',
+            'adding-another-device',
+            'quantum-computers-and-your-photos',
+          ],
         },
         {
           label: 'Run',

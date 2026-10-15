@@ -1,9 +1,24 @@
 ---
 title: veyq
-description: Self-hostable, end-to-end-encrypted sharing of memories.
+description: A plain-language guide to what veyq does and why your memories stay private.
 ---
 
-This site is being built. The guides for using veyq move here next; the guide for running an instance and the
-reading path for security researchers follow.
+A plain-language guide to what veyq does and why your memories stay private. No technical background needed.
 
-Start with [running an instance](/veyq/run/) if you administer one.
+## For you
+
+- [Is my data safe?](/veyq/is-my-data-safe/)
+- [Files — and finding your way around](/veyq/files/)
+- [Sharing with people who have no account](/veyq/sharing/)
+- [People in your Memories](/veyq/people-in-your-memories/)
+- [Download and import](/veyq/download-and-import/)
+- [Account keys & recovery](/veyq/account-keys-and-recovery/)
+- [Who gets into your space](/veyq/who-gets-into-your-space/)
+- [Adding another device](/veyq/adding-another-device/)
+- [Quantum computers & your photos](/veyq/quantum-computers-and-your-photos/)
+
+## Running an instance
+
+Technical, English only — for whoever operates a server rather than uses one.
+
+- [Running your own instance](/veyq/run/)

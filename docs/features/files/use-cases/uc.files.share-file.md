@@ -61,7 +61,7 @@ verschlüsselt, und über diesen Link kann niemand den Rest deines Ordners sehen
 
 ## Related
 
-- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/files.md](../../../apps/files.md).
 - **Use-cases:** [uc.files.share-folder-files](uc.files.share-folder-files.md) (a folder link carries its files),
   [uc.files.member-files](uc.files.member-files.md),

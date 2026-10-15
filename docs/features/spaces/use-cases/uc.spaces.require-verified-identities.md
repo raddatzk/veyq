@@ -58,4 +58,4 @@ Mitglieder teilen, ist noch offen.
   requires), [uc.spaces.verify-identity](uc.spaces.verify-identity.md) (the advisory default it would harden)
 - Decisions: [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (Decision 4, strict
   mode), [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the trust tier this rides on)
-- End-user view (wiki): [Is my data safe?](../../../../wiki/en/is-my-data-safe.md)
+- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md)

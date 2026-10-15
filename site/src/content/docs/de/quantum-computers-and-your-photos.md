@@ -1,7 +1,10 @@
-<!-- speaks-for: docs/crosscutting/security-model.md; pair: en/quantum-computers-and-your-photos.md -->
-# Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?
+---
+title: "Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?"
+sources:
+  - docs/crosscutting/security-model.md
+---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Kurz gesagt:
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/). Kurz gesagt:
 **deine Erinnerungen werden schon heute mit einem Schutz verschlossen, der auch künftigen
 Quantencomputern standhält** — und der Entwurf lässt Raum für stärkere Schlösser später.
 

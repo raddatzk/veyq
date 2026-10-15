@@ -218,4 +218,4 @@ Passwort + Secret Key.
   the floor); [remember this device](uc.account.remember-this-device.md) (the sign-in screen that enrols it);
   [onboard device](uc.account.onboard-device.md); [sessions](uc.account.sessions.md); passkey — planned
   (biometric / WebAuthn PRF)
-- End-user view (wiki): [Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)
+- End-user view (docs site): [Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)

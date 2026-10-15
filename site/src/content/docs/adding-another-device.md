@@ -1,7 +1,10 @@
-<!-- speaks-for: docs/features/account/use-cases/uc.account.onboard-device.md; pair: de/ein-weiteres-geraet-hinzufuegen.md -->
-# Adding another device
+---
+title: "Adding another device"
+sources:
+  - docs/features/account/use-cases/uc.account.onboard-device.md
+---
 
-A plain-language companion to [Account keys & recovery](account-keys-and-recovery.md). You can let a new
+A plain-language companion to [Account keys & recovery](/veyq/account-keys-and-recovery/). You can let a new
 phone or laptop in without digging out your Emergency Kit: **one device you are already signed in on hands
 the other everything it needs.**
 
@@ -65,11 +68,11 @@ past the one warning you get.
 
 **A device added this way gets everything, permanently.** It can read every memory you have. Signing it
 out later stops it reaching the server, but it does **not** take the key back — see
-[Is my data safe?](is-my-data-safe.md) for what a sign-out does and does not do. So only ever add a device
+[Is my data safe?](/veyq/is-my-data-safe/) for what a sign-out does and does not do. So only ever add a device
 you are holding.
 
 If you ever approve a code that turns out not to be your own device, there is one thing that ends it:
-[replacing your keys](account-keys-and-recovery.md#if-someone-got-into-your-account). It shuts that device
+[replacing your keys](/veyq/account-keys-and-recovery/#if-someone-got-into-your-account). It shuts that device
 out from that moment on — it cannot take back what was already read, and it needs your Emergency Kit.
 
 **A device added this way has no password saved on it.** You never typed one there, and it never learns
@@ -80,6 +83,6 @@ signed in on it, closing the browser ends its access, and you add it again next 
 
 ## Related
 
-- [Is my data safe?](is-my-data-safe.md)
-- [Account keys & recovery](account-keys-and-recovery.md)
-- [Who gets into your space](who-gets-into-your-space.md)
+- [Is my data safe?](/veyq/is-my-data-safe/)
+- [Account keys & recovery](/veyq/account-keys-and-recovery/)
+- [Who gets into your space](/veyq/who-gets-into-your-space/)

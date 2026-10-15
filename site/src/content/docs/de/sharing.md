@@ -1,7 +1,17 @@
-<!-- speaks-for: docs/features/files/use-cases/uc.files.share-folder-files.md, docs/features/files/use-cases/uc.files.share-file.md, docs/features/files/use-cases/uc.files.drop-box.md, docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md, docs/features/sharing/use-cases/uc.sharing.share-password.md, docs/features/sharing/use-cases/uc.sharing.share-note.md; pair: en/sharing.md -->
-# Teilen mit Menschen ohne Konto
+---
+title: "Teilen mit Menschen ohne Konto"
+sources:
+  - docs/features/files/use-cases/uc.files.share-folder-files.md
+  - docs/features/files/use-cases/uc.files.share-file.md
+  - docs/features/files/use-cases/uc.files.drop-box.md
+  - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
+  - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
+  - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
+  - docs/features/sharing/use-cases/uc.sharing.share-password.md
+  - docs/features/sharing/use-cases/uc.sharing.share-note.md
+---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md) und [Dateien](dateien.md). Du
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/) und [Dateien](/veyq/de/files/). Du
 kannst etwas an irgendwen weitergeben — Oma, eine Freundin, einen Gruppenchat — als **Link**. Die Person öffnet ihn im
 Browser: ohne Konto, ohne Installation.
 
@@ -83,4 +93,4 @@ zählt gegen den Platz, den du dem Link erlaubt hast.
 Die ehrliche Grenze, wie überall: Im Browser ist das so privat wie dein Vertrauen in den, der die Webseite
 *ausliefert* — bist das du selbst (self-hosted), ist es voll privat. Und ein Link lässt sich nicht ungesehen machen:
 Ein Entzug stoppt künftigen Zugriff, kann aber nicht löschen, was jemand schon gespeichert hat. Mehr:
-[Sind meine Daten sicher?](sind-meine-daten-sicher.md).
+[Sind meine Daten sicher?](/veyq/de/is-my-data-safe/).

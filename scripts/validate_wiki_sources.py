@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""Every published wiki page names the docs it speaks for and its other-language pair, and those docs name it back.
+"""Every published site page names the docs it speaks for, its German translation declares the same ones, and those
+docs name the page back.
 
-What it asserts, per page under a language directory of `wiki/` (`wiki/en/`, `wiki/de/`; the root `Home.md` is
-the index and carries no header):
-  (a) line 1 is the header `<!-- speaks-for: <repo-relative path>, …; pair: <page relative to wiki/> -->`, or
-      with `pair: none — <reason>` in place of a page;
-  (b) every `speaks-for` path exists;
-  (c) the pair exists and is a page, its own `pair` points back, and both declare the same `speaks-for` set;
-  (d) `pair: none` appears only under `wiki/en/`, with a reason — an English operator page may stand alone, a
-      translated page cannot;
-  (e) every `speaks-for` target under `docs/` contains a markdown link that resolves to the page's English
-      side. A doc outside `docs/` (`infra/README.md`) is exempt: it is not where an engineering change to a
-      user-facing claim is made.
-The header is an HTML comment because `wiki-sync.yml` publishes `wiki/` alone: a relative link into `docs/`
-would be dead on the published wiki, and a visible absolute link would put engineering docs in front of the
-plain-language reader on every page. That GitHub's wiki renderer hides the comment is **remembered, not
-measured**: there is no remote to publish to yet, so look at one published page on the first real sync.
+The name is the wiki's, which this guard was built for (cr-wiki-pages-name-their-source); since ADR 0087 the
+published pages are the Starlight site's, `site/src/content/docs/` (English at the root, German under `de/` at the
+English path — which is how Starlight pairs a page with its translation, so the pair needs no declaring).
+
+What it asserts, per page (`*.md` / `*.mdx`) under that directory:
+  (a) the page opens with a YAML frontmatter block, and — except the landing pair `index.md` / `de/index.md`, which
+      speaks for no doc — declares `sources:`, a non-empty list of repo-relative paths;
+  (b) every declared path exists;
+  (c) a German page translates an English page at the same path, and both declare the same `sources` set;
+  (d) an English page outside the English-only areas has its German translation. The areas that are English by
+      design (ADR 0087 §1) are `run/` (administrators) and `security/` (researchers); there, a missing German page
+      is Starlight's fallback, not a gap;
+  (e) every declared source under `docs/` contains a markdown link that resolves to the English page's file. A
+      source outside `docs/` (`infra/README.md`) is exempt: it is not where an engineering change to a user-facing
+      claim is made.
 
 The defect that bought it (inbox #120): `wiki/{en,de}/account-keys-and-recovery.md` told users their password is
 sent to the server to log in — the opposite of the design, where the device derives a keypair and shows the server
@@ -27,8 +28,7 @@ Its limit — what a green run does NOT prove: that the page and the doc **claim
 not have caught the sentence above; what it buys is an address, so a change to a doc shows the published pages to
 re-read. Pinned open in `validate_guard_gaps.py`. Also unchecked: that the declared set is complete (a doc a page
 restates but does not declare is invisible here), and the reverse direction — a doc that links a page without
-being declared by it. The pairing itself cannot be derived: EN and DE file names are translated, so only the
-header says which pages belong together.
+being declared by it. Links between the pages themselves are the site's own check (`npm run check` in `site/`).
 
 A `validate_*.py`, so the trust-chain glob runs it on every push with no build. Runnable locally:
 
@@ -40,17 +40,24 @@ import pathlib
 import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-WIKI = ROOT / "wiki"
-EN = "en"  # the one language a page may stand alone in: the operator page is technical and English-only
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
+    print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
+    sys.exit(2)
 
-HEADER = re.compile(r"^<!--\s*speaks-for:\s*(?P<sources>[^;]*?)\s*;\s*pair:\s*(?P<pair>.*?)\s*-->\s*$")
-NONE = re.compile(r"^none\s*[—-]\s*(?P<reason>\S.*)$")
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+PAGES = ROOT / "site" / "src" / "content" / "docs"
+DE = "de"  # the one translation locale; English is the root
+LANDING = {"index.md", "de/index.md"}  # the landing pair lists the pages and speaks for no doc
+ENGLISH_ONLY = ("run/", "security/")  # areas English by design (ADR 0087 §1): Run and Security
+
+FRONTMATTER = re.compile(r"\A---\n(?P<yaml>.*?)\n---\n", re.S)
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 
 
 def pages() -> list[pathlib.Path]:
-    return sorted(p for lang in WIKI.iterdir() if lang.is_dir() for p in lang.glob("*.md"))
+    return sorted(p for p in PAGES.rglob("*") if p.suffix in {".md", ".mdx"} and p.is_file())
 
 
 def rel(p: pathlib.Path) -> str:
@@ -67,67 +74,67 @@ def links_to(doc: pathlib.Path, page: pathlib.Path) -> bool:
 
 
 errors: list[str] = []
-headers: dict[pathlib.Path, tuple[list[str], str]] = {}
+declared: dict[str, list[str]] = {}  # path under PAGES -> declared sources
 all_pages = pages()
 
 for page in all_pages:
-    first = page.read_text().split("\n", 1)[0]
-    m = HEADER.match(first)
+    path = page.relative_to(PAGES).as_posix()
+    m = FRONTMATTER.match(page.read_text())
     if not m:  # (a)
-        errors.append(f"{rel(page)}: no header — line 1 must be "
-                      f"`<!-- speaks-for: docs/…md, …; pair: <other-language page> | none — <reason> -->`")
+        errors.append(f"{rel(page)}: no frontmatter — a page opens with `---`, its `title:` and `sources:`, `---`")
         continue
-    sources = [s.strip() for s in m.group("sources").split(",") if s.strip()]
-    if not sources:
-        errors.append(f"{rel(page)}: `speaks-for` names no doc")
+    try:
+        front = yaml.safe_load(m.group("yaml")) or {}
+    except yaml.YAMLError as e:
+        errors.append(f"{rel(page)}: frontmatter does not parse ({str(e).splitlines()[0]})")
+        continue
+    sources = front.get("sources") if isinstance(front, dict) else None
+    if path in LANDING:
+        continue
+    if not isinstance(sources, list) or not sources or not all(isinstance(s, str) and s.strip() for s in sources):
+        errors.append(f"{rel(page)}: `sources:` must list the docs this page speaks for (repo-relative paths)")
+        continue
     for s in sources:  # (b)
         if not (ROOT / s).is_file():
             errors.append(f"{rel(page)}: speaks for `{s}`, which does not exist")
-    headers[page] = (sources, m.group("pair"))
+    declared[path] = sources
 
-for page, (sources, pair) in headers.items():
-    lang = page.parent.name
-    none = NONE.match(pair)
-    if pair.startswith("none"):
-        if lang != EN:  # (d)
-            errors.append(f"{rel(page)}: `pair: none` is allowed only under wiki/{EN}/ — a {lang} page is a "
-                          f"translation, so it has an English pair")
-        elif not none:
-            errors.append(f"{rel(page)}: `pair: none` must say why (`none — <reason>`)")
-        continue
-    other = WIKI / pair
-    if other not in headers:  # (c)
-        state = "has no header" if other in all_pages else "is not a wiki page"
-        errors.append(f"{rel(page)}: pair `{pair}` {state}")
-        continue
-    if other.parent.name == lang:
-        errors.append(f"{rel(page)}: pair `{pair}` is in the same language")
-    back_sources, back = headers[other]
-    if WIKI / back != page:
-        errors.append(f"{rel(page)}: pair `{pair}` points back at `{back}`, not at this page")
-    if set(back_sources) != set(sources):
-        only_here = sorted(set(sources) - set(back_sources))
-        only_there = sorted(set(back_sources) - set(sources))
-        errors.append(f"{rel(page)}: speaks for a different set than its pair `{pair}` — "
-                      f"only here: {only_here or '—'}, only there: {only_there or '—'}")
+for path, sources in declared.items():
+    if path.startswith(DE + "/"):  # (c)
+        english = path[len(DE) + 1:]
+        if english not in declared:
+            state = "declares no sources" if (PAGES / english).is_file() else "does not exist"
+            errors.append(f"{rel(PAGES / path)}: translates `{english}`, which {state} — a German page sits at its "
+                          f"English page's path")
+            continue
+        if set(sources) != set(declared[english]):
+            only_here = sorted(set(sources) - set(declared[english]))
+            only_there = sorted(set(declared[english]) - set(sources))
+            errors.append(f"{rel(PAGES / path)}: speaks for a different set than its English page `{english}` — "
+                          f"only here: {only_here or '—'}, only there: {only_there or '—'}")
+    elif not path.startswith(ENGLISH_ONLY) and f"{DE}/{path}" not in declared:  # (d)
+        errors.append(f"{rel(PAGES / path)}: has no German translation at `{DE}/{path}` — only "
+                      f"{', '.join(ENGLISH_ONLY)} are English-only by design")
 
-for page, (sources, _pair) in headers.items():  # (e), from the English side: a pair declares the same set
-    if page.parent.name != EN:
+for path, sources in declared.items():  # (e), from the English side: a translation declares the same set
+    if path.startswith(DE + "/"):
         continue
+    page = PAGES / path
     for s in sources:
         doc = ROOT / s
         if s.startswith("docs/") and doc.is_file() and not links_to(doc, page):
             errors.append(f"{rel(page)}: `{s}` does not link back to {rel(page)} — whoever edits that doc "
                           f"must see the published page that speaks for it")
 
-if not all_pages:
-    print("WIKI SOURCES VALIDATION FAILED: found no wiki page at all — wiki/ moved?")
+if not declared:
+    print("SITE SOURCES VALIDATION FAILED: found no site page declaring sources — site/src/content/docs moved?")
     sys.exit(1)
 
 if errors:
-    print("WIKI SOURCES VALIDATION FAILED:")
+    print("SITE SOURCES VALIDATION FAILED:")
     for e in errors:
         print("  -", e)
     sys.exit(1)
 
-print(f"wiki sources OK: {len(all_pages)} page(s) name their docs and pair, and every docs/ source links back")
+print(f"site sources OK: {len(declared)} page(s) name their docs, each German page its English page's set, and "
+      f"every docs/ source links back")

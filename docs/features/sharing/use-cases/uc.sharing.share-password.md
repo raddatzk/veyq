@@ -102,7 +102,7 @@ dicht); es ist ein Schloss an der Tür, und deine Fotos selbst sind ohnehin vers
 
 ## Related
 
-- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
 - **Feature:** [sharing](../_index.md)
 - **Decisions:** [ADR 0037](../../../decisions/0037-password-protected-shares.md) (this gate + the honest
   access-control vs crypto tradeoff), [ADR 0030](../../../decisions/0030-contributor-public-share.md) (the

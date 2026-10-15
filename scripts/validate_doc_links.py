@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Validate that every relative link under `docs/`, `changes/` and `wiki/` resolves to a real file.
+"""Validate that every relative link under `docs/` and `changes/`, and every repository link on the published site
+(`site/src/content/docs/`), resolves to a real file.
 
 **Asserts:** every inline markdown link/image in those trees points at a path that exists. The reliable,
 false-positive-free half of "are the docs (incl. ADRs) still correct?": a doc linking to a
@@ -10,7 +11,12 @@ added to the walk later for the same reason `.claude/` got its own `validate_ski
 pointer-heavy tree that sat outside every link guard. `changes/README.md` defines the guard-docstring
 contract and is cited from four other files, so a rename would have rotted those pointers silently. `wiki/`
 joined with cr-wiki-pages-name-their-source: the published pages carried 36 relative links between themselves
-that no run read, so the one surface strangers see was the one whose links nothing checked.
+that no run read, so the one surface strangers see was the one whose links nothing checked. When the wiki became
+the Starlight site (ADR 0087) its pages stopped linking each other relatively — a link between them is a site URL
+under `/veyq/`, which the site's own `npm run check` resolves (starlight-links-validator), so this guard skips it.
+What a site page links in the repository is a GitHub URL (`https://github.com/raddatzk/veyq/blob/main/<path>`, the
+Security area's whole reading path), and that is read here as the repository path it names: a moved or deleted
+doc would otherwise leave a dead link in front of exactly the readers who follow them.
 
 **Limit — resolution, never aptness.** A link that resolves is not thereby a link that points at the *right*
 thing. External (http/https/mailto/tel) and pure in-page anchors (`#section`) are skipped, and a `#fragment`
@@ -36,7 +42,10 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DOC_ROOTS = [ROOT / "docs", ROOT / "changes", ROOT / "wiki"]
+SITE = ROOT / "site" / "src" / "content" / "docs"
+DOC_ROOTS = [ROOT / "docs", ROOT / "changes", SITE]
+SITE_BASE = "/veyq/"  # site/astro.config.mjs `base`: a link under it is a page URL, checked by the site's build
+REPO_URL = re.compile(r"^https://github\.com/raddatzk/veyq/(?:blob|tree)/main/(?P<path>[^#?]+)")
 
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 SKIP_SCHEME = ("http://", "https://", "mailto:", "tel:")
@@ -44,22 +53,28 @@ SKIP_SCHEME = ("http://", "https://", "mailto:", "tel:")
 errors: list[str] = []
 
 
-def targets(text: str):
+def targets(text: str, site: bool):
     for m in LINK.finditer(text):
         raw = m.group(1).strip()
         # drop an optional "title": [x](path "the title")
         target = raw.split()[0] if raw else raw
         target = target.strip("<>")
+        repo = REPO_URL.match(target) if site else None
+        if repo:
+            yield ROOT / repo.group("path"), target
+            continue
         if not target or target.startswith("#") or target.startswith(SKIP_SCHEME):
             continue
-        yield target.split("#", 1)[0]  # strip any in-page anchor
+        if site and target.startswith(SITE_BASE):
+            continue
+        yield None, target.split("#", 1)[0]  # strip any in-page anchor
 
 
-for md in sorted(p for root in DOC_ROOTS for p in root.rglob("*.md")):
-    for target in targets(md.read_text()):
+for md in sorted(p for root in DOC_ROOTS for p in root.rglob("*.md*") if p.suffix in (".md", ".mdx")):
+    for absolute, target in targets(md.read_text(), SITE in md.parents):
         if not target:
             continue
-        resolved = (md.parent / target).resolve()
+        resolved = absolute.resolve() if absolute else (md.parent / target).resolve()
         if not resolved.exists():
             errors.append(f"{md.relative_to(ROOT)}: dead link → {target}")
 
@@ -69,5 +84,5 @@ if errors:
         print("  -", e)
     sys.exit(1)
 
-n = sum(1 for root in DOC_ROOTS for _ in root.rglob("*.md"))
+n = sum(1 for root in DOC_ROOTS for p in root.rglob("*.md*") if p.suffix in (".md", ".mdx"))
 print(f"doc links OK: all relative links in {n} doc(s) resolve")

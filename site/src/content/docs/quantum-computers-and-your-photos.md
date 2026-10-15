@@ -1,7 +1,10 @@
-<!-- speaks-for: docs/crosscutting/security-model.md; pair: de/quantencomputer-und-deine-fotos.md -->
-# What happens to my photos when quantum computers arrive?
+---
+title: "What happens to my photos when quantum computers arrive?"
+sources:
+  - docs/crosscutting/security-model.md
+---
 
-A plain-language companion to [Is my data safe?](is-my-data-safe.md). Short version: **your memories are
+A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/). Short version: **your memories are
 locked today with protection chosen to survive tomorrow's quantum computers** — and the design leaves room
 for stronger locks later.
 

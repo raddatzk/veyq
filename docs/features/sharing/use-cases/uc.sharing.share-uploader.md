@@ -140,7 +140,7 @@ Galerie. Du als Kurator:in siehst jeden Beitrag in deiner eigenen Erinnerung und
 
 ## Related
 
-- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
 - Feature: [Sharing](../_index.md)
 - Decisions: [ADR 0031](../../../decisions/0031-uploader-public-share.md) (this write-only drop-box — the
   client-local, session-only own-view + delete-own), [ADR 0030](../../../decisions/0030-contributor-public-share.md)
@@ -152,4 +152,4 @@ Galerie. Du als Kurator:in siehst jeden Beitrag in deiner eigenen Erinnerung und
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md).
 - Related: [uc.sharing.share-contributor](uc.sharing.share-contributor.md) (view + add — the sibling upload role),
   [Memory](../../memory/_index.md) (what a Memory is — the thing being contributed to).
-- End-user view (wiki): [Is my data safe?](../../../../wiki/en/is-my-data-safe.md)
+- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md)

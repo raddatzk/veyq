@@ -1,7 +1,17 @@
-<!-- speaks-for: docs/features/files/use-cases/uc.files.share-folder-files.md, docs/features/files/use-cases/uc.files.share-file.md, docs/features/files/use-cases/uc.files.drop-box.md, docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md, docs/features/sharing/use-cases/uc.sharing.share-password.md, docs/features/sharing/use-cases/uc.sharing.share-note.md; pair: de/teilen.md -->
-# Sharing with people who have no account
+---
+title: "Sharing with people who have no account"
+sources:
+  - docs/features/files/use-cases/uc.files.share-folder-files.md
+  - docs/features/files/use-cases/uc.files.share-file.md
+  - docs/features/files/use-cases/uc.files.drop-box.md
+  - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
+  - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
+  - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
+  - docs/features/sharing/use-cases/uc.sharing.share-password.md
+  - docs/features/sharing/use-cases/uc.sharing.share-note.md
+---
 
-A plain-language companion to [Is my data safe?](is-my-data-safe.md) and [Files](files.md). You can hand
+A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/) and [Files](/veyq/files/). You can hand
 something to anyone — a grandparent, a friend, a group chat — as a **link**. They open it in a browser: no
 account, nothing to install.
 
@@ -80,4 +90,4 @@ that link.
 
 The honest limit, same as everywhere: in a browser, this is as private as your trust in whoever *serves* the web
 page — if that is you (self-hosted), it is fully private. And a link can't be unseen: revoking it stops future
-access but can't erase what someone already saved. More: [Is my data safe?](is-my-data-safe.md#when-you-share).
+access but can't erase what someone already saved. More: [Is my data safe?](/veyq/is-my-data-safe/#when-you-share).

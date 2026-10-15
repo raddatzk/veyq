@@ -69,7 +69,7 @@ du einem Bereich als Mitglied bei, kannst du dein Bild gleich nach dem ersten En
 ## Related
 
 - Feature: [Spaces (scopes)](../_index.md)
-- End-user view (wiki): [People in your Memories](../../../../wiki/en/people-in-your-memories.md)
+- End-user view (docs site): [People in your Memories](../../../../site/src/content/docs/people-in-your-memories.md)
 - Enabler: [en.spaces.member-identity](../enablers/en.spaces.member-identity.md) (the per-tenant profile row)
 - Decisions: [ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md),
   [ADR 0023](../../../decisions/0023-per-tenant-member-identity.md),

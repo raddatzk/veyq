@@ -24,7 +24,7 @@
   [Security Model](../../../crosscutting/security-model.md).
 
 > **No end-user section** (enabler) — its value surfaces through the account use-cases it serves. Plain-language
-> companion: [wiki: Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md). This is the
+> companion: [docs site: Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md). This is the
 > **target model**; first-build scope is tracked via the inbox + change-requests.
 
 ## Principle: one Master Key, many wraps
@@ -215,4 +215,4 @@ an existing space (the temporary invite-wrap) is a scopes & tenancy concern, ref
   [en.memory.tree](../../memory/enablers/en.memory.tree.md) build their scope/content keys on this root
 - Concepts: [security-model](../../../crosscutting/security-model.md) (the whole-system boundary),
   [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md) (the scope/content keys this root extends)
-- End-user view: [wiki: Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)
+- End-user view: [docs site: Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)

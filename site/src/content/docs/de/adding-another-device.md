@@ -1,7 +1,10 @@
-<!-- speaks-for: docs/features/account/use-cases/uc.account.onboard-device.md; pair: en/adding-another-device.md -->
-# Ein weiteres Gerät hinzufügen
+---
+title: "Ein weiteres Gerät hinzufügen"
+sources:
+  - docs/features/account/use-cases/uc.account.onboard-device.md
+---
 
-Eine verständliche Ergänzung zu [Konto-Schlüssel & Wiederherstellung](konto-schluessel-und-wiederherstellung.md).
+Eine verständliche Ergänzung zu [Konto-Schlüssel & Wiederherstellung](/veyq/de/account-keys-and-recovery/).
 Du kannst ein neues Handy oder einen neuen Laptop hereinlassen, ohne dein Notfall-Kit herauszusuchen: **ein
 Gerät, an dem du schon angemeldet bist, gibt dem anderen alles Nötige.**
 
@@ -65,11 +68,11 @@ Das ist Absicht und keine fehlende Funktion. Ein „Nochmal versuchen" auf demse
 
 **Ein so hinzugefügtes Gerät bekommt alles, dauerhaft.** Es kann jede deiner Erinnerungen lesen. Späteres
 Abmelden hindert es daran, den Server zu erreichen, nimmt ihm den Schlüssel aber **nicht** zurück — was ein
-Abmelden bewirkt und was nicht, steht in [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Füge also
+Abmelden bewirkt und was nicht, steht in [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/). Füge also
 nur Geräte hinzu, die du in der Hand hältst.
 
 Solltest du doch einmal einen Code bestätigen, der nicht dein eigenes Gerät war, gibt es genau eine Sache,
-die das beendet: [deine Schlüssel ersetzen](konto-schluessel-und-wiederherstellung.md#wenn-jemand-in-dein-konto-gekommen-ist).
+die das beendet: [deine Schlüssel ersetzen](/veyq/de/account-keys-and-recovery/#wenn-jemand-in-dein-konto-gekommen-ist).
 Damit ist dieses Gerät ab diesem Moment ausgesperrt — zurückholen kann es nichts, was schon gelesen wurde,
 und du brauchst dafür dein Notfall-Kit.
 
@@ -82,6 +85,6 @@ Schließen des Browsers, und du fügst es beim nächsten Mal erneut hinzu.
 
 ## Verwandt
 
-- [Sind meine Daten sicher?](sind-meine-daten-sicher.md)
-- [Konto-Schlüssel & Wiederherstellung](konto-schluessel-und-wiederherstellung.md)
-- [Wer in deinen Bereich kommt](wer-in-deinen-bereich-kommt.md)
+- [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/)
+- [Konto-Schlüssel & Wiederherstellung](/veyq/de/account-keys-and-recovery/)
+- [Wer in deinen Bereich kommt](/veyq/de/who-gets-into-your-space/)

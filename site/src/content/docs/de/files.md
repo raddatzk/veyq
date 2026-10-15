@@ -1,7 +1,16 @@
-<!-- speaks-for: docs/features/platform/use-cases/uc.platform.node-cover.md, docs/features/files/use-cases/uc.files.member-files.md, docs/features/files/use-cases/uc.files.view-file.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md, docs/features/platform/use-cases/uc.platform.copy-node.md; pair: en/files.md -->
-# Dateien — und wie du dich zurechtfindest
+---
+title: "Dateien — und wie du dich zurechtfindest"
+sources:
+  - docs/features/platform/use-cases/uc.platform.node-cover.md
+  - docs/features/files/use-cases/uc.files.member-files.md
+  - docs/features/files/use-cases/uc.files.view-file.md
+  - docs/features/memory/use-cases/uc.memory.move-node.md
+  - docs/features/memory/use-cases/uc.memory.delete-node.md
+  - docs/features/memory/use-cases/uc.memory.browse.md
+  - docs/features/platform/use-cases/uc.platform.copy-node.md
+---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). veyq ist eine Plattform
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/). veyq ist eine Plattform
 für verschlüsselte, teilbare Dinge und wächst durch **Anwendungen**. **Erinnerungen** ist die Anwendung für Fotos,
 Videos und Tagebuch. **Dateien** ist die für alles andere: Dokumente, PDFs, jede Datei, die du aufbewahren willst.
 Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
@@ -15,7 +24,7 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
   Ordner und Dateien an, genau wie auf deinem Computer (leere Ordner darin werden ausgelassen). Ein Name, den manche Computer
   nicht erlauben, wird leicht geändert, und ein schon vergebener Name heißt dann „Name (2)“. Ein Ordner, der ein
   ausgepackter veyq-Download ist, wird dir stattdessen zum Importieren angeboten ([Herunterladen und
-  Importieren](herunterladen-und-importieren.md)).
+  Importieren](/veyq/de/download-and-import/)).
 - **Herunterladen** — die Herunterladen-Schaltfläche in der Zeile der Datei (oder oben auf ihrer Seite) gibt dir die
   Datei genau so zurück, wie du sie abgelegt hast, unter dem Namen, den sie in veyq hat. Ein Klick auf die Zeile selbst öffnet die Seite der Datei.
 - **Ansehen** — klicke auf die Zeile der Datei, und ihre Seite öffnet sich mit der Datei selbst darauf: ein **Bild**
@@ -50,7 +59,7 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
 - **Löschen, mit Rückgängig** — eine gelöschte Datei kommt in den **Papierkorb**, und eine Meldung bietet dir sofort
   **Rückgängig** an. Später kannst du sie noch aus dem Papierkorb wiederherstellen, bis sie endgültig entfernt wird;
   der Papierkorb zeigt das Datum. Was im Papierkorb liegt, zählt weiter gegen deinen Speicherplatz, bis er geleert ist.
-- **Teilen** — einen ganzen Ordner oder eine einzelne Datei. Siehe [Teilen](teilen.md).
+- **Teilen** — einen ganzen Ordner oder eine einzelne Datei. Siehe [Teilen](/veyq/de/sharing/).
 
 Hat jemand anderes in deinem Bereich dieselbe Datei kurz vor dir ersetzt, sagt dir veyq das, statt seine Fassung
 stillschweigend zu überschreiben, und du kannst **Trotzdem ersetzen** wählen.
@@ -151,4 +160,4 @@ Adresse bleiben also auf deinem Gerät.
 Eine Datei wird auf deinem eigenen Gerät verschlüsselt, **bevor** sie hochgeladen wird — genau wie ein Foto. Was wir
 nicht sehen können: den **Inhalt** der Datei und ihren **Namen**. Was der Server sieht, ist dasselbe wie bei allem
 anderen: dass es eine Datei gibt, ungefähr wie groß sie ist, wann sie hochgeladen oder geändert wurde und wer in
-deinem Bereich sie öffnen darf. Die Einzelheiten: [Sind meine Daten sicher?](sind-meine-daten-sicher.md).
+deinem Bereich sie öffnen darf. Die Einzelheiten: [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/).

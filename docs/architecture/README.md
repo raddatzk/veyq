@@ -336,4 +336,4 @@ The words this project uses precisely. Where a term has a tempting synonym, the 
 - **Features** (use-cases + enablers, each with its own runtime diagram): [features/](../features/)
 - **Cross-cutting concerns:** [crosscutting/](../crosscutting/)
 - **What is proven, and where:** [coverage/](../coverage/)
-- **The published, plain-language view for end users (EN+DE):** [`wiki/`](../../wiki/)
+- **The published documentation site — plain language for end users (EN+DE), and for operators:** [`site/`](../../site/src/content/docs/)

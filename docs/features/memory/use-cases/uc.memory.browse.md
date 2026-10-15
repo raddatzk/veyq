@@ -133,7 +133,7 @@ späteren Schritt; vorerst ist dies das Zuhause, das deinen verschlüsselten Ber
 
 ## Related
 
-- End-user view (wiki): [Files — and finding your way around](../../../../wiki/en/files.md)
+- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the encrypted node tree this browses),
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (`K_SC`, auto-birth),

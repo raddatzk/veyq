@@ -5,9 +5,9 @@
 > operational metadata and a blind job queue, and never holds a key that opens content. Every other
 > concept — processing, search, sharing, recovery, deletion — is designed around this.
 >
-> Plain-language companions for end users (wiki): [Is my data safe?](../../wiki/en/is-my-data-safe.md) and
-> [What happens to my photos when quantum computers arrive?](../../wiki/en/quantum-computers-and-your-photos.md);
-> for operators, [Running your own instance](../../wiki/en/running-your-instance.md).
+> Plain-language companions for end users (docs site): [Is my data safe?](../../site/src/content/docs/is-my-data-safe.md) and
+> [What happens to my photos when quantum computers arrive?](../../site/src/content/docs/quantum-computers-and-your-photos.md);
+> for operators, [Running your own instance](../../site/src/content/docs/run/index.md).
 > Sibling engineering docs: the [account & key model](../features/account/enablers/en.account.key-model.md), the
 > [scopes & tenancy model](scopes-and-tenancy.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
 
@@ -77,8 +77,8 @@ range API whether the password appears in known breaches. The fences apply like 
   and the reason is what crosses: a 5-hex prefix carries no content and no identity, where a geocoding request
   carries the coordinate itself. **What it does disclose, stated:** the browser's `Origin` header names the veyq
   instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
-  The wiki says so, in [Is my data safe?](../../wiki/en/is-my-data-safe.md) and
-  [Account keys & recovery](../../wiki/en/account-keys-and-recovery.md). A one-sentence note under the password field says what leaves the device.
+  The docs site says so, in [Is my data safe?](../../site/src/content/docs/is-my-data-safe.md) and
+  [Account keys & recovery](../../site/src/content/docs/account-keys-and-recovery.md). A one-sentence note under the password field says what leaves the device.
 - **It advises, never gates.** A hit shows a warning that needs an **explicit "Use it anyway"** before the dialog
   submits that password; the result is not stored. **A check that could not run** (offline, firewalled, the admin
   container with no route out) **does not stop anything**: the dialog submits and says, in one line, that the

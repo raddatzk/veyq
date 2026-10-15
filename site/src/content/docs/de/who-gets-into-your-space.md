@@ -1,7 +1,11 @@
-<!-- speaks-for: docs/features/spaces/use-cases/uc.spaces.add-member.md, docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md; pair: en/who-gets-into-your-space.md -->
-# Wer in deinen Bereich kommt
+---
+title: "Wer in deinen Bereich kommt"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.add-member.md
+  - docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md
+---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Dein gemeinsamer Bereich
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/). Dein gemeinsamer Bereich
 gehört zuerst nur dir. Auf dieser Seite geht es um die eine Entscheidung, die das ändert — jemanden einzuladen —
 und darum, was danach von allein passiert.
 

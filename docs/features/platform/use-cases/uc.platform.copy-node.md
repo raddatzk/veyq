@@ -84,4 +84,4 @@ Neues gespeichert wird - nicht, dass es eine Kopie ist.
 - Decisions: [ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
   decision 11, [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md) (one reference per blob)
-- End-user view (wiki): [Files — and finding your way around](../../../../wiki/en/files.md)
+- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)

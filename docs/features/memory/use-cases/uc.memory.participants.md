@@ -139,7 +139,7 @@ welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
 ## Related
 
 - Feature: [Memory](../_index.md)
-- End-user view (wiki): [People in your Memories](../../../../wiki/en/people-in-your-memories.md)
+- End-user view (docs site): [People in your Memories](../../../../site/src/content/docs/people-in-your-memories.md)
 - Enablers: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta`)
 - Use-cases: [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md) (the versioned meta write),
   [uc.memory.buckets](uc.memory.buckets.md) (the uploader axis), [uc.memory.gallery](uc.memory.gallery.md) (the lightbox)

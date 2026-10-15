@@ -1,5 +1,15 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/spaces/use-cases/uc.spaces.require-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md; pair: en/is-my-data-safe.md -->
-# Sind meine Daten sicher?
+---
+title: "Sind meine Daten sicher?"
+sources:
+  - docs/crosscutting/security-model.md
+  - docs/features/memory/use-cases/uc.memory.gallery.md
+  - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
+  - docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md
+  - docs/features/spaces/use-cases/uc.spaces.require-verified-identities.md
+  - docs/features/account/use-cases/uc.account.recover-access.md
+  - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
+  - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
+---
 
 **In einem Satz:** veyq ist **Ende-zu-Ende-verschlüsselt** — deine Fotos, Videos, Tagebuchtexte und
 die sensiblen Details drumherum werden auf deinem eigenen Gerät verschlüsselt, *bevor* sie den Server
@@ -21,7 +31,7 @@ stehlen — nur unverständlicher Datenmüll:
 
 - deine **Fotos und Videos** (und die kleineren Vorschaubilder),
 - deine **Tagebuchtexte**,
-- deine **Dateien** — Dokumente, PDFs, alles, was du in [Dateien](dateien.md) ablegst — und ihre **Namen**,
+- deine **Dateien** — Dokumente, PDFs, alles, was du in [Dateien](/veyq/de/files/) ablegst — und ihre **Namen**,
 - die **sensiblen Details**: Titel, Bildunterschriften, Beschreibungen, Orte, die abgebildeten
   Personen, Schlagwörter,
 - **wo** ein Foto aufgenommen wurde (GPS) und **wann** es entstand,
@@ -77,7 +87,7 @@ ausdrückliche Handlung:
   App erst beweisen, dass sie den Schlüssel hat. Wer nur die Adresse kennt (etwa aus einer Kopie unserer
   Datenbank), kann darüber nichts hochladen.
 
-Wie die verschiedenen Links funktionieren — nur ansehen, ansehen und mitmachen, Briefkasten — steht unter [Teilen](teilen.md).
+Wie die verschiedenen Links funktionieren — nur ansehen, ansehen und mitmachen, Briefkasten — steht unter [Teilen](/veyq/de/sharing/).
 
 Drei ehrliche Grenzen:
 - **Entteilen macht das Heruntergeladene nicht rückgängig.** Ein Entzug stoppt den *künftigen* Zugriff;
@@ -114,7 +124,7 @@ einzuführen, während alles, was du schon hast, lesbar bleibt, wie es ist. Das 
 vorhandenen Erinnerungen **wechseln nicht von selbst auf neue Schlösser** — heute gibt es nur einen Satz
 Schlösser, nötig war das also noch nie.
 
-Mehr: [Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?](quantencomputer-und-deine-fotos.md)
+Mehr: [Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?](/veyq/de/quantum-computers-and-your-photos/)
 
 ## Ist es wirklich *ihr* Schlüssel — und eine ehrliche Lücke
 
@@ -147,7 +157,7 @@ Schlüssel gar nicht lügen kann, ist **geplant, aber nicht gebaut** — und das
   nicht am Passwort. Dein Notfall-Kit ist das, was dich wieder hineinbringt; ein Gerät, auf dem du noch
   angemeldet bist, funktioniert derweil weiter. Zum Zurücksetzen müssen zwei Dinge zusammenkommen: ein
   Link, den wir dir mailen, und der Secret Key aus deinem Kit. Keines von beiden reicht allein — mehr
-  dazu in [Konto-Schlüssel & Wiederherstellung](konto-schluessel-und-wiederherstellung.md).
+  dazu in [Konto-Schlüssel & Wiederherstellung](/veyq/de/account-keys-and-recovery/).
 - **Alles verloren** — kein angemeldetes Gerät und kein Notfall-Kit? Dann ist es **weg.**
   Es gibt **keine Hintertür und keine Schlüsselhinterlegung**: Dasselbe, was *uns* am Lesen deiner
   Daten hindert, hindert uns auch daran, sie zu retten. Das sagen wir von vornherein.

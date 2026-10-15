@@ -58,7 +58,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github/workflows/container.yml"
 
 # The flow surfaces and vendored trees — the same line the other guards draw.
-SKIP_PREFIXES = ("changes/", "docs/", "wiki/")
+SKIP_PREFIXES = ("changes/", "docs/", "site/src/content/")
 PINNED = re.compile(r"^(?P<repo>[a-z0-9][a-z0-9._/-]*(?::[0-9]+)?(?:/[a-z0-9._-]+)*):(?P<tag>[A-Za-z0-9._-]+)@sha256:[0-9a-f]{64}$")
 FROM = re.compile(r"^\s*FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?\s*$", re.IGNORECASE)
 COPY_FROM = re.compile(r"^\s*COPY\s+.*--from=(\S+)", re.IGNORECASE)
