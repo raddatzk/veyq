@@ -60,8 +60,8 @@ whose they are (§9). Neither carries a `v` field: the versioning axis is the re
 
 **2. "The member's own key" means the master key, not an asymmetric seal to the identity key.**
 [ADR 0014](0014-group-scopes-and-governance.md) §7 names the *property* (private to the member, on every device
-they unlock), not the primitive. `asymWrap(hybridPublic(priv), …)` would satisfy it at **+1 149 bytes and an
-ML-KEM keygen per toggle**, and buys nothing: nobody seals *to* the member here — it is seal-to-self.
+they unlock), not the primitive. A `sealTo` to the member's own X-Wing identity key would satisfy it at **+1 149 bytes and an
+X-Wing key derivation per toggle**, and buys nothing: nobody seals *to* the member here — it is seal-to-self.
 `symWrap` under the master key costs +29 bytes, is the property stated exactly, and already has a live
 precedent in the identity-pin store.
 

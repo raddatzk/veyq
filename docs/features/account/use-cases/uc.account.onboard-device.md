@@ -76,8 +76,8 @@ flowchart TB
    under the handle the secret derives on the instance it has open, and displays the secret as a code — the
    same payload the other direction displays, under its own marker so a code shown for one direction cannot be
    scanned into the other. The key
-   itself does **not** travel in the code: a post-quantum transport bundle serialises to 1260 bytes, which is a
-   129-module QR nobody scans reliably and which sits past the decoder defect
+   itself does **not** travel in the code: a post-quantum transport bundle serialises to 1256 bytes, which is a
+   153-module QR (version 34) nobody scans reliably and which sits past the decoder defect
    [`web/CLAUDE.md`](../../../../web/CLAUDE.md) grants its QR reader an exception around. Nothing is lost by
    relaying it instead, because the relayed key is MACed under the channel key the secret derives, and the code
    is bound into the same MAC (§5, §11). It sends **no account identifier** — which account this becomes is decided by

@@ -80,7 +80,7 @@ uploads and a token-gated **delete-own**. **v1: role WRITE_ONLY, personal scope,
    server capability. A capability the server enforces does not survive a dump, and an uploader link is the one
    link handed to people who are *meant* not to see — so a leaked link plus a database and store dump must read
    nothing beyond what that link-holder uploaded.
-   - **The drop keypair belongs to the Memory.** A hybrid (X25519 + ML-KEM-768) keypair, minted by the owner's
+   - **The drop keypair belongs to the Memory.** An X-Wing (X25519 + ML-KEM-768) keypair, held as its 32-byte seed and minted by the owner's
      client when the Memory's first WRITE_ONLY share is created. Its private half is sealed under `K_mem` on the
      Memory, so everyone who reads the Memory — members, viewer and contributor links — opens what uploaders
      sealed. Its public half is sealed under `K_share` on each WRITE_ONLY share, so the server can neither read

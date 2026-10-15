@@ -80,7 +80,7 @@ decision and its rejected alternatives.
       identities, admit members, deliver grants and open uploader shares green (`scripts/run_web_e2e.py`, with the
       phase's run named); a browser pass shows a member's safety number and a second member admitted and opening
       shared content.
-- [ ] 3 docs — every doc the docs locator lists describes X-Wing and the new bundle (en.account.key-model and
+- [x] 3 docs — every doc the docs locator lists describes X-Wing and the new bundle (en.account.key-model and
       security-model § Cryptographic stance / § Key hierarchy first; the identity-pinning enabler, ADRs 0020,
       0028 and 0068, the use-cases and coverage files it names); contract prose that says `hybridPublic(target)`
       or "HPKE-style" follows; ADR 0017's status line loses "not built yet". · Done when: trust-chain green, and the docs locator above returns only

@@ -11,7 +11,7 @@ controls** (MITM) at the moment of a wrap and read what is sealed to it. Until t
 **Plain** — the wrapper trusted the returned key, no pin, no gate ([ADR 0020](0020-grant-distribution-invite-wrap.md),
 [ADR 0014](0014-group-scopes-and-governance.md) §5 — deferred to this slice). The **fingerprint / safety
 number** primitive already exists (`fingerprint()` — a Signal-style digest of the full identity public bundle
-`lp(kemX) || lp(kemM) || lp(sign)`, vector-pinned + conformance-tested) but was, when this record was
+`lp(kem) || lp(sign)`, vector-pinned + conformance-tested) but was, when this record was
 written, **dormant** — no UI, no pin store. It is now the safety number the changed-key review renders and
 the check number device pairing compares ([ADR 0059](0059-device-linking.md) §5).
 
@@ -32,8 +32,8 @@ Adopt **trust-on-first-use (TOFU) pinning + out-of-band safety-number verificati
 split by whether a human is present. Key Transparency stays the (out-of-scope) end-state.
 
 1. **Pin on first use.** The first time a client wraps to a member's identity key it **pins** it (state:
-   *pinned, unverified*) and proceeds. What is pinned is the **full identity public bundle** (`kemX` X25519 +
-   `kemM` ML-KEM-768 + `sign` Ed25519), keyed by `userId` (identity is account-global, so one pin per contact
+   *pinned, unverified*) and proceeds. What is pinned is the **full identity public bundle** (`kem`, the
+   X-Wing encapsulation key over X25519 + ML-KEM-768, + `sign` Ed25519), keyed by `userId` (identity is account-global, so one pin per contact
    across all tenants). The **pin store is client-side, synced across the user's devices, and sealed under the
    master key** — the server stores only ciphertext and never sees a pin or the trust graph (operator-blind).
 

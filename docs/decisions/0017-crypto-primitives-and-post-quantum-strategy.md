@@ -1,6 +1,6 @@
 # ADR 0017 — Cryptographic primitives & post-quantum strategy
 
-- Status: Accepted; X-Wing (decision 2) is not built yet — `changes/cr-hybrid-kem-is-x-wing.md`
+- Status: Accepted
 - Date: 2026-07-01
 
 ## Context

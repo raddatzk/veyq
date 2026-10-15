@@ -7,7 +7,7 @@
 
 Every scope key veyq holds today is wrapped to the caller's **own** identity: the personal scope auto-birth,
 the tenant scope's cold birth ([ADR 0006](0006-cold-tenant-scope-birth.md)), and the group scope's warm birth
-all call `asymWrap(hybridPublic(self), K_SC, "scope-grant")` and store the ciphertext as that member's own
+all seal `K_SC` to the caller's own X-Wing identity key (`sealTo`, purpose `scope-grant`) and store the ciphertext as that member's own
 `MembershipEntity.wrappedGrant`. There is **no path where member A wraps a scope key to member B**, and **no
 endpoint that returns another member's identity public key** — pubkeys are only uploaded at registration, never
 looked up.
@@ -36,8 +36,8 @@ consumer, [uc.spaces.add-member](../features/spaces/use-cases/uc.spaces.add-memb
 identity public key. The server only ever relays pubkeys and stores opaque grant ciphertext — it never holds a
 key, wraps, or unwraps.** Concretely:
 
-1. **Wrap-to-foreign identity — the one new crypto move.** The granter seals `K_SC` to the target's hybrid
-   public key under the `scope-grant` purpose — the *same* hybrid KEM, purpose, and wire shape as a
+1. **Wrap-to-foreign identity — the one new crypto move.** The granter seals `K_SC` to the target's X-Wing
+   identity key under the `scope-grant` purpose — the *same* hybrid KEM, purpose, and wire shape as a
    self-grant, only the recipient pubkey is someone else's. The purpose is bound to the scope and epoch the grant
    belongs to ([ADR 0072](0072-a-seal-binds-its-object.md)), and the grant carries its granter's signature
    ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 6). The result is posted as the target's

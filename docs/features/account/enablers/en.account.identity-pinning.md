@@ -32,7 +32,8 @@ ciphertext** and never interprets it. The plaintext is a small map:
 { pins: { <userId>: { key, state, firstSeenAt } } }
 ```
 
-- **`key`** — the contact's full identity public bundle (`lp(kemX) || lp(kemM) || lp(sign)`, base64), the exact
+- **`key`** — the contact's full identity public bundle (`lp(kem) || lp(sign)`: the 1216-byte X-Wing encapsulation key and the
+  Ed25519 key, base64), the exact
   bytes a wrap targets. A change is detected by comparing the directory-returned key against this.
 - **`state`** — `pinned` (trust-on-first-use, unverified) or `verified` (a human compared the safety-number
   out-of-band, [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)).

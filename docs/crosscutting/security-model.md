@@ -234,7 +234,8 @@ flowchart TB
 ```
 
 - **Cheap grants, scoped shares.** Adding a member = one seal of the scope's current content-epoch key to
-  their identity. A public share = one node's content key (a Memory's, a chapter's or a folder's —
+  their identity (an X-Wing encapsulation to their identity public key, then AES-256-GCM under the derived key;
+  [Cryptographic stance](#cryptographic-stance)). A public share = one node's content key (a Memory's, a chapter's or a folder's —
   [ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)) wrapped to a per-share key. **Revoking a member
   = rotate `K_SC` forward into a new epoch** granted to the remaining members
   ([ADR 0024](../decisions/0024-scope-key-rotation.md)); already-read content cannot be retroactively pulled
@@ -264,7 +265,10 @@ above, and each such application states it in its concept doc ([docs/apps](../ap
 Standard, well-reviewed primitives only (no home-grown crypto); **post-quantum from the start** for encryption
 (a hybrid KEM, secure if either component holds) because decade-lived memories make harvest-now-decrypt-later
 real, while signatures stay classical for now; and **crypto-agility** via a versioned suite id, so upgrades never
-break old data. Built today, that id is stored **per account** (`veyq_user.suite_id`) and bound into every wrap's
+break old data. The hybrid KEM is **X-Wing** (X25519 + ML-KEM-768, `draft-connolly-cfrg-xwing-kem-11` — an
+individual Internet-Draft, not an RFC) through `@noble/post-quantum`, held to the draft's own published test
+vectors; a wrap to a public key is X-Wing, then HKDF-SHA256 over the seal's context into an AES-256-GCM key —
+HPKE-like in shape, **not** RFC 9180 HPKE. Built today, the suite id is stored **per account** (`veyq_user.suite_id`) and bound into every wrap's
 authenticated data (`wrapAad`), not carried in the bytes of each artifact — enough while one suite exists, so a
 second suite has to bring a per-artifact label first; nothing re-wraps old data onto a newer suite. Content itself is
 AES-256-GCM alone; the hybrid KEM wraps keys. The strategy, its rejected alternatives, and the conformance
@@ -373,7 +377,7 @@ from its directory. A malicious server could serve an attacker's key instead (ke
 and read what is wrapped to it. The defense is **trust-on-first-use pinning + safety-number verification**:
 
 - **Pin on first use (TOFU).** The first time a client wraps to Bob's identity key it **pins** the full
-  identity public bundle (`kemX` X25519 + `kemM` ML-KEM-768 + `sign` Ed25519), keyed by `userId`, and
+  identity public bundle (`kem`, the X-Wing encapsulation key over X25519 + ML-KEM-768, + `sign` Ed25519), keyed by `userId`, and
   proceeds (*pinned, unverified*). The **pin store is client-side, synced across the user's devices, and
   sealed under the master key** — the server never sees a pin or the who-trusts-whom graph (operator-blind).
 - **A key change is surfaced, split by whether a human is present.** A key ≠ pin is "**attack OR a

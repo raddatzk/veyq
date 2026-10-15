@@ -37,7 +37,7 @@ group's **canonical** name (not an owner-typed claim), and the **accept/decline*
    key-holder ever wraps `K_SC` to a pending invitee.
 3. **The wrapped name-key.** The owner's device — a key-holder — derives the group's **name-key**
    `K_name = HKDF(E_e, "group-name-key")` from the key of the epoch the name was sealed under, and wraps **the key
-   bytes** (not a name copy) to the invitee's identity: `asymWrap(hybridPublic(invitee), K_name, "group-name-key")`,
+   bytes** (not a name copy) to the invitee's identity: `sealTo` to the invitee's X-Wing identity key under the `group-name-key` purpose,
    posted as the proposal's `sealedNameKey`. The server returns the scope's **canonical** `encryptedName` in the
    invitation. Handing the *key* — not a name — is the crux of [ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md):
    the invitee opens the **same** ciphertext the members hold, so a modified owner **cannot** privately show a

@@ -21,7 +21,7 @@ info:
     **First consumer — `grant-delivery` (ADR 0020).** A grant-less TENANT/GROUP membership is a *pending*
     member; the backend originates a `grant-delivery` job for it (server-structural origination — a blind,
     already-understood job, no sealed body). Any online key-holder claims it, wraps `K_SC` to the pending
-    member's identity public key (`asymWrap(hybridPublic(target), K_SC, "scope-grant")` — the first wrap to a
+    member's identity public key (`sealTo` that X-Wing key, purpose `scope-grant` — the first wrap to a
     **foreign** identity), and completes by posting the ciphertext grant; the backend writes it onto the target
     membership **idempotently** (no-op if a grant already exists — first-online-wins). The claim resolves the
     delivery target (the member's userId + identity public key, operational metadata the server already holds)

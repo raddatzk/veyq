@@ -9,7 +9,7 @@ title: Trust-on-first-use, notice, and review a changed identity key
 # `planned` flag even though cr-0098/cr-0099 built and unit-tested them. Only `changed-key-review` had a ref.
 acceptanceCriteria:
   - id: tofu-pin-on-first-use
-    text: The first time a client wraps to a contact's identity key it pins the full identity public bundle (kemX+kemM+sign) keyed by userId (state pinned) and proceeds — trust-on-first-use. The pin store is one blob sealed under the Master Key, synced across the account, account-global (one pin per contact across tenants). The server sees one opaque ciphertext, never a userId, key, or count.
+    text: The first time a client wraps to a contact's identity key it pins the full identity public bundle (kem+sign) keyed by userId (state pinned) and proceeds — trust-on-first-use. The pin store is one blob sealed under the Master Key, synced across the account, account-global (one pin per contact across tenants). The server sees one opaque ciphertext, never a userId, key, or count.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts] }
       backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobVersionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToVersionOne, IdentityPinsSliceTest.storeIsPerAccountNotShared] }
