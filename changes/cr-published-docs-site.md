@@ -76,7 +76,7 @@ changes nothing in the image.
       recorded), `npm run check` in `site/` green, the built site serves the placeholder pages, `/de/` shows the
       German placeholder and the English fallback with its notice; bite: a deprecated package pinned into
       `site/` turns the gate red.
-- [ ] 2 Use area — move `wiki/en/*` to `site/src/content/docs/` and `wiki/de/*` to `site/src/content/docs/de/`
+- [x] 2 Use area — move `wiki/en/*` to `site/src/content/docs/` and `wiki/de/*` to `site/src/content/docs/de/`
       under the **English** path of their pair; the `speaks-for` comment becomes frontmatter `title` +
       `sources:`, the H1 goes (Starlight renders the title). Merge `running-your-instance.md` into phase 3
       instead. Rebuild `validate_wiki_sources.py` for the site (frontmatter `sources:`, pair = same path, both
@@ -86,7 +86,8 @@ changes nothing in the image.
       `wiki/`, `wiki-sync.yml`, and `Home.md` becomes the site's landing page. · Done when: trust-chain green,
       `npm run check` green in `web/` and `site/`; bites: a German page with one source fewer than its English
       pair, and a declared doc with its back-link removed, each turn the rebuilt guard red.
-- [ ] 3 Run area — the production sections of `infra/README.md` and `wiki/en/running-your-instance.md` become
+- [ ] 3 Run area — the production sections of `infra/README.md` and `site/src/content/docs/run/index.md` (the wiki's
+      `running-your-instance.md`, moved there as-is in phase 2 so `wiki/` could go) become
       the Run pages (verify a release, new instance, Kubernetes, upgrade, backup & restore), Compose and Helm side
       by side where both apply. The release-verification page stays `.md` with its commands in plain fenced
       blocks. Re-anchor `validate_release_identity.py` on that page; re-point every file that means the
