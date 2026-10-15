@@ -96,11 +96,48 @@ changes nothing in the image.
       release* and links the Run area. · Done when: trust-chain green, `python3 scripts/chart_meta_check.py`
       green, `npm run check` in `site/` green; bite: removing the image's `cosign verify` line from the Run page
       turns `validate_release_identity.py` red, and it names the new file.
-- [ ] 4 Security area — a reading path for researchers: start here (what operator-blind means and what it does
-      not cover), threat model, what holds today, key hierarchy, cryptographic stance with how to reproduce the
-      vectors, and disclosure (from `SECURITY.md`). Each page declares its `sources:` in `docs/` and links the
-      normative docs on GitHub; no page claims more than § What holds today. · Done when: trust-chain green,
-      `npm run check` in `site/` green, the pages read with the owner in conversation before the phase closes.
+- [ ] 4 Security area — a reading path for researchers, at the depth ADR 0087 decision 1 sets (explain and point
+      exactly; byte formats only linked). Each page declares its `sources:` in `docs/`, links the normative docs on
+      GitHub, describes only what is built, and claims nothing beyond § What holds today:
+      - **Start here** — what operator-blind means and what it does not cover; the client trust tiers
+        (self-hosted / operator-served / trusted third party); the reading path. Sources: security-model intro and
+        § Client integrity & trust tiers, ADR 0026.
+      - **Threat model** — **one** table, adversary × what it can and cannot do today (stolen disk or dump, passive
+        operator, active operator, fellow member, removed member, link holder, third-party service, stolen
+        device), merging security-model's *protect against* and *What holds today* tables, which have different
+        grains today. A row closed only by a roadmap item links the Roadmap page.
+      - **What the server sees** — server-visible metadata by category, with the deliberate concessions (range
+        streaming, plaintext account email, node `kind`, member enumeration, share linkability). Sources:
+        § What is encrypted vs. server-visible, ADR 0044, ADR 0047.
+      - **Cryptography** — primitives, the hybrid KEM and its combiner **with its rationale**, the fixed KDF
+        profile, AEAD framing and chunking, what a seal binds, suite agility. Sources: ADR 0017, ADR 0072,
+        ADR 0013. **Entry condition:** the combiner's rationale (why its own HKDF combiner, not RFC 9180 HPKE or
+        X-Wing) is in ADR 0017 first; the owner supplies it, the page does not invent it.
+      - **Key hierarchy** — account (one KEK per unlock method → Master Key → identity keypair; separately the
+        auth and Secret-Key-proof keypairs), scope (`K_SC` epochs, signed grants, admission tag), content
+        (`K_mem` per node incl. folders and chapters → `K_blob` → frames), sharing (`K_share` in the fragment,
+        its recovery copy under `K_SC`, the uploader drop keypair). Per key: how it is made, what wraps it, who
+        holds it, when it rotates, what losing it means. Sources: en.account.key-model, ADRs 0012, 0024, 0036,
+        0080, security-model § Key hierarchy.
+      - **Protocols** — account birth and login (2SKD, the auth keypair), linking a device, admitting a member and
+        TOFU with safety numbers, sharing, rotation and revocation, recovery; one sequence diagram each. Sources:
+        the use-cases and enablers that already carry these flows, ADRs 0003, 0020, 0028, 0059, 0060, 0036.
+      - **Verify it yourself** — reproducing the vectors, the conformance tests, the wire sweep over six surfaces,
+        the guards, verifying a signed release. Sources: `contracts/crypto/`, cc.security.wire-assertion,
+        ADR 0057. `OperatorBlindProbeTest` is described as what it is — the scope-access (authorization) probe.
+      - **Known limitations** — every residual of the built system in one place: TOFU's first-use gap, freshness
+        held only where a device keeps a mark, the metadata concessions, revocation of content already read, no
+        external audit, one seal implementation. Sources: § What holds today's open list, ADRs 0028, 0072, 0024.
+      - **Roadmap** — what is designed and not built: Key Transparency (ADR 0060 (g)), strict verification mode
+        (uc.spaces.require-verified-identities, its shape still open), abuse-report intake and per-share action
+        (security-model § Sharing), passkey unlock (en.account.key-model), hybrid ML-DSA signatures (ADR 0017),
+        a client served by a trusted third party (ADR 0026). Each with the gap it would close.
+      - **Reporting** — disclosure, from `SECURITY.md`.
+
+      The protocol diagrams need Mermaid on the site: add a maintained Starlight/Astro Mermaid integration through
+      the deprecated gate, or render the diagrams to SVG at build time — whichever passes the gate. · Done when:
+      trust-chain green, `npm run check` in `site/` green, the gate green with whatever renders the diagrams, the
+      combiner rationale in ADR 0017, and the pages read with the owner in conversation before the phase closes.
 - [ ] 5 `docs/` for development — each use-case's `## What this means for you / Was das für dich bedeutet`
       becomes `## User impact` with one English line on why the feature exists for the user; a section whose
       content a Use page does not yet carry is checked against that page first (the German text is dropped, ADR

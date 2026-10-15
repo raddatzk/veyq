@@ -36,6 +36,15 @@ copy (the drift `validate_wiki_sources.py` was built after, inbox #120), and it 
    - **Security** (EN only) — for researchers; a guided reading path that explains the model and links the
      normative docs in `docs/` on GitHub. It claims nothing beyond
      [security-model § What holds today](../crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve).
+     It **explains, and points exactly**: concepts, protocols and their rationale at whitepaper depth, while byte
+     formats stay normative in [`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts) and the
+     [vectors](../../contracts/crypto/vectors/v1.json) and are linked, never restated — a second byte spec would
+     be a second source nothing holds to the vectors. Its pages describe what is **built**; everything designed
+     and not built (Key Transparency, strict verification mode, abuse-report intake, passkey unlock, post-quantum
+     signatures, a client served by a trusted third party) lives on **one Roadmap page** of the area, which the
+     other pages link where a gap is closed only by a roadmap item. A rationale the Security pages need and no
+     doc records — first of all why the hybrid KEM uses its own HKDF combiner rather than RFC 9180 HPKE or
+     X-Wing — is written into its ADR before the page that explains it.
 
    The repository becomes public; GitHub Pages on the free plan requires it.
 2. **The site is Astro with Starlight**, in its own package `site/`, **outside** the npm workspace (the workspace
