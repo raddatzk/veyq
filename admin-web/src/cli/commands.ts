@@ -5,7 +5,7 @@
 // in the facade, where the UI gets it too.
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
-// + the tenant storage quota + release info. Per-tenant mail settings, terms authoring and the per-link storage
+// + the tenant storage quota + release info + the config-secret state. Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
 // they are not Server-Owner commands.
 // First-run **setup** is excluded on purpose (cr-admin-cli): it is a one-time interactive ceremony that mints
@@ -24,6 +24,7 @@ import {
 } from '../features/tenants/tenants'
 import { CliError } from './output'
 import { getInstanceRelease } from '../features/instance/release'
+import { getInstanceConfigSecret } from '../features/instance/configSecret'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
 export type Flag = { describe: string; required: boolean }
@@ -109,5 +110,11 @@ export const COMMANDS: Record<string, Command> = {
     summary: 'Print the release version the running instance was published under.',
     flags: {},
     run: () => getInstanceRelease(),
+  },
+  'config-secret': {
+    usage: 'config-secret',
+    summary: "Print the config-secret key's state (OK, ABSENT or MISMATCH) — a restore's verification read; it changes nothing.",
+    flags: {},
+    run: () => getInstanceConfigSecret(),
   },
 }

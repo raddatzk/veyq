@@ -95,6 +95,17 @@ const en = {
     "provisioned": "The object store is ready. Its bucket, access key and browser rule are in place, so media can be uploaded and shown.",
     "failed": "The object store could not be set up, and this server has stopped trying. Media will not work until the store is reachable again and this server is restarted. The server log names the step that failed."
   },
+  "configSecret": {
+    "navTitle": "Config-secret key",
+    "sub": "Whether the key that seals this server's stored secrets — such as a tenant's SMTP password — is the one they were sealed with. After a restore or an update, this is the reading that says the key came along.",
+    "loading": "Reading the config-secret key's state…",
+    "loadFailed": "Couldn’t read the config-secret key's state.",
+    "notOwner": "Only the server owner can see the state of this instance's config-secret key.",
+    "stateLabel": "Reported state",
+    "ok": "The config-secret key is in place, and it is the one this server's stored secrets were sealed with — or nothing has been sealed yet. Sealed settings can be opened.",
+    "absent": "No config-secret key is available: it could not be created, or this server cannot read the key file. After a restore, the file must be readable by the application's runtime user. Until it is, nothing can be sealed, and tenants whose mail needs a password cannot send — member invites and password resets are refused.",
+    "mismatch": "The config-secret key is not the one this server's stored secrets were sealed with — the key file was lost, replaced, or not restored. Content is unaffected, but the sealed settings cannot be opened, so member invites and password resets are refused. Put the original key file back and restart, or have each tenant owner re-enter their SMTP password to seal it under the current key."
+  },
   "setup": {
     "title": "Set up this instance",
     "sub": "Create the first owner account. All keys are generated on this device — the server only ever sees ciphertext.",
@@ -237,6 +248,17 @@ const de: typeof en = {
     "inProgress": "Der Objektspeicher wird eingerichtet. Das dauert nach einem Start normalerweise ein paar Sekunden; bis dahin können Uploads fehlschlagen. Lade neu, um den Stand zu sehen.",
     "provisioned": "Der Objektspeicher ist bereit. Bucket, Zugriffsschlüssel und Browser-Regel sind vorhanden, Medien lassen sich hochladen und anzeigen.",
     "failed": "Der Objektspeicher konnte nicht eingerichtet werden, und dieser Server hat es aufgegeben. Medien funktionieren erst wieder, wenn der Speicher erreichbar ist und dieser Server neu gestartet wurde. Das Server-Log nennt den fehlgeschlagenen Schritt."
+  },
+  "configSecret": {
+    "navTitle": "Konfigurationsschlüssel",
+    "sub": "Ob der Schlüssel, der die gespeicherten Geheimnisse dieses Servers versiegelt — etwa das SMTP-Passwort eines Tenants —, derjenige ist, mit dem sie versiegelt wurden. Nach einer Wiederherstellung oder einem Update ist das die Anzeige, die sagt, dass der Schlüssel mitgekommen ist.",
+    "loading": "Zustand des Konfigurationsschlüssels wird gelesen…",
+    "loadFailed": "Der Zustand des Konfigurationsschlüssels konnte nicht gelesen werden.",
+    "notOwner": "Nur der Server-Eigentümer sieht den Zustand des Konfigurationsschlüssels dieser Instanz.",
+    "stateLabel": "Gemeldeter Zustand",
+    "ok": "Der Konfigurationsschlüssel ist vorhanden, und er ist der, mit dem die gespeicherten Geheimnisse dieses Servers versiegelt wurden — oder es wurde noch nichts versiegelt. Versiegelte Einstellungen lassen sich öffnen.",
+    "absent": "Es ist kein Konfigurationsschlüssel verfügbar: Er konnte nicht erzeugt werden, oder dieser Server kann die Schlüsseldatei nicht lesen. Nach einer Wiederherstellung muss die Datei für den Laufzeitbenutzer der Anwendung lesbar sein. Bis dahin lässt sich nichts versiegeln, und Tenants, deren Mail ein Passwort braucht, können nicht senden — Mitgliedseinladungen und Passwort-Zurücksetzungen werden abgelehnt.",
+    "mismatch": "Der Konfigurationsschlüssel ist nicht der, mit dem die gespeicherten Geheimnisse dieses Servers versiegelt wurden — die Schlüsseldatei ging verloren, wurde ersetzt oder nicht wiederhergestellt. Inhalte sind nicht betroffen, aber die versiegelten Einstellungen lassen sich nicht öffnen, deshalb werden Mitgliedseinladungen und Passwort-Zurücksetzungen abgelehnt. Lege die ursprüngliche Schlüsseldatei zurück und starte neu, oder lass die Besitzperson jedes Tenants ihr SMTP-Passwort neu eingeben, damit es unter dem aktuellen Schlüssel versiegelt wird."
   },
   "setup": {
     "title": "Diese Instanz einrichten",

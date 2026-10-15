@@ -20,12 +20,14 @@ vi.mock('../features/tenants/tenants', async (importOriginal) => ({
   reactivateTenant: vi.fn(),
 }))
 vi.mock('../features/instance/release', () => ({ getInstanceRelease: vi.fn() }))
+vi.mock('../features/instance/configSecret', () => ({ getInstanceConfigSecret: vi.fn() }))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
 import { run } from './cli'
 import { signIn } from './adminSession'
 import * as tenants from '../features/tenants/tenants'
 import { getInstanceRelease } from '../features/instance/release'
+import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import type { TenantCreated, TenantInviteState, TenantSummary } from '../features/tenants/tenants'
 
 const ENV = { VEYQ_ADMIN_EMAIL: 'owner@example.com', VEYQ_ADMIN_PASSWORD: 'pw' }
@@ -68,6 +70,7 @@ beforeEach(() => {
   vi.mocked(tenants.suspendTenant).mockResolvedValue(undefined)
   vi.mocked(tenants.reactivateTenant).mockResolvedValue(undefined)
   vi.mocked(getInstanceRelease).mockResolvedValue({ release: '1.4.0' })
+  vi.mocked(getInstanceConfigSecret).mockResolvedValue({ state: 'MISMATCH' })
 })
 
 describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.suspend-tenant)', () => {
@@ -141,13 +144,20 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
     expect(JSON.parse(r.out)).toEqual({ release: '1.4.0' })
     expect(r.code).toBe(0)
   })
+
+  it('config-secret prints the config-secret state (uc.admin.back-up-and-restore-instance step 11)', async () => {
+    const r = await invoke(['config-secret'])
+    expect(getInstanceConfigSecret).toHaveBeenCalledOnce()
+    expect(JSON.parse(r.out)).toEqual({ state: 'MISMATCH' })
+    expect(r.code).toBe(0)
+  })
 })
 
 describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

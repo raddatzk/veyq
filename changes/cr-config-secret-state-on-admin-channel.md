@@ -49,7 +49,7 @@ today's `ConfigSecretKeyGuard.state()` adopts a fingerprint when none is stored,
       `./gradlew check` green; bites: a non-Server-Owner caller gets no state, on the public port the operation
       404s, and a read on an instance with no stored fingerprint leaves it with none (the adopting call swapped in
       turns that test red).
-- [ ] 2 admin-web + CLI — the state shown in the Server section beside release and store provisioning, with what
+- [x] 2 admin-web + CLI — the state shown in the Server section beside release and store provisioning, with what
       ABSENT and MISMATCH mean for the operator; `veyq-admin config-secret` printing it. · Done when: `npm run check`
       in `admin-web/` green; a browser pass shows the state on a dev instance.
 - [ ] 3 docs + site — the runbooks' verification step (`site/src/content/docs/run/upgrade.mdx`,

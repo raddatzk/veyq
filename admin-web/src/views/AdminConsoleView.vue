@@ -21,6 +21,7 @@ import CreateTenantDialog from '../features/tenants/CreateTenantDialog.vue'
 import TenantDetailPanel from '../features/tenants/TenantDetailPanel.vue'
 import ReleaseVersionPanel from '../features/instance/ReleaseVersionPanel.vue'
 import StoreProvisioningPanel from '../features/instance/StoreProvisioningPanel.vue'
+import ConfigSecretPanel from '../features/instance/ConfigSecretPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
 import { formatBytes } from '../shared/formatBytes'
 import { probeServerRole, serverRole } from '../app/serverRole'
@@ -41,7 +42,7 @@ const tenants = ref<TenantSummary[]>([])
 const createOpen = ref(false)
 const selected = ref<string | null>(null)
 // One rubric at a time under `Server`, so a second boolean cannot leave two panels open at once.
-const serverPanel = ref<'release' | 'store' | null>(null)
+const serverPanel = ref<'release' | 'store' | 'configSecret' | null>(null)
 const loading = ref(true)
 
 const isOwner = computed(() => serverRole.verdict === 'owner')
@@ -153,12 +154,18 @@ async function signOut() {
               <span class="pi pi-database" aria-hidden="true" /> {{ t('store.navTitle') }}
             </button>
           </li>
+          <li>
+            <button type="button" :class="{ 'is-active': serverPanel === 'configSecret' }" @click="serverPanel = 'configSecret'">
+              <span class="pi pi-key" aria-hidden="true" /> {{ t('configSecret.navTitle') }}
+            </button>
+          </li>
         </ul>
       </nav>
 
       <section class="admin-shell__detail">
         <ReleaseVersionPanel v-if="serverPanel === 'release'" />
         <StoreProvisioningPanel v-else-if="serverPanel === 'store'" />
+        <ConfigSecretPanel v-else-if="serverPanel === 'configSecret'" />
         <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" />
       </section>
     </div>
