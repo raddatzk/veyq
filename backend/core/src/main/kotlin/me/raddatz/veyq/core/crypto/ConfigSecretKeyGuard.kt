@@ -49,6 +49,19 @@ class ConfigSecretKeyGuard(
     }
 
     /**
+     * The same state as [state], **without adopting**: a read that must change nothing — the Server Owner's
+     * admin-channel read, which a restore and an upgrade run as their verification step (ADR 0056 §5). No stored
+     * fingerprint reads as OK, because nothing has been sealed under any key yet (sealing records the fingerprint,
+     * [recordReseal]), and stays unstored. Adopting here would let a GET write the row a later restore compares
+     * against; the adopting [state] stays for the mail paths, which act on the key they are about to use.
+     */
+    fun readState(): ConfigSecretKeyState {
+        val fp = seal.fingerprint() ?: return ConfigSecretKeyState.ABSENT
+        val stored = instance.configSecretFingerprint() ?: return ConfigSecretKeyState.OK
+        return if (stored == fp) ConfigSecretKeyState.OK else ConfigSecretKeyState.MISMATCH
+    }
+
+    /**
      * Record that the stored secrets were just (re)sealed under the CURRENT key — call after a successful reseal.
      * Advances the stored fingerprint to the current key, so a prior MISMATCH clears to OK (the recovery path: the
      * owner re-enters the SMTP password). A no-op when unconfigured.

@@ -255,6 +255,7 @@ class OperatorBlindProbeTest {
             "revokeTenant", "suspendTenant", "reactivateTenant", "setTenantStorageQuota", "clearTenantStorageQuota",
             "getInstanceRelease",
             "getInstanceStoreProvisioning",
+            "getInstanceConfigSecret",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +

@@ -21,8 +21,9 @@ class VeyqInstance : PanacheEntityBase {
     @Column(name = "instance_salt", nullable = false)
     lateinit var instanceSalt: String
 
-    /** HKDF fingerprint of the config-secret KEK that sealed the stored secrets (ADR 0050); null until
-     *  the first configured read adopts the current key. A hash, never the key — safe at rest. */
+    /** HKDF fingerprint of the config-secret KEK that sealed the stored secrets (ADR 0050); null until a secret
+     *  is sealed or a mail path first adopts the current key — never set by the Server Owner's read, which must
+     *  change nothing. A hash, never the key — safe at rest. */
     @Column(name = "config_secret_fingerprint")
     var configSecretFingerprint: String? = null
 

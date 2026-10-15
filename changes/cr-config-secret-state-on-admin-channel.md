@@ -43,7 +43,7 @@ today's `ConfigSecretKeyGuard.state()` adopts a fingerprint when none is stored,
 
 ## Phases
 
-- [ ] 1 contracts + backend — a Server-Owner read on the admin channel in `instance.openapi.yaml` (enum
+- [x] 1 contracts + backend — a Server-Owner read on the admin channel in `instance.openapi.yaml` (enum
       `x-veyq-visibility`), a read-only state on the guard (the adopting path stays for the mail handlers), the
       handler on `InstanceResource`, the operation in `OperatorBlindProbeTest`'s Server-Owner bucket. · Done when:
       `./gradlew check` green; bites: a non-Server-Owner caller gets no state, on the public port the operation

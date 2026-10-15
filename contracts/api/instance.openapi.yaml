@@ -20,7 +20,8 @@ info:
 tags:
   - name: instance
     description: >
-      Server-Owner reads about the running instance (release identity, store provisioning). One tag = one
+      Server-Owner reads about the running instance (release identity, store provisioning, config-secret
+      state). One tag = one
       resource interface owning the whole `/api/instance` subtree.
 
 # x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
@@ -124,6 +125,57 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
 
+  /api/instance/config-secret:
+    get:
+      tags: [instance]
+      operationId: getInstanceConfigSecret
+      x-veyq-channel: admin
+      summary: Report whether the config-secret key can open the secrets sealed under it.
+      description: >
+        Returns the instance's config-secret state
+        ([ADR 0050](../../docs/decisions/0050-operator-config-secret-encryption.md)) for the Server Owner, who
+        owns no tenant and so cannot read it through a tenant's mail settings. Server-Owner only.
+
+        This is the verification step of a restore and an upgrade
+        ([ADR 0056](../../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) §5): the
+        fingerprint comparison is the only check that tells a restore that carried its key from one that lost
+        it, and an instance that lost it looks healthy — it serves content and refuses member invites and
+        password resets.
+
+        **Reading changes nothing.** An instance that has not yet recorded the fingerprint of its key keeps not
+        having one; the fingerprint is recorded where a secret is sealed or first used, never by this read. The
+        value is server self-description — a state, never key material, a fingerprint or a sealed value.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The config-secret state of the running instance.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceConfigSecret" }
+              examples:
+                ok:
+                  summary: The key is present and is the one the stored secrets were sealed under
+                  value: { state: OK }
+                mismatch:
+                  summary: A restore that did not carry the key file — the instance starts and refuses invites
+                  value: { state: MISMATCH }
+                absent:
+                  summary: No key is available — it could not be generated or cannot be read
+                  value: { state: ABSENT }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
 components:
   schemas:
     InstanceRelease:
@@ -176,6 +228,28 @@ components:
             log carries which call failed.
           enum: [NOT_ATTEMPTED, IN_PROGRESS, PROVISIONED, FAILED]
           example: PROVISIONED
+
+    InstanceConfigSecret:
+      type: object
+      description: >
+        Whether the instance's config-secret key can open the operator secrets sealed under it (ADR 0050).
+        Server self-description, not user data: a state, never the key, its fingerprint or a sealed value.
+      required: [state]
+      properties:
+        state:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            `OK` = a key is present, and it is the one the stored secrets were sealed under — or nothing has
+            been sealed yet, so there is nothing it could fail to open. `ABSENT` = no key is available: it could
+            not be generated, or the application cannot read the file (a restored key file that is not readable
+            by the runtime user reads as this). Sealing is unavailable, and member invites and password resets
+            refuse with `503` until it is fixed (ADR 0055). `MISMATCH` = a key is present but is **not** the
+            one the stored secrets were sealed under — the key file was lost, replaced or not restored. The
+            sealed secrets cannot be opened; restore the key file, or re-enter each secret to seal it under the
+            current key. Content is unaffected either way: this key seals operator configuration, never content.
+          enum: [OK, ABSENT, MISMATCH]
+          example: OK
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
