@@ -69,9 +69,17 @@ instance and tenant layers.
     - Handing the key from one of the user's own native apps to another on the same device (inbox #438) is not
       linking: it needs no network and no confirmation. Each app enrols its own wrap, and that wrap is governed by
       `remember-device`.
-12. **A tenant owner switches in the tenant settings in `web/`,** beside terms and mail (owner, 2026-10-15). The
-    tenant owner is an ordinary member, and ADR 0065 keeps what a member can reach out of `admin-web`. The
-    operator's `*` stays configuration.
+12. **Where each level switches** (owner, 2026-10-15).
+    - **A tenant owner** switches in the tenant settings in `web/`, beside terms and mail. The tenant owner is an
+      ordinary member, and ADR 0065 keeps what a member can reach out of `admin-web`.
+    - **The Server Owner** switches in `admin-web` and its CLI, through the Admin API. The state lives in the
+      database and takes effect without a restart. It is not a configuration property: the
+      `veyq.capabilities.disabled` list retires, and with it any question of what an unknown id in it means.
+    - **Configuration as code** (switches declared in compose or Helm values) is a later topic (inbox #444).
+13. **The register describes itself.** Every switchable entry carries, in English and German, *what it is for* and
+    *what switching it off does*, both to new and to existing data (decision 5). The catalog holds that text and
+    the API serves it. `admin-web`, the CLI and `web/`'s tenant settings render it from there, and none of them
+    keeps its own copy.
 
 ### The register
 

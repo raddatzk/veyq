@@ -84,8 +84,10 @@ response and a client-side gate that reads them.
 
 ### 4. Turning a capability off — advertised **and** enforced
 
-An operator disables a capability **instance-wide** via config (a `veyq.capabilities.disabled` list, or a
-per-feature flag). A disabled capability is then:
+An operator disables a capability **instance-wide**: in `admin-web` or its CLI, through the Admin API, without a
+restart ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 12).
+**Built today** is the earlier form, a `veyq.capabilities.disabled` config list read once at boot
+(`CapabilityRegistry.kt`), which the Admin API replaces (inbox #443). A disabled capability is then:
 
 - **Omitted from the manifest** → every client **hides** the feature (soft, graceful — the ShareDialog simply
   doesn't offer the role).
