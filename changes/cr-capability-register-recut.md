@@ -295,6 +295,20 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   doc fault (D5). #442 and #443 are already open, and #443's row was brought in line with D3 at refine. ·
   **Done when:** `python3 scripts/validate_coverage.py` and `python3 scripts/validate_capabilities.py` green, and the
   literal-id angle over `docs/` returns nothing.
+- [ ] **5 site docs — the register on the published site** (owner, 2026-10-15, via the docs-site coordinator: "soll die
+  andere Session mit in die Doku schreiben" — the register documentation belongs to this CR, not to a separate docs
+  pass). Site rules (ADR 0087): no page claims more than is built; the designed-but-unbuilt part goes on
+  `site/src/content/docs/security/roadmap.md` (EN only), what is built goes where it binds.
+  - **Roadmap:** a "Feature switches" section marking each entry of ADR 0088's tree built / planned / idea (built: the
+    seven `core.*` entries; not built: operator switches #443, the tenant level and settings UI #439, config as code
+    #444, the `memories.*` / `depot.*` entries and the rest of `core.*`).
+  - **Built part:** the AND along the path and the `422 capability_disabled` refusal, on a Security or Run page.
+  - **Repoint** `site/src/content/docs/run/moderation.md` ("the register of switches", § Not built) at the roadmap
+    section.
+  - Stage only this CR's hunks (the docs-site coordinator edits the same area); site pages declare their sources, and EN/DE
+    pairing is needed only for the Use area (`scripts/validate_wiki_sources.py`).
+  · **Done when:** `npm run check` in `site/` and `python3 scripts/validate_wiki_sources.py` green, and no site page
+  claims a switch the instance cannot yet make.
 
 ## Definition of done
 
