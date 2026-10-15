@@ -12,6 +12,23 @@ guarantee validate_feature_wiring gives the feature graph:
 
 It also checks the catalog is well-formed: a lowercase-dotted id, a non-empty `serves`, and a known `source`.
 
+And it checks the catalog is a TREE (ADR 0088 decisions 1 and 2):
+    - root  — every id's first segment is in `ROOTS`. Today that is `core` alone, a deliberate list of one: the CR
+              that adds the first `<application>.*` entry widens it and names the source the application set is
+              derived from, rather than typing application names here.
+    - parent — every id of three or more segments has its parent (the id minus its last segment) as a catalog
+              entry. The server's effective state is an AND along the path, and an entry whose parent is missing
+              has nothing to AND with. A root (`core`) is not an entry, so a two-segment id has no parent to need.
+
+The defect that bought the tree checks: no incident. Built with cr-capability-register-recut, because the catalog
+was four flat ids under no common root, and run against that untouched catalog the root check was red once per
+id. The re-cut fixed it; these checks keep a flat id or an orphaned child from re-entering.
+
+Its limit: it reads the catalog alone. It does not prove that the server gates an id, that it ANDs along the path,
+or that the backend and web constants match the catalog: those are `CapabilityRegistryTest` and the web's
+`capabilities.test.ts`. Nor does it see an inheritance that is not a path prefix (an application's share entry
+inheriting `core.public-shares`): no such entry exists yet, and the CR that adds one owns that rule.
+
 Reserving an id ahead of its use-cases being built (advertised active only once built) is a deferred lifecycle
 extension; when it lands, the built-check gains an explicit reserved-entry skip. For the lean core every catalog
 entry is already built, so both checks are hard.
@@ -33,6 +50,8 @@ COVERAGE = ROOT / "docs" / "coverage" / "features"
 ID_RE = re.compile(r"^[a-z0-9]+(\.[a-z0-9-]+)+$")
 UC_RE = re.compile(r"^uc\.([a-z0-9-]+)\.[a-z0-9-]+$")
 KNOWN_SOURCES = {"operator-policy", "infra-preflight"}
+# The roots an id may hang from (ADR 0088 decision 1). `core` alone until the first application entry; see the docstring.
+ROOTS = {"core"}
 
 errors: list[str] = []
 
@@ -54,6 +73,15 @@ if not caps:
 for cid, entry in caps.items():
     if not ID_RE.match(cid):
         errors.append(f"capability id '{cid}' is not a lowercase-dotted token")
+    segments = cid.split(".")
+    if segments[0] not in ROOTS:
+        errors.append(f"{cid}: root segment '{segments[0]}' is not one of {sorted(ROOTS)} (ADR 0088 decision 1)")
+    if len(segments) >= 3:
+        parent = ".".join(segments[:-1])
+        if parent not in caps:
+            errors.append(
+                f"{cid}: parent '{parent}' is not a catalog entry — the AND along the path has nothing to AND with "
+                f"(ADR 0088 decision 2)")
     if entry.get("source") not in KNOWN_SOURCES:
         errors.append(f"{cid}: source '{entry.get('source')}' is not one of {sorted(KNOWN_SOURCES)}")
     serves = entry.get("serves")

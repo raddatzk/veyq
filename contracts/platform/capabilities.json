@@ -1,26 +1,41 @@
 {
   "registry": "platform-capabilities",
-  "note": "Append-only catalog of client-facing capability ids (ADR 0032). An id, once added, is never removed or repurposed. The backend advertises the ACTIVE subset on GET /api/setup — this catalog minus the operator's veyq.capabilities.disabled list. Each surface pins these ids as constants (backend CapabilityIds, web src/features/platform/capabilities.ts) with a conformance test guarding drift against this file. `serves` cross-references the use-case(s) each capability gates; it is a COARSER projection over use-cases (many-to-many, not 1:1) and is catalog-only metadata — NEVER put on the wire (the manifest is [{ id }] only). scripts/validate_capabilities.py enforces that every `serves` entry resolves to a real, built use-case. `source` records how the active bit is computed: operator-policy (a config toggle enforced by a 422 at the endpoint) vs infra-preflight (a runtime probe, no operator off-switch; no current entry is one — ADR 0032 §5). Reserving an id ahead of its use-cases being built (advertised active only once built, ADR 0032 §6) is a deferred lifecycle extension; every current entry's serves are already built.",
+  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core` today; an application's own entries hang from the application, ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the operator switches it off and the endpoint refuses with 422 capability_disabled; no built instance can switch one off until the Admin API switches land, inbox #443) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, ADR 0032 §5). scripts/validate_capabilities.py checks the tree and that every `serves` resolves to a built use-case.",
   "capabilities": {
-    "sharing.public-links": {
-      "serves": ["uc.sharing.share-public-viewer", "uc.sharing.share-contributor"],
+    "core.public-shares": {
+      "serves": ["uc.sharing.share-public-viewer"],
       "source": "operator-policy",
-      "description": "Public share links of a node in the READ and READ_WRITE access modes; what a READ_WRITE guest's write adds is the application's. Disabled => the Share affordance is hidden client-side and createShare(READ|READ_WRITE), reactivateShare and reissueShare of such a link are rejected server-side with 422 capability_disabled."
+      "description": "Public share links of a node in the READ access mode, and the parent of every other share entry. Off => createShare, reactivateShare and reissueShare of a READ link are refused with 422 capability_disabled, and by the AND along the path so are those of a contribute and a drop-box link; the client hides the Share affordance. Links that already exist keep working until a share switch reaches them (inbox #442)."
     },
-    "sharing.uploader-links": {
+    "core.public-shares.contribute": {
+      "serves": ["uc.sharing.share-contributor"],
+      "source": "operator-policy",
+      "description": "Public share links in the READ_WRITE access mode: the guest reads and also adds; what the write adds is the application's. Off => createShare, reactivateShare and reissueShare of a READ_WRITE link are refused with 422 capability_disabled, and the client does not offer the role. Links that already exist keep working until a share switch reaches them (inbox #442)."
+    },
+    "core.public-shares.drop-box": {
       "serves": ["uc.sharing.share-uploader"],
       "source": "operator-policy",
-      "description": "Public share links of a node in the WRITE_ONLY access mode (a drop-box: a guest adds and cannot read what others added; what it adds is the application's). Disabled => the write-only link option is hidden client-side and createShare(WRITE_ONLY), reactivateShare and reissueShare of such a link are rejected server-side with 422 capability_disabled."
+      "description": "Public share links in the WRITE_ONLY access mode (a drop box: a guest adds and cannot read what others added; what it adds is the application's). Off => createShare, reactivateShare and reissueShare of a WRITE_ONLY link are refused with 422 capability_disabled, and so is creating a drop-box node (Files' FILES_DROPBOX, createNode); the client hides the write-only option and the drop box. Links that already exist keep working until a share switch reaches them (inbox #442), and an existing drop box stays (a feature switch refuses only what is new, ADR 0088 decision 5)."
     },
-    "spaces.groups": {
+    "core.group-space": {
       "serves": ["uc.spaces.add-group-member", "uc.spaces.manage-group-members", "uc.spaces.rename-group", "uc.spaces.delete-group", "uc.spaces.consent-group-add"],
       "source": "operator-policy",
-      "description": "Shared group spaces — creating a group scope and managing its membership. Disabled => the group affordance is hidden client-side and the group-create endpoint is rejected server-side with 422 capability_disabled (a personal-only instance)."
+      "description": "Shared group spaces. Off => creating a group scope (createGroup) is refused with 422 capability_disabled and the client hides the affordance: a personal-only instance. A feature switch refuses only what is new (ADR 0088 decision 5), so an existing group stays usable: renaming it, managing its members, deleting and restoring it, and accepting or declining an add keep working."
     },
-    "account.device-trust": {
+    "core.remember-device": {
       "serves": ["uc.account.trust-device", "uc.account.remember-this-device"],
       "source": "operator-policy",
-      "description": "Device trust and passwordless remember-me unlock levels. Disabled => the \"remember this device\" toggle is hidden client-side and enrolling a device wrap is rejected server-side with 422 capability_disabled (an instance mandating a full password every time)."
+      "description": "Remembering a device: a DEVICE wrap, the Master Key under the password and a device-bound key that stands in for the Secret Key. Off => enrolling a DEVICE wrap (addAccountWrap) is refused with 422 capability_disabled, and by the AND along the path so is a passwordless one; the client hides \"remember this device\". Unlocking with a wrap that already exists, and deleting one, stay allowed."
+    },
+    "core.remember-device.passwordless": {
+      "serves": ["uc.account.remember-this-device"],
+      "source": "operator-policy",
+      "description": "Passwordless unlock on a remembered device: a DEVICE_KEY wrap, the Master Key under a device key alone. Off => enrolling a DEVICE_KEY wrap (addAccountWrap) is refused with 422 capability_disabled; the client hides the passwordless choice, and a linked device gets a session but no stored key (ADR 0088 decision 11)."
+    },
+    "core.device-linking": {
+      "serves": ["uc.account.onboard-device"],
+      "source": "operator-policy",
+      "description": "Linking a device from one that is already unlocked (ADR 0059): the Master Key reaches the new device from the other one instead of from the password and the Secret Key. Off => every /api/pairing/* endpoint (open, answer, delegate, seal, collect) is refused with 422 capability_disabled, which also stops a pairing in flight; the client hides \"sign in with code\" and the add-device entry. Independent of core.remember-device (ADR 0088 decision 11)."
     }
   }
 }
