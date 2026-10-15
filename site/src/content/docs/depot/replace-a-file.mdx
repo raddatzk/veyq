@@ -1,0 +1,21 @@
+---
+title: "Replace a file with a newer one"
+sources:
+  - docs/features/depot/use-cases/uc.depot.member-files.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+Use this when you have a newer version of a file and want it to take the old one's place, under the same name.
+
+1. Upload a file with the **same name** into the file's folder (**New**, **Upload files**), or open the file and choose
+   the replace button at the top of its page (**Replace the content of …, the name stays**).
+2. veyq asks **Replace file**. Choose **Replace**.
+
+<Screenshot id="depot-replace-confirm" shows="The Replace file question with the file's name, the warning that there is no version history, and the Cancel and Replace buttons" />
+
+veyq asks first because there is **no version history**: the old content cannot be brought back. A file whose upload
+never finished is filled without the question.
+
+If someone else in your space replaced the same file a moment before you, veyq tells you instead of silently
+overwriting their version. You can then choose **Replace anyway**, or look at theirs first.

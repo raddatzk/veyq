@@ -1,0 +1,42 @@
+---
+title: "Views, tabs and favorites"
+sources:
+  - docs/features/memory/use-cases/uc.memory.browse.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+## One list for everything in a folder
+
+A folder shows **one list** of everything in it: sub-folders, Memories, files and drop boxes together. Folders come
+first. Everything else follows in alphabetical order, whatever it is; numbers count as numbers, so "Photo 2" comes before
+"Photo 10".
+
+Each entry says what it is: for example "File · 157 B · modified …" or "Memory · June 2024". The most useful button (for a
+file, download) sits on the entry; the rest are in its **⋯** menu. Where you may not do something, its button is not
+there.
+
+<Screenshot id="depot-level-list" shows="A folder's list with a sub-folder, a Memory, a file and a drop box, each with its type line, its heart and its ⋯ menu" />
+
+## Tabs
+
+When a folder holds more than one kind of thing, tabs above the list — **All**, **Memories**, **Depot**, **Drop boxes** —
+show just one kind. Sub-folders stay visible in every tab.
+
+## Grid or list
+
+Use **Grid view** and **List view** at the top of the folder (and **Map view**, where Memories have places). Your choice is
+remembered.
+
+## Favorites
+
+Every entry has a **heart** (**Favorite**). It adds the entry to your favorites in the left-hand navigation;
+**Remove favorite** takes it out again. Your favorites are yours alone: other members of the space cannot see them, and
+neither can the server. People you share a link with get no heart.
+
+## Addresses you can bookmark
+
+The address of a folder in your browser reads like its path, for example `…/#holidays/2026/`. A folder's address ends
+with a slash. A Memory sits under `/memories/`, for example `…/#holidays/memories/rome`. You can bookmark any of them.
+The readable part comes after the `#`, which a browser never sends to a server, so the names in the address stay on your
+device.

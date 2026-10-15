@@ -23,8 +23,8 @@ export default defineConfig({
       // Use is task-first in nine sections (cr-use-area-content): platform first (Getting started, Your account,
       // Spaces), then the applications (Memories, Depot), then Sharing, the space owner's tasks, Privacy and Help.
       // A section's pages live in its folder (getting-started/, account/, spaces/, memories/, depot/, sharing/,
-      // space-owners/, privacy/, help/), so a page's URL says its section; the three moved wiki pages still at the
-      // root (account-keys-and-recovery, depot, sharing) wait for the phase that splits them. A section with no
+      // space-owners/, privacy/, help/), so a page's URL says its section; the two moved wiki pages still at the
+      // root (account-keys-and-recovery, sharing) wait for the phase that splits them. A section with no
       // page yet is left out rather than shown empty. The labels are the web client's own words in each language.
       sidebar: [
         {
@@ -64,7 +64,23 @@ export default defineConfig({
                     'memories/photo-trash',
                   ],
                 },
-                { label: 'Depot', items: ['depot'] },
+                {
+                  label: 'Depot',
+                  items: [
+                    { slug: 'depot', label: 'What Depot is for', translations: { de: 'Wofür das Depot da ist' } },
+                    'depot/upload-files-and-folders',
+                    'depot/view-a-file',
+                    'depot/replace-a-file',
+                    'depot/rename-a-file',
+                    'depot/delete-a-file',
+                    'depot/move-things',
+                    'depot/copy-things',
+                    'depot/select-several',
+                    'depot/give-a-folder-a-cover',
+                    'depot/views-and-favorites',
+                    'depot/drop-boxes',
+                  ],
+                },
               ],
             },
             { label: 'Sharing', translations: { de: 'Teilen' }, items: ['sharing'] },

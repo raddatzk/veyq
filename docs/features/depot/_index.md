@@ -26,3 +26,5 @@ with it and point there instead of repeating it.
   text, PDF, video, audio; full screen), a member's and a guest's alike, or comes with a note and the download.
 - [uc.depot.drop-box](use-cases/uc.depot.drop-box.md) — **built (web)**: guests send files into a drop box, each
   into a folder of its own, and the members open them.
+- End-user view (docs site): [Depot](../../../site/src/content/docs/depot/index.mdx)
+

@@ -1,0 +1,51 @@
+---
+title: "Dateien mit einem Briefkasten sammeln"
+sources:
+  - docs/features/depot/use-cases/uc.depot.drop-box.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Ein **Briefkasten** ist ein Ort, an dem dir Menschen Dateien geben können, ohne sonst etwas zu sehen und ohne Konto. Du
+schickst ihnen einen Link; sie tippen einen Namen ein, wählen ihre Dateien aus, fertig. Jede Person bekommt einen eigenen
+Ordner, niemand sieht, was andere geschickt haben. Du und die anderen Mitglieder deines Bereichs seht alles an einem Ort.
+
+## Einen Briefkasten und einen Link anlegen
+
+1. Öffne den Ordner, in dem der Briefkasten liegen soll.
+2. Wähle **Neu**, dann **Neuer Briefkasten**, tippe einen Namen ein und lege ihn an.
+3. Öffne den Briefkasten und wähle **Link teilen**, dann **Link erstellen**.
+4. Wähle **Link kopieren** und schick ihn weiter.
+
+<Screenshot id="depot-dropbox-links" shows="Der Dialog Links zum Briefkasten mit einem Link, seinen Schaltflächen Link kopieren und Ausschalten und dem Hinweis, dass niemand mit dem Link den Briefkasten sieht" />
+
+Wer den Link hat, kann Dateien einwerfen. Den Briefkasten und was andere eingeworfen haben, sieht damit niemand. Du kannst
+auch einen Ordner [teilen](/veyq/de/sharing/), in dem ein Briefkasten liegt.
+
+## Was die sendende Person sieht
+
+Die Seite heißt **Dateien senden**. Die Person tippt einen Namen ein (unter ihm siehst du ihre Dateien), wählt **Dateien
+auswählen** und sieht jede Datei von **Wird gesendet…** zu **Gesendet** wechseln. Geht eine Datei nicht durch, steht dort
+warum, und es gibt **Erneut versuchen**. Nach dem Verlassen sieht die Person ihre Dateien nicht mehr. **Mit neuem Namen neu
+beginnen** gibt ihr einen frischen Ordner.
+
+## Was du siehst
+
+Der Briefkasten hat einen Ordner pro sendender Person, so benannt, wie sie sich eingetragen hat, und die Liste zeigt, wie
+viele Personen etwas eingeworfen haben. Öffne den Ordner einer Person, um ihre Dateien herunterzuladen oder zu löschen.
+
+- Um alles zu entfernen, was jemand eingeworfen hat, lösche den Ordner der Person.
+- Um ihn stattdessen als gewöhnlichen Ordner zu behalten, wähle **… herausverschieben …**. Danach kann die Person nichts
+  mehr hinzufügen, und er lässt sich nicht zurückschieben.
+
+## Einen Link ausschalten
+
+In **Links zum Briefkasten** hält **Ausschalten** den Link an; veyq fragt vorher. Was schon angekommen ist, bleibt.
+**Wieder einschalten** bringt ihn zurück, außer jemand, der den Bereich verlassen hat, könnte ihn noch haben; dann erstelle
+einen neuen Link. **Link löschen** ist endgültig.
+
+Löschst du den ganzen Briefkasten, kommt er mit den Ordnern aller Sendenden in den Papierkorb, und seine Links nehmen dort
+keine Dateien an.
+
+Die Dateien werden im Browser der sendenden Person verschlüsselt; wer den Server betreibt, kann weder sie noch ihre Namen
+lesen.

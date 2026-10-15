@@ -1,0 +1,25 @@
+---
+title: "Select several things at once"
+sources:
+  - docs/features/memory/use-cases/uc.memory.move-node.md
+  - docs/features/memory/use-cases/uc.memory.delete-node.md
+  - docs/features/platform/use-cases/uc.platform.copy-node.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+1. In a folder, choose **Select**, next to **New** and the trash. Every entry gets a tick box.
+2. Tick what you want, or choose **All** (and **None** to start over). The bar says how many you ticked.
+3. Choose **Move to…**, **Copy to…** or **Delete**.
+
+<Screenshot id="depot-select-bar" shows="A folder in select mode with three entries ticked and the selection bar showing the count and the Move to…, Copy to… and Delete buttons" />
+
+If a tab hides some of what you ticked, the bar says so; your ticks stay when you switch tabs.
+
+- **Delete** asks once for all of them, and one **Undo** brings all of them back.
+- **Move to…** opens the same window as for one thing. Anything that cannot go there, because the same name is already
+  there for example, is named and stays where it is. One **Undo** moves back what moved.
+- **Copy to…** copies everything you ticked in one go and names what it cannot copy.
+
+If some of the ticked things cannot be moved or deleted, veyq says how many and does it with the rest. If somebody
+shared a folder with you and lets you contribute, you can select and move there too, but not delete.

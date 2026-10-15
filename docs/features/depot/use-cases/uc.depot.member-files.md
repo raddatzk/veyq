@@ -73,7 +73,11 @@ dieselbe Datei kurz vor dir ersetzt, sagt dir veyq das, statt seine Fassung stil
 
 ## Related
 
-- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
+- End-user view (docs site): [Delete a file, and bring it back](../../../../site/src/content/docs/depot/delete-a-file.mdx)
+- End-user view (docs site): [Rename a file](../../../../site/src/content/docs/depot/rename-a-file.mdx)
+- End-user view (docs site): [Replace a file with a newer one](../../../../site/src/content/docs/depot/replace-a-file.mdx)
+- End-user view (docs site): [Upload files and folders](../../../../site/src/content/docs/depot/upload-files-and-folders.mdx)
+- End-user view (docs site): [Open and look at a file](../../../../site/src/content/docs/depot/view-a-file.mdx)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md) (the same files through a folder
   link), [uc.depot.drop-box](uc.depot.drop-box.md).

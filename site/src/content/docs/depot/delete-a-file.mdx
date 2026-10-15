@@ -1,0 +1,28 @@
+---
+title: "Delete a file, and bring it back"
+sources:
+  - docs/features/depot/use-cases/uc.depot.member-files.md
+  - docs/features/memory/use-cases/uc.memory.delete-node.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+## Delete
+
+1. Open the **⋯** menu of the file's row, or open the file, and choose **Delete**.
+2. veyq asks **Delete file**. Confirm with **Delete**.
+3. The file goes to the **trash**, and a message offers **Undo** right away.
+
+<Screenshot id="depot-delete-undo" shows="The message that a file moved to the trash with the Undo button" />
+
+## Bring it back
+
+1. In the toolbar of the folder, open the **Trash**.
+2. Find the file. It shows **Deleted** with the date, and **removed for good on** the date it will be gone.
+3. Choose **Restore**. Anything deleted with it comes back complete.
+
+Until that date it can be restored. After it, the file is removed for good. Space in the trash still counts against your
+storage until it is gone.
+
+A folder, a Memory or a drop box works the same way: it goes to the trash with everything inside it, and comes back
+complete.

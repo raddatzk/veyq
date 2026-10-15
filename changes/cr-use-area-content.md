@@ -92,6 +92,11 @@ phase closes only after the owner has read its pages in conversation. Done when,
       rename, delete, move and copy, select several, covers and views, drop boxes. The single `depot.md` is split
       along its sections and goes away; an unexplained aside (the copy-of-a-shown-part parenthesis) is written out
       or dropped. Every function page opens with the task, in the UI's words.
+      *Built, waiting for the owner's read:* `depot/` (landing + eleven pages; replace, rename and delete are three
+      pages, move/copy/select three, covers and views two, plus drop boxes, which the old page lacked); the old
+      `depot.md` is gone and its links follow. Written from `web/src/i18n/index.ts`, the old page and the use-cases,
+      **not yet checked live in the web client**. `validate_guard_gaps.py` forged `account-keys-and-recovery.md`,
+      not `depot.md`, so it needed no re-anchoring.
 - [ ] 7 Sharing and For space owners — share with people who have no account (roles, note, password, expiry,
       renew, revoke); turn off every link in a space; what a guest sees. For owners: invite and manage members,
       remove a member, terms, email settings, storage and the upload-link limit.

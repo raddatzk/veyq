@@ -133,7 +133,6 @@ späteren Schritt; vorerst ist dies das Zuhause, das deinen verschlüsselten Ber
 
 ## Related
 
-- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the encrypted node tree this browses),
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (`K_SC`, auto-birth),
@@ -143,3 +142,5 @@ späteren Schritt; vorerst ist dies das Zuhause, das deinen verschlüsselten Ber
 - Related use-cases: [login](../../account/use-cases/uc.account.login.md), unlock — done; the **Memory detail
   view** — [gallery](uc.memory.gallery.md) and [chapters](uc.memory.chapters.md) built, the journal planned;
   [multi-space switching](../../spaces/use-cases/uc.spaces.switch-spaces.md) built; search — planned
+- End-user view (docs site): [Views, tabs and favorites](../../../../site/src/content/docs/depot/views-and-favorites.mdx)
+

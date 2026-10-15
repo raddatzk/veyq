@@ -96,7 +96,7 @@ anzeigen kann, bekommst du stattdessen einen klaren Hinweis und den Download.
 
 ## Related
 
-- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
+- End-user view (docs site): [Open and look at a file](../../../../site/src/content/docs/depot/view-a-file.mdx)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.member-files](uc.depot.member-files.md) (the page's download and replace),
   [uc.depot.share-file](uc.depot.share-file.md), [uc.depot.share-folder-files](uc.depot.share-folder-files.md).

@@ -1,0 +1,47 @@
+---
+title: "Collect files with a drop box"
+sources:
+  - docs/features/depot/use-cases/uc.depot.drop-box.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+A **drop box** is a place where people can hand you files without seeing anything else and without an account. You send
+them a link; they type a name, pick their files, and are done. Each person gets a folder of their own, so nobody sees
+what others sent. You and the other members of your space see everything in one place.
+
+## Create a drop box and a link
+
+1. Open the folder where the drop box should be.
+2. Choose **New**, then **New drop box**, type a name and create it.
+3. Open the drop box and choose **Share link**, then **Create link**.
+4. Choose **Copy link** and send it.
+
+<Screenshot id="depot-dropbox-links" shows="The Drop box links dialog with one link, its Copy link and Switch off buttons and the hint that nobody with the link sees the drop box" />
+
+Anyone with the link can add files. Nobody with it sees the drop box or what others added. You can also
+[share](/veyq/sharing/) a folder that holds a drop box.
+
+## What the sender sees
+
+The page says **Send files**. The sender types a name (the owner sees the files under it), chooses **Choose files**, and
+sees each file go through **Sending…** to **Sent**. If a file does not go through it says why and offers **Try again**. After
+leaving, they cannot see their files again. **Start over under a new name** gives them a fresh folder.
+
+## What you see
+
+The drop box has one folder per sender, named as they typed it, and the list shows how many people sent something. Open a
+person's folder to download or delete their files.
+
+- To remove everything someone sent, delete their folder.
+- To keep it as an ordinary folder instead, choose **Move … out…**. After that the sender can no longer add anything
+  to it, and it cannot be moved back.
+
+## Switch a link off
+
+In **Drop box links**, **Switch off** stops the link; veyq asks first. What already arrived stays. **Switch on again** brings
+it back, unless someone who has left the space may still hold it; then create a new link. **Delete link** is for good.
+
+Deleting the whole drop box sends it to the trash with every sender's folder, and its links take no files while it is there.
+
+The files are locked in the sender's browser; the person running the server cannot read them or their names.

@@ -1,0 +1,42 @@
+---
+title: "Ansichten, Reiter und Favoriten"
+sources:
+  - docs/features/memory/use-cases/uc.memory.browse.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+## Eine Liste für alles in einem Ordner
+
+Ein Ordner zeigt **eine Liste** von allem, was darin ist: Unterordner, Erinnerungen, Dateien und Briefkästen zusammen.
+Ordner stehen zuerst. Alles andere folgt in alphabetischer Reihenfolge, egal was es ist; Zahlen zählen als Zahlen, „Foto 2“
+steht also vor „Foto 10“.
+
+Jeder Eintrag sagt, was er ist: zum Beispiel „Datei · 157 B · geändert …“ oder „Erinnerung · Juni 2024“. Die nützlichste
+Schaltfläche (bei einer Datei das Herunterladen) sitzt am Eintrag, der Rest steht in seinem **⋯**-Menü. Wo du etwas nicht
+darfst, fehlt die Schaltfläche.
+
+<Screenshot id="depot-level-list" shows="Die Liste eines Ordners mit einem Unterordner, einer Erinnerung, einer Datei und einem Briefkasten, jeweils mit Zeile zur Art, Herz und ⋯-Menü" />
+
+## Reiter
+
+Enthält ein Ordner mehr als eine Art von Dingen, zeigen Reiter über der Liste — **Alle**, **Erinnerungen**, **Depot**,
+**Briefkästen** — jeweils nur eine Art. Unterordner bleiben in jedem Reiter sichtbar.
+
+## Raster oder Liste
+
+Mit **Rasteransicht** und **Listenansicht** oben im Ordner (und **Kartenansicht**, wo Erinnerungen Orte haben) wechselst du
+die Ansicht. Deine Wahl wird gemerkt.
+
+## Favoriten
+
+Jeder Eintrag hat ein **Herz** (**Favorit**). Es nimmt den Eintrag in deine Favoriten in der Navigation links auf;
+**Favorit entfernen** nimmt ihn wieder heraus. Deine Favoriten gehören nur dir: Andere Mitglieder des Bereichs sehen sie
+nicht, und der Server auch nicht. Wer nur einen Link hat, bekommt kein Herz.
+
+## Adressen, die du als Lesezeichen speichern kannst
+
+Die Adresse eines Ordners in deinem Browser liest sich wie sein Pfad, zum Beispiel `…/#holidays/2026/`. Die Adresse eines
+Ordners endet mit einem Schrägstrich. Eine Erinnerung liegt unter `/memories/`, zum Beispiel
+`…/#holidays/memories/rome`. Du kannst jede davon als Lesezeichen speichern. Der lesbare Teil steht hinter dem `#`, den
+ein Browser nie an einen Server schickt; die Namen in der Adresse bleiben also auf deinem Gerät.

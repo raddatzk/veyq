@@ -140,7 +140,6 @@ nur, dass etwas gelöscht wurde, und entfernt später verschlüsselte Dateien, d
 
 ## Related
 
-- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the node lifecycle this defines),
   [en.memory.media](../enablers/en.memory.media.md) (what the purge reclaims)
@@ -157,3 +156,6 @@ nur, dass etwas gelöscht wurde, und entfernt später verschlüsselte Dateien, d
   compute a slug token), [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (the blob
   store the purge reclaims from), [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6 (the
   group grace period)
+- End-user view (docs site): [Delete a file, and bring it back](../../../../site/src/content/docs/depot/delete-a-file.mdx)
+- End-user view (docs site): [Select several things at once](../../../../site/src/content/docs/depot/select-several.mdx)
+

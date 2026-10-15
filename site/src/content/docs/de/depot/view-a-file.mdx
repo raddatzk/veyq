@@ -1,0 +1,51 @@
+---
+title: "Eine Datei öffnen und ansehen"
+sources:
+  - docs/features/depot/use-cases/uc.depot.view-file.md
+  - docs/features/depot/use-cases/uc.depot.member-files.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+1. Öffne den Ordner und klicke auf die Zeile der Datei. Ihre eigene Seite öffnet sich mit der Datei darauf.
+2. Sieh sie dir an, wie unten beschrieben.
+3. Um eine Kopie auf deinem Computer zu behalten, wähle **Herunterladen**. Das ist auch die Schaltfläche zum
+   Herunterladen in der Zeile der Datei. Du bekommst die Datei genau so, wie du sie abgelegt hast, unter dem Namen, den
+   sie in veyq hat.
+
+<Screenshot id="depot-file-page" shows="Die Seite einer geöffneten PDF mit ihrer Kopfzeile (Name, Größe, Art, Geändert, Hochgeladen von) und darunter der ersten Seite der PDF" />
+
+## Was angezeigt wird
+
+- Ein **Bild** wird angezeigt.
+- Ein **Text** (reiner Text, Markdown, Code, JSON, CSV und Ähnliches) wird als Text angezeigt. Markiere ihn nach Belieben
+  oder wähle **Kopieren**. Mit **Zeilen umbrechen** schaltest du den Zeilenumbruch ein und aus. Von einem langen Text
+  erscheint nur das erste Megabyte.
+- Eine **PDF-Datei** wird Seite für Seite angezeigt, mit Seitenzahl und den Schaltflächen **Vergrößern**, **Verkleinern**
+  und **An Breite anpassen**. Ihren Text kannst du markieren und kopieren. Links in einer PDF tun nichts, eine PDF kann
+  dich also nie woandershin führen.
+- Ein **Video** oder eine **Audiodatei** wird abgespielt. Bei einem Video gibt es **Vollbild**.
+
+Eine **PDF, die mit einem Passwort geschützt ist**, fragt direkt auf der Seite danach. Das Passwort wird nur auf deinem
+Gerät benutzt, um die PDF zu öffnen; es wird nicht gespeichert oder irgendwohin gesendet. Brichst du ab, wird dir der
+Download angeboten.
+
+Manches kann die Seite nicht anzeigen: ein Format, das dein Browser nicht darstellen kann, und sehr große Bilder oder
+PDFs (über 64 MB). Gescannte Seiten in manchen Formaten zeigen eventuell Lücken. Wenn etwas nicht angezeigt werden kann,
+sagt veyq das, und die Schaltfläche **Herunterladen** ist gleich daneben.
+
+Die Datei wird auf deinem Gerät entschlüsselt, während du sie ansiehst, und es wird nichts Zusätzliches gespeichert. Wem
+du die Datei geteilt hast, der sieht genau dasselbe.
+
+## Wer sie hochgeladen hat
+
+Oben auf der Seite einer Datei sehen Mitglieder des Bereichs **Hochgeladen von**: Name und Bild des Mitglieds,
+**Ehemaliges Mitglied** für jemanden, der den Bereich verlassen hat, oder den Namen, den ein Gast angegeben hat, als die
+Datei über einen Link kam. Nach einem [Ersetzen](/veyq/de/depot/replace-a-file/) steht dort, wer sie ersetzt hat. Wer nur
+einen Link hat, sieht das nie.
+
+## Sehr große Dateien
+
+Große Dateien werden Stück für Stück heruntergeladen und auf deinem Gerät wieder zusammengesetzt. Browser kommen damit
+unterschiedlich gut zurecht. Wo dein Browser direkt in eine Datei speichern kann, die du wählst, klappt es am besten; wo
+nicht, wird eine sehr große Datei mit einer Meldung abgelehnt, statt auf halbem Weg zu scheitern.

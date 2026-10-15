@@ -1,0 +1,46 @@
+---
+title: "Open and look at a file"
+sources:
+  - docs/features/depot/use-cases/uc.depot.view-file.md
+  - docs/features/depot/use-cases/uc.depot.member-files.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+1. Open the folder and click the file's row. Its own page opens with the file on it.
+2. Look at it, as described below.
+3. To keep a copy on your computer, choose **Download**. It is also the download button on the file's row. You get the
+   file exactly as you put it in, under the name it has in veyq.
+
+<Screenshot id="depot-file-page" shows="The page of an opened PDF with its header (name, size, type, modified, Uploaded by) and the first page of the PDF below" />
+
+## What is shown
+
+- A **picture** is shown.
+- A **text** (plain text, Markdown, code, JSON, CSV and the like) is shown as text. Select it as you like, or choose
+  **Copy**. **Wrap lines** switches line wrapping on and off. A long text shows only its first megabyte.
+- A **PDF** is shown page by page, with its page count and buttons to **Zoom in**, **Zoom out** and **Fit to width**. You can
+  select and copy its text. Links inside a PDF do nothing, so a PDF can never take you somewhere else.
+- A **video** or a **sound file** plays. Use **Full screen** for a video.
+
+A **PDF that is protected by a password** asks for it right on the page. The password is used only on your device to
+open the PDF; it is not stored or sent anywhere. If you cancel, the download is offered instead.
+
+Some things cannot be shown on the page: a format your browser cannot display, and very large pictures or PDFs
+(over 64 MB). Scanned pages in some formats may show gaps. Whenever something cannot be shown, veyq says so and the
+**Download** button is right there.
+
+The file is unlocked on your device while you look and nothing extra is stored. Someone you shared the file with sees
+exactly the same.
+
+## Who uploaded it
+
+At the top of a file's page, members of the space see **Uploaded by**: the member's name and picture, **Former member**
+for someone who has left the space, or the name a guest gave when the file came in through a link. After a
+[replace](/veyq/depot/replace-a-file/) it names whoever replaced it. People you share a link with never see this.
+
+## Very large files
+
+Large files are downloaded piece by piece and put back together on your device. Browsers differ in how well they cope.
+Where your browser can save straight to a file you choose, that works best; where it cannot, a very large file may be
+refused with a message instead of failing halfway.
