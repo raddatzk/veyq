@@ -137,6 +137,18 @@ export default defineConfig({
               translations: { de: 'Privatsphäre' },
               items: ['privacy/is-my-data-safe', 'privacy/quantum-computers-and-your-photos'],
             },
+            {
+              label: 'Help',
+              translations: { de: 'Hilfe' },
+              items: [
+                'help',
+                'help/lost-emergency-kit',
+                'help/lost-device',
+                'help/key-changed',
+                'help/start-a-list-over',
+                'help/offline',
+              ],
+            },
           ],
         },
         {

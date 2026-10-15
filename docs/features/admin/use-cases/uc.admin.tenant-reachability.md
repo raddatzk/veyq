@@ -164,3 +164,4 @@ tun: der Server leitet nur nach Adresse weiter, und was darin liegt, bleibt für
 - Operations: [Set up a new instance](../../../../site/src/content/docs/run/new-instance.mdx) (the shared volume the projection is written to,
   and why it is never hand-edited).
 - Run area of the docs site: [Networking and TLS](../../../../site/src/content/docs/run/networking.md), [Troubleshooting](../../../../site/src/content/docs/run/troubleshooting.md)
+- End-user view (docs site): [Offline or unreachable](../../../../site/src/content/docs/help/offline.mdx)

@@ -153,3 +153,5 @@ version reads the new store with no action; one whose mark sat above it is offer
   (the human ceremony that elevates *pinned* → *verified*), [uc.spaces.require-verified-identities](../../spaces/use-cases/uc.spaces.require-verified-identities.md)
   (strict mode, planned)
 - End-user view (docs site): [Verify a person](../../../../site/src/content/docs/account/verify-a-person.mdx)
+- End-user view (docs site): [A key changed](../../../../site/src/content/docs/help/key-changed.mdx)
+- End-user view (docs site): [Start a list over](../../../../site/src/content/docs/help/start-a-list-over.mdx)

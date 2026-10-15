@@ -152,6 +152,13 @@ phase closes only after the owner has read its pages in conversation. Done when,
       area; Help: lost Emergency Kit, lost device, a changed-key notice, "Start a list over", the offline page,
       forgotten password (pointing to its page). At the end, `npm run shots` is handed to the owner as the list
       of screenshots to supply.
+      *Built, waiting for the owner's read:* `help/` — Help (an index of situations, a forgotten password and an
+      expired invitation pointing to their pages), Lost Emergency Kit, Lost device, A key changed, Start a list over,
+      Offline or unreachable; the two Privacy pages now link the task pages, Help and the Security area, and lost a
+      stale claim (no moderation tooling: the operator's capability switches are built). Your Emergency Kit says the
+      still-signed-in window (inbox #446, closed). The landing page lists the nine sections. Walked earlier in this CR:
+      the lost-device and key-changed steps (phase 3), the terms gate; not walked: Start a list over (needs a server
+      that rolls a list back) and the offline states. `npm run shots`: 56 screenshots, 112 files, handed to the owner.
 
 ## Definition of done
 
