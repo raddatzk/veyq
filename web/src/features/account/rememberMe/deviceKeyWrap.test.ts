@@ -139,6 +139,38 @@ describe('deviceKeyWrap (web remember-me, cr-0054)', () => {
     expect(await isRemembered()).toBe(true)
   })
 
+  // ADR 0088 decision 5: `core.remember-device.passwordless` off withholds the DEVICE_KEY wrap from the
+  // key material, deletes nothing, and serves it again once switched back on. The PASSWORD wrap stays served.
+  it('a withheld wrap keeps the record, and the same wrap served again opens it with no new enrolment', async () => {
+    const add = vi.fn<AddWrap>().mockResolvedValue({ id: 'wrap-1' })
+    const del = vi.fn<DeleteWrap>()
+    mockWrapsApi(add, del)
+    await enrolDeviceKey('a@b.com', masterKey())
+    const served = materialFrom(add, 'wrap-1')
+    const withheld = material([{ id: 'pw-1', method: 'PASSWORD', wrappedKey: 'AA==', kdfParams: 'AA==' }])
+
+    expect(await restoreDeviceKey(withheld)).toBeNull()
+    expect(await rememberedWrapId('a@b.com')).toBe('wrap-1')
+
+    expect((await restoreDeviceKey(served))?.masterKey).toEqual(masterKey())
+    expect(add).toHaveBeenCalledOnce() // the enrolment above, nothing since
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('an explicit forget still clears a record whose wrap is withheld', async () => {
+    const add = vi.fn<AddWrap>().mockResolvedValue({ id: 'wrap-1' })
+    const del = vi.fn<DeleteWrap>().mockResolvedValue(undefined)
+    mockWrapsApi(add, del)
+    await enrolDeviceKey('a@b.com', masterKey())
+    expect(await restoreDeviceKey(material())).toBeNull() // withheld, kept
+
+    await clearDeviceKey()
+
+    // The server still holds the withheld wrap and lets it be deleted, so the forget reaches both halves.
+    expect(del).toHaveBeenCalledWith({ id: 'wrap-1' })
+    expect(await isRemembered()).toBe(false)
+  })
+
   it('clear removes the server wrap and drops the local key', async () => {
     const add = vi.fn<AddWrap>().mockResolvedValue({ id: 'wrap-1' })
     const del = vi.fn<DeleteWrap>().mockResolvedValue(undefined)

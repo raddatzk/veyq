@@ -17,7 +17,7 @@ vi.mock('../trustDevice/deviceKey', () => ({
 }))
 
 import { unlockWithDevice } from './unlock'
-import { accountApi } from '../../../api/client'
+import { accountApi, accountWrapsApi } from '../../../api/client'
 import type { AccountKeyMaterial } from '../../../api/generated/account'
 import { stubApi } from '../../../test/apiMock'
 import * as device from '../trustDevice/deviceKey'
@@ -99,6 +99,29 @@ describe('unlockWithDevice (uc.account.trust-device)', () => {
     expect(device.clearTrust).not.toHaveBeenCalled()
     expect(isUnlocked()).toBe(false)
   })
+
+  // ADR 0088 decision 5: `core.remember-device` off withholds every DEVICE wrap from the key material,
+  // deletes nothing, and serves it again once switched back on. The PASSWORD wrap stays served throughout.
+  it('a withheld DEVICE wrap falls back and keeps the trust; served again it unlocks with no new enrolment', async () => {
+    const { material, mk } = built
+    const withheld: AccountKeyMaterial = {
+      ...material,
+      wraps: [{ id: 'pw-1', method: 'PASSWORD', wrappedKey: 'AA==', kdfParams: 'AA==' }],
+    }
+    vi.mocked(device.loadTrust).mockResolvedValue({ cryptoKey: {} as CryptoKey, wrapId: WRAP_ID })
+    vi.mocked(device.deviceFactor).mockResolvedValue(DEVICE_FACTOR)
+
+    mockMaterial(withheld)
+    expect(await unlockWithDevice(EMAIL, PASSWORD)).toBe(false)
+    expect(device.clearTrust).not.toHaveBeenCalled()
+    expect(isUnlocked()).toBe(false)
+
+    mockMaterial(material)
+    expect(await unlockWithDevice(EMAIL, PASSWORD)).toBe(true)
+    expect(masterKey()).toEqual(mk)
+    expect(device.saveTrust).not.toHaveBeenCalled()
+    expect(accountWrapsApi).not.toHaveBeenCalled()
+  }, PRODUCTION_ARGON_TIMEOUT_MS)
 
   it('throws a generic failure on a wrong password — no key held', async () => {
     const { material } = built

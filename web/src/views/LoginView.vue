@@ -13,7 +13,7 @@ import { signOut, takeSignOutNotice, type SignOutNotice } from '../features/acco
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
 import { trustThisDevice, untrustThisDevice, isTrusted } from '../features/account/trustDevice/trustDevice'
-import { enrolDeviceKey, clearDeviceKey, isRememberSupported } from '../features/account/rememberMe/deviceKeyWrap'
+import { enrolDeviceKey, clearDeviceKey, isRememberSupported, rememberedWrapId } from '../features/account/rememberMe/deviceKeyWrap'
 import { cacheSessionVault, clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
@@ -52,6 +52,10 @@ const error = ref('')
 // front and only HIDE it once we positively confirm the entered email is trusted on this device. Resolved
 // against the local trust record on mount + when the email changes.
 const needsSecretKey = ref(true)
+// This device holds a convenience record for the entered email whose switch is off: the server withholds that wrap
+// from the key material without deleting it (ADR 0088 decision 5), so the device needs the Secret Key, and the hint
+// under that field says why instead of calling it a first sign-in.
+const heldBack = ref(false)
 // Login already succeeded for the current inputs → a Secret-Key retry must re-unlock, not re-login. Seeded from a
 // session boot restored without unlocking — e.g. the document a sign-out that never reached the server loads
 // (uc.account.sign-out E4): the refresh cookie is still live, and this card's sign-out is then the retry.
@@ -103,8 +107,17 @@ async function resolveDeviceState() {
   // No email yet → unknown account, keep the Secret Key shown (the safe first-sign-in default). With an email
   // it's needed unless this device already carries a password DEVICE wrap for it (then email + password
   // unlock it). A remembered device auto-opens at boot; if it reached this screen its restore failed, so it
-  // falls back to needing it.
-  needsSecretKey.value = email.value ? !(await isTrusted(email.value).catch(() => false)) : true
+  // falls back to needing it. A DEVICE wrap whose switch is off is withheld, so it unlocks nothing either: asking
+  // for the Secret Key up front spares the member a submit that can only fail over to it.
+  const trusted = email.value ? await isTrusted(email.value).catch(() => false) : false
+  needsSecretKey.value = !(trusted && deviceWrapSupported)
+  heldBack.value = trusted ? !deviceWrapSupported : await rememberedWhileOff()
+}
+
+/** This device keeps a password-less DEVICE_KEY record for the entered email while that switch is off. One wrap per
+ *  device (ADR 0005 §9), so such a device holds no DEVICE wrap to fall back on: only the floor is left. */
+async function rememberedWhileOff(): Promise<boolean> {
+  return !!email.value && !rememberSupported && (await rememberedWrapId(email.value).catch(() => null)) !== null
 }
 
 /** Write moment 2 of the device register (en.account.device-register): record the device↔wrap join at the ONE
@@ -137,7 +150,10 @@ async function enrolConvenienceWrap() {
     }
   } else {
     await cacheSessionVault(email.value, mk) // survive reloads this browser session
-    if (deviceWrapSupported) {
+    // A DEVICE_KEY wrap withheld by its switch is not replaced (ADR 0088 decision 5): dropping it would delete the
+    // wrap the server only holds back, and its local key with it, so switching back on would restore nothing. The
+    // device keeps its record and needs the floor until then; an explicit forget still clears it.
+    if (deviceWrapSupported && !(await rememberedWhileOff())) {
       await clearDeviceKey().catch(() => {}) // drop a prior password-less DEVICE_KEY wrap
       await noteWrapOfThisDevice(await trustThisDevice(email.value, password.value, mk).catch(() => null))
     }
@@ -406,7 +422,7 @@ onMounted(async () => {
             @kit="applyKit"
             @scanned="onForeignScan"
           />
-          <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>
+          <small class="field-hint">{{ t(heldBack ? 'unlock.deviceHeldBack' : 'unlock.secretKeyHint') }}</small>
         </label>
         <div v-if="rememberSupported" class="checkbox-row">
           <Checkbox v-model="remember" input-id="remember-me" binary />

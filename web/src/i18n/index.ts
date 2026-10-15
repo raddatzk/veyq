@@ -694,6 +694,10 @@ const en = {
   unlock: {
     secretKey: 'Secret Key',
     secretKeyHint: 'First time on this device — paste or upload your Secret Key from your Emergency Kit. It never leaves this device and you won’t need it here again.',
+    // Instead of the hint above, on a device whose remembered unlock the server's Owner switched off
+    // (ADR 0088 decision 5): the wrap is withheld, not deleted, and this device keeps its key.
+    deviceHeldBack:
+      'This server does not allow remembered devices right now, so this device needs your Secret Key from your Emergency Kit. Nothing on it was removed: once the server allows it again, it unlocks as before.',
     upload: 'Upload Emergency Kit',
     scan: 'Scan QR code',
     scanHint: 'Point your camera at the QR code in your Emergency Kit.',
@@ -2460,6 +2464,8 @@ const de: typeof en = {
   unlock: {
     secretKey: 'Secret Key',
     secretKeyHint: 'Erstes Mal auf diesem Gerät — füge deinen Secret Key aus dem Notfall-Kit ein oder lade ihn hoch. Er verlässt dieses Gerät nie und wird hier nicht wieder gebraucht.',
+    deviceHeldBack:
+      'Dieser Server lässt gemerkte Geräte gerade nicht zu, darum braucht dieses Gerät deinen Secret Key aus dem Notfall-Kit. Darauf wurde nichts entfernt: Sobald der Server es wieder zulässt, entsperrt es wie zuvor.',
     upload: 'Notfall-Kit hochladen',
     scan: 'QR-Code scannen',
     scanHint: 'Richte deine Kamera auf den QR-Code in deinem Notfall-Kit.',

@@ -27,6 +27,7 @@ vi.mock('../features/account/rememberMe/deviceKeyWrap', () => ({
   enrolDeviceKey: vi.fn(),
   clearDeviceKey: vi.fn(),
   isRememberSupported: vi.fn(),
+  rememberedWrapId: vi.fn(),
 }))
 vi.mock('../features/account/rememberMe/sessionVault', () => ({
   cacheSessionVault: vi.fn(),
@@ -68,7 +69,7 @@ import { signOut, takeSignOutNotice } from '../features/account/login/signOut'
 import { session } from '../app/session'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
 import { trustThisDevice, untrustThisDevice, isTrusted } from '../features/account/trustDevice/trustDevice'
-import { enrolDeviceKey, clearDeviceKey, isRememberSupported } from '../features/account/rememberMe/deviceKeyWrap'
+import { enrolDeviceKey, clearDeviceKey, isRememberSupported, rememberedWrapId } from '../features/account/rememberMe/deviceKeyWrap'
 import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
 import { cacheSessionVault, clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { revokeOtherSessionFamilies } from '../features/account/sessions/sessions'
@@ -174,6 +175,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     vi.mocked(enrolDeviceKey).mockResolvedValue('wrap-2')
     vi.mocked(clearDeviceKey).mockResolvedValue(undefined)
     vi.mocked(isRememberSupported).mockReturnValue(true)
+    vi.mocked(rememberedWrapId).mockResolvedValue(null)
     vi.mocked(deviceId).mockReturnValue('this-device')
     vi.mocked(guessDeviceLabel).mockReturnValue('Firefox · macOS')
     vi.mocked(cacheSessionVault).mockResolvedValue(undefined)
@@ -325,6 +327,87 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(on.find('#remember-me').exists()).toBe(true)
     await submitOrdinary(on, true)
     expect(enrolDeviceKey).toHaveBeenCalled()
+  })
+
+  // ADR 0088 decision 5: a switch-off withholds the device's own wrap from the key material without
+  // deleting it, so the device falls back to the floor (password AND Secret Key, for both tiers: a device holds one
+  // convenience wrap) and keeps its local record, so switching back on restores it. What must NOT happen is the
+  // enrolment after the fallback replacing the withheld tier with the other one. The mock does not AND the path as
+  // the server does, so a parent switched off switches its child off here by hand.
+  const secretKeyField = (w: VueWrapper) => w.find('input[name="secret-key"]')
+
+  it('remember-device off: a trusted device asks for the password and the Secret Key at once, says why, and keeps its trust', async () => {
+    switchedOff.add(CORE_REMEMBER_DEVICE).add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    vi.mocked(unlockWithDevice).mockResolvedValue(false) // its DEVICE wrap is withheld
+    const w = mountView()
+    await fillCredentials(w)
+
+    expect(secretKeyField(w).exists()).toBe(true)
+    expect(w.text()).toContain(t('unlock.deviceHeldBack'))
+    expect(w.text()).not.toContain(t('unlock.secretKeyHint'))
+    await secretKeyField(w).setValue('the-secret-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', 'the-secret-key')
+    expect(unlockWithDevice).not.toHaveBeenCalled()
+    expect(cacheSessionVault).toHaveBeenCalled() // control: the sign-in itself went through
+    expect(untrustThisDevice).not.toHaveBeenCalled()
+    expect(trustThisDevice).not.toHaveBeenCalled()
+    expect(clearDeviceKey).not.toHaveBeenCalled()
+    expect(enrolDeviceKey).not.toHaveBeenCalled()
+  })
+
+  it('remember-device on again: the same trusted device unlocks with the password alone and enrols nothing', async () => {
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    const w = mountView()
+    await fillCredentials(w)
+
+    expect(secretKeyField(w).exists()).toBe(false)
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(unlockWithDevice).toHaveBeenCalledWith('kevin@example.com', 'the-password')
+    expect(unlockMasterKey).not.toHaveBeenCalled()
+    expect(trustThisDevice).not.toHaveBeenCalled()
+    expect(enrolDeviceKey).not.toHaveBeenCalled()
+  })
+
+  it('remember-device.passwordless off: a remembered device asks for the password and the Secret Key, says why, and is not made a trusted one', async () => {
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    vi.mocked(rememberedWrapId).mockResolvedValue('wrap-remembered')
+    const w = mountView()
+    await fillCredentials(w)
+
+    expect(secretKeyField(w).exists()).toBe(true)
+    expect(w.text()).toContain(t('unlock.deviceHeldBack'))
+    await secretKeyField(w).setValue('the-secret-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', 'the-secret-key')
+    expect(cacheSessionVault).toHaveBeenCalled() // control: the sign-in itself went through
+    // Replacing the withheld DEVICE_KEY wrap with a DEVICE one would delete it, and its local key with it.
+    expect(clearDeviceKey).not.toHaveBeenCalled()
+    expect(trustThisDevice).not.toHaveBeenCalled()
+  })
+
+  it('control: with its switch on, a remembered device whose wrap is gone is re-enrolled as before, and nothing is said', async () => {
+    // The skip above is the switch's, not the record's: a wrap absent while its switch is on was removed, and the
+    // sign-in replaces the stale record (uc.account.remember-this-device E2).
+    vi.mocked(rememberedWrapId).mockResolvedValue('wrap-remembered')
+    const w = mountView()
+    await fillCredentials(w)
+
+    expect(w.text()).not.toContain(t('unlock.deviceHeldBack'))
+    expect(w.text()).toContain(t('unlock.secretKeyHint'))
+    await secretKeyField(w).setValue('the-secret-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(clearDeviceKey).toHaveBeenCalled()
+    expect(trustThisDevice).toHaveBeenCalled()
   })
 
   it('device-linking off: no "sign in with code" entry, and a scanned pairing code is not accepted (the kit still is)', async () => {
