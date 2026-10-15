@@ -46,10 +46,13 @@ paths:
                     instanceSalt: aW5zdGFuY2Utc2FsdC0xNmI=
                     version: { major: 1, build: 1 }
                     capabilities:
-                      - { id: sharing.public-links }
-                      - { id: sharing.uploader-links }
-                      - { id: spaces.groups }
-                      - { id: account.device-trust }
+                      - { id: core.public-shares }
+                      - { id: core.public-shares.contribute }
+                      - { id: core.public-shares.drop-box }
+                      - { id: core.group-space }
+                      - { id: core.remember-device }
+                      - { id: core.remember-device.passwordless }
+                      - { id: core.device-linking }
                 done:
                   summary: An instance that is already set up
                   value:
@@ -58,10 +61,13 @@ paths:
                     instanceSalt: aW5zdGFuY2Utc2FsdC0xNmI=
                     version: { major: 1, build: 1 }
                     capabilities:
-                      - { id: sharing.public-links }
-                      - { id: sharing.uploader-links }
-                      - { id: spaces.groups }
-                      - { id: account.device-trust }
+                      - { id: core.public-shares }
+                      - { id: core.public-shares.contribute }
+                      - { id: core.public-shares.drop-box }
+                      - { id: core.group-space }
+                      - { id: core.remember-device }
+                      - { id: core.remember-device.passwordless }
+                      - { id: core.device-linking }
 
   /api/setup/owner:
     post:
@@ -125,16 +131,18 @@ components:
         capabilities:
           type: array
           description: >
-            The instance's ACTIVE capability manifest (ADR 0032): the abilities this build supports and the
-            operator has not disabled, sourced from the append-only catalog contracts/platform/capabilities.json
-            minus the veyq.capabilities.disabled config list. Pre-auth, identity-free and identical for every
-            caller (operator-blind-safe) — it advertises only instance-wide abilities, never per-user data. A
-            client soft-gates each optional feature on the presence of its id (absent => hidden). The wire shape
-            is intentionally [{ id }]; the catalog's serves[]/source metadata stays off the wire.
+            The instance's ACTIVE capability manifest (ADR 0032, ADR 0088): the abilities this build supports,
+            sourced from the catalog contracts/platform/capabilities.json, minus the switched-off ids (none until
+            the Server Owner's switches land, inbox #443). An id is listed only when it and every ancestor entry
+            are active (the AND along the path), so a switched-off parent drops its children too; the server
+            computes that, and a client reads each leaf id without ANDing. Pre-auth, identity-free and identical
+            for every caller (operator-blind-safe) — it advertises only instance-wide abilities, never per-user
+            data. A client soft-gates each optional feature on the presence of its id (absent => hidden). The
+            wire shape is intentionally [{ id }]; the catalog's serves[]/source metadata stays off the wire.
           items: { $ref: "#/components/schemas/Capability" }
           example:
-            - { id: sharing.public-links }
-            - { id: sharing.uploader-links }
+            - { id: core.public-shares }
+            - { id: core.public-shares.drop-box }
         suites:
           x-veyq-visibility: public
           type: array
@@ -194,12 +202,12 @@ components:
           x-veyq-visibility: public
           type: string
           description: >
-            Stable lowercase-dotted capability id (e.g. "sharing.public-links"), from the append-only catalog
-            contracts/platform/capabilities.json. A capability is instance-wide + pre-auth ("this server can do
+            Stable lowercase-dotted capability id, a path in the register tree (e.g. "core.public-shares.drop-box"),
+            from the catalog contracts/platform/capabilities.json. A capability is instance-wide + pre-auth ("this server can do
             X at all") — NOT a per-scope/role permission ("you may do X here"). A feature is offered only when
             the capability is present AND local policy permits.
           maxLength: 64
-          example: sharing.public-links
+          example: core.public-shares.drop-box
 
     MasterKeyWrap:
       $ref: '_common.openapi.yaml#/components/schemas/MasterKeyWrap'

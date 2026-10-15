@@ -39,6 +39,8 @@ tags:
       Device linking (ADR 0059). A short-lived, single-use channel over which one device hands another the
       Master Key and a session, and a session delegation that mints the family the second device could never
       obtain by itself — it never learns the password, and the auth keypair is password-derived (ADR 0003).
+      Every operation of the tag is gated by the `core.device-linking` capability (`422 capability_disabled`
+      while it is switched off, ADR 0088 decision 11).
 
       The server relays three opaque values and interprets none of them: the routing handle, one `answer` and
       one sealed grant. `answer` means slightly different things in the two directions — the new device's
@@ -519,6 +521,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invalid_request }
+        "422": { $ref: "#/components/responses/DeviceLinkingDisabled" }
 
   /api/pairing/answer:
     post:
@@ -559,6 +562,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: pairing_channel_invalid }
+        "422": { $ref: "#/components/responses/DeviceLinkingDisabled" }
 
   /api/pairing/delegate:
     post:
@@ -613,6 +617,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: pairing_channel_invalid }
+        "422": { $ref: "#/components/responses/DeviceLinkingDisabled" }
 
   /api/pairing/seal:
     post:
@@ -660,6 +665,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: pairing_channel_invalid }
+        "422": { $ref: "#/components/responses/DeviceLinkingDisabled" }
 
   /api/pairing/collect:
     post:
@@ -703,6 +709,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: pairing_channel_invalid }
+        "422": { $ref: "#/components/responses/DeviceLinkingDisabled" }
 
 components:
   securitySchemes:
@@ -710,6 +717,18 @@ components:
       type: http
       scheme: bearer
       description: The opaque access token issued by login / refresh.
+
+  responses:
+    DeviceLinkingDisabled:
+      description: >
+        The `core.device-linking` capability is switched off instance-wide (ADR 0032, ADR 0088 decision 11), so
+        no device is linked: every pairing endpoint refuses, which also stops a pairing already in flight.
+        Enforced server-side even if a stale client still offers "sign in with code" or "add a device". It is
+        independent of `core.remember-device`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { code: capability_disabled }
 
   schemas:
     LoginChallengeRequest:

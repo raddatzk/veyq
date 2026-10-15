@@ -140,9 +140,12 @@ paths:
               example: { code: too_many_devices }
         "422":
           description: >
-            The `account.device-trust` capability is disabled instance-wide (ADR 0032): the operator mandates a
-            full password every time, so device-local convenience wraps (trust-this-device / remember-me) are
-            turned off. Enforced server-side even if a stale client still offers the toggle.
+            The capability the wrap's method needs is switched off instance-wide (ADR 0032, ADR 0088):
+            `core.remember-device` for DEVICE, `core.remember-device.passwordless` for DEVICE_KEY, which by the AND
+            along the path also needs `core.remember-device`. With the first off no device is remembered; with
+            only the second off, a remembered device still asks for the password. Enforced server-side even if a
+            stale client still offers the toggle.
+            Only enrolling is refused: unlocking with an existing wrap and deleting one stay allowed.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }

@@ -102,10 +102,11 @@ paths:
         "422":
           description: >
             Unprocessable. Two codes: `capability_disabled` — the sharing capability this role needs
-            (`sharing.public-links` for READ/READ_WRITE, `sharing.uploader-links` for WRITE_ONLY) is disabled
-            instance-wide, so the operator has turned public sharing off (ADR 0032; checked first, before any
-            scope check, so it reads as instance policy not a scope error); `illegal_scope` — the node's kind may not
-            be a share root with this role (`ShareRoots`, ADR 0080: a `FOLDER` with READ or READ_WRITE, a kind of an
+            (`core.public-shares` for READ, `core.public-shares.contribute` for READ_WRITE,
+            `core.public-shares.drop-box` for WRITE_ONLY) is not active instance-wide: its own entry is switched
+            off, or `core.public-shares` above it is (the AND along the path, ADR 0088). It is checked first, before
+            any scope check, so it reads as instance policy, not a scope error (ADR 0032). `illegal_scope` — the
+            node's kind may not be a share root with this role (`ShareRoots`, ADR 0080: a `FOLDER` with READ or READ_WRITE, a kind of an
             application as that application declares — Files: a `FILE` with READ or READ_WRITE, never WRITE_ONLY; a kind
             nobody declares, or two do, is never shared); a non-member scope is a non-enumerable `404`, not `422`.
           content:

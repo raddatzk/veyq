@@ -194,9 +194,10 @@ paths:
               example: { code: tenant_not_found }
         "422":
           description: >
-            The `spaces.groups` capability is disabled instance-wide (ADR 0032): the operator runs a
-            personal-only instance and group scopes are turned off. Enforced server-side even if a stale client
-            still offers the affordance.
+            The `core.group-space` capability is switched off instance-wide (ADR 0032, ADR 0088): the operator
+            runs a personal-only instance, so no new group scope is created. Enforced server-side even if a stale
+            client still offers the affordance. Only creation is refused: an existing group stays usable (a
+            feature switch refuses only what is new, ADR 0088 decision 5).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
