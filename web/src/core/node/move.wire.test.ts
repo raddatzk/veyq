@@ -201,7 +201,7 @@ describe('a member moves a drop-box guest\'s folder out (ADR 0080 decision 11)',
     const { identityKey, wrappedIdentityKey } = mintIdentityKey(SCOPE, BOX, IDENTITY, openDropPublicKey(kShare, drop.sealedDropPublicKey))
     const keys = { folder: v1.randomBytes(32), file: v1.randomBytes(32), dest: v1.randomBytes(32) }
     const nodes = [
-      row(BOX, null, 'FILES_DROPBOX', scopeKey, boxKey, 'Einsendungen', 0, 0, { sealedDropPrivateKey: drop.sealedDropPrivateKey }),
+      row(BOX, null, 'DEPOT_DROPBOX', scopeKey, boxKey, 'Einsendungen', 0, 0, { sealedDropPrivateKey: drop.sealedDropPrivateKey }),
       // the guest sealed its folder's entry under its own K_up
       row(FOLDER, BOX, 'FOLDER', identityKey, keys.folder, 'Adelgunde', 0, 0, { shareIdentityId: IDENTITY, wrappedIdentityKey }),
       row(FILE, FOLDER, 'FILE', keys.folder, keys.file, 'Bericht.pdf', 0, 0),

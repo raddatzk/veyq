@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Core's copy dialog (uc.platform.copy-node, cr-copy-node Decisions 1, 4, 5) over the REAL registry (Memories and Files,
+// Core's copy dialog (uc.platform.copy-node, cr-copy-node Decisions 1, 4, 5) over the REAL registry (Memories and Depot,
 // filled by `src/test/setup.ts`), the real PrimeVue Dialog and the move's real browser, every step a DOM click. The walk and
 // the replay are `prepareCopy`'s (mocked here: `copySubtree.test.ts` and `copy.wire.test.ts` pin them). What this pins: the
 // browser for a copy allows the nodes' own place and blocks them and their inside; the summary says what is created, its
@@ -24,7 +24,7 @@ import { ImportFailed } from './importSubtree'
 import { FOLDER_KIND } from '../node/kind'
 import type { TreeNode } from '../node/tree'
 import { treeStore } from '../node/treeStore'
-import { FILE_KIND, DROPBOX_KIND } from '../../features/files/kinds'
+import { FILE_KIND, DROPBOX_KIND } from '../../features/depot/kinds'
 import { CHAPTER_KIND, MEMORY_KIND } from '../../features/memory/kinds'
 import { copiesKind } from './copyActions'
 import { tenantStorageFits } from '../../features/tenant/tenantStorage'
@@ -118,7 +118,7 @@ describe('CopyNodesDialog: the summary, before anything is written', () => {
     await mountDialog([byId('reisen')])
     expect(text('copy-summary')).toBe(t('node.copy.summary', { nodes: 3, size: '2 kB', target: 'Familie' }, 3))
     expect(listed('copy-left-out')).toEqual([t('node.copy.leftOutLine', { name: 'Lissabon', reason: t('node.copy.reason.not_copyable') })])
-    expect(listed('copy-losses')).toEqual([t('node.copy.lossAlways'), t('node.copy.lossFolderCover'), t('files.dropBox.copyLoss')])
+    expect(listed('copy-losses')).toEqual([t('node.copy.lossAlways'), t('node.copy.lossFolderCover'), t('depot.dropBox.copyLoss')])
     expect(listed('copy-losses')).not.toContain(t('memory.copyLoss'))
   })
 

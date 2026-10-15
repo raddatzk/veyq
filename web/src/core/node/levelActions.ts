@@ -1,10 +1,10 @@
 // The seam between the level view's "New" menu (and its drop target) and an application's row source (inbox #406, #407). A
-// menu entry that is no create dialog - Files' "Upload files" needs the picker and the upload flow - cannot be run by core,
+// menu entry that is no create dialog - Depot's "Upload files" needs the picker and the upload flow - cannot be run by core,
 // which imports no application. So the level keeps a small handler registry (`createLevelActions`), and the application's row
 // factory registers, through the host it is handed (`LevelRowsHost.registerAction`), the handler for the action id its kind's
 // `levelActions` entry declared. Core only calls the handler of the entry the viewer chose - or, for what is dropped, the one
-// of an entry that declared `acceptsDrop`: dropped files go to a handler's `drop` (Files' "Upload files"), a dropped directory
-// to a handler's `dropDirectory` (Files' "Upload folder…", inbox #424).
+// of an entry that declared `acceptsDrop`: dropped files go to a handler's `drop` (Depot's "Upload files"), a dropped directory
+// to a handler's `dropDirectory` (Depot's "Upload folder…", inbox #424).
 //
 // The row factory is set up once per level view, in the level's setup, so its handlers exist for the level's whole life and do
 // NOT depend on which application tab is shown: "Upload files" is never greyed out because another tab is open. The level
@@ -16,7 +16,7 @@ export interface LevelActionHandler {
   /** Whether the action can run right now (e.g. the session's keys are unlocked, the matrix grants it). */
   enabled: () => boolean
   run: () => void
-  /** Files dropped onto the level (the entry declared `acceptsDrop`): core calls it only while `enabled()` says yes. */
+  /** Depot dropped onto the level (the entry declared `acceptsDrop`): core calls it only while `enabled()` says yes. */
   drop?: (files: File[]) => void
   /** A directory dropped onto the level that is no download to import (the entry declared `acceptsDrop`): core reads its
    *  files and calls it only while `enabled()` says yes. */

@@ -49,7 +49,7 @@ div.veyq-node-host
             button.p-tab [role="tab"]
               "Memories"
             button.p-tab [role="tab"]
-              "Files"
+              "Depot"
             button.p-tab [role="tab"]
               "Drop boxes"
             span.p-tablist-active-bar [role="presentation"]

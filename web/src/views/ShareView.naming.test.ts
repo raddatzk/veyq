@@ -14,7 +14,7 @@ import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../api/client', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../features/memory/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../features/files/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../features/depot/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
   return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
@@ -28,7 +28,7 @@ import { identityNameContext, loadGuestSession, saveGuestSession } from '../core
 import { ShareRole, type PublicShare } from '../api/generated/sharing'
 import { publicSharesApi } from '../api/client'
 import { publicShareMediaApi } from '../features/memory/api'
-import { publicShareFilesApi } from '../features/files/api'
+import { publicShareFilesApi } from '../features/depot/api'
 import { stubApi } from '../test/apiMock'
 import { realI18n, t } from '../test/i18n'
 import { chooseNew, hasNewMenu } from '../test/newMenu'

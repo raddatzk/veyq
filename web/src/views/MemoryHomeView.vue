@@ -72,7 +72,7 @@ const pendingPurgeDay = computed(() =>
   activeSpace.purgeAfter ? new Date(activeSpace.purgeAfter).toLocaleDateString(locale.value) : '',
 )
 
-// Position from the #fragment (`core/node/location.ts` owns its grammar: a folder ends in a slash, a Files node is its
+// Position from the #fragment (`core/node/location.ts` owns its grammar: a folder ends in a slash, a Depot node is its
 // plain name, any other application's node carries the application's slug). The leading token selects the scope
 // (token-less = tenant, `~me` = personal — ADR 0019); a path that doesn't resolve (`false`) collapses to the scope root.
 const currentScope = computed(() => parseHash(route.hash).scope)

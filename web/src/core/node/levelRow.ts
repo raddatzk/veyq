@@ -6,8 +6,8 @@
 // level view (in its setup, so it may use composables, watchers and the app's stores) with the level's reactive
 // {@link LevelRowsContext} and the {@link LevelRowsHost}, returning a {@link LevelRowSource}: `row(node)` for each of its
 // nodes, plus what only the application can explain (`notices`) and its alternative presentation (`presentation`, e.g.
-// Memories' map). It owns the DATA a row needs (Files' blob listing, Memories' covers) and the flows behind its actions
-// (Files' upload and replace); it draws nothing of the list itself. Several kinds may name one factory: it is called once.
+// Memories' map). It owns the DATA a row needs (Depot's blob listing, Memories' covers) and the flows behind its actions
+// (Depot's upload and replace); it draws nothing of the list itself. Several kinds may name one factory: it is called once.
 //
 // **An action is already a capability answer.** The factory builds the action list from its application's fail-closed
 // capability function (`core/access.ts`, `capabilities.ts`): an action it was not granted is `shown: false` or left out,
@@ -90,7 +90,7 @@ export interface LevelRowSelection {
   move: boolean
   /** It is deleted with the selection, into the scope's trash. */
   delete: boolean
-  /** The kind's own delete write where its single delete has one (Files' source for a file); it re-reads nothing - the
+  /** The kind's own delete write where its single delete has one (Depot's source for a file); it re-reads nothing - the
    *  selection's delete re-reads the tree once, after the last node. Omitted: core's `deleteNode`. */
   remove?: (nodeId: string) => Promise<void>
 }

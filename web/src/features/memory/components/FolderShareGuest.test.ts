@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The guest's folder page as it ships (inbox #401 S2): core's `ShareTreePage` with the app's REAL registry (Memories
-// and Files, filled by `src/test/setup.ts`), the real PrimeVue and the real vue-router, every step a DOM click on the
+// and Depot, filled by `src/test/setup.ts`), the real PrimeVue and the real vue-router, every step a DOM click on the
 // rendered element. The folder level is core's member `LevelView` (inbox #407: ONE unified list, every item core's
 // `LevelRowItem`): a Memory, the sub-folder and the file are items of that list, the rows' data the applications' own
 // — and nothing a member alone may do is on the page (pins, marks, the trash,
@@ -17,7 +17,7 @@ import { b64std, b64url } from '@veyq/crypto/base64'
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../../files/api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../../depot/api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../useThumbnailPipeline', () => ({
   useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), decrypt: vi.fn().mockResolvedValue(undefined), revokeAll: vi.fn() }),
 }))
@@ -27,8 +27,8 @@ import { FOLDER_KIND } from '../../../core/node/kind'
 import { sealName, wrapContentKey } from '../../../core/node/tree'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { ShareRole, type PublicShare, type ShareNode } from '../../../api/generated/sharing'
-import { FILE_KIND } from '../../files/kinds'
-import { publicShareFilesApi } from '../../files/api'
+import { FILE_KIND } from '../../depot/kinds'
+import { publicShareFilesApi } from '../../depot/api'
 import { MEMORY_KIND } from '../kinds'
 import { publicShareMediaApi } from '../api'
 import { stubApi } from '../../../test/apiMock'
@@ -115,7 +115,7 @@ describe("a folder link's guest page is the member's level (inbox #401 S2)", () 
       expect(w.findAll('li.veyq-level-item.is-folder .veyq-level-item-title').map((c) => c.text())).toEqual(['Briefe'])
       expect(w.find('li.veyq-level-item[data-kind="MEMORY"] .veyq-level-item-main').attributes('aria-label')).toBe('Rom 2026')
       expect(w.find('li.veyq-level-item[data-kind="MEMORY"] .veyq-level-item-meta').text()).toContain(t('memory.kindMemory'))
-      expect(w.find('li.veyq-level-item[data-kind="FILE"] .veyq-level-item-meta').text()).toContain(t('files.kindFile'))
+      expect(w.find('li.veyq-level-item[data-kind="FILE"] .veyq-level-item-meta').text()).toContain(t('depot.kindFile'))
       expectNoMemberControl(w)
       expect(authenticatedCalls).toEqual([])
     })

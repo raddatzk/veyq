@@ -6,7 +6,7 @@
 //
 // The platform's, not an application's (cr-files-application B3): the core top bar mounts it directly, and it lists
 // EVERY batch of the one core queue, whichever application enqueued it. It reads only the neutral item and batch
-// fields (name, status, progress, error, label, finishedAt) — never an application's `extra` — so a Files batch shows
+// fields (name, status, progress, error, label, finishedAt) — never an application's `extra` — so a Depot batch shows
 // exactly like a Memories one, and nothing here may import an application.
 //
 // ONE LIST PER DESTINATION (uc.memory.upload step 4). The tray draws a list, not a batch: every open (unacknowledged)

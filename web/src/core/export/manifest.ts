@@ -41,7 +41,7 @@ export type ManifestPayload = {
   size: number
   mediaType: string
   sha256?: string
-  /** Files only, optional: the file's modified time at export (ms since the epoch), restored on import. */
+  /** Depot only, optional: the file's modified time at export (ms since the epoch), restored on import. */
   modifiedAt?: number
 }
 

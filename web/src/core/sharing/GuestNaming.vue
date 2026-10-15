@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The ONE guest-naming component of a public share page (inbox #401 S2): every place a guest names itself — the
-// shell's naming dialog behind `GuestAccess.requestGuest` (a folder link, a Memory embedded below one, Files' list), the
-// Memories link's name pre-screen, Files' drop-box page — and the line that says whose session this device holds, with
+// shell's naming dialog behind `GuestAccess.requestGuest` (a folder link, a Memory embedded below one, Depot's list), the
+// Memories link's name pre-screen, Depot's drop-box page — and the line that says whose session this device holds, with
 // its "Not you?". Core's and neutral: what the name is FOR (the identity it creates, the key it is sealed under) is the
 // caller's `action`; who reads the name is the caller's `hint`, a sentence only the caller can say truthfully.
 //
@@ -10,7 +10,7 @@
 // - inline with no session (`current` null): the form on the page (a pre-screen, the drop-box page).
 // - inline with a session: "You are here as Anna." and, when the caller can `forget`, "Not you?" — which ASKS FIRST
 //   (inbox #395: the session is the device's only way back to what this identity did), unless `askBeforeForget` is
-//   false (Files' "Start over" after a link stopped taking files, which re-reads the link instead). Forgetting is the
+//   false (Depot's "Start over" after a link stopped taking files, which re-reads the link instead). Forgetting is the
 //   caller's (`forgetGuestSession` and whatever it holds beside the session); nothing on the server changes.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -25,7 +25,7 @@ import type { GuestIdentity } from './guestIdentity'
 const props = withDefaults(
   defineProps<{
     /** Whose session this device holds for the link — only its name is read; null: none, the form shows (inline).
-     *  Ignored as `dialog`. A caller may hand a name nothing was sent under yet (Files' drop page, inbox #385 (a)). */
+     *  Ignored as `dialog`. A caller may hand a name nothing was sent under yet (Depot's drop page, inbox #385 (a)). */
     current?: Pick<GuestIdentity, 'displayName'> | null
     /** Names the guest with the trimmed name; resolves once named (the caller saves the session). */
     action?: (name: string) => Promise<void>

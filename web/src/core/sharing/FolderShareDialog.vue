@@ -64,7 +64,7 @@ const MIN_PW = 10
 const props = defineProps<NodeShareDialogProps & { words?: ShareDialogCopy }>()
 const emit = defineEmits<{ close: [] }>()
 /** The i18n key of a sentence that says what the node is: the folder's own (`share.folder.*`) unless the wrapping dialog
- *  of another kind hands its own (`words`, Files' single-file link). */
+ *  of another kind hands its own (`words`, Depot's single-file link). */
 const copyKey = (name: keyof ShareDialogCopy) => props.words?.[name] ?? `share.folder.${name}`
 
 const { t, locale } = useI18n()

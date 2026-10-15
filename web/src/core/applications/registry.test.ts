@@ -292,16 +292,16 @@ describe('registry: lifecycle hooks', () => {
   })
 })
 
-// Inbox #328: an application claims its URL route slug once (ADR 0015); Files declares it has none.
+// Inbox #328: an application claims its URL route slug once (ADR 0015); Depot declares it has none.
 describe('registry: route slugs', () => {
   it('maps the claimed kinds to their application\'s slug and group, a folder and the rest to none', () => {
     const r = createRegistry()
     r.claimRouteSlug('memories', [MEMORY_KIND, CHAPTER_KIND])
-    r.claimNoRouteSegment(['FILE', 'FILES_DROPBOX'])
+    r.claimNoRouteSegment(['FILE', 'DEPOT_DROPBOX'])
     expect(r.routeOf(MEMORY_KIND)).toEqual({ slug: 'memories', group: 'app:memories' })
     expect(r.routeOf(CHAPTER_KIND)).toEqual({ slug: 'memories', group: 'app:memories' })
     expect(r.routeOf('FILE')).toEqual({ slug: null, group: 'none' })
-    expect(r.routeOf('FILES_DROPBOX')).toEqual(r.routeOf('FILE'))
+    expect(r.routeOf('DEPOT_DROPBOX')).toEqual(r.routeOf('FILE'))
     expect(r.routeOf(FOLDER_KIND)).toEqual({ slug: null, group: 'folder' })
     // a kind nobody claimed has no segment and numbers among the plain names of the segment-less application
     expect(r.routeOf('FUTURE')).toEqual({ slug: null, group: 'none' })

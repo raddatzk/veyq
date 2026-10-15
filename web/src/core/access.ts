@@ -11,10 +11,10 @@
 //   fragment (web/CLAUDE.md, the breadcrumb trap) and a member's stays a slug path in the fragment.
 //
 // **Capabilities are the applications'**, pure and FAIL-CLOSED: `memoryCapabilities` (features/memory/capabilities.ts),
-// `filesCapabilities` (features/files/capabilities.ts), and core's own `folderCapabilities` here for the one kind core
+// `depotCapabilities` (features/depot/capabilities.ts), and core's own `folderCapabilities` here for the one kind core
 // owns. Every right defaults to false; an unknown mode, role or kind grants nothing. The role matrix each one encodes is
 // written down in its `docs/apps/<application>.md` (ADR 0080 decision 6). A capability is the matrix's half; the other
-// half — that the data source implements the operation at all — is the application's source (Files' `source.ts` since
+// half — that the data source implements the operation at all — is the application's source (Depot's `source.ts` since
 // inbox #401 S3, Memories' `source.ts` since S4): a control is shown only where both say yes.
 //
 // Core imports no application here (`validate_web_core_imports_no_applications.py`).

@@ -3,20 +3,20 @@ feature: files
 title: Drop box — guests send files, each into a folder of its own
 # Built by cr-files-application F3 (ADR 0080 decision 11). Backend: DropBoxSliceTest and DropFolderRaceSliceTest (core +
 # Files); web: the guest's wire recorded at fetch with real crypto, the member's tree opening identity folders, the drop
-# box's detail and the read-only level; filesDropBox.e2e.test.ts runs in the web-e2e job.
+# box's detail and the read-only level; depotDropBox.e2e.test.ts runs in the web-e2e job.
 acceptanceCriteria:
   - id: one-folder-per-guest-identity
     text: A drop-box guest's first call creates its identity folder from its own ciphertext; every later call of that identity, concurrent first calls included, answers the same folder and its stored wrap; two guests get two folders, and two uploads of one identity land in the same one.
     coverage:
       backend: { integration: [DropBoxSliceTest.twoGuestsGetTwoFoldersAndASecondUploadOfOneIdentityLandsInTheSameFolder, DropFolderRaceSliceTest.concurrentFirstCallsOfOneIdentityMakeOneFolder] }
       web:
-        unit: [src/features/files/dropBox.wire.test.ts]
-        e2e: [src/features/files/filesDropBox.e2e.test.ts]
+        unit: [src/features/depot/dropBox.wire.test.ts]
+        e2e: [src/features/depot/depotDropBox.e2e.test.ts]
   - id: a-guest-writes-only-into-its-own-folder
     text: A WRITE_ONLY guest creates and uploads only inside its own identity folder; another guest's folder or file and the space beside the folders are refused, its listing is empty, and a create while a member moves its folder out is refused.
     coverage:
       backend: { integration: [DropBoxSliceTest.twoGuestsGetTwoFoldersAndASecondUploadOfOneIdentityLandsInTheSameFolder, DropFolderRaceSliceTest.aGuestsCreateWhileAMemberMovesItsFolderOutIsRefused] }
-      web: { e2e: [src/features/files/filesDropBox.e2e.test.ts] }
+      web: { e2e: [src/features/depot/depotDropBox.e2e.test.ts] }
   - id: a-guest-creates-only-files
     text: Inside its own identity folder a drop-box guest creates FILE nodes only (and uploads into them); a sub-folder, a drop box or any other kind is refused with 422 illegal_scope and stores nothing (owner decision 2026-10-08, inbox #377 (c)).
     coverage:
@@ -29,24 +29,24 @@ acceptanceCriteria:
       backend:
         unit: [DepotNodeKindRulesTest.aDropBoxLivesWhereAFileDoesAndNothingIsPlacedInIt]
         integration: [DropBoxSliceTest.aMemberPlacesNothingInADropBoxAndOnlyDeletesOrMovesOut]
-      web: { unit: [src/features/files/components/DropBoxDetail.test.ts, src/views/MemoryHomeView.test.ts] }
+      web: { unit: [src/features/depot/components/DropBoxDetail.test.ts, src/views/MemoryHomeView.test.ts] }
   - id: members-open-every-guest-folder
     text: A member opens each guest's folder through the drop box's key, its drop key and the guest's identity key (no new seal purpose); a repeated guest name is numbered at display time; a guest-sealed entry that does not open leaves that folder out of the tree instead of failing it, while a member-sealed broken entry still fails it.
     coverage:
       backend: { integration: [DropBoxSliceTest.twoGuestsGetTwoFoldersAndASecondUploadOfOneIdentityLandsInTheSameFolder] }
       web:
-        unit: [src/core/node/tree.identityFolder.test.ts, src/features/files/components/DropBoxDetail.test.ts]
-        e2e: [src/features/files/filesDropBox.e2e.test.ts]
+        unit: [src/core/node/tree.identityFolder.test.ts, src/features/depot/components/DropBoxDetail.test.ts]
+        e2e: [src/features/depot/depotDropBox.e2e.test.ts]
   - id: a-guest-of-a-link-above-sees-it-read-only
     text: A READ or READ_WRITE guest of a folder link above a drop box sees it in the member's own drop-box view — its guests' folders (a repeated name numbered in node-id order) and their files with the download — and no send form, upload, replace, share, delete or move; the server lets no guest move anything out of it.
     coverage:
       backend: { integration: [DropBoxSliceTest.aGuestOfALinkAboveMovesNothingOutOfADropBox] }
-      web: { unit: [src/features/files/components/DropBoxDetail.guest.test.ts] }
+      web: { unit: [src/features/depot/components/DropBoxDetail.guest.test.ts] }
   - id: revoking-the-link-keeps-everything
     text: Revoking or deleting a drop-box link keeps the drop box, its folders, files and blobs, and every identity a folder names.
     coverage:
       backend: { integration: [DropBoxSliceTest.revokingTheLinkKeepsTheFoldersTheFilesAndTheIdentitiesThatOpenThem] }
-      web: { e2e: [src/features/files/filesDropBox.e2e.test.ts] }
+      web: { e2e: [src/features/depot/depotDropBox.e2e.test.ts] }
   - id: the-purge-erases-folders-then-identities
     text: Purging a trashed drop box erases it, its folders and files, and then the identities nothing names any more; a trashed identity folder takes nothing.
     coverage:
@@ -55,4 +55,4 @@ acceptanceCriteria:
     text: A drop box is shared WRITE_ONLY only, and only a WRITE_ONLY link on a drop box gets a folder; a Memories or folder link does not.
     coverage:
       backend: { integration: [DropBoxSliceTest.onlyAWriteOnlyLinkOnADropBoxGetsAFolder] }
-      web: { unit: [src/features/files/register.test.ts] }
+      web: { unit: [src/features/depot/register.test.ts] }

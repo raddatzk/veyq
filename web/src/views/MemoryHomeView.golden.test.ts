@@ -54,8 +54,8 @@ vi.mock('../core/node/treeStore', async () => {
 
 import MemoryHomeView from './MemoryHomeView.vue'
 import { memoryRows } from '../features/memory/levelRows'
-import { filesRows } from '../features/files/levelRows'
-import { DROPBOX_KIND, FILE_KIND } from '../features/files/kinds'
+import { depotRows } from '../features/depot/levelRows'
+import { DROPBOX_KIND, FILE_KIND } from '../features/depot/kinds'
 import { registry } from '../core/applications/registry'
 import { activeSpace } from '../app/activeSpace'
 import { treeStore } from '../core/node/treeStore'
@@ -163,14 +163,14 @@ function pendingDeletion() {
 }
 
 describe('the Memories level view (golden)', () => {
-  // The control every snapshot rests on: the level's rows are the real Memories and Files registrations, as `main.ts` registers
+  // The control every snapshot rests on: the level's rows are the real Memories and Depot registrations, as `main.ts` registers
   // them (MEMORY and CHAPTER naming one row factory, FILE and the drop box the other) - a golden of a stub would pin nothing
   // about what a user sees. Since the unified list (inbox #407) core draws ONE list of folders and every kind's rows.
-  it('control: the level view renders the real Memories and Files registrations', () => {
+  it('control: the level view renders the real Memories and Depot registrations', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
     expect(registry.lists().map((l) => ({ ...l, views: l.views.map((v) => v.mode) }))).toEqual([
       { rows: memoryRows, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
-      { rows: filesRows, views: [], kinds: [FILE_KIND, DROPBOX_KIND] },
+      { rows: depotRows, views: [], kinds: [FILE_KIND, DROPBOX_KIND] },
     ])
   })
 

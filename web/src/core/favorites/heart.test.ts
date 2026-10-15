@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The heart on EVERY kind, by real clicks (inbox #409): core's real `LevelView` with the real registry as `main.ts` fills it
-// (Memories' and Files' real row factories), a folder, a Memory, a file and a drop box in one level. Each row carries the ONE
+// (Memories' and Depot's real row factories), a folder, a Memory, a file and a drop box in one level. Each row carries the ONE
 // heart core contributes, and so does the folder header; a click toggles the node through the real store, which seals the whole
 // set under the member's Master Key and PUTs it (`saveFavorites`, mocked at the data layer - its wire is `favorites.test.ts`'s
 // and `favorites.wire.test.ts`'s). A share guest's mount of the same level has no heart anywhere.
@@ -11,7 +11,7 @@ import PrimeVue from 'primevue/config'
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('./favorites', () => ({ loadFavorites: vi.fn(), saveFavorites: vi.fn(), resealFavoritesUnderNewMasterKey: vi.fn() }))
 vi.mock('../../app/vault', () => ({ masterKey: vi.fn() }))
-vi.mock('../../features/files/api', () => ({ filesApi: vi.fn() }))
+vi.mock('../../features/depot/api', () => ({ filesApi: vi.fn() }))
 
 import LevelView from '../node/LevelView.vue'
 import { childrenOf } from '../node/browse'
@@ -21,11 +21,11 @@ import type { Access } from '../access'
 import { favoritesStore, clearFavorites, loadFavoritesFor } from './favoritesStore'
 import { loadFavorites, saveFavorites } from './favorites'
 import { masterKey } from '../../app/vault'
-import { filesApi } from '../../features/files/api'
+import { filesApi } from '../../features/depot/api'
 import { MEMORY_KIND } from '../../features/memory/kinds'
-import { FILE_KIND, DROPBOX_KIND } from '../../features/files/kinds'
+import { FILE_KIND, DROPBOX_KIND } from '../../features/depot/kinds'
 import { ShareRole } from '../../api/generated/sharing'
-import type { FileListPage } from '../../api/generated/files'
+import type { FileListPage } from '../../api/generated/depot'
 import { stubApi } from '../../test/apiMock'
 import { realI18n, t } from '../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
@@ -76,7 +76,7 @@ describe('the heart in a level (real clicks, real registry)', () => {
     }
   })
 
-  it.each([['Sub', 'FOLDER'], ['Rome', 'MEMORY'], ['Plan.pdf', 'FILE'], ['Inbox', 'FILES_DROPBOX']])(
+  it.each([['Sub', 'FOLDER'], ['Rome', 'MEMORY'], ['Plan.pdf', 'FILE'], ['Inbox', 'DEPOT_DROPBOX']])(
     'a click on %s (%s) pins it: the whole set is sealed and stored, the heart turns pressed; a second click unpins',
     async (title, kind) => {
       const id = TREE.find((n) => n.name === title)!.id

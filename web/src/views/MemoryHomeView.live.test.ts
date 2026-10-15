@@ -2,7 +2,7 @@
 // The member's level view picks up what others changed WITHOUT a reload (inbox #408): the real host (`MemoryHomeView`),
 // the real level view, the real tree store and the real tree decryption over sealed rows served by a faked content API
 // that keeps a tree revision like the server's (ADR 0081: the listing's `ETag`, a `304` for an echo of it);
-// Files' blob listing (`listFiles`) is a counting stub, so the rows' "look again" cue (the level's live tick, which Files'
+// Depot's blob listing (`listFiles`) is a counting stub, so the rows' "look again" cue (the level's live tick, which Depot's
 // row factory answers by re-reading it) is read off its call count. What this pins, each with its
 // control: a row a peer added appears after one poll interval; the poll is CONDITIONAL — it echoes the tag of what is
 // shown, an idle scope is a 304 that does no tree work and tells the rows nothing, a moved one updates the tree; a
@@ -37,15 +37,15 @@ vi.mock('../core/favorites/favoritesStore', () => ({
   toggleFavorite: vi.fn(),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
-vi.mock('../features/files/api', () => ({ filesApi: vi.fn() }))
+vi.mock('../features/depot/api', () => ({ filesApi: vi.fn() }))
 
 import MemoryHomeView from './MemoryHomeView.vue'
 import { loadTree, treeStore, resetTree } from '../core/node/treeStore'
 import { contentApi } from '../api/client'
 import { listMyTenants } from '../features/spaces/scopes'
 import { fakeApi } from '../test/apiMock'
-import { filesApi } from '../features/files/api'
-import type { FilesApi } from '../api/generated/files'
+import { filesApi } from '../features/depot/api'
+import type { FilesApi } from '../api/generated/depot'
 import { titlesOf } from '../test/levelRows'
 import { apiResponse } from '../test/apiResponse'
 import { httpError } from '../test/httpError'
@@ -73,7 +73,7 @@ let served: NodeSummary[]
 let revision: number // the tree revision the faked server is at: every change moves it, as every write of the server's does
 let listNodes: ReturnType<typeof vi.fn<ContentApi['listNodesRaw']>>
 let listFiles: ReturnType<typeof vi.fn<FilesApi['listFiles']>>
-/** A level that already holds a file when the tab opens (Files' row factory re-reads its blob listing only for a level with
+/** A level that already holds a file when the tab opens (Depot's row factory re-reads its blob listing only for a level with
  *  files, and the listing was started by the mount). The tag stays the load's. */
 async function startWithAFile() {
   served = [...served, rowOf(FILE_ID, 'FILE', 'foto.png')]
@@ -132,7 +132,7 @@ describe('the member level view, live', () => {
   it("shows a peer's new file after one poll interval, with no reload", async () => {
     const w = await mountLevel()
     expect(titlesOf(w)).toEqual(['Trips'])
-    expect(listFiles, 'a level without files asks Files\' listing nothing').not.toHaveBeenCalled()
+    expect(listFiles, 'a level without files asks Depot\'s listing nothing').not.toHaveBeenCalled()
     change([...served, rowOf(FILE_ID, 'FILE', 'foto.png')])
     await settle(OVER_ONE_INTERVAL)
     expect(listNodes).toHaveBeenCalled()
@@ -212,7 +212,7 @@ describe('the member level view, live', () => {
     await settle(OVER_ONE_INTERVAL)
     expect(listNodes.mock.calls.some(([r]) => r.ifNoneMatch === '"1"')).toBe(true)
     expect(treeStore.nodes).toBe(before) // the same array: nothing re-renders
-    expect(listFiles.mock.calls.length, 'Files re-reads its blob listing').toBeGreaterThan(listed)
+    expect(listFiles.mock.calls.length, 'Depot re-reads its blob listing').toBeGreaterThan(listed)
     w.unmount()
   })
 

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The personal-space content host over the REAL registry (filled by `src/test/setup.ts`, as `main.ts` does: Memories
-// and Files), core's real level view (`core/node/LevelView.vue`) and the real Memories detail adapter
+// and Depot), core's real level view (`core/node/LevelView.vue`) and the real Memories detail adapter
 // (`MemoryDetailHost`), with only the heavy Memories view (`MemoryDetail`) and the dialogs stubbed to prop recorders.
 // What this pins: which component the host renders for which node kind, and that the generic context (buckets by kind,
 // the member's access and tree, content key) arrives in the props the Memories components take. Since inbox #407 the
@@ -31,8 +31,8 @@ vi.mock('../core/favorites/favoritesStore', () => ({
   isFavorite: vi.fn(),
   toggleFavorite: vi.fn(),
 }))
-// Files' row factory lists the blobs of the level's files; here there are none (the rows read "not uploaded yet").
-vi.mock('../features/files/api', () => ({ filesApi: vi.fn() }))
+// Depot's row factory lists the blobs of the level's files; here there are none (the rows read "not uploaded yet").
+vi.mock('../features/depot/api', () => ({ filesApi: vi.fn() }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
 const { showUndo } = vi.hoisted(() => ({ showUndo: vi.fn() }))
 vi.mock('../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), showUndo, dismissUndo: vi.fn() }) }))
@@ -69,7 +69,7 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
     }),
   }
 })
-vi.mock('../features/files/components/FileDetail.vue', async () => {
+vi.mock('../features/depot/components/FileDetail.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return { default: defineComponent({ name: 'FileDetailStub', props: ['node', 'access', 'tree'], setup: (p) => () => h('div', { class: 'file-detail-stub' }, `file=${p.node.name}`) }) }
 })
@@ -124,7 +124,7 @@ import { isFavorite } from '../core/favorites/favoritesStore'
 import { restoreNode, type TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
-import { FILE_KIND } from '../features/files/kinds'
+import { FILE_KIND } from '../features/depot/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
@@ -134,7 +134,7 @@ import PrimeVue from 'primevue/config'
 import { registry } from '../core/applications/registry'
 import { treeNode } from '../test/models'
 import { stubApi } from '../test/apiMock'
-import { filesApi } from '../features/files/api'
+import { filesApi } from '../features/depot/api'
 import { setViewMode, useViewMode } from '../shared/state/useViewMode'
 import { setLevelTab } from '../shared/state/useLevelTab'
 
@@ -228,7 +228,7 @@ describe('MemoryHomeView over the real registry', () => {
 
   // Inbox #404: the view mode is one app-wide preference, but the level shows it only where something on screen offers it.
   // A member who last chose the map opens a guest's identity folder: Memories (the map's) has no node and no entry there,
-  // so the level shows the grid - Files' rows and the folders, not a blank page - and offers the switch with the grid
+  // so the level shows the grid - Depot's rows and the folders, not a blank page - and offers the switch with the grid
   // pressed; the stored map is kept, and the next level with Memories shows the map again.
   it('a stored map shows an identity folder in the grid, and the map again where Memories draws it', async () => {
     treeStore.nodes = [
@@ -268,14 +268,14 @@ describe('MemoryHomeView over the real registry', () => {
     expect(first.find('.veyq-node-header-title').text()).toBe('Anna')
   })
 
-  // Files' row factory lists a file at the level beside the Memory (inbox #407: one list, mixed by name, not grouped by
+  // Depot's row factory lists a file at the level beside the Memory (inbox #407: one list, mixed by name, not grouped by
   // application and not Memories-first as the sections were); no fallback row for it.
-  it("lists a FILE child as Files' row beside the Memory, with no unsupported fallback", async () => {
+  it("lists a FILE child as Depot's row beside the Memory, with no unsupported fallback", async () => {
     treeStore.nodes = [...TREE.map((n) => ({ ...n })), node({ id: 'report', kind: FILE_KIND, name: 'report.pdf', parentId: 'trips' })]
     const w = await mountAt('#~me/trips')
-    // Order is by name now (Italy < report.pdf), whatever the kind - it used to be Memories' section, then Files'.
+    // Order is by name now (Italy < report.pdf), whatever the kind - it used to be Memories' section, then Depot's.
     expect(titlesOf(w)).toEqual(['Italy', 'report.pdf'])
-    expect(w.find('li.veyq-level-item[data-kind="FILE"] .veyq-level-item-meta').text()).toContain(t('files.kindFile'))
+    expect(w.find('li.veyq-level-item[data-kind="FILE"] .veyq-level-item-meta').text()).toContain(t('depot.kindFile'))
     expect(w.find('li.is-unsupported').exists()).toBe(false)
     expect(w.text()).not.toContain(t('home.unsupportedKind'))
   })
@@ -372,14 +372,14 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.detail-stub').text()).toBe('Solo|')
   })
 
-  // A kind whose application registered no createDialog (Files' FILE, F0) has no create entry at all in the New menu
-  // (Files' upload is a level action, not a create of a kind): choosing "Upload files" opens no dialog of another kind and
+  // A kind whose application registered no createDialog (Depot's FILE, F0) has no create entry at all in the New menu
+  // (Depot's upload is a level action, not a create of a kind): choosing "Upload files" opens no dialog of another kind and
   // no core dialog, and the level stays as it was; control: the entry with a registered dialog opens it.
   it('a New entry of a kind with no createDialog opens nothing', async () => {
     const w = await mountAt('#~me/trips')
     const labels = await newMenuLabels(w)
-    expect(labels).toContain(t('files.upload'))
-    await chooseNew(w, t('files.upload'))
+    expect(labels).toContain(t('depot.upload'))
+    await chooseNew(w, t('depot.upload'))
     expect(w.find('.create-stub').exists()).toBe(false)
     expect(w.find('.name-stub').exists()).toBe(false)
     expect(titlesOf(w), 'the level is untouched').toEqual(['Italy'])
@@ -463,7 +463,7 @@ describe('MemoryHomeView entering a scope', () => {
 })
 
 // Inbox #328 over real URLs (ADR 0015, amended 2026-10-11): the host resolves a fragment by `location.ts`'s grammar —
-// a folder ends in a slash, a Files node is its plain name, a Memory sits behind Memories' segment.
+// a folder ends in a slash, a Depot node is its plain name, a Memory sits behind Memories' segment.
 describe('MemoryHomeView resolving the fragment grammar', () => {
   const REPORT_TREE: TreeNode[] = [
     ...TREE.map((n) => ({ ...n })),
@@ -487,7 +487,7 @@ describe('MemoryHomeView resolving the fragment grammar', () => {
   it('a slug shared by a file and a folder: the file without the slash, the folder with it or with a child behind it', async () => {
     const file = await mountAt('#~me/trips/report')
     expect(file.find('ul.veyq-level-list').exists()).toBe(false)
-    expect(file.find('.file-detail-stub').text()).toBe('file=Report') // a file opens its detail (Files' FileDetail)
+    expect(file.find('.file-detail-stub').text()).toBe('file=Report') // a file opens its detail (Depot's FileDetail)
     const folder = await mountAt('#~me/trips/report/')
     // (the folder beside the same-named file is headed "Report (2)": equal names are numbered across kinds)
     expect(folder.find('.veyq-node-header').exists()).toBe(true)

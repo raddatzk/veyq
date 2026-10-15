@@ -53,7 +53,7 @@ beforeEach(() => {
     exportContent: async () => null, importContent: async () => ({ nodeId: 'x', nodeKey: new Uint8Array(0) }), importStreams: true,
   })
   // BETA moves (its application's selection answer) but cannot be copied
-  holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: stubRows('b', { selection: () => ({ move: true, delete: false }) }).factory, tabLabel: 'files.title' } })
+  holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: stubRows('b', { selection: () => ({ move: true, delete: false }) }).factory, tabLabel: 'depot.title' } })
 })
 
 function mountLevel(access: Access) {

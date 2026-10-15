@@ -54,7 +54,7 @@ const tabNamed = (w: Level, label: string) => tabButtons(w).find((b) => b.text()
 const selected = (w: Level) => tabButtons(w).filter((b) => b.attributes('aria-selected') === 'true').map((b) => b.text())
 
 const LABEL_A = 'memory.memories'
-const LABEL_B = 'files.title'
+const LABEL_B = 'depot.title'
 let b: ReturnType<typeof stubRows>
 
 beforeEach(() => {
@@ -118,14 +118,14 @@ describe('LevelView application tabs', () => {
     setLevelTab('BETA')
     // an identity folder offers no tab for a kind with nothing in it: here BETA has no node, so the bar has ALPHA and GAMMA only
     const c = stubRows('c')
-    holder.reg!.registerKind({ kind: 'GAMMA', icon: 'pi pi-c', shareable: false, list: { rows: c.factory, tabLabel: 'files.dropBox.section' } })
+    holder.reg!.registerKind({ kind: 'GAMMA', icon: 'pi pi-c', shareable: false, list: { rows: c.factory, tabLabel: 'depot.dropBox.section' } })
     const level = childrenOf([TRIPS, node('a1', 'ALPHA', 'Trips'), node('g1', 'GAMMA', 'Trips')], TRIPS.id)
     const tree = memberTreeOf(() => [TRIPS])
     const w = mount(LevelView, {
       props: { folder: TRIPS, level, access: memberAccessOf({}), tree: { ...tree, inIdentityFolder: () => true } },
       global: PLUGINS,
     })
-    expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t('files.dropBox.section')])
+    expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t('depot.dropBox.section')])
     expect(selected(w)).toEqual([t('node.tabAll')])
     expect(titlesOf(w)).toEqual(['a1', 'g1'])
     expect(useLevelTab().levelTab.value).toBe('BETA')

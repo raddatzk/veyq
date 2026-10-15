@@ -42,7 +42,7 @@ describe('collidingSibling', () => {
 
 describe('nameTakenMessage', () => {
   it('names the sibling and its kind\'s noun', () => {
-    expect(nameTakenMessage(t, node('x1', 'FILE', 'Foto.JPG'))).toBe(t('node.nameTakenBy', { kind: t('files.aFile'), name: 'Foto.JPG' }))
+    expect(nameTakenMessage(t, node('x1', 'FILE', 'Foto.JPG'))).toBe(t('node.nameTakenBy', { kind: t('depot.aFile'), name: 'Foto.JPG' }))
     expect(nameTakenMessage(t, node('f1', 'FOLDER', 'Trips'))).toBe(t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Trips' }))
     expect(nameTakenMessage(t, node('m1', 'MEMORY', 'Rom'))).toBe(t('node.nameTakenBy', { kind: t('memory.aMemory'), name: 'Rom' }))
   })

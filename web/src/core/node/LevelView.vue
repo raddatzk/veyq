@@ -13,8 +13,8 @@
 // factory has no row for it, is an explicit unsupported row (its icon, its name, the unsupported state, not clickable) -
 // fail closed, never a node silently dropped. Each factory is called ONCE per level view, in this setup, with the level's
 // reactive context (folder, its nodes, access, tree, epochs, view mode, live tick) and the host (open / rename / move, and
-// `registerAction`); it keeps the data a row needs (Files' blob listing: it re-reads on `liveTick`, inbox #408) and the flows
-// behind its actions (Files' upload and replace) beside it, so none of that depends on which tab is shown.
+// `registerAction`); it keeps the data a row needs (Depot's blob listing: it re-reads on `liveTick`, inbox #408) and the flows
+// behind its actions (Depot's upload and replace) beside it, so none of that depends on which tab is shown.
 //
 // **The order** (`levelList.ts`): folders first, then every other node MIXED BY NAME - natural, locale-aware, case-insensitive,
 // equal names in creation order (the rule that numbers equal names everywhere else). The folder cards' labels are numbered
@@ -37,8 +37,8 @@
 // whole subtree, folders included). The toggle offers the union of what is on screen (`levelViews.ts`, inbox #370).
 //
 // **Dropped files and directories.** The level receives a drop and hands the files to the level action that takes them
-// (`acceptsDrop` on a kind's `levelActions`, a handler with `drop`: Files' "Upload files") and a dropped directory to the one
-// that takes directories (a handler with `dropDirectory`: Files' "Upload folder…", inbox #424), only while that action is
+// (`acceptsDrop` on a kind's `levelActions`, a handler with `drop`: Depot's "Upload files") and a dropped directory to the one
+// that takes directories (a handler with `dropDirectory`: Depot's "Upload folder…", inbox #424), only while that action is
 // allowed AND enabled - a drop is never more than the "New" menu entry would be. Nothing in a share guest's READ view takes one.
 // A veyq download among them - a ZIP, or one unpacked into a directory - is recognised by its content and, for a member who may
 // create here, offered as the import (ADR 0082 decision 7); there is no import entry of its own in the "New" menu.
@@ -120,7 +120,7 @@ const emit = defineEmits<{
    *  application's own kind otherwise (that kind's `createDialog`, e.g. Memories' MEMORY). */
   create: [kind: NodeKind]
   renameFolder: []
-  /** A node to move (inbox #358): the folder on screen (its header) or a row's node (Files' row). The host mounts core's
+  /** A node to move (inbox #358): the folder on screen (its header) or a row's node (Depot's row). The host mounts core's
    *  `MoveNodeDialog` for it. */
   moveNode: [node: TreeNode]
   /** The movable part of the level's selection (inbox #421): the host mounts core's move dialog for several nodes. */
@@ -137,7 +137,7 @@ const emit = defineEmits<{
    *  recognised by its content (ADR 0082 decision 7): the host mounts core's `ImportSubtreeDialog` for it, under the folder
    *  on screen. A ZIP carries `uploadAsFile`, the way back to the ordinary upload. */
   importArchive: [offer: ImportOffer]
-  /** A row's node renamed in place (a kind that does not open, e.g. Files' file): the host's `FolderNameDialog`. */
+  /** A row's node renamed in place (a kind that does not open, e.g. Depot's file): the host's `FolderNameDialog`. */
   renameNode: [node: TreeNode]
   deleteFolder: []
   openTrash: []
@@ -154,7 +154,7 @@ const hideEmptyTabs = computed(() => inIdentityFolder.value)
 
 // --- the "New" menu (inbox #406) -----------------------------------------------------------------------------------------
 // Core's folder entry plus every entry the registry derives from the kinds' descriptors, each shown only where ITS capability
-// function says yes (member and guest alike; a READ guest gets none, so no menu button). An application action (Files'
+// function says yes (member and guest alike; a READ guest gets none, so no menu button). An application action (Depot's
 // upload) runs the handler its row source registered (`levelActions.ts`) - registered for the level's whole life, whichever
 // tab is shown; an entry whose handler says it is not ready (keys still locked) is disabled, never a click that does nothing.
 const levelActions = createLevelActions()

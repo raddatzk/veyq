@@ -204,7 +204,7 @@ describe('ShareView — a chapter share', () => {
   })
 })
 
-// A Memory link's uploader names itself with core's one form (inbox #401 S2) and has the "Not you?" Files' drop box had —
+// A Memory link's uploader names itself with core's one form (inbox #401 S2) and has the "Not you?" Depot's drop box had —
 // the drop page's own line (a contributor's is the shell's: `ShareView.memory.test.ts`). It asks first, then forgets the
 // session and shows the name screen again.
 describe('ShareView — a Memory drop: core\'s naming form and its "Not you?"', () => {

@@ -102,8 +102,8 @@ acceptanceCriteria:
           - src/core/favorites/favoriteActions.test.ts
           - src/core/favorites/heart.test.ts
           - src/features/memory/components/MemoryDetailHost.heart.test.ts
-          - src/features/files/components/FileDetail.test.ts
-          - src/features/files/components/DropBoxDetail.test.ts
+          - src/features/depot/components/FileDetail.test.ts
+          - src/features/depot/components/DropBoxDetail.test.ts
           - src/components/app/AppSidebar.test.ts
           - src/features/account/rotation/rotateKeys.test.ts
   - id: operator-blind-fetch

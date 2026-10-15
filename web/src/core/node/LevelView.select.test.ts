@@ -43,7 +43,7 @@ function node(id: string, kind: NodeKind, parentId: string | null = 'Trips'): Tr
 const TRIPS = node('Trips', FOLDER_KIND, null)
 const OTHER = node('Other', FOLDER_KIND, null)
 const LABEL_A = 'memory.memories'
-const LABEL_B = 'files.title'
+const LABEL_B = 'depot.title'
 const remove = vi.fn(async () => {})
 
 // ALPHA moves and is deleted; BETA moves only, and carries its own delete door where it would be deleted (b-del).

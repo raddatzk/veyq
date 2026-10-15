@@ -21,7 +21,7 @@ import { b64std, b64url } from '@veyq/crypto/base64'
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../../files/api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../../depot/api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 const memberReads = vi.hoisted(() => [] as string[])
 vi.mock('../../../app/activeSpace', () => {
   const read = (name: string) => () => {

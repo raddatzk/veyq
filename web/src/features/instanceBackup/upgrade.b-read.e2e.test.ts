@@ -11,7 +11,7 @@
 //   - FIRST, before any content: the candidate reports `configSecretState: OK` - the key that came with the backup is
 //     the one the restored rows were sealed for (Decision 4 of cr-upgrade-proof); written for the run's summary too;
 //   - Memories: the Memory's name, date, place and cover (its photo and crop), every photo's bytes, the chapter's;
-//   - Files: the folder's name, each file's name, sealed type and modified time, size and bytes;
+//   - Depot: the folder's name, each file's name, sealed type and modified time, size and bytes;
 //   - the drop box: its name, each guest's folder (named after the guest) and the guest's files, as above;
 //   - the READ link, opened as its guest: the Memory's title and the bytes of what it serves.
 // The record (`src/test/upgradeRecord.ts`) may come from an OLDER seeder: this file reads every version it can be
@@ -34,8 +34,8 @@ import { unsealMemoryDate } from '../memory/memoryDate'
 import { unsealMemoryLocation } from '../memory/memoryLocation'
 import { memoryPhotoSource, unsealMemoryCover } from '../memory/memoryCover'
 import { openShareOriginal, resolveShare } from '../memory/share'
-import { filesApi } from '../files/api'
-import { fetchFileContent, fileFacts } from '../files/download'
+import { filesApi } from '../depot/api'
+import { fetchFileContent, fileFacts } from '../depot/download'
 
 const contentOf = async (b: Blob) => new Uint8Array(await b.arrayBuffer())
 const byHash = (a: { sha256: string; size: number }, b: { sha256: string; size: number }) => a.sha256.localeCompare(b.sha256)
@@ -100,7 +100,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - read', () => {
     await media(m.chapter.nodeId, keyOf(m.chapter.nodeId, 'the chapter'), m.chapter.media, 'the chapter')
     items += 1
 
-    // --- Files -----------------------------------------------------------------------------------------------------
+    // --- Depot -----------------------------------------------------------------------------------------------------
     const files = async (folderId: string, expected: SealedFile[], what: string) => {
       const listed = (await filesApi().listFiles({ scopeId, parentId: folderId })).items
       expect(listed.map((i) => i.nodeId).sort(), `${what}: the files listed`).toEqual(expected.map((e) => e.nodeId).sort())
@@ -118,9 +118,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - read', () => {
       }
     }
     const f = record.files
-    const folderNode = node(f.folderId, 'the Files folder')
-    expect(folderNode.name, 'the Files folder name').toBe(f.name)
-    await files(f.folderId, f.files, 'the Files folder')
+    const folderNode = node(f.folderId, 'the Depot folder')
+    expect(folderNode.name, 'the Depot folder name').toBe(f.name)
+    await files(f.folderId, f.files, 'the Depot folder')
     items += 1
 
     // --- the drop box ----------------------------------------------------------------------------------------------

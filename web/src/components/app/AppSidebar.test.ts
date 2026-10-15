@@ -230,7 +230,7 @@ describe('AppSidebar favorites — every kind of pinned node, with its kind icon
       at('f1', 'FOLDER', 'Reisen'),
       at('m1', 'MEMORY', 'Rom 2026', 'f1'),
       at('d1', 'FILE', 'Plan.pdf', 'f1'),
-      at('b1', 'FILES_DROPBOX', 'Einreichungen'),
+      at('b1', 'DEPOT_DROPBOX', 'Einreichungen'),
       at('x1', 'FUTURE_KIND', 'Unbekannt'),
     ]
   })
@@ -244,8 +244,8 @@ describe('AppSidebar favorites — every kind of pinned node, with its kind icon
     const wrapper = await mountAt('')
     const rows = wrapper.findAll('.sidebar-favorite-link')
     expect(rows.map((r) => r.text())).toEqual(['Reisen', 'Rom 2026', 'Plan.pdf', 'Einreichungen'])
-    expect(rows.map((r) => r.attributes('data-kind'))).toEqual(['FOLDER', 'MEMORY', 'FILE', 'FILES_DROPBOX'])
-    for (const [i, kind] of ['FOLDER', 'MEMORY', 'FILE', 'FILES_DROPBOX'].entries()) {
+    expect(rows.map((r) => r.attributes('data-kind'))).toEqual(['FOLDER', 'MEMORY', 'FILE', 'DEPOT_DROPBOX'])
+    for (const [i, kind] of ['FOLDER', 'MEMORY', 'FILE', 'DEPOT_DROPBOX'].entries()) {
       const info = registry.kind(kind)
       expect(info.supported, kind).toBe(true)
       if (info.supported) expect(rows[i].find('.sidebar-favorite-cover span').classes().join(' '), kind).toBe(info.icon)
@@ -303,7 +303,7 @@ describe('AppSidebar favorites — the cover of a pinned node', () => {
     treeStore.nodes = [
       at('e0000000-0000-4000-8000-000000000001', 'FOLDER', 'Reisen', sealed('e0000000-0000-4000-8000-000000000001', 'b-f')),
       at('e0000000-0000-4000-8000-000000000002', 'MEMORY', 'Rom 2026', sealed('e0000000-0000-4000-8000-000000000002', 'b-m')),
-      at('e0000000-0000-4000-8000-000000000003', 'FILES_DROPBOX', 'Einreichungen', null),
+      at('e0000000-0000-4000-8000-000000000003', 'DEPOT_DROPBOX', 'Einreichungen', null),
       at('e0000000-0000-4000-8000-000000000004', 'FILE', 'Plan.pdf', sealed('e0000000-0000-4000-8000-000000000004', 'b-d')), // a file takes no cover: its icon, whatever the meta holds
     ]
     favoritesStore.ids = new Set(['e0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000004'])
@@ -329,8 +329,8 @@ describe('AppSidebar favorites — the cover of a pinned node', () => {
       expect(img.attributes('src'), kind).toMatch(/^blob:rail-/)
       expect(img.attributes('style'), 'the crop is applied, as on every other surface').toContain('200%')
     }
-    expect(cell('FILES_DROPBOX').find('img').exists()).toBe(false)
-    expect(cell('FILES_DROPBOX').find('.pi-inbox').exists()).toBe(true)
+    expect(cell('DEPOT_DROPBOX').find('img').exists()).toBe(false)
+    expect(cell('DEPOT_DROPBOX').find('.pi-inbox').exists()).toBe(true)
     expect(cell('FILE').find('img').exists()).toBe(false)
     expect(cell('FILE').find('.pi-file').exists()).toBe(true)
   })

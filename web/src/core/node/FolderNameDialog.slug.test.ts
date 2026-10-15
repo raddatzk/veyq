@@ -2,7 +2,7 @@
 // A rename through core's name dialog folds the new name by the RENAMED NODE's kind (inbox #350, cr-files-application
 // P4c): the dialog names no kind and no folding — it hands the node to the real `renameNode`, which asks
 // `registry.slugFor(node.kind, name)`. Proven on the wire (the JSON at `fetch`), over the app's real registry as
-// `src/test/setup.ts` fills it (Memories and Files: FILE folds by `fileNameSlug`). Each token is compared with both
+// `src/test/setup.ts` fills it (Memories and Depot: FILE folds by `fileNameSlug`). Each token is compared with both
 // foldings, so a dialog or a tree helper that fell back to the folder's `slugify` is told apart.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -15,7 +15,7 @@ import FolderNameDialog from './FolderNameDialog.vue'
 import { treeStore } from './treeStore'
 import type { TreeNode } from './tree'
 import { FOLDER_KIND } from './kind'
-import { FILE_KIND } from '../../features/files/kinds'
+import { FILE_KIND } from '../../features/depot/kinds'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { realI18n } from '../../test/i18n'
@@ -65,7 +65,7 @@ describe('FolderNameDialog: a rename folds by the node\'s kind (inbox #350)', ()
   const NAME = 'Day1.MD'
   const token = (folded: string) => b64std(v1.slugToken(keyA, A, folded))
 
-  it("a Files node's new name folds by fileNameSlug, not slugify", async () => {
+  it("a Depot node's new name folds by fileNameSlug, not slugify", async () => {
     expect(fileNameSlug(NAME)).not.toBe(slugify(NAME)) // the two foldings differ for this name (control)
     const body = await renameOnTheWire(FILE_KIND, NAME)
     expect(body.slugToken).toBe(token(fileNameSlug(NAME)))

@@ -3,7 +3,7 @@ feature: files
 title: Member files — upload, download, replace, rename and delete a file
 # Built by cr-files-application (P1 the file-name folding, P3 core's attachments, F0 the kind, F1a the backend, F1b the
 # web). Backend: :apps:depot slice tests (core + Files, no Memories) and the root's composition test; web: the wire
-# tests record every request a Files job sends at `fetch`, the rows test mounts the real catalog; files.e2e.test.ts
+# tests record every request a Files job sends at `fetch`, the rows test mounts the real catalog; depot.e2e.test.ts
 # runs in the web-e2e job against a live backend, MariaDB and the S3 store, with its own fetch wrapper asserting that
 # no file name or MIME type crosses the wire.
 acceptanceCriteria:
@@ -13,21 +13,21 @@ acceptanceCriteria:
       backend:
         unit: [DepotNodeKindRulesTest.aFileLivesAtTheRootOrInAFolder, DepotNodeKindRulesTest.aFileLivesNowhereElse, DepotNodeKindRulesTest.noRuleOfCoreOrDepotAdmitsAFileAsAParent]
         integration: [DepotNodeSliceTest.aFileIsCreatedAtTheRootAndInAFolderAndTakesNoChild, DepotNodeSliceTest.aFileIsRenamedAndMovedBetweenFolders, ModuleCompositionTest.theRulesOfCoreAndEveryApplicationPartitionTheKinds]
-      web: { unit: [src/features/files/register.test.ts] }
+      web: { unit: [src/features/depot/register.test.ts] }
   - id: upload-attaches-one-sealed-blob
     text: An upload creates the FILE node under the folder's key, seals its blob under the file node's own key (role FILE_CONTENT, owner the node), and completeFile without an expected blob attaches it to the empty slot; the folder's listing then serves the blob reference, and only a member of the scope can presign its chunks.
     coverage:
       backend: { integration: [DepotContentSliceTest.aFileIsUploadedListedAndItsBlobPresignedForTheMemberOnly, DepotNodeSliceTest.theUploadSeamsClaimFileAndNothingElse, ModuleCompositionTest.theUploadSeamsOfEveryApplicationPartitionTheKinds] }
       web:
-        unit: [src/features/files/uploadFile.wire.test.ts, src/features/files/levelRows.test.ts]
-        e2e: [src/features/files/files.e2e.test.ts]
+        unit: [src/features/depot/uploadFile.wire.test.ts, src/features/depot/levelRows.test.ts]
+        e2e: [src/features/depot/depot.e2e.test.ts]
   - id: download-returns-the-original-bytes
     text: A download presigns the blob's chunks, opens every frame under the file node's key and returns the original bytes; a blob listed for another node, or opened under another key, does not open.
     coverage:
       backend: { integration: [DepotContentSliceTest.aFileIsUploadedListedAndItsBlobPresignedForTheMemberOnly] }
       web:
-        unit: [src/features/files/download.test.ts]
-        e2e: [src/features/files/files.e2e.test.ts]
+        unit: [src/features/depot/download.test.ts]
+        e2e: [src/features/depot/depot.e2e.test.ts]
     gaps:
       - surface: web
         reason: The download streams into a save target (a picked file, the Service Worker's download route, or a Blob up to 512 MiB), proven by unit tests with fake sinks and ports; no real browser has streamed a multi-gigabyte file, and the streamed e2e step is written but not yet run (inbox #371).
@@ -36,32 +36,32 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [DepotContentSliceTest.aReplaceWithTheReadBlobSwapsItAndFreesTheOldOne, DepotContentSliceTest.aStaleExpectedBlobIsRefusedWithTheCurrentOneAndTheUploadIsFreed] }
       web:
-        unit: [src/features/files/uploadFile.wire.test.ts, src/features/files/levelRows.test.ts]
-        e2e: [src/features/files/files.e2e.test.ts]
+        unit: [src/features/depot/uploadFile.wire.test.ts, src/features/depot/levelRows.test.ts]
+        e2e: [src/features/depot/depot.e2e.test.ts]
   - id: a-file-name-is-folded-as-a-file-name
     text: A file's slug folds by fileNameSlug (NFC, lower case, punctuation kept), so a picked name a file of the folder already holds asks to replace it (the one replace a row's file has, since no row offers one, owner decision 2026-10-14), a rename folds by the renamed node's kind, and a folder keeps slugify.
     coverage:
-      web: { unit: [src/features/files/register.test.ts, src/features/files/levelRows.test.ts, src/core/node/FolderNameDialog.slug.test.ts] }
+      web: { unit: [src/features/depot/register.test.ts, src/features/depot/levelRows.test.ts, src/core/node/FolderNameDialog.slug.test.ts] }
   - id: metadata-is-the-blobs-own
     text: A file's type, the name it was uploaded under and its modified time are its blob's metadata, sealed under the blob's own K_blob (blob-meta) and declared with the upload, served back unchanged on every blob reference and never rewritten; nothing about the file is written beside the blob, so a replace brings its own metadata atomically with its bytes. The list shows the size the blob's sealed size gives exactly and the sealed modified time — whatever the node's own payload holds — and a blob reference listed for another node shows no metadata. A download is saved under the node name (a rename wins), else the sealed name, with the sealed type's extension when the name has none.
     coverage:
       backend: { integration: [DepotContentSliceTest.theDeclaredBlobMetaIsServedBackUnchangedAndAbsentStaysNull, DepotContentSliceTest.aBlobMetaOverItsCapOrEmptyIsRefused400, DepotContentSliceTest.theBlobMetaIsWriteOnce] }
       web:
-        unit: [src/features/files/uploadFile.wire.test.ts, src/features/files/levelRows.test.ts, src/features/files/download.test.ts, src/core/blob/meta.test.ts, src/core/blob/blobMeta.wire.test.ts]
-        e2e: [src/features/files/files.e2e.test.ts]
+        unit: [src/features/depot/uploadFile.wire.test.ts, src/features/depot/levelRows.test.ts, src/features/depot/download.test.ts, src/core/blob/meta.test.ts, src/core/blob/blobMeta.wire.test.ts]
+        e2e: [src/features/depot/depot.e2e.test.ts]
   - id: only-a-live-file-of-the-scope-takes-an-upload
     text: completeFile attaches only into a live FILE of the caller's scope that the caller may write; a folder, a Memory, a trashed file, another scope's node, a session started for another node or role, and a caller without write access are refused with nothing attached, and a listing never reaches into another scope.
     coverage:
       backend: { integration: [DepotContentSliceTest.onlyALiveFileOfTheScopeTakesAnUpload, DepotContentSliceTest.aCallerWithoutWriteAccessCompletesNothing, DepotContentSliceTest.aListingNeverReachesIntoAnotherScope, ModuleCompositionTest.filesCompletionRouteNeverReachesMemoriesCompletion] }
-      web: { e2e: [src/features/files/files.e2e.test.ts] }
+      web: { e2e: [src/features/depot/depot.e2e.test.ts] }
   - id: refusals-end-without-a-repeat
     text: A create refused as slug_taken or illegal_structure, and a stale_file conflict, end the job without a second request; a transient failure retries once into the node already created; the section says why a file of its folder was not uploaded.
     coverage:
-      web: { unit: [src/features/files/uploadFile.wire.test.ts, src/features/files/levelRows.test.ts] }
+      web: { unit: [src/features/depot/uploadFile.wire.test.ts, src/features/depot/levelRows.test.ts] }
   - id: delete-goes-to-the-trash
     text: Delete asks, then moves the node to core's trash; a trashed file keeps its attachment and its quota until the purge, which frees the attachment and the blob.
     coverage:
       backend: { integration: [DepotContentSliceTest.purgingATrashedFileFreesItsAttachmentAndBlob] }
       web:
-        unit: [src/features/files/levelRows.test.ts]
-        e2e: [src/features/files/files.e2e.test.ts]
+        unit: [src/features/depot/levelRows.test.ts]
+        e2e: [src/features/depot/depot.e2e.test.ts]

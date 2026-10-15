@@ -197,14 +197,14 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      foreign key onto `veyq_node`), but only as a purge that rolls back on every tick; the guard does not lean on it
   69 core's attachment `ScopeEraser` no longer deleting its rows — rejected: `validate_scope_erasure_arity` finds
      `veyq_node_attachment` in the FK closure below `veyq_scope`, with no cascade
-  72 a `features/files` file importing `features/memory` — rejected: `validate_web_core_imports_no_applications`'s
+  72 a `features/depot` file importing `features/memory` — rejected: `validate_web_core_imports_no_applications`'s
      application rule reads every application's files for an edge into another one (cr-files-application F0, the
      second application): an application depends on core only, as the backend's rule (b) holds for the modules
-  73 a `features/files` file importing Memories' generated `media` client — rejected: an application's clients are
+  73 a `features/depot` file importing Memories' generated `media` client — rejected: an application's clients are
      derived per owner (`contracts/api/<owner>/`), so the edge to another application's client is red as well
-  74 a `core/node/` file re-exporting `features/files` — rejected: core's import rule reads every application of
+  74 a `core/node/` file re-exporting `features/depot` — rejected: core's import rule reads every application of
      `APPLICATIONS`, not only the first one
-  75 a `core/node/` file naming the Files node kind `'FILE'` — rejected: the kind rule lists every application's kinds
+  75 a `core/node/` file naming the Depot node kind `'FILE'` — rejected: the kind rule lists every application's kinds
   76 `:apps:depot`' build file depending on `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) on the
      real second application (case 50 forges one); Gradle accepts the edge without complaint
   77 the root build no longer composing `:apps:depot` (its `implementation(project(…))` line gone) — rejected:
@@ -212,7 +212,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      guard; the module compiled and its tests ran green while the fast-jar held none of it
   78 a `core/node/` dialog reading Memories' message key `'memory.deleteMemoryTitle'` — rejected:
      `validate_web_core_imports_no_applications`' i18n rule. The catalog is one file, so the key resolves and every test
-     is green; core's delete dialog did exactly this and titled a Files drop box "Delete Memory" (inbox #375)
+     is green; core's delete dialog did exactly this and titled a Depot drop box "Delete Memory" (inbox #375)
   79 admin-web's light `--app-primary` set back to Aura's emerald-500 (`#10b981`, white label 2.54:1) — rejected:
      `validate_web_contrast` reads `admin-web/src/styles/base.css` as well as web's (inbox #390). Until then that
      guard's limit (e) said admin-web was not covered, and the copy ADR 0065 keeps failed 34 pairs unseen
@@ -1012,33 +1012,33 @@ def forge_web_core_glob(root: pathlib.Path) -> str:
     return "a core file discovering code with import.meta.glob (must be REJECTED)"
 
 
-def _plant_files(root: pathlib.Path, rel: str, text: str) -> None:
-    if not (root / "web" / "src" / "features" / "files").is_dir():
-        raise ForgeError("web/src/features/files is gone — re-anchor this forgery on the Files application directory")
+def _plant_depot(root: pathlib.Path, rel: str, text: str) -> None:
+    if not (root / "web" / "src" / "features" / "depot").is_dir():
+        raise ForgeError("web/src/features/depot is gone — re-anchor this forgery on the Depot application directory")
     _plant_web(root, rel, text)
 
 
 def forge_web_application_imports_application(root: pathlib.Path) -> str:
-    _plant_files(root, "features/files/guardGapProbe.ts",
+    _plant_depot(root, "features/depot/guardGapProbe.ts",
                  "import { MEMORY_KIND } from '../memory/kinds'\nexport const k = MEMORY_KIND\n")
-    return "a features/files file importing features/memory/kinds (must be REJECTED — no application → application)"
+    return "a features/depot file importing features/memory/kinds (must be REJECTED — no application → application)"
 
 
 def forge_web_application_imports_application_client(root: pathlib.Path) -> str:
-    _plant_files(root, "features/files/guardGapProbe.ts",
+    _plant_depot(root, "features/depot/guardGapProbe.ts",
                  "import type { MediaItem } from '../../api/generated/media'\nexport type M = MediaItem\n")
-    return ("a features/files file importing Memories' generated media client (must be REJECTED — the client is "
+    return ("a features/depot file importing Memories' generated media client (must be REJECTED — the client is "
             "Memories', derived from contracts/api/memories/)")
 
 
 def forge_web_core_imports_second_application(root: pathlib.Path) -> str:
-    _plant_files(root, "core/node/guardGapProbe.ts", "export { FILE_KIND } from '../../features/files/kinds'\n")
-    return "a core/node file re-exporting features/files/kinds (must be REJECTED — core depends on no application)"
+    _plant_depot(root, "core/node/guardGapProbe.ts", "export { FILE_KIND } from '../../features/depot/kinds'\n")
+    return "a core/node file re-exporting features/depot/kinds (must be REJECTED — core depends on no application)"
 
 
 def forge_web_core_names_file_kind(root: pathlib.Path) -> str:
-    _plant_files(root, "core/node/guardGapProbe.ts", "export const isFile = (kind: string) => kind === 'FILE'\n")
-    return "a core/node file naming the Files node kind 'FILE' (must be REJECTED — the shell asks the registry)"
+    _plant_depot(root, "core/node/guardGapProbe.ts", "export const isFile = (kind: string) => kind === 'FILE'\n")
+    return "a core/node file naming the Depot node kind 'FILE' (must be REJECTED — the shell asks the registry)"
 
 
 def forge_web_core_reads_application_i18n(root: pathlib.Path) -> str:

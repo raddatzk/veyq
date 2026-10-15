@@ -192,7 +192,7 @@ const isRead = (r: Req) => r.method === 'GET' || r.path.endsWith('/blob-download
 
 beforeAll(() => {
   // A node-environment suite gets no registry (`test/setup.ts`): Memories' two kinds with their real hooks, as the files suite
-  // registers Files'. That the real registration declares `importStreams` is `CopyNodesDialog.test.ts`'s (the real registry).
+  // registers Depot's. That the real registration declares `importStreams` is `CopyNodesDialog.test.ts`'s (the real registry).
   for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
     if (!registry.kind(kind).supported) {
       registry.registerKind({

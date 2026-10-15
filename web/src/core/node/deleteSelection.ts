@@ -1,6 +1,6 @@
 // Deleting a level's selection (inbox #421, owner decisions 2026-10-14; uc.memory.delete-node step 1): each node is its own
 // ordinary delete into the space's trash, sent through the door its single delete uses (core's `deleteNode`, or the kind's
-// own `LevelRowSelection.remove` - Files' source for a file), one after the other, and the tree is re-read ONCE after the
+// own `LevelRowSelection.remove` - Depot's source for a file), one after the other, and the tree is re-read ONCE after the
 // last. No batch request: a node delete is already one soft-delete of a whole subtree (ADR 0061). A failure does not stop
 // the rest; the undo restores exactly the nodes that went, each through core's `restoreNode` as the trash's own undo does
 // (`trashUndo.ts`), and re-reads once more.

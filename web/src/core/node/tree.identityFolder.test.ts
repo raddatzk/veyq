@@ -39,7 +39,7 @@ function world({ folderNameKey }: { folderNameKey?: Uint8Array } = {}) {
     encryptedName: sealName(entryKey, at(id), name), slugToken: 'c2x1Zw==', wrappedContentKey: wrapContentKey(entryKey, at(id), key), ...extra,
   })
   const rows = [
-    row(BOX, null, 'FILES_DROPBOX', scopeKey, boxKey, 'Einsendungen', { sealedDropPrivateKey: drop.sealedDropPrivateKey }),
+    row(BOX, null, 'DEPOT_DROPBOX', scopeKey, boxKey, 'Einsendungen', { sealedDropPrivateKey: drop.sealedDropPrivateKey }),
     { ...row(FOLDER, BOX, 'FOLDER', identityKey, folderKey, 'Adelgunde'), shareIdentityId: IDENTITY, wrappedIdentityKey,
       ...(folderNameKey ? { encryptedName: sealName(folderNameKey, at(FOLDER), 'Adelgunde') } : {}) },
     row(FILE, FOLDER, 'FILE', folderKey, fileKey, 'Bericht.pdf'),

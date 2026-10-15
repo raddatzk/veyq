@@ -122,22 +122,22 @@ here; the server is blind.
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
 - **Core and application ([ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
-  The applications are `src/features/memory/` (Memories) and `src/features/files/` (Files: the `FILE` and `FILES_DROPBOX` kinds, their rows in
+  The applications are `src/features/memory/` (Memories) and `src/features/depot/` (Depot: the `FILE` and `DEPOT_DROPBOX` kinds, their rows in
   the level list, upload, download, the drop box — [docs/apps/files.md](../docs/apps/files.md)) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop
   `sealedMetaWrite`), `core/applications/registry.ts`
-  (the registry) and `core/sharing/` (the kind-independent half of a public share, the subtree walk and the share management — mint, list, revoke, re-issue, recovery — and the drop key with its guests' identity keys, `dropKey.ts`, since cr-files-application F3: Memories' uploader media and Files' drop-box folders both open through it). Dependencies run application →
+  (the registry) and `core/sharing/` (the kind-independent half of a public share, the subtree walk and the share management — mint, list, revoke, re-issue, recovery — and the drop key with its guests' identity keys, `dropKey.ts`, since cr-files-application F3: Memories' uploader media and Depot's drop-box folders both open through it). Dependencies run application →
   core, never back and never application → application, and `scripts/validate_web_core_imports_no_applications.py`
   (no allowlist) is red on a core file that imports an application or one of its generated clients, and on an
   application file that imports another application or its clients (every `generate:api` output whose `-i` lies in an
   application's directory `contracts/api/<app>/`, read from `package.json` — today `generated/media`, `generated/item-favorites`,
-  `generated/share-media` (Memories) and `generated/files` (Files); so their
+  `generated/share-media` (Memories) and `generated/depot` (Depot); so their
   factories are each application's `api.ts`, not `api/client.ts`'s, and a core helper types from core's own client or
   from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter|File` / `'MEMORY'` /
-  `'CHAPTER'` / `'FILE'` / `'FILES_DROPBOX'` (a hand list: a new kind is added to the guard's `KIND` with its application),
-  or reads an application's i18n namespace — `'memory.…'` / `'media.…'` / `'files.…'` (the guard's `I18N_NAMESPACES`;
+  `'CHAPTER'` / `'FILE'` / `'DEPOT_DROPBOX'` (a hand list: a new kind is added to the guard's `KIND` with its application),
+  or reads an application's i18n namespace — `'memory.…'` / `'media.…'` / `'depot.…'` (the guard's `I18N_NAMESPACES`;
   core serves every application's nodes, so its strings are `node.*`/`common.*` and a kind's noun comes from its descriptor). The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
@@ -182,13 +182,13 @@ here; the server is blind.
   over `useViewMode` - the map is the level's `SpaceMap`, the views `memoryViews.ts`, inbox #417 -, [docs/apps](../docs/apps/README.md#how-an-application-shows-facts-in-a-levels-rows-and-tiles)), the PRIMARY click (what a plain click does: it opens
   the node) and the actions. An action is the header's model (`NodeHeaderAction`: id, label = aria-label, icon, onClick,
   severity, shown, disabled, pressed) plus `first` and `loading`: AT MOST TWO actions marked `first` are real buttons on the
-  row (Files: download, every kind: core's heart), every other shown action sits in ONE "more" menu (a PrimeVue `Menu`, entries
+  row (Depot: download, every kind: core's heart), every other shown action sits in ONE "more" menu (a PrimeVue `Menu`, entries
   `veyq-row-action-<id>`), `shown` by the application's fail-closed capability function - a share guest gets this very row with
   fewer actions, never a guest-only one. Core's own actions (the favorite heart of inbox #409) plug in as the
   level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
   A row's `selection` (`LevelRowSelection` `{ move, delete, remove? }`, inbox #421) is the application's capability answer
   for the level's Select mode (core's `selection.ts`, the bar in `LevelView`): omitted, the node allows nothing; `remove` is
-  the kind's own delete door without its tree re-read (Files' file), else core's `deleteNode`. Several nodes move through
+  the kind's own delete door without its tree re-read (Depot's file), else core's `deleteNode`. Several nodes move through
   `core/node/MoveNodesDialog.vue` (`NodeMover.moveMany`: N single writes, one re-read) and are deleted through
   `core/node/components/DeleteNodesDialog.vue` (`deleteSelection.ts`), never a batch request.
 
@@ -203,7 +203,7 @@ here; the server is blind.
   (`useMediaGalleryLive`, bound to the loop by `mediaRevisionPolling.ts`) is the first user. Core imports no application.
 
   **Covers are core's (inbox #411, `core/node/cover/`).** Any node whose kind carries a `cover` descriptor (`KindDescriptor.cover`: FOLDER
-  pre-registered by core, Files' drop box, Memories' MEMORY and CHAPTER - the server's `NodeKindRules.takesCover` is the authority and must
+  pre-registered by core, Depot's drop box, Memories' MEMORY and CHAPTER - the server's `NodeKindRules.takesCover` is the authority and must
   agree; a file takes none) has one image its owner uploads as the node's own `COVER` blob. `coverModel.ts` is the pure model (the
   `cover` field of the sealed `wrappedMeta` - `core/node/nodeMeta.ts`, moved from Memories - in the shape every Memory cover already
   had: crop, display formula, ref, `uploadedCover`), `coverWrite.ts` the I/O (`uploadCoverImage`: the existing derive pipeline, ONE JPEG at
@@ -260,16 +260,16 @@ here; the server is blind.
   `folder`, `nodes` of every kind that names the factory, `epochs`, `access`, `tree`, the clamped `viewMode`, `liveTick`) and a
   host (`LevelRowsHost`: `open`, `rename`, `move`, `registerAction`), and it returns a `LevelRowSource`: `row(node)` (a row,
   or `null` for a node it cannot draw - core then shows the explicit unsupported row), `notices` (what only the application
-  can explain, drawn above the list by `LevelNotices`; Files: why an upload failed) and `presentation(mode)` (the
+  can explain, drawn above the list by `LevelNotices`; Depot: why an upload failed) and `presentation(mode)` (the
   application's own presentation of a mode core does not draw, in place of the list: Memories' map - `views` names it, so the
   toggle offers it exactly where a shown tab includes the kind). The factory owns the DATA a row needs and the flows behind its
-  actions (Files: the blob listing, re-read on `liveTick`, the upload and replace flows with their confirmation and the
+  actions (Depot: the blob listing, re-read on `liveTick`, the upload and replace flows with their confirmation and the
   picker it builds; Memories: covers, dates, the heart), so none of that depends on which tab is shown. Kinds naming the
   same `rows` function share one row source and must agree on `views` (else `registerKind` throws). A kind registered
   without a `list`, or not registered at all, is an unsupported row. For the level's "New" menu (inbox #406) a kind brings
   `createEntry` (`{ label, icon, order, allowed(ctx), enabled?(ctx) }`: the kind's menu entry, its label an i18n key of the
   application's own namespace, `allowed` its fail-closed capability function, and it needs a `createDialog`, which
-  `registerKind` checks) and `levelActions` (entries that are no create dialog - Files' "Upload files" and "Upload folder…";
+  `registerKind` checks) and `levelActions` (entries that are no create dialog - Depot's "Upload files" and "Upload folder…";
   ids write-once, `create:` reserved; `acceptsDrop` makes the level hand it what is dropped onto it). The factory registers
   the action's handler with `host.registerAction(id, { enabled, run, drop?, dropDirectory? })` (`core/node/levelActions.ts`)
   for the level's life; an entry whose handler is not `enabled` is disabled, and a DROP reaches `drop` (files) or
@@ -289,7 +289,7 @@ here; the server is blind.
   the member's `fetchTree` (`listNodesRaw`, the scope's tree revision as `ETag`/`If-None-Match`) and the guest's
   `pollPublicShare` (`resolveShareRaw`, a digest of what the link serves - never the scope revision, which would tell a guest
   when the rest of the space changes) read a `304` as "nothing moved": no parse, no decryption, no tick. `read` resolves whether
-  the state MOVED and the host's `useLevelLive` hands every row factory `LevelRowsContext.liveTick` only then, which Files'
+  the state MOVED and the host's `useLevelLive` hands every row factory `LevelRowsContext.liveTick` only then, which Depot's
   factory answers with a blob re-read - an upload completing moves the revision and changes no row; the tree itself is
   replaced only when the rows' fingerprint differs. A guest poll that meets the link gone (`404`) flips `ShareView` to its
   unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's
@@ -310,13 +310,13 @@ here; the server is blind.
   menu, `core/blob/UploadStatusMenu.vue`, which lists every application's batches of the one core queue and is no
   application's item, so today no application adds to `topbarTray`); `claimRouteSlug(slug, kinds)` — the application's segment in a node's URL fragment path (`#foo/memories/rom`; Memories claims
   `memories`, a second claim of a slug or a kind throws, `RESERVED_ROUTE_SEGMENTS` are refused) — or `claimNoRouteSegment(kinds)`,
-  the explicit "no segment" option only Files takes (its nodes are plain names: `#foo/report`; one application at most). The grammar
+  the explicit "no segment" option only Depot takes (its nodes are plain names: `#foo/report`; one application at most). The grammar
   — a folder ends in a slash, a claimed slug is reserved among folder and file names (`memories-2`), folders and files are numbered
   apart, no slash resolves to the file before the folder — lives in `core/node/location.ts` (ADR 0015, amended 2026-10-11) and
   nowhere else: `scripts/validate_web_fragment_paths_via_location.py` is red on a file that splits or hand-builds a fragment path;
   `claimShareBody(rootKind, body)` for the drop page of
   a `WRITE_ONLY` link rooted at that kind (`PublicShare.rootKind`) — the one page with no member equivalent, its guest
-  holding no key: Memories' photo drop (`MemoryShareBody`), Files' drop box (`DropBoxShareBody`); `FOLDER` is claimed by
+  holding no key: Memories' photo drop (`MemoryShareBody`), Depot's drop box (`DropBoxShareBody`); `FOLDER` is claimed by
   nobody and refused. Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any
   guest a write;
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
@@ -333,8 +333,8 @@ here; the server is blind.
   `guestTreeSource` (`core/sharing/guestAccess.ts`: a served `ShareNode` as a `TreeNode` — `createdAt` 0, so equal
   names number by node id; `metaVersion` 0; `wrappedMeta` as served). A row factory built for a guest reads nothing of
   the member's world (`treeStore`, `activeSpace`, the cover and pin stores) — Memories' rows read their dates, covers
-  and map from the guest's tree (the covers are core's, `core/node/cover/`, resolved by the level), Files' rows read and write through Files' data
-  source (`features/files/source.ts`: the member's or the guest's, fixed at mount; a write is offered where the matrix
+  and map from the guest's tree (the covers are core's, `core/node/cover/`, resolved by the level), Depot's rows read and write through Depot's data
+  source (`features/depot/source.ts`: the member's or the guest's, fixed at mount; a write is offered where the matrix
   grants it AND the source carries it — `sourceCapabilities` — and the guest's source has no delete, no rename), and so
   does Memories' detail (`features/memory/source.ts`, picked by `MemoryDetailHost`: the detail, its composables, the
   lightbox's loaders and — by injection, `useMemoryView`, which throws outside a detail — the organizer touch no API but
@@ -342,7 +342,7 @@ here; the server is blind.
   its own). A drop page (`ShareBodyProps`) is handed the
   guest's `access` too and names its uploader on the page (the identity key is its application's). What a view offers is its
   application's pure, fail-closed capability function over `access` and `targetOf(tree, node)` — `memoryCapabilities`
-  (`features/memory/capabilities.ts`), `filesCapabilities` (`features/files/capabilities.ts`), core's
+  (`features/memory/capabilities.ts`), `depotCapabilities` (`features/depot/capabilities.ts`), core's
   `folderCapabilities` for the level view; each matrix is its `docs/apps/<app>.md` table — never a `readonly`,
   `shareable` or `hasCapability` read inline; `targetOf` carries the kind's descriptor (`shareable` AND a `shareDialog`),
   so no share button appears whose dialog the host cannot mount.
@@ -360,7 +360,7 @@ here; the server is blind.
   lists); the level view (its list items `veyq-level-item`) and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
   `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read
   too for the shared labels; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
-  `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memory/kinds.ts`, `features/files/kinds.ts`), and no compiler lists the
+  `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memory/kinds.ts`, `features/depot/kinds.ts`), and no compiler lists the
   kinds — the registry's `{ supported: false }` answer and its tests do; the directory is still `features/memory`, the i18n catalog
   is one file and `styles/memory.css` is global.
   **Testing against it:** `src/test/setup.ts` fills the registry in a `beforeAll` *dynamic* import (a static one
@@ -399,8 +399,8 @@ here; the server is blind.
   against the contract-pinned `[A-Za-z0-9+/]*={0,2}`. **Revisit on any of three triggers:** we need to decode
   a *foreign* QR code, jsQR gets a CVE, or `BarcodeDetector` reaches Firefox and desktop Chrome.
 
-- **A file page shows the file when it is opened** (inbox #412, `features/files/components/FileViewer.vue` +
-  `useFileViewer.ts` + `view.ts`; the rules and caps are `docs/apps/files.md` § The viewer). Files makes **no thumbnail or
+- **A file page shows the file when it is opened** (inbox #412, `features/depot/components/FileViewer.vue` +
+  `useFileViewer.ts` + `view.ts`; the rules and caps are `docs/apps/files.md` § The viewer). Depot makes **no thumbnail or
   preview blob**. Four rules bind a change here: (1) **the decrypted bytes decide the kind** (`core/blob/sniff.ts`), the
   sealed type and the name only narrow - a test per claim-vs-bytes case; (2) **never render a peer's bytes as markup or code**:
   text is `textContent`, an image an `<img>` on an object URL owned by `useObjectUrl` and typed with the SNIFFED type (SVG
@@ -409,7 +409,7 @@ here; the server is blind.
   (4) **everything the viewer made is undone** on a new file, on navigation and on unmount (object URL, playback handle,
   the `AbortSignal` into the stream pump). A PDF is drawn by **pdf.js** (`pdfjs-dist`, legacy build) onto canvases in the page, never by the browser's
   viewer: `frame-src`/`object-src` stay `'none'` and **the CSP is unchanged** (widening it is the owner's decision). The rules
-  (`features/files/pdf/`, `docs/apps/files.md` § The viewer): `pdfEngine.ts` is the only seam and reaches pdf.js through a
+  (`features/depot/pdf/`, `docs/apps/files.md` § The viewer): `pdfEngine.ts` is the only seam and reaches pdf.js through a
   **dynamic** `import('./pdfjsRuntime')` - the one file that imports it, never imported statically (a source test and
   `npm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
   Function` in the emitted files, no `.wasm`); `pdfOptions.ts` is the option set - the document is `{data}` (never a URL),

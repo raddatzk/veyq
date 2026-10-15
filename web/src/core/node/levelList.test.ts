@@ -10,7 +10,7 @@ const names = (list: readonly TreeNode[]) => list.map((x) => x.name)
 describe('orderLevel', () => {
   it('lists the folders first, then every other node mixed by name - not grouped by kind', () => {
     const folders = [n('f2', 'Zebra', 'FOLDER'), n('f1', 'Alpha', 'FOLDER')]
-    const others = [n('a', 'Report', 'FILE'), n('b', 'Beach', 'MEMORY'), n('c', 'Inbox', 'FILES_DROPBOX'), n('d', 'Aaa', 'FILE')]
+    const others = [n('a', 'Report', 'FILE'), n('b', 'Beach', 'MEMORY'), n('c', 'Inbox', 'DEPOT_DROPBOX'), n('d', 'Aaa', 'FILE')]
     expect(names(orderLevel(folders, others, 'en'))).toEqual(['Alpha', 'Zebra', 'Aaa', 'Beach', 'Inbox', 'Report'])
   })
 

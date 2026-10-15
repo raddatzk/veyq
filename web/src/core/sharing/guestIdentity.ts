@@ -22,7 +22,7 @@ export const identityNameContext = (scopeId: string, shareId: string, identityId
  * link's ROOT key, which need not be the node the member looks at — a folder link's guest who uploads below the folder —
  * so the caller passes the node's own key and its ancestors', NEAREST FIRST, as the session holds them through the chain
  * (`contentKeyChain`); a WRITE_ONLY guest's name opens only under its own `K_up`. Every application reads a guest's name
- * here: Memories' contributor buckets (`features/memory/mediaBuckets.ts`) and Files' uploader (`features/files/uploader.ts`).
+ * here: Memories' contributor buckets (`features/memory/mediaBuckets.ts`) and Depot's uploader (`features/depot/uploader.ts`).
  */
 export function openIdentityName(
   scopeId: string, shareId: string, identityId: string, sealedName: string, keys: Iterable<Uint8Array>,
@@ -47,7 +47,7 @@ export function openIdentityName(
 /**
  * A guest's self-chosen `name` as a MEMBER is shown it: marked as a guest's - "Ben (guest)", "Ben (Gast)" (inbox #433).
  * A guest names itself freely, so a bare name could pass for a member's ("Kevin Raddatz"); every place a member reads a
- * guest's name - Files' uploader line, Memories' lightbox uploader and contributor buckets - goes through here, so the
+ * guest's name - Depot's uploader line, Memories' lightbox uploader and contributor buckets - goes through here, so the
  * mark cannot be left out in one of them. Never for a guest's own view ("You are here as Ben" stays), and never for a
  * fallback that already says "a guest". Reactive to the language where it is read inside a computed or a template.
  */

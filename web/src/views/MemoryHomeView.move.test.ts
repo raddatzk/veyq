@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-// A member's move through the personal-space host (inbox #358) - and a level's selection moved and deleted (inbox #421) - over the REAL registry (Memories and Files, as `main.ts`
-// fills it), the real router, PrimeVue, core's real level view, move dialog and confirmation dialog, Files' real drop-box
+// A member's move through the personal-space host (inbox #358) - and a level's selection moved and deleted (inbox #421) - over the REAL registry (Memories and Depot, as `main.ts`
+// fills it), the real router, PrimeVue, core's real level view, move dialog and confirmation dialog, Depot's real drop-box
 // detail and Memories' real detail adapter — every step a DOM click. The placement write is a recorder (`moveNode`): its
 // wire is `core/node/move.wire.test.ts`'s. Only the heavy Memories detail view is a stub that exposes the events the host
-// listens to; the level's rows (inbox #407: one list, the applications' real row factories) are real, Files' blob
+// listens to; the level's rows (inbox #407: one list, the applications' real row factories) are real, Depot's blob
 // listing is an empty stub.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -50,14 +50,14 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
     }),
   }
 })
-vi.mock('../features/files/api', () => ({ filesApi: vi.fn() }))
+vi.mock('../features/depot/api', () => ({ filesApi: vi.fn() }))
 
 import MemoryHomeView from './MemoryHomeView.vue'
 import { treeStore, loadTree } from '../core/node/treeStore'
 import { deleteNode, moveNode, restoreNode, type TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND } from '../features/memory/kinds'
-import { DROPBOX_KIND, FILE_KIND } from '../features/files/kinds'
+import { DROPBOX_KIND, FILE_KIND } from '../features/depot/kinds'
 import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'
 import { mountConfirmDialog } from '../test/confirmDialog'
@@ -65,7 +65,7 @@ import { hashForNode } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../core/favorites/favoritesStore'
 import { stubApi } from '../test/apiMock'
-import { filesApi } from '../features/files/api'
+import { filesApi } from '../features/depot/api'
 import { clickAction } from '../test/levelRows'
 import { browserOpen as dialogOpen, crumbs, goTo, moveHere, placeNames } from '../test/moveBrowser'
 import { deleteSelection, moveSelection, selectRows, startSelecting } from '../test/levelSelection'
@@ -136,7 +136,7 @@ describe('a member moves a folder from its card', () => {
     expect(router.currentRoute.value.hash).toBe('#~me/trips/rome/')
   })
 
-  it('a row\'s move (Files\' file, by its real menu entry) and an opened Memory ask the host for the same dialog', async () => {
+  it('a row\'s move (Depot\'s file, by its real menu entry) and an opened Memory ask the host for the same dialog', async () => {
     const w = await mountAt('#~me/trips/')
     await clickAction(w, 'notes.txt', 'move')
     expect(document.body.textContent).toContain(t('node.move.title', { name: 'notes.txt' }))
@@ -190,7 +190,7 @@ describe('a member deletes a selection of the level', () => {
     expect(deleteNode, 'nothing before the answer').not.toHaveBeenCalled()
     const confirm = [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('node.delete'))!
     await click(confirm)
-    // the folder and the Memory through core's delete, the file through Files' source (which writes core's delete too)
+    // the folder and the Memory through core's delete, the file through Depot's source (which writes core's delete too)
     expect(vi.mocked(deleteNode).mock.calls.map((c) => c[1]).sort()).toEqual(['italy', 'notes', 'rome'])
     expect(loadTree, 'one re-read for the three').toHaveBeenCalledTimes(1)
     expect(dialog(), 'closed').toBeNull()
@@ -209,7 +209,7 @@ describe('a member moves a guest\'s folder out of a drop box', () => {
   it('from the drop box\'s row: asked first, then moved; no undo', async () => {
     const confirm = mountConfirmDialog()
     await mountAt('#~me/inbox')
-    await click(byLabel(t('files.dropBox.moveFolder', { name: 'Anna' }))!)
+    await click(byLabel(t('depot.dropBox.moveFolder', { name: 'Anna' }))!)
     expect(crumbs(), 'it opens in the drop box').toEqual([t('shell.personal'), 'Inbox'])
     expect(placeNames(), 'no guest folder is offered').toEqual([])
     await moveHere(t('shell.personal'), 'Archive')

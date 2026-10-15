@@ -7,11 +7,11 @@
 //
 // **The member's page, with functions removed (inbox #401).** At a folder it renders core's `LevelView` — the very view
 // a member browses with: the folder's header and ONE list of the folders and every application's rows through the
-// registry (Memories' rows with their covers and dates, Files' files and drop boxes), an unsupported row for a kind nobody
+// registry (Memories' rows with their covers and dates, Depot's files and drop boxes), an unsupported row for a kind nobody
 // lists (inbox #407). At any other node — the link's root included — it renders that kind's registered `detail`
-// (`NodeDetailProps`: Memories' `MemoryDetail`, Files' `DropBoxDetail`), as the member's host does. Both are handed the
+// (`NodeDetailProps`: Memories' `MemoryDetail`, Depot's `DropBoxDetail`), as the member's host does. Both are handed the
 // guest's `access` and `tree`, so every control is the capability functions' answer for a guest (`folderCapabilities`,
-// `memoryCapabilities`, `filesCapabilities`) and every byte the applications' guest data sources'. What stays this
+// `memoryCapabilities`, `depotCapabilities`) and every byte the applications' guest data sources'. What stays this
 // page's own is what only a guest's page has: the breadcrumb up to the share root, the share's note (once), the role
 // badge. A kind without a detail is a local empty state here, never the page's.
 //
@@ -21,7 +21,7 @@
 //
 // **Writes (READ_WRITE only)** are what the capabilities grant on screen: at a folder a new folder, created as the guest
 // under the current folder (`createShareNodeAsGuest`) after the shell named it (`access.requestGuest`), and what an
-// application's own level action offers (Files: an upload, whose files it creates itself). A guest creates no Memory, no
+// application's own level action offers (Depot: an upload, whose files it creates itself). A guest creates no Memory, no
 // drop box and no other application's node (owner decision 2026-10-14: the server admits a folder and the kinds their
 // application declares guest-creatable, `GuestCreatableKinds`), so no such "New" entry is shown - hidden, not greyed; a
 // section kind whose entry did allow it would be created through this page's name dialog the same way. Inside a detail

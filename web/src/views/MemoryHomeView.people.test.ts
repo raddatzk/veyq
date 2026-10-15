@@ -24,7 +24,7 @@ vi.mock('../core/favorites/favoritesStore', () => ({
   isFavorite: vi.fn(),
   toggleFavorite: vi.fn(),
 }))
-vi.mock('../features/files/api', () => ({ filesApi: vi.fn() }))
+vi.mock('../features/depot/api', () => ({ filesApi: vi.fn() }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
 vi.mock('../core/node/treeStore', async () => {
   const { reactive } = await import('vue')

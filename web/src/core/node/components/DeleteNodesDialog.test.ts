@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Core's delete question for a level's selection (inbox #421) over the REAL registry (Memories and Files, filled by
+// Core's delete question for a level's selection (inbox #421) over the REAL registry (Memories and Depot, filled by
 // `src/test/setup.ts`) and the real PrimeVue Dialog, every step a DOM click. Core's `deleteNode` / `restoreNode` and the tree
 // re-read are recorders. Pinned: ONE question naming how many go and of which kinds (each kind's own noun); each node
 // through its door (core's, or the kind's own `remove`); a failure named in one summary while the rest is deleted; one toast
@@ -22,7 +22,7 @@ import { FOLDER_KIND } from '../kind'
 import type { TreeNode } from '../tree'
 import type { SelectedForDelete } from '../selection'
 import { MEMORY_KIND } from '../../../features/memory/kinds'
-import { FILE_KIND } from '../../../features/files/kinds'
+import { FILE_KIND } from '../../../features/depot/kinds'
 import { treeNode } from '../../../test/models'
 import { realI18n, t } from '../../../test/i18n'
 
@@ -64,7 +64,7 @@ describe('DeleteNodesDialog', () => {
     mountDialog([{ node: folder }, { node: memory }, { node: folder2 }, { node: file, remove }])
     await flushPromises()
     expect(text()).toContain(t('node.deleteMany.title', { count: 4 }))
-    const kinds = `${t('node.aFolder')}, ${t('memory.aMemory')}, and ${t('files.aFile')}`
+    const kinds = `${t('node.aFolder')}, ${t('memory.aMemory')}, and ${t('depot.aFile')}`
     expect(text()).toContain(t('node.deleteMany.copy', { count: 4, kinds }))
     expect(calls.deleteNode, 'nothing before the answer').not.toHaveBeenCalled()
   })

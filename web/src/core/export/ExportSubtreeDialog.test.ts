@@ -20,7 +20,7 @@ const node = treeNode({ id: 'n1', kind: 'FOLDER', name: 'Trip: 2025' })
 const tree = { rootId: null } as unknown as TreeSource<TreeNode>
 const sink = { write: vi.fn(), close: vi.fn(), abort: vi.fn() }
 const prepared = (over: Partial<PreparedExport> = {}): PreparedExport => ({
-  nodes: 4, payloads: 3, bytes: 2_500_000, skipped: [{ name: 'Box', kind: 'FILES_DROPBOX', reason: 'unsupported_kind' }],
+  nodes: 4, payloads: 3, bytes: 2_500_000, skipped: [{ name: 'Box', kind: 'DEPOT_DROPBOX', reason: 'unsupported_kind' }],
   write: vi.fn(async () => {}), ...over,
 })
 

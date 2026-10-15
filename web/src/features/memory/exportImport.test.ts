@@ -296,7 +296,7 @@ describe('importMemoryContent', () => {
   })
 
   it('refuses content that is not a Memory\'s, and a newer schema', async () => {
-    await expect(importMemoryContent(MEMORY_KIND)(ctx({ id: 'n', kind: MEMORY_KIND, name: 'x', content: { type: 'files.file' } } as ManifestNode))).rejects.toThrow('import_invalid_content')
+    await expect(importMemoryContent(MEMORY_KIND)(ctx({ id: 'n', kind: MEMORY_KIND, name: 'x', content: { type: 'depot.file' } } as ManifestNode))).rejects.toThrow('import_invalid_content')
     await expect(importMemoryContent(MEMORY_KIND)(ctx(node({ schema: 9 })))).rejects.toThrow('import_newer_content')
     expect(createContentNode).not.toHaveBeenCalled()
   })
@@ -312,7 +312,7 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
   })
 
   it.each([
-    ['another kind\'s content', { ...sound, type: 'files.file' }, 'invalid_manifest'],
+    ['another kind\'s content', { ...sound, type: 'depot.file' }, 'invalid_manifest'],
     ['media that is no list', { ...sound, media: {} }, 'invalid_manifest'],
     ['a medium without its file', { ...sound, media: [{ name: 'a.jpg' }] }, 'invalid_manifest'],
     ['a capture time that is no time', { ...sound, media: [{ ...medium, capturedAt: 'yesterday' }] }, 'invalid_manifest'],

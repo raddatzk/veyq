@@ -15,7 +15,7 @@ describe('registerMemories: placement', () => {
   it.each([
     [MEMORY_KIND, null, true], [MEMORY_KIND, FOLDER_KIND, true], [MEMORY_KIND, MEMORY_KIND, false], [MEMORY_KIND, CHAPTER_KIND, false],
     [CHAPTER_KIND, null, false], [CHAPTER_KIND, FOLDER_KIND, false], [CHAPTER_KIND, MEMORY_KIND, true], [CHAPTER_KIND, CHAPTER_KIND, false],
-    [MEMORY_KIND, 'FILES_DROPBOX', false], [CHAPTER_KIND, 'FILE', false],
+    [MEMORY_KIND, 'DEPOT_DROPBOX', false], [CHAPTER_KIND, 'FILE', false],
   ])('%s in %s: %s', (kind, parent, allowed) => {
     expect(registry.placementAllows(kind, parent)).toBe(allowed)
   })

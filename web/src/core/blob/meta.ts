@@ -32,7 +32,7 @@ export function openBlobMetaOf(ref: { wrappedBlobMeta?: string | null }, kBlob: 
 
 /**
  * Download extension per media type — the suffix a saved name gains when it has none. Moved from Memories'
- * `features/memory/download.ts` (inbox #397) unchanged, so Files and Memories name a type alike; Memories' magic-byte
+ * `features/memory/download.ts` (inbox #397) unchanged, so Depot and Memories name a type alike; Memories' magic-byte
  * sniff (`sniffMediaType`) produces only types this table names — a type added there needs its row here.
  */
 export const MIME_TO_EXT: Readonly<Record<string, string>> = {

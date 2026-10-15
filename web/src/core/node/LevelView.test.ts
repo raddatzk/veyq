@@ -2,7 +2,7 @@
 // Core's folder level view (cr-files-application P4b; the unified list, inbox #407) against a STUBBED registry (a fresh
 // `createRegistry()` per test behind a delegating `registry` export), so each test chooses which kinds bring which rows. Kinds
 // here are made-up tokens (`ALPHA`, `BETA`, …) and their row factory is `test/stubRows.ts`: core's view knows no application,
-// and neither does its test. Every control is clicked for real. The real registry with Memories and Files registered is in
+// and neither does its test. Every control is clicked for real. The real registry with Memories and Depot registered is in
 // `views/MemoryHomeView.test.ts`; the Memories level as a member meets it, in the golden. The tabs are `LevelView.tabs.test.ts`.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -413,7 +413,7 @@ describe('LevelView: the mode it shows', () => {
   let a: ReturnType<typeof stubRows>
   let b: ReturnType<typeof stubRows>
   beforeEach(() => {
-    // ALPHA offers the map (its empty tab is left out in an identity folder); BETA has the rows only, as Files'.
+    // ALPHA offers the map (its empty tab is left out in an identity folder); BETA has the rows only, as Depot's.
     a = stubRows('a', { presentationFor: 'map' })
     b = stubRows('b')
     reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, LIST_VIEW, MAP] } })

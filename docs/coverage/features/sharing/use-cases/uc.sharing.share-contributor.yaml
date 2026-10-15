@@ -59,7 +59,7 @@ acceptanceCriteria:
       WRITE_ONLY link (Memories', Files').
     coverage:
       web:
-        unit: [src/views/ShareView.naming.test.ts, src/views/ShareView.memory.test.ts, src/views/ShareView.test.ts, src/features/files/components/DropBoxShareBody.test.ts, src/features/memory/source.test.ts]
+        unit: [src/views/ShareView.naming.test.ts, src/views/ShareView.memory.test.ts, src/views/ShareView.test.ts, src/features/depot/components/DropBoxShareBody.test.ts, src/features/memory/source.test.ts]
   - id: share-scoped-upload
     text: Three share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role READ_WRITE + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads opens sessions and presigns their first window of PUTs, POST /api/shares/{shareId}/blob-upload-windows presigns each next window, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_mem and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
     coverage:

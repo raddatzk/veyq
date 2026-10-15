@@ -37,12 +37,12 @@ export type UploadJob<R = unknown, X extends object = object> = {
   /**
    * Called once each time a run of the job settles `failed` (its automatic retry spent, or a refusal no retry helps) or
    * `cancelled` — never between the automatic retry's attempts. The job undoes here what a run left half-done and no
-   * one will finish (Files: a file node it created that holds no content, inbox #384), so that a later retry by the
+   * one will finish (Depot: a file node it created that holds no content, inbox #384), so that a later retry by the
    * user starts clean. Awaited before the batch settles; a throw is swallowed (best effort, never a second failure).
    */
   abandon?(): Promise<void> | void
   /**
-   * Whether `error` is a refusal no retry of THIS job can change (Files: a taken name, an illegal structure, a file a
+   * Whether `error` is a refusal no retry of THIS job can change (Depot: a taken name, an illegal structure, a file a
    * peer replaced). The queue then fails the item at once and the tray offers no retry — a retry would only fail
    * again. Core's own [QUOTA_EXCEEDED] needs no declaration here.
    */

@@ -41,7 +41,7 @@ describe('createGuestIdentity', () => {
 })
 
 // inbox #431: how a MEMBER reads what `createGuestIdentity` sealed - every application's one reader (Memories' buckets,
-// Files' uploader). The seal here is the real write path's, so a reader that drifts from it is red.
+// Depot's uploader). The seal here is the real write path's, so a reader that drifts from it is red.
 describe('openIdentityName', () => {
   async function named(rootKey: Uint8Array, name: string) {
     const { createShareIdentity } = stubApi(publicSharesApi, { createShareIdentity: { identityId: 'ignored', contributorToken: 'tok-1' } })

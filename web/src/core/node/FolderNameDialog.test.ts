@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Core's name dialog (cr-files-application P4c): create a folder, rename a node of ANY kind. The folder and rename cases
 // moved here from Memories' former `NodeMutationDialog.test.ts` unchanged but for the mode name; the rename cases run
-// for a Files node (`FILE`) beside the platform's and Memories' kinds. The slug token a rename sends is proven on the
+// for a Depot node (`FILE`) beside the platform's and Memories' kinds. The slug token a rename sends is proven on the
 // wire, through the real `renameNode`, in `FolderNameDialog.slug.test.ts`.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../../test/httpError'
@@ -107,7 +107,7 @@ describe('FolderNameDialog', () => {
   })
 
   // ADR 0080 decision 14: every share rooted at the renamed node gets the new name — for any kind, through core. FILE is
-  // the Files application's kind: the dialog names no kind, so a node of a second application renames the same way.
+  // the Depot application's kind: the dialog names no kind, so a node of a second application renames the same way.
   it.each(['FOLDER', 'MEMORY', 'CHAPTER', 'FILE'])('a rename of a %s re-seals its share names after the rename, then closes', async (kind) => {
     const order: string[] = []
     vi.mocked(renameNode).mockImplementation(async () => { order.push('rename') })
@@ -184,7 +184,7 @@ describe('FolderNameDialog', () => {
     expect(createFolder).not.toHaveBeenCalled()
   })
 
-  // inbox #385 (h): a file's rename selects its name without the extension (the kind's `renameSelectionEnd`, Files'
+  // inbox #385 (h): a file's rename selects its name without the extension (the kind's `renameSelectionEnd`, Depot's
   // registration through the real registry) as the dialog shows; a kind that declares none leaves the caret alone.
   it('a rename selects what its kind declares as the dialog shows: a file\'s name without its extension', async () => {
     const shown = async (kind: string, name: string) => {

@@ -77,14 +77,16 @@ the tags `files` / `share-files`, the paths `/files`, the generated `FilesApi` /
       `./gradlew check` green, the contracts guards and `validate_backend_module_graph.py` green; bite: a
       `contracts/api/files/` directory restored beside `depot/` turns the build red on the missing module. (Ticked 2026-10-15 with one red outside
       this CR: `CapabilityRegistryTest`, from `cr-capability-register-recut` phase 1's catalog ids.)
-- [ ] 2 web — `web/src/features/files` → `web/src/features/depot`, `generate:api` input and output
+- [x] 2 web — `web/src/features/files` → `web/src/features/depot`, `generate:api` input and output
       (`generated/depot`), `registerFiles` and every app-prefixed symbol, the export ids in `exportImport.ts` and its
       import validators, the i18n namespace `files:` → `depot:` (EN and DE) with the application's tab label
       `Depot`, while every string that means a file keeps *file* / *Datei*; `validate_web_core_imports_no_applications.py`
       (application map, namespace, kind fragment); the coverage YAMLs' `src/features/files/` paths. · Done when:
       `npm run check` green in `web/`; the web e2e suites green including the Depot suites and the upgrade proof
       (`scripts/run_web_e2e.py`, run named); a browser pass shows the level tab *Depot*, an upload, a drop box, and a
-      download whose manifest says `depot.file`; bite: an import of a manifest with `files.file` skips those nodes.
+      download whose manifest says `depot.file`; bite: an import of a manifest with `files.file` skips those nodes. (Ticked 2026-10-15: `run_web_e2e.py` 26/26 incl. the
+      `upgrade` pair from this tree; the two-build `--upgrade` proof is reported in the close-out, not here. Reds outside
+      this CR: `platform/capabilities.test.ts`, from `cr-capability-register-recut` phase 1's catalog ids.)
 - [ ] 3 docs + site — `docs/apps/files.md` → `depot.md`, `docs/features/files/` → `docs/features/depot/`,
       `docs/coverage/features/files/` → `…/depot/`, `uc.files.*` → `uc.depot.*` with every citation (locator), the
       ADRs' and CLAUDE.mds' live mentions of the application, `security-model.md`; the site's `files.md` / `de/files.md`

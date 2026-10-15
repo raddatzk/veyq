@@ -92,7 +92,7 @@ describe('FolderNameDialog names the sibling a name collides with (inbox #389)',
     const w = mountDialog({ mode: 'rename', node: node('x9', 'FILE', 'Old.txt') })
     await typeAndClickSubmit(w, 'FOTO.JPG')
     expect(renameNode).not.toHaveBeenCalled()
-    expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('files.aFile'), name: 'foto.jpg' }))
+    expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('depot.aFile'), name: 'foto.jpg' }))
 
     await typeAndClickSubmit(w, 'Day1 md')
     expect(renameNode).toHaveBeenCalledWith(SCOPE, EPOCHS, treeStore.nodes, 'x9', 'Day1 md')

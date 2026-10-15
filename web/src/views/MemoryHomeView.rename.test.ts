@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
-// A member's rename through the personal-space host, over the REAL registry (Memories and Files, as `main.ts` fills it),
+// A member's rename through the personal-space host, over the REAL registry (Memories and Depot, as `main.ts` fills it),
 // the real router, PrimeVue, core's real level view, overview card and name dialog — every step a DOM click. The position
 // lives in the #fragment as a slug path derived from the names (ADR 0015), so a rename of the node on screen changes its
 // own path — and a restore of an older sibling of one plain segment renumbers it: the URL must follow it, or the old path
 // resolves to nothing and the view collapses to the scope root (found by the read-only assessment of inbox #328). The
 // writes are recorders (`renameNode`, `restoreNode`; their wire is `core/node/tree.wire.test.ts`'s) and the re-read is
 // `loadTree`'s stub. Only the heavy Memories detail is a stub exposing the events the host listens to; the level's rows
-// (inbox #407: one list, the applications' real row factories) are real, Files' blob listing is an empty stub.
+// (inbox #407: one list, the applications' real row factories) are real, Depot's blob listing is an empty stub.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -57,20 +57,20 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
     }),
   }
 })
-vi.mock('../features/files/api', () => ({ filesApi: vi.fn() }))
+vi.mock('../features/depot/api', () => ({ filesApi: vi.fn() }))
 
 import MemoryHomeView from './MemoryHomeView.vue'
 import { treeStore, loadTree } from '../core/node/treeStore'
 import { renameNode, listTrash, restoreNode, type TreeNode, type TrashedNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND } from '../features/memory/kinds'
-import { FILE_KIND } from '../features/files/kinds'
+import { FILE_KIND } from '../features/depot/kinds'
 import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../core/favorites/favoritesStore'
 import { stubApi } from '../test/apiMock'
-import { filesApi } from '../features/files/api'
+import { filesApi } from '../features/depot/api'
 import { clickAction, titlesOf } from '../test/levelRows'
 
 const node = (id: string, kind: string, parentId: string | null, name: string, createdAt: number): TreeNode =>
@@ -203,7 +203,7 @@ describe('a restore that renumbers an ancestor of the open node', () => {
 describe('a rename of a row on the level', () => {
   it('leaves the level where it is', async () => {
     const w = await mountAt('#~me/trips/')
-    await clickAction(w, 'x.y', 'rename') // Files' row: a real click on its entry in the row's menu
+    await clickAction(w, 'x.y', 'rename') // Depot's row: a real click on its entry in the row's menu
     serverRenames({ xy: 'notes.txt' })
     await renameTo('notes.txt')
     expect(renameNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'xy', 'notes.txt')

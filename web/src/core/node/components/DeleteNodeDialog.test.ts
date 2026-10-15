@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Core's delete dialog serves every application's nodes, so its title comes from the node's kind (inbox #375): a folder
 // its own, a kind's `deleteTitle` from the registry (filled by the real applications in `test/setup.ts`), else the
-// neutral "Delete". Before, every non-folder node — a Files drop box too — was titled "Delete Memory".
+// neutral "Delete". Before, every non-folder node — a Depot drop box too — was titled "Delete Memory".
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 
@@ -46,18 +46,18 @@ describe('DeleteNodeDialog', () => {
   it('titles a node by its kind\'s registered deleteTitle — a Memory, a chapter and a drop box each by its own noun', () => {
     expect(mountDialog('MEMORY').find('.header').text()).toBe('Delete Memory')
     expect(mountDialog('CHAPTER').find('.header').text()).toBe('Delete chapter')
-    expect(mountDialog('FILES_DROPBOX').find('.header').text()).toBe('Delete drop box')
+    expect(mountDialog('DEPOT_DROPBOX').find('.header').text()).toBe('Delete drop box')
     expect(mountDialog('MEMORY').text()).toContain(t('node.deleteCopy', { name: 'Rom 2026' }))
   })
 
   // Inbox #395: a kind's `deleteCopy` names what goes with it — a drop box its guests' folders and links; a kind without
   // one keeps the neutral sentence.
   it('says a kind\'s registered deleteCopy (a drop box: its guests\' folders and links), else the neutral one', () => {
-    expect(mountDialog('FILES_DROPBOX').find('.dialog-copy').text()).toBe(t('files.dropBox.deleteConfirm', { name: 'Rom 2026' }))
+    expect(mountDialog('DEPOT_DROPBOX').find('.dialog-copy').text()).toBe(t('depot.dropBox.deleteConfirm', { name: 'Rom 2026' }))
     expect(mountDialog('MEMORY').find('.dialog-copy').text()).toBe(t('node.deleteCopy', { name: 'Rom 2026' }))
     // …and an opened file (inbox #378) names itself, not "an item"
-    expect(mountDialog('FILE').find('.dialog-copy').text()).toBe(t('files.deleteConfirm', { name: 'Rom 2026' }))
-    expect(mountDialog('FILE').find('.header').text()).toBe(t('files.deleteTitle'))
+    expect(mountDialog('FILE').find('.dialog-copy').text()).toBe(t('depot.deleteConfirm', { name: 'Rom 2026' }))
+    expect(mountDialog('FILE').find('.header').text()).toBe(t('depot.deleteTitle'))
   })
 
   it('falls back to the neutral "Delete" for a kind without a deleteTitle and for a kind nobody registered', () => {
@@ -70,7 +70,7 @@ describe('DeleteNodeDialog', () => {
 
   it('deletes the node and shows the neutral failure when the delete fails', async () => {
     vi.mocked(deleteNode).mockRejectedValueOnce(new Error('boom'))
-    const w = mountDialog('FILES_DROPBOX')
+    const w = mountDialog('DEPOT_DROPBOX')
     await w.findAll('button').find((b) => b.text() === t('node.delete'))!.trigger('click')
     for (let i = 0; i < 4; i++) await Promise.resolve()
     await w.vm.$nextTick()

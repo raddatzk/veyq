@@ -36,7 +36,7 @@ export function isVideoMediaType(mediaType: string | undefined): boolean {
 
 /**
  * Whether `mediaType` is one well-formed audio or video essence - what the SW may serve a playback under (inbox #412 added
- * audio: Files plays an `<audio>` through the same route). The same rule as [isVideoMediaType]: the value is a peer's, and
+ * audio: Depot plays an `<audio>` through the same route). The same rule as [isVideoMediaType]: the value is a peer's, and
  * the shim serves it as `Content-Type` on the app origin, so a list or a parameter never passes.
  */
 export function isStreamableMediaType(mediaType: string | undefined): boolean {

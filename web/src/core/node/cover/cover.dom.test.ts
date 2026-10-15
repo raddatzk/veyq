@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // A node's cover in a level, by real clicks and a real DOM (inbox #411): core's real `LevelView` with the real registry as
-// `main.ts` fills it (Memories' and Files' real row factories), a folder, a Memory, a file and a drop box in one level.
+// `main.ts` fills it (Memories' and Depot's real row factories), a folder, a Memory, a file and a drop box in one level.
 //
 // Pinned here: the ONE action - `Set cover` / `Change cover`, core's, in the row's menu and in the header; removal lives in the
 // dialog it opens - is offered exactly where the capability function says (a writer, on the kinds that opted in; never a file,
@@ -22,7 +22,7 @@ vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../../favorites/favorites', () => ({ loadFavorites: vi.fn(), saveFavorites: vi.fn(), resealFavoritesUnderNewMasterKey: vi.fn() }))
 vi.mock('../../../app/vault', () => ({ masterKey: vi.fn() }))
-vi.mock('../../../features/files/api', () => ({ filesApi: vi.fn() }))
+vi.mock('../../../features/depot/api', () => ({ filesApi: vi.fn() }))
 vi.mock('../../blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn(), openBlobFromUrls: vi.fn() }))
 vi.mock('../../sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store.test/c0']) }))
 vi.mock('./coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
@@ -37,11 +37,11 @@ import { shareChunkUrls } from '../../sharing/guestBlob'
 import { uploadCoverImage, writeNodeCover } from './coverWrite'
 import { uploadedCover } from './coverModel'
 import { resetCovers } from './coverStore'
-import { filesApi } from '../../../features/files/api'
+import { filesApi } from '../../../features/depot/api'
 import { MEMORY_KIND } from '../../../features/memory/kinds'
-import { FILE_KIND, DROPBOX_KIND } from '../../../features/files/kinds'
+import { FILE_KIND, DROPBOX_KIND } from '../../../features/depot/kinds'
 import { ShareRole } from '../../../api/generated/sharing'
-import type { FileListPage } from '../../../api/generated/files'
+import type { FileListPage } from '../../../api/generated/depot'
 import type { EpochKeys } from '../../../features/spaces/epochs'
 import type { PublicShareHead } from '../../sharing/resolvePublicShare'
 import { stubApi } from '../../../test/apiMock'

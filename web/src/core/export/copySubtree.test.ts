@@ -1,6 +1,6 @@
 // @vitest-environment node
 // A copy (uc.platform.copy-node, `copySubtree.ts`): the download's walk handed to the import without an archive. Core's node
-// writes are mocked (their wire is `tree.wire.test.ts`; a copied file's whole wire is `features/files/copy.wire.test.ts`);
+// writes are mocked (their wire is `tree.wire.test.ts`; a copied file's whole wire is `features/depot/copy.wire.test.ts`);
 // the kinds are made-up ones with hooks of the shapes the applications' have. What this pins:
 //   - the walk is planned before anything is written: what it creates, its bytes, the kinds (the losses) and every node it
 //     leaves out by name - a kind whose import cannot take a payload read by frame (Decision 3), a file with nothing in it;
@@ -27,7 +27,7 @@ import { framesFor, framesOfBytes } from './copySource'
 import { ImportFailed } from './importSubtree'
 import type { ManifestPayload } from './manifest'
 
-const FILE = 'C_FILE' // a Files-like file: its import reads the payload by frame (`importStreams`)
+const FILE = 'C_FILE' // a Depot-like file: its import reads the payload by frame (`importStreams`)
 const ALBUM = 'C_ALBUM' // a Memory-like kind: both hooks, but its import needs whole payloads (no `importStreams`)
 const BOX = 'C_BOX' // a drop-box-like container: copied as a plain folder
 const RAW = 'C_RAW' // takes a payload by frame, but its export cannot be read by frame

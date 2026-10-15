@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // (The route grammar asks the application registry which kinds carry which segment — `src/test/setup.ts` fills it for a
-// DOM-environment file, as `main.ts` does: Memories claims `memories`, Files declares no segment.)
+// DOM-environment file, as `main.ts` does: Memories claims `memories`, Depot declares no segment.)
 import { describe, it, expect } from 'vitest'
 import {
   parseHash,
@@ -19,7 +19,7 @@ import { breadcrumbOf } from './browse'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
-import { DROPBOX_KIND } from '../../features/files/kinds'
+import { DROPBOX_KIND } from '../../features/depot/kinds'
 import type { TreeNode } from './tree'
 import { treeNode } from '../../test/models'
 
@@ -283,7 +283,7 @@ describe('equal sibling slugs', () => {
     const t = [...dropTree, node('c2000000-0000-4000-8000-000000000000', 'Fotos', ANNA_2)]
     expect(breadcrumbOf(t, 'c2000000-0000-4000-8000-000000000000', 'Root', TENANT_SCOPE).map((c) => c.hash)).toEqual([
       '',
-      '#uploads', // the drop box: a Files node, its plain name
+      '#uploads', // the drop box: a Depot node, its plain name
       '#uploads/anna-2/', // its guest's folder: a folder, the trailing slash
       '#uploads/anna-2/fotos/',
     ])
@@ -314,13 +314,13 @@ describe('displayNamesOf', () => {
   })
 })
 
-// The grammar of inbox #328 (ADR 0015, amended 2026-10-11): a folder ends in a slash, a Files node is its plain name, any
+// The grammar of inbox #328 (ADR 0015, amended 2026-10-11): a folder ends in a slash, a Depot node is its plain name, any
 // other application's node carries the application's slug, and a claimed slug is reserved among the plain names.
 describe('the route grammar', () => {
-  it('rests on what the applications claimed in the real registry: Memories `memories`, Files no segment', () => {
+  it('rests on what the applications claimed in the real registry: Memories `memories`, Depot no segment', () => {
     expect(registry.routeSlugs()).toEqual(['memories'])
     expect(() => registry.claimRouteSlug('memories', ['SOMETHING'])).toThrow(/already claimed/) // Memories holds it
-    expect(() => registry.claimNoRouteSegment(['SOMETHING'])).toThrow(/no route segment/) // Files declared it
+    expect(() => registry.claimNoRouteSegment(['SOMETHING'])).toThrow(/no route segment/) // Depot declared it
     for (const kind of [MEMORY_KIND, CHAPTER_KIND]) expect(registry.routeOf(kind).slug).toBe('memories')
     for (const kind of ['FILE', DROPBOX_KIND]) expect(registry.routeOf(kind).slug).toBeNull()
   })
@@ -482,7 +482,7 @@ describe('the route grammar', () => {
     expect(resolveHash(t, '#box/x')).toBe('dir-x')
   })
 
-  it('numbers a kind nobody claimed among the plain names of Files, so two nodes never build one URL', () => {
+  it('numbers a kind nobody claimed among the plain names of Depot, so two nodes never build one URL', () => {
     const t = [node('u', 'Thing', null, 'FUTURE', 1), node('f', 'Thing', null, FILE, 2), node('d', 'Thing', null, FOLDER_KIND, 3)]
     expect(t.map((n) => hashOf(t, n.id))).toEqual(['#thing', '#thing-2', '#thing/'])
     for (const n of t) expect(resolveHash(t, hashOf(t, n.id))).toBe(n.id)

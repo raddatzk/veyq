@@ -106,7 +106,7 @@ beforeEach(() => {
       },
     })
     registry.registerKind({ kind: ODD, icon: 'x', shareable: false }) // no hooks: cannot be downloaded
-    // a container that downloads with a content of its own and imports as a plain folder (a Files drop box's shape)
+    // a container that downloads with a content of its own and imports as a plain folder (a Depot drop box's shape)
     registry.registerKind({
       kind: BOX, icon: 'x', shareable: false, contentSchema: { application: 't', version: 1 }, importsAsFolder: true,
       exportContent: async () => ({ type: 't.box', schema: 1 }),

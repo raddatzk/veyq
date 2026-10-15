@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // A share guest's folder page picks up what the owner or a peer changed WITHOUT a reload (inbox #408), and stores its
 // own view preferences. The real shell (`ShareView`), the real page (`ShareTreePage`), the real level view and the real
-// guest tree over sealed rows, with the resolve faked and Files' guest blob listing (`listShareFiles`) a counting stub - its
+// guest tree over sealed rows, with the resolve faked and Depot's guest blob listing (`listShareFiles`) a counting stub - its
 // call count is how the rows' "look again" cue (the level's live tick) is read.
 // The poll is conditional (ADR 0081): the faked resolve keeps a tag like the server's digest, answers `null` (a 304) to an
 // echo of it, and the page does nothing with that. Each case has its control: a changed share appears after one poll
@@ -19,7 +19,7 @@ import { b64std, b64url } from '@veyq/crypto/base64'
 
 vi.mock('../api/client', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../features/memory/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../features/files/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../features/depot/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
   return { ...actual, resolvePublicShare: vi.fn(), pollPublicShare: vi.fn(), fetchShareTerms: vi.fn() }
@@ -36,10 +36,10 @@ import {
 import { sealName, wrapContentKey } from '../core/node/tree'
 import { ShareRole, type PublicShare, type ShareNode } from '../api/generated/sharing'
 import { FOLDER_KIND } from '../core/node/kind'
-import { FILE_KIND } from '../features/files/kinds'
+import { FILE_KIND } from '../features/depot/kinds'
 import { authenticatedCalls } from '../test/guestMode'
-import { publicShareFilesApi } from '../features/files/api'
-import type { ShareFilesApi } from '../api/generated/files'
+import { publicShareFilesApi } from '../features/depot/api'
+import type { ShareFilesApi } from '../api/generated/depot'
 import { fakeApi } from '../test/apiMock'
 import { titlesOf } from '../test/levelRows'
 import { realI18n } from '../test/i18n'

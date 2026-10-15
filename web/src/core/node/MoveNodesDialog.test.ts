@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Core's move dialog for a level's selection (inbox #421) over the REAL registry (Memories and Files, filled by
+// Core's move dialog for a level's selection (inbox #421) over the REAL registry (Memories and Depot, filled by
 // `src/test/setup.ts`), the real PrimeVue Dialog and the app's real confirmation dialog, every step a DOM click. The door
 // is a recorder (`NodeMover.moveMany`): that it is N single-node writes and one re-read is `move.test.ts`' and
 // `move.wire.test.ts`'s. What this pins: the browser blocks a place ANY selected node cannot take, naming it; the
@@ -18,7 +18,7 @@ import { MoveDeclined, type MoveOutcome, type NodeMover } from './move'
 import { FOLDER_KIND } from './kind'
 import type { TreeNode } from './tree'
 import type { Access, TreeSource } from '../access'
-import { FILE_KIND, DROPBOX_KIND } from '../../features/files/kinds'
+import { FILE_KIND, DROPBOX_KIND } from '../../features/depot/kinds'
 import { guestAccessOf, memberAccessOf, memberTreeOf, treeNode } from '../../test/models'
 import { realI18n, t } from '../../test/i18n'
 import { mountConfirmDialog } from '../../test/confirmDialog'
@@ -132,7 +132,7 @@ describe('MoveNodesDialog: the write', () => {
     expect(sent(mover)).toEqual(['rom>archiv'])
     expect(summaryMoved()).toBe(t('node.move.many.moved', { count: 1, to: 'Archiv' }))
     expect(summaryLines()).toEqual([
-      t('node.move.many.reason', { name: 'bericht.pdf', reason: t('node.move.nameTakenThere', { kind: t('files.aFile'), name: 'Bericht.PDF' }) }),
+      t('node.move.many.reason', { name: 'bericht.pdf', reason: t('node.move.nameTakenThere', { kind: t('depot.aFile'), name: 'Bericht.PDF' }) }),
     ])
     expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.many.moved', { count: 1, to: 'Archiv' }) }))
   })
@@ -143,7 +143,7 @@ describe('MoveNodesDialog: the write', () => {
     await flushPromises()
     await moveHere('Familie', 'Archiv')
     expect(mover.moveMany).not.toHaveBeenCalled()
-    expect(errorText()).toBe(t('node.move.many.reason', { name: 'bericht.pdf', reason: t('node.move.nameTakenThere', { kind: t('files.aFile'), name: 'Bericht.PDF' }) }))
+    expect(errorText()).toBe(t('node.move.many.reason', { name: 'bericht.pdf', reason: t('node.move.nameTakenThere', { kind: t('depot.aFile'), name: 'Bericht.PDF' }) }))
     expect(w.emitted('close')).toBeUndefined()
     expect(crumbs()).toEqual(['Familie', 'Archiv'])
   })

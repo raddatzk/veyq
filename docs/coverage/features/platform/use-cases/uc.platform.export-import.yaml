@@ -33,22 +33,22 @@ acceptanceCriteria:
     text: A ZIP picked for an upload or dropped, and a directory picked for "Upload folder…" or dropped that holds .veyq/manifest.json at its root, are recognised by their content and offered to a member who may create there as an import - a ZIP with "Upload as a file" beside it, a directory Import only, one import per pick or drop, the other files and directories uploaded at once; a guest gets the ordinary upload, a locked level too. The "New" menu has no import entry.
     coverage:
       web:
-        unit: [src/core/node/LevelView.test.ts, src/features/files/levelRows.test.ts, src/core/export/ImportSubtreeDialog.test.ts, src/views/LevelNewMenu.entries.test.ts]
+        unit: [src/core/node/LevelView.test.ts, src/features/depot/levelRows.test.ts, src/core/export/ImportSubtreeDialog.test.ts, src/views/LevelNewMenu.entries.test.ts]
   - id: upload-folder
     text: '"New -> Upload folder..." (a member and a READ_WRITE guest, never a reader, an identity folder or a pending deletion) uploads a directory that is no download as its tree - a FOLDER per directory and a FILE per file, every name through archiveName and its clash suffix and numbered further where a sibling''s slug holds it, the top folder numbered among the level''s siblings - after a member''s quota preflight for the tree''s bytes (a no writes nothing and says so, an unanswered question never blocks; a guest asks none); a folder that cannot be created is named and nothing below it sent, a file that fails is the queue''s per-file failure, and a guest''s directory - its .veyq/ included - is always this upload, never the import.'
     coverage:
       web:
-        unit: [src/features/files/uploadFolder.test.ts, src/features/files/levelRows.test.ts, src/features/files/levelRows.guest.test.ts, src/features/files/capabilities.test.ts, src/core/node/LevelView.test.ts]
+        unit: [src/features/depot/uploadFolder.test.ts, src/features/depot/levelRows.test.ts, src/features/depot/levelRows.guest.test.ts, src/features/depot/capabilities.test.ts, src/core/node/LevelView.test.ts]
   - id: drop-box-as-plain-folders
     text: A drop box downloads as a directory with each guest's folder under the name the drop box shows it by (a repeated name numbered, equal names listed in that order), its content only what it was (files.drop-box), and imports as plain FOLDERs with its guests' folders and their files - no drop box, no drop key, no share - by the kind's own importsAsFolder; a drop box content carrying more is refused before anything is written. Download is offered on it to a member and a READ or READ_WRITE guest of a link above it, never to its WRITE_ONLY guest.
     coverage:
       web:
-        unit: [src/features/files/dropBoxDownload.test.ts, src/core/export/subtree.test.ts, src/features/files/components/DropBoxDetail.test.ts, src/features/files/components/DropBoxDetail.guest.test.ts, src/features/files/register.test.ts]
+        unit: [src/features/depot/dropBoxDownload.test.ts, src/core/export/subtree.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/depot/components/DropBoxDetail.guest.test.ts, src/features/depot/register.test.ts]
   - id: round-trip-by-hooks
     text: Core walks the tree and each kind supplies its content through its descriptor's hooks; a kind without a hook is left out and reported; an import recreates the tree under the importer with a free name (Name (2)), and a failure moves what it created to the trash and says N of M.
     coverage:
       web:
-        unit: [src/core/export/subtree.test.ts, src/features/files/exportImport.test.ts, src/features/memory/exportImport.test.ts]
+        unit: [src/core/export/subtree.test.ts, src/features/depot/exportImport.test.ts, src/features/memory/exportImport.test.ts]
   - id: memories-content
     text: A Memory and a chapter download their originals with capture time (a correction flagged), place, EXIF, date, cover and participants as names, and an import restores date and place at birth, corrections and place names afterwards, and the cover.
     coverage:
@@ -58,7 +58,7 @@ acceptanceCriteria:
     text: Download is offered on a folder, a Memory, a chapter or a drop box to a member whose keys are open and to a READ or READ_WRITE share guest - who reads through the link and carries no names and no EXIF copy - never to a WRITE_ONLY guest; a file keeps its own download and gets no ZIP action; import only where a member may create.
     coverage:
       web:
-        unit: [src/core/export/downloadActions.test.ts, src/core/sharing/ShareTreePage.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/features/files/exportImport.test.ts, src/features/memory/exportImport.test.ts, src/core/node/LevelView.test.ts]
+        unit: [src/core/export/downloadActions.test.ts, src/core/sharing/ShareTreePage.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/features/depot/exportImport.test.ts, src/features/memory/exportImport.test.ts, src/core/node/LevelView.test.ts]
   - id: dialogs
     text: The download dialog asks nothing - no warning, no location option - walks at once, says what is in it and opens the save target first with the safe name and the known size; the import dialog shows what would be created before anything is written and says how far a failed import got.
     coverage:

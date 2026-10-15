@@ -6,7 +6,7 @@
 //
 // Which tab is shown is a stable client setting (`shared/state/useLevelTab`, one value per account and one for the share-guest
 // pages, like the view mode). The level shows the stored tab only where this level offers it (`effectiveTab`), else `All`, and
-// never rewrites the stored value: a folder without Files shows `All`, and the next folder with Files shows the Files tab again.
+// never rewrites the stored value: a folder without Depot shows `All`, and the next folder with Depot shows the Depot tab again.
 //
 // A tab is named by its first kind (the tab's stable identity across levels, what the preference stores), labelled by the i18n
 // key its application supplies (`KindList.tabLabel`) - core names no application. Kinds sharing a label share a tab (Memories:

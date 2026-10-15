@@ -1340,10 +1340,10 @@ const en = {
     noSpace: 'No space left. Items in a trash still take up space until they are removed for good.',
     close: 'Close',
   },
-  // The Files application (features/files, cr-files-application F1b): its section of the folder level view, the upload
+  // The Depot application (features/depot, cr-files-application F1b): its section of the folder level view, the upload
   // and replace of a file, its download and delete. `errors` is keyed by the upload's failure code.
-  files: {
-    title: 'Files',
+  depot: {
+    title: 'Depot',
     upload: 'Upload files',
     // "Upload folder…" (inbox #424): a picked directory uploaded as its tree. Said above the list when the tree is not sent.
     uploadFolder: 'Upload folder…',
@@ -1467,7 +1467,7 @@ const en = {
       quota_exceeded: '“{name}” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.',
       failed: '“{name}” could not be uploaded.',
     },
-    // A guest's words in Files' rows on a shared folder (levelRows.ts, F2): no trash to point at, a link has
+    // A guest's words in Depot's rows on a shared folder (levelRows.ts, F2): no trash to point at, a link has
     // a limit of its own (the code does not say which limit was reached, ADR 0073 §6).
     guest: {
       empty: 'No files here.',
@@ -3047,8 +3047,8 @@ const de: typeof en = {
     noSpace: 'Kein Speicherplatz mehr frei. Einträge im Papierkorb belegen weiter Platz, bis sie endgültig entfernt sind.',
     close: 'Schließen',
   },
-  files: {
-    title: 'Dateien',
+  depot: {
+    title: 'Depot',
     upload: 'Dateien hochladen',
     uploadFolder: 'Ordner hochladen…',
     uploadFolderNoRoom: '„{name}“ wurde nicht hochgeladen: Dafür ist nicht genug Speicherplatz vorhanden ({size}). Gib Platz frei oder frage die Person, die deinen Bereich betreibt.',

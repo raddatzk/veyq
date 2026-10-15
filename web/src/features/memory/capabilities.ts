@@ -88,7 +88,7 @@ export function memoryCapabilities(access: Access, at: CapabilityTarget): Memory
 function memberCapabilities(readonly: boolean, publicLinks: boolean, uploaderLinks: boolean, at: CapabilityTarget): MemoryCapabilities {
   const write = !readonly
   if (isLevel(at.kind)) {
-    // A guest's identity folder (Files' drop box) takes no Memory. (The favorite heart is core's: `core/favorites`.)
+    // A guest's identity folder (Depot's drop box) takes no Memory. (The favorite heart is core's: `core/favorites`.)
     return { ...NO_MEMORY_CAPABILITIES, navigate: true, createMemory: write && !at.inIdentityFolder }
   }
   if (!isMemoriesNode(at.kind)) return NO_MEMORY_CAPABILITIES

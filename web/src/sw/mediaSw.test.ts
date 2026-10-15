@@ -238,7 +238,7 @@ describe('handleMessage — handshake / register / revoke / end-session', () => 
     expect(reg.get('h')).toBeUndefined()
   })
 
-  // inbox #412: Files plays an `<audio>` through the same route.
+  // inbox #412: Depot plays an `<audio>` through the same route.
   it.each(['audio/mpeg', 'audio/ogg', 'audio/mp4', 'video/webm'])('registers a playback under %s', (mediaType) => {
     const reg = makeRegistry()
     const { a } = portPair()

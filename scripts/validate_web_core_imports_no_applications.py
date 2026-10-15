@@ -3,7 +3,7 @@
 another (ADR 0079, web phase).
 
 **What it asserts.** The applications are the directories of `APPLICATIONS` below (today `web/src/features/memory`,
-Memories', and `web/src/features/files`, Files'), each keyed by its owner name — the directory its specs live in under
+Memories', and `web/src/features/depot`, Depot's), each keyed by its owner name — the directory its specs live in under
 `contracts/api/<owner>/`, the owner rule `buildSrc`'s `SpecSets` builds by (inbox #344) — **plus every generated API
 client whose `generate:api` run reads an application's spec**: an application owns the clients generated from its
 own `contracts/api/<owner>/`. Core is everything else under `web/src` — by exclusion, so a new directory is guarded
@@ -26,17 +26,17 @@ Dependencies run application → core, never back, and never application → app
 - **glob** (core): no file contains `import.meta.glob`. Discovery by glob would hide an edge from the rules above,
   and ADR 0079 Decision 5 says what runs is what was reviewed.
 - **kind** (core): no file names an application's node kind — `NodeKind.Memory`, `NodeKind.Chapter`,
-  `NodeKind.File`, `'MEMORY'`, `'CHAPTER'`, `'FILE'` or `'FILES_DROPBOX'`. The shell asks a registry what to render for a kind; it does
+  `NodeKind.File`, `'MEMORY'`, `'CHAPTER'`, `'FILE'` or `'DEPOT_DROPBOX'`. The shell asks a registry what to render for a kind; it does
   not know which kinds the applications have. Since the contract's `NodeKind` opened to a bounded token
   (cr-platform-contract-split slice 4) the generated client has no `NodeKind` enum and core types a kind as a string
   with a `FOLDER_KIND` constant (`core/node/kind.ts`), so a literal is the spelling left; the enum spelling stays
   matched for a client generated from an older contract. Each application's constants live in the application
-  (`features/memory/kinds.ts`, `features/files/kinds.ts`), which the import rule already keeps from core. The kinds
+  (`features/memory/kinds.ts`, `features/depot/kinds.ts`), which the import rule already keeps from core. The kinds
   are listed here by hand (a kind is a value, not a path): a new application adds its kinds to `KIND`.
 - **i18n** (core): no file names a message key of an application's i18n namespace — a quoted `'memory.…'`,
-  `'media.…'` (Memories') or `'files.…'` (Files') — `I18N_NAMESPACES`, by hand like `KIND`. The catalog is one file
+  `'media.…'` (Memories') or `'depot.…'` (Depot's) — `I18N_NAMESPACES`, by hand like `KIND`. The catalog is one file
   (`i18n/index.ts`), so nothing but this rule keeps core's strings from borrowing an application's: core serves every
-  application's nodes, and a core dialog that read `memory.deleteMemoryTitle` titled a Files drop box "Delete Memory"
+  application's nodes, and a core dialog that read `memory.deleteMemoryTitle` titled a Depot drop box "Delete Memory"
   (inbox #375). A kind's own noun reaches core through the registry (`KindDescriptor.deleteTitle`, a key the
   application names), never as a literal in core. Each namespace must be a top-level block of the catalog's `en`, and
   every application of `APPLICATIONS` must have an entry, or the guard is red: a renamed namespace would otherwise
@@ -63,7 +63,7 @@ boundary was drawn; a list that can be added to is a list that is added to, so t
 `components/app/`, `sw/`, `views/` and three core features imported `features/memory` directly, which also made two
 import cycles (`app/activeSpace` ↔ the Memories tree store, `features/spaces` ↔ `features/memory`); an application
 that core cannot import is what makes a second one possible. The application rule came with that second one
-(cr-files-application F0), before any Files file could reach into Memories.
+(cr-files-application F0), before any Depot file could reach into Memories.
 
 **Its limit.** Regex over source, not an AST: a commented-out import is read as an import (conservative), and a
 specifier built at runtime (`import(base + name)`) is not seen — the glob rule and the review of the composition
@@ -95,7 +95,7 @@ GENERATE_SCRIPT = "generate:api"
 # `:apps:<owner>`) → its directory relative to web/src. The one place to change when an application is added or renamed.
 APPLICATIONS: dict[str, tuple[str, ...]] = {
     "memories": ("features", "memory"),
-    "files": ("features", "files"),
+    "depot": ("features", "depot"),
 }
 CONTRACTS_API = ("contracts", "api")  # relative to the repo root; a spec directly in a directory below it is an application's
 COMPOSITION_ROOT = "applications.ts"  # relative to web/src; exact path, never a directory
@@ -106,16 +106,16 @@ RULE_IMPORT, RULE_APPLICATION, RULE_GLOB, RULE_KIND, RULE_I18N = "import", "appl
 # `from '…'` covers import/export-from, also across lines; `import('…')` and a bare `import '…'` the others.
 SPECIFIER = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])([^'"\n]+)\1""")
 GLOB = re.compile(r"\bimport\.meta\.glob(?:Eager)?\b")
-# The applications' kinds — Memories' MEMORY and CHAPTER, Files' FILE. Built from parts so this file never spells a
+# The applications' kinds — Memories' MEMORY and CHAPTER, Depot's FILE. Built from parts so this file never spells a
 # kind literal it forbids.
-KIND = re.compile(r"\bNodeKind\.(?:Memory|Chapter|File)\b|['\"](?:" + "MEMO" + "RY|" + "CHAP" + "TER|" + "FI" + "LE|" + "FILES_DROP" + "BOX)['\"]")
+KIND = re.compile(r"\bNodeKind\.(?:Memory|Chapter|File)\b|['\"](?:" + "MEMO" + "RY|" + "CHAP" + "TER|" + "FI" + "LE|" + "DEPOT_DROP" + "BOX)['\"]")
 # Each application's top-level namespaces in the one i18n catalog (`CATALOG`), keyed like `APPLICATIONS`.
 I18N_NAMESPACES: dict[str, tuple[str, ...]] = {
     "memories": ("memory", "media"),
-    "files": ("files",),
+    "depot": ("depot",),
 }
 CATALOG = ("i18n", "index.ts")  # relative to web/src
-# A message key of one of those namespaces in a '…' or "…" literal: `t('memory.deleteMemoryTitle')`, `{ key: 'files.x' }`.
+# A message key of one of those namespaces in a '…' or "…" literal: `t('memory.deleteMemoryTitle')`, `{ key: 'depot.x' }`.
 I18N_KEY = re.compile(r"(['\"])(?:" + "|".join(n for ns in I18N_NAMESPACES.values() for n in ns)
                       + r")(?:\.[A-Za-z_][A-Za-z0-9_]*)+\1")
 

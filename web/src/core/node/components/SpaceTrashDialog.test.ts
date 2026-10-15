@@ -96,7 +96,7 @@ describe('SpaceTrashDialog', () => {
     expect(iconOf('CFuture')).toBe('pi pi-file')
   })
 
-  // Inbox #391: a node of a kind whose content IS its attachment (Files' FILE, `emptyInTrash` through the real registry)
+  // Inbox #391: a node of a kind whose content IS its attachment (Depot's FILE, `emptyInTrash` through the real registry)
   // that holds none says so — restorable still, but not like any other file. One that holds content, and a kind that
   // registered no note (a Memory holds no attachment and is not empty for it), carry no note.
   it('marks a trashed node its kind calls empty without an attachment, and only that one', async () => {
@@ -108,7 +108,7 @@ describe('SpaceTrashDialog', () => {
     const wrapper = mountDialog()
     await settle(wrapper)
     const row = (name: string) => wrapper.findAll('.trash-row').find((r) => r.text().includes(name))!
-    expect(row('empty.txt').find('.trash-row-empty').text()).toBe(t('files.trashEmpty'))
+    expect(row('empty.txt').find('.trash-row-empty').text()).toBe(t('depot.trashEmpty'))
     expect(row('empty.txt').text()).toContain(t('node.trash.restore'))
     expect(row('full.txt').find('.trash-row-empty').exists()).toBe(false)
     expect(row('Rom').find('.trash-row-empty').exists()).toBe(false)

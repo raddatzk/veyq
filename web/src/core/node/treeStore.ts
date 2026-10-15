@@ -41,7 +41,7 @@ export async function loadTree(): Promise<void> {
  * decryption and no work at all. Only a moved scope sends rows, and those replace the tree only if they differ from
  * what is shown (the fingerprint gate stays, as the fallback for a server that sends no tag and for a change in another
  * folder, which moves the scope's revision and not this level's rows). Resolves whether the scope MOVED — the sections'
- * cue to look again at what lives beside the tree (Files' blob listing: an upload completing changes the revision and
+ * cue to look again at what lives beside the tree (Depot's blob listing: an upload completing changes the revision and
  * no row) — and REJECTS when the read fails (the poller backs off); it never touches `treeStore.error`: a transient
  * failure of a background read must not turn a working page into the error state.
  *

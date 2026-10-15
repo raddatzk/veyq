@@ -14,7 +14,7 @@ export type DirectoryFile = { path: string; file: File }
 export type ImportInput = { kind: 'zip'; file: File } | { kind: 'directory'; name: string; files: DirectoryFile[] }
 
 /** A picked or dropped directory: its name and its files, by their paths below it. What "Upload folder…" uploads as its tree
- *  (Files' folder upload, inbox #424) where it is no download, and what the import reads where it is one. */
+ *  (Depot's folder upload, inbox #424) where it is no download, and what the import reads where it is one. */
 export type DirectoryInput = Extract<ImportInput, { kind: 'directory' }>
 
 /** Whether a picked directory is a download unpacked: `.veyq/manifest.json` at its root (by its path, in NFC). Nothing is read. */

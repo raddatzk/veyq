@@ -124,7 +124,7 @@ describe('UploadStatusMenu', () => {
     expect(w.find('.uploads-file-action').attributes('aria-label')).toBe(t('upload.retry'))
   })
 
-  // A job's own final refusal (Files: slug_taken, illegal_structure, stale_file) is not retryable either: the tray
+  // A job's own final refusal (Depot: slug_taken, illegal_structure, stale_file) is not retryable either: the tray
   // offers no retry control for it, and the job ran once (no automatic second attempt). Its control is the same code
   // on a job that declares nothing final — that one still offers the retry and the click re-runs it.
   it('offers no retry for a refusal its job declared final', async () => {

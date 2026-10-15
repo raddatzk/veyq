@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // Core's move dialog (inbox #358) and its folder browser (owner decision 2026-10-14) over the REAL registry (Memories and
-// Files, filled by `src/test/setup.ts`), the real PrimeVue Dialog and Breadcrumb (teleported to the body) and the app's
+// Depot, filled by `src/test/setup.ts`), the real PrimeVue Dialog and Breadcrumb (teleported to the body) and the app's
 // real confirmation dialog, every step a DOM click on the rendered element. The door is a recorder (`NodeMover`): which
 // session moves through what is `move.test.ts`'s; the request body on the wire `move.wire.test.ts`'s and, for a guest,
 // `ShareTreePage.move.test.ts`'s. What this pins: where the browser opens, what it lists and lets open, where "Move here"
@@ -20,7 +20,7 @@ import { FOLDER_KIND } from './kind'
 import type { TreeNode } from './tree'
 import { PlacementConflictError } from './tree'
 import type { Access, TreeSource } from '../access'
-import { FILE_KIND, DROPBOX_KIND } from '../../features/files/kinds'
+import { FILE_KIND, DROPBOX_KIND } from '../../features/depot/kinds'
 import { guestAccessOf, memberAccessOf, memberTreeOf, treeNode } from '../../test/models'
 import { realI18n, t } from '../../test/i18n'
 import { mountConfirmDialog } from '../../test/confirmDialog'
@@ -186,7 +186,7 @@ describe('MoveNodeDialog: refused before sending', () => {
     mountDialog(byId('file'), mover)
     await flushPromises()
     await moveTo('Familie', 'Archiv')
-    expect(errorText()).toBe(t('node.move.nameTakenThere', { kind: t('files.aFile'), name: 'Bericht.PDF' }))
+    expect(errorText()).toBe(t('node.move.nameTakenThere', { kind: t('depot.aFile'), name: 'Bericht.PDF' }))
     expect(mover.move).not.toHaveBeenCalled()
   })
 })

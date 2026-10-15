@@ -49,9 +49,9 @@ export type UpgradeRecord = {
     media: SealedMedia[]
     chapter: { nodeId: string; name: string; media: SealedMedia[] }
   }
-  /** Files: a folder of a member's files. */
+  /** Depot: a folder of a member's files. */
   files: { folderId: string; name: string; files: SealedFile[] }
-  /** Files: a drop box and what its guests left there, each in the folder named after them. */
+  /** Depot: a drop box and what its guests left there, each in the folder named after them. */
   dropBox: { nodeId: string; name: string; guests: { name: string; folderId: string; files: SealedFile[] }[] }
   /** A READ link on the Memory, as a guest opens it: its title and the bytes of its media. */
   share: { shareId: string; fragmentKey: string; name: string; media: SealedBytes[] }

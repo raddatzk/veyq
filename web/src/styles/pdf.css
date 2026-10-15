@@ -1,4 +1,4 @@
-/* The text layer of a PDF page (features/files/components/PdfPages.vue, inbox #412): pdf.js builds transparent, absolutely
+/* The text layer of a PDF page (features/depot/components/PdfPages.vue, inbox #412): pdf.js builds transparent, absolutely
    positioned <span>s over the page's canvas so its text can be selected and copied. These are the rules of pdf.js' own
    `pdf_viewer.css` (`.textLayer`, 6.4.x) that the layer needs, kept to those and rewritten with our tokens; the annotation
    layer, highlights and editors are not used and not styled (a PDF's link is never a live element). The spans carry no class

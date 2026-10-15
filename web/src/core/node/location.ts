@@ -6,7 +6,7 @@
 //
 // **The grammar after the scope token (ADR 0015, amended 2026-10-11):**
 //   - a **folder** is its slug path with a TRAILING SLASH: `#reisen-2026/` (the slash marks the target as a folder);
-//   - a **Files** node (file, drop box) is its plain slug, no slash: `#reisen-2026/rechnung`;
+//   - a **Depot** node (file, drop box) is its plain slug, no slash: `#reisen-2026/rechnung`;
 //   - a node of **any other application** carries the application's route slug before its name — a Memory `rom` is
 //     `#reisen-2026/memories/rom`, a chapter of it extends that (`…/rom/tag-1`; the segment is written where the path
 //     enters the application, not again below it). The slug is claimed once in the registry (`claimRouteSlug`).
@@ -89,7 +89,7 @@ export function buildHash(scope: string, segments: string[], folder = false): st
 
 /** Sibling order: the server-observed creation instant (`NodeSummary.createdAt`, to the millisecond, ADR 0015), then the
  *  node id in UTF-16 code units (locale-free) for two born in one millisecond — the one order that tells equal names
- *  apart, both in the URL ({@link segmentsOf}) and where an application numbers equal display names (Files' drop box).
+ *  apart, both in the URL ({@link segmentsOf}) and where an application numbers equal display names (Depot's drop box).
  *  Neither part can be steered by a client: the instant is the server's, and the id breaks only a same-millisecond tie. */
 export function compareByCreation(a: { id: string; createdAt: number }, b: { id: string; createdAt: number }): number {
   if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
@@ -144,7 +144,7 @@ const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
  * segment of one class, in {@link compareByCreation} order, the first keeps it and each further one gets `<slug>-<n>`
  * with the smallest `n ≥ 2` above the previous one's that no sibling of the class holds as its plain segment — a real
  * sibling named `Anna 2` keeps `anna-2`, and the second `Anna` becomes `anna-3`. **A reserved plain segment** — an
- * application's route slug, among the classes whose nodes carry no application segment (folders, Files) — has no
+ * application's route slug, among the classes whose nodes carry no application segment (folders, Depot) — has no
  * keeper: the application segment stands at that spot of the path, so a folder `Memories` is `memories-2`, a second one
  * `memories-3`. Consequences, all deterministic: a node whose plain segment is unique among its class and not reserved
  * always keeps it; a sibling created later never changes the earlier ones' segments (two born in one millisecond fall to

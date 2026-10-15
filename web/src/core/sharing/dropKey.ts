@@ -1,5 +1,5 @@
 // A node's DROP KEY and its guests' IDENTITY KEYS (ADR 0031 point 7, ADR 0080 decision 11) — the platform's, whatever
-// the node's kind: Memories' uploader seals each guest medium under it, Files' drop box each guest's identity folder.
+// the node's kind: Memories' uploader seals each guest medium under it, Depot's drop box each guest's identity folder.
 // A WRITE_ONLY guest never holds the node's content key: it mints its own identity key `K_up`, seals what it writes
 // under it, and hands `K_up` over wrapped to the node's drop public key. Every reader holding the node's key opens it
 // through the drop PRIVATE key, which the node keeps sealed under its content key:

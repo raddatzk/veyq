@@ -6,7 +6,7 @@
 // are this tree's, which keeps the pair working between proofs.
 //
 // It seals real content of every application there is: a Memory with a date, a place, a cover (one of its photos with
-// a crop) and media, a chapter with media; a Files folder with a member's files (one of several frames); a drop box
+// a crop) and media, a chapter with media; a Depot folder with a member's files (one of several frames); a drop box
 // with a guest's file in the guest's folder; and a READ link on the Memory. What it wrote goes into the record
 // (`src/test/upgradeRecord.ts`) - the names, the date and place, the cover, and each byte stream's size and SHA-256 -
 // with only what a person would still have to sign in.
@@ -35,10 +35,10 @@ import { setMemoryDate } from '../memory/memoryDate'
 import { setMemoryLocation } from '../memory/memoryLocation'
 import { memoryPhotoSource, type MemoryCover } from '../memory/memoryCover'
 import { createShare, openShareOriginal, resolveShare } from '../memory/share'
-import { FILE_KIND } from '../files/kinds'
-import { fileUploadJob } from '../files/uploadFile'
-import { createDropBox, dropGuestContext, ensureDropFolder, mintDropBoxLink, nameDropGuest } from '../files/dropBox'
-import { guestFileUploadJob } from '../files/shareUpload'
+import { FILE_KIND } from '../depot/kinds'
+import { fileUploadJob } from '../depot/uploadFile'
+import { createDropBox, dropGuestContext, ensureDropFolder, mintDropBoxLink, nameDropGuest } from '../depot/dropBox'
+import { guestFileUploadJob } from '../depot/shareUpload'
 
 // Distinctive plaintext for the wire sweep (ADR 0053): spaces and umlauts, so no name is a run of base64 letters that
 // random ciphertext could contain (inbox #323).
@@ -62,7 +62,7 @@ const fileOf = (bytes: Uint8Array, name: string) => new File([bytes as BlobPart]
 const ctx = () => ({ onProgress: () => {}, signal: new AbortController().signal })
 
 beforeAll(() => {
-  // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding, as Files'
+  // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding, as Depot's
   // `register.ts` registers it, so the guest's slug is the one the page computes.
   if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'pi pi-file', shareable: false, slug: fileNameSlug })
 })
@@ -96,7 +96,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
     const cover = memoryPhotoSource.seal(memoryMedia[0].mediaId, CROP) as MemoryCover
     await writeNodeCover({ scopeId, nodeId: memory.nodeId, nodeKey: memory.memoryKey, current: meta, cover })
 
-    // --- Files: a folder with two of a member's files, one of several frames ----------------------------------------
+    // --- Depot: a folder with two of a member's files, one of several frames ----------------------------------------
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
     const memberFiles: SealedFile[] = []
@@ -105,7 +105,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
       memberFiles.push({ nodeId, name, type: MIME, modifiedAt: MODIFIED_AT, ...(await sealedBytes(data)) })
     }
 
-    // --- Files: a drop box in that folder, and a guest's file in the guest's own folder -----------------------------
+    // --- Depot: a drop box in that folder, and a guest's file in the guest's own folder -----------------------------
     const boxId = await createDropBox(scopeId, epochs, { id: folderId, key: folderKey }, BOX_NAME)
     const boxKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), boxId)!
     const link = await mintDropBoxLink(scopeId, boxId, boxKey, epochs, BOX_NAME)

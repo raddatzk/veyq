@@ -1,5 +1,5 @@
 // The sentences core's link dialog (`FolderShareDialog.vue`) says about WHAT is shared, as i18n keys: the dialog is the
-// platform's one READ / READ_WRITE link manager, written for a folder, and a kind with another noun — Files' single file —
+// platform's one READ / READ_WRITE link manager, written for a folder, and a kind with another noun — Depot's single file —
 // hands its own keys instead of the folder's `share.folder.*`. Every field defaults to the folder's key; a kind overrides
 // only the sentences that would be wrong for it.
 

@@ -9,7 +9,7 @@ import { favoriteHeaderActions, favoriteRowActions } from './favoriteActions'
 import { isFavorite, toggleFavorite } from './favoritesStore'
 import { FOLDER_KIND } from '../node/kind'
 import { MEMORY_KIND } from '../../features/memory/kinds'
-import { FILE_KIND, DROPBOX_KIND } from '../../features/files/kinds'
+import { FILE_KIND, DROPBOX_KIND } from '../../features/depot/kinds'
 import { guestAccessOf, memberAccessOf } from '../../test/models'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'

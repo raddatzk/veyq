@@ -2,7 +2,7 @@
 // The platform's name dialog (cr-files-application P4c): CREATE a folder, or RENAME a node of ANY kind. Core's, because
 // both are core operations on the node tree (ADR 0080): a folder is core's kind, and a rename is a placement to the
 // same parent whatever the node is — its key re-wraps, its name re-seals under the parent's key, and its slug token is
-// derived through `registry.slugFor(node.kind, name)` (`core/node/tree.ts` `slugTokenFor`), so a Files node folds by
+// derived through `registry.slugFor(node.kind, name)` (`core/node/tree.ts` `slugTokenFor`), so a Depot node folds by
 // ITS kind's function, never by the folder's. The create dialogs of the application kinds are the kinds' own
 // (`KindDescriptor.createDialog`). Moved from Memories' former `NodeMutationDialog.vue` with the same markup, labels,
 // validation and error mapping; it reads core's `node.*` keys (and `common.save`) since P4d, values unchanged.

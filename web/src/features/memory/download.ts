@@ -49,7 +49,7 @@ export function sniffMediaType(bytes: Uint8Array): string | undefined {
 }
 
 /** The download extension for a media type, or undefined for one this client does not name (then: `bin`). The table
- *  is core's (`core/blob/meta.ts` `MIME_TO_EXT`, shared with Files' download names since inbox #397); every type
+ *  is core's (`core/blob/meta.ts` `MIME_TO_EXT`, shared with Depot's download names since inbox #397); every type
  *  [sniffMediaType] returns has its row there. Own rows only: the type is a peer's sealed statement. */
 export function extensionOf(mediaType: string | undefined): string | undefined {
   return mediaType && Object.hasOwn(MIME_TO_EXT, mediaType) ? MIME_TO_EXT[mediaType] : undefined
@@ -80,7 +80,7 @@ export type OpenSaveTarget = (name: string, size: number) => Promise<ByteSink>
  * provider) into the target `openSaveTarget` picks.
  *
  * **Ordering (the save picker needs the click's user activation).** Nothing is awaited before the save target opens,
- * so the File System Access picker is the first await of the click, as in Files: the name is known synchronously.
+ * so the File System Access picker is the first await of the click, as in Depot: the name is known synchronously.
  * (Before inbox #397 a media without a sealed type had chunk 0 read and sniffed first; the type is the blob's meta now.)
  *
  * Throws what `openSaveTarget` throws (`SaveCancelled`, `SaveTooLarge` — before any chunk is read) or the stream's

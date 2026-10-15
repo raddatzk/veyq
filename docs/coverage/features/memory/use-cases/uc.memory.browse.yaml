@@ -37,7 +37,7 @@ acceptanceCriteria:
           - src/features/memory/memoryRowDetails.test.ts
           - src/features/memory/levelRows.test.ts
           - src/features/memory/levelRows.guest.test.ts
-          - src/features/files/levelRows.test.ts
+          - src/features/depot/levelRows.test.ts
           - src/shared/formatBytes.test.ts
   - id: application-tabs
     text: Where the level offers two or more application tabs, a tab bar `All | <one tab per application>` filters the ONE list of the current folder (folders first, then every node by name, whatever its kind) to one application's nodes (sub-folders stay in every tab, no subtree search; a tab is offered where its kinds have a node or the viewer may add one); the selection is a persisted setting per signed-in account (and one for the share-guest pages), shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
@@ -77,7 +77,7 @@ acceptanceCriteria:
           - src/shared/state/livePoller.test.ts
           - src/views/MemoryHomeView.live.test.ts
           - src/views/ShareView.live.test.ts
-          - src/features/files/levelRows.test.ts
+          - src/features/depot/levelRows.test.ts
           - src/core/node/treeConditional.wire.test.ts
           - src/core/sharing/pollPublicShare.wire.test.ts
   - id: create-folder-and-memory
@@ -115,7 +115,7 @@ acceptanceCriteria:
           - src/core/node/selection.test.ts
           - src/core/node/LevelView.select.test.ts
           - src/core/node/components/LevelRowItem.test.ts
-          - src/features/files/levelRows.test.ts
-          - src/features/files/levelRows.guest.test.ts
+          - src/features/depot/levelRows.test.ts
+          - src/features/depot/levelRows.guest.test.ts
           - src/features/memory/levelRows.test.ts
           - src/features/memory/levelRows.guest.test.ts

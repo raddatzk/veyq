@@ -5,9 +5,9 @@
 // Write-once: a second call throws at the first re-registered kind, which is the point (the registry's header).
 import { registry } from './core/applications/registry'
 import { registerMemories } from './features/memory/register'
-import { registerFiles } from './features/files/register'
+import { registerDepot } from './features/depot/register'
 
 export function registerApplications(): void {
   registerMemories(registry)
-  registerFiles(registry)
+  registerDepot(registry)
 }

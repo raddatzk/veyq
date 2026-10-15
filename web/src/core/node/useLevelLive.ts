@@ -4,7 +4,7 @@
 // this composable owns the lifecycle and the cadence, and the level hands the resulting `ticks` on to its row sources.
 //
 // **One request per level, not per row source.** The read is the tree's (one conditional list, ADR 0081: an idle scope is a
-// `304`, no work); a row source whose data lives beside the tree (Files' blob listing, whose rows change when an upload
+// `304`, no work); a row source whose data lives beside the tree (Depot's blob listing, whose rows change when an upload
 // COMPLETES, without the tree changing) watches `ticks` — the count of reads that found the scope MOVED, which an
 // upload's completion does (it bumps the scope's tree revision) — and re-reads its own, cheap, part. A 304 ticks
 // nothing. A row source with nothing beside the tree ignores it.

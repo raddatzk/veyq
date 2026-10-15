@@ -29,8 +29,8 @@
 // each action `shown` by the application's fail-closed capability function) plus the notices and presentation only the
 // application can supply - and `tabLabel` (the i18n key of its tab; kinds sharing a label share a tab, the tab a pure FILTER with
 // the folders in every tab), `views` (the presentations beyond core's grid and list that its factory draws: Memories' map) and
-// `emptyText` (what its tab says when it has nothing). Several kinds may name the SAME factory (Memories: MEMORY and CHAPTER; Files:
-// FILE and FILES_DROPBOX): it is one row source, called once, handed the nodes of every kind that names it; two kinds naming one
+// `emptyText` (what its tab says when it has nothing). Several kinds may name the SAME factory (Memories: MEMORY and CHAPTER; Depot:
+// FILE and DEPOT_DROPBOX): it is one row source, called once, handed the nodes of every kind that names it; two kinds naming one
 // factory with different `views` is a contradiction, so `registerKind` throws (and registers nothing). `lists()` and `tabs()` list
 // what the level builds from; a child whose kind nobody lists - or for which the factory has no row - is not dropped: core
 // shows the explicit unsupported row, never an empty area.
@@ -54,7 +54,7 @@
 // `READ_WRITE` link then gets core's page (`core/sharing/ShareTreePage.vue`, the member's views with the guest's access and
 // tree); a `WRITE_ONLY` link gets the one page with no member equivalent — its guest holds no key, so there is nothing to
 // render the member's way — the drop page the application claimed for the share's ROOT kind (`PublicShare.rootKind`,
-// served for every role): Memories' photo drop, Files' drop box (ADR 0079 Consequences, inbox #401). A kind is claimed
+// served for every role): Memories' photo drop, Depot's drop box (ADR 0079 Consequences, inbox #401). A kind is claimed
 // once (a second claim throws), FOLDER by nobody (no `WRITE_ONLY` link roots at a folder, ADR 0080 decision 11). A
 // `WRITE_ONLY` root kind nobody claimed, or none at all, renders the shell's explicit unavailable state.
 //
@@ -69,7 +69,7 @@
 // `#fragment` (`core/node/location.ts`); every application but one puts its slug before the name of its nodes
 // (`#foo/memories/rom`) so a path says what kind of thing it opens. An application claims its slug once for the kinds it
 // owns — a second claim of a slug throws, a slug the platform keeps for its own paths (`RESERVED_ROUTE_SEGMENTS`) is
-// refused, and so is a kind claimed twice — or declares, explicitly, that it has NO segment (Files: its nodes are plain
+// refused, and so is a kind claimed twice — or declares, explicitly, that it has NO segment (Depot: its nodes are plain
 // names, a file is `#foo/report`). Only one application may have none: the unprefixed names are one namespace. A claimed
 // slug is RESERVED in that namespace: a folder (or a file) whose name folds to it is numbered (`memories-2`) by
 // `location.ts`. A kind nobody claimed has no segment either and is numbered among the plain names of the application that has none.
@@ -77,7 +77,7 @@
 // **The level view's "New" menu (inbox #406).** The creation entries leave the sections' headers and tiles for ONE menu in
 // core's level toolbar, derived from here: a kind's `createEntry` (label key of its own namespace, icon, order, the
 // capability function that decides whether it shows) opens that kind's `createDialog`; a kind's `levelActions` are entries
-// that are no create dialog (Files' "Upload files"), run through a handler the application's row factory registers with the
+// that are no create dialog (Depot's "Upload files"), run through a handler the application's row factory registers with the
 // level (`core/node/levelActions.ts`) for the level's whole life, whichever tab is shown - and an entry declaring `acceptsDrop`
 // also takes what is dropped onto the level (files, or a directory). `levelMenu()` lists them (each with the kind that
 // declared it); core adds the folder entry itself.
@@ -131,7 +131,7 @@ export interface KindDescriptor {
    *  nodes and so names none in its own strings (inbox #375): a kind's noun comes from the kind. */
   deleteTitle?: string
   /** The i18n key (one `{name}` parameter) of the sentence core's delete dialog says for a node of this kind, where
-   *  the neutral `node.deleteCopy` would leave out what goes with it (Files' drop box: its guests' folders and its
+   *  the neutral `node.deleteCopy` would leave out what goes with it (Depot's drop box: its guests' folders and its
    *  links, inbox #395). Omitted: `node.deleteCopy`. */
   deleteCopy?: string
   /** The i18n key of the kind's noun with its indefinite article, as the object of a sentence (en "a file", de "eine
@@ -139,7 +139,7 @@ export interface KindDescriptor {
    *  (`node.nameTakenBy`, inbox #389). Omitted: the neutral `node.anItem`. */
   nounWithArticle?: string
   /** The i18n key of the note core's trash shows on a trashed node of this kind that holds no attachment (the trash
-   *  listing's `attached`): for a kind whose content IS its attachment, such a node is empty — Files' `FILE` whose
+   *  listing's `attached`): for a kind whose content IS its attachment, such a node is empty — Depot's `FILE` whose
    *  upload never finished (inbox #391). Its restore stays offered, the row says what comes back. Omitted: no note (a
    *  kind whose content lives elsewhere, e.g. a Memory, holds no attachment and is not empty for it). */
   emptyInTrash?: string
@@ -168,7 +168,7 @@ export interface KindDescriptor {
    *  host for this kind's `createDialog` (which therefore must exist: `registerKind` throws without). Omitted: the kind
    *  is not created from a level (a chapter is created inside its Memory). */
   createEntry?: LevelMenuEntry
-  /** Further entries of the "New" menu that are no create dialog - Files' "Upload files". Each runs a handler the
+  /** Further entries of the "New" menu that are no create dialog - Depot's "Upload files". Each runs a handler the
    *  application's row factory registers with the level (`core/node/levelActions.ts`), so core stays
    *  application-agnostic. Ids are write-once across the registry. */
   levelActions?: readonly (LevelMenuEntry & { id: string })[]
@@ -201,10 +201,10 @@ export interface KindDescriptor {
    *  run before anything is written; the answer names the problem, null when the content is sound. Core has already checked
    *  the payload references inside it (their paths, sizes and checksums' shape). Absent: no check of the kind's own. */
   validateContent?: (content: ManifestContent) => ContentProblem | null
-  /** A node of this kind IS one file (Files' file): Download saves it as itself through the application's own action, so core
+  /** A node of this kind IS one file (Depot's file): Download saves it as itself through the application's own action, so core
    *  offers no ZIP download for it, and inside an archive it is that one file at the node's path, not a directory. */
   downloadsAsFile?: boolean
-  /** A node of this kind is imported as a plain `FOLDER` (Files' drop box, cr-download-is-the-export Decision 7): what makes it
+  /** A node of this kind is imported as a plain `FOLDER` (Depot's drop box, cr-download-is-the-export Decision 7): what makes it
    *  this kind - a drop key, guests' identities, links - cannot be rebuilt from a download, so the import creates a folder of
    *  the node's name and its children under it, and needs no `importContent`. Its content is still checked
    *  (`validateContent`) and still names its application and version (`contentSchema`); the manifest keeps the kind it was. */
@@ -278,8 +278,8 @@ export interface LevelMenuEntry {
   allowed(ctx: LevelActionContext): boolean
   enabled?(ctx: LevelActionContext): boolean
   /** An action entry that takes what is dropped onto the level: core hands dropped FILES to the handler registered under
-   *  the entry's id that has a `LevelActionHandler.drop` (Files' "Upload files"), and a dropped DIRECTORY that is no download
-   *  to one that has a `dropDirectory` (Files' "Upload folder…") - only while the entry is `allowed` and the handler
+   *  the entry's id that has a `LevelActionHandler.drop` (Depot's "Upload files"), and a dropped DIRECTORY that is no download
+   *  to one that has a `dropDirectory` (Depot's "Upload folder…") - only while the entry is `allowed` and the handler
    *  `enabled`: a drop is never more than the menu entry would be. Ignored on a create entry. */
   acceptsDrop?: boolean
 }
@@ -496,13 +496,13 @@ export interface Registry {
    *  malformed or reserved, on a slug already claimed, on a kind already claimed (or FOLDER, the platform's), and on an
    *  empty `kinds`. */
   claimRouteSlug(slug: string, kinds: readonly NodeKind[]): void
-  /** Declare that the application owning `kinds` has NO route segment: its nodes are plain names in the path (Files).
+  /** Declare that the application owning `kinds` has NO route segment: its nodes are plain names in the path (Depot).
    *  Throws on a kind already claimed (or FOLDER), on an empty `kinds`, and when another application already declared
    *  it — the unprefixed names are one namespace. */
   claimNoRouteSegment(kinds: readonly NodeKind[]): void
   /** How a node of `kind` is addressed in the path: its application's `slug` (null: none — a folder, the application
    *  that declared no segment, a kind nobody claimed) and the `group` that kind's nodes are numbered in among equal
-   *  siblings — one per application with a segment, one for the folders, one for every node with none (Files and the kinds nobody claimed). */
+   *  siblings — one per application with a segment, one for the folders, one for every node with none (Depot and the kinds nobody claimed). */
   routeOf(kind: NodeKind): KindRoute
   /** The claimed route slugs (the applications' own, not the platform's reserved words). */
   routeSlugs(): readonly string[]

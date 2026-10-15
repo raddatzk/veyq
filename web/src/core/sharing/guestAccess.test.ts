@@ -57,7 +57,7 @@ function head(): PublicShareHead {
         { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, wrappedMeta: 'bWV0YQ==' },
         child(LETTERS, ROOT, keys.root, keys.letters, 'Briefe', FOLDER_KIND),
         child(NESTED, LETTERS, keys.letters, keys.nested, 'Feldpost', FOLDER_KIND, { wrappedMeta: 'c2VhbGVk' }),
-        child(DROP, ROOT, keys.root, keys.drop, 'Postfach', 'FILES_DROPBOX', { sealedDropPrivateKey }),
+        child(DROP, ROOT, keys.root, keys.drop, 'Postfach', 'DEPOT_DROPBOX', { sealedDropPrivateKey }),
         child(ANNA_B, DROP, annaB.identityKey, keys.annaB, 'Anna', FOLDER_KIND, { shareIdentityId: IDENTITY_B, wrappedIdentityKey: annaB.wrappedIdentityKey }),
         child(ANNA_A, DROP, annaA.identityKey, keys.annaA, 'Anna', FOLDER_KIND, { shareIdentityId: IDENTITY_A, wrappedIdentityKey: annaA.wrappedIdentityKey }),
         child(ANNA_FILE, ANNA_A, keys.annaA, keys.annaFile, 'steuer.pdf', 'FILE'),
