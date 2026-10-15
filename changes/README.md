@@ -1358,6 +1358,16 @@ refuses too, so the sign-in page the notice is shown on could never have loaded.
 proxy then answers 502) fails exactly the calls under test and nothing else. Its other precondition, "a video
 having played", needed a tenant with media on the browsed host; the dev DB had none that day.
 
+**And a change to a stored format makes the dev database itself the wrong instance.** `cr-hybrid-kem-is-x-wing`
+changed the identity bundle in place (pre-V1), so no identity in the owner's dev database opened any more, and its
+browser pass needed a fresh instance — which the done-when never said, and a `down -v` would have wiped the owner's
+dev data to get. A database of its own on the same compose stack leaves theirs alone: `CREATE DATABASE` beside `veyq`
+(root credential as in `scripts/run_web_e2e.py`), boot the fast-jar under `-Dquarkus.profile=e2e` with
+`QUARKUS_DATASOURCE_JDBC_URL` pointed at it, its own `VEYQ_SECURITY_CONFIG_SECRET_FILE`, and
+`VEYQ_BLOB_STORE_PUBLIC_ENDPOINT` set to the browsed origin, then `npm run bootstrap:user` — which writes `.run/.env`
+back, so that file is snapshotted first and restored byte-equal after. A CR that changes a stored format names this
+instance in its browser pass.
+
 ### A UI phase's done-when names its browser pass
 
 [`docs/ai`](../docs/ai/README.md) step 3 says a UI slice is not done before it was clicked. `cr-files-application`

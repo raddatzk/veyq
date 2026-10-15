@@ -48,7 +48,7 @@ nowhere in the tree except in this CR, and the catalog becomes strictly append-o
 - **A sibling in flight touches the same web files.** At refine time the shared tree held uncommitted edits by another
   session (`git status --short` showed `web/src/features/account/pairing/{SignInWithCodeCard.vue,JoinDeviceCard.test.ts,
   SignInWithCodeCard.test.ts,pairing.ts}` and `web/src/views/TenantJoinView.vue`, apparently
-  [cr-hybrid-kem-is-x-wing](cr-hybrid-kem-is-x-wing.md)). Phase 3 edits the pairing UI. So it starts only once
+  `cr-hybrid-kem-is-x-wing`, done and deleted since). Phase 3 edits the pairing UI. So it starts only once
   `git status --short web/src/features/account/pairing web/src/views` is clean, or it waits.
 - Substrate of every measurement below: `main` at `31282362`. The tree was clean in the files this CR touches.
 
