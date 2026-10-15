@@ -17,13 +17,18 @@ that installed the same lockfile first.
      `dockerfile:` entry) runs the gate itself or `needs:`, transitively, a job that does, so the gate has passed
      on the same commit before the image build starts. A Dockerfile with an `npm ci` that no workflow job builds
      is red too: nothing then covers its install.
-  3. **Exactly one gated install asks the registry** (inbox #312). The gate's registry half — the locked packages
-     an install skipped, i.e. other platforms' bindings — depends only on the lockfile, so every gated call but
-     one passes `--skip-registry-check`. Red when none asks (nothing would look at another platform's bindings)
-     or more than one does (the same ~54 queries repeated per commit). The one that asks must cover the others:
-     its workflow fires on every `push`/`pull_request` branch the other gating workflows fire on (a missing
-     `branches:` is every branch) and its path filter admits `package-lock.json`, and every job that builds a
+  3. **Exactly one gated install per lockfile asks the registry** (inbox #312). The gate's registry half — the
+     locked packages an install skipped, i.e. other platforms' bindings — depends only on the lockfile, so every
+     gated call of the same lockfile but one passes `--skip-registry-check`. Which lockfile a call installs is read
+     from its `--package-dir <dir>` (`<dir>/package-lock.json`; none is the root's). Red when none asks for a
+     lockfile (nothing would look at another platform's bindings) or more than one does (the same queries repeated
+     per commit). The one that asks must cover the others of its lockfile: its workflow fires on every
+     `push`/`pull_request` branch the other workflows gating that lockfile fire on (a missing `branches:` is every
+     branch) and its path filter admits the lockfile's path; and for the root lockfile, every job that builds a
      Dockerfile `needs:` it — the arm64 image is where those bindings are actually installed.
+  4. **Every tracked `package-lock.json` is installed through the gate** by some workflow step — the root's and
+     each package directory's outside the root workspace (`site/`, ADR 0087) — and every `--package-dir` a step
+     names holds a tracked lockfile. A lockfile no gated step installs is a dependency tree nobody looks at.
 Why the Dockerfiles are covered by (b) and not by calling the gate inside the image (inbox #294): the gate is
 Python, so the image would need either a Python toolchain added to two build stages or a second copy of the gate's
 logic in shell — both to scan a lockfile the gating job has already scanned at the same commit.
@@ -59,6 +64,7 @@ from __future__ import annotations  # the repo's guards run on Python 3.9
 import fnmatch
 import json
 import pathlib
+import posixpath
 import re
 import shlex
 import subprocess
@@ -73,6 +79,7 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GATE = "scripts/npm_ci_no_deprecated.py"
 SKIP_REGISTRY = "--skip-registry-check"  # the gate's opt-out of its registry half (inbox #312)
+PACKAGE_DIR = "--package-dir"  # the gate's option naming a package directory with its own lockfile (ADR 0087)
 GATE_CALL = re.compile(r"(?:^|[\s;&|(])(?:\S*/)?python3?\s+" + re.escape(GATE) + r"(?:\s|$)", re.MULTILINE)
 WORKFLOW_NAME = re.compile(r"^\.github/workflows/[^/]+\.ya?ml$")
 DOCKERFILE_NAME = re.compile(r"(^|/)[^/]*dockerfile[^/]*$", re.IGNORECASE)
@@ -119,6 +126,24 @@ def npm_installs(command: str) -> list[str]:
     return found
 
 
+def tokens_of(command: str) -> list[str]:
+    try:
+        return shlex.split(command)
+    except ValueError:  # an unbalanced quote: fall back to whitespace
+        return command.split()
+
+
+def gated_lockfile(line: str) -> str:
+    """The lockfile a gate call on this line installs: `<dir>/package-lock.json` for `--package-dir <dir>`, the root's
+    otherwise. The gate refuses the `--package-dir=<dir>` spelling, so a step written that way is red in CI."""
+    tokens = tokens_of(line)
+    start = next((i for i, t in enumerate(tokens) if t == GATE or t.endswith("/" + GATE)), len(tokens))
+    for i in range(start + 1, len(tokens) - 1):
+        if tokens[i] == PACKAGE_DIR:
+            return posixpath.normpath(posixpath.join(tokens[i + 1], LOCKFILE))
+    return LOCKFILE
+
+
 def literally_off(node: dict) -> bool:
     return node.get("if") is False or str(node.get("if", "")).strip() in {"false", "${{ false }}"}
 
@@ -142,11 +167,12 @@ for rel in sorted(f for f in files if WORKFLOW_NAME.match(f)):
 if not workflows:
     errors.append("no tracked .github/workflows/*.yml was found — this guard checked nothing")
 
-gating_jobs: dict[str, set[str]] = {}  # workflow -> jobs with a step that runs the gate
-asking: list[tuple[str, str, str]] = []  # (workflow, job, step label) of each gate call that asks the registry
+# lockfile -> workflow -> jobs with a step that installs that lockfile through the gate
+gating: dict[str, dict[str, set[str]]] = {}
+# lockfile -> (workflow, job, step label) of each gate call of that lockfile that asks the registry
+asking: dict[str, list[tuple[str, str, str]]] = {}
 gate_calls = 0
 for rel, doc in workflows.items():
-    gating_jobs[rel] = set()
     for job_id, job in (doc.get("jobs") or {}).items():
         if not isinstance(job, dict):
             continue
@@ -164,10 +190,14 @@ for rel, doc in workflows.items():
             if GATE_CALL.search(run):
                 gate_calls += 1
                 if not literally_off(step) and not literally_off(job):
-                    gating_jobs[rel].add(job_id)
                     for line in run.splitlines():
-                        if GATE_CALL.search(line) and SKIP_REGISTRY not in line.split():
-                            asking.append((rel, job_id, label))
+                        if not GATE_CALL.search(line):
+                            continue
+                        lockfile = gated_lockfile(line)
+                        gating.setdefault(lockfile, {}).setdefault(rel, set()).add(job_id)
+                        asking.setdefault(lockfile, [])
+                        if SKIP_REGISTRY not in tokens_of(line):
+                            asking[lockfile].append((rel, job_id, label))
 if workflows and gate_calls == 0:
     errors.append(f"no workflow step calls `{GATE}` — either every install vanished or the gate was renamed; "
                   f"re-anchor this guard")
@@ -249,7 +279,7 @@ for rel in sorted(dockerfiles):
                                   f"runs before it and nothing covers this install")
                 for wf, job_id in builders:
                     jobs = workflows[wf].get("jobs") or {}
-                    if not needs_closure(jobs, job_id) & gating_jobs[wf]:
+                    if not needs_closure(jobs, job_id) & gating.get(LOCKFILE, {}).get(wf, set()):
                         errors.append(
                             f"{where} runs `npm {sub}`, and `{wf}` job `{job_id}` builds it without running "
                             f"`{GATE}` itself or `needs:`-ing a job that does — so the image installs a lockfile "
@@ -267,41 +297,48 @@ def triggers(doc: dict) -> dict:
     return {event: (spec or {}) for event, spec in (on or {}).items()}
 
 
-def admits_lockfile(spec: dict) -> bool:
+def admits_lockfile(spec: dict, lockfile: str) -> bool:
     if "paths" in spec:
         positive = [p for p in spec["paths"] if not p.startswith("!")]
-        return any(fnmatch.fnmatch(LOCKFILE, p) for p in positive)
+        return any(fnmatch.fnmatch(lockfile, p) for p in positive)
     ignored = [p for p in spec.get("paths-ignore") or [] if not p.startswith("!")]
-    return not any(fnmatch.fnmatch(LOCKFILE, p) for p in ignored)
+    return not any(fnmatch.fnmatch(lockfile, p) for p in ignored)
 
 
-if workflows and len(asking) != 1:
-    if not asking:
-        errors.append(f"no gated install asks the registry — every `{GATE}` call passes `{SKIP_REGISTRY}`, so no job "
-                      f"looks at the locked packages another platform installs (the arm64 image's bindings)")
-    else:
-        errors.append(f"{len(asking)} gated installs ask the registry, but its answer depends only on the lockfile "
-                      f"— pass `{SKIP_REGISTRY}` on all but one: " + "; ".join(label for _, _, label in asking))
-elif asking:
-    asking_wf, asking_job, asking_label = asking[0]
+for lockfile in sorted(asking):
+    calls = asking[lockfile]
+    if len(calls) != 1:
+        if not calls:
+            errors.append(f"no gated install of `{lockfile}` asks the registry — every `{GATE}` call of it passes "
+                          f"`{SKIP_REGISTRY}`, so no job looks at the locked packages another platform installs")
+        else:
+            errors.append(f"{len(calls)} gated installs of `{lockfile}` ask the registry, but its answer depends only "
+                          f"on that lockfile — pass `{SKIP_REGISTRY}` on all but one: "
+                          + "; ".join(label for _, _, label in calls))
+        continue
+    asking_wf, asking_job, asking_label = calls[0]
     asking_on = triggers(workflows[asking_wf])
-    for wf in sorted(w for w, jobs in gating_jobs.items() if jobs and w != asking_wf):
+    for wf in sorted(w for w, jobs in gating[lockfile].items() if jobs and w != asking_wf):
         for event, spec in triggers(workflows[wf]).items():
             if event not in ("push", "pull_request"):
                 continue
             if event not in asking_on:
-                errors.append(f"`{wf}` installs through the gate on `{event}`, but the one registry-asking install "
-                              f"({asking_label}) never runs on `{event}` — those runs' lockfile goes unasked")
+                errors.append(f"`{wf}` installs `{lockfile}` through the gate on `{event}`, but the one "
+                              f"registry-asking install of it ({asking_label}) never runs on `{event}` — those runs' "
+                              f"lockfile goes unasked")
                 continue
             mine = asking_on[event].get("branches")
             theirs = spec.get("branches")
             if mine is not None and (theirs is None or not set(theirs) <= set(mine)):
-                errors.append(f"`{wf}` installs through the gate on `{event}` to branches {theirs or 'any'}, but the "
-                              f"one registry-asking install ({asking_label}) only fires on {mine}")
+                errors.append(f"`{wf}` installs `{lockfile}` through the gate on `{event}` to branches "
+                              f"{theirs or 'any'}, but the one registry-asking install of it ({asking_label}) only "
+                              f"fires on {mine}")
     for event in ("push", "pull_request"):
-        if event in asking_on and not admits_lockfile(asking_on[event]):
-            errors.append(f"`{asking_wf}`'s `{event}` path filter excludes `{LOCKFILE}`, so the one registry-asking "
-                          f"install ({asking_label}) does not run on the change that matters to it")
+        if event in asking_on and not admits_lockfile(asking_on[event], lockfile):
+            errors.append(f"`{asking_wf}`'s `{event}` path filter excludes `{lockfile}`, so the one registry-asking "
+                          f"install of it ({asking_label}) does not run on the change that matters to it")
+    if lockfile != LOCKFILE:
+        continue  # only the root lockfile is installed by an image (section 2)
     for wf, doc in workflows.items():
         jobs = doc.get("jobs") or {}
         for job_id, job in jobs.items():
@@ -312,12 +349,26 @@ elif asking:
                               f"install ({asking_label}) — the locked packages that image installs and the gating "
                               f"platform skipped are then unasked on that commit")
 
+
+# --- 4. every tracked lockfile is installed through the gate -------------------------------------------------
+lockfiles = {f for f in files if posixpath.basename(f) == LOCKFILE}
+if workflows and LOCKFILE not in lockfiles:
+    errors.append(f"the root `{LOCKFILE}` is not tracked — this guard reads tracked files, so it is anchored wrong")
+for lockfile in sorted(lockfiles - set(gating)):
+    errors.append(f"`{lockfile}` is tracked, but no workflow step installs it through `{GATE}` "
+                  f"(`{PACKAGE_DIR} {posixpath.dirname(lockfile) or '.'}`) — a dependency tree the gate never sees")
+for lockfile in sorted(set(gating) - lockfiles):
+    errors.append(f"a workflow step installs `{lockfile}` through `{GATE}`, but no such lockfile is tracked — the "
+                  f"`{PACKAGE_DIR}` it names installs nothing the repository pins")
+
 if errors:
     print("NPM INSTALLS GATED VALIDATION FAILED:")
     for e in errors:
         print("  -", e)
     sys.exit(1)
 
+askers = "; ".join(f"{lockfile} by {calls[0][0]} job `{calls[0][1]}`" for lockfile, calls in sorted(asking.items()))
 print(f"npm installs gated OK: {gate_calls} workflow step(s) install through {GATE} and none bypasses it; "
-      f"{image_installs} Dockerfile `npm ci` install the scanned lockfile behind a gated job; the registry is asked "
-      f"by exactly one ({asking[0][0]} job `{asking[0][1]}`), which covers the others")
+      f"{image_installs} Dockerfile `npm ci` install the scanned lockfile behind a gated job; every tracked lockfile "
+      f"is installed through the gate, and each is asked of the registry by exactly one install ({askers}), which "
+      f"covers the others")

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """`npm ci`, refused when npm reports a deprecated package — the npm half of the root CLAUDE.md dependency rule.
 
-**What it asserts.** It runs `npm ci` from the repository root (any extra arguments are passed through), echoes
+**What it asserts.** It runs `npm ci` from the repository root — or, with `--package-dir <dir>`, from a package
+directory outside the root workspace that carries its own `package-lock.json` (`site/`, ADR 0087) — passing any
+other argument through to npm, echoes
 npm's output as it comes, and exits non-zero when npm fails **or** when any line of its output is npm's
 deprecation warning (`npm warn deprecated <name>@<version>: …`, either case of `warn`), naming every package it
 saw. The registry marks a package deprecated in its packument and `npm ci` prints that mark for every installed
@@ -19,9 +21,10 @@ this install skipped — no directory at its path: another platform's esbuild, r
 is asked of the registry directly (`npm view <name>@<version> deprecated`). A query the registry does not answer
 is red, never read as "not deprecated".
 
-**One CI job asks the registry, the others pass `--skip-registry-check`** (inbox #312). The registry half is ~54
-queries (~16 s, network-dependent) whose answer depends only on the lockfile, and every gated job installs the
-same lockfile at the same commit — so asking it once per commit is the whole check, four times is three repeats.
+**One CI job per lockfile asks the registry, the others pass `--skip-registry-check`** (inbox #312). The registry
+half is ~54 queries (~16 s, network-dependent) whose answer depends only on the lockfile, and every gated job that
+installs the same lockfile does so at the same commit — so asking it once per commit is the whole check, four times
+is three repeats. A second lockfile (`site/`'s) is a different question, so its own install asks it once.
 The flag is an opt-out on purpose: a run without it (every local run, and a new CI caller that forgets it) asks
 the registry, so forgetting costs time, never coverage. The asking job is the one whose workflow fires on every
 branch and every lockfile change the others fire on and whose job every image build `needs:` (the arm64 image is
@@ -50,6 +53,7 @@ before. And only where it is called — every npm install in `.github/workflows/
     python3 scripts/npm_ci_no_deprecated.py            # a full install, as CI does
     python3 scripts/npm_ci_no_deprecated.py --ignore-scripts
     python3 scripts/npm_ci_no_deprecated.py --skip-registry-check   # the non-designated CI jobs only
+    python3 scripts/npm_ci_no_deprecated.py --package-dir site       # the docs site, its own lockfile
 """
 from __future__ import annotations  # the repo's scripts run on Python 3.9
 
@@ -63,6 +67,7 @@ from typing import Callable
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKIP_REGISTRY = "--skip-registry-check"  # this script's own flag, never passed on to npm
+PACKAGE_DIR = "--package-dir"  # this script's own option (`--package-dir <dir>`), never passed on to npm
 
 DEPRECATED = re.compile(r"^npm (?:warn|WARN) deprecated (?P<pkg>\S+?):?(?:\s|$)")
 SUMMARY = re.compile(r"^(?:added|removed|changed) \d+ packages?|^up to date")
@@ -94,9 +99,10 @@ def not_installed(lock: dict, root: pathlib.Path) -> list[str]:
     return sorted({spec_of(path, e) for path, e in locked(lock).items() if not (root / path).is_dir()})
 
 
-def npm_view(spec: str) -> tuple[int, str]:
-    """The registry's deprecation message for one `name@version` (empty when none), and npm's exit code."""
-    r = subprocess.run(["npm", "view", spec, "deprecated", "--json"], cwd=ROOT, capture_output=True, text=True,
+def npm_view(spec: str, cwd: pathlib.Path = ROOT) -> tuple[int, str]:
+    """The registry's deprecation message for one `name@version` (empty when none), and npm's exit code — asked
+    from the installed package's directory, so its `.npmrc` names the registry."""
+    r = subprocess.run(["npm", "view", spec, "deprecated", "--json"], cwd=cwd, capture_output=True, text=True,
                        errors="replace")
     return r.returncode, r.stdout.strip()
 
@@ -120,10 +126,38 @@ def check_lockfile(lock: dict, root: pathlib.Path, view: Callable[[str], tuple[i
     return sorted(set(locked_deprecated(lock)) | set(marked)), failed, len(skipped)
 
 
+def package_dir(argv: list[str]) -> tuple[pathlib.Path | None, list[str], str]:
+    """The directory to install (the repo root unless `--package-dir <dir>` names one), the arguments left for npm,
+    and why the request is refused (empty when it is not). A named directory must be inside the repository and
+    carry its own `package.json` and `package-lock.json`: a root-workspace member has no lockfile of its own, and
+    `npm ci` there would install the root's — so the directory would be named here and not be what is scanned."""
+    if any(a.startswith(PACKAGE_DIR + "=") for a in argv):
+        # npm would take it as a config of its own and install the repo root — not the directory it names.
+        return None, argv, f"write {PACKAGE_DIR} and its directory as two arguments"
+    if PACKAGE_DIR not in argv:
+        return ROOT, argv, ""
+    at = argv.index(PACKAGE_DIR)
+    if at + 1 >= len(argv) or argv[at + 1].startswith("-"):
+        return None, argv, f"{PACKAGE_DIR} needs a directory"
+    rest = argv[:at] + argv[at + 2:]
+    if PACKAGE_DIR in rest:
+        return None, argv, f"{PACKAGE_DIR} given twice"
+    cwd = (ROOT / argv[at + 1]).resolve()
+    if cwd != ROOT and ROOT not in cwd.parents:
+        return None, argv, f"{argv[at + 1]} is outside the repository"
+    for name in ("package.json", "package-lock.json"):
+        if not (cwd / name).is_file():
+            return None, argv, f"{argv[at + 1]} has no {name} of its own"
+    return cwd, rest, ""
+
+
 def main(argv: list[str]) -> int:
-    cwd = ROOT
     ask_registry = SKIP_REGISTRY not in argv
     argv = [a for a in argv if a != SKIP_REGISTRY]
+    cwd, argv, refused = package_dir(argv)
+    if cwd is None:
+        print(f"REFUSED: {refused}", file=sys.stderr)
+        return 2
     cmd = ["npm", "ci", *argv, "--loglevel=notice"]
     proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                             errors="replace")
@@ -137,8 +171,8 @@ def main(argv: list[str]) -> int:
         print(f"npm ci failed (exit {code}) in {cwd}", file=sys.stderr)
         return code
     deprecated, summary = scan(lines)
-    in_lock, unanswered, skipped = check_lockfile(json.loads((ROOT / "package-lock.json").read_text()), ROOT,
-                                                  ask_registry=ask_registry)
+    in_lock, unanswered, skipped = check_lockfile(json.loads((cwd / "package-lock.json").read_text()), cwd,
+                                                  view=lambda spec: npm_view(spec, cwd), ask_registry=ask_registry)
     deprecated = sorted(set(deprecated) | set(in_lock))
     if unanswered:
         print(f"\nREFUSED: the registry gave no answer for {len(unanswered)} locked package(s) this install skipped, "
