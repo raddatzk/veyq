@@ -24,7 +24,7 @@ in what they hold. ADR 0087 decision 1 (the Use bullet) holds the decisions.
   task-first, the UI's words per language, German with *du*, only what is built, a closing privacy note that links
   the Security area, Depot named as the UI names it, screenshot placeholders.
 - [ADR 0086](../docs/decisions/0086-one-word-per-meaning.md): the word rules, and *Depot* as the second
-  application's name (built by `cr-files-becomes-depot`: the UI says *Depot* in both languages).
+  application's name (built 2026-10-15: the UI says *Depot* in both languages).
 - [ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md): platform vs.
   application — Getting started, Your account, Spaces and Sharing are platform; Memories and Depot are applications.
 - [`cc.inclusive-language.md`](../docs/crosscutting/cc.inclusive-language.md): German neutral-first. The UI says

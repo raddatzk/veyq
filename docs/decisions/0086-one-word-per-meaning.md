@@ -69,7 +69,7 @@ across apps, how a link's key reaches an app safely) belong to the native client
 
 - **The word rules bind now**, and this change updates where they are written: the root `CLAUDE.md` and
   [`docs/apps/README.md`](../apps/README.md).
-- **Built:** Files → Depot, as the Depot paragraph above sorts it (`changes/cr-files-becomes-depot.md`, 2026-10-15).
+- **Built (2026-10-15):** Files → Depot, as the Depot paragraph above sorts it.
 - **Not built**, open work tracked in the inbox. Pre-V1 there is no released client to stay compatible with, so
   the wire renames cost no major.
   - `…Capabilities` → `…Rights` (web only).

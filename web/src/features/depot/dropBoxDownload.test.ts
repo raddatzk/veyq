@@ -144,6 +144,8 @@ describe('a drop box as a download', () => {
     expect(() => planImport(wrongType)).toThrow(/not a Depot drop box/)
   })
 
+  // The `files` values below are the point of the case, not leftovers: a sweep that renames `files.*` must spare them
+  // (one did, and the case then read its own archive as Depot's).
   it('skips an archive written before the rename (`files.*`, application `files`): no alias reads it as Depot\'s (ADR 0086)', async () => {
     const { archive } = await download()
     const { manifest } = await openExport({ kind: 'zip', file: new File([archive], 'd.zip') })

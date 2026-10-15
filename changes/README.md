@@ -109,6 +109,16 @@ callers need two lookups, not one. No locator over reads can see this; the follo
 own callers, run only for the sites the CR puts on the "must not" side, because that is the side making a
 completeness claim about an **absence**.
 
+**A rename is graded by its locator re-run AFTER the sweep, never by the sweep's own pattern.** The edit is a
+script, and its regex is narrower than the locator by construction: it is written to change things, the locator
+to find them. `cr-files-becomes-depot`'s guard locator listed `"files"` in `scripts/`; the sweep keyed on
+`features/files`, so `validate_guard_gaps.py`'s `root / "web" / "src" / "features" / "files"` survived and the guard
+went red one 15-minute run later. The same sweep, re-run over a later phase, rewrote the two `files.file` values a
+new test pins ON PURPOSE (a pre-rename archive must be skipped), and its possessive rule (`Files'` -> `Depot's`)
+turned the closing quote of `'E2E Files'` into a broken string. So after each sweep the locator runs again over the
+whole tree, untracked moves included (`git grep` does not see a directory moved with plain `mv`; `grep -r` does),
+and every remaining hit is spared by name — the CR's look-alike list, or a comment at the line that says why.
+
 **"Measured against `main`, so no phase re-derives it" means *don't rebuild the inventory* — never *believe every
 row*.** A CR that carries its measurements in a table earns the implementer's time, and the clause that hands
 them over is doing the opposite of what it reads as: it suppresses re-derivation of the whole set, which is
@@ -1367,6 +1377,11 @@ dev data to get. A database of its own on the same compose stack leaves theirs a
 `VEYQ_BLOB_STORE_PUBLIC_ENDPOINT` set to the browsed origin, then `npm run bootstrap:user` — which writes `.run/.env`
 back, so that file is snapshotted first and restored byte-equal after. A CR that changes a stored format names this
 instance in its browser pass.
+Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused even a scratchpad snapshot on
+2026-10-15), the instance gets a principal of its own instead: the seeder's `ENV_FILE` is a constant, so a temporary
+copy of `web/scripts/bootstrap-user.mts` that reads an env file of generated test values outside the repo seeds it, the
+copy is deleted after, and the login goes through the form (`?devlogin` reads only `.run/.env`). Boot a COPY of the
+fast-jar, too: a neighbour's `./gradlew` rebuilds `backend/build/` under a running pass.
 
 ### A UI phase's done-when names its browser pass
 
@@ -1571,6 +1586,13 @@ The same holds for a **coverage surface**: `cr-tenant-storage-quota` asked for r
 `admin-web`", and `admin-web` refs are not admissible until a run has executed that job (ADR 0040) — the sibling
 file `uc.admin.suspend-tenant.yaml` already said so in its `gaps:`. `python3 scripts/validate_coverage.py` prints
 which surfaces are *"awaiting a first run"*; read that line at refine before promising refs on one.
+
+**A done-when that names the upgrade proof names its predecessor.** `run_web_e2e.py` runs the `upgrade` pair from one
+tree in every ordinary run, and the two-build proof (`--upgrade`) against `HEAD^1` by default; they prove different
+things, and across a pre-V1 change that rewrites a stored value in place (`cr-files-becomes-depot`: `FILES_DROPBOX`
+-> `DEPOT_DROPBOX`, the baseline edited with its pin, no migration) a two-build proof from before the change cannot
+be green at all. Its CR said only "the upgrade proof"; the honest reading was the ordinary pair per phase plus
+`--upgrade` after the last phase, whose `HEAD^1` already carries the change. Say which, and from where, at refine.
 
 ### A server that insists on completeness needs a way to leave something out on purpose
 

@@ -127,6 +127,13 @@ Five rules follow:
    add and the commit, column by column: `git mv` stages the rename with the OLD content, and an `RM` line is that rename
    with its edits unstaged - a staging filter that skipped `RM` lines committed a renamed module's old body under its new
    name (cr-download-is-the-export, 2026-10-14; the next phase's commit carried the fix).
+   The index itself is shared too: `git mv` and a neighbour's `git rm` both stage into the one index every session
+   commits from, so a plain `git commit` takes whatever is in it (on 2026-10-15 a neighbour's staged CR deletion sat
+   there while cr-files-becomes-depot committed). The form that cannot sweep anything up builds the commit in an index
+   of its own: `GIT_INDEX_FILE=<scratch> git read-tree <tip>`, `git add` by explicit path (or `git update-index
+   --cacheinfo` for a file whose working copy already carries the next phase), `git write-tree`, `git commit-tree -p
+   <tip>`, then `git update-ref refs/heads/main <new> <tip>`, which refuses when a neighbour moved the tip in between;
+   afterwards `git reset -q -- <your paths>` re-syncs the shared index for your paths only.
 
    **And the rule reaches a *delegated* read, where nobody can apply it from inside.** A subagent measures
    whatever tree it is pointed at and cannot know which parts of it this session already moved. A `web/`
