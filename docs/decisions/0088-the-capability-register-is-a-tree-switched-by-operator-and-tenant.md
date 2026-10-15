@@ -42,8 +42,13 @@ instance and tenant layers.
 4. **What makes an entry switchable.** An entry gets `*` or `+` only if it names two things: what the server
    **refuses**, by something the server sees (a node kind, a blob role, a share role, an endpoint, a CSP origin),
    and what happens to **existing** data. An entry that cannot name both is presence only (`○`).
-5. **What "off" does.** A share switch and a requirement (decision 8) act at once, on existing links too: a link
-   that keeps working defeats the reason it was switched off. A feature switch refuses only what is **new**.
+5. **What "off" does.** A share switch, a device switch and a requirement (decision 8) act at once, on what
+   exists too: a link that keeps working, or a remembered device that keeps unlocking without the password,
+   defeats the reason it was switched off. A device switch withholds its wraps (`DEVICE` for `remember-device`,
+   `DEVICE_KEY` for `passwordless`) from the key material the server hands out, the way the `RECOVERY` wrap is
+   already withheld. It never deletes them, so switching back on restores every remembered device, and the
+   `PASSWORD` wrap is always served, so nobody is locked out (owner, 2026-10-15). A feature switch refuses only
+   what is **new**.
    What exists stays readable and shareable, so there is no "activated but empty" state machine, and the gate sits
    at creation instead of on every endpoint (the cost ADR 0079 named).
 6. **Server visibility is accepted where a switch needs it.** Journal, GPX and a face index get a node kind or a

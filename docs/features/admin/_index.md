@@ -21,6 +21,9 @@ handling of reported shares.
   ([ADR 0065](../../decisions/0065-admin-ui-cli-separate-service.md); the backend answers every Server-Owner
   operation, first-run setup included, only on an internal listener the admin container reaches — classified by
   the socket, never by a header — and 404s it on the public origin)
+- ★ [Switch the instance's capabilities on and off](use-cases/uc.admin.switch-capabilities.md) — **planned**
+  (ADR 0088 decisions 5, 12, 13; `changes/cr-operator-capability-switches.md`): the register in the admin console
+  and the CLI, each entry with its purpose and effect-when-off; a device switch withholds its wraps at once.
 - ★ [Create a tenant & invite its owner](use-cases/uc.admin.create-tenant.md) — **built (backend + admin-web; the owner accepts in web)**
 - ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built**: both transitions,
   the `Host` filter on the tenant's own domain, step 4's routing withdrawal, which

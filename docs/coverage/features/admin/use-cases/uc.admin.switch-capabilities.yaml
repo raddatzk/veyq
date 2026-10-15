@@ -1,0 +1,20 @@
+useCase: uc.admin.switch-capabilities
+feature: admin
+title: Switch the instance's capabilities on and off
+status: planned
+# Refined 2026-10-15 from inbox #443 (ADR 0088 decisions 5, 12 and 13); built by cr-operator-capability-switches.
+acceptanceCriteria:
+  - id: register-listed
+    text: The Server Owner lists the register as a tree with each entry's title, purpose, effect-when-off and state (on, off, off through its parent), in the console's language or the CLI's locale, from text the API serves.
+  - id: switch-without-restart
+    text: Switching an entry off or on through the Admin API is stored in the database and takes effect for the manifest and every gate without a restart; an entry's own state survives while its parent is off.
+  - id: unknown-id-refused
+    text: Switching an id the register does not hold is refused and stores nothing.
+  - id: device-switch-acts-at-once
+    text: With core.remember-device off, DEVICE wraps are withheld from the key material; with core.remember-device.passwordless off (or its parent), DEVICE_KEY wraps are withheld. Neither is deleted, the PASSWORD wrap is always served, and switching back on restores every remembered device.
+  - id: off-state-in-a-browser
+    text: In a real browser, a switched-off drop box, device linking and password-less remember are absent from the web client, and a device remembered before its switch went off asks for what its wrap replaced.
+gaps:
+  backend: "Not built: the boot-time list was deleted by cr-capability-register-recut, and the only production CapabilitySwitches answers nothing off (backend/core/.../platform/capabilities/CapabilitySwitches.kt)."
+  admin-web: "Not built: the console's Server section holds Release, Store and Config-secret key only."
+  web: "Not built: the client's behaviour when its own DEVICE or DEVICE_KEY wrap is withheld is unmeasured."
