@@ -106,6 +106,21 @@ breaking it yields a session and operational metadata, never content
 
 Normative detail: [en.account.key-model](https://github.com/raddatzk/veyq/blob/main/docs/features/account/enablers/en.account.key-model.md).
 
+What each account key is for:
+
+- **Secret Key** — the high-entropy half of every cold unlock. Mixed into the password unlock, it makes a password
+  cracked from a database dump useless on its own; it is also the recovery factor, and it proves to the server that
+  a credential change comes from the account's holder (the proof keypair below).
+- **Unlock KEK** — opens exactly one wrap of the Master Key. There is one per unlock method.
+- **Master Key** — the account's root. It opens the identity private key, and it seals the account's own private
+  state (the identity-pin store, the device register, private node pins).
+- **Identity keypair** — the account as other members see it. Scope keys are sealed to its encryption key; its
+  signing key signs every grant the account issues. TOFU pins it and the safety number is computed over it.
+- **Auth keypair** — signing in. It proves knowledge of the password to the server without sending it, and opens
+  nothing.
+- **Secret-Key proof keypair** — authorising credential changes. It proves possession of the Secret Key to the
+  server without sending it, and opens nothing.
+
 | Key | How it is made | What wraps it | Who holds it | When it rotates | What losing it means |
 |---|---|---|---|---|---|
 | **Secret Key** | 256 random bits, generated on the device at account birth | Nothing. It is printed in the Emergency Kit and **never stored server-side** | The user (Emergency Kit), and a device the user signed in on with it; a device linked by QR never receives it ([ADR 0059](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0059-device-linking.md)) | Never. No operation rotates it today; a key rotation keeps it, so the kit stays valid | Recovery narrows to another enrolled device, and the account can no longer rotate its keys ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md) Consequences) |
@@ -123,21 +138,49 @@ register**, which is why a rotation re-seals both in the same transaction.
 
 ### Unlock methods
 
+**Why one KEK per method.** The Master Key is random, and everything the account can read hangs on it. It is
+never stored as itself: the server keeps only wraps of it, one per unlock method, each under that method's own KEK.
+So changing the password, or adding or removing a device, rewraps 32 bytes and re-encrypts nothing else; losing one
+method leaves the others working; and the server, holding only wraps, can open none of them.
+
 | Method | KEK input | Notes |
 |---|---|---|
 | `PASSWORD` | Argon2id over the Secret Key and the password | The mandatory floor; cannot be removed. The Secret Key is why a password cracked from a database dump opens nothing |
 | `RECOVERY` | Argon2id over the Secret Key alone | The server **withholds** this wrap until a mailed one-time token and a Secret-Key proof signature are both presented ([ADR 0054](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0054-password-recovery-two-factor-release.md)). There is no separate recovery code |
-| `DEVICE` | Argon2id over a device-bound key's HMAC output and the password | The device key is a non-extractable HMAC key, so no script can export it (the bind it computes can still be copied once); the password stays the real second factor, so a stolen device alone opens nothing |
-| `DEVICE_KEY` | A random key held on the device | Passwordless and explicit opt-in: a stolen *unlocked* device opens content |
+| `DEVICE` | Argon2id over a device-bound key's HMAC output and the password | Written when you sign in with **Stay signed in on this device** off. The device key is a non-extractable WebCrypto HMAC key, so no script can export it (the bind it computes can still be copied once); device and password are two factors, so a stolen device alone opens nothing |
+| `DEVICE_KEY` | A random key held on the device | Written when you sign in with **Stay signed in on this device** on. Passwordless: a stolen *unlocked* device opens content |
 
-Each KEK is derived with a stored salt, used to open its one wrap, then discarded. `DEVICE` and `DEVICE_KEY` may
-appear once per device. **A password change, a reset and a rotation keep only the two cold wraps** (`PASSWORD`,
+**The two device methods, in plain terms.** The first time you sign in on a device you type your password **and**
+your Secret Key. After that the device keeps one wrap of its own, and which one depends on the sign-in toggle
+**Stay signed in on this device**:
+
+- **Off — `DEVICE`.** This device unlocks with your password alone; you never type the Secret Key here again. Its
+  KEK mixes the password with an HMAC from a key the browser holds and cannot export, so the device and the password
+  are two factors: a stolen device without the password opens nothing.
+- **On — `DEVICE_KEY`.** A random key held by the device wraps the Master Key, with no password at all, so the
+  device opens straight in across a restart. A stolen device that is unlocked, or that holds this key, opens content.
+  That is why it is an explicit choice.
+
+A device holds one of the two, never both: changing the toggle replaces one wrap with the other. **Untrust this
+device** deletes it, and the next unlock there needs the Secret Key again.
+
+Each KEK is derived with a stored salt, used to open its one wrap, then discarded. **A password change, a reset and a rotation keep only the two cold wraps** (`PASSWORD`,
 `RECOVERY`) and delete every other one, so a device-held KEK does not outlive the credential it was enrolled under.
 A passkey method is designed but not built; see [Roadmap](/veyq/security/roadmap/).
 
 A linked device receives the Master Key and the identity private key on one human confirmation, but never the
 password or the Secret Key ([ADR 0059](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0059-device-linking.md)).
 That gap is what the next section relies on.
+
+### The Secret-Key proof keypair
+
+An Ed25519 keypair derived from the Secret Key **alone**; its public half is registered at account birth. Every
+request that mints a cold credential — a key rotation, a password change, completing a recovery, changing the
+sign-in address — must carry a signature with it, and the server checks that signature against the registered
+public key ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
+Decision 2). So the server can check that the requester holds the Secret Key without ever seeing it, and someone who
+has only the password, a session, or a linked device (which never receives the Secret Key) cannot replace the
+account's keys or credentials. It is a check the server runs, so it binds every caller except the operator.
 
 ### Rotation after a compromise
 
