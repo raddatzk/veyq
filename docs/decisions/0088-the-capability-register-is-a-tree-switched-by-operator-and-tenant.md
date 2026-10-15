@@ -59,6 +59,16 @@ instance and tenant layers.
    the server may stop advertising it at the next train. That is a removal under ADR 0085.
 10. **The catalog is cut once more before V1, then frozen.** Its append-only rule protects released clients, and
     there are none yet. From V1 on it holds strictly.
+11. **Device linking and remembering a device are two independent switches** (owner, 2026-10-15). Linking answers
+    *how a key reaches a device*: from another unlocked device instead of password and Secret Key. Remembering
+    answers *whether the key may stay there*. Every combination is coherent:
+    - With `passwordless` off, a linked device gets a session but no stored key, because the only wrap it can
+      enrol is a `DEVICE_KEY` (ADR 0059 §10). `useGrantReceiver.ts` already hides "stay signed in" then.
+    - With linking off, a tenant rules out the one mechanism that turns a single human confirmation into the
+      Master Key, where a phished grant is an identity takeover (ADR 0059).
+    - Handing the key from one of the user's own native apps to another on the same device (inbox #438) is not
+      linking: it needs no network and no confirmation. Each app enrols its own wrap, and that wrap is governed by
+      `remember-device`.
 
 ### The register
 
@@ -68,7 +78,7 @@ instance and tenant layers.
 core/
   *+  remember-device              → DEVICE wrap (password only; the device key stands in for the Secret Key)
     *+  passwordless               → DEVICE_KEY wrap (no password)
-  *+  device-linking               → /api/pairing/*   (built; no switch of its own today)
+  *+  device-linking               → /api/pairing/*   (built; independent of remember-device, decision 11)
   *+  group-space                  → group scope creation
   *+  personal-space               → scope kind PERSONAL; "off" = no new content, the scope stays (keys, favorites)
   *+  member-invites               → /member-invites
@@ -117,7 +127,7 @@ both off a place still works, named by hand. The user's own consent to the two
   live updates, the viewer.
 - **Export/import stays unswitchable** because no switch could be enforced: whoever can read holds the plaintext
   on their device ([ADR 0082](0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)).
-  A switch would promise a data-loss protection that does not exist.
+  A switch would promise protection against data leaving the instance that does not exist.
 - **Preconditions, not switches:** mail ([ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)), the S3
   store, ACME.
 - **Parameters, not switches:** quotas, the per-link storage limit, a file-size cap, retention periods.
@@ -125,13 +135,6 @@ both off a place still works, named by hand. The user's own consent to the two
 
 ## Open
 
-- **`device-linking` apart from `remember-device`.** The proposal is two switches. Linking answers *how a key
-  reaches a device*, remembering answers *whether it may stay*. Every combination is coherent:
-  - With `passwordless` off, a linked device gets a session but no stored key, because it can only enrol a
-    `DEVICE_KEY` (ADR 0059 §10). `useGrantReceiver.ts` already behaves that way.
-  - With linking off, a phished grant is ruled out, and a phished grant is an identity takeover (ADR 0059).
-
-  The owner has not decided this yet.
 - **Guests and videos.** If guests stream video from the `ORIGINAL` ([ADR 0047](0047-inline-video-playback-range-streaming.md)),
   `download-originals` off also stops video playback for guests until a video preview tier exists. This must be
   measured before that entry is built.
