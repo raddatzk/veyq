@@ -114,7 +114,7 @@ auch kein Passwort zurücksetzen. Bitte die Person, die den Bereich betreibt, E-
   prompted).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md) (the address, the stamp and the
   send-fact as server-visible metadata).
-- **End-user view (docs site):** [Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)
+- **End-user view (docs site):** [Your email address](../../../../site/src/content/docs/account/change-email.mdx)
 - **Decisions:** [ADR 0074](../../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)
   (what the record means, what sets it, what it gates),
   [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) (the token lifecycle and relay rule

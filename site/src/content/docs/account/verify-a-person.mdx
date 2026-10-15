@@ -1,0 +1,52 @@
+---
+title: "Verify a person"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
+  - docs/features/account/enablers/en.account.identity-pinning.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+Every member has a **safety number**, made from their key. When yours and someone else's app show the same number
+for that person, you know the server gave you their real key and not someone else's. Comparing it once is optional;
+it matters most when a key has changed.
+
+## Compare a safety number
+
+Do this together with the other person, side by side or on a call.
+
+1. Open the other person's profile: choose their name where veyq shows it, for example among who was there in a
+   Memory, or as who added a file or photo.
+2. Under **Safety number**, choose one:
+   - **Scan their code**, and point your camera at the code on their own profile page.
+   - **Compare digits**, read the digits aloud with them, and choose **They match** or **They don't match**.
+3. If they match, the page says the person **is verified on this account**, and shows **Verified**.
+
+The other person finds their own number on their own profile page, under **Your safety number**. They open it the
+same way, by choosing their own name, for example on a file or photo they added.
+
+<Screenshot id="account-safety-number" shows="Another member's profile with the Safety number block: the badge Not verified, the digits, and the Scan their code and Compare digits buttons" />
+
+If the numbers do not match, do not mark the person as verified: the key you have may not be theirs. Ask them to
+check their own profile, and compare again.
+
+## When a key has changed
+
+If the server starts showing a different key for a member, veyq notices: their profile and the member lists under
+**Settings** show **Key changed** and a **Review key** button. This happens when someone
+[replaced their keys](/veyq/account/replace-your-keys/), and it is exactly what you would also see if someone tried
+to pass off a key as theirs.
+
+1. Choose **Review key**. The dialog shows two numbers: **Expected — what you trusted** and **Current — shown now**.
+2. Ask the person directly, outside veyq, whether they replaced their keys, and compare the current number with the
+   one on their own profile.
+3. Only when you are sure it is really theirs, choose **Accept new key**. Otherwise choose **Refuse**.
+
+<Screenshot id="account-review-key" shows="The Review changed key dialog with the Expected and Current numbers and the Refuse and Accept new key buttons" />
+
+Until you accept, your device hands that member no space key and does not add them to a group: a changed key could
+be a new device, or someone pretending to be them. Accepting does not verify the new key; compare again afterwards
+if you want it verified.
+
+veyq only ever trusts a key your own device has checked; the server can pass keys along, but it cannot swap one in
+without your app showing it: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

@@ -84,6 +84,17 @@ phase closes only after the owner has read its pages in conversation. Done when,
 - [ ] 3 Your account — stay signed in and trust a device; add another device; devices and sessions; change
       password; change email; forgot password; replace your keys; profile and picture; appearance and language;
       verify a person (safety number by scan or digits, reviewing a changed key).
+      *Built and checked live, waiting for the owner's read:* `account/` — Devices and sessions (which also carries
+      stay-signed-in/trust and the locked entry), Add another device (rewritten task-first: the scan is an icon in
+      the Secret Key field, five digits one way and six the other, the name and the slide), Change your password,
+      Forgot your password, Your email address (confirm and change), Replace your keys, Your profile, Appearance and
+      language, Verify a person; `account-keys-and-recovery` is gone, its docs link the page that took each part
+      (`validate_guard_gaps.py` 33 now forges `getting-started/emergency-kit.mdx`). Walked with a test owner and a
+      test member: sessions, profile with picture, password change, sign-in address change with the new kit,
+      forgotten password, key replacement, the changed-key review and a digit comparison, appearance. Not walked:
+      device pairing (needs two separate browsers) — written from the code. Found: your own safety number is reached
+      only through your own name on a Memory, file or photo; the member lists show `@username`, not the real name;
+      the German rotation copy says *Räume* where the UI elsewhere says *Bereiche*.
 - [ ] 4 Spaces — personal, group and shared space, and who sees what; groups (create, invite by username, accept
       an invitation, co-owner, remove, rename, delete and restore, icon); organising (folders, favorites, move,
       copy, select several, trash, views); download and import.

@@ -1,0 +1,59 @@
+---
+title: "Deine E-Mail-Adresse"
+sources:
+  - docs/features/account/use-cases/uc.account.confirm-email-address.md
+  - docs/features/account/use-cases/uc.account.change-email.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Mit deiner E-Mail-Adresse meldest du dich an, und an sie geht ein Link, wenn du einmal
+[dein Passwort vergisst](/veyq/de/account/forgot-password/). Beides unten findest du unter **Einstellungen →
+Sicherheit**.
+
+## Prüfen, dass dich ein Link zum Zurücksetzen erreicht
+
+1. Öffne das Menü unten in der Seitenleiste und wähle **Einstellungen**, dann **Sicherheit**.
+2. Unter **E-Mail-Adresse** siehst du deine Adresse und ob sie bestätigt ist.
+3. Steht dort **Noch nicht bestätigt**, wähle **Bestätigung senden**.
+4. Öffne den Link aus dieser E-Mail auf einem Gerät, auf dem du in veyq angemeldet bist. Die Seite sagt **Deine
+   E-Mail-Adresse ist bestätigt.**
+
+Bist du über eine E-Mail-Einladung beigetreten, ist deine Adresse meist schon bestätigt. Es lohnt sich, das einmal zu
+tun: Dann weißt du, dass ein Link zum Zurücksetzen ankommt, bevor du ihn brauchst.
+
+## Die Adresse ändern, mit der du dich anmeldest
+
+Du brauchst dein Passwort und den Secret Key aus deinem [Notfall-Kit](/veyq/de/getting-started/emergency-kit/).
+
+1. Wähle unter **Einstellungen → Sicherheit** **Anmeldeadresse ändern**.
+2. Gib die **Neue E-Mail-Adresse**, dein **Passwort** und deinen **Secret Key** ein (eintippen, einfügen oder das Kit
+   importieren).
+3. Wähle **Link an die neue Adresse senden**.
+4. Öffne den Link aus der E-Mail, die an der neuen Adresse ankommt, auf einem Gerät, auf dem du in diesem Konto
+   angemeldet bist. Die Seite sagt **Erledigt – ab jetzt meldest du dich mit deiner neuen Adresse an.**
+5. Gib auf derselben Seite unter **Neues Notfall-Kit erstellen** dein Passwort und deinen Secret Key ein (oder
+   importiere das alte Kit), wähle **Prüfen und Kit erstellen**, dann **Notfall-Kit herunterladen (PDF)**. Bewahre das
+   neue Kit sicher auf und setze den Haken bei **Ich habe mein Notfall-Kit sicher gespeichert.**
+
+<Screenshot id="account-change-email" shows="Die Sicherheitseinstellungen mit dem Block E-Mail-Adresse und dem Formular Anmeldeadresse ändern: neue E-Mail-Adresse, Passwort, Secret Key und die Schaltfläche Link an die neue Adresse senden" />
+
+Bis du den Link öffnest, ändert sich nichts, und du meldest dich weiter mit der alten Adresse an. Danach werden deine
+anderen Geräte abgemeldet, deine alte Adresse bekommt einen kurzen Hinweis, und Einladungen an deine alte Adresse
+kannst du mit diesem Konto nicht mehr annehmen. Deine Daten, deine Schlüssel und dein Secret Key bleiben gleich; das
+alte Kit funktioniert weiter, es zeigt nur die alte Adresse.
+
+Kann die neue Adresse nicht verwendet werden, etwa weil sich schon ein anderes Konto damit anmeldet, merkst du das
+erst, wenn du den Link öffnest. Das ist Absicht: Sonst könnte jeder mit diesem Formular herausfinden, welche Adressen
+ein Konto haben.
+
+## Wenn es nicht klappt
+
+- **Dieser Bereich kann noch keine E-Mails senden.** Wer deinen Bereich besitzt, hat E-Mail noch nicht eingerichtet.
+  Frag nach; mit deinem Konto ist nichts falsch.
+- **Passwort oder Secret Key passen nicht. Es wurde nichts geändert.**
+- **Melde dich zuerst auf diesem Gerät an und öffne dann den Link aus der E-Mail erneut.** Der Link funktioniert nur
+  auf einem Gerät, auf dem du angemeldet bist.
+
+Deine Adresse ist das Einzige, was der Server wissen muss, um dir zu schreiben; Passwort und Secret Key werden auf
+diesem Gerät geprüft und nie gesendet: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

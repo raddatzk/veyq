@@ -74,3 +74,4 @@ berührt keinen anderen Bereich, in dem du bist.
   [ADR 0022](../../../decisions/0022-settings-information-architecture.md) (the settings hub the rubric lives in)
 - Related use-cases: [add-member](uc.spaces.add-member.md) (where the username is first chosen, and the directory
   that shows it), [consent-group-add](uc.spaces.consent-group-add.md) (the preference on the same panel)
+- End-user view (docs site): [Your profile](../../../../site/src/content/docs/account/your-profile.mdx)

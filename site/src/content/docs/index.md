@@ -13,9 +13,10 @@ A plain-language guide to what veyq does and why your memories stay private. No 
 - [Applications: Memories and Depot](/veyq/applications/)
 - [Memories](/veyq/memories/)
 - [Download and import](/veyq/spaces/download-and-import/)
-- [Account keys & recovery](/veyq/account-keys-and-recovery/)
+- [Getting started](/veyq/getting-started/)
+- [Devices and sessions](/veyq/account/devices-and-sessions/)
 - [Who gets into your space](/veyq/space-owners/who-gets-into-your-space/)
-- [Adding another device](/veyq/account/adding-another-device/)
+- [Add another device](/veyq/account/adding-another-device/)
 - [Quantum computers & your photos](/veyq/privacy/quantum-computers-and-your-photos/)
 
 ## Running an instance

@@ -146,7 +146,7 @@ otherwise.
 - **Forgot your password?** You won't lose your memories — they're tied to your *key*, not your
   password. Your Emergency Kit is what gets you back in; a device you are still signed in on keeps
   working meanwhile. Resetting takes two things at once: a link we mail you, and the secret key from
-  your kit. Neither works alone — see [Account keys & recovery](/veyq/account-keys-and-recovery/).
+  your kit. Neither works alone — see [Forgot your password](/veyq/account/forgot-password/).
 - **Lost everything** — no signed-in device and no Emergency Kit? Then it's **gone.** There is
   **no backdoor and no escrow**: the same thing that stops *us* from reading your data stops us from
   rescuing it. That's the deal, stated up front.

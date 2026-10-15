@@ -80,7 +80,7 @@ range API whether the password appears in known breaches. The fences apply like 
   carries the coordinate itself. **What it does disclose, stated:** the browser's `Origin` header names the veyq
   instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
   The docs site says so, in [Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) and
-  [Account keys & recovery](../../site/src/content/docs/account-keys-and-recovery.md). A one-sentence note under the password field says what leaves the device.
+  [Change your password](../../site/src/content/docs/account/change-password.mdx). A one-sentence note under the password field says what leaves the device.
 - **It advises, never gates.** A hit shows a warning that needs an **explicit "Use it anyway"** before the dialog
   submits that password; the result is not stored. **A check that could not run** (offline, firewalled, the admin
   container with no route out) **does not stop anything**: the dialog submits and says, in one line, that the

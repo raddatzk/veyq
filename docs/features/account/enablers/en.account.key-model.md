@@ -24,7 +24,7 @@
   [Security Model](../../../crosscutting/security-model.md).
 
 > **No end-user section** (enabler) — its value surfaces through the account use-cases it serves. Plain-language
-> companion: [docs site: Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md). This is the
+> companion: [docs site: Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx). This is the
 > **target model**; first-build scope is tracked via the inbox + change-requests.
 
 ## Principle: one Master Key, many wraps
@@ -215,7 +215,6 @@ an existing space (the temporary invite-wrap) is a scopes & tenancy concern, ref
   [en.memory.tree](../../memory/enablers/en.memory.tree.md) build their scope/content keys on this root
 - Concepts: [security-model](../../../crosscutting/security-model.md) (the whole-system boundary),
   [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md) (the scope/content keys this root extends)
-- End-user view: [docs site: Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)
 - Security area of the docs site: [Key hierarchy](../../../../site/src/content/docs/security/key-hierarchy.md), [Protocols](../../../../site/src/content/docs/security/protocols.mdx), [Roadmap](../../../../site/src/content/docs/security/roadmap.md)
 - End-user view (docs site): [Accept an invitation](../../../../site/src/content/docs/getting-started/accept-an-invitation.mdx)
 - End-user view (docs site): [Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx)

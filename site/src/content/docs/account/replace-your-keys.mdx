@@ -1,0 +1,45 @@
+---
+title: "Replace your keys"
+sources:
+  - docs/features/account/use-cases/uc.account.rotate-keys.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+If someone else got into your account, for example because you approved a code that was not your own new device,
+signing their device out is not enough: it already holds your keys. Replacing your keys shuts it out from now on.
+
+Read these four points first. The page shows them too, and none of them is small print:
+
+- **It stops what comes next; it can't take back what's gone.** Anything that person already saw, they still have.
+- **Every other device is signed out and loses its saved key.** Each one needs your password and your Secret Key to
+  get back in, or you add it again from this device. This device also asks for both the next time you sign in here.
+- **You need your Emergency Kit.** That is on purpose: it is the one thing the other person does not have, and it is
+  what stops them from doing this to you first.
+- **In shared spaces, someone else has to confirm it is really you** before you are back in, best by comparing the
+  safety number over a call: [Verify a person](/veyq/account/verify-a-person/). In a space only you own, make someone
+  else an owner first, or nobody there can let you back in.
+
+## Replace them
+
+1. Open the menu at the bottom of the sidebar and choose **Settings**, then **Security**.
+2. Under **Replace your keys**, enter **Your password** and **Your Secret Key**.
+3. Choose **Replace my keys** and confirm with **Replace my keys** in the dialog.
+
+<Screenshot id="account-replace-keys" shows="The Replace your keys block under Security with its four points, the password and Secret Key fields and the Replace my keys button" />
+
+The page then says **Your keys are replaced** and lists each space with its state:
+
+- **Secured** — this space has a new lock and only your new keys open it.
+- **Not secured** — it still has its old lock. Replace your keys again.
+
+Under **Shared spaces** you see the spaces where someone else has to fit the new lock or let you back in:
+**Waiting for someone else** means another owner does it the next time they open veyq; **Nobody can do it** means no
+other owner is left — make someone else an owner of that space. Until the new lock is in, the old key can still read
+what is new there.
+
+Your Emergency Kit keeps working afterwards: your Secret Key stays the same, only what it opens changes.
+
+To the other members, your new keys look like a stranger claiming to be you, which is exactly what veyq is meant to
+notice. That is why they confirm it, and why the server alone can never hand your spaces to someone else:
+[Is my data safe?](/veyq/privacy/is-my-data-safe/)

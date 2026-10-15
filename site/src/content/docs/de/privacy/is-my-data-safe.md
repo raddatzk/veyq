@@ -157,7 +157,7 @@ Schlüssel gar nicht lügen kann, ist **geplant, aber nicht gebaut** — und das
   nicht am Passwort. Dein Notfall-Kit ist das, was dich wieder hineinbringt; ein Gerät, auf dem du noch
   angemeldet bist, funktioniert derweil weiter. Zum Zurücksetzen müssen zwei Dinge zusammenkommen: ein
   Link, den wir dir mailen, und der Secret Key aus deinem Kit. Keines von beiden reicht allein — mehr
-  dazu in [Konto-Schlüssel & Wiederherstellung](/veyq/de/account-keys-and-recovery/).
+  dazu in [Passwort vergessen](/veyq/de/account/forgot-password/).
 - **Alles verloren** — kein angemeldetes Gerät und kein Notfall-Kit? Dann ist es **weg.**
   Es gibt **keine Hintertür und keine Schlüsselhinterlegung**: Dasselbe, was *uns* am Lesen deiner
   Daten hindert, hindert uns auch daran, sie zu retten. Das sagen wir von vornherein.

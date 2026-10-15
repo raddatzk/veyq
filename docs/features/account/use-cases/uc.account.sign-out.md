@@ -127,3 +127,4 @@ Passwort braucht, falls du diesem Gerät vertraust.
 - Related use-cases: [login](uc.account.login.md) (the server revoke), [sessions](uc.account.sessions.md)
   (ending a session elsewhere), [remember-this-device](uc.account.remember-this-device.md),
   [trust-device](uc.account.trust-device.md), [accept-terms](uc.account.accept-terms.md)
+- End-user view (docs site): [Devices and sessions](../../../../site/src/content/docs/account/devices-and-sessions.mdx)

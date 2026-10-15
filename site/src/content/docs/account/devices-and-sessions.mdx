@@ -1,0 +1,73 @@
+---
+title: "Devices and sessions"
+sources:
+  - docs/features/account/use-cases/uc.account.sessions.md
+  - docs/features/account/use-cases/uc.account.trust-device.md
+  - docs/features/account/use-cases/uc.account.sign-out.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+Here you see every place your account is signed in, how this device unlocks, and you can sign any of them out.
+
+## Open the list
+
+1. Open the menu at the bottom of the sidebar, the one with your picture and email address, and choose **Settings**.
+2. Choose **Devices and sessions**.
+
+Each row is one device. It shows the device's name, when it was last used and since when it is signed in. A new
+device starts with a name like "Chrome · macOS"; a device without a name shows **Signed-in device**. Your own row
+says **You are here**.
+
+<Screenshot id="account-sessions-list" shows="Devices and sessions with two rows: this device with You are here and its unlock line, and another device with the pencil, the sign-out icon and Sign out + remove key" />
+
+Your row also says how this device unlocks:
+
+- **This device stays signed in** — you chose Stay signed in on this device; it opens without a password.
+- **This device is trusted** — it unlocks with just your password.
+- **This device has no saved unlock** — it needs your Secret Key every time.
+
+## Give a device a name
+
+1. Choose the pencil on its row (**Rename this device**).
+2. Type a name, for example "Work laptop", and choose **Save**.
+
+The name is stored locked; the server never sees it. Every session from that device shows it.
+
+## Sign a device out
+
+- **One other device:** choose the sign-out icon on its row (**Sign this device out**) and confirm. It has to sign
+  in again.
+- **Every other device at once:** choose **Sign out everywhere else** at the top and confirm. You stay signed in here.
+- **This device:** the sign-out icon on your own row (**Sign out here**), or **Sign out** in the menu at the bottom
+  of the sidebar.
+
+A device that was set to stay signed in loses its saved key when it is signed out, and then needs your password
+**and** your Secret Key.
+
+## If a device is really gone
+
+Signing a device out cuts it off from the server, but it does not take back what it can open: a device that saved a
+key can still open your data with your password. For a lost or stolen device, choose **Sign out + remove key** on
+its row instead and confirm. Whoever holds it then needs your password **and** your Secret Key.
+
+Devices that are signed out but still have a saved key on the server are listed under **Devices with a saved key**.
+Remove one with the key icon (**Remove this saved key**), or all of them with **Remove every saved key except this
+device's**. Your other devices then need your password and your Emergency Kit to get back in.
+
+If the lost device was your only one, sign in somewhere else and use
+[I don't have my Secret Key with me](#without-your-secret-key) to sign every device out.
+
+## Make this device forget its key
+
+On your own row, choose **Untrust this device** and confirm (**Forget this device?**). Your next unlock here will need
+your Secret Key again. You stay signed in, and your other devices are not affected.
+
+## Without your Secret Key
+
+On the sign-in page of a borrowed device, enter your email and password and choose **I don't have my Secret Key with
+me**. You are signed in, but nothing is opened, and the device keeps nothing. Choose **Sign out everywhere, including
+here** to sign every device out. If the kit turns up after all, **I have my Secret Key after all** takes you back.
+
+Device names are locked on your device, and signing out never reaches into a device itself; it only takes away what
+the server keeps for it: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

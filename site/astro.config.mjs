@@ -23,9 +23,9 @@ export default defineConfig({
       // Use is task-first in nine sections (cr-use-area-content): platform first (Getting started, Your account,
       // Spaces), then the applications (Memories, Depot), then Sharing, the space owner's tasks, Privacy and Help.
       // A section's pages live in its folder (getting-started/, account/, spaces/, memories/, depot/, sharing/,
-      // space-owners/, privacy/, help/), so a page's URL says its section; the two moved wiki pages still at the
-      // root (account-keys-and-recovery, sharing) wait for the phase that splits them. A section with no
-      // page yet is left out rather than shown empty. The labels are the web client's own words in each language.
+      // space-owners/, privacy/, help/), so a page's URL says its section; the one moved wiki page still at the
+      // root (sharing) waits for the phase that splits it. A section with no page yet is left out rather than
+      // shown empty. The labels are the web client's own words in each language.
       sidebar: [
         {
           label: 'Use',
@@ -45,7 +45,17 @@ export default defineConfig({
             {
               label: 'Your account',
               translations: { de: 'Dein Konto' },
-              items: ['account/adding-another-device', 'account-keys-and-recovery'],
+              items: [
+                'account/devices-and-sessions',
+                'account/adding-another-device',
+                'account/change-password',
+                'account/forgot-password',
+                'account/change-email',
+                'account/replace-your-keys',
+                'account/your-profile',
+                'account/appearance-and-language',
+                'account/verify-a-person',
+              ],
             },
             {
               label: 'Spaces',

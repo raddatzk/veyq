@@ -1,0 +1,57 @@
+---
+title: "Your email address"
+sources:
+  - docs/features/account/use-cases/uc.account.confirm-email-address.md
+  - docs/features/account/use-cases/uc.account.change-email.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+Your email address is what you sign in with, and where a link goes if you ever
+[forget your password](/veyq/account/forgot-password/). Both tasks below are under **Settings → Security**.
+
+## Check that a reset link would reach you
+
+1. Open the menu at the bottom of the sidebar and choose **Settings**, then **Security**.
+2. Under **Email address** you see your address and whether it is confirmed.
+3. If it says **Not confirmed yet**, choose **Send confirmation**.
+4. Open the link in that email on a device where you are signed in to veyq. The page says **Your email address is
+   confirmed.**
+
+If you joined through an emailed invitation, your address is usually confirmed already. It is worth doing once:
+then you know a reset link reaches you before the day you need one.
+
+## Change the address you sign in with
+
+You need your password and the Secret Key from your [Emergency Kit](/veyq/getting-started/emergency-kit/).
+
+1. Under **Settings → Security**, choose **Change sign-in address**.
+2. Enter the **New email address**, your **Password** and your **Secret Key** (type it, paste it, or import the kit).
+3. Choose **Send link to the new address**.
+4. Open the link in the email that arrives at the new address, on a device where you are signed in to this account.
+   The page says **Done — you sign in with your new address from now on.**
+5. On the same page, under **Print a new Emergency Kit**, enter your password and Secret Key (or import the old kit),
+   choose **Check and make the kit**, then **Download Emergency Kit (PDF)**. Keep the new kit safe and tick **I have
+   saved my Emergency Kit somewhere safe.**
+
+<Screenshot id="account-change-email" shows="The Security settings with the Email address block and the Change sign-in address form: new email address, password, Secret Key and the Send link to the new address button" />
+
+Until you open the link, nothing changes and you keep signing in with the old address. Afterwards your other devices
+are signed out, your old address gets a short notice, and invitations sent to your old address can no longer be
+accepted with this account. Your data, your keys and your Secret Key stay the same; the old kit keeps working, it
+just shows the old address.
+
+If the new address cannot be used, for example because another account already signs in with it, you only learn
+that when you open the link. That is on purpose: otherwise anybody could use this form to find out which addresses
+have an account.
+
+## If it does not work
+
+- **This space can't send email yet.** Whoever owns your space has not set up email. Ask them; nothing is wrong with
+  your account.
+- **That password or Secret Key didn't match. Nothing was changed.**
+- **Sign in on this device first, then open the link from the email again.** The link only works on a device where
+  you are signed in.
+
+Your address is the one thing the server must know to send you mail; your password and Secret Key are checked on
+this device and never sent: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

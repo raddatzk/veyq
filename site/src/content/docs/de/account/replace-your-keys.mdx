@@ -1,0 +1,49 @@
+---
+title: "Deine Schlüssel ersetzen"
+sources:
+  - docs/features/account/use-cases/uc.account.rotate-keys.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Ist jemand anderes in dein Konto gelangt, etwa weil du einen Code bestätigt hast, der nicht zu deinem neuen Gerät
+gehörte, reicht es nicht, dessen Gerät abzumelden: Es hat deine Schlüssel schon. Das Ersetzen deiner Schlüssel sperrt
+es ab jetzt aus.
+
+Lies zuerst diese vier Punkte. Die Seite zeigt sie auch, und keiner davon ist Kleingedrucktes:
+
+- **Es stoppt, was danach kommt; es holt nichts zurück.** Was diese Person schon gesehen hat, hat sie weiterhin.
+- **Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel.** Jedes braucht dein Passwort
+  und deinen Secret Key, um wieder hineinzukommen, oder du fügst es von diesem Gerät aus neu hinzu. Auch dieses Gerät
+  fragt bei der nächsten Anmeldung nach beidem.
+- **Du brauchst dein Notfall-Kit.** Das ist Absicht: Es ist das Einzige, was die andere Person nicht hat, und genau
+  das hindert sie daran, dir das zuerst anzutun.
+- **In geteilten Bereichen muss jemand anderes bestätigen, dass du wirklich du bist**, bevor du wieder drin bist, am
+  besten, indem ihr die Sicherheitsnummer am Telefon vergleicht: [Eine Person verifizieren](/veyq/de/account/verify-a-person/).
+  In einem Bereich, den nur du besitzt, mach vorher jemand anderen zur besitzenden Person, sonst kann dich dort niemand
+  wieder hineinlassen.
+
+## Sie ersetzen
+
+1. Öffne das Menü unten in der Seitenleiste und wähle **Einstellungen**, dann **Sicherheit**.
+2. Gib unter **Schlüssel ersetzen** **Dein Passwort** und **Dein Secret Key** ein.
+3. Wähle **Schlüssel ersetzen** und bestätige im Dialog **Schlüssel wirklich ersetzen?** mit **Schlüssel ersetzen**.
+
+<Screenshot id="account-replace-keys" shows="Der Block Schlüssel ersetzen unter Sicherheit mit seinen vier Punkten, den Feldern für Passwort und Secret Key und der Schaltfläche Schlüssel ersetzen" />
+
+Danach steht dort **Deine Schlüssel sind ersetzt** und jeder Bereich mit seinem Stand:
+
+- **Gesichert** — dieser Bereich hat ein neues Schloss, und nur deine neuen Schlüssel öffnen es.
+- **Nicht gesichert** — er hat noch sein altes Schloss. Ersetze deine Schlüssel noch einmal.
+
+Unter **Geteilte Räume** siehst du die Bereiche, in denen jemand anderes das neue Schloss einbauen oder dich wieder
+hineinlassen muss: **Wartet auf jemand anderen** heißt, eine andere besitzende Person tut es, sobald sie veyq das
+nächste Mal öffnet; **Niemand kann es tun** heißt, es gibt keine andere besitzende Person mehr — mach jemand anderen
+zur besitzenden Person dieses Bereichs. Bis das neue Schloss eingebaut ist, kann der alte Schlüssel Neues dort noch
+lesen.
+
+Dein Notfall-Kit funktioniert danach weiter: Dein Secret Key bleibt gleich, nur was er öffnet, ändert sich.
+
+Für die anderen Mitglieder sehen deine neuen Schlüssel aus wie ein Fremder, der sich als du ausgibt, und genau das
+soll veyq bemerken. Deshalb bestätigen sie es, und deshalb kann der Server allein deine Bereiche nie jemand anderem
+geben: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

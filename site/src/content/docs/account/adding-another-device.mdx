@@ -1,0 +1,64 @@
+---
+title: "Add another device"
+sources:
+  - docs/features/account/use-cases/uc.account.onboard-device.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+You can let a new phone or laptop in without your Emergency Kit: a device you are already signed in on hands the new
+one everything it needs. One device shows a code and the other scans it, so pick the way round where the scanning
+device has a camera. A code is good for about ten minutes.
+
+## The signed-in device shows the code
+
+1. On the device you are signed in on, open the menu at the bottom of the sidebar and choose **Settings**, then **Add
+   a device**, then **Show a code**.
+2. On the new device, open the sign-in page and choose **Scan QR code**, the QR-code symbol in the Secret Key field.
+   Point its camera at the code.
+3. Both screens now show the same five-digit number. Check that they match.
+4. On the signed-in device, enter a **Name for the new device**, for example "Work laptop".
+5. Slide the bar **Slide to give … full access** to the end. The signed-in device says **Done here — finish on the
+   new device**, and the new device opens by itself.
+
+If the numbers differ, choose **The numbers do not match** and stop: something other than your new device answered.
+
+<Screenshot id="account-pairing-compare" shows="The signed-in device's Add a device panel showing the five-digit number, the Name for the new device field and the slide bar" />
+
+## The new device shows the code
+
+Use this way when the new device has no camera.
+
+1. On the new device, choose **Sign in with a QR code** on the sign-in page. It shows a code.
+2. On the signed-in device, open **Settings → Add a device** and choose **Scan a code**. Point its camera at the code.
+3. The signed-in device shows a six-digit number. Type it into the new device under **The six-digit number your other
+   device shows**, and choose **Confirm this number**.
+4. If it was right, the signed-in device says **That is the right device.** Enter a name for it and slide the bar to
+   the end. The new device opens by itself.
+
+<Screenshot id="account-pairing-sign-in-code" shows="The new device's Sign in with a QR code card with the code, and below it the field for the six-digit number and the Confirm this number button" />
+
+You get one try. Check the number before you choose **Confirm this number**; you can correct it until then. If it was
+wrong, the signed-in device says **That number came back wrong — nothing was given away**, and the code is finished.
+The new device is not told; it waits until the code runs out. Start again on the new device; it shows a fresh code.
+
+**Never type in a number someone gives you on the phone or in a message.** Nobody legitimate will ever ask you for
+one. If someone is asking, that is the attack, and typing the number is the moment it succeeds.
+
+## Before you slide
+
+Both ways end on the same bar, and it means what it says: the new device gets everything, permanently. It can read
+every Memory and file you have. Signing it out later stops it reaching the server, but does not take the key back.
+So only ever add a device you are holding. If you ever approve a device that turns out not to be yours,
+[replacing your keys](/veyq/account/replace-your-keys/) shuts it out from then on.
+
+## On the new device
+
+- It never learns your password. If it is set to **Stay signed in on this device**, it keeps a saved key and opens
+  by itself next time. If not, closing the browser ends its access, and you add it again next time.
+- If it ever loses its key, it needs your password **and** your Emergency Kit, or you add it again from a signed-in
+  device.
+
+The code carries a secret that never reaches the server, and both devices check that everything they receive was made
+with it, so the server that passes the messages cannot slip in a device of its own:
+[Is my data safe?](/veyq/privacy/is-my-data-safe/)

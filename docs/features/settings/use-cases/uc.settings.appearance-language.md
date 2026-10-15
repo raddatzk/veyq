@@ -49,3 +49,4 @@ Einstellung ist, verlässt sie dein Gerät nie und erreicht den Server nicht.
 - Feature: [Settings](../_index.md)
 - Concepts: [Security Model](../../../crosscutting/security-model.md) (client-only, server-blind)
 - Work orders: cr-0031 (the ProfileMenu — theme + language)
+- End-user view (docs site): [Appearance and language](../../../../site/src/content/docs/account/appearance-and-language.mdx)

@@ -1261,9 +1261,10 @@ def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
 
 
 def forge_wiki_prose_contradicts_doc(root: pathlib.Path) -> str:
-    page = root / SITE_PAGES / "account-keys-and-recovery.md"
+    # The page that declares the key model (`en.account.key-model`), as the old account-keys page did.
+    page = root / SITE_PAGES / "getting-started" / "emergency-kit.mdx"
     if not page.is_file():
-        raise ForgeError(f"{SITE_PAGES}/account-keys-and-recovery.md is gone — re-anchor this forgery")
+        raise ForgeError(f"{SITE_PAGES}/getting-started/emergency-kit.mdx is gone — re-anchor this forgery")
     page.write_text(page.read_text() + "\nTo log in, your password is sent to the server.\n")
     return "a site page claiming the password is sent to the server, against the key model it declares"
 

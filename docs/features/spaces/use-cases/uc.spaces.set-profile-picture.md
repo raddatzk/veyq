@@ -79,3 +79,4 @@ du einem Bereich als Mitglied bei, kannst du dein Bild gleich nach dem ersten En
   [set-space-icon](uc.spaces.set-space-icon.md) (the sealed constant-length precedent),
   [add-member](uc.spaces.add-member.md) (join),
   [memory participants](../../memory/use-cases/uc.memory.participants.md) (where the picture shows)
+- End-user view (docs site): [Your profile](../../../../site/src/content/docs/account/your-profile.mdx)

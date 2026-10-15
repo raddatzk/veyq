@@ -1,0 +1,56 @@
+---
+title: "Eine Person verifizieren"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
+  - docs/features/account/enablers/en.account.identity-pinning.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Jedes Mitglied hat eine **Sicherheitsnummer**, die aus seinem Schlüssel entsteht. Zeigen deine App und die einer
+anderen Person für diese Person dieselbe Nummer, weißt du, dass der Server dir ihren echten Schlüssel gegeben hat und
+nicht den von jemand anderem. Einmal zu vergleichen ist freiwillig; am wichtigsten ist es, wenn sich ein Schlüssel
+geändert hat.
+
+## Eine Sicherheitsnummer vergleichen
+
+Macht das zusammen, nebeneinander oder am Telefon.
+
+1. Öffne das Profil der anderen Person: Wähle ihren Namen dort, wo veyq ihn zeigt, zum Beispiel bei denen, die bei
+   einer Erinnerung dabei waren, oder bei wer eine Datei oder ein Foto hinzugefügt hat.
+2. Wähle unter **Sicherheitsnummer** eines davon:
+   - **Code scannen**, und richte deine Kamera auf den Code im eigenen Profil der Person.
+   - **Ziffern vergleichen**, lest die Ziffern gemeinsam vor, und wähle **Sie stimmen überein** oder **Sie stimmen
+     nicht überein**.
+3. Stimmen sie überein, sagt die Seite, dass die Person **für dein Konto verifiziert** ist, und zeigt **Verifiziert**.
+
+Die andere Person findet ihre eigene Nummer auf ihrer eigenen Profilseite unter **Deine Sicherheitsnummer**. Sie
+öffnet sie genauso, über ihren eigenen Namen, zum Beispiel an einer Datei oder einem Foto, das sie hinzugefügt hat.
+
+<Screenshot id="account-safety-number" shows="Das Profil eines anderen Mitglieds mit dem Block Sicherheitsnummer: das Abzeichen Nicht verifiziert, die Ziffern und die Schaltflächen Code scannen und Ziffern vergleichen" />
+
+Stimmen die Nummern nicht überein, markiere die Person nicht als verifiziert: Der Schlüssel, den du hast, gehört
+womöglich nicht zu ihr. Bitte sie, im eigenen Profil nachzusehen, und vergleicht erneut.
+
+## Wenn sich ein Schlüssel geändert hat
+
+Zeigt der Server für ein Mitglied plötzlich einen anderen Schlüssel, merkt veyq das: Ihr Profil und die
+Mitgliederlisten unter **Einstellungen** zeigen **Schlüssel geändert** und eine Schaltfläche **Schlüssel prüfen**. Das
+passiert, wenn jemand [seine Schlüssel ersetzt hat](/veyq/de/account/replace-your-keys/), und genau das würdest du auch
+sehen, wenn jemand versucht, einen Schlüssel als den dieser Person auszugeben.
+
+1. Wähle **Schlüssel prüfen**. Der Dialog zeigt zwei Nummern: **Erwartet — dein vertrauter** und **Aktuell — jetzt
+   gezeigt**.
+2. Frag die Person direkt, außerhalb von veyq, ob sie ihre Schlüssel ersetzt hat, und vergleicht die aktuelle Nummer
+   mit der in ihrem eigenen Profil.
+3. Erst wenn du sicher bist, dass er wirklich ihr gehört, wähle **Neuen Schlüssel akzeptieren**. Sonst wähle
+   **Ablehnen**.
+
+<Screenshot id="account-review-key" shows="Der Dialog Geänderten Schlüssel prüfen mit den Nummern Erwartet und Aktuell und den Schaltflächen Ablehnen und Neuen Schlüssel akzeptieren" />
+
+Bis du akzeptierst, gibt dein Gerät diesem Mitglied keinen Schlüssel eines Bereichs und fügt es keiner Gruppe hinzu:
+Ein geänderter Schlüssel kann ein neues Gerät sein oder jemand, der sich als diese Person ausgibt. Akzeptieren
+verifiziert den neuen Schlüssel nicht; vergleicht danach erneut, wenn du ihn verifiziert haben willst.
+
+veyq vertraut nur einem Schlüssel, den dein eigenes Gerät geprüft hat; der Server kann Schlüssel weiterreichen, aber
+keinen unterschieben, ohne dass deine App es zeigt: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

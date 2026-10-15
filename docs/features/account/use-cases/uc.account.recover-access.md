@@ -135,6 +135,6 @@ Secret Key dort also noch einmal ein.
 - [ADR 0049](../../../decisions/0049-email-delivery-boundary.md) — what a veyq mail may contain
 - [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) — why a new password means a new auth keypair
 - End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)
-- End-user view (docs site): [Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)
+- End-user view (docs site): [Forgot your password](../../../../site/src/content/docs/account/forgot-password.mdx)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
 - End-user view (docs site): [Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx)

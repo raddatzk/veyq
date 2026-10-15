@@ -1,0 +1,69 @@
+---
+title: "Ein weiteres Gerät hinzufügen"
+sources:
+  - docs/features/account/use-cases/uc.account.onboard-device.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Du kannst ein neues Handy oder einen neuen Laptop ohne dein Notfall-Kit hereinlassen: Ein Gerät, auf dem du schon
+angemeldet bist, gibt dem neuen alles Nötige. Ein Gerät zeigt einen Code, das andere scannt ihn; nimm also den Weg, bei
+dem das scannende Gerät eine Kamera hat. Ein Code gilt etwa zehn Minuten.
+
+## Das angemeldete Gerät zeigt den Code
+
+1. Öffne auf dem Gerät, auf dem du angemeldet bist, das Menü unten in der Seitenleiste und wähle **Einstellungen**,
+   dann **Gerät hinzufügen**, dann **Code anzeigen**.
+2. Öffne auf dem neuen Gerät die Anmeldeseite und wähle **QR-Code scannen**, das QR-Code-Symbol im Secret-Key-Feld.
+   Richte seine Kamera auf den Code.
+3. Beide Bildschirme zeigen jetzt dieselbe fünfstellige Zahl. Prüfe, dass sie übereinstimmt.
+4. Gib auf dem angemeldeten Gerät einen **Name für das neue Gerät** ein, zum Beispiel „Arbeitslaptop“.
+5. Schieb den Regler **Zum Freigeben schieben: „…“ bekommt vollen Zugriff** bis ans Ende. Das angemeldete Gerät sagt
+   **Hier ist alles erledigt — mach am neuen Gerät weiter**, und das neue Gerät öffnet sich von selbst.
+
+Unterscheiden sich die Zahlen, wähle **Die Zahlen stimmen nicht überein** und hör auf: Dann hat etwas anderes als dein
+neues Gerät geantwortet.
+
+<Screenshot id="account-pairing-compare" shows="Das Feld Gerät hinzufügen auf dem angemeldeten Gerät mit der fünfstelligen Zahl, dem Feld Name für das neue Gerät und dem Schieberegler" />
+
+## Das neue Gerät zeigt den Code
+
+Nimm diesen Weg, wenn das neue Gerät keine Kamera hat.
+
+1. Wähle auf dem neuen Gerät auf der Anmeldeseite **Über QR-Code anmelden**. Es zeigt einen Code.
+2. Öffne auf dem angemeldeten Gerät **Einstellungen → Gerät hinzufügen** und wähle **Code scannen**. Richte seine
+   Kamera auf den Code.
+3. Das angemeldete Gerät zeigt eine sechsstellige Zahl. Tippe sie auf dem neuen Gerät unter **Die sechsstellige Zahl,
+   die dein anderes Gerät zeigt** ein und wähle **Zahl bestätigen**.
+4. Stimmte sie, sagt das angemeldete Gerät **Das ist das richtige Gerät.** Gib ihm einen Namen und schieb den Regler
+   bis ans Ende. Das neue Gerät öffnet sich von selbst.
+
+<Screenshot id="account-pairing-sign-in-code" shows="Die Karte Über QR-Code anmelden auf dem neuen Gerät mit dem Code, darunter das Feld für die sechsstellige Zahl und die Schaltfläche Zahl bestätigen" />
+
+Du hast einen Versuch. Prüfe die Zahl, bevor du **Zahl bestätigen** wählst; bis dahin kannst du sie korrigieren. War
+sie falsch, sagt das angemeldete Gerät **Die Zahl kam falsch zurück — es wurde nichts weitergegeben**, und der Code
+ist verbraucht. Das neue Gerät erfährt davon nichts; es wartet, bis der Code abläuft. Fang auf dem neuen Gerät neu an;
+es zeigt einen frischen Code.
+
+**Tippe nie eine Zahl ein, die dir jemand am Telefon oder in einer Nachricht nennt.** Niemand, der es ehrlich meint,
+fragt je danach. Fragt jemand, ist genau das der Angriff, und das Eintippen der Zahl ist der Moment, in dem er gelingt.
+
+## Bevor du schiebst
+
+Beide Wege enden am selben Regler, und er meint, was er sagt: Das neue Gerät bekommt alles, dauerhaft. Es kann jede
+Erinnerung und jede Datei lesen, die du hast. Späteres Abmelden hindert es daran, den Server zu erreichen, nimmt ihm
+den Schlüssel aber nicht zurück. Füge also nur Geräte hinzu, die du in der Hand hältst. Hast du einmal ein Gerät
+freigegeben, das sich als fremd herausstellt, sperrt es [das Ersetzen deiner Schlüssel](/veyq/de/account/replace-your-keys/)
+ab dann aus.
+
+## Auf dem neuen Gerät
+
+- Es erfährt dein Passwort nie. Steht es auf **Auf diesem Gerät angemeldet bleiben**, behält es einen gespeicherten
+  Schlüssel und öffnet sich beim nächsten Mal von selbst. Wenn nicht, endet sein Zugang mit dem Schließen des
+  Browsers, und du fügst es beim nächsten Mal erneut hinzu.
+- Verliert es einmal seinen Schlüssel, braucht es dein Passwort **und** dein Notfall-Kit, oder du fügst es von einem
+  angemeldeten Gerät aus neu hinzu.
+
+Der Code trägt ein Geheimnis, das den Server nie erreicht, und beide Geräte prüfen, dass alles, was sie bekommen, damit
+gemacht wurde; der Server, der die Nachrichten weiterreicht, kann also kein eigenes Gerät einschleusen:
+[Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

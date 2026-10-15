@@ -155,3 +155,4 @@ und fragt dich nur, ob es sich weiter merken soll.
   keypair
 - [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2 — the cold-credential gate
   this flow runs, in the same shared implementation rotation runs
+- End-user view (docs site): [Change your password](../../../../site/src/content/docs/account/change-password.mdx)

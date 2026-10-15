@@ -205,5 +205,5 @@ fügst es erneut hinzu.
   and whose E3 hosts the QR-sign-in entry),
   [remember-this-device](uc.account.remember-this-device.md) (the tier a linked device is born at),
   [unlock](uc.account.unlock.md) (the Secret-Key path this exists to avoid needing)
-- End-user view (docs site): [Adding another device](../../../../site/src/content/docs/account/adding-another-device.md)
+- End-user view (docs site): [Adding another device](../../../../site/src/content/docs/account/adding-another-device.mdx)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
