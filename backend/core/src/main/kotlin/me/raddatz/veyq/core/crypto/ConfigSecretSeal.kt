@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.crypto
 import me.raddatz.veyq.core.config.VeyqConfig
 import jakarta.enterprise.context.ApplicationScoped
 import org.jboss.logging.Logger
+import java.nio.file.AccessDeniedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -110,15 +111,29 @@ class ConfigSecretSeal(config: VeyqConfig) {
             // An IO failure (unwritable/unreadable path) must not crash the operator-blind rest of veyq, which needs
             // no KEK. Degrade: configured=false → password-authenticated SMTP is unsendable, so the send paths
             // refuse (ADR 0050; ADR 0055 §2/§4). Only the ServerOwner bootstrap still copy-links (§3).
+            // `e.toString()`, not `e.message`: an `AccessDeniedException`'s message is only the path, which names
+            // neither the class nor the cause (inbox #188). No key bytes can ride along: an IO exception carries a
+            // path, never file contents.
             log.errorf(
                 "Could not read or generate the config-secret key at %s (%s) — config-secret sealing is UNAVAILABLE; " +
                     "any tenant whose SMTP needs a password cannot send, so member invites and password recovery " +
-                    "are refused with 503. Fix the path/permissions to enable it.",
-                pathStr, e.message,
+                    "are refused with 503. %s",
+                pathStr, e.toString(), fixHint(e),
             )
             null
         }
     }
+
+    /** What to fix. A permission denial is almost always a key owned by the wrong user (a restore or copy run as
+     *  root, infra/README.md § Restore), so it names that cause; anything else keeps the generic advice. */
+    private fun fixHint(e: Exception): String =
+        if (e is AccessDeniedException) {
+            "Permission denied: the key file and its directory must be owned by and accessible to the user the " +
+                "application runs as (uid 10001 in the image), the key mode 0600; a key restored or copied as " +
+                "another user (e.g. root) is not (infra/README.md § Restore)."
+        } else {
+            "Fix the path/permissions to enable it."
+        }
 
     private fun writeKeyFile(path: Path, base64Key: String) {
         path.toAbsolutePath().parent?.let { Files.createDirectories(it) }
