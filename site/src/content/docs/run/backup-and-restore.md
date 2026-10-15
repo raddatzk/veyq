@@ -33,10 +33,10 @@ docker compose -f infra/docker-compose.prod.yml stop app
 
 # 2. Credentials: the values infra/.env already holds, under the names the tool reads.
 #    The endpoint is the one the rclone container sees on the store's network, not a published port.
-read -rs VEYQ_BACKUP_DB_PASSWORD && export VEYQ_BACKUP_DB_PASSWORD        # = MARIADB_ROOT_PASSWORD
-read -rs VEYQ_BLOB_STORE_ACCESS_KEY && export VEYQ_BLOB_STORE_ACCESS_KEY  # = VEYQ_S3_ACCESS_KEY
-read -rs VEYQ_BLOB_STORE_SECRET_KEY && export VEYQ_BLOB_STORE_SECRET_KEY  # = VEYQ_S3_SECRET_KEY
-export VEYQ_BLOB_STORE_ENDPOINT=http://garage:3900
+#    The bundled store: its admin token; the tool derives the S3 key pair from it, so nothing else is typed.
+read -rs VEYQ_BACKUP_DB_PASSWORD && export VEYQ_BACKUP_DB_PASSWORD              # = MARIADB_ROOT_PASSWORD
+read -rs VEYQ_BUNDLED_STORE_ADMIN_TOKEN && export VEYQ_BUNDLED_STORE_ADMIN_TOKEN  # = GARAGE_ADMIN_TOKEN
+export VEYQ_BUNDLED_STORE_ENDPOINT=http://garage:3900
 
 # 3. Capture legs (a) and (b) into infra/backups/<UTC-ISO8601>/, and leg (c) to a medium of its own.
 sudo -E python3 scripts/instance_backup.py capture \
@@ -51,6 +51,14 @@ sudo python3 scripts/instance_backup.py verify infra/backups/<stamp> --key-from 
 # 5. Start the application again. The downtime was the capture, and nothing else.
 docker compose -f infra/docker-compose.prod.yml start app
 ```
+
+**A store of your own.** The store is a setting in the admin console, not an environment variable, and the capture is
+cold — no app is running to sign for the tool — so you give the tool the store's credentials for this run, the ones you
+entered in the console (the console never shows them again, and neither can the tool read them back): export
+`VEYQ_BACKUP_STORE_ENDPOINT`, `VEYQ_BACKUP_STORE_ACCESS_KEY` and `VEYQ_BACKUP_STORE_SECRET_KEY` instead of the
+bundled pair, plus `VEYQ_BACKUP_STORE_BUCKET` and `VEYQ_BACKUP_STORE_REGION` when they are not `blobs` and
+`us-east-1`. Keep them in a password manager: after a lost config-secret key the console asks for the same
+credentials again.
 
 The network is `veyq_edge`, the one the store is on: the production compose file declares `name: veyq`, so that is
 the project, and nothing has to be passed on the command line to make it so. Leg (c) lives on a **volume**, not on
@@ -168,12 +176,18 @@ The tool from before the fix, run the same way, gave `0:0 600` and `ABSENT`. The
 owner on the same directory, so the tool takes the same branch, but that exact invocation is still derived. The
 tool's owner rule is held by `scripts/instance_backup_selftest.py`, without Docker or root.
 
-The store's **configuration** is not restored because it was never state: bucket, access key and single-node
-layout are recreated idempotently by the app itself, on every start. This has no "fresh node only" limit — the
-layout step is satisfied by a node already carrying a role at any version, and applies `current + 1` where it
-has work to do.
+The store's **setting** now travels with the database: it is a row (`veyq_store_setting`, the one table the
+emptiness gate ignores), its secrets sealed under the config-secret key, so with leg (c) restored they open again.
+A **bundled** setting is a reference to the hint of the install it runs on, so it works on the new install
+whatever that install's Garage secrets are. The bundled store's own bucket, access key and single-node layout are
+still not restored, because they were never state: the app recreates them idempotently on every start. This has no
+"fresh node only" limit — the layout step is satisfied by a node already carrying a role at any version, and
+applies `current + 1` where it has work to do. A store of your own is the same store after the restore (its
+endpoint and bucket are in the restored setting, and they cannot be changed once blobs exist), so the objects go back
+into that bucket; if its credentials were rotated since the capture, re-enter them in **Server → Store**.
 
-The final step is not "it started". Read the instance's **config-secret state** as the Server Owner, on the admin
+The final step is not "it started". Open **Server → Store** (or `veyq-admin store check`) and run the check: it
+proves the restored setting reaches its store before anyone relies on it. Then read the instance's **config-secret state** as the Server Owner, on the admin
 channel — the admin console's **Server → Config-secret key**, or `veyq-admin config-secret` — and expect `OK`. This
 read changes nothing on the instance. A tenant's mail settings carry the same state, but only that tenant's owner may
 read them. Then have a person sign in and **open a Memory that contains media**. That is the only assertion that

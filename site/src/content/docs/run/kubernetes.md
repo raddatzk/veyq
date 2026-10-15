@@ -20,9 +20,11 @@ listener. `app.trustedProxies` stays unset unless your proxy has a stable addres
 controller or an external load balancer. A pod-IP range wide enough to survive a controller restart trusts every
 pod beside it.
 
-Generate the store's secrets the same way as for compose: `openssl rand -hex 32` for `garageRpcSecret`
-(exactly 64 hex characters), and an access key of the shape `GK` + 24 hex for `s3AccessKey`. An operator who
-keeps key material out of values files names an existing `Secret` in `secrets.existingSecret` instead.
+Generate the bundled store's secrets the same way as for compose: `openssl rand -hex 32` for `garageRpcSecret` (exactly
+64 hex characters) and a long random value for `garageAdminToken`. The app's S3 key pair is derived from the admin token, so
+the chart carries no access key. The store itself is not a value: after the install, the Server Owner chooses the
+bundled store in the admin console (**Server → Store**) or enters an S3-compatible one there, and checks it. An
+operator who keeps key material out of values files names an existing `Secret` in `secrets.existingSecret` instead.
 
 **The admin listener has a `Service` of its own, `veyq-app-admin`, and a `NetworkPolicy` keeps every other pod off
 it.** It is deliberately not a second port on `veyq-app`: that Service is what the chart's `Ingress`, every
