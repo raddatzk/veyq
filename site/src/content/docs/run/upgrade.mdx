@@ -5,6 +5,7 @@ sources:
   - docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md
   - docs/decisions/0057-release-identity-and-deployment-recipe.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
+  - docs/decisions/0085-one-major-moved-on-a-yearly-train.md
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -80,7 +81,9 @@ fields and claims are compared on rendered manifests by `scripts/chart_upgrade_c
 
 5. **Diff the new image's recipe against the one you are running.** The image's copy is authoritative for the
    version it belongs to (ADR 0057), and a version that adds a service or a required variable has **no other
-   delivery path to you** — the first sign of one you missed is a `up` that dies on a missing variable.
+   delivery path to you** — the first sign of one you missed is a `up` that dies on a missing variable. A setting
+   that moved into the admin console leaves the recipe the same way, as a removed variable; a change you have to
+   act on is named in that release's notes ([Versions and compatibility](#versions-and-compatibility)).
 
    ```sh
    diff -u infra/docker-compose.prod.yml ./recipe-<new-version>/docker-compose.prod.yml
@@ -98,7 +101,9 @@ fields and claims are compared on rendered manifests by `scripts/chart_upgrade_c
 
    The schema migrates during this boot. There is no gate and no prompt.
 
-7. **Verify, and not by "it started".** Read the instance's config-secret state as the Server Owner
+7. **Verify, and not by "it started".** Open **Server → Object store** and run **Check store** (or
+   `veyq-admin store check`): the store setting survives the upgrade in the database, and the check proves it still
+   reaches its store. Read the instance's config-secret state as the Server Owner
    on the admin channel — the admin console's **Server → Config-secret key**, or `veyq-admin config-secret` — and
    expect `OK`; then have a person sign in and **open a Memory that contains media**. That is the one assertion
    touching all three legs at once — the row, the object and the key are three different failures wearing the
@@ -159,6 +164,24 @@ and images' digests, exactly as under compose.
 
   </TabItem>
 </Tabs>
+
+## Versions and compatibility
+
+**Decided, not built yet** ([ADR 0085](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0085-one-major-moved-on-a-yearly-train.md)).
+This is the promise veyq means to keep from V1 on. Major `0` is pre-release and promises nothing; today the release
+version and the version clients check are still two numbers.
+
+- **A release is `<major>.<minor>`.** A minor only adds: it is safe to take. The major moves only when something is
+  removed (an API operation, a setting you must act on), at most once a year, on 1 May, and only if a removal is
+  pending. A security fix that cannot keep the API intact is the one exception: an unscheduled major that removes only
+  the insecure piece.
+- **What you must act on is named in that release's notes,** a removed configuration variable included.
+- **Apps keep working across your upgrade window.** An installed app speaks every major since the train before last,
+  so after your major stops being current you have about two years to upgrade before an app asks you to. Apps that
+  speak a new major ship before the server's major does. The web client and the admin console come from the server's
+  own image and always match it.
+- **The precise release is for you.** The sign-in page shows only the major; the release you run is in the console's
+  **Server → Release**.
 
 ## Rollback
 

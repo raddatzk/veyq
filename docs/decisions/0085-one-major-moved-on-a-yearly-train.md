@@ -130,3 +130,5 @@ database migrations. They answer other questions and stay independent of the maj
   counts trains, not years.
 - **Bundling the payload format into the major.** Rejected: formats are per node kind, owned by the application,
   and readable forever. Only *writing* an incompatible format is tied to a major (decision 8).
+
+For Server Owners, on the docs site: [Upgrade](../../site/src/content/docs/run/upgrade.mdx) (§ Versions and compatibility).

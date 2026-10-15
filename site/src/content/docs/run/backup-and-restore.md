@@ -31,7 +31,7 @@ On the production recipe, from the directory that holds `infra/`:
 # 1. STOP the application, and only it. MariaDB and Garage keep running.
 docker compose -f infra/docker-compose.prod.yml stop app
 
-# 2. Credentials: the values infra/.env already holds, under the names the tool reads.
+# 2. Credentials, under the names the tool reads: the passwords come from infra/.env.
 #    The endpoint is the one the rclone container sees on the store's network, not a published port.
 #    The bundled store: its admin token; the tool derives the S3 key pair from it, so nothing else is typed.
 read -rs VEYQ_BACKUP_DB_PASSWORD && export VEYQ_BACKUP_DB_PASSWORD              # = MARIADB_ROOT_PASSWORD
@@ -184,9 +184,10 @@ still not restored, because they were never state: the app recreates them idempo
 "fresh node only" limit — the layout step is satisfied by a node already carrying a role at any version, and
 applies `current + 1` where it has work to do. A store of your own is the same store after the restore (its
 endpoint and bucket are in the restored setting, and they cannot be changed once blobs exist), so the objects go back
-into that bucket; if its credentials were rotated since the capture, re-enter them in **Server → Store**.
+into that bucket. The restore refuses a bucket that still holds objects, so empty it first if it outlived the
+instance. If the store's credentials were rotated since the capture, re-enter them in **Server → Object store**.
 
-The final step is not "it started". Open **Server → Store** (or `veyq-admin store check`) and run the check: it
+The final step is not "it started". Open **Server → Object store** and run **Check store** (or `veyq-admin store check`): it
 proves the restored setting reaches its store before anyone relies on it. Then read the instance's **config-secret state** as the Server Owner, on the admin
 channel — the admin console's **Server → Config-secret key**, or `veyq-admin config-secret` — and expect `OK`. This
 read changes nothing on the instance. A tenant's mail settings carry the same state, but only that tenant's owner may
@@ -203,7 +204,9 @@ from running as root. Onto a **freshly installed** release, exactly as [Restore]
 
 ```sh
 kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application
-# 2. port-forward MariaDB and Garage as for the capture; then the Restore command, with
+# 2. port-forward MariaDB and Garage as for the capture; export VEYQ_BACKUP_DB_PASSWORD
+#    (= secrets.mariadbRootPassword) and VEYQ_BUNDLED_STORE_ADMIN_TOKEN (= secrets.garageAdminToken), and point
+#    VEYQ_BUNDLED_STORE_ENDPOINT at the forwarded Garage S3 port; then the Restore command, with
 #    --config-secret-file ./veyq-config-secret.key --key-from /media/usb-stick/veyq-<stamp>.key
 #    (a file you own, so the tool writes it 0600 as you)
 kubectl -n veyq scale deploy/veyq-app --replicas=1      # 3. the pod mounts the claim again
