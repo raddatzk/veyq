@@ -91,18 +91,34 @@ whose release is newer migrates it up at its next start — the same forward mig
 backup NEWER than the target is refused before anything is written (ADR 0056 §7). And it does not verify the
 *database* leg beyond structure: the dump's rows are ciphertext this tool cannot read, by design.
 
-Environment (the app's own variables — nothing new to configure):
-    VEYQ_BACKUP_DB_PASSWORD     Database password. Required by `capture` and `restore`.
-    VEYQ_BLOB_STORE_ENDPOINT    S3 endpoint the *rclone container* must reach — an internal name such as
-                                `http://garage:3900`, not a host-published port.
-    VEYQ_BLOB_STORE_ACCESS_KEY  Store credentials.
-    VEYQ_BLOB_STORE_SECRET_KEY
-    VEYQ_BLOB_STORE_BUCKET      Default `blobs`, the backend's own default.
-    VEYQ_BLOB_STORE_REGION      Default `us-east-1`.
+**The store is a Server-Owner setting, not configuration** (ADR 0089), and the capture is cold, so this tool cannot ask
+the app which store it runs: the operator tells it, for this run. Two ways, the first being the recipe's own case:
+
+  the bundled store     The recipe's environment already holds its hint — `VEYQ_BUNDLED_STORE_ENDPOINT` (the
+                        internal name, the very one this tool's container must reach) and
+                        `VEYQ_BUNDLED_STORE_ADMIN_TOKEN` (compose: `GARAGE_ADMIN_TOKEN` of `infra/.env`). The S3 key
+                        pair is DERIVED from that token, exactly as the backend derives it
+                        ([derive_bundled_credentials]; `BundledStoreCredentialsTest` and this tool's self-test pin
+                        one vector on both sides), so nothing is typed.
+  a store of your own   `VEYQ_BACKUP_STORE_ENDPOINT` plus the key pair below — the credentials you entered in the
+                        admin console, which the console never shows again and this tool therefore cannot read.
+
+Environment:
+    VEYQ_BACKUP_DB_PASSWORD         Database password. Required by `capture` and `restore`.
+    VEYQ_BUNDLED_STORE_ENDPOINT     The bundled store's S3 endpoint the *rclone container* must reach — an internal
+    VEYQ_BUNDLED_STORE_ADMIN_TOKEN  name such as `http://garage:3900`, not a host-published port — and its admin
+                                    token (environment only, never a flag).
+    VEYQ_BACKUP_STORE_ENDPOINT      A store of your own: its endpoint as the container reaches it (wins over the
+    VEYQ_BACKUP_STORE_ACCESS_KEY    bundled endpoint), and its key pair (both or neither; a pair wins over the
+    VEYQ_BACKUP_STORE_SECRET_KEY    token).
+    VEYQ_BACKUP_STORE_BUCKET        Default `blobs`, the bundled store's fixed bucket.
+    VEYQ_BACKUP_STORE_REGION        Default `us-east-1`, the bundled store's fixed region.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
 import shutil
@@ -385,6 +401,30 @@ class Database:
 # --------------------------------------------------------------------------------------------------------
 # The store leg
 # --------------------------------------------------------------------------------------------------------
+
+
+_BUNDLED_ACCESS_KEY_INFO = b"veyq/v1/bundled-store/access-key-id"
+_BUNDLED_SECRET_KEY_INFO = b"veyq/v1/bundled-store/secret-access-key"
+
+
+def _hkdf_sha256(ikm: bytes, info: bytes, length: int) -> bytes:
+    """HKDF-SHA256 (RFC 5869) with an empty salt — the same extract-then-expand as `ConfigSecretSeal.hkdfSha256`."""
+    prk = hmac.new(b"\0" * hashlib.sha256().digest_size, ikm, hashlib.sha256).digest()
+    out, block, counter = b"", b"", 1
+    while len(out) < length:
+        block = hmac.new(prk, block + info + bytes([counter]), hashlib.sha256).digest()
+        out += block
+        counter += 1
+    return out[:length]
+
+
+def derive_bundled_credentials(admin_token: str) -> tuple[str, str]:
+    """The bundled store's S3 key pair, derived from its admin token (ADR 0089 decision 3) — `GK` + 24 hex for the id,
+    64 hex for the secret, the shapes Garage accepts. A change here without `BundledStoreCredentials` (backend, core)
+    makes every bundled capture fail its first rclone call; one vector pins both sides."""
+    ikm = admin_token.encode("utf-8")
+    return ("GK" + _hkdf_sha256(ikm, _BUNDLED_ACCESS_KEY_INFO, 12).hex(),
+            _hkdf_sha256(ikm, _BUNDLED_SECRET_KEY_INFO, 32).hex())
 
 
 class Store:
@@ -1178,12 +1218,14 @@ def add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--docker-network", default=None,
                         help="docker network the rclone (and direct-mode database) container joins — it must "
                              "reach the store's endpoint. e.g. infra_default for the bundled stack.")
-    parser.add_argument("--store-endpoint", default=os.environ.get("VEYQ_BLOB_STORE_ENDPOINT"),
+    parser.add_argument("--store-endpoint",
+                        default=os.environ.get("VEYQ_BACKUP_STORE_ENDPOINT") or os.environ.get("VEYQ_BUNDLED_STORE_ENDPOINT"),
                         help="S3 endpoint AS THE CONTAINER SEES IT (e.g. http://garage:3900), not a published port")
-    parser.add_argument("--store-access-key", default=os.environ.get("VEYQ_BLOB_STORE_ACCESS_KEY"))
-    parser.add_argument("--store-secret-key", default=os.environ.get("VEYQ_BLOB_STORE_SECRET_KEY"))
-    parser.add_argument("--store-bucket", default=os.environ.get("VEYQ_BLOB_STORE_BUCKET", "blobs"))
-    parser.add_argument("--store-region", default=os.environ.get("VEYQ_BLOB_STORE_REGION", "us-east-1"))
+    parser.add_argument("--store-access-key", default=os.environ.get("VEYQ_BACKUP_STORE_ACCESS_KEY"),
+                        help="a store of your own: its access key (the bundled store's pair is derived from its admin token)")
+    parser.add_argument("--store-secret-key", default=os.environ.get("VEYQ_BACKUP_STORE_SECRET_KEY"))
+    parser.add_argument("--store-bucket", default=os.environ.get("VEYQ_BACKUP_STORE_BUCKET", "blobs"))
+    parser.add_argument("--store-region", default=os.environ.get("VEYQ_BACKUP_STORE_REGION", "us-east-1"))
     parser.add_argument("--rclone-image", default=RCLONE_IMAGE)
     parser.add_argument("--rclone-binary", default=None,
                         help="use a host rclone install instead of the pinned container")
@@ -1192,16 +1234,27 @@ def add_common(parser: argparse.ArgumentParser) -> None:
                              "(veyq.security.config-secret-file / VEYQ_SECURITY_CONFIG_SECRET_FILE)")
 
 
-def check_store_args(args: argparse.Namespace) -> None:
+def check_store_args(args: argparse.Namespace, env: dict[str, str] | None = None) -> None:
+    """Settle the store's key pair for this run: the operator's own pair, else the bundled one derived from the
+    recipe's admin token (ADR 0089). Fills `args.store_access_key` / `args.store_secret_key` in the second case."""
+    env = os.environ if env is None else env
+    if bool(args.store_access_key) != bool(args.store_secret_key):
+        raise BackupError("a store key pair is both halves or neither: give --store-access-key AND --store-secret-key "
+                          "(VEYQ_BACKUP_STORE_ACCESS_KEY / VEYQ_BACKUP_STORE_SECRET_KEY), or neither")
+    if not args.store_access_key:
+        token = env.get("VEYQ_BUNDLED_STORE_ADMIN_TOKEN", "")
+        if token.strip():
+            args.store_access_key, args.store_secret_key = derive_bundled_credentials(token)
     missing = [name for name, value in (
-        ("--store-endpoint / VEYQ_BLOB_STORE_ENDPOINT", args.store_endpoint),
-        ("--store-access-key / VEYQ_BLOB_STORE_ACCESS_KEY", args.store_access_key),
-        ("--store-secret-key / VEYQ_BLOB_STORE_SECRET_KEY", args.store_secret_key),
+        ("--store-endpoint / VEYQ_BACKUP_STORE_ENDPOINT or VEYQ_BUNDLED_STORE_ENDPOINT", args.store_endpoint),
+        ("a key pair: VEYQ_BACKUP_STORE_ACCESS_KEY + VEYQ_BACKUP_STORE_SECRET_KEY, or the bundled store's "
+         "VEYQ_BUNDLED_STORE_ADMIN_TOKEN", args.store_access_key and args.store_secret_key),
     ) if not value]
     if missing:
         raise BackupError(
-            "the store leg needs credentials, and they are the SAME ones the backend already reads — nothing "
-            "new to configure. Missing: " + ", ".join(missing)
+            "the store leg needs to know the store, because the capture is cold and cannot ask the app (ADR 0089): "
+            "the bundled store from the recipe's environment, or your own store's endpoint and key pair. Missing: "
+            + "; ".join(missing)
         )
 
 

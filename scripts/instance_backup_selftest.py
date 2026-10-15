@@ -27,7 +27,10 @@ This asserts, with no daemon and no root:
      an older one are accepted, that a target with no applied migration is refused, and the closing log an older
      backup gets — that it will be migrated up, and that a rollback needs the backup's own release;
   6. the emptiness gate's exclusions (`NOT_DATA`): the object-store setting is among them, and every one still names
-     a table a migration creates.
+     a table a migration creates;
+  7. the store's credentials for a run (ADR 0089): the bundled store's key pair derived from its admin token — one
+     pinned vector, the one `BundledStoreCredentialsTest` pins on the backend's side — an operator's own pair winning
+     over a token, half a pair refused, and a run that names no store refused naming both ways.
 
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key
 in a running container — that is the live proof on the production recipe, recorded where the coverage of
@@ -264,6 +267,45 @@ def not_data_cases() -> None:
     check("the exclusion list is the three named tables, no pattern", len(ib.NOT_DATA) == 3, str(ib.NOT_DATA))
 
 
+# The vector `backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.
+VECTOR_TOKEN = "veyq-dev-admin-token"
+VECTOR_ACCESS_KEY = "GKd14f469abb39c11f4f86a0e3"
+VECTOR_SECRET_KEY = "db5a958fff2b57263c0cb0f6963fb047ee2d21fc487250082d035ff35cb79b66"
+
+
+def store_cases() -> None:
+    """What `check_store_args` settles for a run: derived bundled credentials, an operator's pair, or a refusal."""
+    check("bundled: the pair derived from the pinned token is the pinned vector (the backend's side pins the same)",
+          ib.derive_bundled_credentials(VECTOR_TOKEN) == (VECTOR_ACCESS_KEY, VECTOR_SECRET_KEY),
+          str(ib.derive_bundled_credentials(VECTOR_TOKEN)))
+
+    def args(**kw):
+        base = dict(store_endpoint="http://garage:3900", store_access_key=None, store_secret_key=None)
+        return argparse.Namespace(**{**base, **kw})
+
+    def settle(a, env):
+        try:
+            ib.check_store_args(a, env)
+            return None
+        except ib.BackupError as e:
+            return str(e)
+
+    a = args()
+    refused = settle(a, {"VEYQ_BUNDLED_STORE_ADMIN_TOKEN": VECTOR_TOKEN})
+    check("bundled: a token and an endpoint, no typed credential, settles the derived pair",
+          refused is None and (a.store_access_key, a.store_secret_key) == (VECTOR_ACCESS_KEY, VECTOR_SECRET_KEY), str(refused))
+    a = args(store_access_key="GKown", store_secret_key="own-secret")
+    refused = settle(a, {"VEYQ_BUNDLED_STORE_ADMIN_TOKEN": VECTOR_TOKEN})
+    check("own store: the operator's pair wins over the bundled token",
+          refused is None and (a.store_access_key, a.store_secret_key) == ("GKown", "own-secret"), str(refused))
+    check("own store: half a pair is refused", settle(args(store_access_key="GKown"), {}) is not None)
+    named = settle(args(), {}) or ""
+    check("no store named: refused, naming the bundled way and the own-store way",
+          "VEYQ_BUNDLED_STORE_ADMIN_TOKEN" in named and "VEYQ_BACKUP_STORE_ACCESS_KEY" in named, named)
+    check("no endpoint: refused naming it",
+          "ENDPOINT" in (settle(args(store_endpoint=None), {"VEYQ_BUNDLED_STORE_ADMIN_TOKEN": VECTOR_TOKEN}) or ""))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyq-backup-selftest-") as tmp:
         tmp_path = pathlib.Path(tmp)
@@ -273,6 +315,7 @@ def main() -> int:
         capture_cases(tmp_path)
     version_cases()
     not_data_cases()
+    store_cases()
     if failures:
         print(f"[selftest] {len(failures)} failure(s)", file=sys.stderr)
         return 1

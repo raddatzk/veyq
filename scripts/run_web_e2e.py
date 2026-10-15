@@ -216,7 +216,7 @@ def restore_database(index: int) -> str:
 # through it. Documented throwaway dev token, not a secret.
 GARAGE_ADMIN = os.environ.get("VEYQ_GARAGE_ADMIN", "http://127.0.0.1:19003")
 GARAGE_ADMIN_TOKEN = os.environ.get("VEYQ_GARAGE_ADMIN_TOKEN", "veyq-dev-admin-token")
-# The bucket `%e2e` boots with — the backend's default `veyq.blob-store.bucket`, which `%e2e` does not override — and
+# The bucket `%e2e` boots with — the backend's default `veyq.bundled-store.bucket`, which `%e2e` does not override — and
 # the key alias the backend imports it under (GarageStoreProvisioner.KEY_ALIAS). `fresh_bucket` grants against that
 # exact alias, so the name is a contract between this file and that class.
 STORE_BUCKET = "blobs"
@@ -535,7 +535,7 @@ def boot(database: str, secret_file: Path, log_path: Path, bucket: str | None = 
         "VEYQ_SECURITY_CONFIG_SECRET_FILE": str(secret_file),
     }
     if bucket:
-        env["VEYQ_BLOB_STORE_BUCKET"] = bucket
+        env["VEYQ_BUNDLED_STORE_BUCKET"] = bucket
     handle = log_path.open("w")
     # The log is a sweep surface ([sweep_logs]), so the bytes it holds must not depend on the host: with stdout a
     # FILE, Java 21 encodes it in the host locale's charset. Measured: without these two flags, under `LC_ALL=C`,
@@ -2181,9 +2181,8 @@ def backup_env() -> dict[str, str]:
     return {
         **os.environ,
         "VEYQ_BACKUP_DB_PASSWORD": DB_ROOT_PASSWORD,
-        "VEYQ_BLOB_STORE_ENDPOINT": "http://garage:3900",
-        "VEYQ_BLOB_STORE_ACCESS_KEY": "GK0123456789abcdef01234567",
-        "VEYQ_BLOB_STORE_SECRET_KEY": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "VEYQ_BUNDLED_STORE_ENDPOINT": "http://garage:3900",
+        "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": GARAGE_ADMIN_TOKEN,
     }
 
 
@@ -2239,10 +2238,13 @@ def destroy(inst: Instance) -> None:
 def _store_for(bucket: str):
     """An `instance_backup.Store` bound to this bucket — the tool's own rclone plumbing, not a second copy."""
     env = backup_env()
+    # The bundled pair is DERIVED from the admin token, by the backup tool's own function — the harness holds no
+    # key pair (ADR 0089), and a drift between that function and the backend's would fail here first.
+    access_key, secret_key = instance_backup.derive_bundled_credentials(env["VEYQ_BUNDLED_STORE_ADMIN_TOKEN"])
     return instance_backup.Store(SimpleNamespace(
-        store_endpoint=env["VEYQ_BLOB_STORE_ENDPOINT"],
-        store_access_key=env["VEYQ_BLOB_STORE_ACCESS_KEY"],
-        store_secret_key=env["VEYQ_BLOB_STORE_SECRET_KEY"],
+        store_endpoint=env["VEYQ_BUNDLED_STORE_ENDPOINT"],
+        store_access_key=access_key,
+        store_secret_key=secret_key,
         store_bucket=bucket, store_region="us-east-1",
         rclone_image=instance_backup.RCLONE_IMAGE, rclone_binary=None, docker_network=DOCKER_NETWORK,
     ))

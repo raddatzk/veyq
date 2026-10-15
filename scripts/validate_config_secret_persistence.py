@@ -186,7 +186,7 @@ for compose in sorted(list(INFRA.glob("*.yml")) + list(INFRA.glob("*.yaml"))):
             (isinstance(target, str) and target.startswith("runtime-"))
             or APP_IMAGE.search(str(service.get("image") or ""))
             or "VEYQ_IMAGE" in str(service.get("image") or "")
-            or any(k.startswith("QUARKUS_") or k.startswith("VEYQ_BLOB_STORE_") for k in env)
+            or any(k.startswith("QUARKUS_") or k.startswith("VEYQ_BUNDLED_STORE_") for k in env)
         )
         if not is_app:
             continue

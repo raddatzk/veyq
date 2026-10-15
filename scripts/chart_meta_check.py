@@ -93,6 +93,9 @@ render, asserts — deriving every anchor from the source rather than listing it
        `admin.image.digest`, every container running that image renders as `…@<that digest>`; where it sets none,
        the image carries no digest at all. Some file in `ci/` must set both, or the digest render is checked by
        nobody, and `helm lint` with a digest that is not `sha256:<64 hex>` must be refused naming `digest`.
+  xix. **The app container's store variables are the bundled-store hint, and no credential of a store**
+       (cr-store-connection-in-admin-web phase 4, ADR 0089): `VEYQ_BUNDLED_STORE_ENDPOINT`, `_ADMIN_ENDPOINT` and
+       `_ADMIN_TOKEN` are present, and no `VEYQ_BLOB_STORE_*` variable is — the store setting lives in the database.
 
 The app container is recognised the way the compose guards recognise the app service: an image whose
 repository is `veyq` — never `veyq-admin` or any other veyq-namespaced sibling — with the datasource
@@ -589,6 +592,19 @@ def check(values_file: pathlib.Path) -> list[dict]:
             if not is_app_container(container):
                 continue
             app_containers += 1
+
+            # (xix) the object store reaches the app as the bundled-store HINT and nothing else (ADR 0089).
+            env_names = {e.get("name") for e in container.get("env") or []}
+            leaked = sorted(n for n in env_names if str(n).startswith("VEYQ_BLOB_STORE_"))
+            if leaked:
+                errors.append(
+                    f"(xix) {tag}: {name_of(obj)} passes {', '.join(leaked)} — the store is a Server-Owner setting held in the database "
+                    f"(ADR 0089); the only store variables an app container carries are the VEYQ_BUNDLED_STORE_* hint's, whose S3 key "
+                    f"pair is derived from the admin token."
+                )
+            missing_hint = sorted({"VEYQ_BUNDLED_STORE_ENDPOINT", "VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT", "VEYQ_BUNDLED_STORE_ADMIN_TOKEN"} - env_names)
+            if missing_hint:
+                errors.append(f"(xix) {tag}: {name_of(obj)} lacks the bundled-store hint {', '.join(missing_hint)} — the console could not offer \"Use the bundled store\".")
 
             # (iii) one migrator at a time.
             if obj.get("kind") == "Deployment":

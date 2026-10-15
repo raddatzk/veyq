@@ -28,7 +28,7 @@ so — unlike a literal-scanning guard — this file is not part of what it scan
 **Its limit.** Green means a configuration LOADS and points at something real; it never means the
 configuration *works*.
   - Nothing here runs anything: a Gradle **task name** (`quarkusDev`), a Quarkus profile, and every `<env>`
-    value (store endpoint, `VEYQ_BLOB_STORE_PUBLIC_ENDPOINT`, a port) are unchecked. A configuration whose
+    value (store endpoint, `VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`, a port) are unchecked. A configuration whose
     `PUBLIC_ENDPOINT` disagrees with the origin you browse is green here and broken in the browser.
   - Paths embedded in `<env>` values are deliberately **not** resolved: build outputs legitimately do not
     exist yet on a clean tree (a file the configured backend writes under `backend/build/`), so

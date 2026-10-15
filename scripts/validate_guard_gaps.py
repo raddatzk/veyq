@@ -265,7 +265,7 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      configures writes under `backend/build/`), so resolving env paths would make that guard red on arrival,
      and red-because-wrong is indistinguishable from red-because-broken for every later reader. The same limit
      covers the value that actually bites — a
-     `VEYQ_BLOB_STORE_PUBLIC_ENDPOINT` disagreeing with the origin you browse is green here and a broken
+     `VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` disagreeing with the origin you browse is green here and a broken
      presigned URL in the browser — which no file-shaped assertion can decide at all. Pinned so the limit in
      that guard's docstring is executable rather than a sentence.
   16 a CSS class that no markup applies passes `validate_stylesheet_anchors` when it is not the selector's
