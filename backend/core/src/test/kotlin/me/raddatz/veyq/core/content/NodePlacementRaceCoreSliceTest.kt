@@ -45,7 +45,7 @@ class NodePlacementRaceCoreSliceTest {
             assertEquals(Row(t.b, "bW92ZWQ=", move.slugToken!!, "bW92ZWQtd3JhcA==", 1), row(t.child), "round $round")
 
             // control: the rename rebuilt on what it re-reads (version 1, the new parent) lands
-            assertEquals(UpdateNodeOutcome.Updated, update(t, t.child, rename.copy(parentId = t.b, placementVersion = 1)), "round $round")
+            assertEquals(UpdateNodeOutcome.Updated, update(t, t.child, rename.copy(parentId = t.b, placementRevision = 1)), "round $round")
             assertEquals(Row(t.b, "cmVuYW1lZA==", rename.slugToken!!, "cmVuYW1lZC13cmFw", 2), row(t.child), "round $round")
         }
     }
@@ -100,6 +100,6 @@ class NodePlacementRaceCoreSliceTest {
         handler.update(t.userId, t.scopeId, node, placement, null, null, null)
 
     private fun row(node: String): Row = QuarkusTransaction.requiringNew().call {
-        NodeEntity.findById(node)!!.let { Row(it.parentId, it.encryptedName, it.slugToken, it.wrappedContentKey, it.placementVersion) }
+        NodeEntity.findById(node)!!.let { Row(it.parentId, it.encryptedName, it.slugToken, it.wrappedContentKey, it.placementRevision) }
     }
 }

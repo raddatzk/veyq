@@ -235,8 +235,8 @@ CREATE TABLE veyq_node (
     epoch                   INT NOT NULL DEFAULT 0,
     deleted_at              TIMESTAMP NULL,
     sealed_drop_private_key TEXT NULL,
-    meta_version            BIGINT NOT NULL DEFAULT 0,
-    placement_version       BIGINT NOT NULL DEFAULT 0,
+    meta_revision           BIGINT NOT NULL DEFAULT 0,
+    placement_revision      BIGINT NOT NULL DEFAULT 0,
     share_identity_id       UUID NULL,
     CONSTRAINT fk_node_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );

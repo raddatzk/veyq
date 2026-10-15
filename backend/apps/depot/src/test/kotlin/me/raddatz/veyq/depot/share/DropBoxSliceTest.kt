@@ -71,7 +71,7 @@ class DropBoxSliceTest {
         val anna = dropLink(t)
         val ben = secondGuest(anna)
 
-        val annaFolder = ensure(anna).statusCode(200).body("created", equalTo(true)).body("placementVersion", equalTo(0))
+        val annaFolder = ensure(anna).statusCode(200).body("created", equalTo(true)).body("placementRevision", equalTo(0))
             .extract().path<String>("nodeId")
         // the same identity again — another minted id, another wrap: the stored folder answers, nothing new is made
         ensure(anna, wrap = "b3RoZXItd3JhcA==").statusCode(200).body("created", equalTo(false))
@@ -162,7 +162,7 @@ class DropBoxSliceTest {
         GuestTreeShare.place(above, file, parentId = t.folder).statusCode(422).body("code", equalTo("illegal_structure"))
         assertEquals(t.dropBox to folder, parentOf(folder) to parentOf(file), "nothing moved")
         assertEquals(identityOf(guest), tx { NodeEntity.findById(folder)!!.shareIdentityId }, "the folder keeps its identity")
-        assertEquals(0L to 0L, tx { NodeEntity.findById(folder)!!.placementVersion to NodeEntity.findById(file)!!.placementVersion })
+        assertEquals(0L to 0L, tx { NodeEntity.findById(folder)!!.placementRevision to NodeEntity.findById(file)!!.placementRevision })
 
         // control: the same guest moves a plain file of the subtree, and a member moves the guest's folder out
         val plain = UUID.randomUUID().toString()
@@ -307,7 +307,7 @@ class DropBoxSliceTest {
 
     private fun memberPlace(t: Tree, node: String, to: String, version: Long): ValidatableResponse =
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
-            .body("""{"parentId":"$to","encryptedName":"cGxhY2Vk","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementVersion":$version}""")
+            .body("""{"parentId":"$to","encryptedName":"cGxhY2Vk","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":$version}""")
             .`when`().patch("/api/scopes/${t.scopeId}/nodes/$node").then()
 
     private fun share(userId: String, nodeId: String, role: String): ValidatableResponse {

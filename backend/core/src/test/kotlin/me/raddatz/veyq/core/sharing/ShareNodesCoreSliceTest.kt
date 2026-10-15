@@ -62,13 +62,13 @@ class ShareNodesCoreSliceTest {
             .statusCode(201).body("nodeId", equalTo(f2))
 
         // A member lists them as stored — the names and wraps the guest sealed, under the parents it named, at the
-        // epoch it sealed with (ADR 0080 decision 6), at placement version 0.
+        // epoch it sealed with (ADR 0080 decision 6), at placement revision 0.
         given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/nodes").then().statusCode(200)
             .body("find { it.id == '$f1' }.parentId", equalTo(t.a))
             .body("find { it.id == '$f1' }.encryptedName", equalTo("ZjEtbmFtZQ=="))
             .body("find { it.id == '$f1' }.wrappedContentKey", equalTo("ZjEtd3JhcA=="))
             .body("find { it.id == '$f1' }.epoch", equalTo(2))
-            .body("find { it.id == '$f1' }.placementVersion", equalTo(0))
+            .body("find { it.id == '$f1' }.placementRevision", equalTo(0))
             .body("find { it.id == '$f2' }.parentId", equalTo(f1))
             .body("find { it.id == '$f2' }.encryptedName", equalTo("ZjItbmFtZQ=="))
             .body("find { it.id == '$f2' }.epoch", equalTo(2))
@@ -117,21 +117,21 @@ class ShareNodesCoreSliceTest {
     fun aGuestMovesAndRenamesInsideTheSubtree() {
         val t = tree(epoch = 1)
         val epochBefore = epochOf(t.a)
-        place(t.link, t.a, t.b, placementVersion = 0, encryptedName = "bW92ZWQ=", wrappedContentKey = "bW92ZWQtd3JhcA==")
+        place(t.link, t.a, t.b, placementRevision = 0, encryptedName = "bW92ZWQ=", wrappedContentKey = "bW92ZWQtd3JhcA==")
             .statusCode(204)
         assertEquals(t.b, parentOf(t.a))
-        place(t.link, t.a, t.b, placementVersion = 1, encryptedName = "cmVuYW1lZA==").statusCode(204) // a rename: same parent
+        place(t.link, t.a, t.b, placementRevision = 1, encryptedName = "cmVuYW1lZA==").statusCode(204) // a rename: same parent
         given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/nodes").then()
             .body("find { it.id == '${t.a}' }.encryptedName", equalTo("cmVuYW1lZA=="))
-            .body("find { it.id == '${t.a}' }.placementVersion", equalTo(2))
+            .body("find { it.id == '${t.a}' }.placementRevision", equalTo(2))
         assertEquals(epochBefore, epochOf(t.a), "a guest's placement keeps the node's stored epoch")
     }
 
     @Test
-    fun aStalePlacementVersionIsAConflictAndWritesNothing() {
+    fun aStalePlacementRevisionIsAConflictAndWritesNothing() {
         val t = tree()
-        place(t.link, t.a, t.b, placementVersion = 0).statusCode(204)
-        place(t.link, t.a, t.root, placementVersion = 0).statusCode(409).body("code", equalTo("stale_placement"))
+        place(t.link, t.a, t.b, placementRevision = 0).statusCode(204)
+        place(t.link, t.a, t.root, placementRevision = 0).statusCode(409).body("code", equalTo("stale_placement"))
         assertEquals(t.b, parentOf(t.a))
         assertEquals(1L, versionOf(t.a))
     }
@@ -218,7 +218,7 @@ class ShareNodesCoreSliceTest {
         assertEquals(0L, versionOf(t.root))
         // control: a member renames it
         given().header("Authorization", bearer(t.userId)).contentType("application/json")
-            .body("""{"parentId":"${t.outer}","encryptedName":"cmVuYW1lZA==","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"d3JhcA==","epoch":0,"placementVersion":0}""")
+            .body("""{"parentId":"${t.outer}","encryptedName":"cmVuYW1lZA==","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"d3JhcA==","epoch":0,"placementRevision":0}""")
             .`when`().patch("/api/scopes/${t.scopeId}/nodes/${t.root}").then().statusCode(204)
     }
 
@@ -251,6 +251,6 @@ class ShareNodesCoreSliceTest {
     // --- helpers ---
 
     private fun parentOf(id: String): String = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.parentId }
-    private fun versionOf(id: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.placementVersion }
+    private fun versionOf(id: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.placementRevision }
     private fun epochOf(id: String): Int = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.epoch }
 }

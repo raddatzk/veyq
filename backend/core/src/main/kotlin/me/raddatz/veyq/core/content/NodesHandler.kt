@@ -47,19 +47,19 @@ sealed interface UpdateNodeOutcome {
     object ScopeDeleting : UpdateNodeOutcome, HttpFailure by Failures.scopeDeleting
     object IllegalStructure : UpdateNodeOutcome, HttpFailure by Failures.illegalStructure
     object SlugTaken : UpdateNodeOutcome, HttpFailure by Failures.slugTaken
-    /** `wrappedMeta` sent without the `metaVersion` it was built from — an old client cannot skip the check. */
-    object MissingMetaVersion : UpdateNodeOutcome, HttpFailure by Failures.invalidRequest
+    /** `wrappedMeta` sent without the `metaRevision` it was built from — an old client cannot skip the check. */
+    object MissingMetaRevision : UpdateNodeOutcome, HttpFailure by Failures.invalidRequest
     /** A part of a placement write without the rest — a name, slug, wrap or parent without its re-wrapped key, its
-     *  `epoch` or its `placementVersion` (ADR 0080 Decision 3). */
+     *  `epoch` or its `placementRevision` (ADR 0080 Decision 3). */
     object IncompletePlacement : UpdateNodeOutcome, HttpFailure by Failures.invalidRequest
-    /** The node was moved or renamed past the stated `placementVersion`; nothing was written (ADR 0080 Decision 3). */
+    /** The node was moved or renamed past the stated `placementRevision`; nothing was written (ADR 0080 Decision 3). */
     object StalePlacement : UpdateNodeOutcome, HttpFailure by Failures.stalePlacement
     /** A placement at the scope root sealed at an epoch that is not the scope's current one, or any placement stating
      *  an epoch above it (ADR 0080 Decision 4). */
     object StaleEpoch : UpdateNodeOutcome, HttpFailure by Failures.staleEpoch
     /** The node's `wrappedMeta` moved past the stated version; nothing was written (ADR 0077). Carries the current
      *  blob and version for the loser to re-apply its own change on. */
-    data class StaleMeta(val wrappedMeta: String?, val metaVersion: Long) : UpdateNodeOutcome, HttpFailure by Failures.staleVersion
+    data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : UpdateNodeOutcome, HttpFailure by Failures.staleVersion
 }
 
 sealed interface DeleteNodeOutcome {
@@ -214,7 +214,7 @@ class NodesHandler(
      * What a placement write (a move or a rename — one request shape, ADR 0080 Decision 3) carries: the destination
      * ([parentId], null = the scope root; a rename names the current parent), the node's content key re-wrapped under
      * the destination's key, the name and slug re-sealed under it, the [epoch] they were sealed at and the
-     * [placementVersion] they were built on. Every field but the parent is required once any of them is sent.
+     * [placementRevision] they were built on. Every field but the parent is required once any of them is sent.
      */
     data class PlacementRequest(
         val parentId: String?,
@@ -222,12 +222,12 @@ class NodesHandler(
         val slugToken: String?,
         val wrappedContentKey: String?,
         val epoch: Int?,
-        val placementVersion: Long?,
+        val placementRevision: Long?,
     ) {
         /** Whether the request asks for a placement at all — any of its fields, the destination included. */
         val present: Boolean
             get() = parentId != null || encryptedName != null || slugToken != null || wrappedContentKey != null ||
-                epoch != null || placementVersion != null
+                epoch != null || placementRevision != null
 
         /** Whether every field a placement needs is there: a rename without a re-wrapped key cannot land, because
          *  the old wrap is sealed at the old version and would stop opening (bite test 15). */
@@ -238,25 +238,25 @@ class NodesHandler(
          *  scope root, so it keeps the node's stored epoch and states none. */
         val completeWithoutEpoch: Boolean
             get() = !encryptedName.isNullOrBlank() && !slugToken.isNullOrBlank() && !wrappedContentKey.isNullOrBlank() &&
-                placementVersion != null
+                placementRevision != null
     }
 
     fun update(
         userId: String, scopeId: String, nodeId: String, placement: PlacementRequest, orderIndex: Int?,
-        wrappedMeta: String?, metaVersion: Long?,
+        wrappedMeta: String?, metaRevision: Long?,
     ): UpdateNodeOutcome {
         // The request's own shape first, as the boundary's validation is: a malformed body is a 400 for anyone.
-        malformed(placement, wrappedMeta, metaVersion)?.let { return it }
+        malformed(placement, wrappedMeta, metaRevision)?.let { return it }
         access.check(userId, scopeId, WRITE)
             .refusal(UpdateNodeOutcome.NotFound, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting)?.let { return it }
-        return updateInScope(scopeId, nodeId, placement, orderIndex, wrappedMeta, metaVersion)
+        return updateInScope(scopeId, nodeId, placement, orderIndex, wrappedMeta, metaRevision)
     }
 
     /** [epochOptional]: only a bounded placement may leave the epoch out ([updateInScope]). */
     private fun malformed(
-        placement: PlacementRequest, wrappedMeta: String?, metaVersion: Long?, epochOptional: Boolean = false,
+        placement: PlacementRequest, wrappedMeta: String?, metaRevision: Long?, epochOptional: Boolean = false,
     ): UpdateNodeOutcome? = when {
-        wrappedMeta != null && metaVersion == null -> UpdateNodeOutcome.MissingMetaVersion
+        wrappedMeta != null && metaRevision == null -> UpdateNodeOutcome.MissingMetaRevision
         placement.present && !(if (epochOptional) placement.completeWithoutEpoch else placement.complete) ->
             UpdateNodeOutcome.IncompletePlacement
         else -> null
@@ -284,9 +284,9 @@ class NodesHandler(
      */
     internal fun updateInScope(
         scopeId: String, nodeId: String, placement: PlacementRequest, orderIndex: Int?,
-        wrappedMeta: String?, metaVersion: Long?, boundary: SubtreeBoundary? = null,
+        wrappedMeta: String?, metaRevision: Long?, boundary: SubtreeBoundary? = null,
     ): UpdateNodeOutcome {
-        malformed(placement, wrappedMeta, metaVersion, epochOptional = boundary != null)?.let { return it }
+        malformed(placement, wrappedMeta, metaRevision, epochOptional = boundary != null)?.let { return it }
         // A trashed node is not found: it is neither movable nor renamable (its entry is restored, not placed).
         val node = store.findInScope(scopeId, nodeId) ?: return UpdateNodeOutcome.NotFound
 
@@ -339,16 +339,16 @@ class NodesHandler(
                 slugToken = placement.slugToken!!,
                 wrappedContentKey = placement.wrappedContentKey!!,
                 epoch = storedEpoch,
-                expectedVersion = placement.placementVersion!!,
+                expectedVersion = placement.placementRevision!!,
             )
         }
-        return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaVersion, boundary)) {
+        return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaRevision, boundary)) {
             NodesStore.ApplyResult.Applied -> UpdateNodeOutcome.Updated
             NodesStore.ApplyResult.Missing -> UpdateNodeOutcome.NotFound
             NodesStore.ApplyResult.IllegalMove -> UpdateNodeOutcome.IllegalStructure
             NodesStore.ApplyResult.SlugTaken -> UpdateNodeOutcome.SlugTaken
             NodesStore.ApplyResult.StalePlacement -> UpdateNodeOutcome.StalePlacement
-            is NodesStore.ApplyResult.StaleMeta -> UpdateNodeOutcome.StaleMeta(r.wrappedMeta, r.metaVersion)
+            is NodesStore.ApplyResult.StaleMeta -> UpdateNodeOutcome.StaleMeta(r.wrappedMeta, r.metaRevision)
         }
     }
 

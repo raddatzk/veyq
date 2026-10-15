@@ -105,11 +105,11 @@ class MediaResource(
 
     override fun updateMediaMeta(scopeId: UUID, mediaId: UUID, mediaMetaUpdate: MediaMetaUpdate): Response {
         // `@NotNull` refuses a missing version at the boundary; the type is nullable only so that absence is visible
-        // (a primitive would default to 0 — see the spec's MediaMetaUpdate.metaVersion).
-        val metaVersion = mediaMetaUpdate.metaVersion ?: return httpError(Failures.invalidRequest)
-        return when (val o = handler.updateMeta(identity.principal.name, scopeId.toString(), mediaId.toString(), mediaMetaUpdate.wrappedMeta, metaVersion)) {
+        // (a primitive would default to 0 — see the spec's MediaMetaUpdate.metaRevision).
+        val metaRevision = mediaMetaUpdate.metaRevision ?: return httpError(Failures.invalidRequest)
+        return when (val o = handler.updateMeta(identity.principal.name, scopeId.toString(), mediaId.toString(), mediaMetaUpdate.wrappedMeta, metaRevision)) {
             is MetaOutcome.Found -> Response.ok(MediaMetaResponse(wrappedMeta = o.wrappedMeta)).build()
-            is MetaOutcome.Stale -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaVersion)
+            is MetaOutcome.Stale -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaRevision)
             is HttpFailure -> httpError(o)
         }
     }
@@ -146,7 +146,7 @@ class MediaResource(
         deletedBy = row.deletedBy,
         ownerKey = row.ownerKey, // cr-0113: the uploader's opaque owner_key (the buckets attribution)
         bucketId = row.bucketId?.let(UUID::fromString), // cr-0113: the media's bucket (null = the uploader's primary)
-        metaVersion = row.metaVersion,
+        metaRevision = row.metaRevision,
         wrappedBlobMeta = row.wrappedBlobMeta,
     )
 

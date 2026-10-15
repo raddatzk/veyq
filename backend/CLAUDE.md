@@ -68,7 +68,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   node. How an application adopts it: [docs/apps/README.md](../docs/apps/README.md#how-an-application-publishes-a-revisioned-list).
 - **A node's cover is core's write, in ONE transaction** (inbox #411, `core/content/NodeCover*.kt`): `setNodeCover` / `removeNodeCover` attach or detach
   the `COVER` blob through `AttachmentStore` (compare-and-set on the blob replaced; a refused slot COMMITS the loser's freed upload) and then
-  write the node's re-sealed `wrappedMeta` through `NodesStore.applyUpdate` (ADR 0077 version check; a stale meta ROLLS the attach back so the
+  write the node's re-sealed `wrappedMeta` through `NodesStore.applyUpdate` (ADR 0077 revision check; a stale meta ROLLS the attach back so the
   upload stays open). Which kinds take a cover is `NodeKindRules.takesCover`, answered by the rule that already handles the kind - core names
   none; `COVER` is a role core declares (`CoreMemberBlobRoles`), so core alone admits it. Two bumps of the tree revision per request is
   harmless. The zero-residue proof (set, replace, remove: no row, no blob, no session, quota back, a reclaim row per storage key, the sweep
@@ -161,7 +161,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   since the length is the type's. Same trap for any `format:` that changes the generated type.
   **A required `type: integer` or `boolean` is no presence check.** It generates a primitive Kotlin
   `Long`/`Int`/`Boolean`, and Jackson fills a missing one with 0/false — measured: `updateMediaMeta` without
-  `metaVersion` answered 200, not 400, and so did a mail-settings update without `tls` (STARTTLS off). Unless its
+  `metaRevision` answered 200, not 400, and so did a mail-settings update without `tls` (STARTTLS off). Unless its
   `minimum` already excludes 0, make the type nullable (`[integer, "null"]`), annotate `@NotNull`, and read it in
   the resource with `.validated()` (`validate_request_bounds.py` rule 5 holds it). A null that would *mean*
   something ("no quota") is not a field value at all but an operation of its own (`clearTenantStorageQuota`): once

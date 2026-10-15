@@ -120,7 +120,7 @@ class ShareMediaRouteSliceTest {
         },
         "updateShareNode" to Probe("PATCH", "/api/shares/{shareId}/nodes/{nodeId}") { w ->
             given().contentType(ContentType.JSON).header("X-Contributor-Token", w.token)
-                .body("""{"parentId":"${w.memory}","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"d3JhcA==","placementVersion":0}""")
+                .body("""{"parentId":"${w.memory}","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"d3JhcA==","placementRevision":0}""")
                 .`when`().patch("/api/shares/${w.shareId}/nodes/${TestIds.uuid()}").then().statusCode(404).body("code", equalTo("node_not_found"))
         },
         // --- Memories `share-media` (root /api/shares/{shareId}/media) ---

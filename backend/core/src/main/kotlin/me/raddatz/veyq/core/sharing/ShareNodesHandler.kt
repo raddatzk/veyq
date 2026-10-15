@@ -157,7 +157,7 @@ class ShareNodesHandler(
 
     fun update(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, parentId: String,
-        encryptedName: String, slugToken: String, wrappedContentKey: String, placementVersion: Long,
+        encryptedName: String, slugToken: String, wrappedContentKey: String, placementRevision: Long,
     ): UpdateShareNodeOutcome {
         // A placement adds no row, so it spends no budget (`@RateLimitExempt` on the route).
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = false, onlyRole = ShareEntity.READ_WRITE)) {
@@ -202,7 +202,7 @@ class ShareNodesHandler(
             // No epoch: the node keeps its stored one (a bounded placement never touches the scope root).
             val placement = NodesHandler.PlacementRequest(
                 parentId = parentId, encryptedName = encryptedName, slugToken = slugToken,
-                wrappedContentKey = wrappedContentKey, epoch = null, placementVersion = placementVersion,
+                wrappedContentKey = wrappedContentKey, epoch = null, placementRevision = placementRevision,
             )
             when (nodes.updateInScope(scopeId, nodeId, placement, null, null, null, SubtreeBoundary(root))) {
                 UpdateNodeOutcome.Updated -> UpdateShareNodeOutcome.Updated
@@ -210,7 +210,7 @@ class ShareNodesHandler(
                 UpdateNodeOutcome.IllegalStructure -> UpdateShareNodeOutcome.IllegalStructure
                 UpdateNodeOutcome.SlugTaken -> UpdateShareNodeOutcome.SlugTaken
                 UpdateNodeOutcome.StalePlacement -> UpdateShareNodeOutcome.StalePlacement
-                UpdateNodeOutcome.IncompletePlacement, UpdateNodeOutcome.MissingMetaVersion -> UpdateShareNodeOutcome.InvalidRequest
+                UpdateNodeOutcome.IncompletePlacement, UpdateNodeOutcome.MissingMetaRevision -> UpdateShareNodeOutcome.InvalidRequest
                 // No epoch and no meta is sent, and the gate refused a space that serves no guests.
                 UpdateNodeOutcome.StaleEpoch, is UpdateNodeOutcome.StaleMeta, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting ->
                     error("a guest placement states no epoch and no meta, and passed the gate")

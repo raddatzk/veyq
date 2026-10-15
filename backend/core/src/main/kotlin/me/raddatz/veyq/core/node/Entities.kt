@@ -14,7 +14,7 @@ import org.hibernate.annotations.DynamicUpdate
  * A node in a scope's encrypted tree (en.memory.tree, cr-0027). FOLDER organizes only and is core's; every other
  * `kind` belongs to an application, which places it through `NodeKindRules` (ADR 0079). Every node, FOLDER included,
  * carries its own content key (`wrappedContentKey`, wrapped under its parent's content key, or under `K_SC` at the
- * node's epoch at the scope root — ADR 0080 Decision 1), and every node may carry one versioned sealed payload (`wrappedMeta`/`metaVersion`) whose format is its kind's application's.
+ * node's epoch at the scope root — ADR 0080 Decision 1), and every node may carry one versioned sealed payload (`wrappedMeta`/`metaRevision`) whose format is its kind's application's.
  * Operator-blind: `encryptedName` / `wrappedContentKey` / `wrappedMeta` are opaque ciphertext, `slugToken` a blinded
  * keyed MAC. `parentId`
  * is the **parent slot** — the parent node id, or the scope id for a root-level node (so slug uniqueness per
@@ -60,14 +60,14 @@ class NodeEntity : PanacheEntityBase {
 
     /** How many times [wrappedMeta] was replaced (ADR 0077): 0 at birth, bumped only by the compare-and-set in
      *  `NodesStore.applyUpdate`, which every meta write goes through. Not a node's item-list revision (`veyq_node_items_revision`), which every attach and trash of an item also moves. */
-    @Column(name = "meta_version", nullable = false)
-    var metaVersion: Long = 0
+    @Column(name = "meta_revision", nullable = false)
+    var metaRevision: Long = 0
 
     /** How many times the node was moved or renamed (ADR 0080 Decision 3): 0 at birth, bumped only by the
      *  compare-and-set in `NodesStore.applyUpdate`, which every placement write (parent, name, slug, key wrap) goes
      *  through. The `node-name` and `content-key` seals bind it, so a wrap or a name is valid at exactly one version. */
-    @Column(name = "placement_version", nullable = false)
-    var placementVersion: Long = 0
+    @Column(name = "placement_revision", nullable = false)
+    var placementRevision: Long = 0
 
     /** The drop private key of the shared root node of a WRITE_ONLY link, sealed under the node's content key (opaque
      *  base64) — set once, by core inside the node's first WRITE_ONLY share, never replaced: what WRITE_ONLY guests

@@ -8,7 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped
 /** What [IdentityFolders.ensure] answers. */
 sealed interface IdentityFolderOutcome {
     /** The identity's folder: [created] when this call made it, else the one it already had (its stored wrap). */
-    data class Folder(val nodeId: String, val epoch: Int, val placementVersion: Long, val wrappedContentKey: String, val created: Boolean) :
+    data class Folder(val nodeId: String, val epoch: Int, val placementRevision: Long, val wrappedContentKey: String, val created: Boolean) :
         IdentityFolderOutcome
     /** The link is gone under its lock (revoked, deleted) — as the gate's 404. */
     object NotFound : IdentityFolderOutcome
@@ -74,7 +74,7 @@ class IdentityFolders(private val nodes: NodesStore) {
     private fun existing(root: String, identityId: String): IdentityFolderOutcome? {
         val folder = nodes.identityFolder(root, identityId) ?: return null
         if (folder.deletedAt != null) return IdentityFolderOutcome.NotContributable
-        return IdentityFolderOutcome.Folder(folder.id, folder.epoch, folder.placementVersion, folder.wrappedContentKey, created = false)
+        return IdentityFolderOutcome.Folder(folder.id, folder.epoch, folder.placementRevision, folder.wrappedContentKey, created = false)
     }
 }
 
