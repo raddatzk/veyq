@@ -20,6 +20,16 @@ And it checks the catalog is a TREE (ADR 0088 decisions 1 and 2):
               entry. The server's effective state is an AND along the path, and an entry whose parent is missing
               has nothing to AND with. A root (`core`) is not an entry, so a two-segment id has no parent to need.
 
+And it checks every entry carries its words (ADR 0088 decision 13): `title`, `purpose` and `whenOff`, each an
+object with a non-empty `en` and a non-empty `de` string (`TEXT_FIELDS`, `LANGUAGES`). They are what the Server
+Owner reads before switching an entry off, and the catalog is the one place they are written: the API serves them
+and no client keeps its own copy. The dev-facing `description` stays and is not read.
+
+The defect that bought the text check: no incident. Built with cr-operator-capability-switches, because the
+console and the CLI render an entry from these fields and a missing one would be a blank line where the Server
+Owner decides whether to switch it off. Run against the untouched catalog, which carried none of them, it was red
+21 times: three fields on each of seven entries.
+
 The defect that bought the tree checks: no incident. Built with cr-capability-register-recut, because the catalog
 was four flat ids under no common root, and run against that untouched catalog the root check was red once per
 id. The re-cut fixed it; these checks keep a flat id or an orphaned child from re-entering.
@@ -27,7 +37,10 @@ id. The re-cut fixed it; these checks keep a flat id or an orphaned child from r
 Its limit: it reads the catalog alone. It does not prove that the server gates an id, that it ANDs along the path,
 or that the backend and web constants match the catalog: those are `CapabilityRegistryTest` and the web's
 `capabilities.test.ts`. Nor does it see an inheritance that is not a path prefix (an application's share entry
-inheriting `core.public-shares`): no such entry exists yet, and the CR that adds one owns that rule.
+inheriting `core.public-shares`): no such entry exists yet, and the CR that adds one owns that rule. Of the texts it
+proves only that both languages are there and not blank: not that `whenOff` matches what the server does when the
+entry is off, and not that the German says what the English says. Those are read by a person, against the gate
+and the key-material handler the entry names.
 
 Reserving an id ahead of its use-cases being built (advertised active only once built) is a deferred lifecycle
 extension; when it lands, the built-check gains an explicit reserved-entry skip. For the lean core every catalog
@@ -52,6 +65,9 @@ UC_RE = re.compile(r"^uc\.([a-z0-9-]+)\.[a-z0-9-]+$")
 KNOWN_SOURCES = {"operator-policy", "infra-preflight"}
 # The roots an id may hang from (ADR 0088 decision 1). `core` alone until the first application entry; see the docstring.
 ROOTS = {"core"}
+# The words every entry carries for the Server Owner (ADR 0088 decision 13), each in every language below.
+TEXT_FIELDS = ("title", "purpose", "whenOff")
+LANGUAGES = ("en", "de")
 
 errors: list[str] = []
 
@@ -82,6 +98,15 @@ for cid, entry in caps.items():
             errors.append(
                 f"{cid}: parent '{parent}' is not a catalog entry — the AND along the path has nothing to AND with "
                 f"(ADR 0088 decision 2)")
+    for field in TEXT_FIELDS:
+        text = entry.get(field)
+        if not isinstance(text, dict):
+            errors.append(f"{cid}: {field} must be an object with {' and '.join(LANGUAGES)} (ADR 0088 decision 13)")
+            continue
+        for lang in LANGUAGES:
+            value = text.get(lang)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"{cid}: {field}.{lang} must be a non-empty string (ADR 0088 decision 13)")
     if entry.get("source") not in KNOWN_SOURCES:
         errors.append(f"{cid}: source '{entry.get('source')}' is not one of {sorted(KNOWN_SOURCES)}")
     serves = entry.get("serves")

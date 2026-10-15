@@ -1,38 +1,122 @@
 {
   "registry": "platform-capabilities",
-  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core` today; an application's own entries hang from the application, ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the operator switches it off and the endpoint refuses with 422 capability_disabled; no built instance can switch one off until the Admin API switches land, inbox #443) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, ADR 0032 §5). scripts/validate_capabilities.py checks the tree and that every `serves` resolves to a built use-case.",
+  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core` today; an application's own entries hang from the application, ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the operator switches it off and the endpoint refuses with 422 capability_disabled; no built instance can switch one off until the Admin API switches land, inbox #443) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, ADR 0032 §5). `title`, `purpose` and `whenOff` are the entry's words for the Server Owner, each in English and German: what it is, what it is for, and what switching it off does to what is new and to what exists, as built (ADR 0088 decision 13). The catalog is the one place they are written; the API serves them and every client renders them from there. `description` is the dev-facing note and is not served. scripts/validate_capabilities.py checks the tree, that every `serves` resolves to a built use-case, and that every entry carries its three texts in both languages.",
   "capabilities": {
     "core.public-shares": {
+      "title": {
+        "en": "Public links",
+        "de": "Öffentliche Links"
+      },
+      "purpose": {
+        "en": "Members can share what is in a space through a link that anyone who has it can open without an account, to look only. The two other kinds of link hang below this entry.",
+        "de": "Mitglieder können Inhalte eines Bereichs über einen Link teilen, den jede Person, die ihn hat, ohne Konto öffnen kann – nur zum Ansehen. Die beiden anderen Arten von Links hängen unter diesem Eintrag."
+      },
+      "whenOff": {
+        "en": "No new public link of any kind can be made, and no link can be renewed or switched back on. Links that already exist keep working. The two kinds of link below this entry are off too, whatever their own switch says, so no new drop box can be created either; switching this back on brings back each one whose own switch is on.",
+        "de": "Es lässt sich kein neuer öffentlicher Link mehr anlegen, gleich welcher Art, und kein Link lässt sich erneuern oder wieder einschalten. Links, die es schon gibt, funktionieren weiter. Die beiden Arten von Links unter diesem Eintrag sind ebenfalls aus, egal wie ihr eigener Schalter steht, also lässt sich auch kein neuer Briefkasten anlegen; wird dieser Eintrag wieder eingeschaltet, kommt jede zurück, deren eigener Schalter an ist."
+      },
       "serves": ["uc.sharing.share-public-viewer"],
       "source": "operator-policy",
       "description": "Public share links of a node in the READ access mode, and the parent of every other share entry. Off => createShare, reactivateShare and reissueShare of a READ link are refused with 422 capability_disabled, and by the AND along the path so are those of a contribute and a drop-box link; the client hides the Share affordance. Links that already exist keep working until a share switch reaches them (inbox #442)."
     },
     "core.public-shares.contribute": {
+      "title": {
+        "en": "Links to look and add",
+        "de": "Links zum Ansehen und Hinzufügen"
+      },
+      "purpose": {
+        "en": "A public link whose guests can add to what they see, not only look at it. What a guest can add is up to the application the link leads into.",
+        "de": "Ein öffentlicher Link, über den Gäste nicht nur ansehen, sondern auch etwas hinzufügen können. Was ein Gast hinzufügen kann, bestimmt die Anwendung, in die der Link führt."
+      },
+      "whenOff": {
+        "en": "No new link of this kind can be made, and none can be renewed or switched back on; links to look only stay possible. Links of this kind that already exist keep working, and what guests added stays. This entry is also off whenever Public links is off.",
+        "de": "Es lässt sich kein neuer Link dieser Art anlegen, und keiner lässt sich erneuern oder wieder einschalten; Links nur zum Ansehen bleiben möglich. Bestehende Links dieser Art funktionieren weiter, und was Gäste hinzugefügt haben, bleibt. Dieser Eintrag ist außerdem immer dann aus, wenn „Öffentliche Links“ aus ist."
+      },
       "serves": ["uc.sharing.share-contributor"],
       "source": "operator-policy",
       "description": "Public share links in the READ_WRITE access mode: the guest reads and also adds; what the write adds is the application's. Off => createShare, reactivateShare and reissueShare of a READ_WRITE link are refused with 422 capability_disabled, and the client does not offer the role. Links that already exist keep working until a share switch reaches them (inbox #442)."
     },
     "core.public-shares.drop-box": {
+      "title": {
+        "en": "Drop boxes",
+        "de": "Briefkästen"
+      },
+      "purpose": {
+        "en": "A public link through which guests can add, but cannot see what is already there or what others added, and the drop box that collects files from people without an account.",
+        "de": "Ein öffentlicher Link, über den Gäste etwas einwerfen können, ohne zu sehen, was schon da ist oder was andere eingeworfen haben – und der Briefkasten, der Dateien von Personen ohne Konto sammelt."
+      },
+      "whenOff": {
+        "en": "No new link of this kind can be made, none can be renewed or switched back on, and no new drop box can be created. Links of this kind that already exist keep working, and drop boxes that exist stay, with everything in them. This entry is also off whenever Public links is off.",
+        "de": "Es lässt sich kein neuer Link dieser Art anlegen und keiner erneuern oder wieder einschalten, und es lässt sich kein neuer Briefkasten anlegen. Bestehende Links dieser Art funktionieren weiter, und bestehende Briefkästen bleiben mit allem, was darin liegt. Dieser Eintrag ist außerdem immer dann aus, wenn „Öffentliche Links“ aus ist."
+      },
       "serves": ["uc.sharing.share-uploader"],
       "source": "operator-policy",
       "description": "Public share links in the WRITE_ONLY access mode (a drop box: a guest adds and cannot read what others added; what it adds is the application's). Off => createShare, reactivateShare and reissueShare of a WRITE_ONLY link are refused with 422 capability_disabled, and so is creating a drop-box node (Depot's DEPOT_DROPBOX, createNode); the client hides the write-only option and the drop box. Links that already exist keep working until a share switch reaches them (inbox #442), and an existing drop box stays (a feature switch refuses only what is new, ADR 0088 decision 5)."
     },
     "core.group-space": {
+      "title": {
+        "en": "Groups",
+        "de": "Gruppen"
+      },
+      "purpose": {
+        "en": "Members can create groups: spaces that several members use together, beside each member's own personal space.",
+        "de": "Mitglieder können Gruppen anlegen: Bereiche, die mehrere Mitglieder gemeinsam nutzen, neben dem persönlichen Bereich jedes Mitglieds."
+      },
+      "whenOff": {
+        "en": "No new group can be created, so the instance offers personal spaces only. Groups that already exist stay as they are: members keep using, renaming and deleting them, adding and removing members, and accepting or declining being added.",
+        "de": "Es lässt sich keine neue Gruppe mehr anlegen; die Instanz bietet dann nur persönliche Bereiche. Bestehende Gruppen bleiben, wie sie sind: Mitglieder können sie weiter nutzen, umbenennen und löschen, Mitglieder aufnehmen und entfernen und eine Aufnahme annehmen oder ablehnen."
+      },
       "serves": ["uc.spaces.add-group-member", "uc.spaces.manage-group-members", "uc.spaces.rename-group", "uc.spaces.delete-group", "uc.spaces.consent-group-add"],
       "source": "operator-policy",
       "description": "Shared group spaces. Off => creating a group scope (createGroup) is refused with 422 capability_disabled and the client hides the affordance: a personal-only instance. A feature switch refuses only what is new (ADR 0088 decision 5), so an existing group stays usable: renaming it, managing its members, deleting and restoring it, and accepting or declining an add keep working."
     },
     "core.remember-device": {
+      "title": {
+        "en": "Remembered devices",
+        "de": "Gemerkte Geräte"
+      },
+      "purpose": {
+        "en": "A device a member has signed in on can keep a key of its own, so that it unlocks next time with the password alone, without the Secret Key from the Emergency Kit. Unlocking without a password hangs below this entry.",
+        "de": "Ein Gerät, auf dem sich ein Mitglied angemeldet hat, kann einen eigenen Schlüssel behalten und entsperrt dann beim nächsten Mal allein mit dem Passwort, ohne den Secret Key aus dem Notfall-Kit. Das Entsperren ohne Passwort hängt unter diesem Eintrag."
+      },
+      "whenOff": {
+        "en": "No device can be newly remembered. Devices remembered before stop unlocking that way at once: the server withholds what they unlock with, and deletes none of it. Members who relied on a remembered device then need their password and their Secret Key from the Emergency Kit. Unlocking without a password hangs below this entry, so it is off too, whatever its own switch says. Switching back on restores every remembered device. The password with the Secret Key always works.",
+        "de": "Kein Gerät lässt sich neu merken. Bereits gemerkte Geräte entsperren sofort nicht mehr auf diesem Weg: Der Server hält zurück, womit sie entsperren, und löscht nichts davon. Mitglieder, die sich auf ein gemerktes Gerät verlassen haben, brauchen dann ihr Passwort und ihren Secret Key aus dem Notfall-Kit. Das Entsperren ohne Passwort hängt unter diesem Eintrag und ist damit ebenfalls aus, egal wie sein eigener Schalter steht. Wird der Eintrag wieder eingeschaltet, entsperrt jedes gemerkte Gerät wieder wie zuvor. Passwort und Secret Key zusammen funktionieren immer."
+      },
       "serves": ["uc.account.trust-device", "uc.account.remember-this-device"],
       "source": "operator-policy",
       "description": "Remembering a device: a DEVICE wrap, the Master Key under the password and a device-bound key that stands in for the Secret Key. Off => enrolling a DEVICE wrap (addAccountWrap) is refused with 422 capability_disabled, and by the AND along the path so is a passwordless one; the client hides \"remember this device\". Unlocking with a wrap that already exists, and deleting one, stay allowed."
     },
     "core.remember-device.passwordless": {
+      "title": {
+        "en": "Unlock without a password",
+        "de": "Entsperren ohne Passwort"
+      },
+      "purpose": {
+        "en": "A remembered device can open straight in, with neither the password nor the Secret Key, because it holds a key that is enough on its own.",
+        "de": "Ein gemerktes Gerät kann direkt öffnen, ganz ohne Passwort und Secret Key, weil es einen Schlüssel hält, der allein genügt."
+      },
+      "whenOff": {
+        "en": "No device can be newly set up to unlock without a password, and a device added from another one gets a session but keeps no key. Devices set up this way before stop opening straight in at once: the server withholds what they unlock with, and deletes none of it. Members who relied on such a device then need their password and their Secret Key from the Emergency Kit. Switching back on restores them. This entry is also off whenever Remembered devices is off.",
+        "de": "Kein Gerät lässt sich neu so einrichten, dass es ohne Passwort entsperrt, und ein Gerät, das über ein anderes hinzugefügt wird, bekommt eine Sitzung, aber keinen Schlüssel. Bereits so eingerichtete Geräte öffnen sofort nicht mehr direkt: Der Server hält zurück, womit sie entsperren, und löscht nichts davon. Mitglieder, die sich auf ein solches Gerät verlassen haben, brauchen dann ihr Passwort und ihren Secret Key aus dem Notfall-Kit. Wird der Eintrag wieder eingeschaltet, öffnen diese Geräte wieder direkt. Dieser Eintrag ist außerdem immer dann aus, wenn „Gemerkte Geräte“ aus ist."
+      },
       "serves": ["uc.account.remember-this-device"],
       "source": "operator-policy",
       "description": "Passwordless unlock on a remembered device: a DEVICE_KEY wrap, the Master Key under a device key alone. Off => enrolling a DEVICE_KEY wrap (addAccountWrap) is refused with 422 capability_disabled; the client hides the passwordless choice, and a linked device gets a session but no stored key (ADR 0088 decision 11)."
     },
     "core.device-linking": {
+      "title": {
+        "en": "Add a device from another one",
+        "de": "Gerät über ein anderes hinzufügen"
+      },
+      "purpose": {
+        "en": "A member signs in on a new device by pairing it through a QR code with a device that is already unlocked, without typing the password and the Secret Key on the new one.",
+        "de": "Ein Mitglied meldet sich auf einem neuen Gerät an, indem es dieses per QR-Code mit einem bereits entsperrten Gerät koppelt – ohne auf dem neuen Gerät Passwort und Secret Key einzugeben."
+      },
+      "whenOff": {
+        "en": "No device can be added this way any more, and an addition already under way stops. Devices added before are not affected. Members sign in on a new device with their password and their Secret Key. This entry is independent of Remembered devices.",
+        "de": "Auf diesem Weg lässt sich kein Gerät mehr hinzufügen, und ein Hinzufügen, das gerade läuft, bricht ab. Bereits hinzugefügte Geräte sind nicht betroffen. Auf einem neuen Gerät melden sich Mitglieder dann mit Passwort und Secret Key an. Dieser Eintrag ist unabhängig von „Gemerkte Geräte“."
+      },
       "serves": ["uc.account.onboard-device"],
       "source": "operator-policy",
       "description": "Linking a device from one that is already unlocked (ADR 0059): the Master Key reaches the new device from the other one instead of from the password and the Secret Key. Off => every /api/pairing/* endpoint (open, answer, delegate, seal, collect) is refused with 422 capability_disabled, which also stops a pairing in flight; the client hides \"sign in with code\" and the add-device entry. Independent of core.remember-device (ADR 0088 decision 11)."
