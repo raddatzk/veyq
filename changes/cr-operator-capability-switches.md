@@ -202,7 +202,51 @@ deleting them. Inbox #443 asked for this, and **it must land before V1**.
     - `DEVICE` and `DEVICE_KEY` withheld and restored, with `PASSWORD` always present;
     - a write invalidates the cache without a restart (a second read in the same test sees it).
   - **Done when:** `./gradlew check` is green and every bite is recorded red → green.
-- [ ] **3 admin-web + CLI: the panel and the commands (D7, D8).**
+- [x] **3 admin-web + CLI: the panel and the commands (D7, D8).** Done in 634765d4.
+  - **Built.** The facade `features/instance/capabilities.ts` holds the two calls and the one rule both surfaces
+    share: `capabilityTree()` places each entry by its id path and names, for `off: false, effective: false`, the
+    nearest ancestor whose own switch is off. The state follows the served `effective`; no AND is recomputed.
+    `CapabilitiesPanel.vue` sits under Server beside Release, Store and Config-secret key. Switching off goes
+    through `useConfirm` with the entry's `whenOff` as the message; switching on asks nothing (the suspend /
+    reactivate split). A row re-renders from the PUT's answer, and a switched entry with descendants re-reads the
+    list, because their `effective` is the server's. The 13 `capabilities.*` keys are UI chrome only.
+  - **CLI.** `capabilities list | off <id> | on <id>`, `--lang en|de` over `LC_ALL`, then `LANG`. Two generic
+    additions to the table make that possible: `Command.operand` (one positional; `splitCommand` matches an operand
+    command on its own words, so a stray word on any other command still reads as unknown) and `Flag.oneOf`
+    (checked before sign-in). The three commands print text through `Command.render` rather than the JSON
+    document, since their output is the served words for a person. The state is a fixed token (`on`, `off`,
+    `off through <id>`), as `config-secret` prints `MISMATCH`.
+  - **Deviation.** `capabilities off` prints `whenOff` from the PUT's answer, so after the switch rather than
+    before it. That needs one call instead of two, the text is the server's word for the entry it actually
+    switched, and an unknown id prints nothing but the refusal (`HTTP 404 capability_not_found`, exit 1).
+  - **Bites, each red once by injection and restored byte for byte (`git status --porcelain` unchanged):**
+    - state ignoring `effective` → the tree, the nearest-ancestor, German, switch-on and re-read cases red, and the
+      CLI list;
+    - the farthest off ancestor instead of the nearest → the nearest-ancestor case, German, and the CLI list red;
+    - `whenOff` always English → the German confirmation red;
+    - titles always English → both German cases red;
+    - cancel still switching → the cancel case red;
+    - switching on asks too → switch-on, re-read and refusal cases red;
+    - the PUT's answer not adopted → both switch cases red;
+    - no re-read after switching a parent → the re-read case red;
+    - `capability_not_found` not mapped → the refusal case red;
+    - the console's nav not rendering the panel → `AdminConsoleView`'s new case red;
+    - CLI: `LC_ALL` ignored, the `--lang` override ignored, `--lang` values unchecked, `off` printing no `whenOff`,
+      `off` sending on, the refusal swallowed, the operand not split off the words, and the tree not indented,
+      each red in its own case.
+  - **Measured:** `npm run check` green in admin-web, 28 files and 215 tests (21 new: 10 panel, 10 CLI, 1 console).
+    The guard glob is green.
+  - **Web constants (D2's open half): not generated; they keep their conformance test.** Generating them would
+    need a generator script, a hook in web's `generate:api`, and a `COPY` of the catalog into the root
+    `Dockerfile`'s web stage, which copies only `contracts/api`. Then 14 importing files either move or go through
+    a re-export. The gain would be small. The pin is one-directional on purpose: ADR 0032 §6 lets the catalog
+    reserve an id ahead of any UI, and a generator would emit a constant for every id. The test reads the
+    catalog live on every `npm run check`, while generated code goes stale between generations, which `check`
+    does not rerun. And each pinned constant's KDoc names the UI it gates, which a generated one cannot. The
+    words are never needed in `web/`: only admin-web shows them, and it shows them as served.
+  - **For phase 4:** nothing in admin-web depends on it.
+  - **For phase 5:** the panel is Server → Capabilities (DE "Funktionen"). The CLI in the container is
+    `veyq-admin capabilities off <id>`, and `capabilities list` shows which ancestor an entry is off through.
   - `npm run generate:api` in admin-web regenerates the existing instance client. This is not a fifth spec.
   - Tests: the panel's tree and the three states, the confirmation showing `whenOff` in both locales, the CLI's
     commands, its locale choice and its exit codes.
