@@ -55,8 +55,8 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
    two shared-scope questions the earlier v1 cut deferred are **decided**, not sidestepped:
    - **Who may publish — any member.** Content in a shared scope belongs to all members, and any member could
      already reach an outsider by other means; a public link is a member capability, not an owner-only one. (This
-     is a *capability*, still `AND`-ed with the instance's `sharing.public-links` / `sharing.uploader-links`
-     capability, [ADR 0032](0032-capability-discovery-version-gating.md), and the role-`AND`-scope gate.)
+     is a *capability*, still `AND`-ed with the instance's `core.public-shares` entries (the READ, contribute and
+     drop-box leaves), [ADR 0032](0032-capability-discovery-version-gating.md), and the role-`AND`-scope gate.)
    - **Member removal — deactivate the removed member's shares.** Removing a member **soft-revokes every share
      that member created** in that scope (`enabled = false`, §7). The share is **not** deleted, but it is **not
      revived either**: a link its removed creator holds is re-issued — a new id and a new `K_share`, the old one

@@ -146,16 +146,17 @@ both off a place still works, named by hand. The user's own consent to the two
 
 ## Consequences
 
-- **Built today** (measured: `contracts/platform/capabilities.json`): four flat ids. They map onto the tree as
-  - `sharing.public-links` → `core.public-shares` + `.contribute`
-  - `sharing.uploader-links` → `.drop-box`
-  - `spaces.groups` → `core.group-space`
-  - `account.device-trust` → `core.remember-device` + `.passwordless`
-- **Enforcement gaps in what is built**, tracked in the inbox:
-  - The server gates `spaces.groups` only at group creation (`grep -c isActive ScopesHandler.kt` → 1), although
-    the catalog names five use-cases.
-  - Depot lets a member create a drop box while uploader links are off (`web/src/features/depot/capabilities.ts`
-    `createDropBox: place`), and the drop box's Share button checks `publicLinks`, so the box can never be shared.
+- **Built today** (measured: `contracts/platform/capabilities.json`): seven `core.*` entries - `core.public-shares`
+  with `.contribute` and `.drop-box`, `core.group-space`, `core.remember-device` with `.passwordless`, and
+  `core.device-linking`. The server computes the AND along the path (`CapabilityRegistry`); each client reads one leaf.
+  No instance-wide switch is built until inbox #443 and no tenant level until #439, so a built instance advertises every
+  entry; the gates are proven by tests that hand the registry a switched-off set. Share switches act on new links only
+  until #442.
+- **The two enforcement gaps of the flat ids are closed.** The server gated `core.group-space` only at group creation
+  although the catalog names five use-cases - decided a doc fault, since a feature switch refuses only what is new
+  (decision 5), so group creation is the one gate. Depot let a member create a drop box while uploader links were off,
+  and the drop box's Share button read the READ leaf - now creating one needs `core.public-shares.drop-box`, and its
+  share needs the same leaf, not the READ one.
 - **`download-originals` waits for a measurement** (owner, 2026-10-15). If guests stream video from the
   `ORIGINAL` ([ADR 0047](0047-inline-video-playback-range-streaming.md)), switching it off also stops video
   playback for guests until a video preview tier exists. This must be measured before the entry is built.

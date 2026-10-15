@@ -9,7 +9,7 @@
   leaves.
 - **Preconditions:** an **authenticated, unlocked** caller who is a **member of the target Memory's scope** (personal,
   group, or tenant) and can open it (holds `K_node`); the instance advertises the role's capability
-  (`sharing.public-links` / `sharing.uploader-links`, [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md)).
+  (`core.public-shares`, `.contribute` or `.drop-box`, [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md)).
 - **Postconditions (success):** a share record exists (opaque, owned by its creator), and the link opens the Memory
   subtree per its role — until revoked, expired, **or auto-deactivated by the creator's removal from the scope**.
 

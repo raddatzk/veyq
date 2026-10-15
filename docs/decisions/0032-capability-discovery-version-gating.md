@@ -54,9 +54,8 @@ response and a client-side gate that reads them.
 
 - Ids are **paths in a tree**, `core.<x>` or `<application>.<x>`. The register, its two switching levels
   (operator, tenant owner), inheritance along the path and what makes an entry switchable are
-  [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)'s. **Built today:** four
-  flat ids (`sharing.public-links`, `sharing.uploader-links`, `spaces.groups`, `account.device-trust`, §5), to be
-  cut into the tree once before V1 (ADR 0088 decision 10).
+  [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)'s. **Built today:** seven
+  `core.*` entries (§5), the first cut of the tree (ADR 0088 decision 10).
 - **Source of truth** is the catalog `contracts/platform/capabilities.json`, codegen'd into a backend registry
   **and** each client's constants, so ids can never silently diverge across surfaces. Each catalog entry also
   carries a `serves: [uc.…]` back-ref to the use-case(s) it gates (catalog-only, validated — see §6); it is
@@ -86,8 +85,9 @@ response and a client-side gate that reads them.
 
 An operator disables a capability **instance-wide**: in `admin-web` or its CLI, through the Admin API, without a
 restart ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 12).
-**Built today** is the earlier form, a `veyq.capabilities.disabled` config list read once at boot
-(`CapabilityRegistry.kt`), which the Admin API replaces (inbox #443). A disabled capability is then:
+**Built today** is the gate and the manifest, not the switch: no instance-wide switch exists until inbox #443 (the
+`veyq.capabilities.disabled` config list is gone), so a built instance advertises every entry and the gates are proven
+by tests that hand the registry a switched-off set. A disabled capability is then:
 
 - **Omitted from the manifest** → every client **hides** the feature (soft, graceful — the ShareDialog simply
   doesn't offer the role).
@@ -100,32 +100,26 @@ Both are required: the manifest alone is only UX; the endpoint gate alone gives 
 they are honest and safe. A tenant owner switches a `+` entry off for their tenant the same way, from the tenant
 settings in `web/`, and the same gate answers `422` (ADR 0088 decisions 2, 5 and 12).
 
-### 5. The built seed, and where it goes in the register
+### 5. The built entries
 
-The lean core seeded the catalog with the capabilities whose features already existed **and** that an operator
-had a plausible reason to switch off. Two computation sources feed the same active manifest: an operator
-**disabled-list** (policy) and, separately, an infra **preflight** (runtime). These four are what is built, and
-the re-cut before V1 maps them onto ADR 0088's register:
+The catalog holds the capabilities whose features exist **and** that an operator has a plausible reason to switch off.
+Two computation sources feed the same active manifest: an operator **disabled set** (policy, not built until #443) and,
+separately, an infra **preflight** (runtime). These seven are what is built (`contracts/platform/capabilities.json`, whose
+`description` per entry is the reference for what off does); a child is switched off by its own id or by its parent's,
+the AND along the path being the server's (ADR 0088 decision 2):
 
-| built id | register path (ADR 0088) |
-|---|---|
-| `sharing.public-links` | `core.public-shares` + `core.public-shares.contribute` |
-| `sharing.uploader-links` | `core.public-shares.drop-box` |
-| `spaces.groups` | `core.group-space` |
-| `account.device-trust` | `core.remember-device` + `core.remember-device.passwordless` |
+| id | `serves` (use-cases) | disabled ⇒ |
+|---|---|---|
+| `core.public-shares` | share-public-viewer | Share affordance hidden; `createShare`, re-activating and re-issuing a READ link → `422`, and by the AND those of the two children below |
+| `core.public-shares.contribute` | share-contributor | the READ_WRITE role is not offered; the same three operations on a READ_WRITE link → `422` |
+| `core.public-shares.drop-box` | share-uploader | the uploader option and the drop-box node are not offered; WRITE_ONLY links and creating a drop-box node → `422` |
+| `core.group-space` | add-group-member, manage-group-members, rename-group, delete-group, consent-group-add | group creation hidden; `createGroup` → `422` (an existing group stays usable, inbox #440 resolved as a doc fault) |
+| `core.remember-device` | trust-device, remember-this-device | enrolling a DEVICE wrap → `422`, and by the AND a passwordless one |
+| `core.remember-device.passwordless` | remember-this-device | the "remember this device" toggle hidden; enrolling a DEVICE_KEY wrap → `422` |
+| `core.device-linking` | onboard-device | "sign in with code" and the Settings entry hidden; every `/api/pairing/*` endpoint → `422` |
 
-| id | `serves` (use-cases) | source | disabled ⇒ |
-|---|---|---|---|
-| `sharing.public-links` | share-public-viewer, share-contributor | operator policy | Share affordance hidden; `createShare(READ/READ_WRITE)` and re-activating such a share → `422` |
-| `sharing.uploader-links` | share-uploader | operator policy | Uploader option hidden; `createShare(WRITE_ONLY)` and re-activating such a share → `422` |
-| `spaces.groups` | add-group-member, manage-group-members, rename-group, delete-group, consent-group-add | operator policy | group-space UI hidden; the group-create endpoint → `422` |
-| `account.device-trust` | trust-device, remember-this-device | operator policy | the "remember this device" toggle hidden; enrolling a device wrap → `422` |
-
-**Sharing is the worked end-to-end proof** (manifest → client soft-gate → server `422`) since it is fully built
-(web). `spaces.groups` and `account.device-trust` are seeded + advertised + client-soft-gated on the **same**
-machinery; their endpoint-`422` enforcement lands at each feature's own create/enable gate (the identical
-one-line pattern), advertised **active** only once that feature is built (§6). `spaces.groups` is gated
-narrower than its `serves`: only group creation refuses (inbox #440).
+**Sharing is the worked end-to-end proof** (manifest → client soft-gate → server `422`). Share switches act on new links
+only until inbox #442 lets them reach existing ones.
 
 The **infra-detected** category (a capability computed by a preflight, not a policy toggle, with no operator
 off-switch or `422`) was originally illustrated by `directTransport` on `/api/setup`. That flag has been
@@ -145,10 +139,8 @@ different **projections** and must not be collapsed 1:1:
   and a client would sensibly gate a whole feature-surface on — a **per-instance, versioned, client-facing** wire
   token.
 
-The mapping is therefore **many-to-many**, not identity — the seed shows it: `sharing.public-links` bundles the
-viewer + contributor use-cases while `sharing.uploader-links` stands alone (2 capabilities over 3 sharing
-use-cases), and `spaces.groups` / `account.device-trust` each fold **four to five** use-cases into one operator
-switch. Always-on core use-cases (e.g. creating a Memory) get **no** capability; runtime/ops signals (e.g. a
+The mapping is therefore **many-to-many**, not identity — the entries show it: three share ids over three sharing
+use-cases, while `core.group-space` and `core.remember-device` each fold **two to five** use-cases into one switch. Always-on core use-cases (e.g. creating a Memory) get **no** capability; runtime/ops signals (e.g. a
 future `server.auto-updates`) would be capabilities with **no** single use-case.
 
 Two rules follow, so the catalog stays honest instead of being invented in parallel:
@@ -160,12 +152,12 @@ Two rules follow, so the catalog stays honest instead of being invented in paral
   checks every capability's `serves` resolves to a **real** use-case (the doc exists) — so a catalog entry can't
   be a typo or drift from the graph. Because the catalog is **append-only**, an id may be *reserved* ahead of its
   first advertisement; a capability is **advertised active** only once its use-case(s) are actually **built** and
-  the operator hasn't disabled it. (So `spaces.groups` / `account.device-trust` are valid catalog entries now,
-  advertised as their features finish building.)
+  the operator hasn't disabled it. (So an entry for a feature still being built is valid in the catalog,
+  advertised as that feature finishes.)
 - **Pick the grain coarser than a use-case.** One token *per* use-case would bloat the wire contract and the
   client gating, and most use-cases can't be disabled independently anyway. The **default grain is feature- or
   feature-cluster-level**; drop to a finer capability only when an operator has a real reason to toggle that slice
-  alone (as `sharing.uploader-links` splits from `sharing.public-links`).
+  alone (as `core.public-shares.drop-box` splits from `core.public-shares`).
 
 ## Consequences
 

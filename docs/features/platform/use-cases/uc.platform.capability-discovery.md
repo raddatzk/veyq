@@ -35,7 +35,7 @@
 
 - **A capability is not a permission.** It is instance-wide and pre-auth; it says what this *server* offers, not
   what *you* may do. A feature is offered only when **(capability present) AND (policy permits here)** — e.g.
-  `sharing.public-links` present **and** the node is a personal-scope Memory the caller owns. Conflating the two
+  `core.public-shares` present **and** the node is one the caller may share. Conflating the two
   is the modelling error this use-case exists to prevent ([ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) §6).
 - **Operator-blind-safe.** The response is identical for every caller and carries no per-user state, so a
   pre-auth manifest leaks nothing — that is what lets it sit outside the auth boundary.
@@ -44,11 +44,10 @@
   `scripts/validate_capabilities.py` enforces that every `serves` resolves to a real use-case, so the catalog
   cannot drift from the graph. It is **append-only**: an id may be reserved before its first advertisement and is
   advertised active only once its use-case(s) are built.
-- **Seeded with four operator-policy capabilities**, sharing being the worked end-to-end proof; the others ride
-  the same machinery (advertised + `hasCapability` soft-gate + a one-line `422` at their create/enable path):
-  `sharing.public-links` / `sharing.uploader-links` (the Share dialog's role options), `spaces.groups` (a
-  personal-only instance), `account.device-trust` (an instance mandating a full password every time). The
-  authoritative list is the catalog file, not this page.
+- **Seeded with seven operator-policy capabilities**, all under `core` and arranged as a tree (ADR 0088), sharing being
+  the worked end-to-end proof; each is advertised, soft-gated by `hasCapability` and refused with `422` at its
+  create/enable path. The authoritative list is the catalog file, not this page; no instance-wide switch to turn one off
+  is built until inbox #443.
 
 ## What this means for you / Was das für dich bedeutet
 

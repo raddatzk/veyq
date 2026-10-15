@@ -71,7 +71,7 @@ proven, whatever colour its column is. **The unit is the test, not the surface.*
 > the same suites `gradlew check` already runs on H2, so it waits under no gap, but it is evidence about the
 > production engine only from its first read log on. The last ref that predated this, `uc.account.trust-device`'s
 > `device-kek-conformance`, cited `crypto` alone, so a gap in its place would have made that use-case `planned`, which
-> `validate_capabilities.py` reads as not built — `account.device-trust` could then no longer be advertised
+> `validate_capabilities.py` reads as not built — the `core.remember-device` entries could then no longer be advertised
 > ([ADR 0032](0032-capability-discovery-version-gating.md) §6). It moved the same day, once a web test
 > (`trustDevice.conformance.test.ts`) pinned that vector through web's own trust path on an admitted row, and
 > `validate_coverage.py`'s baseline has been empty since.

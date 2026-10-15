@@ -327,9 +327,9 @@ shows is `depotCapabilities(access, target)` (`web/src/features/depot/capabiliti
 | delete a file, a guest's folder | ✓ | ✗ | ✓ (inbox #391) | ✗ | ✗ | ✗ |
 | copy a file, a drop box, a guest's folder elsewhere in the space (core's "Copy to…", `canCopy`, [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md); a drop box's copy is a plain folder) | ✓ | ✗ | ✓ out of it | ✗ | ✗ | ✗ |
 | the **opened file** (`FileDetail`): replace, a header action | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder) | ✗ |
-| the opened file: rename, share, delete, move | all ✓ (share with the instance's public links; not in an identity folder) | share only (links are a read) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
-| create a drop box | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| a drop box's links, delete it | links with the instance's public links; delete ✓ | links only | — | ✗ | ✗ | ✗ |
+| the opened file: rename, share, delete, move | all ✓ (share with the instance's `core.public-shares`, its READ_WRITE role with `.contribute`; not in an identity folder) | share only (links are a read) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
+| create a drop box (needs the instance's `core.public-shares.drop-box`) | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| a drop box's links, delete it | links with the instance's `core.public-shares.drop-box` (not the READ leaf); delete ✓ | links only | — | ✗ | ✗ | ✗ |
 
 These are the matrix half; a right shows only where the session's data source also implements it
 (`web/src/features/depot/source.ts`, `sourceCapabilities`: the guest's source has no delete and no rename, and no upload

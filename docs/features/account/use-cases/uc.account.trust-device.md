@@ -10,7 +10,7 @@
   **unlocked**, so the in-memory Master Key can be wrapped under a new KEK **and** the account password is
   still in hand (the unlock flow clears it right after — enrolment runs *at the sign-in that unlocks*, see
   [uc.account.remember-this-device](uc.account.remember-this-device.md)); WebCrypto + IndexedDB are available, and
-  the operator has not disabled the `account.device-trust` capability.
+  the operator has not disabled the `core.remember-device` capability.
 - **Postconditions (success):** A **DEVICE** wrap (ciphertext) exists server-side; this device's IndexedDB
   holds its **non-extractable** device key plus the wrap's **salt** and server **id**; subsequent unlocks on
   this device open the Master Key from **password + device key** (2-factor, no Secret Key). The Secret Key
@@ -129,7 +129,7 @@ a plain revoke does *not* do it, is [ADR 0058](../../../decisions/0058-revoke-ne
 - **E3 — wrong password at unlock:** the KEK fails to open the wrap (AEAD tag mismatch) → **generic unlock
   failure**, identical to the PASSWORD path; the server is uninvolved.
 - **E4 — WebCrypto / IndexedDB unavailable** (a locked-down browser), or the operator disabled
-  `account.device-trust`: trust-device is **unsupported** → only the PASSWORD floor is offered, and the
+  `core.remember-device`: trust-device is **unsupported** → only the PASSWORD floor is offered, and the
   *Devices and sessions* row says so. No silent downgrade. The check is presence only
   (`isRememberSupported`): an ordinary private window has both APIs, so it **enrols** — its local key dies with
   the window and its server wrap is left as harmless E1 ciphertext.

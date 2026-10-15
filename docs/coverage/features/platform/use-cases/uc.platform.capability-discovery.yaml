@@ -6,10 +6,10 @@ title: A client discovers an instance's version + capabilities, and refuses to b
 # the append-only catalog contracts/platform/capabilities.json, pinned into a backend registry + web constants
 # with conformance tests). The web client hard-gates on a major mismatch (a blocking, direction-specific screen
 # before login) and soft-gates each optional feature on hasCapability. An operator disables a capability
-# instance-wide (veyq.capabilities.disabled) — omitted from the manifest AND rejected at its create/enable gate
-# (422 capability_disabled). Sharing is the worked end-to-end proof; spaces.groups + account.device-trust ride
-# the same machinery. Lean-core scope: no deprecation lifecycle /
-# notices / audience filter yet.
+# instance-wide — omitted from the manifest AND rejected at its create/enable gate (422 capability_disabled); the
+# switch itself is not built until inbox #443, so the gates are proven with a registry handed a switched-off set. The ids
+# are a tree under `core` (ADR 0088); the catalog is the list. Sharing is the worked end-to-end proof. Lean-core scope: no
+# deprecation lifecycle / notices / audience filter yet.
 acceptanceCriteria:
   - id: discover-manifest
     text: GET /api/setup (pre-auth, no identity) returns version { major, build } and capabilities [{ id }] — the instance's ACTIVE capability set, sourced from the append-only catalog contracts/platform/capabilities.json. The response is identical for every caller (operator-blind-safe, no per-user data).
@@ -29,30 +29,47 @@ acceptanceCriteria:
       web:
         unit: [src/shared/state/useCapabilities.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
   - id: operator-disable-enforced
-    text: An operator disables a capability instance-wide (config); the server BOTH drops it from the manifest AND rejects the corresponding endpoint with 422 capability_disabled. The manifest is a UX hint; the server-side enforcement is the authority (a stale/ignoring client still cannot use it).
+    text: A switched-off capability is omitted from the manifest AND its endpoint answers 422 capability_disabled; the manifest is a UX hint and the server-side enforcement is the authority (a stale or ignoring client still cannot use it). One slice test per gate - share links (create, reactivate, reissue), the drop-box node, the group create, the two device wraps, every pairing endpoint.
     coverage:
       backend:
-        unit: [CapabilityRegistryTest.aSwitchedOffParentSwitchesOffItsChildrenAndNotItsSiblings]
-        integration: [CapabilityDisabledSliceTest.aSwitchedOffParentDropsEveryShareIdAndRefusesADropBoxLink, CapabilityDisabledSliceTest.aSwitchedOffDropBoxRefusesWriteOnlyAndLeavesReadWriteThrough]
+        integration: [CapabilityDisabledSliceTest.aSwitchedOffParentDropsEveryShareIdAndRefusesADropBoxLink, CapabilityDisabledSliceTest.aSwitchedOffChildRefusesItsRoleAndLeavesTheParentsRoleThrough, CapabilityDisabledSliceTest.groupSpaceOffRefusesANewGroupAndKeepsAnExistingOneUsable, CapabilityDisabledSliceTest.passwordlessOffRefusesADeviceKeyWrapAndStillEnrolsADeviceWrap, CapabilityDisabledSliceTest.rememberDeviceOffRefusesBothMethods, CapabilityDisabledSliceTest.deviceLinkingOffRefusesEveryPairingEndpointAndStopsAPairingInFlight, DropBoxCapabilitySliceTest.dropBoxOffRefusesANewDropBoxAndCreatesAFolderAtTheSameParent, ReactivateShareCapabilitySliceTest.reactivatingALinkWhoseCapabilityIsOffIs422, ReactivateShareCapabilitySliceTest.reissuingALinkWhoseCapabilityIsOffIs422]
+    gaps:
+      - surface: backend
+        reason: The operator half - a Server Owner switching an id off in a running instance - is not built; no instance-wide switch exists until inbox #443 (ADR 0088 decision 3), and a built instance cannot switch an id off at all. The tests above hand the registry a switched-off set through its test seam, so they prove the manifest and the gates, not the switch.
   - id: capability-not-permission
-    text: A capability is instance-wide + pre-auth, NOT a per-scope/role permission. A feature is offered only when (capability present) AND (policy permits here) — e.g. sharing.public-links present AND the node is a personal-scope Memory the caller owns. The manifest carries no identity/permission data.
+    text: A capability is instance-wide + pre-auth, NOT a per-scope/role permission. A feature is offered only when (capability present) AND (policy permits here) — e.g. core.public-shares present AND the node is a Memory the caller may share. The manifest carries no identity/permission data.
     coverage:
       backend:
         integration: [CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller, CapabilityDisabledSliceTest.aSwitchedOffDropBoxRefusesWriteOnlyAndLeavesReadWriteThrough]
   - id: sharing-first-consumer
-    text: Sharing gates on sharing.public-links / sharing.uploader-links. The normal share create dialog offers only READ/READ_WRITE (ShareCreateDialog.test.ts); the uploader is a SEPARATE memory action + its own dialog variant, gated on sharing.uploader-links in MemoryDetail. Disabling sharing.uploader-links hides the uploader action AND makes createShare(role=WRITE_ONLY) return 422 capability_disabled. Proves the full loop (manifest -> client gate -> server enforcement) on a real feature.
+    text: Sharing gates on the three share leaves - core.public-shares (READ), core.public-shares.contribute (READ_WRITE), core.public-shares.drop-box (WRITE_ONLY). Each capability function reads ONE leaf (the server ANDs the path); the share dialogs offer READ_WRITE only where contribute is on (handed down as a prop), the uploader is a SEPARATE Memory action gated on drop-box, and a drop box's own share needs drop-box, not public-shares. A switched-off role makes createShare of that role return 422 capability_disabled while the others still pass. Proves the full loop (manifest -> client gate -> server enforcement) on a real feature. A switch acts on new links only until inbox #442.
     coverage:
       backend:
-        integration: [CapabilityDisabledSliceTest.aSwitchedOffDropBoxRefusesWriteOnlyAndLeavesReadWriteThrough]
+        integration: [CapabilityDisabledSliceTest.aSwitchedOffDropBoxRefusesWriteOnlyAndLeavesReadWriteThrough, CapabilityDisabledSliceTest.aSwitchedOffChildRefusesItsRoleAndLeavesTheParentsRoleThrough]
       web:
-        unit: [src/features/memory/components/ShareCreateDialog.test.ts]
+        unit: [src/features/memory/components/ShareCreateDialog.test.ts, src/features/memory/capabilities.test.ts, src/features/depot/capabilities.test.ts, src/core/access.test.ts]
   - id: catalog-serves-usecases
-    text: A capability is a coarser projection over use-cases, not a 1:1 rename (ADR 0032 §6). Each catalog entry in contracts/platform/capabilities.json declares a serves [uc.…] back-ref (catalog-only, NOT on the wire), and a validator enforces every serves resolves to a real use-case — so the catalog can't be a typo or drift from the graph. The catalog is append-only; an id may be reserved ahead of first advertisement and is advertised active only once its use-cases are built. Seed - 4 capabilities over 12 use-cases (sharing.public-links=viewer+contributor, sharing.uploader-links=uploader, spaces.groups=the 5 group use-cases, account.device-trust=the 4 device-unlock use-cases).
+    text: A capability is a coarser projection over use-cases, not a 1:1 rename (ADR 0032 §6). Each catalog entry in contracts/platform/capabilities.json declares a serves [uc.…] back-ref (catalog-only, NOT on the wire), and a validator enforces every serves resolves to a real use-case — so the catalog can't be a typo or drift from the graph. The catalog is append-only; an id may be reserved ahead of first advertisement and is advertised active only once its use-cases are built. The catalog file is the list; the entries and the use-cases each serves are not counted here.
     coverage:
       backend:
         unit: [CapabilityRegistryTest.everyAdvertisedIdIsARealCatalogEntry]
       web:
         unit: [src/features/platform/capabilities.test.ts]
+  - id: register-path-and
+    text: The ids are a tree and a child is switched off by its own id or by its parent's - the AND along the path is the server's (CapabilityRegistry), never a client's. A registry handed a switch that names a parent drops every child and no sibling; a child switched alone leaves its parent and siblings; the client reads the leaf it has UI for and ANDs nothing (the matrices test each leaf on its own).
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.aSwitchedOffParentSwitchesOffItsChildrenAndNotItsSiblings, CapabilityRegistryTest.aSwitchedOffChildLeavesItsParentAndItsSiblingActive, CapabilityRegistryTest.anAdvertisedIdsParentEntryIsAdvertisedToo]
+        integration: [CapabilityDisabledSliceTest.aSwitchedOffParentDropsEveryShareIdAndRefusesADropBoxLink, DropBoxCapabilitySliceTest.aSwitchedOffParentRefusesANewDropBoxThroughThePath]
+      web:
+        unit: [src/features/platform/capabilities.test.ts, src/features/memory/capabilities.test.ts, src/features/depot/capabilities.test.ts]
+  - id: feature-switch-refuses-only-new
+    text: A feature switch refuses what is new and leaves what exists usable (ADR 0088 decision 5) - with core.group-space off a new group is refused while an existing group is renamed; with core.remember-device.passwordless off a DEVICE_KEY wrap is refused while a DEVICE wrap is still enrolled; with the drop-box leaf off a new drop box is refused while an existing one is renamed. An existing contributor link keeps its role on screen when contribute is off.
+    coverage:
+      backend:
+        integration: [CapabilityDisabledSliceTest.groupSpaceOffRefusesANewGroupAndKeepsAnExistingOneUsable, CapabilityDisabledSliceTest.passwordlessOffRefusesADeviceKeyWrapAndStillEnrolsADeviceWrap, DropBoxCapabilitySliceTest.anExistingDropBoxIsRenamedWhileTheSwitchIsOff]
+      web:
+        unit: [src/features/memory/components/ShareCreateDialog.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts]
 # scripts/validate_capabilities.py enforces catalog-serves-usecases at the doc-graph level (every serves -> a real,
 # built use-case), run in the CI trust-chain alongside validate_feature_wiring. The Phase-3 live smoke (uploader
 # disabled -> option gone + forced createShare WRITE_ONLY rejected; a major bump -> the incompatibility screen) is a
