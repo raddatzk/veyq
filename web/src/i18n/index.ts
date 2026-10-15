@@ -680,7 +680,7 @@ const en = {
     failed: 'Sign-in failed. Check your email and password.',
     rememberMe: 'Stay signed in on this device',
     rememberMeHint:
-      'On, this device opens straight to your memories next time; off, just your password — either way your Secret Key is never needed again here.',
+      'On, this device opens straight to your memories next time — but once you sign out, it asks for your Secret Key again; off, next time just your password.',
     signOut: 'Sign out',
     signOutUnconfirmed:
       'Your sign-out did not reach the server, so this browser may still be signed in. Once you are back online, use “Sign out” here.',
@@ -2449,7 +2449,7 @@ const de: typeof en = {
     failed: 'Anmeldung fehlgeschlagen. Prüfe E-Mail und Passwort.',
     rememberMe: 'Auf diesem Gerät angemeldet bleiben',
     rememberMeHint:
-      'An öffnet dieses Gerät beim nächsten Mal direkt deine Erinnerungen; aus brauchst du nur dein Passwort — deinen Secret Key brauchst du hier so oder so nie wieder.',
+      'An öffnet dieses Gerät beim nächsten Mal direkt deine Erinnerungen — nach dem Abmelden fragt es aber wieder nach deinem Secret Key; aus brauchst du nächstes Mal nur dein Passwort.',
     signOut: 'Abmelden',
     signOutUnconfirmed:
       'Die Abmeldung hat den Server nicht erreicht, deshalb kann dieser Browser noch angemeldet sein. Sobald du wieder online bist, nutze hier „Abmelden“.',

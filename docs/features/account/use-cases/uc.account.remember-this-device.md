@@ -90,6 +90,10 @@ sequenceDiagram
   on first unlock, then is forgotten — it lives only in the Emergency Kit (ADR 0005 §3).
 - **"Remember me" is the whole per-device choice on web.** It replaces both the old login and unlock checkboxes
   (ADR 0005 §18); a device carries exactly one convenience wrap.
+- **A remembered device that signs out is a first-time device again.** Sign-out deletes the password-less tier
+  ([uc.account.sign-out](uc.account.sign-out.md) step 2), and "remember me" never left a password DEVICE wrap
+  beside it (one wrap per device, §9), so the next sign-in there needs the Secret Key. The checkbox's hint
+  (`login.rememberMeHint`) says so; it must not promise "never again" for both settings.
 - **A stolen device alone yields nothing without "remember me".** The password DEVICE wrap is password-gated, so
   device theft without the password opens nothing — which is why even "off" can safely auto-enrol it (§19).
 - **The remember-me wrap is the device key alone** (no password, no KDF) — its own `MasterKeyWrap.Method`
@@ -115,15 +119,17 @@ device goes from opening with no credentials at all to needing the password **an
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** When you sign in on the web the first time on a device, you enter your password and your Secret Key
-once. Tick "remember me" and that device opens straight to your memories next time; leave it unticked and next
-time you just need your password — either way you never retype your Secret Key on that device. The server only
+once. Tick "remember me" and that device opens straight to your memories next time — but once you sign out
+there, it asks for your Secret Key again, because signing out removes what let it open by itself. Leave it
+unticked and next time you just need your password, signed out or not. The server only
 ever sees scrambled data, and the key that opens your memories never leaves your device. On a computer that
 isn't yours, use a private/incognito window — nothing is kept.
 
 **DE —** Wenn du dich im Web das erste Mal auf einem Gerät anmeldest, gibst du einmal Passwort und Secret Key
 ein. Setzt du das Häkchen „angemeldet bleiben", öffnet dieses Gerät beim nächsten Mal direkt deine
-Erinnerungen; ohne Häkchen brauchst du nächstes Mal nur dein Passwort — so oder so tippst du deinen Secret Key
-auf diesem Gerät nie wieder. Der Server sieht nur verschlüsselte Daten, und der Schlüssel zu deinen
+Erinnerungen — meldest du dich dort aber ab, fragt es wieder nach deinem Secret Key, weil das Abmelden
+entfernt, womit es sich von selbst öffnen konnte. Ohne Häkchen brauchst du nächstes Mal nur dein Passwort, ob
+abgemeldet oder nicht. Der Server sieht nur verschlüsselte Daten, und der Schlüssel zu deinen
 Erinnerungen verlässt dein Gerät nie. Auf einem fremden Rechner nutze ein privates/Inkognito-Fenster — dann
 bleibt nichts zurück.
 

@@ -76,11 +76,11 @@ phase closes only after the owner has read its pages in conversation. Done when,
       *Built and checked live, waiting for the owner's read:* `getting-started/` (What veyq is, Accept an invitation,
       Your Emergency Kit, Sign in), walked in the web client (German UI) on a fresh dev instance: invite by mail,
       accept, kit, sign-in by kit upload, Awaiting access, both "Stay signed in" paths, a wrong password. Not walked:
-      the terms gate (phase 7 walks it) and the camera scan (no camera in the pane). Found: with "Stay signed in" on,
-      a sign-out drops the device's key and the next sign-in there asks for the Secret Key again, while the hint
-      under that checkbox says it is "never needed again" either way — the page says what happens; the hint is a
-      web follow-up. The German UI says *geteilter Bereich*, not *gemeinsamer*. `account-keys-and-recovery` stays
-      until phase 3 takes in the rest.
+      the terms gate (phase 7 walks it) and the camera scan (no camera in the pane). Found: with "Stay signed in" on, a
+      sign-out drops the device's key and the next sign-in there asks for the Secret Key again, while the hint under
+      that checkbox said it is "never needed again" either way; the owner chose to keep the behaviour (one wrap per
+      device, ADR 0005 §9) and correct the hint, which now says so. The German UI says *geteilter Bereich*, not
+      *gemeinsamer*. `account-keys-and-recovery` stays until phase 3 takes in the rest.
 - [ ] 3 Your account — stay signed in and trust a device; add another device; devices and sessions; change
       password; change email; forgot password; replace your keys; profile and picture; appearance and language;
       verify a person (safety number by scan or digits, reviewing a changed key).
