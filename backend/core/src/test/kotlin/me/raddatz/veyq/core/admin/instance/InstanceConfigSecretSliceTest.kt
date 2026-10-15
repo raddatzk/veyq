@@ -92,6 +92,11 @@ class InstanceConfigSecretSliceTest {
             .body(not(containsString("\"state\"")))
     }
 
+    /**
+     * Counted in a transaction of its own. Read on the test thread outside one, Panache answers from the
+     * request-scoped session, which can still hold what it loaded before the call — and a write the read made would
+     * be invisible to the very assertion that exists to catch it (the first bite of this test passed that way).
+     */
     private fun rows(): Long = QuarkusTransaction.requiringNew().call { StoreSettingEntity.count() }
 
     private companion object {

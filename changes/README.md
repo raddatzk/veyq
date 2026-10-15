@@ -774,6 +774,12 @@ behaviour in the tool, useless as a lever. Drive the **configuration** it reads 
 the boot, a dead one failed the PUT: two distinct injections, two distinct messages). Before injecting, ask what
 the tool does to repair itself, because that is exactly what it will do to your test case.
 
+**And check the build compiled the injection.** Gradle can repair a lever too, by never seeing it:
+cr-config-secret-state-on-admin-channel's second bite printed `compileKotlin UP-TO-DATE` and `test UP-TO-DATE` after
+the test file had been edited, because Gradle's file-system watching missed an edit in a tree several sessions
+write at once. The green it reported was the previous run's. Run a bite with `--no-watch-fs`, and read the task
+lines before the verdict: an injected file whose compile task says `UP-TO-DATE` was not run.
+
 **And check the lever reaches the oracle, in the form the oracle searches for.** Surviving the tool is not
 enough — the injected value has to *arrive*, and arrive *recognisably*. cr-wire-assertion-db-sweep picked a lever
 nothing repairs (*"replace the blinded `slugTokenFor` with the plain `slugify(name)`, and the Memory title's
@@ -1141,6 +1147,13 @@ config mapping and driving it into a real store; it reddens, and the eleven stil
 *configuration* fact, so its detector lives at the tier that reads configuration, not at the tier that
 exercises the behaviour the default selects.
 
+**A "the read wrote nothing" assertion reads the row in a transaction of its own.** Read on a `@QuarkusTest`'s
+own thread, outside a transaction, Panache answers from the request-scoped session, which still holds the entity
+the test loaded before the call — so a write the call under test made is invisible, and the assertion that exists to
+catch it passes on it. cr-config-secret-state-on-admin-channel's "the read adopts no fingerprint" test was green with
+the adopting call swapped in until its read moved into `QuarkusTransaction.requiringNew().call { … }`; only then did
+the swap redden it, naming the adopted value.
+
 ### A before/after snapshot taken inside the test is blind to what STARTUP already did
 
 **The sibling of the rule above, and it survives the inversion.** `cr-tenant-ingress-kubernetes-sink` named
@@ -1308,6 +1321,18 @@ it, or it cascades failures into every later test that assumed the clean value. 
 of the *insert*-side seed-uniqueness rule (distinct domains/emails/**secrets** so the mem DB can't bleed —
 cr-email-invite-send-hardening's `token_hash` collision): the same JVM-shared-state trap. Run the **full**
 `./gradlew check`, never just the touched class, before calling backend done.
+
+### In a shared working tree, a file is read whole before it is opened for writing
+
+**`open(p, 'w').write(edit(open(p).read()))` empties the file before it reads it** — Python evaluates `open(p, 'w')`,
+which truncates, before the argument. On a file only you edit, the edit then fails loudly and `git` restores it. On a
+file another session is editing, its uncommitted work is gone, and `git` holds no copy of it:
+cr-config-secret-state-on-admin-channel emptied `site/src/content/docs/run/backup-and-restore.md` this way, under
+another session's uncommitted rewrite. That session rebuilt the file from its own context. So read into a variable
+in one statement and write in the next, and snapshot a file you do not own before the first write to it
+(§ *Bite-proof … by snapshot-and-restore* is the same habit). When you stage into a file another session is also
+editing, apply only your own edits to the `HEAD` blob (`git hash-object -w` + `git update-index --cacheinfo`) rather
+than adding the working-tree file.
 
 ### A build step that emits an executable artifact is not done until the artifact RUNS
 
