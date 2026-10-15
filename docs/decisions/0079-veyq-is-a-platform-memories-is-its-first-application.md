@@ -65,11 +65,13 @@ only when the user writes. This is the convention the sealed `wrappedMeta` blobs
 ([ADR 0077](0077-a-write-carries-the-version-it-read.md) names their concurrency); it is stated here for every
 application.
 
-**8. No per-tenant activation.** Every application is available everywhere and created on demand inside a
-scope: many Memories, many expense groups, one inventory, one file tree per scope. A tenant owner does not
-"turn an application on". The operator can still gate a node kind as a rollout flag through the capability
-mechanism ([ADR 0032](0032-capability-discovery-version-gating.md)); that is an instance-wide switch with a
-`422 capability_disabled`, not a per-tenant product setting.
+**8. No activation step, but an application can be switched off.** Every application is available everywhere
+and created on demand inside a scope: many Memories, many expense groups, one inventory, one file tree per scope.
+Nobody "turns an application on", so there is no "activated but empty" state. What the operator (for the
+instance) and a tenant owner (for their tenant) can do is switch an application, or one of its functions,
+**off** through the capability register ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)).
+The server then refuses to create that application's nodes with `422 capability_disabled`, and what already
+exists stays readable and shareable.
 
 **9. Crypto does not change.** No existing format, seal purpose or suite id moves; nothing is re-encrypted.
 A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new
@@ -371,6 +373,8 @@ on their own.
 - **Rejected: a container per application.** It multiplies the deployment (compose and Helm, which must answer
   together — [ADR 0064](0064-kubernetes-helm-deployment-target.md)) for no isolation the shared database does not
   already defeat, and works against *self-hostable by default*.
-- **Rejected: per-tenant activation.** It adds a settings surface, a state machine for "activated but empty", and
-  a per-tenant gate on every endpoint, to solve a problem — clutter — that "created on demand" already solves.
+- **Rejected: per-tenant activation** (an application is off until a tenant turns it on). It adds a state
+  machine for "activated but empty" and a per-tenant gate on every endpoint, to solve a problem — clutter — that
+  "created on demand" already solves. Switching **off** (decision 8, ADR 0088) is a different thing: it serves
+  policy, not clutter, the default is on, and the one gate sits at creation.
 - **Rejected: re-deriving Memories' keys under an application context** — Decision 9.

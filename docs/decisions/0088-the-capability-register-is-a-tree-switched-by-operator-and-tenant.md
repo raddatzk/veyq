@@ -1,8 +1,8 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
-- Status: Proposed. This is what the owner and Claude had settled on 2026-10-15, written down while it is still
-  being refined (inbox #439). Accepting it supersedes [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)
-  decision 8 and reshapes [ADR 0032](0032-capability-discovery-version-gating.md) §2 and §5.
+- Status: Accepted 2026-10-15; not built (§ Consequences; inbox #439). It replaces
+  [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
+  [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match.
 - Date: 2026-10-15
 
 ## Context
@@ -25,7 +25,7 @@ have changed since then.
 ADR 0086 has already separated the per-view `…Rights` functions from capabilities. This ADR is only about the
 instance and tenant layers.
 
-## Decision (proposed)
+## Decision
 
 1. **One register, a tree.** An id is a path: `core.<x>`, or `<application>.<x>`, where the application's own
    node is the application itself (`depot`). An entry is placed where it is used. It moves up to `core` only when

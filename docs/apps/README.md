@@ -38,8 +38,10 @@ media tables. What is built and what is open: the ADR's Consequences.
   that it has none — Files is the one that does. The slug is reserved among folder names.
 - **Own tables keyed by `node_id`.** The server side is as thin as possible; domain logic lives in the client.
 - **Payloads carry a schema version.** Old versions stay readable; migration happens on write.
-- **No per-tenant activation.** Created on demand inside a scope. An operator may gate a node kind through the
-  capability mechanism ([ADR 0032](../decisions/0032-capability-discovery-version-gating.md)) as a rollout flag.
+- **No activation step, but a switch to turn it off.** Created on demand inside a scope. The operator, and a tenant
+  owner for their tenant, may switch an application or one of its functions off through the capability register
+  ([ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)): no new
+  nodes of it, what exists stays.
 - **Crypto unchanged.** No application shares a key with another by accident: a node's key is random and wrapped
   under its parent's ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   and a blob's key is sealed bound to its node and its application's role token — so Files needed no new seal purpose

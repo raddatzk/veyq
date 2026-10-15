@@ -50,26 +50,37 @@ response and a client-side gate that reads them.
   client speaks every major released since the train before last (ADR 0085 decision 5).
 - `build` is informational (diagnostics, "what's new"); it is **never** a gate.
 
-### 2. `capabilities: [{ id }]` — the active capability manifest
+### 2. `capabilities` — the register of what this server serves
 
-- The instance advertises the **active** capabilities it serves, as stable lowercase-dotted ids
-  (`sharing.public-links`, `sharing.uploader-links`, …).
-- **Source of truth** is an **append-only** catalog `contracts/platform/capabilities.json`, codegen'd into a
-  backend registry **and** each client's constants — so ids can never silently diverge across surfaces. Each
-  catalog entry also carries a `serves: [uc.…]` back-ref to the use-case(s) it gates (catalog-only, validated —
-  see §6); it is **not** put on the wire.
-- **Lean core = active set only.** The `state` field (`active | deprecated`), `sunsetAt`/`supersededBy`, and the
-  deprecation lifecycle are **deferred** — the wire shape is `[{ id }]` now, extensible to `[{ id, state, … }]`
-  later without a `major` bump (additive → `build`).
+- Ids are **paths in a tree**, `core.<x>` or `<application>.<x>`. The register, its two switching levels
+  (operator, tenant owner), inheritance along the path and what makes an entry switchable are
+  [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)'s. **Built today:** four
+  flat ids (`sharing.public-links`, `sharing.uploader-links`, `spaces.groups`, `account.device-trust`, §5), to be
+  cut into the tree once before V1 (ADR 0088 decision 10).
+- **Source of truth** is the catalog `contracts/platform/capabilities.json`, codegen'd into a backend registry
+  **and** each client's constants, so ids can never silently diverge across surfaces. Each catalog entry also
+  carries a `serves: [uc.…]` back-ref to the use-case(s) it gates (catalog-only, validated — see §6); it is
+  **not** put on the wire. From V1 on the catalog is **append-only**: an id is never removed or repurposed, except
+  that a presence id may retire at a train (ADR 0088 decision 9).
+- **Two deliveries.** The pre-auth `/api/setup` advertises the **instance** level, for what matters before login.
+  After login the server delivers the **effective** set for the tenant. The client only reads it and never
+  computes it (ADR 0088 decision 3).
+- **Wire shape** `[{ id }]` today. It grows to `[{ id, …values }]` for requirements (ADR 0088 decision 8), which is
+  additive and costs no major. The deprecation lifecycle (`state`, `sunsetAt`, `supersededBy`) stays deferred: a
+  removal under [ADR 0085](0085-one-major-moved-on-a-yearly-train.md) is marked `deprecated: true` in its contract
+  and needs no manifest state.
 
 ### 3. Capability ≠ permission (the load-bearing distinction)
 
-- A **capability** is **instance-wide** and **pre-auth**: *"this server knows how to do X at all."* It is read
-  from `/api/setup` before login.
-- A **permission** is **per-tenant / per-scope / per-role** and **post-auth**: *"you may do X here."* (E.g. the
-  personal-scope gate on creating a public share.)
-- A feature is offered only when **(capability present) AND (policy permits here)**. The capability manifest
-  never carries per-user data — it stays operator-blind-safe (pre-auth, no identity, same for everyone).
+- A **capability** says what this server serves and what its operator and the tenant allow: *"X exists here at
+  all."* It is instance-wide before login, narrowed per tenant after it (ADR 0088), and **never** per user, per
+  scope or per role.
+- A **permission** is **per-scope / per-role** and **post-auth**: *"you may do X here."* (E.g. the personal-scope
+  gate on creating a public share.) A view's client-side projection of it is its **rights**
+  ([ADR 0086](0086-one-word-per-meaning.md)).
+- A feature is offered only when **(capability active) AND (permission granted here)**. The pre-auth manifest
+  carries no identity. It stays operator-blind-safe because it is the same for everyone. The tenant set is the same
+  for every member of that tenant.
 
 ### 4. Turning a capability off — advertised **and** enforced
 
@@ -84,13 +95,22 @@ per-feature flag). A disabled capability is then:
   first creates it. A client that ignores the manifest (or is stale) still cannot use a disabled capability.
 
 Both are required: the manifest alone is only UX; the endpoint gate alone gives a broken-looking UI. Together
-they are honest and safe.
+they are honest and safe. A tenant owner switches a `+` entry off for their tenant the same way, from the tenant
+settings in `web/`, and the same gate answers `422` (ADR 0088 decisions 2, 5 and 12).
 
-### 5. Seed catalog & first consumers
+### 5. The built seed, and where it goes in the register
 
-The lean core seeds the catalog with the capabilities whose features already exist **and** that an operator has
-a plausible reason to switch off. Two computation sources feed the same active manifest: an operator
-**disabled-list** (policy) and, separately, an infra **preflight** (runtime).
+The lean core seeded the catalog with the capabilities whose features already existed **and** that an operator
+had a plausible reason to switch off. Two computation sources feed the same active manifest: an operator
+**disabled-list** (policy) and, separately, an infra **preflight** (runtime). These four are what is built, and
+the re-cut before V1 maps them onto ADR 0088's register:
+
+| built id | register path (ADR 0088) |
+|---|---|
+| `sharing.public-links` | `core.public-shares` + `core.public-shares.contribute` |
+| `sharing.uploader-links` | `core.public-shares.drop-box` |
+| `spaces.groups` | `core.group-space` |
+| `account.device-trust` | `core.remember-device` + `core.remember-device.passwordless` |
 
 | id | `serves` (use-cases) | source | disabled ⇒ |
 |---|---|---|---|
@@ -102,13 +122,15 @@ a plausible reason to switch off. Two computation sources feed the same active m
 **Sharing is the worked end-to-end proof** (manifest → client soft-gate → server `422`) since it is fully built
 (web). `spaces.groups` and `account.device-trust` are seeded + advertised + client-soft-gated on the **same**
 machinery; their endpoint-`422` enforcement lands at each feature's own create/enable gate (the identical
-one-line pattern), advertised **active** only once that feature is built (§6).
+one-line pattern), advertised **active** only once that feature is built (§6). `spaces.groups` is gated
+narrower than its `serves`: only group creation refuses (inbox #440).
 
 The **infra-detected** category (a capability computed by a preflight, not a policy toggle, with no operator
 off-switch or `422`) was originally illustrated by `directTransport` on `/api/setup`. That flag has been
 **removed** — a byte-path store became a hard instance requirement ([ADR 0013](0013-blob-storage-presigned-direct-to-store.md)),
-so there is nothing to soft-gate — leaving a future worker-gated `memory.derivatives` as the standing example of
-an infra-detected capability that could fold into the manifest (see Consequences).
+so there is nothing to soft-gate. No infra-detected capability exists now: derivatives, once named as the example,
+are part of the base function and never switchable (ADR 0088 § Not in the register). The source stays available
+for a future one.
 
 ### 6. Capability grain — a coarser projection over use-cases, cross-referenced to them
 
