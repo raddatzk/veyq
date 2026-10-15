@@ -132,8 +132,8 @@ components:
           type: array
           description: >
             The instance's ACTIVE capability manifest (ADR 0032, ADR 0088): the abilities this build supports,
-            sourced from the catalog contracts/platform/capabilities.json, minus the switched-off ids (none until
-            the Server Owner's switches land, inbox #443). An id is listed only when it and every ancestor entry
+            sourced from the catalog contracts/platform/capabilities.json, minus the ids the Server Owner switched
+            off (`setInstanceCapability`, which acts without a restart). An id is listed only when it and every ancestor entry
             are active (the AND along the path), so a switched-off parent drops its children too; the server
             computes that, and a client reads each leaf id without ANDing. Pre-auth, identity-free and identical
             for every caller (operator-blind-safe) — it advertises only instance-wide abilities, never per-user
