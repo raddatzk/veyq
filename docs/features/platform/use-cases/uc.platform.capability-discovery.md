@@ -16,6 +16,9 @@
 1. On startup (before login), the client fetches `GET /api/setup` → `{ setupRequired, suites, instanceSalt,
    version: { major, build }, capabilities: [{ id }] }`.
 2. The client compares `server.version.major` to the **`major` it was compiled against**. Equal → continue.
+   Both are the platform's one major, the repository's `VERSION` when each was built
+   ([ADR 0085](../../../decisions/0085-one-major-moved-on-a-yearly-train.md) decision 1), so the web client and the
+   server it ships with always agree; the gate exists for a client built from another tree.
    (Mismatch → A1/A2. `build` never gates.)
 3. The client keeps the `capabilities` set and exposes `hasCapability(id)`.
 4. Each feature that is **optional per instance** gates its entry points on its capability: present → offered,

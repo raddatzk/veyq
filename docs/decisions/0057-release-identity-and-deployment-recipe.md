@@ -97,7 +97,7 @@ of that image** rather than fetching them from a URL. Two things follow that no 
   verified digest**, never by the tag, because a tag can move between the verify and the pull.
 
 **4. One major, and the precise release never pre-auth.** The release major in `VERSION` *is* the protocol major
-([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 1, not built yet): both count the same event, a
+([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 1): both count the same event, a
 removal, and two counters for one event drift. What stays apart is the precision.
 
 - The **protocol version** (`major` / `build`, pre-auth, ADR 0032) answers *"can these two sides talk to each
