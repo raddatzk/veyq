@@ -241,7 +241,7 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   The conformance test (`CapabilityRegistryTest`) stays one-directional (code ⊆ catalog), because a catalog id may be
   reserved ahead of code (ADR 0032 §6). · **Done when:** `./gradlew check` green, and the backend half of the two
   inventory angles returns nothing.
-- [ ] **2b backend — D8, the drop-box creation gate.** It starts once `git status --short backend/apps/depot
+- [x] **2b backend — D8, the drop-box creation gate.** It starts once `git status --short backend/apps/depot
   backend/core/src/main/kotlin/me/raddatz/veyq/core/node backend/core/src/main/kotlin/me/raddatz/veyq/core/content`
   is clean, i.e. once `cr-files-becomes-depot` has committed its backend. D8's locators are re-derived against that
   result. Measured after its `f92bc78c`: the rule is `backend/apps/depot/…/DepotNodeKindRules.kt` and the kind is
@@ -253,6 +253,12 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
 
   `createNode`'s 422 text already names `DEPOT_DROPBOX` (fixed at the phase split). · **Done when:**
   `./gradlew check` green.
+  Built: the hook is `NodeKindRules.capabilityToCreate` (default null), Depot's answer is in `DepotNodeKindRules`, the
+  test is `apps/depot DropBoxCapabilitySliceTest` (plus the parent's path AND and an existing drop box renamed while the
+  switch is off). Bite: on a detached worktree, Depot's override deleted → 3 of 12 red (both slice negatives
+  `Expected status code <422> but was <201>`, and `DepotNodeKindRulesTest`'s pin), the rename control green; restored.
+  The guest path maps the refusal to a new `CreateShareNodeOutcome.CapabilityDisabled`, unreachable today (no kind a
+  guest may create names a capability); whether `createShareNode`'s contract names it is handed back.
 - [ ] **3 web — leaves, matrices, gates (D9).** Start only when the sibling's pairing files are committed
   (§ Context) **and** `cr-files-becomes-depot` has committed its web rename of `web/src/features/files`, which D9
   edits. Re-derive D9's Files/Depot paths against that result. The matrix tests gain the rows this CR adds: drop box on/off on `createDropBox` and on the drop box's
@@ -334,3 +340,12 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   gate's own lever had been put in a separate run for exactly that reason, so nothing was left unproven, but the
   prediction listed one red too few. Next time: before batching, list per lever every test whose fixture passes
   through the changed mapping, not only the test written for it.
+- **Phase 2b, execution: the bite's restore hung on the known `cp` prompt.** The restore step was a bare `cp` over the
+  bitten file, which this Mac aliases to `cp -i`; the background run waited at `overwrite …? (y/n)` until it was killed,
+  and the bitten file stayed in place until restored by hand. The trap was already in the local machine notes. Next
+  time: every snapshot-and-restore in a script uses `/bin/cp -f`, and the restore is checked (`grep` for the restored
+  line) before the result is read.
+- **Phase 2b, planning: "one check covers both" left the guest's answer open.** D8 says the member and guest paths
+  share `createInScope`, so one check covers both. That holds, but the guest path maps every outcome of
+  `createInScope` into its own type, and `createShareNode`'s contract names no `capability_disabled`. Next time: a
+  decision that adds an outcome to a shared function lists every caller's outcome mapping and the contract of each.
