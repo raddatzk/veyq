@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeFalse
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.FileSystems
@@ -13,6 +15,9 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
 import java.util.Base64
+import java.util.logging.Handler
+import java.util.logging.Level
+import java.util.logging.LogRecord
 import javax.crypto.AEADBadTagException
 
 /**
@@ -119,10 +124,64 @@ class ConfigSecretSealTest {
     fun anUnavailableKekIsAnErrorNotAPlaintextLeak() {
         // Point the key file inside a path whose parent is a regular FILE ⇒ generation fails ⇒ degrade (not crash).
         val notADir = Files.createFile(tmp.resolve("blocker"))
-        val seal = sealAt(notADir.resolve("key")) // parent = a file ⇒ createDirectories throws ⇒ configured=false
+        lateinit var seal: ConfigSecretSeal
+        val logged = captureErrors { seal = sealAt(notADir.resolve("key")) } // createDirectories throws
         assertFalse(seal.configured, "an un-writable key path ⇒ not configured (degrade, no plaintext)")
         assertThrows(IllegalStateException::class.java) { seal.seal("secret") }
         assertEquals(null, seal.fingerprint(), "no key ⇒ no fingerprint")
+        // Not a permission denial, so the line names the real exception and does not blame the key's owner.
+        val line = logged.single()
+        assertTrue(line.contains("java.nio.file.FileAlreadyExistsException"), "the exception's class is logged: <$line>")
+        assertFalse(line.contains("uid 10001"), "only a permission denial points at the key's owner: <$line>")
+    }
+
+    /**
+     * A key that exists but this process may not read — what a restore run as root leaves for the app's uid 10001
+     * (inbox #188). The log line must say it is a permission denial and name the owner as the likely cause: the
+     * exception's message alone is just the path, which tells the operator nothing. And it never carries the key.
+     */
+    @Test
+    fun anUnreadableKeyLogsAPermissionDenialAndItsLikelyCause() {
+        val keyBytes = ByteArray(32) { 9 }
+        val path = tmp.resolve("unreadable.key")
+        Files.writeString(path, Base64.getEncoder().encodeToString(keyBytes))
+        assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"), "needs POSIX permissions")
+        Files.setPosixFilePermissions(path, emptySet())
+        try {
+            assumeFalse(Files.isReadable(path), "running as a user that reads a 000 file anyway (root)")
+            lateinit var seal: ConfigSecretSeal
+            val logged = captureErrors { seal = sealAt(path) }
+            assertFalse(seal.configured, "an unreadable key ⇒ degrade, not crash")
+            val line = logged.single()
+            assertTrue(line.contains("java.nio.file.AccessDeniedException: $path"), "class + path are logged: <$line>")
+            assertTrue(line.contains("Permission denied"), "the line says what kind of failure it is: <$line>")
+            assertTrue(line.contains("uid 10001"), "and names the app's user as the owner it needs: <$line>")
+            assertFalse(line.contains(Base64.getEncoder().encodeToString(keyBytes)), "never the key: <$line>")
+        } finally {
+            Files.setPosixFilePermissions(path, setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE))
+        }
+    }
+
+    /** Runs [block] and returns every ERROR line [ConfigSecretSeal]'s logger emitted, formatted. */
+    private fun captureErrors(block: () -> Unit): List<String> {
+        val jul = java.util.logging.Logger.getLogger(ConfigSecretSeal::class.java.name)
+        val records = mutableListOf<LogRecord>()
+        val handler = object : Handler() {
+            override fun publish(record: LogRecord) { records.add(record) }
+            override fun flush() {}
+            override fun close() {}
+        }
+        handler.level = Level.ALL
+        jul.addHandler(handler)
+        try {
+            block()
+        } finally {
+            jul.removeHandler(handler)
+        }
+        return records.filter { it.level.intValue() >= Level.SEVERE.intValue() }.map { r ->
+            val params = r.parameters
+            if (params.isNullOrEmpty()) r.message else String.format(r.message, *params)
+        }
     }
 
     @Test
