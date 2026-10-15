@@ -431,6 +431,12 @@ entry with a reason) — and leaves `python3 scripts/validate_coverage.py` **gre
 while the trust chain is red. (A use-case refined ahead of any implementation ships a `status: planned`
 coverage file that gaps every target surface.)
 
+**A phase that renames or removes a test runs `validate_coverage.py` itself — `./gradlew check` does not read
+`docs/coverage/`.** `cr-store-connection-in-admin-web` renamed four test methods in its phase 2 commit with a Done-when
+that named only `./gradlew check`; `validate_coverage.py` and `validate_guard_gaps.py` (which goes red on a copy it
+cannot forge) stayed red through phases 3 and 4 and were first measured in phase 5. The locator is the refs, not
+the test sources: `git grep -n "<old test name>" -- docs/coverage`.
+
 **Where a CR may not name its use-cases yet, a phase owns writing them.** A new application cannot name use-cases
 before its concept settles, so `cr-files-application` started with `satisfies: []` and *"written with F1"* — and
 F1, F2 and F3 each closed saying they were not written; fourteen phases later the harvest wrote them from the tests,
