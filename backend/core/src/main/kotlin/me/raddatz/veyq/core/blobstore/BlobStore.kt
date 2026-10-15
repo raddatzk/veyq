@@ -355,6 +355,10 @@ object UnconfiguredBlobStore : BlobStore {
  * built from. A replaced delegate is left to the garbage collector rather than closed, because a request on another
  * thread may still be signing with it; a store setting changes a handful of times in an instance's life.
  *
+ * [built] needs no generation of its own (inbox #445): it is a memo of [StoreSettings.current], checked against it on
+ * every call. A racing call can store a delegate for an older resolution over a newer one, but the next call finds the
+ * current resolution a different object and builds again — a wasted build, never a stale store that sticks.
+ *
  * With no usable setting it is [InMemoryBlobStore] under `%test` (the hermetic suite's metadata stub) and
  * [UnconfiguredBlobStore] everywhere else.
  */
