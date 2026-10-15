@@ -50,7 +50,7 @@ acceptanceCriteria:
           Re-entering each tenant's SMTP password is not driven after a restore. That re-sealing clears a
           MISMATCH is proven where the key's lifecycle lives: uc.admin.tenant-mail-settings,
           `config-secret-key-loss-is-detected-and-degrades`, cites
-          `ConfigSecretKeyGuardTest.detectsAChangedKeyThenRecoversOnReseal`.
+          `ConfigSecretKeyGuardTest.theInstanceWideStateSeesEveryHolderOfASealedValue`.
   - id: a-stopped-app-makes-the-dangerous-skew-impossible
     # No coverage, and none to come: the property is "the app is stopped", which a backend test cannot observe
     # because a backend test IS the app. Both rehearsals capture with the app already down, which is the whole
@@ -186,8 +186,8 @@ acceptanceCriteria:
       backend:
         integration:
           - InstanceConfigSecretSliceTest.serverOwnerWhoOwnsNoTenantReadsTheState
-          - InstanceConfigSecretSliceTest.aReadOnAnInstanceWithNoFingerprintLeavesItWithNone
-          - InstanceConfigSecretSliceTest.aKeyThatIsNotTheOneThatSealedReadsAsMismatch
+          - InstanceConfigSecretSliceTest.aReadWritesNothing
+          - InstanceConfigSecretSliceTest.aStoredValueSealedUnderAnotherKeyReadsAsMismatch
           - InstanceConfigSecretSliceTest.aMemberIsNotTheServerOwnerAndGetsNoState
           - InstanceConfigSecretSliceTest.onThePublicPortTheOperationDoesNotExist
   - id: the-store-leg-restores-onto-a-different-store

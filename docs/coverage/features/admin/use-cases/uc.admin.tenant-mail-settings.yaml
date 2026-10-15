@@ -72,7 +72,7 @@ acceptanceCriteria:
     text: A lost or changed config-secret key is DETECTED via a non-invertible HKDF fingerprint stored in the DB (a hash of a full-entropy key, never the key — the "no usable secret in a DB dump" property holds), not a silent unseal failure. On a mismatch the send path never attempts a send with a bad key — the tenant simply counts as unable to send, so member invites and recovery are refused — and a reseal under the current key recovers to OK.
     coverage:
       backend:
-        unit: [ConfigSecretSealTest.theFingerprintIsStableAndIsNotTheRawKey, ConfigSecretSealTest.aDifferentKeyHasADifferentFingerprint, ConfigSecretKeyGuardTest.detectsAChangedKeyThenRecoversOnReseal]
+        unit: [ConfigSecretSealTest.theFingerprintIsStableAndIsNotTheRawKey, ConfigSecretSealTest.aDifferentKeyHasADifferentFingerprint, ConfigSecretKeyGuardTest.aValueSealedUnderAnotherKeyIsDetectedPerValue, ConfigSecretKeyGuardTest.theInstanceWideStateSeesEveryHolderOfASealedValue]
         integration: [SmtpInviteMailSendTest.aConfiguredTenantWhoseConfigSecretKeyChangedCannotSendAndAttemptsNoSmtp]
   - id: changed-key-surfaced-and-recoverable-in-ui
     text: The owner sees the config-secret key state proactively on the mail-settings read — a MISMATCH (the stored password can't be decrypted; re-enter it) or an ABSENT server (can't seal at all) is shown as its own message and blocks the "send-ready" state, rather than the panel falsely reporting a usable config.

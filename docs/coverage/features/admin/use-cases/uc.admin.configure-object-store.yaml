@@ -1,37 +1,86 @@
 useCase: uc.admin.configure-object-store
 feature: admin
 title: Connect and check the instance's object store
-status: planned
-# Refined 2026-10-15 (ADR 0089); cr-store-connection-in-admin-web builds it. Every criterion waits under `gaps`
-# until that CR adds its tests.
+# Built by cr-store-connection-in-admin-web (ADR 0089). The store is configured on the admin channel, so the
+# criteria's refs are the backend's slice and unit tests; `admin-web`'s suites (StorePanel, the CLI, the create-tenant
+# dialog) wait under `gaps` until its CI job has executed (ADR 0040).
 acceptanceCriteria:
   - id: server-owner-sets-and-checks-the-store
     text: >-
       A signed-in Server Owner saves an S3-compatible or Garage store setting and checks it; a passing check marks
       the setting checked and the backend signs against it without a restart.
+    coverage:
+      backend:
+        unit: [StoreCheckTest.aPassingCheckWritesOneProbeAndDeletesNothing, StoreCheckTest.theProbeIsOverwrittenByTheNextCheckSoNothingAccumulates, StoreCheckTest.aGarageStoreIsProvisionedFirstAndAFailedBringUpStopsTheCheck]
+        integration: [InstanceStoreSliceTest.anS3StoreIsStoredAndItsSecretIsNeverReturned, InstanceStoreSliceTest.aCheckAgainstAStoreNobodyAnswersFailsAtItsStepAndIsRemembered, InstanceStoreSliceTest.theBundledStoreIsRefusedWhereTheDeploymentOffersNone, AppShellStoreOriginSliceTest.thePolicyAllowsTheOriginOfAUrlThisAppSigns, StoreOriginPresignSliceTest.theSignedUrlIsARealPresignedUrlForTheConfiguredBucket]
+    gaps:
+      - surface: backend
+        reason: >-
+          No backend test drives a PASSING check through the endpoint against a live store: the passing path is proven
+          against a stub HTTP server (`StoreCheckTest`), the endpoint's check only against a store nobody answers. The
+          real one is the web e2e suites' `birthInstance` (bundled store chosen and checked against Garage), which
+          `run_web_e2e.py` runs and no backend ref names. "Without a restart" is the setting-follows-the-store
+          wiring (`SwitchingBlobStore`) that `AppShellStoreOriginSliceTest` and `StoreOriginPresignSliceTest` observe
+          through the CSP and the signed URL.
   - id: a-failing-check-names-its-step-and-changes-no-store-configuration
     text: >-
       A check that fails names the failing step and the store's answer, keeps tenant creation closed, and leaves
       the store's configuration untouched (no bucket created, no CORS policy written).
+    coverage:
+      backend:
+        unit: [StoreCheckTest.aMissingBucketFailsAtItsStepAndCreatesNone, StoreCheckTest.aCorsRuleThatDoesNotNameTheOriginFailsTheCorsStep, StoreCheckTest.theResultRoundTripsThroughItsStoredJson]
+        integration: [InstanceStoreSliceTest.aCheckAgainstAStoreNobodyAnswersFailsAtItsStepAndIsRemembered, InstanceStoreSliceTest.aTenantIsRefusedUntilTheCurrentSettingHasPassedItsCheck]
   - id: no-tenant-without-a-checked-store
     text: >-
       Creating a tenant is refused with a reason until the current store setting has passed its check.
+    coverage:
+      backend:
+        integration: [InstanceStoreSliceTest.aTenantIsRefusedUntilTheCurrentSettingHasPassedItsCheck, InstanceStoreSliceTest.changingTheSettingClearsItsCheck]
   - id: the-store-secrets-are-sealed-and-write-only
     text: >-
       The access key secret and the Garage admin token are sealed under the config-secret key with that key's
       fingerprint and returned on no surface, the Server Owner's included.
+    coverage:
+      backend:
+        unit: [ConfigSecretKeyGuardTest.aValueSealedUnderAnotherKeyIsDetectedPerValue, ConfigSecretKeyGuardTest.aStoreSecretReEnteredUnderTheNewKeyLeavesTheSmtpSecretUnreadable]
+        integration: [InstanceStoreSliceTest.anS3StoreIsStoredAndItsSecretIsNeverReturned, InstanceStoreSliceTest.aSecretOmittedOnALaterWriteKeepsTheStoredOne, InstanceStoreSliceTest.aFirstWriteWithoutASecretIsRefused, InstanceStoreSliceTest.aMemberIsNotTheServerOwnerAndIsRefusedOnEveryOperation]
   - id: a-lost-key-asks-for-the-store-credentials-again
     text: >-
       With the config-secret key absent or not the one that sealed them, the store's credentials are reported as
       unreadable and can be re-entered; the bundled store, which seals nothing, keeps working.
+    coverage:
+      backend:
+        unit: [StoreCheckTest.aSettingThatCannotBeOpenedFailsAtCredentialsAndTouchesNoStore, ConfigSecretKeyGuardTest.theInstanceWideStateSeesEveryHolderOfASealedValue, BundledStoreCredentialsTest.theDevTokenDerivesThePinnedVector]
+        integration: [InstanceConfigSecretSliceTest.aStoredValueSealedUnderAnotherKeyReadsAsMismatch, InstanceStoreSliceTest.aSecretOmittedOnALaterWriteKeepsTheStoredOne]
+    gaps:
+      - surface: backend
+        reason: >-
+          The store's own `unreadable` list after a key change is read through the state (`StoreCheckTest` stops at
+          `CREDENTIALS`; the config-secret read reports the MISMATCH), never through `GET /api/instance/store` with a
+          real second key file. That the bundled case seals nothing is shown by its derived key pair (the pinned
+          vector), not by a restart with a lost key.
   - id: no-store-refuses-uploads-with-a-reason
     text: >-
       With no store set the instance runs and refuses uploads with a reason; the in-memory store is never used
       outside tests.
+    coverage:
+      backend:
+        unit: [UnconfiguredBlobStoreTest.anUnconfiguredStoreSignsNothingAndHasNoOrigin, UnconfiguredBlobStoreTest.anUnconfiguredStoreReportsNothingDeleted]
+    gaps:
+      - surface: backend
+        reason: >-
+          The choice between the in-memory stub and the unconfigured store is `SwitchingBlobStore`'s `hermetic` flag,
+          and the whole suite runs under `%test`, where it is true: the `else` branch that a production profile takes
+          is read by no test, only the store it picks is proven. The upload handlers' `store_unavailable` answer is
+          pinned by the many slice tests that run on a store which cannot presign.
 gaps:
-  backend: >-
-    Not built: the store setting is read from environment variables at boot today (VeyqConfig, BlobStoreProducer);
-    cr-store-connection-in-admin-web moves it to the database behind the admin channel.
+  admin-web: >-
+    The console's Store page, the create-tenant dialog's closed state and `veyq-admin store show | set | check` live
+    in `admin-web` (ADR 0065), and their suites (`StorePanel.test.ts`, `store.test.ts`, `cli.test.ts`,
+    `CreateTenantDialog.test.ts`, `AdminConsoleView.test.ts`) exist and pass locally, but `admin-web`'s job
+    (`container.yml` → `test` → "Admin surface checks") has never executed, so ADR 0040 admits none of them. They
+    are mocked-client tests that pin the call and the rendering, never the server's answer. On the first run of that
+    job they flip to refs on the criteria above.
   web: >-
     The web client has no part in configuring the store; it only uploads to whatever store the backend signs for.
     Its upload refusal (no-store-refuses-uploads-with-a-reason) is reached through the backend's response.
