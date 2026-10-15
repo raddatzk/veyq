@@ -5,7 +5,7 @@
 // in the facade, where the UI gets it too.
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
-// + the tenant storage quota + release info + the config-secret state. Per-tenant mail settings, terms authoring and the per-link storage
+// + the tenant storage quota + release info + the config-secret state + the object-store setting and its check. Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
 // they are not Server-Owner commands.
 // First-run **setup** is excluded on purpose (cr-admin-cli): it is a one-time interactive ceremony that mints
@@ -25,9 +25,17 @@ import {
 import { CliError } from './output'
 import { getInstanceRelease } from '../features/instance/release'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
+import {
+  BUNDLED_STORE_UPDATE,
+  checkInstanceStore,
+  getInstanceStore,
+  InstanceStoreType,
+  ownStoreUpdate,
+  setInstanceStore,
+} from '../features/instance/store'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
-export type Flag = { describe: string; required: boolean }
+export type Flag = { describe: string; required: boolean; /** A bare `--flag` with no value; it reads as `'true'` when given and is absent otherwise. */ switch?: boolean }
 
 export type Command = {
   /** How the command is written on the command line, flags included — the one line `--help` prints. */
@@ -35,7 +43,10 @@ export type Command = {
   summary: string
   flags: Record<string, Flag>
   /** Resolves to the API result, or `undefined` for a 204 operation that returns no body. */
-  run: (flags: Record<string, string>) => Promise<unknown>
+  run: (flags: Record<string, string>, env: Record<string, string | undefined>) => Promise<unknown>
+  /** The exit code for a result the command printed — 0 when absent. Lets a read that finds a problem (a failed
+   *  check) still print the whole document and then fail a script. */
+  exitCode?: (result: unknown) => number
 }
 
 const tenantId: Flag = { describe: 'tenant id', required: true }
@@ -116,5 +127,61 @@ export const COMMANDS: Record<string, Command> = {
     summary: "Print the config-secret key's state (OK, ABSENT or MISMATCH) — a restore's verification read; it changes nothing.",
     flags: {},
     run: () => getInstanceConfigSecret(),
+  },
+  'store show': {
+    usage: 'store show',
+    summary: 'Print the object-store setting, whether a bundled store is offered, and the last check. Secrets are never printed.',
+    flags: {},
+    run: () => getInstanceStore(),
+  },
+  'store set': {
+    usage:
+      'store set --bundled | --endpoint <url> --bucket <bucket> --region <region> --access-key <id> [--type S3|GARAGE] [--public-endpoint <url>] [--garage-admin-endpoint <url>]',
+    summary:
+      'Set the object store and apply it at once: the bundled one, or one of your own. Secrets come from VEYQ_STORE_SECRET_KEY and VEYQ_STORE_GARAGE_ADMIN_TOKEN (never flags); unset keeps the stored one. Run `store check` next.',
+    flags: {
+      bundled: { describe: 'use the store the deployment brings; no other flag may be given', required: false, switch: true },
+      type: { describe: 'S3 (default) or GARAGE', required: false },
+      endpoint: { describe: 'the S3 endpoint this server reaches the store at', required: false },
+      'public-endpoint': { describe: 'the origin browsers reach the store at, if not the endpoint', required: false },
+      bucket: { describe: 'the bucket', required: false },
+      region: { describe: 'the region the store signs for', required: false },
+      'access-key': { describe: 'the access key id', required: false },
+      'garage-admin-endpoint': { describe: "Garage's admin API endpoint (GARAGE only)", required: false },
+    },
+    run: (f, env) => {
+      if (f.bundled) {
+        const others = Object.keys(f).filter((k) => k !== 'bundled')
+        if (others.length) throw new CliError(`--bundled takes no other flag (got --${others.join(', --')})`)
+        return setInstanceStore(BUNDLED_STORE_UPDATE)
+      }
+      for (const flag of ['endpoint', 'bucket', 'region', 'access-key']) {
+        if (!f[flag]) throw new CliError(`--${flag} is required unless --bundled is given`)
+      }
+      const type = (f.type ?? 'S3').toUpperCase()
+      if (type !== InstanceStoreType.S3 && type !== InstanceStoreType.Garage) {
+        throw new CliError(`--type must be S3 or GARAGE (got '${f.type}')`)
+      }
+      return setInstanceStore(
+        ownStoreUpdate({
+          type,
+          endpoint: f.endpoint,
+          publicEndpoint: f['public-endpoint'] ?? '',
+          bucket: f.bucket,
+          region: f.region,
+          accessKey: f['access-key'],
+          secretKey: env.VEYQ_STORE_SECRET_KEY ?? '',
+          garageAdminEndpoint: f['garage-admin-endpoint'] ?? '',
+          garageAdminToken: env.VEYQ_STORE_GARAGE_ADMIN_TOKEN ?? '',
+        }),
+      )
+    },
+  },
+  'store check': {
+    usage: 'store check',
+    summary: 'Check the saved object store step by step; prints every step and exits 1 when the check failed. Tenants can be created only after a passed check.',
+    flags: {},
+    run: () => checkInstanceStore(),
+    exitCode: (r) => ((r as { passed?: boolean }).passed === true ? 0 : 1),
   },
 }

@@ -13,7 +13,10 @@ import { buildInviteLink, copyText } from '../../shared/inviteLink'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 
 const visible = defineModel<boolean>('visible', { required: true })
-const emit = defineEmits<{ created: [] }>()
+// `storeBlocked`: the console knows no object store has passed its check (ADR 0089 decision 6). A courtesy over the
+// server, which refuses with 409 `store_not_ready` on its own — so a stale flag costs a refusal, never a tenant.
+const props = defineProps<{ storeBlocked?: boolean }>()
+const emit = defineEmits<{ created: []; openStore: [] }>()
 const { t } = useI18n()
 
 const name = ref('')
@@ -23,7 +26,7 @@ const error = ref('')
 const inviteUrl = ref('') // set on success → switches to the copy-link view (the owner hands the link off)
 const copied = ref(false)
 const canSubmit = computed(
-  () => name.value.trim().length > 0 && domain.value.trim().length > 0 && ownerEmail.value.trim().length > 0,
+  () => !props.storeBlocked && name.value.trim().length > 0 && domain.value.trim().length > 0 && ownerEmail.value.trim().length > 0,
 )
 
 watch(visible, (isVisible) => {
@@ -47,7 +50,9 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
   {
     onError: async (e) => {
       const { code } = await tenantError(e)
-      error.value = code === 'domain_taken' ? t('tenant.domainTaken') : t('tenant.createFailed')
+      error.value =
+        code === 'domain_taken' ? t('tenant.domainTaken') : code === 'store_not_ready' ? t('tenant.storeNotReady') : t('tenant.createFailed')
+      if (code === 'store_not_ready') emit('openStore')
     },
   },
 )
@@ -79,6 +84,16 @@ async function copyLink() {
         {{ t('tenant.ownerEmailNew') }}
         <InputText v-model="ownerEmail" type="email" autocomplete="email" required :disabled="loading" />
       </label>
+      <Message v-if="storeBlocked" severity="warn" :closable="false" class="tenant-store-blocked">
+        {{ t('tenant.storeNotReady') }}
+        <Button
+          type="button"
+          text
+          icon="pi pi-database"
+          :label="t('tenant.openStore')"
+          @click="emit('openStore')"
+        />
+      </Message>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <div class="veyq-dialog-action-row">
         <Button

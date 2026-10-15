@@ -21,6 +21,13 @@ vi.mock('../features/tenants/tenants', async (importOriginal) => ({
 }))
 vi.mock('../features/instance/release', () => ({ getInstanceRelease: vi.fn() }))
 vi.mock('../features/instance/configSecret', () => ({ getInstanceConfigSecret: vi.fn() }))
+vi.mock('../features/instance/store', async (importOriginal) => ({
+  // the builders stay real: what `store set` sends is what is asserted on
+  ...(await importOriginal<typeof import('../features/instance/store')>()),
+  getInstanceStore: vi.fn(),
+  setInstanceStore: vi.fn(),
+  checkInstanceStore: vi.fn(),
+}))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
 import { run } from './cli'
@@ -28,6 +35,8 @@ import { signIn } from './adminSession'
 import * as tenants from '../features/tenants/tenants'
 import { getInstanceRelease } from '../features/instance/release'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
+import { checkInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
+import type { InstanceStore, InstanceStoreCheck } from '../features/instance/store'
 import type { TenantCreated, TenantInviteState, TenantSummary } from '../features/tenants/tenants'
 
 const ENV = { VEYQ_ADMIN_EMAIL: 'owner@example.com', VEYQ_ADMIN_PASSWORD: 'pw' }
@@ -58,8 +67,21 @@ const invite = (ownerEmail: string): TenantInviteState => ({
   ownerEmail, inviteStatus: 'ACTIVE', inviteExpiresAt: EXPIRES, bootstrapSecret: 'boot-2', delivery: 'FALLBACK_COPYLINK',
 })
 
+const storeRead: InstanceStore = { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null }
+const failedCheck: InstanceStoreCheck = {
+  passed: false,
+  checkedAt: EXPIRES,
+  steps: [
+    { step: 'CREDENTIALS', outcome: 'PASSED', detail: null },
+    { step: 'BUCKET', outcome: 'FAILED', detail: 'The bucket nope does not exist (HTTP 404).' },
+  ],
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(getInstanceStore).mockResolvedValue(storeRead)
+  vi.mocked(setInstanceStore).mockResolvedValue(storeRead)
+  vi.mocked(checkInstanceStore).mockResolvedValue(failedCheck)
   vi.mocked(tenants.setTenantStorageQuota).mockResolvedValue(undefined)
   vi.mocked(tenants.createTenant).mockResolvedValue(created)
   vi.mocked(tenants.listTenants).mockResolvedValue([row])
@@ -153,11 +175,84 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
   })
 })
 
+describe('veyq-admin — the object store (uc.admin.configure-object-store)', () => {
+  it('store show prints the setting and the last check', async () => {
+    const r = await invoke(['store', 'show'])
+    expect(JSON.parse(r.out)).toEqual(storeRead)
+    expect(r.code).toBe(0)
+  })
+
+  it('store set --bundled chooses the bundled store and nothing else', async () => {
+    const r = await invoke(['store', 'set', '--bundled'])
+    expect(setInstanceStore).toHaveBeenCalledWith({ bundled: true })
+    expect(r.code).toBe(0)
+  })
+
+  it('store set --bundled refuses any other flag and sends nothing', async () => {
+    const r = await invoke(['store', 'set', '--bundled', '--bucket', 'b'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('--bundled takes no other flag')
+    expect(setInstanceStore).not.toHaveBeenCalled()
+  })
+
+  it('store set builds an S3 store; the secret comes from the environment, never a flag', async () => {
+    const r = await invoke(
+      ['store', 'set', '--endpoint', 'https://s3.example.com', '--bucket', 'b', '--region', 'eu', '--access-key', 'AK'],
+      { ...ENV, VEYQ_STORE_SECRET_KEY: 'sek' },
+    )
+    expect(r.code).toBe(0)
+    expect(setInstanceStore).toHaveBeenCalledWith({
+      bundled: false, type: 'S3', endpoint: 'https://s3.example.com', publicEndpoint: null,
+      bucket: 'b', region: 'eu', accessKey: 'AK', secretKey: 'sek',
+    })
+    // The secret is not echoed: the result is the server's read, which never carries one.
+    expect(r.out).not.toContain('sek')
+  })
+
+  it('store set without the secret in the environment keeps the stored one (the key is omitted, not empty)', async () => {
+    await invoke(['store', 'set', '--endpoint', 'https://e', '--bucket', 'b', '--region', 'r', '--access-key', 'AK'])
+    expect(vi.mocked(setInstanceStore).mock.calls[0][0]).not.toHaveProperty('secretKey')
+  })
+
+  it('store set --type GARAGE carries the admin endpoint and token', async () => {
+    await invoke(
+      ['store', 'set', '--type', 'garage', '--endpoint', 'http://g:3900', '--bucket', 'b', '--region', 'garage', '--access-key', 'GK',
+        '--garage-admin-endpoint', 'http://g:3903'],
+      { ...ENV, VEYQ_STORE_GARAGE_ADMIN_TOKEN: 'tok' },
+    )
+    expect(setInstanceStore).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'GARAGE', garageAdminEndpoint: 'http://g:3903', garageAdminToken: 'tok' }),
+    )
+  })
+
+  it('store set refuses an incomplete own store and an unknown type before calling anything', async () => {
+    const missing = await invoke(['store', 'set', '--bucket', 'b'])
+    expect(missing.code).toBe(1)
+    expect(missing.err).toContain('--endpoint is required unless --bundled')
+    const bad = await invoke(['store', 'set', '--type', 'ceph', '--endpoint', 'e', '--bucket', 'b', '--region', 'r', '--access-key', 'a'])
+    expect(bad.code).toBe(1)
+    expect(bad.err).toContain('--type must be S3 or GARAGE')
+    expect(setInstanceStore).not.toHaveBeenCalled()
+  })
+
+  it('store check prints every step and exits 1 when the check failed — a script cannot mistake it for success', async () => {
+    const r = await invoke(['store', 'check'])
+    expect(JSON.parse(r.out).steps).toHaveLength(2)
+    expect(r.out).toContain('does not exist')
+    expect(r.code).toBe(1)
+  })
+
+  it('store check exits 0 when it passed', async () => {
+    vi.mocked(checkInstanceStore).mockResolvedValueOnce({ ...failedCheck, passed: true })
+    expect((await invoke(['store', 'check'])).code).toBe(0)
+  })
+})
+
 describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

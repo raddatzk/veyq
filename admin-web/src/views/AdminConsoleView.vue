@@ -20,7 +20,8 @@ import Message from 'primevue/message'
 import CreateTenantDialog from '../features/tenants/CreateTenantDialog.vue'
 import TenantDetailPanel from '../features/tenants/TenantDetailPanel.vue'
 import ReleaseVersionPanel from '../features/instance/ReleaseVersionPanel.vue'
-import StoreProvisioningPanel from '../features/instance/StoreProvisioningPanel.vue'
+import StorePanel from '../features/instance/StorePanel.vue'
+import { getInstanceStore, storeReady, type InstanceStore } from '../features/instance/store'
 import ConfigSecretPanel from '../features/instance/ConfigSecretPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
 import { formatBytes } from '../shared/formatBytes'
@@ -44,6 +45,10 @@ const selected = ref<string | null>(null)
 // One rubric at a time under `Server`, so a second boolean cannot leave two panels open at once.
 const serverPanel = ref<'release' | 'store' | 'configSecret' | null>(null)
 const loading = ref(true)
+// The object store as last read or changed (ADR 0089 decision 6): a tenant waits for a store that passed its check.
+// Null until read, and when the read failed — then nothing is blocked here and the server decides.
+const store = ref<InstanceStore | null>(null)
+const storeBlocked = computed(() => store.value !== null && !storeReady(store.value))
 
 const isOwner = computed(() => serverRole.verdict === 'owner')
 
@@ -58,7 +63,9 @@ onMounted(async () => {
     await router.replace({ name: 'login' })
     return
   }
-  if (verdict === 'owner') await loadTenants().catch(() => {})
+  if (verdict === 'owner') {
+    await Promise.all([loadTenants().catch(() => {}), getInstanceStore().then((s) => (store.value = s)).catch(() => {})])
+  }
   loading.value = false
 })
 
@@ -164,13 +171,18 @@ async function signOut() {
 
       <section class="admin-shell__detail">
         <ReleaseVersionPanel v-if="serverPanel === 'release'" />
-        <StoreProvisioningPanel v-else-if="serverPanel === 'store'" />
+        <StorePanel v-else-if="serverPanel === 'store'" @changed="store = $event" />
         <ConfigSecretPanel v-else-if="serverPanel === 'configSecret'" />
         <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" />
       </section>
     </div>
 
-    <CreateTenantDialog v-model:visible="createOpen" @created="onCreated" />
+    <CreateTenantDialog
+      v-model:visible="createOpen"
+      :store-blocked="storeBlocked"
+      @created="onCreated"
+      @open-store="createOpen = false; serverPanel = 'store'"
+    />
   </div>
 </template>
 

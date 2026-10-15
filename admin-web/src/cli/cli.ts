@@ -25,6 +25,7 @@ export function usage(): string {
     'Environment:',
     '  VEYQ_ADMIN_EMAIL     Server-Owner account (required)',
     '  VEYQ_ADMIN_PASSWORD  its password (required) — used once per invocation, never stored',
+    '  VEYQ_STORE_SECRET_KEY, VEYQ_STORE_GARAGE_ADMIN_TOKEN  the secrets `store set` seals (optional: unset keeps the stored one)',
     '  BACKEND_URL          the backend\'s admin listener (default http://app:8090)',
   ].join('\n')
 }
@@ -45,8 +46,10 @@ function splitCommand(argv: string[]): { name: string; rest: string[] } {
 
 /** Parse `rest` against exactly this command's flags. Throws {@link CliError} for an unknown or missing one. */
 function readFlags(command: Command, rest: string[]): Record<string, string> {
-  const options = Object.fromEntries(Object.keys(command.flags).map((f) => [f, { type: 'string' as const }]))
-  let values: Record<string, string | undefined>
+  const options = Object.fromEntries(
+    Object.entries(command.flags).map(([f, spec]) => [f, { type: spec.switch ? ('boolean' as const) : ('string' as const) }]),
+  )
+  let values: Record<string, string | boolean | undefined>
   try {
     values = parseArgs({ args: rest, options, strict: true, allowPositionals: false }).values
   } catch (e) {
@@ -56,7 +59,10 @@ function readFlags(command: Command, rest: string[]): Record<string, string> {
   for (const [flag, spec] of Object.entries(command.flags)) {
     if (spec.required && !values[flag]) throw new CliError(`--${flag} is required (${spec.describe})\nusage: ${NAME} ${command.usage}`)
   }
-  return values as Record<string, string>
+  // A switch given reads as 'true' and absent as missing, so every command sees the one `Record<string, string>`.
+  return Object.fromEntries(
+    Object.entries(values).filter(([, v]) => v !== undefined && v !== false).map(([k, v]) => [k, String(v)]),
+  )
 }
 
 /**
@@ -83,8 +89,9 @@ export async function run(
   try {
     const flags = readFlags(command, rest)
     await signIn(env)
-    out(renderResult(await command.run(flags)))
-    return 0
+    const result = await command.run(flags, env)
+    out(renderResult(result))
+    return command.exitCode?.(result) ?? 0
   } catch (e) {
     err(`${NAME}: ${await describeFailure(e)}`)
     return 1

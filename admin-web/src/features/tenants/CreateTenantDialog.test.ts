@@ -26,7 +26,7 @@ const i18n = createI18n({
       common: { cancel: 'Cancel', create: 'Create', done: 'Done' },
       tenant: {
         create: 'Create a tenant', name: 'Name', domain: 'Domain', domainHint: 'hint',
-        ownerEmail: 'Owner email', domainTaken: 'That domain is already taken', createFailed: 'Could not create',
+        ownerEmail: 'Owner email', domainTaken: 'That domain is already taken', createFailed: 'Could not create', storeNotReady: 'Needs a checked store', openStore: 'Open the store',
         created: 'Tenant created',
       },
       members: { copyLinkIntro: 'copy it', copyLink: 'Copy link', copied: 'Copied' },
@@ -47,9 +47,9 @@ const stubs = {
   Message: { template: '<div class="msg"><slot /></div>' },
 }
 
-function mountDialog() {
+function mountDialog(extra: { storeBlocked?: boolean } = {}) {
   return mount(CreateTenantDialog, {
-    props: { visible: true },
+    props: { visible: true, ...extra },
     global: { plugins: [i18n], stubs },
   })
 }
@@ -103,5 +103,41 @@ describe('CreateTenantDialog (uc.admin.create-tenant, web Slice A)', () => {
     expect(wrapper.text()).toContain('That domain is already taken')
     expect(wrapper.emitted('created')).toBeUndefined()
     expect(wrapper.emitted('update:visible')).toBeUndefined()
+  })
+
+  // ADR 0089 decision 6 — closed WITH the reason, not silently disabled.
+  it('is closed with the reason while no store has passed its check, and sends nothing', async () => {
+    const wrapper = mountDialog({ storeBlocked: true })
+    await fillForm(wrapper, 'Acme', 'acme.example', 'owner@acme.example')
+    expect(wrapper.text()).toContain('Needs a checked store')
+    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+    expect(createTenant).not.toHaveBeenCalled()
+    // the way out is one click: it asks the console to open the store
+    await wrapper.findAll('button').find((b) => b.text() === 'Open the store')!.trigger('click')
+    // (the Button stub fires both the native click and its own `click` emit, so "at least once" is the claim)
+    expect(wrapper.emitted('openStore')?.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('stays open for an unblocked store (the paired case: the reason is absent, the create goes through)', async () => {
+    const wrapper = mountDialog({ storeBlocked: false })
+    expect(wrapper.text()).not.toContain('Needs a checked store')
+    await fillForm(wrapper, 'Acme', 'acme.example', 'owner@acme.example')
+    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+    expect(createTenant).toHaveBeenCalledOnce()
+  })
+
+  it("shows the server's own store_not_ready refusal when the console's flag was stale", async () => {
+    vi.mocked(createTenant).mockRejectedValueOnce(new Error('409'))
+    vi.mocked(tenantError).mockResolvedValueOnce({ status: 409, code: 'store_not_ready' })
+    const wrapper = mountDialog()
+    await fillForm(wrapper, 'Acme', 'acme.example', 'owner@acme.example')
+    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('Needs a checked store')
+    expect(wrapper.emitted('openStore')).toHaveLength(1)
+    expect(wrapper.emitted('created')).toBeUndefined()
   })
 })

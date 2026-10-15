@@ -25,17 +25,24 @@ vi.mock('../features/auth/login', () => ({ logout: vi.fn() }))
 vi.mock('../features/tenants/CreateTenantDialog.vue', () => ({
   default: {
     name: 'CreateTenantDialog',
-    props: { visible: { type: Boolean, required: true } },
-    emits: ['created', 'update:visible'],
+    props: { visible: { type: Boolean, required: true }, storeBlocked: { type: Boolean, default: false } },
+    emits: ['created', 'update:visible', 'openStore'],
     template: '<div class="stub-create" />',
   },
 }))
+// The real `storeReady` stays: the gate's rule is what is asserted. Only the network read is stubbed.
+vi.mock('../features/instance/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/instance/store')>()),
+  getInstanceStore: vi.fn(),
+}))
+vi.mock('../features/instance/StorePanel.vue', () => ({ default: { template: '<div class="stub-store" />' } }))
 vi.mock('../features/tenants/TenantDetailPanel.vue', () => ({ default: { template: '<div class="stub-detail" />' } }))
 vi.mock('../features/instance/ReleaseVersionPanel.vue', () => ({ default: { template: '<div class="stub-release" />' } }))
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
 import { logout } from '../features/auth/login'
+import { getInstanceStore } from '../features/instance/store'
 import { resetServerRole } from '../app/serverRole'
 import { httpError } from '../test/httpError'
 
@@ -76,6 +83,7 @@ async function mountConsole() {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(logout).mockResolvedValue(undefined)
+  vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: false, blobsStored: false, setting: null, lastCheck: { passed: true, checkedAt: new Date(), steps: [] } })
   resetServerRole()
 })
 
@@ -157,5 +165,39 @@ describe('AdminConsoleView — creating a tenant', () => {
 
     expect(w.text()).toContain('Fresh')                                                   // the list refreshed
     expect(w.findComponent({ name: 'CreateTenantDialog' }).props('visible')).toBe(true)   // and stayed open
+  })
+})
+
+describe('AdminConsoleView — a tenant waits for a checked store (ADR 0089 decision 6)', () => {
+  const dialog = (w: Awaited<ReturnType<typeof mountConsole>>['w']) => w.findComponent({ name: 'CreateTenantDialog' })
+
+  it('closes tenant creation while the store has not passed its check, and opens it once it has', async () => {
+    vi.mocked(listTenants).mockResolvedValue([])
+    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null })
+    const blocked = await mountConsole()
+    expect(dialog(blocked.w).props('storeBlocked')).toBe(true)
+
+    // the paired case, same predicate: a passed check is the one thing that opens it
+    resetServerRole()
+    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: { passed: true, checkedAt: new Date(), steps: [] } })
+    const open = await mountConsole()
+    expect(dialog(open.w).props('storeBlocked')).toBe(false)
+  })
+
+  it('does not block on a failed READ of the store — the server is the authority and refuses on its own', async () => {
+    vi.mocked(listTenants).mockResolvedValue([])
+    vi.mocked(getInstanceStore).mockRejectedValue(new Error('network'))
+    const { w } = await mountConsole()
+    expect(dialog(w).props('storeBlocked')).toBe(false)
+  })
+
+  it('takes the owner to the store page when the dialog asks for it', async () => {
+    vi.mocked(listTenants).mockResolvedValue([])
+    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null })
+    const { w } = await mountConsole()
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Create'))!.trigger('click')
+    dialog(w).vm.$emit('openStore')
+    await flushPromises()
+    expect(w.find('.stub-store').exists()).toBe(true)
   })
 })

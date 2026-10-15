@@ -52,8 +52,8 @@ const shown = computed(() => (state.value ? RENDER[state.value] : null))
     <section class="settings-form">
       <div class="settings-section-header">
         <div>
-          <h2>{{ t('store.navTitle') }}</h2>
-          <p>{{ t('store.sub') }}</p>
+          <h2>{{ t('store.provisioningTitle') }}</h2>
+          <p>{{ t('store.provisioningSub') }}</p>
         </div>
       </div>
 
