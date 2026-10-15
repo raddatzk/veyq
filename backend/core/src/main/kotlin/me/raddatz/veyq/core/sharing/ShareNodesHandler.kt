@@ -37,6 +37,9 @@ sealed interface CreateShareNodeOutcome {
     /** The epoch the guest sealed with is above the scope's current one (or the scope has none) — a 409, nothing
      *  stored (ADR 0080 Decision 6, the rule a member's placement off the root follows). */
     object StaleEpoch : CreateShareNodeOutcome, HttpFailure by Failures.staleEpoch
+    /** Creating the kind needs a capability that is switched off ([me.raddatz.veyq.core.node.NodeKindRules.capabilityToCreate],
+     *  asked by `createInScope` for a guest as for a member). Unreachable today: no kind a guest may create names one. */
+    object CapabilityDisabled : CreateShareNodeOutcome, HttpFailure by Failures.capabilityDisabled
 }
 
 sealed interface UpdateShareNodeOutcome {
@@ -239,6 +242,7 @@ class ShareNodesHandler(
         CreateNodeOutcome.SlugTaken -> CreateShareNodeOutcome.SlugTaken
         CreateNodeOutcome.IdTaken -> CreateShareNodeOutcome.IdTaken
         CreateNodeOutcome.StaleEpoch -> CreateShareNodeOutcome.StaleEpoch
+        CreateNodeOutcome.CapabilityDisabled -> CreateShareNodeOutcome.CapabilityDisabled
         // The gate refused a space that serves no guests, and `createInScope` answers none of the member gate's refusals.
         CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting ->
             error("a guest create past the gate cannot answer $o")

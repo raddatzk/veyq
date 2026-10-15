@@ -35,7 +35,23 @@ interface NodeKindRules {
      */
     fun takesCover(kind: String): Boolean = false
 
+    /**
+     * The capability id (`contracts/platform/capabilities.json`) that creating a node of [kind] — one this
+     * implementation [handles] — needs, or null for none, the default. The kind's own answer, so core names no
+     * application kind: Depot's drop box needs `core.public-shares.drop-box` (ADR 0088, #440 gap 2), because a drop box
+     * exists to carry a `WRITE_ONLY` link. `NodesHandler.createInScope` asks it beside [parentAllows] and refuses a
+     * switched-off one with `422 capability_disabled`, on the member's and the guest's create alike. Only creation asks
+     * it: a node that exists stays, and is moved, renamed and shared as before (ADR 0088 decision 5, a feature switch
+     * refuses only what is new).
+     */
+    fun capabilityToCreate(kind: String): String? = null
+
     companion object {
+        /** The capability the one rule of [rules] that handles [kind] says its creation needs; none or several → null
+         *  (such a kind is refused by [parentAllows] anyway). */
+        fun capabilityToCreate(rules: List<NodeKindRules>, kind: String): String? =
+            rules.filter { it.handles(kind) }.singleOrNull()?.capabilityToCreate(kind)
+
         /** Whether the one rule of [rules] that handles [kind] says it takes a cover; none or several → false. */
         fun takesCover(rules: List<NodeKindRules>, kind: String): Boolean =
             rules.filter { it.handles(kind) }.singleOrNull()?.takesCover(kind) ?: false

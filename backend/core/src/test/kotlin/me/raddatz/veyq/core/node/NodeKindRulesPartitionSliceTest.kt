@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.content.CreateNodeOutcome
 import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
@@ -43,6 +44,9 @@ class NodeKindRulesPartitionSliceTest {
     lateinit var access: ScopeAccess
 
     @Inject
+    lateinit var capabilities: CapabilityRegistry
+
+    @Inject
     lateinit var handler: NodesHandler
 
     /** A rule for [kind] that allows it anywhere and records each placement it is asked about. */
@@ -58,7 +62,7 @@ class NodeKindRulesPartitionSliceTest {
     @Test
     fun anEmptyRuleSetPlacesNothingNotEvenAFolder() {
         val (userId, scopeId) = seedMemberScope()
-        val none = NodesHandler(store, access, mutableListOf())
+        val none = NodesHandler(store, access, mutableListOf(), capabilities)
         assertEquals(CreateNodeOutcome.IllegalStructure, create(none, userId, scopeId, null, NodeEntity.FOLDER))
 
         // control: the registered set places the same folder at the same root
@@ -70,14 +74,14 @@ class NodeKindRulesPartitionSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val a = Forged("MEMORY")
         val b = Forged("MEMORY")
-        val doubled = NodesHandler(store, access, mutableListOf<NodeKindRules>(FolderNodeRules(), a, b))
+        val doubled = NodesHandler(store, access, mutableListOf<NodeKindRules>(FolderNodeRules(), a, b), capabilities)
         assertEquals(CreateNodeOutcome.IllegalStructure, create(doubled, userId, scopeId, null, "MEMORY"))
         assertTrue(a.asked.isEmpty() && b.asked.isEmpty(), "an ambiguous kind is asked of nobody")
         assertTrue(create(doubled, userId, scopeId, null, NodeEntity.FOLDER) is CreateNodeOutcome.Created,
             "the unambiguous kind beside it is unaffected")
 
         // control: either of them alone places the Memory
-        val single = NodesHandler(store, access, mutableListOf<NodeKindRules>(FolderNodeRules(), a))
+        val single = NodesHandler(store, access, mutableListOf<NodeKindRules>(FolderNodeRules(), a), capabilities)
         assertTrue(create(single, userId, scopeId, null, "MEMORY") is CreateNodeOutcome.Created)
         assertEquals(listOf("MEMORY"), a.asked)
     }

@@ -9,6 +9,7 @@ import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.persistence.createOrConflict
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -24,6 +25,9 @@ sealed interface CreateNodeOutcome {
     /** The node is tagged with an epoch that is not the scope's current one (ADR 0024 Decision 6) — a bounded create:
      *  one above it (ADR 0080 Decision 6) — nothing stored. */
     object StaleEpoch : CreateNodeOutcome, HttpFailure by Failures.staleEpoch
+    /** Creating the kind needs a capability that is switched off instance-wide ([NodeKindRules.capabilityToCreate],
+     *  ADR 0088) — nothing stored. */
+    object CapabilityDisabled : CreateNodeOutcome, HttpFailure by Failures.capabilityDisabled
 }
 
 sealed interface ListNodesOutcome {
@@ -84,7 +88,8 @@ sealed interface ListTrashOutcome {
  * asked first by every operation (uc.spaces.scope-access): a non-member sees a 404, not a reveal. Structural rules:
  * a parent that is missing, trashed or in another scope refuses every kind; where a kind may live is the one
  * [NodeKindRules] that handles it (core's `FOLDER`, an application's own kinds — ADR 0079), none or several →
- * `illegal_structure`; no cycle on move; slug unique per parent.
+ * `illegal_structure`; no cycle on move; slug unique per parent. Whether a kind may be created at all on this instance
+ * is the same rule's [NodeKindRules.capabilityToCreate], asked of [capabilities] (`capability_disabled`).
  */
 @ApplicationScoped
 class NodesHandler(
@@ -92,6 +97,7 @@ class NodesHandler(
     private val access: ScopeAccess,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
     @All private val kindRules: MutableList<NodeKindRules>,
+    private val capabilities: CapabilityRegistry,
 ) {
 
     private fun parentAllows(kind: String, parent: ParentSlot): Boolean =
@@ -178,6 +184,10 @@ class NodesHandler(
         // The boundary before anything that answers by what lies outside it (a slug taken there).
         if (boundary != null && !store.withinSubtree(scopeId, boundary.rootNodeId, slot)) return CreateNodeOutcome.IllegalStructure
         if (!parentAllows(kind, parent)) return CreateNodeOutcome.IllegalStructure
+        // ADR 0088: a kind whose creation needs a switched-off capability is refused here, on the member's and the
+        // guest's create alike (both reach this) — after the placement rule, so a misplaced node answers as it always
+        // did. Only creation: a node of the kind that exists is moved and renamed as before (decision 5).
+        NodeKindRules.capabilityToCreate(kindRules, kind)?.let { if (!capabilities.isActive(it)) return CreateNodeOutcome.CapabilityDisabled }
         store.identityFolderOwner(scopeId, slot)?.let { owner -> if (owner != identityWriter) return CreateNodeOutcome.IllegalStructure }
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
         // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is

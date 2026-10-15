@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.node.FolderNodeRules
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.sharing.FolderGuestNodeRules
 import me.raddatz.veyq.core.sharing.GuestCreatableKinds
 import me.raddatz.veyq.core.sharing.GuestNodeOp
@@ -71,6 +72,17 @@ class DepotNodeKindRulesTest {
         }
         // Depot answers for its drop box only: no other root kind is its question
         for (root in listOf(NodeEntity.FOLDER, file, "MEMORY")) assertEquals(null, DepotWriteOnlyGuestKinds().creatable(root), root)
+    }
+
+    /** #440 gap 2: a new drop box needs the drop-box links; a file needs no capability (`DropBoxCapabilitySliceTest`
+     *  is the gate through the node API). */
+    @Test
+    fun aDropBoxNeedsTheDropBoxCapabilityToBeCreatedAndAFileNone() {
+        assertEquals(CapabilityIds.PUBLIC_SHARES_DROP_BOX, rules.capabilityToCreate(DepotNodeKinds.DROPBOX))
+        assertEquals(null, rules.capabilityToCreate(file))
+        val composed = listOf(FolderNodeRules(), rules)
+        assertEquals(CapabilityIds.PUBLIC_SHARES_DROP_BOX, NodeKindRules.capabilityToCreate(composed, DepotNodeKinds.DROPBOX))
+        assertEquals(null, NodeKindRules.capabilityToCreate(composed, NodeEntity.FOLDER), "core's folder needs none")
     }
 
     @Test

@@ -3,6 +3,7 @@ package me.raddatz.veyq.depot
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.sharing.GuestCreatableKinds
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareRoots
@@ -46,6 +47,15 @@ class DepotNodeKindRules : NodeKindRules {
 
     /** A drop box takes a cover (inbox #411); a file does not - its one blob is its content, and a file's own thumbnail is a different idea. */
     override fun takesCover(kind: String): Boolean = kind == DepotNodeKinds.DROPBOX
+
+    /**
+     * A new drop box needs the drop-box links (#440 gap 2): it exists to carry a `WRITE_ONLY` link, so with
+     * `core.public-shares.drop-box` off — or its parent, by the AND along the path — none is created (`capability_disabled`).
+     * A core id, because Depot has no catalog entry of its own yet: the CR that adds the first `<application>.*` entries
+     * re-points it. A file needs none.
+     */
+    override fun capabilityToCreate(kind: String): String? =
+        if (kind == DepotNodeKinds.DROPBOX) CapabilityIds.PUBLIC_SHARES_DROP_BOX else null
 }
 
 /**

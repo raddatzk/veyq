@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.content.CreateNodeOutcome
 import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.arc.All
@@ -44,6 +45,9 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     lateinit var access: ScopeAccess
 
     @Inject
+    lateinit var capabilities: CapabilityRegistry
+
+    @Inject
     lateinit var handler: NodesHandler
 
     /** A rule for [kind] that allows it anywhere and records each placement it is asked about. */
@@ -70,7 +74,7 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     @Test
     fun withCoreAloneOnlyAFolderIsPlaced() {
         val (userId, scopeId) = seedMemberScope()
-        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()))
+        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()), capabilities)
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val memory = seedNode(scopeId, "MEMORY", wrappedContentKey = "aw==")
 
