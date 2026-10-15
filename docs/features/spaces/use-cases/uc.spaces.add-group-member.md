@@ -84,7 +84,7 @@ sequenceDiagram
 - **A3 — the target opted into consent ("ask before adding me"):** the add diverts into a **proposal** instead of
   admitting immediately — a *soft*, grant-less membership that delivery **skips** until the invitee accepts, with
   the group name one-off-sealed to them. That is its own use-case, [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md)
-  (refined per [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §5; a later CR builds it). **This**
+  (per [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §5; built by cr-0094 and cr-0096). **This**
   use-case is the direct-add default — consent **off**.
 - **E1 — the username doesn't resolve in this tenant:** a generic *not-found*. The resolve is **tenant-scoped** —
   a non-member (or a handle in another tenant) is not reachable, and the server never runs a global search
@@ -122,7 +122,7 @@ sequenceDiagram
   unverified until someone compares safety numbers (self-hosted makes it moot); Key Transparency remains the
   end-state.
 - **Additive only.** This use-case only **adds** a grant. **Consent** (the account-global "ask before adding me"
-  opt-in, soft membership) is [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md) (refined); **promote/
+  opt-in, soft membership) is [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md) (built); **promote/
   demote a co-owner, remove a member, the last-owner guard, `K_SC` rotation, and the orphan rule** are the
   group-lifecycle slice ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4/§6).
 

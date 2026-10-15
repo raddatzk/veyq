@@ -8,12 +8,13 @@
 - **Provides:** a **`kind=GROUP` scope** that **exists, has a member-readable name, and can be opened on this
   device** — a keyed container designed to be held by **many** members (one grant each), confidential **even
   from the tenant owner** ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md)). This enabler is
-  the scope itself born by its owner; **adding other members** is the next slice.
+  the scope itself born by its owner; **adding other members** is its own use-case, built.
 - **Serves (use-cases/enablers):** [uc.spaces.switch-spaces](../use-cases/uc.spaces.switch-spaces.md) (groups
   appear in the switcher), [uc.spaces.add-group-member](../use-cases/uc.spaces.add-group-member.md) (bring a
   fellow tenant member in) and [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md)
   (promote/demote/remove — removal drives [en.spaces.scope-key-rotation](en.spaces.scope-key-rotation.md)) — plus
-  the *planned* share-with-a-group flows. A group holds a
+  the share-with-a-group flows, built ([uc.spaces.consent-group-add](../use-cases/uc.spaces.consent-group-add.md)
+  and a public share from a group's tree). A group holds a
   [Memory](../../memory/_index.md) tree like any scope; that tree is scope-agnostic — it depends on
   *personal-scope* as its first home, not on this enabler.
 - **Depends on:** [en.spaces.personal-scope](en.spaces.personal-scope.md) (generalised scope identity +

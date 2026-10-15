@@ -3,7 +3,7 @@
 - **ID:** uc.spaces.switch-spaces
 - **Primary actor:** Member (authenticated + unlocked)
 - **Goal:** move between the **tenants** they belong to and the **spaces** within the active tenant — the shared
-  **Tenant** space, their **Personal** space, and — once built — their **groups** — from the shell.
+  **Tenant** space, their **Personal** space, and their **groups** — from the shell.
 - **Preconditions:** A live session + an unlocked vault; the member belongs to ≥1 tenant.
 - **Postconditions (success):** The shell shows the chosen tenant/space; the active scope key is the one for the
   selected space, and the tree + favorites have been re-entered for it.

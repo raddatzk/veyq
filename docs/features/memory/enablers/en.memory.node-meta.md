@@ -3,9 +3,11 @@
 - **ID:** en.memory.node-meta
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
-- **Status:** **partly built** — the envelope + the `date` sub-object shipped with **cr-0067**
-  ([uc.memory.date](../use-cases/uc.memory.date.md)); the `location` sub-object is refined but not yet built
-  ([uc.memory.place](../use-cases/uc.memory.place.md)).
+- **Status:** **built** — the envelope + the `date` sub-object shipped with **cr-0067**
+  ([uc.memory.date](../use-cases/uc.memory.date.md)), then `location` ([uc.memory.place](../use-cases/uc.memory.place.md),
+  cr-0069), `cover` ([uc.memory.cover](../use-cases/uc.memory.cover.md)) and `participants`
+  ([uc.memory.participants](../use-cases/uc.memory.participants.md)). The envelope itself is core's since inbox #411
+  (`web/src/core/node/nodeMeta.ts`).
 - **Provides:** **one** optional, opaque, **client-versioned** metadata blob (`wrappedMeta`) on a content node
   (MEMORY/CHAPTER), sealed under that node's **`K_mem`** — the single sealed home for a Memory's curated
   node-level metadata (its **date**, and next its **place**). Materialized so a browse card / a tenant map can

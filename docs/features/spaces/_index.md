@@ -24,14 +24,14 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
 
 ## Enablers
 
-- ★ [en.spaces.tenant-scope](enablers/en.spaces.tenant-scope.md) — **refined** (the shared root TENANT scope
+- ★ [en.spaces.tenant-scope](enablers/en.spaces.tenant-scope.md) — **built (web + backend)** (the shared root TENANT scope
   **opened + entered** on the device — no birth, it already exists from activation; the token-less default home;
   [ADR 0019](../../decisions/0019-token-less-tenant-home.md))
 - ★ [en.spaces.personal-scope](enablers/en.spaces.personal-scope.md) — **built** (the per-tenant PERSONAL
   scope born + opened, client-driven & operator-blind; the keyed container the content flows fill)
-- ★ [en.spaces.group-scope](enablers/en.spaces.group-scope.md) — **refined** (a shared, **named** GROUP scope
+- ★ [en.spaces.group-scope](enablers/en.spaces.group-scope.md) — **built (web + backend, cr-0032)** (a shared, **named** GROUP scope
   born by its owner + opened — confidential even from the tenant owner;
-  [ADR 0014](../../decisions/0014-group-scopes-and-governance.md), building in cr-0032)
+  [ADR 0014](../../decisions/0014-group-scopes-and-governance.md))
 - [en.spaces.member-identity](enablers/en.spaces.member-identity.md) — **built** (per-tenant `username`
   unique-in-tenant + `firstName`/`lastName` **sealed** under `K_tenant`; email the only global key, owner-only in
   the directory; [ADR 0023](../../decisions/0023-per-tenant-member-identity.md))
@@ -64,7 +64,7 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   (an owner's worker completes a rotation a tenant removal or an account rotation had to queue; owners only, an
   event joins only an unclaimed job, `done` only on the holder's own commit; owners see `stalled` / `failed` on the
   space and re-queue a failed one)
-- Create / share with a group — **in progress** ([ADR 0014](../../decisions/0014-group-scopes-and-governance.md)):
+- Create / share with a group — **built (G1–G3)**, each step its own use-case below ([ADR 0014](../../decisions/0014-group-scopes-and-governance.md)):
   **G1** create + open + browse (`en.spaces.group-scope`, cr-0032); **G2** member-add — per-tenant username
   search ([en.spaces.member-identity](enablers/en.spaces.member-identity.md)) + the
   [ADR 0020](../../decisions/0020-grant-distribution-invite-wrap.md) grant-wrap, direct-add default with an
@@ -84,7 +84,7 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   `K_name` from the **current** epoch and bumps `nameEpoch`, so a rename is **forward-secret** — a removed member
   can't read the new name; name-only, no `K_SC` rotation; server rejects a stale `nameEpoch`;
   [ADR 0027](../../decisions/0027-group-invite-name-shared-key.md))
-- [Space icon](use-cases/uc.spaces.set-space-icon.md) — **refined** (the owner gives a space a **face**: one
+- [Space icon](use-cases/uc.spaces.set-space-icon.md) — **built (web + backend; TENANT cr-space-icon, GROUP cr-group-space-icon)** (the owner gives a space a **face**: one
   square image, framed + re-encoded to a fixed box + **padded to a constant length** on device, then sealed under
   `K_icon` derived from the **current** epoch → `sealedIcon` + `iconEpoch` on the scope row — a **field**, not a
   blob. The tenant's *name* stays cleartext because at creation **no key exists**
@@ -92,8 +92,8 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   [ADR 0023](../../decisions/0023-per-tenant-member-identity.md)'s *only-the-plaintext-the-mechanism-requires*
   rule seals it — making it the **first sealed content on a TENANT row**. Rendered cross-tenant off the
   account-scoped `my-tenants` (which widens to carry each tenant's own grant,
-  [en.spaces.tenant-scope](enablers/en.spaces.tenant-scope.md)); initial stays the fallback. **v1 = TENANT**;
-  group is the identical field one level down)
+  [en.spaces.tenant-scope](enablers/en.spaces.tenant-scope.md)); initial stays the fallback. A group carries the
+  identical field one level down; a personal space never has an icon)
 - [Manage a group's members](use-cases/uc.spaces.manage-group-members.md) — **web done (cr-0088, cr-0089)** (the
   GroupOwner runs the roster: **promote/demote** co-owners (multiple owners + a last-owner guard) and **remove** a
   member — removal rotates the content key forward ([en.spaces.scope-key-rotation](enablers/en.spaces.scope-key-rotation.md))
@@ -102,7 +102,7 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   **grace period** (clearly marked, still readable, any owner can restore); a scheduled operator-blind job then
   hard-purges the ciphertext + files; [ADR 0014](../../decisions/0014-group-scopes-and-governance.md) §4/§6)
 - [Act on a space — who is let in, and what everyone else is told](use-cases/uc.spaces.scope-access.md) —
-  **planned** (the one `ScopeAccess` gate every scope-, tenant-, share- and job-addressed operation calls first:
+  **built (backend gate + the web's suspension notice; cr-scope-access-gate)** (the one `ScopeAccess` gate every scope-, tenant-, share- and job-addressed operation calls first:
   an unaccepted proposal is not a member, a deleting group refuses every write, a suspended tenant refuses its
   members everything on any domain, and a non-member — share guests included — learns neither;
   [ADR 0042](../../decisions/0042-http-failure-projection.md), [ADR 0066](../../decisions/0066-tenant-suspension.md))
@@ -121,10 +121,11 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   **planned** (split out of the use-case above when its ceremony was built — the worker skips unverified members and
   a changed key is a hard block; needs a scope-wide redesign before it is buildable at all, a per-account toggle
   can't protect shared-scope content)
-- Person / profile view — planned (`~username`, [ADR 0015](../../decisions/0015-operator-blind-readable-urls.md)):
-  open a member and see the Memories **you can see** that tag them; client-side (never a server query), depends
-  on a future per-Memory **participants** tag (sealed `userId`s)
-- Public share of a subtree — **refined** → [Sharing](../sharing/_index.md)
+- Person / profile view — **built (web)** (`#people/<userId>`, ADR 0083 — not the `~username` of
+  [ADR 0015](../../decisions/0015-operator-blind-readable-urls.md)): open a member and see the Memories **you can
+  see** that tag them; client-side (never a server query), over the per-Memory **participants** tag
+  ([uc.memory.participants](../memory/use-cases/uc.memory.participants.md))
+- Public share of a subtree — **built** → [Sharing](../sharing/_index.md)
   ([uc.sharing.share-public-viewer](../sharing/use-cases/uc.sharing.share-public-viewer.md), [ADR 0029](../../decisions/0029-public-viewer-share.md)):
   a per-share key, anonymous link, least-privilege (only the shared node's own key: a Memory, a chapter or a folder,
   [ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)); a node of any scope the

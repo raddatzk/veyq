@@ -33,7 +33,7 @@
    application sections (Memories, Files, drop boxes), a **tab bar** `All | Memories | Files | …` sits under the
    folder's card ([Application tabs](#application-tabs-a-facet-of-browsing)).
 4. **Navigate:** clicking a folder drills into it (new level + breadcrumb); clicking a Memory opens it (its
-   detail view is a later slice). The breadcrumb walks back up the local tree.
+   detail view, [uc.memory.gallery](uc.memory.gallery.md)). The breadcrumb walks back up the local tree.
 5. **Organize:** *create folder* / *create Memory* seal the name + blinded slug under the parent's key (`K_SC` at
    the scope root, the folder's key inside one) and POST only ciphertext (every node, a folder too, births its random
    key wrapped under the same parent key — ADR 0080); *rename* re-seals the name + recomputes the slug under it; *delete* takes the node and its whole subtree into the space's recoverable trash
@@ -137,8 +137,9 @@ späteren Schritt; vorerst ist dies das Zuhause, das deinen verschlüsselten Ber
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the encrypted node tree this browses),
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (`K_SC`, auto-birth),
-  [en.memory.media](../enablers/en.memory.media.md) (media — display is a later slice),
+  [en.memory.media](../enablers/en.memory.media.md) (media — displayed by [uc.memory.gallery](uc.memory.gallery.md)),
   [en.memory.favorites](../enablers/en.memory.favorites.md) (the heart on every row, and the sidebar Favorites section)
 - Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_SC`→`K_mem`)
 - Related use-cases: [login](../../account/use-cases/uc.account.login.md), unlock — done; the **Memory detail
-  view** (gallery / journal / chapters) — planned; multi-space switching, search — planned
+  view** — [gallery](uc.memory.gallery.md) and [chapters](uc.memory.chapters.md) built, the journal planned;
+  [multi-space switching](../../spaces/use-cases/uc.spaces.switch-spaces.md) built; search — planned

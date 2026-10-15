@@ -27,7 +27,7 @@ The data model is a **real bucket table** keyed by an opaque **`owner_key`**
 ([en.memory.buckets](../enablers/en.memory.buckets.md), [ADR 0034](../../../decisions/0034-media-uploader-buckets.md)),
 carrying a **lazy primary** bucket per uploader plus optional **one-level sub-buckets**. **This slice surfaces the
 primary grouping**: each uploader's **primary bucket** (everything they contributed). The **sub-bucket management
-UI** (create/rename/move/delete folders) is built next on the same table + endpoints.
+UI** (create/rename/move/delete folders) followed on the same table + endpoints (cr-0122).
 
 Uploaders span **members** (`owner_key = user:{userId}`, display name = the per-tenant **username**) and anonymous
 **public contributors** (`owner_key = share:{shareIdentityId}`, display name = the **`K_mem`-sealed** name from

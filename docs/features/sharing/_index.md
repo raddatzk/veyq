@@ -26,16 +26,17 @@ member renames a shared node, their client re-seals the name of every share on i
 
 - [uc.sharing.share-public-viewer](use-cases/uc.sharing.share-public-viewer.md) — **built (web)** (cr-0100: publish
   one of your own Memories as a read-only, anonymous, revocable public link `/s/{shareId}#k=…`; the share key rides
-  the fragment, the server stays blind; v1 = **personal-scope Memories, READ only**)
+  the fragment, the server stays blind; READ only — any scope and any node kind since
+  [share-shared-scope](use-cases/uc.sharing.share-shared-scope.md) and ADR 0080)
 - [uc.sharing.share-contributor](use-cases/uc.sharing.share-contributor.md) — **built (web)** (cr-0101: a
   **READ_WRITE** link where an anonymous visitor can **view + add photos** after naming themselves — the name
-  **sealed under `K_mem`** → an anonymous share identity, the buckets hook; direct-append, personal-scope only;
+  **sealed under `K_mem`** → an anonymous share identity, the buckets hook; direct-append (personal-scope only until share-shared-scope);
   [ADR 0030](../../decisions/0030-contributor-public-share.md))
 - [uc.sharing.share-uploader](use-cases/uc.sharing.share-uploader.md) — **built (web)** (cr-0102: a **WRITE_ONLY**
   write-only drop-box — add photos but **cannot see** the Memory or others'; the resolve returns no media (the
   `canView` gate, no server-side gallery filtering), the own-view is **client-local, session-only** from local
   previews (never a download), delete-your-own is **token-gated + ownership-checked**, and the ephemerality is
-  warned in four places; personal-scope only; [ADR 0031](../../decisions/0031-uploader-public-share.md))
+  warned in four places (personal-scope only until share-shared-scope); [ADR 0031](../../decisions/0031-uploader-public-share.md))
 - [uc.sharing.share-shared-scope](use-cases/uc.sharing.share-shared-scope.md) — **built (web)** (cr-0104: lifts
   the personal-scope-only restriction so **any member** of a **group/tenant** scope may public-share a Memory (since
   ADR 0080 also a chapter or a folder) there,
@@ -82,22 +83,24 @@ member renames a shared node, their client re-seals the name of every share on i
 
 ## Deferred (later slices, each with its own dependency)
 
-- **Buckets** — the per-uploader grouping (each contributor's uploads under their sealed name) is now refined as
+- **Buckets** — the per-uploader grouping (each contributor's uploads under their sealed name) is now **built** as
   [uc.memory.buckets](../memory/use-cases/uc.memory.buckets.md) +
   [en.memory.buckets](../memory/enablers/en.memory.buckets.md)
   ([ADR 0034](../../decisions/0034-media-uploader-buckets.md)) — the contributor identity becomes the
-  `share:{shareIdentityId}` **`owner_key`**, read with no migration. **cr-0113 (done)** shipped the full bucket
-  data layer + backend + the **web** organizer (the always-visible Beiträge tab, sub-bucket create/rename/delete,
-  move + batch, virtual-primary); a **camera filter** stays a later slice.
+  `share:{shareIdentityId}` **`owner_key`**, read with no migration. **cr-0113** shipped the full bucket
+  data layer + backend + the **web** organizer, **cr-0122** its sub-bucket create/rename/delete and the move + batch
+  bar; a **camera filter** stays a later slice.
 - **MANAGER role + moderation + persistent uploader deletes** — a manager role with view-all + edit/delete;
   **moderation** (review-before-publish) over the direct-append default; and persisting an uploader's id list
   client-side for **post-reload delete** (still no download).
-- **Password-protected shares** — fold `Argon2id(passphrase)` into the wrap key for link-leak defense.
+- **A password that keys the share** — fold `Argon2id(passphrase)` into the wrap key for link-leak defense. The
+  password **gate** itself is built ([uc.sharing.share-password](use-cases/uc.sharing.share-password.md)); only this
+  cryptographic fold is not.
 - **Persisted shares / person-resolution** — cross-scope surfaces. **Tenant terms** are built
   ([ADR 0035](../../decisions/0035-server-terms-of-service.md); the operator sets versioned per-locale terms in
   [uc.admin.tenant-terms](../admin/use-cases/uc.admin.tenant-terms.md), members accept server-side in
   [uc.account.accept-terms](../account/use-cases/uc.account.accept-terms.md)), and the accountless-visitor
-  acceptance is now its own refined use-case
+  acceptance is now its own built use-case
   ([uc.sharing.share-accept](use-cases/uc.sharing.share-accept.md), above). What stays deferred on terms is only the
   **pre-auth login-page** terms surface (a Host-served public read — a different mechanism from the share-keyed
   guest read).

@@ -20,7 +20,8 @@ This is the third sharing slice ([ADR 0031](../../../decisions/0031-uploader-pub
 READ_WRITE share ([uc.sharing.share-contributor](uc.sharing.share-contributor.md),
 [ADR 0030](../../../decisions/0030-contributor-public-share.md)). The upload crypto/path is identical; the
 difference is the **`canView` gate** (a WRITE_ONLY link's media read answers an empty list) and the **session-only,
-client-local** own-view. **v1: role WRITE_ONLY, personal scope, direct-append.**
+client-local** own-view. **v1: role WRITE_ONLY, personal scope, direct-append** — the personal-scope limit was lifted by
+[uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md).
 
 ## Main flow
 

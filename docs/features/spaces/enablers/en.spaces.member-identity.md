@@ -14,7 +14,8 @@
 - **Serves (use-cases/enablers):** the member directory of [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md),
   editing your own handle and name in [uc.spaces.edit-profile](../use-cases/uc.spaces.edit-profile.md),
   the **group member-add username search** ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md), G2),
-  and the *planned* person/profile view (`~username`, [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
+  and the person/profile view (built at `#people/<userId>`, ADR 0083, not the `~username` of
+  [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
 - **Depends on:** [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) +
   [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md) (the tenant-join flows where a username is chosen),
   `uc.account.unlock` (the identity that seals the name under `K_tenant`),

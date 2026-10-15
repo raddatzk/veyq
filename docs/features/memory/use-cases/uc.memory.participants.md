@@ -12,8 +12,8 @@
   later; the header shows them; a profile page lists the Memories its person is on. The server stored one opaque blob and
   nothing else ([ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)).
 
-**Status: built (web only, no backend or contract change).** The avatar is the member's profile picture when they have one, else the letter ([uc.spaces.set-profile-picture](../../spaces/use-cases/uc.spaces.set-profile-picture.md), [inbox #414](../../../inbox.md)). Not built:
-the uploader on **Files** ([inbox #415](../../../inbox.md)), a per-share opt-in for guests. The profile's cover tiles load for the
+**Status: built (web only, no backend or contract change).** The avatar is the member's profile picture when they have one, else the letter ([uc.spaces.set-profile-picture](../../spaces/use-cases/uc.spaces.set-profile-picture.md), [inbox #414](../../../inbox.md)). The uploader on
+**Files** is built too ([inbox #415](../../../inbox.md), cr-file-uploader). Not built: a per-share opt-in for guests. The profile's cover tiles load for the
 Memories of the scopes read in that visit only (no cover cache across scope switches); the index is bounded at
 500 Memories per scope and says so when it is partial.
 

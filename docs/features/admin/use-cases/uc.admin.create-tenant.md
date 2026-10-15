@@ -204,4 +204,5 @@ eine reservierte Adresse.
 - Decisions: [ADR 0002](../../../decisions/0002-personal-scope-per-tenant.md) (tenant-bound scopes),
   [ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md) (cold tenant-scope birth by the invited owner).
 - Related use-cases: [setup-server](uc.admin.setup-server.md), [login](../../account/use-cases/uc.account.login.md);
-  member invites & the personal-scope bootstrap on join (planned).
+  [member invites](../../spaces/use-cases/uc.spaces.add-member.md) & the personal-scope bootstrap on join
+  ([en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md)).

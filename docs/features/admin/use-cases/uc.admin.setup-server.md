@@ -119,5 +119,5 @@ Account existiert, schließt sich die Setup-Seite endgültig.
   the separate admin surface, not the main app, by decision (the most privileged single action an instance
   takes is also the one moved furthest from the public origin); the flow itself is unchanged by that move.
 - Related use-cases: [admin-channel](uc.admin.admin-channel.md) — the property that keeps this anonymous
-  operation off the public origin, so "first caller after `up -d`" is never a stranger; (planned) account login,
-  create-tenant-invite-owner
+  operation off the public origin, so "first caller after `up -d`" is never a stranger; [account login](../../account/use-cases/uc.account.login.md),
+  [create-tenant](uc.admin.create-tenant.md)

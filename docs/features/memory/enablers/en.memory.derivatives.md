@@ -3,7 +3,8 @@
 - **ID:** en.memory.derivatives
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
-- **Status:** **refined** — ready to cut a CR. All four design points are settled (role-tagged blobs with
+- **Status:** **built** (web + backend) — the upload generates the tiers on the device, the gallery grid reads the
+  thumbnail and the lightbox the preview. All four design points held as decided (role-tagged blobs with
   **per-blob keys**, **no backfill**, **first-frame video poster**, the tier sizes); see *Decisions*.
 - **Provides:** a **three-tier** view of each media item — a small **thumbnail** (the grid), a medium
   **preview** (the lightbox), and the **original** (download only) — each its own encrypted blob, generated

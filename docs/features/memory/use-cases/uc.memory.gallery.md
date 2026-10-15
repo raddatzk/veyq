@@ -193,5 +193,5 @@ anhält, sobald du etwas berührst. Journal, Kapitel, Karten und Playlists komme
   [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) (the two favorite objects, the
   aggregate-only rule, and why the copy above says what it says)
 - Related use-cases: [uc.memory.browse](uc.memory.browse.md) (done — the shell this opens from);
-  the journal / chapters / map — planned
+  [chapters](uc.memory.chapters.md) and the places map ([uc.memory.place](uc.memory.place.md)) — built; the journal — planned
 - End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md)

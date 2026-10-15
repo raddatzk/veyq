@@ -142,6 +142,6 @@ Gerät so einrichten, dass es sich nur mit deinem Passwort (oder Biometrie) ents
 - Decisions: [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) (the auth-vs-unlock
   split), [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) (wrap methods, device
   trust, re-lock & precedence — this PASSWORD path is the floor of that spectrum)
-- Related use-cases: [login](uc.account.login.md) (gates the session that lets you fetch the wrap); trust
-  this device — planned (DEVICE wrap for routine re-unlock); recover access — planned (RECOVERY wrap);
-  manage active sessions — planned (its E2EE names need this unlock)
+- Related use-cases: [login](uc.account.login.md) (gates the session that lets you fetch the wrap); [trust
+  this device](uc.account.trust-device.md) (DEVICE wrap for routine re-unlock); [recover access](uc.account.recover-access.md)
+  (RECOVERY wrap); [manage active sessions](uc.account.sessions.md) (its E2EE names need this unlock)

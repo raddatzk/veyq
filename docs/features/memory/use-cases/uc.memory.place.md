@@ -5,13 +5,13 @@
   a **place**.
 - **Goal:** Curate a Memory's **place** — **one named location**: a map position derived from the Memory's own
   photo GPS, plus a name that is either typed or reverse-geocoded — **sealed under the Memory's `K_mem`** and
-  shown on the Memory's detail header and a later **tenant-wide map** — **operator-blind** (the veyq server never
+  shown on the Memory's detail header and on the **places map** — **operator-blind** (the veyq server never
   sees a coordinate or a place name).
 - **Preconditions:** The vault is unlocked and the Memory is open (its **`K_mem`** is held). The node's
   `wrappedMeta` blob already exists (shipped for the date, [uc.memory.date](uc.memory.date.md)); place adds a
   `location` sub-object to it.
 - **Postconditions (success):** Once set, the Memory shows its named location; the user can "set location" (a
-  medoid position + a typed or reverse-geocoded name), move/rename it, and see it as a pin on the tenant map. The
+  medoid position + a typed or reverse-geocoded name), move/rename it, and see it as a pin on the places map. The
   server stored only the **opaque `wrappedMeta` blob** + the unchanged node shape.
 
 A Memory carries **one location** — a map position (from its own photo GPS) plus a **name** (typed or
@@ -30,7 +30,7 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
    - **framed on the map**, if the reverse lookup is enabled → its centre + zoom become the `nameAnchor`, the
      provider returns a name at that resolution → `geocoded`, still editable.
 4. On save the client seals `{ v, …, location }` under `K_mem` and PATCHes `wrappedMeta`. The Memory's detail
-   header shows the named location, and it appears as a pin on the tenant map.
+   header shows the named location, and it appears as a pin on the places map.
 
 ## Alternate / exception flows
 
@@ -106,15 +106,15 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
 
 **EN —** Give a memory a **where**. You pick "set location": your photos' own GPS drop a pin at a real spot you
 visited, and you give it a name — type one ("at grandma's"), or, if you switch it on, let a map service turn the
-pin into a name ("Tenerife"). Later, a map shows all your memories as pins. It's all locked with the memory's own
+pin into a name ("Tenerife"). A map shows your memories as pins. It's all locked with the memory's own
 key on your device, so **veyq's server** never learns the place or the coordinates. The only thing that ever
 leaves your device is — if *you* turn it on — a bare coordinate sent straight to the map service to fetch a name;
 veyq never sees it.
 
 **DE —** Gib einer Erinnerung ein **Wo**. Du wählst „Ort festlegen": das GPS deiner Fotos setzt einen Pin an einen
 echten Ort, an dem du warst, und du gibst ihm einen Namen — tippst ihn selbst („bei Oma") oder lässt, wenn du es
-einschaltest, einen Kartendienst aus dem Pin einen Namen machen („Teneriffa"). Später zeigt eine Karte alle deine
-Erinnerungen als Pins. Alles wird mit dem eigenen Schlüssel der Erinnerung auf deinem Gerät verschlüsselt;
+einschaltest, einen Kartendienst aus dem Pin einen Namen machen („Teneriffa"). Eine Karte zeigt deine Erinnerungen als
+Pins. Alles wird mit dem eigenen Schlüssel der Erinnerung auf deinem Gerät verschlüsselt;
 **veyqs Server** erfährt weder den Ort noch die Koordinaten. Das Einzige, was je dein Gerät verlässt, ist —
 *wenn du es einschaltest* — eine nackte Koordinate, direkt an den Kartendienst geschickt, um einen Namen zu holen;
 veyq sieht sie nie.
