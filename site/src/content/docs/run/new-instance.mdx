@@ -1,11 +1,9 @@
 ---
 title: Set up a new instance
-description: Bring up the production recipe or the Helm chart, and create the Server Owner before DNS and TLS exist.
+description: Bring up the production recipe or the Helm chart, pinned to the release you verified.
 sources:
   - docs/decisions/0057-release-identity-and-deployment-recipe.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
-  - docs/decisions/0065-admin-ui-cli-separate-service.md
-  - docs/features/admin/use-cases/uc.admin.admin-channel.md
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -83,97 +81,15 @@ The rest of what is specific to this target is on [Kubernetes](/veyq/run/kuberne
   </TabItem>
 </Tabs>
 
-## Create the Server Owner — before DNS and TLS
+## Then: set it up
 
-**You create the first account on the administration surface, not on the app's domain.** That is the whole
-point of it being a separate container ([ADR 0065](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0065-admin-ui-cli-separate-service.md)):
-the `admin` service reverse-proxies the backend from **its own** origin, so first-run setup works over plain
-`http://localhost` with no DNS record, no certificate, and `VEYQ_DOMAIN` pointing at a name that does not
-resolve yet. Before this, setup lived in the app SPA served at `VEYQ_DOMAIN` — which quietly made a working
-public hostname a precondition for creating the first account.
-
-**And the Server-Owner operations answer nowhere else.** The backend runs a second, internal **admin listener**
-(`8090`, `veyq.admin-channel.port`); setup, tenant administration and the instance reads answer only for a request
-that arrived there from a non-public peer, and the public port 404s them
-([uc.admin.admin-channel](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.admin-channel.md)). So until you have created
-the owner, nobody who finds `VEYQ_DOMAIN` in a certificate log can claim the instance first. The compose file
-points the admin container at that listener and routes nothing else to it; the image does not `EXPOSE` it. **If
-you put your own reverse proxy in front of the app, route the public port `8080` only** — nothing but the admin
-container may ever be pointed at `8090`.
-
-So the order is: bring the stack up, create the owner over the tunnel, and *then* worry about DNS and TLS.
-
-<Tabs syncKey="target">
-  <TabItem label="Docker Compose">
-
-```sh
-docker compose -f infra/docker-compose.prod.yml up -d
-ssh -L 8081:127.0.0.1:8081 you@the-host        # from your laptop; 8081 = ADMIN_PORT
-# then open http://localhost:8081 and create the Server Owner account
-```
-
-  </TabItem>
-  <TabItem label="Kubernetes">
-
-**Setting up a brand-new instance works the same way it does under compose — before DNS and TLS exist.** The
-administration surface gets a `ClusterIP` `Service` and **no** `Ingress` by default; `kubectl port-forward` is
-this target's `127.0.0.1:${ADMIN_PORT}`:
-
-```sh
-kubectl -n veyq port-forward svc/veyq-admin 8081:8080
-# then open http://localhost:8081 and create the Server Owner account
-```
-
-Save the Emergency Kit on that screen. Set `admin.domain` to expose the surface on a hostname of its own
-afterwards — never before the owner exists, for the reason given [on Docker Compose](#on-docker-compose) — or never.
-
-  </TabItem>
-</Tabs>
-
-**Save the Emergency Kit on that screen.** It carries the Secret Key, it is shown once, and there is no
-operator-side recovery — the server holds no key material by construction.
+Bring the stack up, then create the Server Owner over the tunnel or port-forward, connect the object store, and
+only then worry about DNS and TLS: [First-run setup and the admin console](/veyq/run/first-run/).
 
 ## On Docker Compose
 
-**Two exposure modes, one image, chosen by one variable.**
-
-- **`ADMIN_DOMAIN` unset — the default, and the one to keep.** No Traefik router exists for the admin
-  container at all; it is published on `127.0.0.1:${ADMIN_PORT}` of the host only, so nothing on the internet
-  can reach the highest-privilege surface this instance serves. Reach it with the SSH tunnel above, or
-  `docker compose exec`.
-- **`ADMIN_DOMAIN` set** — it gets its own hostname, router and certificate. The app renders that router into
-  the routing file below, from configuration and never from the tenant table: the admin surface is 1:1 with the
-  instance ([ADR 0065](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0065-admin-ui-cli-separate-service.md)). Point the name's DNS
-  at this host **first**, or the ACME order fails against the rate limit. Choose a name you publish nowhere:
-  the app never links to this surface, and an unlisted name is one more layer between a stranger and it.
-  **Set it only after the Server Owner exists.** This mode puts the admin container — and with it the admin
-  listener — on the internet, so before setup it reopens exactly the first-caller window the listener closes on
-  the public origin (uc.admin.admin-channel A5). Nothing enforces the order; it is yours.
-
-The user-facing app never links to the admin surface and carries no hint that it exists. The backend is handed
-`ADMIN_DOMAIN` only to render its router, and no client ever reads it back.
-
-**The same container also holds `veyq-admin`, a CLI for the same operations** ([ADR
-0065](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0065-admin-ui-cli-separate-service.md)) — tenant create/list/resend/reassign/
-change-domain/revoke/suspend/reactivate/quota, plus `release`. It is an HTTP client of the same Admin API the UI
-calls, so it needs no route and no exposed port at all:
-
-```sh
-read -rs VEYQ_ADMIN_PASSWORD && export VEYQ_ADMIN_PASSWORD
-docker compose exec \
-  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
-  admin veyq-admin tenant list
-```
-
-Pass the credential **on the invocation**, as above, rather than putting it in `infra/.env`: it is the Server
-Owner's own password, and the CLI signs in fresh on every call and writes nothing to disk, so there is no
-reason for it to sit in a file between calls. Pass it **by name**: a bare `-e VEYQ_ADMIN_PASSWORD` copies the
-value from your shell into the container, whereas `-e VEYQ_ADMIN_PASSWORD="$VEYQ_ADMIN_PASSWORD"` expands it
-into `docker compose`'s own argv, where `ps` shows it to every user on the host for as long as the call runs —
-the rule `scripts/instance_backup.py` follows for its credentials too. Each call therefore pays one Argon2id derivation (~1–3s,
-measured) before it does anything — the accepted price of never holding a session that outlives the process.
-First-run **setup** is deliberately not a command: it mints key material and shows the Emergency Kit once, so
-it stays on the screen above, where a person can actually save the kit.
+The admin surface's two exposure modes and the `veyq-admin` CLI are on
+[First-run setup and the admin console](/veyq/run/first-run/).
 
 **TLS is a precondition, not a preference.** `veyq.session.cookie.secure=true` is the shipped default, so over
 plain HTTP the refresh cookie is set and never sent back and **Stay signed in on this device** breaks silently; and every invitation

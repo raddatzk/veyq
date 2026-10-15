@@ -76,3 +76,5 @@ Garage, so using one means editing the compose file, and under Helm it is not po
   more to offer than tenants, and only tenants need a store); a backup tool that asks the running app for presigned
   URLs (the capture is cold, so no app is running to sign); an admin endpoint that hands out store credentials
   (a surface whose only job is to leak a secret).
+
+For Server Owners, on the docs site: [First-run setup and the admin console](../../site/src/content/docs/run/first-run.mdx).

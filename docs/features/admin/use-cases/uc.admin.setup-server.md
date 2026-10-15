@@ -121,3 +121,4 @@ Account existiert, schließt sich die Setup-Seite endgültig.
 - Related use-cases: [admin-channel](uc.admin.admin-channel.md) — the property that keeps this anonymous
   operation off the public origin, so "first caller after `up -d`" is never a stranger; [account login](../../account/use-cases/uc.account.login.md),
   [create-tenant](uc.admin.create-tenant.md)
+- Run area of the docs site: [First-run setup and the admin console](../../../../site/src/content/docs/run/first-run.mdx)

@@ -102,3 +102,4 @@ verwalten.
 - Decisions: [ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md) (the mechanism, the rejected
   alternatives, the residuals), [ADR 0008](../../../decisions/0008-centralized-http-auth.md) (why the marker is not
   authorization in the contract)
+- Run area of the docs site: [First-run setup and the admin console](../../../../site/src/content/docs/run/first-run.mdx)

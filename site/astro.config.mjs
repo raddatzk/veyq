@@ -104,6 +104,7 @@ export default defineConfig({
             'run/plan',
             'run/verify-a-release',
             'run/new-instance',
+            'run/first-run',
             'run/kubernetes',
             'run/upgrade',
             'run/backup-and-restore',

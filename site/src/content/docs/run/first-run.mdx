@@ -1,0 +1,189 @@
+---
+title: First-run setup and the admin console
+description: Create the Server Owner and save its Emergency Kit, connect the object store, then run the instance from the admin console or the veyq-admin CLI.
+sources:
+  - docs/features/admin/use-cases/uc.admin.setup-server.md
+  - docs/features/admin/use-cases/uc.admin.admin-channel.md
+  - docs/features/admin/use-cases/uc.admin.configure-object-store.md
+  - docs/decisions/0065-admin-ui-cli-separate-service.md
+  - docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Everything a Server Owner does happens on the **admin surface**: a separate container with its own console and
+its own command line, `veyq-admin`
+([ADR 0065](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0065-admin-ui-cli-separate-service.md)). It is
+reachable only from the host by default, so you can set up an instance before it has DNS or a certificate, and
+nobody who finds its domain can claim it first.
+
+:::note[How far this is proven]
+This page describes the console and the CLI as their code and tests define them (`admin-web/src/views`,
+`admin-web/src/cli`). The labels below are the console's own. It was not exercised on a running instance while this
+page was written.
+:::
+
+## Reach the console
+
+The application answers Server-Owner operations (setup, tenants, the instance's settings) only on an internal
+listener, port 8090, and only to a peer that is not on the public internet; the public port answers them with `404`
+([uc.admin.admin-channel](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.admin-channel.md)).
+The admin container is the one thing pointed at that listener. Reach the container itself:
+
+<Tabs syncKey="target">
+  <TabItem label="Docker Compose">
+
+The admin container is published on `127.0.0.1:${ADMIN_PORT}` (8081 by default) of the host only. From your laptop:
+
+```sh
+ssh -L 8081:127.0.0.1:8081 you@the-host
+```
+
+Then open `http://localhost:8081`.
+
+  </TabItem>
+  <TabItem label="Kubernetes">
+
+The admin surface has a `ClusterIP` Service and no Ingress by default:
+
+```sh
+kubectl -n veyq port-forward svc/veyq-admin 8081:8080
+```
+
+Then open `http://localhost:8081`.
+
+  </TabItem>
+</Tabs>
+
+**Exposing it on a domain of its own** (`ADMIN_DOMAIN` / `admin.domain`) is possible and optional. It gives the
+console its own hostname and certificate, and it puts the admin listener on the internet with it. So set it only
+**after** the Server Owner exists, point its DNS at the instance first, and choose a name you publish nowhere: the
+app never links to the admin surface and carries no hint that it exists. Nothing enforces the order; it is yours.
+
+If you put a proxy of your own in front of the application, route only its public port, 8080. Nothing but the admin
+container may ever be pointed at 8090 ([Hardening](/veyq/run/hardening/)).
+
+## Create the Server Owner
+
+On a fresh instance the console opens on **Set up this instance**
+([uc.admin.setup-server](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.setup-server.md)).
+
+1. Enter an **Email** and a **Password** of at least 10 characters. When you leave the password field, the first 5
+   characters of a hash of it go from your browser to Have I Been Pwned; a hit asks you to choose another or tick
+   **Use it anyway**. If the check cannot run, setup goes ahead.
+2. **Confirm.** Your browser generates every key of the account — the server only ever sees ciphertext — and the
+   account is created. From this moment the instance is set up: the setup screen does not open again.
+3. **Save your Emergency Kit.** **Download Emergency Kit (PDF)**, tick **I have saved my Emergency Kit somewhere
+   safe.**, then **Continue to sign in**. The kit holds your email and your **Secret Key** (and a QR code of both);
+   it does not hold your password.
+4. **Sign in** with your email and password.
+
+:::caution[The Emergency Kit is shown once]
+The account exists as soon as you confirm, before the kit screen. Download the kit there and keep it: it carries
+the Secret Key, the server holds no key material, and there is no operator-side recovery. If the screen closes
+before you saved it, the kit cannot be shown again.
+:::
+
+## Connect the object store
+
+Media are stored in an S3-compatible object store, and the store is a setting of the console, not of the
+environment ([ADR 0089](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
+**A tenant cannot be created until a store is set and has passed its check.** Open **Server → Object store**:
+
+1. Choose the **Store**:
+   - **Use the bundled store** — the Garage the recipe brings (offered when the deployment provides it). There is
+     nothing to enter.
+   - **S3-compatible store** — one you run or rent: **Endpoint**, **Public endpoint** (only if browsers reach the
+     store at another address than the server does), **Bucket** (it must exist already: veyq never creates a bucket
+     on a store you brought), **Region**, **Access key ID**, **Secret key**.
+   - **Garage** — a Garage of your own: the same fields plus **Garage admin endpoint** and **Garage admin token**;
+     veyq creates the bucket and sets the store up.
+2. **Save.** The setting applies at once, without a restart. The secret key and admin token are sealed on the server
+   under its config-secret key and never shown again; keep them in your password manager, because a backup run and a
+   lost config-secret key both ask for them again.
+3. **Check store.** The check runs in order and stops at the first failure: **Credentials can be opened**, **Store
+   set up** (Garage only), **Bucket exists**, **Upload a test object**, **Read it back**, **Browser access (CORS)**
+   (skipped where the store is served from the instance's own origin). It changes no store configuration; its test
+   object lives under `veyq-check/` and is overwritten by every check.
+
+Once media are stored, the store's type, endpoint and bucket are fixed; credentials and the public endpoint can
+still change.
+
+## The console
+
+The console has two sections: **Tenants** and **Server**.
+
+### Tenants
+
+The list shows each tenant with its storage in use and its quota, for example *2.1 GB of 10 GB* or *2.1 GB, no
+quota*.
+
+- **Create tenant** — **Tenant name**, **Domain** (the web address the tenant is reached at), and **Who should own
+  this tenant? (email)**. The tenant's domain must resolve to the instance first
+  ([Plan your instance](/veyq/run/plan/#domains)).
+- **The owner's invitation is yours to pass on.** A new tenant has no email set up until its owner configures it, so
+  the console shows a link (`https://<domain>/tenant/accept#…`) to copy and send them. It is valid for seven days.
+  While the tenant is **Pending**: **Re-issue invite** mints a new link, **Reassign invite** binds it to another
+  email, **Revoke** deletes the pending tenant.
+- **Move this tenant to a different address** — the tenant answers on the new domain and stops answering on the old
+  one at once.
+- **Storage quota (GiB)** — **Save quota** or **Remove quota**. Uploads that would go over it are refused; nothing
+  already stored is removed, and trash counts until it is emptied.
+- **Take offline** / **Bring back online** — see [Moderation](/veyq/run/moderation/).
+
+A tenant's mail settings, terms and per-link upload limit are not here: they belong to the tenant's owner, in the
+app.
+
+### Server
+
+- **Release** — the release this instance runs, the version to name if an update ever has to be undone
+  ([Upgrade](/veyq/run/upgrade/)). A build that was never published says so.
+- **Object store** — the setting and its check, as above. For a Garage store it also shows whether the server has
+  set it up: in progress, ready, or failed (the server log names the failed step).
+- **Config-secret key** — whether the key that seals the server's stored secrets is the one they were sealed with:
+  - **OK** — in place, and the right one (or nothing has been sealed yet).
+  - **ABSENT** — no key is available, or the application cannot read the file. Nothing can be sealed; tenants whose
+    mail needs a password cannot send invitations or password resets.
+  - **MISMATCH** — the key is not the one the secrets were sealed with: lost, replaced or not restored. Content is
+    unaffected; put the original key file back and restart, or re-enter the sealed secrets.
+
+  After a restore or an update, this is the reading that says the key came along
+  ([Backup and restore](/veyq/run/backup-and-restore/)).
+
+## The veyq-admin CLI
+
+The admin container also carries `veyq-admin`, a client of the same operations. It needs no route and no exposed
+port. It signs in fresh on every call with the Server Owner's own credentials and writes nothing to disk; each call
+therefore pays one password derivation (about 1–3 s) first.
+
+```sh
+read -rs VEYQ_ADMIN_PASSWORD && export VEYQ_ADMIN_PASSWORD
+docker compose -f infra/docker-compose.prod.yml exec \
+  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
+  admin veyq-admin tenant list
+```
+
+Pass the password **by name** (`-e VEYQ_ADMIN_PASSWORD`): written as `-e VEYQ_ADMIN_PASSWORD="$VEYQ_ADMIN_PASSWORD"`
+it lands in `docker compose`'s own argument list, where every user on the host can see it while the call runs. On
+Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --`.
+
+| Command | What it does |
+|---|---|
+| `tenant create --name <name> --domain <domain> --owner-email <email>` | Create a pending tenant and print its owner's invitation secret |
+| `tenant list` | List the tenants with their invitation status, storage use and quota |
+| `tenant resend --tenant-id <id>` | Re-mint a pending tenant's invitation |
+| `tenant reassign --tenant-id <id> --owner-email <email>` | Bind a pending tenant's invitation to another email |
+| `tenant change-domain --tenant-id <id> --domain <domain>` | Move a tenant to another domain |
+| `tenant revoke --tenant-id <id>` | Delete a pending tenant |
+| `tenant suspend --tenant-id <id>` / `tenant reactivate --tenant-id <id>` | Take a tenant offline, bring it back |
+| `tenant quota --tenant-id <id> --gib <GiB\|none>` | Set or clear a tenant's storage quota |
+| `release` | Print the running release |
+| `config-secret` | Print the config-secret key's state (`OK`, `ABSENT` or `MISMATCH`); changes nothing |
+| `store show` | Print the store setting, whether a bundled store is offered, and the last check; never a secret |
+| `store set --bundled` | Use the bundled store |
+| `store set --endpoint <url> --bucket <bucket> --region <region> --access-key <id> [--type S3\|GARAGE] [--public-endpoint <url>] [--garage-admin-endpoint <url>]` | Set a store of your own; the secret key comes from `VEYQ_STORE_SECRET_KEY` and the Garage token from `VEYQ_STORE_GARAGE_ADMIN_TOKEN`, never from a flag |
+| `store check` | Run the store's check and print every step; exits `1` if it failed |
+
+Output is JSON on standard output. A failure prints one line, `veyq-admin: <reason>`, to standard error and exits
+`1`. `veyq-admin --help` prints the usage. Setup is deliberately not a command: it creates key material and an
+Emergency Kit, which belong on a screen where a person can save the kit.
