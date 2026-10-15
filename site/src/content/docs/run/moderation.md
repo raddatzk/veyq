@@ -5,6 +5,8 @@ sources:
   - docs/features/admin/use-cases/uc.admin.suspend-tenant.md
   - docs/decisions/0066-tenant-suspension.md
   - docs/crosscutting/security-model.md
+  - docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md
+  - docs/decisions/0032-capability-discovery-version-gating.md
 ---
 
 There is no central moderation service, because there is no central service. And an instance's operator cannot
@@ -54,13 +56,27 @@ You still cannot read anything private, which is the design working as intended.
 - **Revoking a tenant** that was created but never accepted (a pending one) deletes it. There is no operation that
   deletes an active tenant.
 
+## The register behind the switches
+
+Every instance advertises the features it serves as a list of ids, before anyone signs in. Seven are built, all under
+`core`: public share links with their two roles (view and add, drop box), group spaces, remembering a device with
+and without a password, and linking a device. The ids form a tree, and a child counts as off when its own id or its
+parent's is, which the server works out, never the app. An app hides a feature whose id is missing, and the server
+refuses the action itself with `422 capability_disabled`, so an app that ignores the list still cannot use it. A
+group space or a link that already exists stays usable when its switch goes off. Switching a share role off is
+meant to stop its existing links too, which is not built yet.
+
+**What you cannot do yet:** turn any of them off. No setting, console screen or command exists for it, so an
+instance advertises all seven. The tests prove the refusals by handing the server a switched-off set. The full design,
+with the planned and idea entries, is on the [Security roadmap](/veyq/security/roadmap/#feature-switches).
+
 ## Not built
 
 - **Report intake.** There is no form or address that collects abuse reports; a report reaches you however your
   members reach you.
 - **An operator action on a single share.**
-- **Switching a feature off for the whole instance** (for example public links). The register of switches is
-  decided and not built.
+- **Switching a feature off for the whole instance** (for example public links). The register behind the switches
+  is built, the switch is not: see the section below.
 
 These are on the security model's target; see the [Security roadmap](/veyq/security/roadmap/).
 

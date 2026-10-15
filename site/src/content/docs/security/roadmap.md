@@ -8,6 +8,8 @@ sources:
   - docs/decisions/0037-password-protected-shares.md
   - docs/features/spaces/use-cases/uc.spaces.require-verified-identities.md
   - docs/features/account/enablers/en.account.key-model.md
+  - docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md
+  - docs/decisions/0032-capability-discovery-version-gating.md
 ---
 
 This is the one page of the Security area that describes things veyq does **not** do yet. Every item is named in a
@@ -31,6 +33,7 @@ this page says so.
 | [Hybrid ML-DSA signatures](#hybrid-ml-dsa-signatures) | signatures are classical (Ed25519) | strategy only | ADR 0017 |
 | [A client served by a trusted third party](#a-client-served-by-a-trusted-third-party) | operator-served web is passive-operator only | trust tier defined; needs a central origin | ADR 0026 |
 | [Cryptographic share password](#cryptographic-share-password) | a share password does not hold against a malicious operator | shape sketched as a rejected-for-now alternative | ADR 0037 |
+| [Feature switches](#feature-switches) | an operator or tenant owner cannot turn a feature off; the register is seven entries and no switch | designed as a tree; the entries below are marked built, planned or idea | ADR 0088, ADR 0032 |
 
 ## Key Transparency
 
@@ -169,3 +172,37 @@ edits, nested wraps and a migration.
 
 **Decided in:** [ADR 0037](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0037-password-protected-shares.md)
 (§ Context, § Operator-blindness & threat model, § Alternatives considered (A)).
+
+## Feature switches
+
+**Today.** An instance advertises what it serves as a list of ids, and the apps hide a feature whose id is missing. The
+server refuses the matching action with `422 capability_disabled`. Seven entries exist, all under `core`, and each
+gate is tested. **Nothing can switch one off in a running instance**: there is no operator switch, no tenant-owner
+switch and no settings screen for either, so every instance advertises every entry. The
+[Moderation](/veyq/run/moderation/#the-register-behind-the-switches) page says what the built part does.
+
+**The gap.** A Server Owner who wants no public links, or a tenant owner who does not want password-less devices in
+their tenant, has no way to say so.
+
+**Design state.** Decided in ADR 0088 and not built. The ids are a tree, a child is off when its own id or any parent's
+is, and a tenant owner can only narrow what the operator allows. A switch exists only where the server can see what it
+refuses and a rule says what happens to what already exists: share switches act at once, on existing links too, and
+a feature switch refuses only what is new. The Server Owner would switch in the admin console and its CLI, a tenant
+owner in the tenant settings, and each entry would describe itself in English and German. Declaring switches in
+the deployment files is a later topic. Share switches reaching existing links, requirements such as a password on every
+link, and the served text per entry are each part of this and not built either.
+
+| Entry | State | What the server sees |
+|---|---|---|
+| `core.public-shares`, with `.contribute` and `.drop-box` | built | a share's role: READ, READ_WRITE, WRITE_ONLY |
+| `core.group-space` | built | creating a group space |
+| `core.remember-device`, with `.passwordless` | built | a device wrap, or a device-key wrap |
+| `core.device-linking` | built | the pairing endpoints |
+| `core.personal-space`, `core.member-invites`, `core.breached-password` | planned | a scope kind; the invite endpoint; a call to an external service |
+| `memories.chapters`, `.places`, `.map`, `.download-originals` and the application's own share entries | planned | a node kind; external services; a blob role |
+| `depot.*` share entries | planned | the application's node kind and blob role |
+| `memories.journal`, `memories.gpx` | planned | a node kind or blob role the server would then see |
+| `core.self-registration`, `memories.faces` | idea | a new endpoint; a role for a face index |
+
+Export and import, favorites, trash, cover, participants and the viewer are deliberately not in the register: no
+switch could be enforced for them, or switching them off would break the app.

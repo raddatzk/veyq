@@ -190,3 +190,7 @@ Two rules follow, so the catalog stays honest instead of being invented in paral
   question directly and the `major` gate covers breaking removals.
 - **Client-only feature flags (build-time).** Rejected — can't reflect a *specific instance's* operator choices;
   discovery must be **server-advertised** to be per-instance.
+
+## Related
+
+- On the docs site: [Moderation](../../site/src/content/docs/run/moderation.md) (what the built register does) and the [Security roadmap](../../site/src/content/docs/security/roadmap.md) (the designed switches).

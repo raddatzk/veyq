@@ -302,7 +302,7 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   doc fault (D5). #442 and #443 are already open, and #443's row was brought in line with D3 at refine. ·
   **Done when:** `python3 scripts/validate_coverage.py` and `python3 scripts/validate_capabilities.py` green, and the
   literal-id angle over `docs/` returns nothing.
-- [ ] **5 site docs — the register on the published site** (owner, 2026-10-15, via the docs-site coordinator: "soll die
+- [x] **5 site docs — the register on the published site** (owner, 2026-10-15, via the docs-site coordinator: "soll die
   andere Session mit in die Doku schreiben" — the register documentation belongs to this CR, not to a separate docs
   pass). Site rules (ADR 0087): no page claims more than is built; the designed-but-unbuilt part goes on
   `site/src/content/docs/security/roadmap.md` (EN only), what is built goes where it binds.

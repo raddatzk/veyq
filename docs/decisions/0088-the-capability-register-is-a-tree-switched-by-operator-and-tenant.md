@@ -173,3 +173,7 @@ both off a place still works, named by hand. The user's own consent to the two
   (ADR 0086), and a tenant-wide policy is server-enforced state.
 - **Splitting public shares by risk (read vs. any guest write) instead of by role.** Rejected: the role split
   gives the same "no anonymous uploads" with two switches, and lets an application forbid only its drop box.
+
+## Related
+
+- On the docs site: [Moderation](../../site/src/content/docs/run/moderation.md) (what the built register does) and the [Security roadmap](../../site/src/content/docs/security/roadmap.md) (the designed switches).
