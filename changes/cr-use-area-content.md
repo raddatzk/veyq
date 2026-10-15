@@ -108,15 +108,20 @@ phase closes only after the owner has read its pages in conversation. Done when,
       delete and restore from the trash; select, move with Undo, copy into the same place. Not walked: the group and
       space icon (the same cropper as the profile picture). Found: the move dialog says "1 Einträge verschieben"; a
       folder row's ⋯ menu offers no move, rename or delete.
-- [ ] 5 Applications and Memories — an *Applications* overview page (what an application is: one kind of sealed
+- [x] 5 Applications and Memories — an *Applications* overview page (what an application is: one kind of sealed
       thing in your spaces; Memories and Depot side by side; short, no jargon), then the *Memories* group: a landing page
       that says what Memories is for (photos, videos and journals that belong to an occasion) and links one page per
       function, never one long page: create a Memory and chapters; add photos; gallery; date and location (with the map consent);
       who was there; cover; marked photos; contributions; the photo trash.
       *Built, waiting for the owner's read:* `applications/` (overview), `memories/` (landing + ten pages, date and
-      location as two pages); steps written from `web/src/i18n/index.ts` and the Memory components, **not yet
-      checked live in the web client**. Screenshot placeholders are in; `npm run shots` lists them.
-- [ ] 6 Depot — a *Depot* landing page that says what Depot is for (documents, PDFs, any file you want to keep;
+      location as two pages); steps written from `web/src/i18n/index.ts` and the Memory components. Read by the owner
+      and walked live (2026-10-15): create with I was there, upload (an EXIF photo set the date by itself), the large
+      view and its Details, cover from a photo, mark and the filter, the date dialog, the maps consent, the
+      participant picker, a chapter, contributions, the photo trash. Corrected: Determine location automatically
+      appears only once maps are enabled; Details shows coordinates until then; your own contributions group shows
+      your name. Not walked: the maps-enabled path (it calls the third-party map and geocoder), video, slideshow,
+      sub-buckets, link contributors.
+- [x] 6 Depot — a *Depot* landing page that says what Depot is for (documents, PDFs, any file you want to keep;
       the goal, not the feature list), then one page per function: upload files and folders, view a file, replace,
       rename, delete, move and copy, select several, covers and views, drop boxes. The single `depot.md` is split
       along its sections and goes away; an unexplained aside (the copy-of-a-shown-part parenthesis) is written out
@@ -125,7 +130,11 @@ phase closes only after the owner has read its pages in conversation. Done when,
       pages, move/copy/select three, covers and views two, plus drop boxes, which the old page lacked); the old
       `depot.md` is gone and its links follow. (Phase 4 moved the five organising pages to `spaces/`.) Written from `web/src/i18n/index.ts`, the old page and the use-cases,
       **not yet checked live in the web client**. `validate_guard_gaps.py` forged `account-keys-and-recovery.md`,
-      not `depot.md`, so it needed no re-anchoring.
+      not `depot.md`, so it needed no re-anchoring. Read by the owner and walked live (2026-10-15): upload, the text
+      file's page, rename (the selection stops before the ending), replace with its no-history warning, delete and
+      restore, a drop box with a link, a guest's drop and the member's view of it. Corrected: the trash is never
+      emptied by hand, rename saves with Save, the guest continues with Continue and starts over with Not you?. Not
+      walked: folder upload, the PDF/video viewer, a password PDF, switching a link off and on.
 - [ ] 7 Sharing and For space owners — share with people who have no account (roles, note, password, expiry,
       renew, revoke); turn off every link in a space; what a guest sees. For owners: invite and manage members,
       remove a member, terms, email settings, storage and the upload-link limit.
