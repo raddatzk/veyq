@@ -1,6 +1,8 @@
 ---
 title: "Running your own instance"
 sources:
+  - docs/decisions/0026-client-trust-tiers.md
+  - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
   - docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md
   - docs/crosscutting/security-model.md
@@ -11,6 +13,39 @@ site is written for the people using the app, and is available in German too.
 
 If you are here to find out whether your memories are safe, you want
 [Is my data safe?](/veyq/privacy/is-my-data-safe/) instead.
+
+## What self-hosting means
+
+Running an instance yourself is veyq's default, and it is also its strongest security posture. Content is encrypted
+and decrypted in the users' browsers, and the server never holds a key that opens it. Whoever runs the server, you
+included, sees only ciphertext and operational metadata: who belongs to which tenant and space, sizes, times and ids,
+never a photo, a name or a note ([What the server sees](/veyq/security/what-the-server-sees/)).
+
+Who serves the web client decides how far that holds
+([ADR 0026](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0026-client-trust-tiers.md)):
+
+- **On your own instance** the operator is you, so nobody can serve you tampered code. This is the case veyq is built
+  for.
+- **For the people you host,** the instance is someone else's, and you serve their web client. Against an operator
+  who only reads the database and logs they are protected; against one who changes the code you serve them, they are
+  not. veyq says so in the client and never claims otherwise.
+
+The [Security](/veyq/security/start-here/) area explains the model, its threat model and its known limits in full.
+
+## What runs
+
+| | Docker Compose | Kubernetes (Helm) |
+|---|---|---|
+| **Application** | `app`: serves the web client and the API; reaches the database and the store; a second, internal listener (8090) answers only Server-Owner operations | Deployment `veyq-app`, one replica, Service `veyq-app` (8080) and Service `veyq-app-admin` (8090) |
+| **Admin surface** | `admin`: the Server-Owner console and the `veyq-admin` CLI, published on `127.0.0.1` only | Deployment `veyq-admin`, a ClusterIP Service, no Ingress unless you set `admin.domain` |
+| **Database** | `mariadb`, on a network with no route out | StatefulSet `veyq-mariadb`, or your own database |
+| **Object store** | `garage` (Garage, S3-compatible); browsers upload and download straight to it through presigned links | StatefulSet `veyq-garage`, with an Ingress on its own host |
+| **Proxy and TLS** | `traefik`, the only container with public ports (80, 443); it routes what the application writes into its one routing file | Your ingress controller; the application writes one Ingress per tenant into its own namespace |
+| **One-shot** | `volume-ownership` hands the Garage and certificate volumes to their non-root writers and exits | — |
+
+The application provisions the store itself on first start (bucket, access key, layout, CORS), and routes every
+tenant's domain without a restart. There is no Docker socket mounted anywhere and no cluster-wide permission: on
+Kubernetes the application may manage Ingresses in its own namespace and nothing else.
 
 ## The honest state, first
 
@@ -81,6 +116,7 @@ every [upgrade](/veyq/run/upgrade/).
 
 ## The procedures
 
+- [Plan your instance](/veyq/run/plan/) — Compose or Kubernetes, sizing, storage growth and quotas, the domains.
 - [Verify a release](/veyq/run/verify-a-release/) — before anything runs it: the signatures, and the digests you
   deploy.
 - [Set up a new instance](/veyq/run/new-instance/) — the production compose recipe or the Helm chart, and the Server
@@ -88,19 +124,11 @@ every [upgrade](/veyq/run/upgrade/).
 - [Kubernetes](/veyq/run/kubernetes/) — what is specific to the Helm chart.
 - [Upgrade](/veyq/run/upgrade/) — with the backup as the way back.
 - [Backup and restore](/veyq/run/backup-and-restore/) — the three legs, captured cold and checked.
+- [Hardening](/veyq/run/hardening/) — what is hardened by default, and what is yours to keep that way.
+- [Moderation](/veyq/run/moderation/) — a reported public share, and taking a tenant offline.
 
 ## Further reading
 
 - **[`README.md`](https://github.com/raddatzk/veyq/blob/main/README.md)** — repository shape and what is built.
 - **[Security](/veyq/security/start-here/)** — what the operator can and cannot see, and
   [how to report a vulnerability](/veyq/security/reporting/).
-
-## Moderation
-
-There is no central moderation service, because there is no central service. If someone reports an abusive
-public share on your instance, the report includes the link — and therefore the key — so you can open it and
-judge it. veyq ships no moderation tooling today, and you cannot switch off a single share — only its creator
-can revoke it. What you have is the whole tenant: **Take offline** in the administration surface (or
-`tenant suspend` in its CLI) makes the tenant unreachable for everyone, its members and every share included,
-until you bring it back; nothing inside is changed or deleted. You still cannot read anything private, which is
-the design working as intended.

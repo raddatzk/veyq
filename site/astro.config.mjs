@@ -66,11 +66,14 @@ export default defineConfig({
           translations: { de: 'Betreiben' },
           items: [
             { slug: 'run', label: 'Overview', translations: { de: 'Überblick' } },
+            'run/plan',
             'run/verify-a-release',
             'run/new-instance',
             'run/kubernetes',
             'run/upgrade',
             'run/backup-and-restore',
+            'run/hardening',
+            'run/moderation',
           ],
         },
         {

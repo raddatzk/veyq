@@ -134,3 +134,4 @@ sign-in included. Neither needs any session state.**
   backs).
 - [ADR 0004](0004-session-tokens.md) (the account-global session-family model that ruled out a session-revoke
   here — sessions carry no `tenantId`).
+- Run area of the docs site: [Moderation](../../site/src/content/docs/run/moderation.md)

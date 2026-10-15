@@ -122,3 +122,4 @@ Forces:
   controller, and what a CNI without NetworkPolicy enforcement leaves open).
 - [ADR 0065](0065-admin-ui-cli-separate-service.md) (the admin container, a second proxy in front of the app).
 - [cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md) (the forwarded-address trust this narrows).
+- Run area of the docs site: [Hardening](../../site/src/content/docs/run/hardening.md)

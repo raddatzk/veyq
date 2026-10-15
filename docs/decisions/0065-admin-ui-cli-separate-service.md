@@ -268,3 +268,4 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
   single-homed).
 - [ADR 0063](0063-database-driven-tenant-ingress.md), [ADR 0064](0064-kubernetes-helm-deployment-target.md)
   (the two deployment targets this container ships on).
+- Run area of the docs site: [Hardening](../../site/src/content/docs/run/hardening.md)

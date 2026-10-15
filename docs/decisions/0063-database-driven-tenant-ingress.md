@@ -164,3 +164,4 @@ startup regenerate.
 - [ADR 0066](0066-tenant-suspension.md) (the "deactivate" trigger this projector reacts to — a request-level
   lockout, of which routing withdrawal is only a secondary effect).
 - [scopes-and-tenancy.md](../crosscutting/scopes-and-tenancy.md) (tenant carries a domain).
+- Run area of the docs site: [Plan your instance](../../site/src/content/docs/run/plan.md)

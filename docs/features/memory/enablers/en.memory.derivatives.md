@@ -144,3 +144,4 @@ video.
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (deferred
   thumbnails/previews — **this enabler is where they land**),
   [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_blob` under `K_mem`)
+- Run area of the docs site: [Plan your instance](../../../../site/src/content/docs/run/plan.md)

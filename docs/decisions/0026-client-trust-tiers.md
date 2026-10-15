@@ -85,3 +85,5 @@ SaaS-era build.
   moves the other.** This is the tempting wrong turn here, so it is recorded rather than left to be re-proposed.
 
 Explained for security researchers on the docs site: [Start here](../../site/src/content/docs/security/start-here.md), [Threat model](../../site/src/content/docs/security/threat-model.md), [Roadmap](../../site/src/content/docs/security/roadmap.md).
+
+For Server Owners, on the docs site: [Running your own instance](../../site/src/content/docs/run/index.md).

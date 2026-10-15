@@ -243,3 +243,4 @@ exhausted share does not spend another's budget; and the identity budget is sepa
   `backend/core/…/core/sharing/{ShareRateLimiter,SharePasswordAttemptLimiter}.kt`,
   `backend/core/…/core/admin/tenant/InviteMailRateLimiter.kt`,
   `backend/core/…/core/account/{recovery/RecoveryRateLimiter,email/EmailConfirmationRateLimiter}.kt`
+- Run area of the docs site: [Hardening](../../site/src/content/docs/run/hardening.md)

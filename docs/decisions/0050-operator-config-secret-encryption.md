@@ -91,3 +91,5 @@ Key-Encryption-Key the server manages as a file.** Concretely:
   secret protected, not a multi-operator key hierarchy. This ADR is deliberately smaller and cited from #43.
 - **Rejected — keeping the password in env, keyed per tenant.** Cannot self-service (a tenant can't edit env at
   runtime) and does not scale to many tenants; the whole point of per-tenant settings is runtime configuration.
+
+For Server Owners, on the docs site: [Hardening](../../site/src/content/docs/run/hardening.md).

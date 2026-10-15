@@ -234,3 +234,4 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
 - The Run area of the docs site: [Set up a new instance](../../site/src/content/docs/run/new-instance.mdx) (the
   `helm install` beside the compose one) and [Kubernetes](../../site/src/content/docs/run/kubernetes.md).
 - [inbox #26](../inbox.md) (the reversed scope cut).
+- Run area of the docs site: [Running your own instance](../../site/src/content/docs/run/index.md), [Plan your instance](../../site/src/content/docs/run/plan.md)

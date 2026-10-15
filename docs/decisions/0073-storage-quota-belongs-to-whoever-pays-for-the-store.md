@@ -152,3 +152,4 @@ Who pays for the store differs by deployment. Today there is one store connectio
   the per-link limit bounds.
 - Use-cases: [uc.sharing.share-link-storage-limit](../features/sharing/use-cases/uc.sharing.share-link-storage-limit.md),
   [uc.admin.tenant-storage-quota](../features/admin/use-cases/uc.admin.tenant-storage-quota.md).
+- Run area of the docs site: [Plan your instance](../../site/src/content/docs/run/plan.md)

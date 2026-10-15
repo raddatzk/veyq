@@ -230,3 +230,5 @@ every header of the admin origin.
   `/setup` keeps only `Cache-Control` while the asset keeps all five — the merge is what carries them.
 - **Not verified:** that a browser records the admin host as an HSTS host. That needs a trusted certificate on
   a real admin domain, and a browser ignores STS on a certificate error.
+
+For Server Owners, on the docs site: [Hardening](../../site/src/content/docs/run/hardening.md).

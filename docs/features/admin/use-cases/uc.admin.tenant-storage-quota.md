@@ -76,3 +76,4 @@ werden nur Größen, die der Server ohnehin sieht — nie, was auf deinen Fotos 
 - **Decisions:** [ADR 0073](../../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md),
   [ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md) (the Server-Owner surface),
   [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) (one store connection today).
+- Run area of the docs site: [Plan your instance](../../../../site/src/content/docs/run/plan.md)
