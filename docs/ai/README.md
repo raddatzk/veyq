@@ -265,7 +265,10 @@ A refined CR nails **decisions, not keystrokes**:
   carries) comes from the caller, never from the data. A CR that edits a pre-release baseline says there are **no existing rows** (every dev
   database is recreated) rather than designing for legacy rows that cannot exist (cr-file-uploader). A CR that changes an
   identifier greps the client's local records keyed by it too (cr-change-email found the remember-me record and the
-  session vault only by following the address end to end).
+  session vault only by following the address end to end). A proof that seems to need a root Linux host (a file's owner in a
+  Docker volume) usually needs only a root container that mounts the volume (cr-restore-places-the-key-as-the-runtime-user
+  waited two weeks on the owner for a run an agent then did in an hour); and an expected log line in a CR is measured, not
+  remembered.
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest
   names — an attacker who, with that same link and dump, decrypts every photo of the Memory. The owner took the
