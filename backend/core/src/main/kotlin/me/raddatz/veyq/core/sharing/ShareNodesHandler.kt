@@ -38,7 +38,9 @@ sealed interface CreateShareNodeOutcome {
      *  stored (ADR 0080 Decision 6, the rule a member's placement off the root follows). */
     object StaleEpoch : CreateShareNodeOutcome, HttpFailure by Failures.staleEpoch
     /** Creating the kind needs a capability that is switched off ([me.raddatz.veyq.core.node.NodeKindRules.capabilityToCreate],
-     *  asked by `createInScope` for a guest as for a member). Unreachable today: no kind a guest may create names one. */
+     *  asked by `createInScope` for a guest as for a member). Unreachable today: no kind a guest may create names one.
+     *  So `createShareNode`'s contract names no `422 capability_disabled` yet: it joins the contract, with a test that
+     *  reaches it, in the first change that lets a guest create a kind whose rule names a capability. */
     object CapabilityDisabled : CreateShareNodeOutcome, HttpFailure by Failures.capabilityDisabled
 }
 
