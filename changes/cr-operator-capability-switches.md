@@ -252,7 +252,35 @@ deleting them. Inbox #443 asked for this, and **it must land before V1**.
     commands, its locale choice and its exit codes.
   - **Done when:** `npm run check` in `admin-web/` is green.
 - [ ] **4 web: the withheld wrap (D6).**
-  - The measurement first, written here.
+  - **Measured (2026-10-15, before any change; the six suites on it green, 54 tests):**
+    - **The unlock modules already keep the local key on a missing wrap.** `unlockWithDevice`
+      (`web/src/features/account/unlock/unlock.ts:177`) looks its DEVICE wrap up by the trust record's `wrapId` and
+      at `:190` returns `false` without touching the record (`unlock.device.test.ts` "falls back … without
+      destroying the local key"). `restoreDeviceKey` (`rememberMe/deviceKeyWrap.ts:131`) does the same for
+      DEVICE_KEY at `:139`, and `restoreVaultFromCache` (`unlock.ts:154`, `:160`) then lands on the sign-in screen
+      (`deviceKeyWrap.test.ts` "restore returns null (keeps the local key) …"). No error is shown on either path.
+      `uc.account.trust-device` E1 says this, not "cleans up locally": only an explicit untrust or a re-trust
+      cleans up.
+    - **The fallback is password and Secret Key for both tiers.** A trusted device's sign-in hides the Secret-Key
+      field (`LoginView.vue:107`, from the local trust record alone), and when `unlockWithDevice` answers `false`
+      it reveals the field without an error (`:176-181`), so the member submits a second time. A remembered device
+      has no trust record (one wrap per device: `enrolConvenienceWrap` drops the DEVICE wrap before it enrols
+      DEVICE_KEY, `:135`, and the reverse at `:141`), so its field shows from the start. Both then go through
+      `unlockMasterKey` (`unlock.ts:104`), the PASSWORD floor.
+    - **The defect is the enrolment after that fallback, not the fallback.** `submit` runs
+      `enrolConvenienceWrap()` after every floor unlock (`LoginView.vue:185`). With
+      `core.remember-device.passwordless` off and `core.remember-device` on, the toggle is hidden, so `remember` is
+      `false` and `:140-142` run: `clearDeviceKey()` deletes the withheld DEVICE_KEY wrap on the server
+      (`deleteWrap` stays allowed while the switch is off, `KeyMaterialHandler.capabilityFor`'s KDoc) and drops the
+      local remember-me key, then `trustThisDevice` enrols a DEVICE wrap. Switching back on then restores nothing:
+      the wrap and the key are gone. With `core.remember-device` off, `deviceWrapSupported` is false and nothing is
+      replaced, so the DEVICE case keeps its record and only pays the second submit.
+    - **Revoke, untrust and a withheld wrap.** An explicit forget on this device (`DeviceTrustControl.vue:65-66`,
+      `signOut.ts:31`) deletes the local record itself, so the client never has to infer it. A wrap revoked from
+      another device (ADR 0058) and a withheld one look the same in the key material: both are absent, nothing
+      says why. The pre-auth capability manifest is the one thing that tells them apart, and only one way: with
+      the switch on, an absent wrap was removed; with it off, it may be withheld or also removed. Keeping the
+      local key in that second case is harmless (it opens nothing without its wrap), so the switch decides.
   - Then the fallback, with its tests: `DEVICE` withheld → password + Secret Key; `DEVICE_KEY` withheld →
     password; local key kept; switched on again → the device unlocks as before.
   - **Done when:** `npm run check` in `web/` is green.
