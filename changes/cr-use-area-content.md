@@ -64,6 +64,12 @@ phase closes only after the owner has read its pages in conversation. Done when,
       or absorbed in phases 2–7) without breaking a link (the in-app link in `web/src/views/ShareView.vue` and
       the docs' back-links follow). Bites: a placeholder with no image renders its box and the build stays green;
       an image dropped in renders instead; the shot list names both.
+      *Built, waiting for the owner's read:* a section is a folder (`getting-started/`, `account/`, `spaces/`,
+      `memories/`, `depot/`, `sharing/`, `space-owners/`, `privacy/`, `help/`), so its pages' URLs say the section;
+      `account-keys-and-recovery`, `depot` and `sharing` stay at the root until the phase that splits them
+      (`validate_guard_gaps.py` forges the first at that path — re-anchor it then). A section with no page yet is
+      not in the sidebar. The shot list is `scripts/site_shots.py`; it also reports a German page that places other
+      ids than its English page. No redirects from the old URLs: nothing was published (no remote).
 - [ ] 2 Getting started — what veyq is (spaces, Memories, Depot); accepting an invitation and creating the account
       (there is no self-sign-up: `/tenant/accept`); the Emergency Kit and Secret Key, and why losing both loses
       the data; signing in on a new device (Secret Key by paste, kit upload or QR scan).

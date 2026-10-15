@@ -5,7 +5,7 @@ sources:
   - docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md
 ---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/) und [Teilen](/veyq/de/sharing/). In einer
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/) und [Teilen](/veyq/de/sharing/). In einer
 Erinnerung kannst du festhalten, **wer dabei war** – die Menschen einer Reise, einer Hochzeit, eines Geburtstags – und
 eine Person öffnen, um alle Erinnerungen zu sehen, an denen sie beteiligt war.
 

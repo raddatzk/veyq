@@ -4,7 +4,7 @@ sources:
   - docs/crosscutting/security-model.md
 ---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/). Kurz gesagt:
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/). Kurz gesagt:
 **deine Erinnerungen werden schon heute mit einem Schutz verschlossen, der auch künftigen
 Quantencomputern standhält** — und der Entwurf lässt Raum für stärkere Schlösser später.
 

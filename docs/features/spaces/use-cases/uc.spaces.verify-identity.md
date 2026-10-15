@@ -130,4 +130,4 @@ und ein Schlüssel, der sich inzwischen geändert hat, wird nicht mehr gemeldet.
 - Decisions: [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (the authenticity
   model), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) (the fingerprint /
   safety-number), [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the trust tier this rides on)
-- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md)
+- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)

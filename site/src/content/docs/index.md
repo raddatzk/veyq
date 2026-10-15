@@ -7,15 +7,15 @@ A plain-language guide to what veyq does and why your memories stay private. No 
 
 ## For you
 
-- [Is my data safe?](/veyq/is-my-data-safe/)
+- [Is my data safe?](/veyq/privacy/is-my-data-safe/)
 - [Depot — and finding your way around](/veyq/depot/)
 - [Sharing with people who have no account](/veyq/sharing/)
-- [People in your Memories](/veyq/people-in-your-memories/)
-- [Download and import](/veyq/download-and-import/)
+- [People in your Memories](/veyq/memories/people-in-your-memories/)
+- [Download and import](/veyq/spaces/download-and-import/)
 - [Account keys & recovery](/veyq/account-keys-and-recovery/)
-- [Who gets into your space](/veyq/who-gets-into-your-space/)
-- [Adding another device](/veyq/adding-another-device/)
-- [Quantum computers & your photos](/veyq/quantum-computers-and-your-photos/)
+- [Who gets into your space](/veyq/space-owners/who-gets-into-your-space/)
+- [Adding another device](/veyq/account/adding-another-device/)
+- [Quantum computers & your photos](/veyq/privacy/quantum-computers-and-your-photos/)
 
 ## Running an instance
 

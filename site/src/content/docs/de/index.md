@@ -8,15 +8,15 @@ Vorwissen nötig.
 
 ## Für dich
 
-- [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/)
+- [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)
 - [Depot — und wie du dich zurechtfindest](/veyq/de/depot/)
 - [Teilen mit Menschen ohne Konto](/veyq/de/sharing/)
-- [Personen in deinen Erinnerungen](/veyq/de/people-in-your-memories/)
-- [Herunterladen und Importieren](/veyq/de/download-and-import/)
+- [Personen in deinen Erinnerungen](/veyq/de/memories/people-in-your-memories/)
+- [Herunterladen und Importieren](/veyq/de/spaces/download-and-import/)
 - [Konto-Schlüssel & Wiederherstellung](/veyq/de/account-keys-and-recovery/)
-- [Wer in deinen Bereich kommt](/veyq/de/who-gets-into-your-space/)
-- [Ein weiteres Gerät hinzufügen](/veyq/de/adding-another-device/)
-- [Quantencomputer & deine Fotos](/veyq/de/quantum-computers-and-your-photos/)
+- [Wer in deinen Bereich kommt](/veyq/de/space-owners/who-gets-into-your-space/)
+- [Ein weiteres Gerät hinzufügen](/veyq/de/account/adding-another-device/)
+- [Quantencomputer & deine Fotos](/veyq/de/privacy/quantum-computers-and-your-photos/)
 
 ## Eine Instanz betreiben
 

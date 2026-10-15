@@ -124,7 +124,7 @@ einzuführen, während alles, was du schon hast, lesbar bleibt, wie es ist. Das 
 vorhandenen Erinnerungen **wechseln nicht von selbst auf neue Schlösser** — heute gibt es nur einen Satz
 Schlösser, nötig war das also noch nie.
 
-Mehr: [Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?](/veyq/de/quantum-computers-and-your-photos/)
+Mehr: [Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?](/veyq/de/privacy/quantum-computers-and-your-photos/)
 
 ## Ist es wirklich *ihr* Schlüssel — und eine ehrliche Lücke
 

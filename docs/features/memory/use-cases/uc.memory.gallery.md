@@ -194,4 +194,4 @@ anhält, sobald du etwas berührst. Journal, Kapitel, Karten und Playlists komme
   aggregate-only rule, and why the copy above says what it says)
 - Related use-cases: [uc.memory.browse](uc.memory.browse.md) (done — the shell this opens from);
   [chapters](uc.memory.chapters.md) and the places map ([uc.memory.place](uc.memory.place.md)) — built; the journal — planned
-- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md)
+- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)

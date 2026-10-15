@@ -10,7 +10,7 @@ This page is for whoever **operates** a veyq instance. It is technical and Engli
 site is written for the people using the app, and is available in German too.
 
 If you are here to find out whether your memories are safe, you want
-[Is my data safe?](/veyq/is-my-data-safe/) instead.
+[Is my data safe?](/veyq/privacy/is-my-data-safe/) instead.
 
 ## The honest state, first
 
@@ -54,7 +54,7 @@ So the things you own are:
   a password stops sending. The one mail you trigger yourself, the invitation of a new space's first owner,
   falls back to a link you copy and pass on, because that space has no relay yet.
 - **Nothing else.** Not the content, not the keys, not who verified whom. Read
-  [Is my data safe?](/veyq/is-my-data-safe/) — the "what we can see" table there is what *you* can see.
+  [Is my data safe?](/veyq/privacy/is-my-data-safe/) — the "what we can see" table there is what *you* can see.
 
 ## Backups — read this twice
 

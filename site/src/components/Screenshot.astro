@@ -1,0 +1,65 @@
+---
+// One screenshot on a Use page (ADR 0087 §1): `<Screenshot id="share-dialog" shows="The share dialog, …" />` on an
+// `.mdx` page. It renders `src/assets/screenshots/<id>.<en|de>.png` for the page's language when that file exists,
+// and otherwise a visible placeholder naming the id and what the shot must show: the owner supplies the images, so a
+// missing one is a to-do on `npm run shots`, never a broken build. The English and German page use the same id.
+// `shows` describes the picture in the page's language and doubles as its alt text. Pass both as plain string
+// literals — the shot list reads them from the page source, not from a render.
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
+interface Props {
+  id: string;
+  shows: string;
+}
+const { id, shows } = Astro.props;
+if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(id)) {
+  throw new Error(`Screenshot id "${id}" is not kebab-case; it names src/assets/screenshots/<id>.<en|de>.png`);
+}
+// The language of the content, not of the route: a page shown under /de/ as Starlight's English fallback carries
+// English words, so it takes the English shot.
+const lang = Astro.locals.starlightRoute.entryMeta.lang.split('-')[0];
+const images = import.meta.glob<{ default: ImageMetadata }>('../assets/screenshots/*.png', { eager: true });
+const image = images[`../assets/screenshots/${id}.${lang}.png`]?.default;
+const toCome = lang === 'de' ? 'Screenshot folgt' : 'Screenshot to come';
+---
+
+{
+  image ? (
+    <figure class="screenshot">
+      <Image src={image} alt={shows} />
+    </figure>
+  ) : (
+    <figure class="screenshot placeholder" data-screenshot-placeholder={id} data-pagefind-ignore>
+      <span class="label">{toCome}</span>
+      <code>{id}</code>
+      <span>{shows}</span>
+    </figure>
+  )
+}
+
+<style>
+  .screenshot img {
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+  }
+  .placeholder {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.25rem;
+    border: 2px dashed var(--sl-color-gray-4);
+    border-radius: 0.5rem;
+    background: var(--sl-color-gray-6);
+    color: var(--sl-color-gray-2);
+  }
+  .label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: var(--sl-text-xs);
+  }
+  .placeholder code {
+    align-self: flex-start;
+  }
+</style>

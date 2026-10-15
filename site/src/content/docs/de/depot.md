@@ -10,7 +10,7 @@ sources:
   - docs/features/platform/use-cases/uc.platform.copy-node.md
 ---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/). veyq ist eine Plattform
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/). veyq ist eine Plattform
 für verschlüsselte, teilbare Dinge und wächst durch **Anwendungen**. **Erinnerungen** ist die Anwendung für Fotos,
 Videos und Tagebuch. **Depot** ist die für alles andere: Dokumente, PDFs, jede Datei, die du aufbewahren willst.
 Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
@@ -24,7 +24,7 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
   Ordner und Dateien an, genau wie auf deinem Computer (leere Ordner darin werden ausgelassen). Ein Name, den manche Computer
   nicht erlauben, wird leicht geändert, und ein schon vergebener Name heißt dann „Name (2)“. Ein Ordner, der ein
   ausgepackter veyq-Download ist, wird dir stattdessen zum Importieren angeboten ([Herunterladen und
-  Importieren](/veyq/de/download-and-import/)).
+  Importieren](/veyq/de/spaces/download-and-import/)).
 - **Herunterladen** — die Herunterladen-Schaltfläche in der Zeile der Datei (oder oben auf ihrer Seite) gibt dir die
   Datei genau so zurück, wie du sie abgelegt hast, unter dem Namen, den sie in veyq hat. Ein Klick auf die Zeile selbst öffnet die Seite der Datei.
 - **Ansehen** — klicke auf die Zeile der Datei, und ihre Seite öffnet sich mit der Datei selbst darauf: ein **Bild**
@@ -160,4 +160,4 @@ Adresse bleiben also auf deinem Gerät.
 Eine Datei wird auf deinem eigenen Gerät verschlüsselt, **bevor** sie hochgeladen wird — genau wie ein Foto. Was wir
 nicht sehen können: den **Inhalt** der Datei und ihren **Namen**. Was der Server sieht, ist dasselbe wie bei allem
 anderen: dass es eine Datei gibt, ungefähr wie groß sie ist, wann sie hochgeladen oder geändert wurde und wer in
-deinem Bereich sie öffnen darf. Die Einzelheiten: [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/).
+deinem Bereich sie öffnen darf. Die Einzelheiten: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/).

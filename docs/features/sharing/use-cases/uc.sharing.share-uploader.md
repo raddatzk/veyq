@@ -153,4 +153,4 @@ Galerie. Du als Kurator:in siehst jeden Beitrag in deiner eigenen Erinnerung und
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md).
 - Related: [uc.sharing.share-contributor](uc.sharing.share-contributor.md) (view + add — the sibling upload role),
   [Memory](../../memory/_index.md) (what a Memory is — the thing being contributed to).
-- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md)
+- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)

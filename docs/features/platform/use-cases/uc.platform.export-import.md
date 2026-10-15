@@ -74,6 +74,6 @@ Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, 
 ## Related
 
 - Feature: [Platform](../_index.md)
-- End-user view (docs site): [Download and import](../../../../site/src/content/docs/download-and-import.md) · [Herunterladen und Importieren](../../../../site/src/content/docs/de/download-and-import.md)
+- End-user view (docs site): [Download and import](../../../../site/src/content/docs/spaces/download-and-import.md) · [Herunterladen und Importieren](../../../../site/src/content/docs/de/spaces/download-and-import.md)
 - Use-cases: [uc.platform.node-cover](uc.platform.node-cover.md), [uc.memory.participants](../../memory/use-cases/uc.memory.participants.md), [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md)
 - Decisions: [ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md), [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md), [ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)

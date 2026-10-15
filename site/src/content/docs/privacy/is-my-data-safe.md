@@ -116,7 +116,7 @@ room to add stronger locks later for new things you save, while what you already
 is. That also means your existing memories **don't move to new locks by themselves** — today there is only
 one set of locks, so nothing has needed to.
 
-More: [What happens to my photos when quantum computers arrive?](/veyq/quantum-computers-and-your-photos/)
+More: [What happens to my photos when quantum computers arrive?](/veyq/privacy/quantum-computers-and-your-photos/)
 
 ## Making sure it's really *their* key — and an honest gap
 

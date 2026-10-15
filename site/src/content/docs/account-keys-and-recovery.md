@@ -12,7 +12,7 @@ sources:
   - docs/features/account/use-cases/uc.account.change-email.md
 ---
 
-A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/). Because veyq is end-to-end
+A plain-language companion to [Is my data safe?](/veyq/privacy/is-my-data-safe/). Because veyq is end-to-end
 encrypted, **your keys — not the server — guard your data.** Here's how that works, no crypto
 background needed.
 
@@ -69,7 +69,7 @@ When you pick a new password, veyq checks it against passwords known from data b
 you leave the field, never while you type. Only the first 5 characters of a fingerprint (a hash) worked out from it go,
 straight from your device, to the free service *Have I Been Pwned*; your browser also tells that service which
 veyq server you're on. If the password turns up in a breach you can still use it — tick **"Use it anyway"** — and
-if the check can't run, nothing is blocked. The details: [Is my data safe?](/veyq/is-my-data-safe/#the-one-check-that-leaves-your-device-by-itself)
+if the check can't run, nothing is blocked. The details: [Is my data safe?](/veyq/privacy/is-my-data-safe/#the-one-check-that-leaves-your-device-by-itself)
 
 ## If a device is lost
 

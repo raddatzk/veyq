@@ -68,7 +68,7 @@ Das ist Absicht und keine fehlende Funktion. Ein „Nochmal versuchen" auf demse
 
 **Ein so hinzugefügtes Gerät bekommt alles, dauerhaft.** Es kann jede deiner Erinnerungen lesen. Späteres
 Abmelden hindert es daran, den Server zu erreichen, nimmt ihm den Schlüssel aber **nicht** zurück — was ein
-Abmelden bewirkt und was nicht, steht in [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/). Füge also
+Abmelden bewirkt und was nicht, steht in [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/). Füge also
 nur Geräte hinzu, die du in der Hand hältst.
 
 Solltest du doch einmal einen Code bestätigen, der nicht dein eigenes Gerät war, gibt es genau eine Sache,
@@ -85,6 +85,6 @@ Schließen des Browsers, und du fügst es beim nächsten Mal erneut hinzu.
 
 ## Verwandt
 
-- [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/)
+- [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)
 - [Konto-Schlüssel & Wiederherstellung](/veyq/de/account-keys-and-recovery/)
-- [Wer in deinen Bereich kommt](/veyq/de/who-gets-into-your-space/)
+- [Wer in deinen Bereich kommt](/veyq/de/space-owners/who-gets-into-your-space/)

@@ -5,8 +5,8 @@
 > operational metadata and a blind job queue, and never holds a key that opens content. Every other
 > concept — processing, search, sharing, recovery, deletion — is designed around this.
 >
-> Plain-language companions for end users (docs site): [Is my data safe?](../../site/src/content/docs/is-my-data-safe.md) and
-> [What happens to my photos when quantum computers arrive?](../../site/src/content/docs/quantum-computers-and-your-photos.md);
+> Plain-language companions for end users (docs site): [Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) and
+> [What happens to my photos when quantum computers arrive?](../../site/src/content/docs/privacy/quantum-computers-and-your-photos.md);
 > for operators, [Running your own instance](../../site/src/content/docs/run/index.md).
 > For security researchers, the docs site's Security area: [Start here](../../site/src/content/docs/security/start-here.md), [Threat model](../../site/src/content/docs/security/threat-model.md), [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md), [Cryptography](../../site/src/content/docs/security/cryptography.md), [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md), [Protocols](../../site/src/content/docs/security/protocols.mdx), [Known limitations](../../site/src/content/docs/security/known-limitations.md), [Roadmap](../../site/src/content/docs/security/roadmap.md), [Reporting a vulnerability](../../site/src/content/docs/security/reporting.md).
 > Sibling engineering docs: the [account & key model](../features/account/enablers/en.account.key-model.md), the
@@ -78,7 +78,7 @@ range API whether the password appears in known breaches. The fences apply like 
   and the reason is what crosses: a 5-hex prefix carries no content and no identity, where a geocoding request
   carries the coordinate itself. **What it does disclose, stated:** the browser's `Origin` header names the veyq
   instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
-  The docs site says so, in [Is my data safe?](../../site/src/content/docs/is-my-data-safe.md) and
+  The docs site says so, in [Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) and
   [Account keys & recovery](../../site/src/content/docs/account-keys-and-recovery.md). A one-sentence note under the password field says what leaves the device.
 - **It advises, never gates.** A hit shows a warning that needs an **explicit "Use it anyway"** before the dialog
   submits that password; the result is not stored. **A check that could not run** (offline, firewalled, the admin

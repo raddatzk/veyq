@@ -7,7 +7,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check && astro build"
+    "check": "astro check && astro build",
+    "shots": "python3 ../scripts/site_shots.py"
   },
   "//engines": "The Node the site's tree supports: astro >=22.12.0 and postcss-nested 8 (the override below) ^22.0.0 || ^24.0.0 || >=26.0.0, so an odd, non-LTS release such as 23 is outside it. CI runs Node 22, as for the root workspace.",
   "engines": {

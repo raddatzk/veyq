@@ -5,7 +5,7 @@ sources:
   - docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md
 ---
 
-A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/) and [Sharing](/veyq/sharing/). In a Memory you can
+A plain-language companion to [Is my data safe?](/veyq/privacy/is-my-data-safe/) and [Sharing](/veyq/sharing/). In a Memory you can
 say **who was there** — the people of a trip, a wedding, a birthday — and open a person to see every Memory they
 took part in.
 

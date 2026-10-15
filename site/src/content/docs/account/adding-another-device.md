@@ -68,7 +68,7 @@ past the one warning you get.
 
 **A device added this way gets everything, permanently.** It can read every memory you have. Signing it
 out later stops it reaching the server, but it does **not** take the key back — see
-[Is my data safe?](/veyq/is-my-data-safe/) for what a sign-out does and does not do. So only ever add a device
+[Is my data safe?](/veyq/privacy/is-my-data-safe/) for what a sign-out does and does not do. So only ever add a device
 you are holding.
 
 If you ever approve a code that turns out not to be your own device, there is one thing that ends it:
@@ -83,6 +83,6 @@ signed in on it, closing the browser ends its access, and you add it again next 
 
 ## Related
 
-- [Is my data safe?](/veyq/is-my-data-safe/)
+- [Is my data safe?](/veyq/privacy/is-my-data-safe/)
 - [Account keys & recovery](/veyq/account-keys-and-recovery/)
-- [Who gets into your space](/veyq/who-gets-into-your-space/)
+- [Who gets into your space](/veyq/space-owners/who-gets-into-your-space/)

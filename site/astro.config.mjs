@@ -20,21 +20,45 @@ export default defineConfig({
         de: { label: 'Deutsch', lang: 'de' },
       },
       // One group per area and reader: Use (EN+DE, users), Run (EN, administrators), Security (EN, researchers).
+      // Use is task-first in nine sections (cr-use-area-content): platform first (Getting started, Your account,
+      // Spaces), then the applications (Memories, Depot), then Sharing, the space owner's tasks, Privacy and Help.
+      // A section's pages live in its folder (getting-started/, account/, spaces/, memories/, depot/, sharing/,
+      // space-owners/, privacy/, help/), so a page's URL says its section; the three moved wiki pages still at the
+      // root (account-keys-and-recovery, depot, sharing) wait for the phase that splits them. A section with no
+      // page yet is left out rather than shown empty. The labels are the web client's own words in each language.
       sidebar: [
         {
           label: 'Use',
           translations: { de: 'Benutzen' },
           items: [
             { slug: 'index', label: 'Start', translations: { de: 'Start' } },
-            'is-my-data-safe',
-            'depot',
-            'sharing',
-            'people-in-your-memories',
-            'download-and-import',
-            'account-keys-and-recovery',
-            'who-gets-into-your-space',
-            'adding-another-device',
-            'quantum-computers-and-your-photos',
+            {
+              label: 'Your account',
+              translations: { de: 'Dein Konto' },
+              items: ['account/adding-another-device', 'account-keys-and-recovery'],
+            },
+            {
+              label: 'Spaces',
+              translations: { de: 'Bereiche' },
+              items: ['spaces/download-and-import'],
+            },
+            {
+              label: 'Memories',
+              translations: { de: 'Erinnerungen' },
+              items: ['memories/people-in-your-memories'],
+            },
+            { label: 'Depot', items: ['depot'] },
+            { label: 'Sharing', translations: { de: 'Teilen' }, items: ['sharing'] },
+            {
+              label: 'For space owners',
+              translations: { de: 'Wenn dir der Bereich gehört' },
+              items: ['space-owners/who-gets-into-your-space'],
+            },
+            {
+              label: 'Privacy',
+              translations: { de: 'Privatsphäre' },
+              items: ['privacy/is-my-data-safe', 'privacy/quantum-computers-and-your-photos'],
+            },
           ],
         },
         {

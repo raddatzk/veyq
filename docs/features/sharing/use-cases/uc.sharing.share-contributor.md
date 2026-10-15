@@ -193,4 +193,4 @@ das?"-Link erklärt die Details.
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md).
 - Related: [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md) (the read-only viewer share this
   builds on), [Memory](../../memory/_index.md) (what a Memory is — the thing being shared + contributed to).
-- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md)
+- End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)

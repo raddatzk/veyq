@@ -10,7 +10,7 @@ sources:
   - docs/features/platform/use-cases/uc.platform.copy-node.md
 ---
 
-A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/). veyq is a platform for sealed, shareable
+A plain-language companion to [Is my data safe?](/veyq/privacy/is-my-data-safe/). veyq is a platform for sealed, shareable
 things, and it grows by **applications**. **Memories** is the one for photos, videos and journals. **Depot** is
 the one for everything else: documents, PDFs, any file you want to keep. Both live in the same folders of your
 space, side by side.
@@ -23,7 +23,7 @@ space, side by side.
 - **Upload a folder** — choose **New → Upload folder…**, or drop a folder onto the folder: it arrives as folders and files,
   just as it is on your computer (empty folders inside it are left out). A name some computers do not allow is changed
   slightly, and a name that is already taken becomes "Name (2)". A folder that is an unpacked veyq download is offered as an
-  import instead ([Download and import](/veyq/download-and-import/)).
+  import instead ([Download and import](/veyq/spaces/download-and-import/)).
 - **Download** — the download button on the file's row (or at the top of its page) gives you the file back exactly as
   you put it in, under the name it has in veyq. Clicking the row itself opens the file's own page.
 - **Look at it** — click the file's row and its page opens with the file itself on it: a **picture** is shown, a
@@ -148,4 +148,4 @@ address stay on your device.
 A file is locked on your own device **before** it is uploaded, exactly like a photo. What we can't see: the file's
 **contents** and its **name**. What the server does see is the same as for everything else: that a file exists,
 roughly how large it is, when it was uploaded or changed, and who in your space may open it. Details:
-[Is my data safe?](/veyq/is-my-data-safe/).
+[Is my data safe?](/veyq/privacy/is-my-data-safe/).
