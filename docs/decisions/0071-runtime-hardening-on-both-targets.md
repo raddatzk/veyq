@@ -118,5 +118,7 @@ Forces:
 
 - [ADR 0063](0063-database-driven-tenant-ingress.md) (the file-provider-only proxy this builds on).
 - [ADR 0064](0064-kubernetes-helm-deployment-target.md) (the `restricted` posture the chart already holds).
+- [Kubernetes](../../site/src/content/docs/run/kubernetes.md) (the docs site's Run area: naming the ingress
+  controller, and what a CNI without NetworkPolicy enforcement leaves open).
 - [ADR 0065](0065-admin-ui-cli-separate-service.md) (the admin container, a second proxy in front of the app).
 - [cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md) (the forwarded-address trust this narrows).

@@ -101,7 +101,8 @@ flowchart LR
   the browser to a projection that never ran.
 - **E2 — certificates are rate-limited:** domains can now be added as fast as tenants are created, and each
   new one is a certificate order. Point the ACME client at a staging directory while testing a deployment —
-  [`infra/README.md`](../../../../infra/README.md) carries the setting for both targets: `VEYQ_ACME_CASERVER` on
+  the docs site's [Set up a new instance](../../../../site/src/content/docs/run/new-instance.mdx) and
+  [Kubernetes](../../../../site/src/content/docs/run/kubernetes.md) carry the setting for both targets: `VEYQ_ACME_CASERVER` on
   compose, the chart's `ingress.tls.acme.server` on Kubernetes (or, with an issuer of the operator's own, a
   staging issuer named through the same annotation the production one is). What production limits is an hour's
   lockout of a hostname after repeated failed validations and a weekly cap on issued certificates per
@@ -160,5 +161,5 @@ tun: der Server leitet nur nach Adresse weiter, und was darin liegt, bleibt für
   two callers).
 - Related use-cases: [create-tenant](uc.admin.create-tenant.md) (where a domain comes from, and where it is
   moved), [suspend-tenant](uc.admin.suspend-tenant.md) (the transition whose routing withdrawal this carries).
-- Operations: [`infra/README.md`](../../../../infra/README.md) (the shared volume the projection is written to,
+- Operations: [Set up a new instance](../../../../site/src/content/docs/run/new-instance.mdx) (the shared volume the projection is written to,
   and why it is never hand-edited).

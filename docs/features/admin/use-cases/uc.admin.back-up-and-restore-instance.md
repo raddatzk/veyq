@@ -160,5 +160,6 @@ auf, wo du es in einem Jahr noch findest.
 - [uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md) — the half of durability the operator cannot hold
 - [uc.admin.setup-server](uc.admin.setup-server.md) — how the empty instance a restore targets comes into being
 - [architecture §10](../../../architecture/README.md) — the durability bar this exists to make executable
-- [infra/README](../../../../infra/README.md) — the stack the procedure operates on
+- Run area of the docs site: [Backup and restore](../../../../site/src/content/docs/run/backup-and-restore.md) — the
+  procedure's commands
 - Operator view (docs site): [Running your own instance](../../../../site/src/content/docs/run/index.md)

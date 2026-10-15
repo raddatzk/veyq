@@ -14,7 +14,7 @@ is not a setting; there is no key on the server to misuse.
 **veyq is pre-V1 and there is no supported deployment path yet.** What runs today is a development stack
 ([`infra/`](infra/README.md)): MariaDB, an optional S3-compatible object store, an optional test mailbox. There
 is no upgrade procedure. A production Compose file and a backup-and-restore runbook now exist
-([`infra/README.md`](infra/README.md)), but neither has been executed by any CI run — the remaining V1 work is
+([the Run area](site/src/content/docs/run/index.md) of the docs site), but neither has been executed by any CI run — the remaining V1 work is
 tracked as [the V1 line](docs/inbox.md).
 
 Built and in use: accounts and unlock, key recovery from the Emergency Kit (on an instance that can send

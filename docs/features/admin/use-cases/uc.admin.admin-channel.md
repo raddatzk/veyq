@@ -56,7 +56,7 @@ flowchart LR
   too. None of them is marked.
 - **A5 — `ADMIN_DOMAIN` set before setup:** the admin container is itself on the internet, and so is the admin
   channel — the window step 5 closes on the public origin is open again on that one. Setup therefore runs over
-  the localhost path first and the domain is set afterwards. Documented in `infra/README.md`, not enforced.
+  the localhost path first and the domain is set afterwards. Documented in the docs site's [Set up a new instance](../../../../site/src/content/docs/run/new-instance.mdx), not enforced.
 - **E1 — a Server-Owner operation added without the marker:** the build fails. The backend's gate implies the
   channel, and a sweep holds every operation carrying the Server-Owner gate to its marker (and every marker to a
   resource method that exists).

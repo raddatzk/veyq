@@ -168,7 +168,8 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   § Cutting a release lists; until its refused repeat release has run, this stays *unobserved*, not *released*.
   In the tree, `Chart.yaml` carries the placeholder `0.0-dev` no publish uses, because the minor is a commit count
   no tree can hold, and `helm install ./charts/veyq` from a checkout sets the image tags itself. The image
-  repositories' defaults are held to the names infra/README verifies by the same guard; `chart_meta_check.py`
+  repositories' defaults are held to the names the Run area's
+  [Verify a release](../../site/src/content/docs/run/verify-a-release.md) verifies by the same guard; `chart_meta_check.py`
   runs in `container.yml`'s test job.
 - **The chart generates nothing and every pod passes `restricted`**, to which
   [ADR 0071](0071-runtime-hardening-on-both-targets.md) adds a read-only root and a NetworkPolicy set whose
@@ -193,7 +194,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   **without a cluster**, so `scripts/chart_upgrade_check.py` (its pure parts pinned by
   `chart_upgrade_check_selftest.py`) renders the predecessor's chart and the candidate's with the same values and
   compares those fields, and renders the candidate with the predecessor's `ci/` values
-  ([infra/README](../../infra/README.md) § Upgrading with `helm upgrade`). The predecessor is the upgrade proof's
+  ([Upgrade](../../site/src/content/docs/run/upgrade.mdx), Kubernetes). The predecessor is the upgrade proof's
   (`default_predecessor`); the check runs in `container.yml`'s `test` job and is **information until the first
   release and red from it** (the same switch as the upgrade proof), so from then on it gates `publish`.
 - **Backup/restore stays explicitly out of this ADR's scope.** [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
@@ -209,7 +210,8 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   keeps between the compose file's two homes (repo + inside the image).
 - **`docs/inbox.md` #26 is corrected in place** to record the reversal and point here — the 2026-08-06
   reasoning is superseded, not silently contradicted.
-- **The upgrade runbook has its Kubernetes equivalent** — `infra/README.md` § Running on Kubernetes carries
+- **The upgrade runbook has its Kubernetes equivalent** — the Run area's [Upgrade](../../site/src/content/docs/run/upgrade.mdx)
+  and [Kubernetes](../../site/src/content/docs/run/kubernetes.md) pages carry
   `helm upgrade` with the same migrate-at-start caveat (one pod, `Recreate`, the backup as the only way back)
   and the orphaned-TLS-`Secret` residue.
 - **A green chart-upgrade check renders; it never installs.** Not covered: a missing StorageClass or expansion
@@ -229,4 +231,6 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
 - [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md),
   [ADR 0057](0057-release-identity-and-deployment-recipe.md) (the compose-side precedents this generalizes).
 - [ADR 0065](0065-admin-ui-cli-separate-service.md) (the admin container the chart also deploys).
+- The Run area of the docs site: [Set up a new instance](../../site/src/content/docs/run/new-instance.mdx) (the
+  `helm install` beside the compose one) and [Kubernetes](../../site/src/content/docs/run/kubernetes.md).
 - [inbox #26](../inbox.md) (the reversed scope cut).

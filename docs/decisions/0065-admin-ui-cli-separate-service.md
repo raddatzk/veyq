@@ -262,6 +262,8 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
 - [ADR 0008](0008-centralized-http-auth.md) (authorization stays out of the contract; the channel marker is
   reachability, not a role).
 - [ADR 0026](0026-client-trust-tiers.md) (trust tiers this container inherits, not extends).
+- [Set up a new instance](../../site/src/content/docs/run/new-instance.mdx) (the docs site's Run area: creating the
+  Server Owner on this surface before DNS and TLS, and its two exposure modes).
 - [ADR 0050](0050-operator-config-secret-encryption.md) (the secret this ADR deliberately keeps
   single-homed).
 - [ADR 0063](0063-database-driven-tenant-ingress.md), [ADR 0064](0064-kubernetes-helm-deployment-target.md)

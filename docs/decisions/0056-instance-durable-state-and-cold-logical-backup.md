@@ -196,4 +196,6 @@ wrong image, and it buys nothing that the forward migration does not already hav
 - [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) — presigned direct-to-store, why the client is a writer
 - [ADR 0050](0050-operator-config-secret-encryption.md) — the managed config-secret key and its fingerprint
 - [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) — what a lost key file actually costs
-- [infra/README](../../infra/README.md) — where the procedure and the dev stack live
+- Run area of the docs site: [Backup and restore](../../site/src/content/docs/run/backup-and-restore.md) — where the
+  procedure lives, and [Upgrade](../../site/src/content/docs/run/upgrade.mdx) — the upgrade that begins with it
+- [infra/README](../../infra/README.md) — the dev stack

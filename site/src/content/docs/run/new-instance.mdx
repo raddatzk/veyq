@@ -1,0 +1,234 @@
+---
+title: Set up a new instance
+description: Bring up the production recipe or the Helm chart, and create the Server Owner before DNS and TLS exist.
+sources:
+  - docs/decisions/0057-release-identity-and-deployment-recipe.md
+  - docs/decisions/0064-kubernetes-helm-deployment-target.md
+  - docs/decisions/0065-admin-ui-cli-separate-service.md
+  - docs/features/admin/use-cases/uc.admin.admin-channel.md
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Install
+
+<Tabs syncKey="target">
+  <TabItem label="Docker Compose">
+
+`infra/docker-compose.prod.yml` is the deployment artifact: the app, its administration surface, MariaDB,
+Garage, and a Traefik that terminates TLS in front of them. It is **standalone**, not an override of the dev
+file — that file has no app service at all, publishes `3306`/`19000`/`18080`, and ships `change-me` passwords.
+
+```sh
+# first: Verify a release — it leaves the recipe in ./recipe-<version>/ and prints two image lines
+cp ./recipe-<version>/docker-compose.prod.yml ./recipe-<version>/.env.example infra/
+cp infra/.env.example infra/.env          # then fill in every value (it is gitignored), and the two image lines
+docker compose -f infra/docker-compose.prod.yml up -d
+```
+
+**Every secret is required and has no default.** A missing variable fails the `up` with the name of the variable,
+rather than starting an instance on a password that is printed in this repository.
+
+**Every container runs unprivileged, and the proxy cannot reach the database**
+([ADR 0071](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0071-runtime-hardening-on-both-targets.md)). Each service drops every capability,
+cannot escalate, runs as a non-root user and has a read-only root. A one-shot `volume-ownership` service chowns the
+Garage and ACME volumes to their writers first, so `ps` lists it as exited (0) after every `up`, and that is its
+done state. Three networks separate the peers: `veyq_edge` (Traefik, app, Garage), `veyq_db` (app, MariaDB, no
+route out) and `veyq_admin` (app, admin container, and Traefik for the `ADMIN_DOMAIN` router). A command that joins
+the stack names one of them.
+
+  </TabItem>
+  <TabItem label="Kubernetes">
+
+`charts/veyq` is the second deployment target ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)):
+the same five services as the production compose file — the app, its administration surface, MariaDB, Garage
+— on an operator's own cluster, with the ingress controller as the operator's choice. It deploys published
+images and builds nothing; it **generates nothing** either, so every secret is yours to supply and an install
+that leaves one unset is refused by name (`values.schema.json`). One release per namespace: the app projects
+tenant domains as `Ingress` objects into its own namespace and lists them by label, so two releases there
+would reconcile each other's routing away.
+
+```sh
+# Verify a release first: it leaves ${version}, ${app_digest}, ${admin_digest} and ${chart_digest}
+chart="oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}"
+helm show values "$chart" > my-values.yaml        # fill in: domain, storeDomain, every key under secrets,
+                                                  # the ingress.tls block, and networkPolicy.ingressFrom —
+                                                  # your ingress controller's pods:
+#   networkPolicy:
+#     ingressFrom:
+#       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+#         podSelector: {matchLabels: {app.kubernetes.io/name: ingress-nginx}}
+helm install veyq "$chart" -n veyq --create-namespace -f my-values.yaml \
+  --set image.digest="${app_digest}" --set admin.image.digest="${admin_digest}"
+```
+
+The published chart already names the release: its `appVersion` is the image tag both images default to, and
+the image repositories default to the upstream's. Pin the two digests the verification resolved, so the pods run
+exactly what you verified. Helm finds a veyq chart **only by its digest or its exact version** (`--version 1.4`):
+the version has two parts, and Helm's tag listing skips every tag that is not three-part SemVer, so `helm install`
+without a version, or with a range, finds nothing (measured with Helm 4.0.1, ADR 0064).
+
+**From a checkout** the chart is `./charts/veyq`, and its in-tree version is a placeholder (`0.0-dev`) no publish
+uses, so name the release yourself: add `--set image.tag="${version}" --set admin.image.tag="${version}"` to the
+same `helm install`, with `./charts/veyq` in place of `"$chart"`.
+
+The rest of what is specific to this target is on [Kubernetes](/veyq/run/kubernetes/).
+
+  </TabItem>
+</Tabs>
+
+## Create the Server Owner — before DNS and TLS
+
+**You create the first account on the administration surface, not on the app's domain.** That is the whole
+point of it being a separate container ([ADR 0065](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0065-admin-ui-cli-separate-service.md)):
+the `admin` service reverse-proxies the backend from **its own** origin, so first-run setup works over plain
+`http://localhost` with no DNS record, no certificate, and `VEYQ_DOMAIN` pointing at a name that does not
+resolve yet. Before this, setup lived in the app SPA served at `VEYQ_DOMAIN` — which quietly made a working
+public hostname a precondition for creating the first account.
+
+**And the Server-Owner operations answer nowhere else.** The backend runs a second, internal **admin listener**
+(`8090`, `veyq.admin-channel.port`); setup, tenant administration and the instance reads answer only for a request
+that arrived there from a non-public peer, and the public port 404s them
+([uc.admin.admin-channel](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.admin-channel.md)). So until you have created
+the owner, nobody who finds `VEYQ_DOMAIN` in a certificate log can claim the instance first. The compose file
+points the admin container at that listener and routes nothing else to it; the image does not `EXPOSE` it. **If
+you put your own reverse proxy in front of the app, route the public port `8080` only** — nothing but the admin
+container may ever be pointed at `8090`.
+
+So the order is: bring the stack up, create the owner over the tunnel, and *then* worry about DNS and TLS.
+
+<Tabs syncKey="target">
+  <TabItem label="Docker Compose">
+
+```sh
+docker compose -f infra/docker-compose.prod.yml up -d
+ssh -L 8081:127.0.0.1:8081 you@the-host        # from your laptop; 8081 = ADMIN_PORT
+# then open http://localhost:8081 and create the Server Owner account
+```
+
+  </TabItem>
+  <TabItem label="Kubernetes">
+
+**Setting up a brand-new instance works the same way it does under compose — before DNS and TLS exist.** The
+administration surface gets a `ClusterIP` `Service` and **no** `Ingress` by default; `kubectl port-forward` is
+this target's `127.0.0.1:${ADMIN_PORT}`:
+
+```sh
+kubectl -n veyq port-forward svc/veyq-admin 8081:8080
+# then open http://localhost:8081 and create the Server Owner account
+```
+
+Save the Emergency Kit on that screen. Set `admin.domain` to expose the surface on a hostname of its own
+afterwards — never before the owner exists, for the reason given [on Docker Compose](#on-docker-compose) — or never.
+
+  </TabItem>
+</Tabs>
+
+**Save the Emergency Kit on that screen.** It carries the Secret Key, it is shown once, and there is no
+operator-side recovery — the server holds no key material by construction.
+
+## On Docker Compose
+
+**Two exposure modes, one image, chosen by one variable.**
+
+- **`ADMIN_DOMAIN` unset — the default, and the one to keep.** No Traefik router exists for the admin
+  container at all; it is published on `127.0.0.1:${ADMIN_PORT}` of the host only, so nothing on the internet
+  can reach the highest-privilege surface this instance serves. Reach it with the SSH tunnel above, or
+  `docker compose exec`.
+- **`ADMIN_DOMAIN` set** — it gets its own hostname, router and certificate. The app renders that router into
+  the routing file below, from configuration and never from the tenant table: the admin surface is 1:1 with the
+  instance ([ADR 0065](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0065-admin-ui-cli-separate-service.md)). Point the name's DNS
+  at this host **first**, or the ACME order fails against the rate limit. Choose a name you publish nowhere:
+  the app never links to this surface, and an unlisted name is one more layer between a stranger and it.
+  **Set it only after the Server Owner exists.** This mode puts the admin container — and with it the admin
+  listener — on the internet, so before setup it reopens exactly the first-caller window the listener closes on
+  the public origin (uc.admin.admin-channel A5). Nothing enforces the order; it is yours.
+
+The user-facing app never links to the admin surface and carries no hint that it exists. The backend is handed
+`ADMIN_DOMAIN` only to render its router, and no client ever reads it back.
+
+**The same container also holds `veyq-admin`, a CLI for the same operations** ([ADR
+0065](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0065-admin-ui-cli-separate-service.md)) — tenant create/list/resend/reassign/
+change-domain/revoke/suspend/reactivate/quota, plus `release`. It is an HTTP client of the same Admin API the UI
+calls, so it needs no route and no exposed port at all:
+
+```sh
+read -rs VEYQ_ADMIN_PASSWORD && export VEYQ_ADMIN_PASSWORD
+docker compose exec \
+  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
+  admin veyq-admin tenant list
+```
+
+Pass the credential **on the invocation**, as above, rather than putting it in `infra/.env`: it is the Server
+Owner's own password, and the CLI signs in fresh on every call and writes nothing to disk, so there is no
+reason for it to sit in a file between calls. Pass it **by name**: a bare `-e VEYQ_ADMIN_PASSWORD` copies the
+value from your shell into the container, whereas `-e VEYQ_ADMIN_PASSWORD="$VEYQ_ADMIN_PASSWORD"` expands it
+into `docker compose`'s own argv, where `ps` shows it to every user on the host for as long as the call runs —
+the rule `scripts/instance_backup.py` follows for its credentials too. Each call therefore pays one Argon2id derivation (~1–3s,
+measured) before it does anything — the accepted price of never holding a session that outlives the process.
+First-run **setup** is deliberately not a command: it mints key material and shows the Emergency Kit once, so
+it stays on the screen above, where a person can actually save the kit.
+
+**TLS is a precondition, not a preference.** `veyq.session.cookie.secure=true` is the shipped default, so over
+plain HTTP the refresh cookie is set and never sent back and "remember me" breaks silently; and every invitation
+link is built as `https://<domain>/tenant/accept#<token>`, so an HTTP-only instance mails links pointing at a
+scheme it does not answer. Traefik obtains a Let's Encrypt certificate over the HTTP-01 challenge, which needs
+port 80 reachable from the internet and `VEYQ_DOMAIN` resolving to this host. While you are still testing a
+deployment, point `VEYQ_ACME_CASERVER` at Let's Encrypt's staging directory. In production 5 failed validations
+lock a hostname out for an hour, and the weekly limit is on **issued** certificates — 50 per registered domain,
+which a burst of test tenants reaches ([rate limits](https://letsencrypt.org/docs/rate-limits/)). Staging
+certificates are not browser-trusted, so switch back before anyone uses the instance.
+
+**HSTS is on by default, and one switch turns it off — on both targets.** The app sends
+`Strict-Transport-Security: max-age=15552000` (180 days, no `includeSubDomains`, no `preload`) itself, alongside
+its CSP and the other security headers ([ADR 0069](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0069-backend-serves-the-web-app-shell.md)),
+and the admin container's nginx sends the same value on the admin origin
+([cc.security.csp § admin-web](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md#admin-web)), so neither Traefik nor an
+Ingress carries anything for it. The switch is `VEYQ_HSTS_ENABLED=false` in `infra/.env` under compose and
+`hsts.enabled: false` in the Helm values; it belongs to the deployment rather than to one container, so both
+origins answer to the same value. The admin container accepts exactly `true` or `false` and refuses to start on
+anything else, naming the variable. Turn it off for one of
+two reasons only: a hostname of this instance is **also** served over plain HTTP somewhere, or a proxy of your
+own in front of it already sets the header. Know the cost of having had it on: a browser that saw the header
+keeps it for the whole 180 days, switched off or not.
+
+**The config-secret volume is the point of the production compose file.** `veyq-config-secret` is mounted at `/var/lib/veyq` and
+`VEYQ_SECURITY_CONFIG_SECRET_FILE` points into it. Without it, every `up -d --force-recreate app` regenerates the
+KEK, the instance reports `configSecretState: MISMATCH`, and member invites and password resets refuse with
+`503 mail_unavailable` — an instance that boots, serves every page, and cannot admit anybody.
+`scripts/validate_config_secret_persistence.py` holds the three files that have to agree about that path
+(`Dockerfile`, `VeyqConfig.kt`, `infra/docker-compose.prod.yml`) to each other on every push.
+
+**A domain routes because the app writes the routing, not because you edit the compose file.**
+`veyq-traefik-dynamic` is mounted at `/etc/traefik/dynamic` — read-write on `app`, read-only on `traefik`, which
+file-watches it — and holds exactly one generated file, which is **all** of this stack's routing: the router
+pair for `VEYQ_DOMAIN`, one per non-suspended tenant, the admin router when `ADMIN_DOMAIN` is set, and the
+services and store middleware they reference. Traefik runs no other provider, so no container mounts the Docker
+socket — a `:ro` mount of it restricts nothing about the Docker API, and the proxy faces the internet. The one
+cost: if the app cannot write the file, `VEYQ_DOMAIN` is unrouted too, and it logs that loudly; the admin
+surface's localhost port bypasses Traefik, so you keep a way in. **Never hand-edit it.** It is not configuration you maintain, it is a projection of
+the `tenant` table ([ADR 0063](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0063-database-driven-tenant-ingress.md)): the app rewrites the
+whole file on every tenant create, domain change, suspend, reactivate and at startup, so an edit survives until
+the next one of those and no longer. Nothing else is in there — no secret, no content — and it is deliberately
+**not** part of a backup: wiping the volume costs nothing, because the next start regenerates it. Adding a
+tenant does mean a new Let's Encrypt certificate order per domain, which is the one place where the ACME
+rate-limit advice above stops being about your own testing.
+
+Worth knowing rather than discovering:
+
+- **Upgrading is a procedure, not a flag change.** It has its own section — [Upgrade](/veyq/run/upgrade/) — and
+  the reason it is not one line is that the schema migrates at boot with no gate and no downgrade path.
+- **There are two images per release, and they are pinned together.** `VEYQ_IMAGE` and `VEYQ_ADMIN_IMAGE` are
+  built, versioned and cosign-signed by the same publish ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md)),
+  so pin the same `<major>.<minor>` on both, each by the digest [Verify a release](/veyq/run/verify-a-release/) resolved. A mismatched pair is two versions of one instance, and only one of
+  them migrated the schema.
+- **The compose file and the env template ride inside the image.** Every published image carries the recipe it
+  was built with at `/opt/veyq/deploy/`, so the file you deploy a version with cannot drift from the bits it
+  describes, and it inherits the image's cosign signature instead of needing a second trust decision — which
+  holds only for a recipe read out of the digest you verified, so [Verify a release](/veyq/run/verify-a-release/) extracts it from
+  exactly that digest, never from a tag.
+
+  (Note the current limit: the recipe is those two files, so the store's `garage.toml` still comes from this
+  repository — the Helm chart carries its own copy as a `ConfigMap`, so the file has a second, self-sufficient
+  home there, but the compose recipe still reads it from the repository's `infra/`. It used to be two files — ADR 0067 deleted
+  `garage-init.sh` along with the image that ran it.)

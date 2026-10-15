@@ -43,8 +43,9 @@ copy (the drift `validate_wiki_sources.py` was built after, inbox #120), and it 
      and not built (Key Transparency, strict verification mode, abuse-report intake, passkey unlock, post-quantum
      signatures, a client served by a trusted third party) lives on **one Roadmap page** of the area, which the
      other pages link where a gap is closed only by a roadmap item. A rationale the Security pages need and no
-     doc records — first of all why the hybrid KEM uses its own HKDF combiner rather than RFC 9180 HPKE or
-     X-Wing — is written into its ADR before the page that explains it.
+     doc records is written into its ADR before the page that explains it. The first such gap, why the hybrid
+     KEM had its own HKDF combiner, was closed by replacing the combiner with X-Wing
+     ([ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md) decision 2).
 
    The repository becomes public; GitHub Pages on the free plan requires it.
 2. **The site is Astro with Starlight**, in its own package `site/`, **outside** the npm workspace (the workspace

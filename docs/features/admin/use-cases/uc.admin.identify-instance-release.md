@@ -92,5 +92,5 @@ der Backup-Seite: Der Betrieb hält Geheimtext, und alles, was hilft, ihn unvers
   and the two version notions), [ADR 0056](../../../decisions/0056-instance-durable-state-and-cold-logical-backup.md)
   (the upgrade that begins with a backup and rolls back by restoring it),
   [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) (the protocol version).
-- **Ops:** [infra/README](../../../../infra/README.md) owns the commands; this use-case owns the goal and the
+- **Ops:** the docs site's [Verify a release](../../../../site/src/content/docs/run/verify-a-release.md) owns the commands; this use-case owns the goal and the
   failure modes ([admin feature note](../_index.md)).

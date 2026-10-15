@@ -29,16 +29,16 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      build matrix) AND `charts/<name>` (`Chart.yaml`'s `name`), so a release with any of the three already out
      is refused; the step that runs `helm package` sets `--version` and `--app-version` from the tree-derived
      version and pushes to `oci://ghcr.io/<owner>/charts`; a `cosign sign` step names `charts/<name>`; and the
-     chart's default image repositories are exactly the upstream images `infra/README.md` verifies by digest —
-     `image.repository` the chart's own name, `admin.image.repository` its `-admin` sibling. And
-     `infra/README.md` verifies the chart itself by digest (assertion 7 collects `ghcr.io/<owner>/charts/<name>`
+     chart's default image repositories are exactly the upstream images the Run area's verification page
+     (`site/src/content/docs/run/verify-a-release.md`) verifies by digest — `image.repository` the chart's own
+     name, `admin.image.repository` its `-admin` sibling. And that page verifies the chart itself by digest (assertion 7 collects `ghcr.io/<owner>/charts/<name>`
      tokens as it collects the images', and holds them to a digest the same way).
   4. **The deployment recipe travels in the image, in every runtime target.** Every `runtime-*` stage of the
      `Dockerfile` (one today, `runtime-jvm`) copies `infra/docker-compose.prod.yml` and `infra/.env.example`
      from their real in-tree paths, to the same destination, and that destination is neither `/work` (it holds
      `quarkus-app/`; a mount there freezes an upgrade — see the Dockerfile's own comment) nor under
-     `/var/lib/veyq` (the config-secret volume). Plus: every veyq image tag written down under `infra/` matches
-     a tag the pipeline emits.
+     `/var/lib/veyq` (the config-secret volume). Plus: every veyq image tag written down under `infra/` or on the
+     Run pages (`site/src/content/docs/run/`, where the operator procedures live) matches a tag the pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
      `infra/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
      `.github/workflows/container.yml` actually publishes — the set is read out of that workflow's build
@@ -54,7 +54,7 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      halves are one assertion, not two: dropping the flag is safe only *because* the file carries what the
      flag used to say, and re-introducing the flag beside the key is how the two start to disagree.
   7. **The operator's documented signature check is exactly as narrow as what signs** (ADR 0057 §3). Every
-     `cosign verify` in `infra/README.md` pins GitHub's OIDC issuer and one certificate identity; that identity
+     `cosign verify` on `site/src/content/docs/run/verify-a-release.md` pins GitHub's OIDC issuer and one certificate identity; that identity
      **accepts** the signing identity of every branch assertion 2's scenarios turn into a publish, and
      **rejects** every other workflow in `.github/workflows/`, non-release branches (which the version step must
      refuse as well), pull-request and tag refs, another owner, a repository whose name only starts with ours,
@@ -691,8 +691,10 @@ written_tags = 0
 # Tracked files only, as in assertion 9's flag scan. A gitignored `infra/.env` is one operator's local pin (a
 # dev build's `veyq:cr162`, say), not something this repository tells anyone to run — scanning it made the
 # guard red on that machine and green in CI over the same commit.
+RUN_PAGES = ROOT / "site/src/content/docs/run"  # the operator procedures (ADR 0087), which write tags down too
 tracked_infra = subprocess.run(
-    ["git", "ls-files", "-z", "--", str(INFRA.relative_to(ROOT))], cwd=ROOT, capture_output=True, text=True
+    ["git", "ls-files", "-z", "--", str(INFRA.relative_to(ROOT)), str(RUN_PAGES.relative_to(ROOT))],
+    cwd=ROOT, capture_output=True, text=True,
 )
 if tracked_infra.returncode != 0:
     fail(
@@ -844,7 +846,7 @@ if workflow_doc:
     if chart_name and not signs_chart:
         fail(
             f"no `{PUBLISH_JOB}` step runs `cosign sign` over `{owner_expr}/charts/{chart_name}` — the chart is "
-            f"verified the way the images are (infra/README.md § Verifying a release), and an unsigned one "
+            f"verified the way the images are ({VERIFY_PAGE.relative_to(ROOT)}), and an unsigned one "
             f"verifies against nothing"
         )
 
@@ -905,7 +907,9 @@ if prod_project:
 
 # ---- 7. the documented verification pins exactly the identity that signs -------------------------------------
 
-README = INFRA / "README.md"
+# The operator's verification is a page of the docs site's Run area (ADR 0087), kept `.md` with its commands in
+# plain fenced blocks so this guard can read them; it moved there from infra/README.md, which keeps the dev stack.
+VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
 CHART = ROOT / "charts/veyq/Chart.yaml"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 # The registry the publish pushes to. The owner is not taken from the workflow — there it is
@@ -927,7 +931,7 @@ def verify_commands(markdown: str) -> list[list[str]]:
             try:
                 argv = shlex.split(line)
             except ValueError as e:
-                fail(f"{README.relative_to(ROOT)}: cannot parse the command `{line[:80]}…`: {e}")
+                fail(f"{VERIFY_PAGE.relative_to(ROOT)}: cannot parse the command `{line[:80]}…`: {e}")
                 continue
             if argv[:2] == ["cosign", "verify"]:
                 commands.append(argv[2:])
@@ -953,8 +957,8 @@ if upstream is None:
         f"{CHART.relative_to(ROOT)} has no `home: https://github.com/<owner>/<repo>` — it is where this guard "
         f"reads the upstream a verification must pin, so without it the identity check below checks NOTHING"
     )
-elif not README.is_file():
-    fail(f"{README.relative_to(ROOT)} is missing — it is where an operator is told how to verify a release")
+elif not VERIFY_PAGE.is_file():
+    fail(f"{VERIFY_PAGE.relative_to(ROOT)} is missing — it is where an operator is told how to verify a release")
 else:
     owner, repo = upstream.group(1), upstream.group(2)
     workflow_file = WORKFLOW.relative_to(ROOT).as_posix()
@@ -987,10 +991,10 @@ else:
             "to be checked against and this assertion would check NOTHING"
         )
 
-    commands = verify_commands(README.read_text())
+    commands = verify_commands(VERIFY_PAGE.read_text())
     if not commands:
         fail(
-            f"{README.relative_to(ROOT)} documents no `cosign verify`. Both images are keyless-signed by the "
+            f"{VERIFY_PAGE.relative_to(ROOT)} documents no `cosign verify`. Both images are keyless-signed by the "
             f"publish, and a signature nobody is told to check protects nobody (ADR 0057 §3). Document one per "
             f"published image, pinned to `{workflow_file}` in {owner}/{repo} on its release branches."
         )
@@ -1004,7 +1008,7 @@ else:
         issuers = flag_values(argv, "--certificate-oidc-issuer")
         if flag_values(argv, "--certificate-oidc-issuer-regexp") or issuers != [OIDC_ISSUER]:
             fail(
-                f"{README.relative_to(ROOT)}: `cosign verify {shown}` must pin exactly "
+                f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` must pin exactly "
                 f"`--certificate-oidc-issuer {OIDC_ISSUER}` — GitHub's OIDC issuer is what makes the identity "
                 f"below mean `a GitHub workflow run`, and any other issuer lets someone else mint that string"
             )
@@ -1012,7 +1016,7 @@ else:
         patterns = flag_values(argv, "--certificate-identity-regexp")
         if len(exact) + len(patterns) != 1:
             fail(
-                f"{README.relative_to(ROOT)}: `cosign verify {shown}` must carry exactly one certificate "
+                f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` must carry exactly one certificate "
                 f"identity (found {len(exact) + len(patterns)})"
             )
             continue
@@ -1024,19 +1028,19 @@ else:
                 # `re.fullmatch`, is the faithful model. A pattern without `^…$` is exactly what it lets through.
                 compiled = re.compile(patterns[0])
             except re.error as e:
-                fail(f"{README.relative_to(ROOT)}: the identity pattern `{patterns[0]}` does not compile: {e}")
+                fail(f"{VERIFY_PAGE.relative_to(ROOT)}: the identity pattern `{patterns[0]}` does not compile: {e}")
                 continue
             matches = lambda subject, rx=compiled: rx.search(subject) is not None  # noqa: E731
         for what, subject in accepted.items():
             if not matches(subject):
                 fail(
-                    f"{README.relative_to(ROOT)}: `cosign verify {shown}` rejects {what} ({subject}) — the "
+                    f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` rejects {what} ({subject}) — the "
                     f"workflow publishes and signs from that branch, so a genuine release fails to verify"
                 )
         for what, subject in rejected.items():
             if matches(subject):
                 fail(
-                    f"{README.relative_to(ROOT)}: `cosign verify {shown}` accepts {what} ({subject}). A "
+                    f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` accepts {what} ({subject}). A "
                     f"verification is only as narrow as the identity it pins (ADR 0057 §3) — this one "
                     f"accepts a signature the veyq release never made."
                 )
@@ -1047,7 +1051,7 @@ else:
             if match:
                 if match.group(2) == ":":
                     fail(
-                        f"{README.relative_to(ROOT)}: `cosign verify {shown}` verifies a TAG. A tag can move "
+                        f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` verifies a TAG. A tag can move "
                         f"between the verify and the pull; verify the digest the tag resolved to, and deploy "
                         f"that digest (ADR 0057 §3)."
                     )
@@ -1056,14 +1060,14 @@ else:
     for image in sorted(published_images(WORKFLOW.read_text()) if WORKFLOW.is_file() else set()):
         if commands and image not in verified_images:
             fail(
-                f"{README.relative_to(ROOT)} never verifies `{REGISTRY}/{owner}/{image}` by digest. The publish "
+                f"{VERIFY_PAGE.relative_to(ROOT)} never verifies `{REGISTRY}/{owner}/{image}` by digest. The publish "
                 f"signs every image it ships, and an operator told to verify one of a pair runs the other on "
                 f"trust — and the pair includes the higher-privilege admin image (ADR 0065)."
             )
     chart_ref = f"charts/{(yaml.safe_load(CHART.read_text()) or {}).get('name') or ''}"
     if commands and chart_ref not in verified_images:
         fail(
-            f"{README.relative_to(ROOT)} never verifies `{REGISTRY}/{owner}/{chart_ref}` by digest. The publish "
+            f"{VERIFY_PAGE.relative_to(ROOT)} never verifies `{REGISTRY}/{owner}/{chart_ref}` by digest. The publish "
             f"signs the chart beside the images (ADR 0064), and a chart nobody is told to verify is the one "
             f"artifact of the release an operator installs on trust — the one that chooses which images run."
         )
@@ -1080,24 +1084,25 @@ else:
             fail(
                 f"{values_file.relative_to(ROOT)}: `{key}.repository` defaults to `{default}`, not `{want}` — "
                 f"the chart installs from the registry with the upstream's own images, the ones "
-                f"{README.relative_to(ROOT)} verifies (ADR 0064); a fork overrides it knowingly"
+                f"{VERIFY_PAGE.relative_to(ROOT)} verifies (ADR 0064); a fork overrides it knowingly"
             )
         elif commands and image not in verified_images:
             fail(
                 f"{values_file.relative_to(ROOT)}: `{key}.repository` defaults to `{want}`, which "
-                f"{README.relative_to(ROOT)} never verifies by digest — a default nobody is told to verify"
+                f"{VERIFY_PAGE.relative_to(ROOT)} never verifies by digest — a default nobody is told to verify"
             )
     if WORKFLOW.is_file() and "certificate-identity" in WORKFLOW.read_text():
         fail(
             f"{workflow_file} states a verification identity of its own. The identity is stated once, in "
-            f"{README.relative_to(ROOT)}, where this guard holds it to what signs — a second copy is one "
+            f"{VERIFY_PAGE.relative_to(ROOT)}, where this guard holds it to what signs — a second copy is one "
             f"nothing checks, and the one the workflow carried accepted any workflow on any ref."
         )
 
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
     fail(
-        f"no literal veyq image tag found anywhere under {INFRA.relative_to(ROOT)}/ — this half of the guard "
+        f"no literal veyq image tag found anywhere under {INFRA.relative_to(ROOT)}/ or "
+        f"{RUN_PAGES.relative_to(ROOT)}/ — this half of the guard "
         f"checked NOTHING and would report green either way"
     )
 

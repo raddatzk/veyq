@@ -38,7 +38,8 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 - `infra/` + `charts/veyq/` — the two deployment targets: the production compose file (travels inside the
   signed image, [ADR 0057](docs/decisions/0057-release-identity-and-deployment-recipe.md)) and the Helm chart
   ([ADR 0064](docs/decisions/0064-kubernetes-helm-deployment-target.md)). Every infra-level decision has an
-  answer on both, and a change to one checks the other; `infra/README.md` owns the commands for both.
+  answer on both, and a change to one checks the other; the docs site's Run area (`site/src/content/docs/run/`) owns
+  the operator commands for both, and `infra/README.md` the dev stack and cutting a release.
 - `packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
   suite + the cold account birth + the Emergency Kit codec that carries its Secret Key + the wire base64,
   shared by `web/` and `admin-web/`

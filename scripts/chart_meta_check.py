@@ -135,7 +135,7 @@ recognises the database by its image repository, so a database image of another 
 the app container's mount and the pod's
 `fsGroup`; it does not check the claim's access mode or that the same claim is not also mounted elsewhere. (xi)
 checks three contradictions, not the schema's completeness. (xiv) proves the rendered reference, not that the
-digest exists or is the one `infra/README.md` verified — the chart cannot see the verification. And it says nothing about the compose recipe, which
+digest exists or is the one `site/src/content/docs/run/verify-a-release.md` verified — the chart cannot see the verification. And it says nothing about the compose recipe, which
 its sibling guards own (`validate_compose_posture.py` holds that target's half of ADR 0071).
 
 **Why it sits OUTSIDE the `validate_*` glob.** It shells out to `helm`, which is not a repository artifact,
@@ -338,7 +338,7 @@ def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
             if digest and not image.endswith(f"@{digest}"):
                 errors.append(
                     f"(xiv) {tag}: the {which} image renders as `{image}` although the values pin `{digest}` — the "
-                    f"operator verified that digest (infra/README.md § Verifying a release), and the pod pulls something else"
+                    f"operator verified that digest (https://raddatzk.github.io/veyq/run/verify-a-release/), and the pod pulls something else"
                 )
             if not digest and "@" in image:
                 errors.append(f"(xiv) {tag}: the {which} image renders as `{image}` with a digest the values never set")

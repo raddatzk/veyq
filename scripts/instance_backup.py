@@ -5,7 +5,7 @@ The executable form of [uc.admin.back-up-and-restore-instance] and
 [ADR 0056](../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md): an instance's durable
 state is exactly **(a)** the database, **(b)** the object store's *contents*, **(c)** the config-secret key
 file — and a procedure that captures fewer than three produces an instance that boots, serves pages, and is
-still broken. The commands live in [infra/README](../infra/README.md) § Backup & restore; this file is what
+still broken. The commands live in the docs site's [Backup and restore](../site/src/content/docs/run/backup-and-restore.md); this file is what
 they call.
 
 **Not a `validate_*.py`.** The trust-chain job runs that glob buildlessly on every push; this needs Docker, a
@@ -614,7 +614,7 @@ def key_owner_plan(euid: int, parent_uid: int, parent_gid: int, existing_uid: in
             f"a file to another user — the key would be born yours, and an application running as uid "
             f"{parent_uid} could not read it (configSecretState: ABSENT). Run the restore as root (`sudo -E`), or "
             f"restore the key to a file of your own and copy it in through the application container "
-            f"(`docker cp`, `kubectl cp`), as infra/README.md § Restore shows."))
+            f"(`docker cp`, `kubectl cp`), as https://raddatzk.github.io/veyq/run/backup-and-restore/ shows."))
     if existing_uid is not None and existing_uid != euid:
         return KeyOwnerPlan(REFUSE, reason=(
             f"a key already there belongs to uid {existing_uid}; overwriting it keeps that owner, which this tool "

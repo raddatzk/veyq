@@ -15,7 +15,7 @@ list of files or names (§ *a guard derives its anchor set from the code*, chang
     the helper containers it starts.
 
 A reference is **external** unless it is a variable (`${VEYQ_IMAGE:?…}` — the operator's pin, which
-`infra/README.md` § *Verifying a release* resolves to a verified digest), an earlier stage of the same
+`site/src/content/docs/run/verify-a-release.md` resolves to a verified digest), an earlier stage of the same
 Dockerfile, `scratch`, or one of veyq's own published images (read out of `.github/workflows/container.yml`'s
 build matrix). Every external reference must be written `repo:tag@sha256:<64 hex>` — the tag so a person can
 still read the version, the digest so what runs is what was pinned — and one `repo:tag` must carry one digest

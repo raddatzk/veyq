@@ -25,7 +25,7 @@ VEYQ_RESOLVERS=$(awk '/^nameserver/ { print ($2 ~ /:/) ? "[" $2 "]" : $2 }' /etc
 export VEYQ_RESOLVERS
 
 # The deployment's HSTS switch — fed from the same key as the app's (`VEYQ_HSTS_ENABLED` in infra/.env,
-# `hsts.enabled` in the chart; infra/README.md § Running in production), so one value governs both origins;
+# `hsts.enabled` in the chart; https://raddatzk.github.io/veyq/run/new-instance/), so one value governs both origins;
 # docs/crosscutting/cc.security.csp.md § admin-web says why there is one and not two. Exactly `true` (the default
 # when unset or empty) or `false`. Anything else stops the container here, naming the variable — the image's
 # entrypoint runs hooks under `set -e` — because a mistyped security switch must fail loudly, never land silently

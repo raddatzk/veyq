@@ -40,7 +40,14 @@ export default defineConfig({
         {
           label: 'Run',
           translations: { de: 'Betreiben' },
-          items: [{ slug: 'run' }],
+          items: [
+            { slug: 'run', label: 'Overview', translations: { de: 'Überblick' } },
+            'run/verify-a-release',
+            'run/new-instance',
+            'run/kubernetes',
+            'run/upgrade',
+            'run/backup-and-restore',
+          ],
         },
         {
           label: 'Security',

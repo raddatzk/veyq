@@ -139,7 +139,7 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
 
 **7. An upgrade is proven before it is published** (owner decision 2026-10-14, inbox #419). A release does not only
 claim that it upgrades an instance of its predecessor; a run shows it — `scripts/run_web_e2e.py --upgrade` locally and
-`container.yml`'s `upgrade-proof` job ([infra/README](../../infra/README.md) § An upgrade, step by step).
+`container.yml`'s `upgrade-proof` job ([Upgrade](../../site/src/content/docs/run/upgrade.mdx), the Run area's procedure).
 
 - **The proof.** The predecessor's own build (its fast-jar and its own e2e suites, from a worktree of its ref) writes
   sealed content into a fresh instance; [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s tool
@@ -223,4 +223,6 @@ claim that it upgrades an instance of its predecessor; a run shows it — `scrip
 - [ADR 0085](0085-one-major-moved-on-a-yearly-train.md) — when that one major moves, and which majors a client speaks
 - [ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md) — why a workflow that has never run proves nothing
 - [uc.admin.identify-instance-release](../features/admin/use-cases/uc.admin.identify-instance-release.md) — the operator-facing half
-- [infra/README](../../infra/README.md) — the stack the recipe describes
+- Run area of the docs site: [Verify a release](../../site/src/content/docs/run/verify-a-release.md) — the operator's
+  signature check, [Set up a new instance](../../site/src/content/docs/run/new-instance.mdx) — the stack the recipe
+  describes, and [Upgrade](../../site/src/content/docs/run/upgrade.mdx)

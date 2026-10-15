@@ -1,7 +1,6 @@
 ---
 title: "Running your own instance"
 sources:
-  - infra/README.md
   - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
   - docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md
   - docs/crosscutting/security-model.md
@@ -75,17 +74,25 @@ Tell your users to keep their Emergency Kit somewhere safe, and mean it. This is
 as a durability requirement in veyq, not a convenience feature.
 
 The commands, and the one precondition that makes them correct — **stop the application first, and leave the
-database and the store running** — are in
-[`infra/README.md`](https://github.com/raddatzk/veyq/blob/main/infra/README.md) § Backup & restore. Take one
-before every upgrade.
+database and the store running** — are in [Backup and restore](/veyq/run/backup-and-restore/). Take one before
+every [upgrade](/veyq/run/upgrade/).
+
+## The procedures
+
+- [Verify a release](/veyq/run/verify-a-release/) — before anything runs it: the signatures, and the digests you
+  deploy.
+- [Set up a new instance](/veyq/run/new-instance/) — the production compose recipe or the Helm chart, and the Server
+  Owner created before DNS and TLS exist.
+- [Kubernetes](/veyq/run/kubernetes/) — what is specific to the Helm chart.
+- [Upgrade](/veyq/run/upgrade/) — with the backup as the way back.
+- [Backup and restore](/veyq/run/backup-and-restore/) — the three legs, captured cold and checked.
 
 ## Where the material is
 
 These are the real sources:
 
-- **[`infra/README.md`](https://github.com/raddatzk/veyq/blob/main/infra/README.md)** — both stacks and the Helm
-  chart: the dev profiles, the object store, a mail smoke test against the throwaway mailbox, running in
-  production and on Kubernetes, and the backup-and-restore runbook.
+- **[`infra/README.md`](https://github.com/raddatzk/veyq/blob/main/infra/README.md)** — the development stack: the
+  dev profiles, the object store, a mail smoke test against the throwaway mailbox, and how a release is cut.
 - **[`README.md`](https://github.com/raddatzk/veyq/blob/main/README.md)** — repository shape and what is built.
 - **[`docs/architecture/README.md`](https://github.com/raddatzk/veyq/blob/main/docs/architecture/README.md)** —
   deployment topology and the runtime view.

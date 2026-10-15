@@ -113,7 +113,7 @@ jobs:
           publish_latest=false
 
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            # Whatever publishes also signs, and infra/README.md § Verifying a release accepts exactly these two
+            # Whatever publishes also signs, and site/src/content/docs/run/verify-a-release.md accepts exactly these two
             # branch shapes — scripts/validate_release_identity.py holds the two to each other.
             if [[ "$REF_NAME" != "main" && "$REF_NAME" != "release/${major}.x" ]]; then
               echo "Unsupported publish branch: $REF_NAME (VERSION ${major} publishes from main or release/${major}.x)" >&2
@@ -286,7 +286,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
 
-  # The upgrade proof (ADR 0057 Decision 7, infra/README.md § An upgrade, step by step): the predecessor's own jar and e2e
+  # The upgrade proof (ADR 0057 Decision 7, site/src/content/docs/run/upgrade.mdx): the predecessor's own jar and e2e
   # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
   # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
   # default of `scripts/run_web_e2e.py --upgrade`: the first parent of the commit until the first release, the newest
@@ -484,7 +484,7 @@ jobs:
           # Resolve each manifest-list digest (the sha- tag is always produced) and sign THAT, so every channel
           # tag pointing at it (latest/<major>/<version>) is covered. The identity this produces is this file on
           # the branch that ran it — which is why the version step publishes from `main` and `release/<major>.x`
-          # only. How an operator verifies it is stated once, in infra/README.md § Verifying a release, and
+          # only. How an operator verifies it is stated once, in site/src/content/docs/run/verify-a-release.md, and
           # scripts/validate_release_identity.py holds that command to the branches this workflow publishes from.
           for image in $IMAGES; do
             digest="sha256:$(docker buildx imagetools inspect --raw "$image:sha-${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)"

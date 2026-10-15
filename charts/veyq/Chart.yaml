@@ -10,7 +10,7 @@ type: application
 # `appVersion` (`<major>.<minor>`, or `<major>.<minor>-SNAPSHOT`; ADR 0057 §1, ADR 0064), and the minor is a commit
 # count — so no tree can hold the real value, and writing one here would be a number that is wrong on the next
 # commit. `appVersion` is the image tag the values default to, so an install from a checkout sets `image.tag` and
-# `admin.image.tag` (infra/README.md § Running on Kubernetes); an install from the registry needs neither.
+# `admin.image.tag` (https://raddatzk.github.io/veyq/run/new-instance/, Kubernetes); an install from the registry needs neither.
 version: 0.0-dev
 appVersion: "0.0-dev"
 # `restricted` PodSecurity admission is GA from 1.25, and every pod here is written to pass it.

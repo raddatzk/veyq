@@ -34,13 +34,13 @@ hsts:
 image:
   # The upstream's app image, cosign-signed by the same publish as the admin image and the chart — written out, as
   # the verify identity is (ADR 0057 §3), so a fork that deploys its own images overrides it knowingly.
-  # scripts/validate_release_identity.py holds it to the name infra/README.md § Verifying a release verifies.
+  # scripts/validate_release_identity.py holds it to the name https://raddatzk.github.io/veyq/run/verify-a-release/ verifies.
   repository: ghcr.io/raddatzk/veyq
   # Defaults to the chart's appVersion: the release a published chart was packaged with (`<major>.<minor>`), and
   # a placeholder in a checkout, where it must be set. Pin one; `latest` moves, the schema migrates at boot with
   # no gate, and there is no downgrade path (ADR 0057).
   tag: ""
-  # The digest infra/README.md § Verifying a release resolved and verified for that tag (`sha256:<64 hex>`).
+  # The digest https://raddatzk.github.io/veyq/run/verify-a-release/ resolved and verified for that tag (`sha256:<64 hex>`).
   # Set, the pod runs `repository:tag@digest` and the runtime pulls by the digest; the tag stays for a reader.
   # Leave it empty only if you accept running whatever the tag points at when the node pulls.
   digest: ""

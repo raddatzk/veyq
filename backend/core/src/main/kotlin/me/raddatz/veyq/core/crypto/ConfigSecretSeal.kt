@@ -125,12 +125,12 @@ class ConfigSecretSeal(config: VeyqConfig) {
     }
 
     /** What to fix. A permission denial is almost always a key owned by the wrong user (a restore or copy run as
-     *  root, infra/README.md § Restore), so it names that cause; anything else keeps the generic advice. */
+     *  root, https://raddatzk.github.io/veyq/run/backup-and-restore/), so it names that cause; anything else keeps the generic advice. */
     private fun fixHint(e: Exception): String =
         if (e is AccessDeniedException) {
             "Permission denied: the key file and its directory must be owned by and accessible to the user the " +
                 "application runs as (uid 10001 in the image), the key mode 0600; a key restored or copied as " +
-                "another user (e.g. root) is not (infra/README.md § Restore)."
+                "another user (e.g. root) is not (https://raddatzk.github.io/veyq/run/backup-and-restore/)."
         } else {
             "Fix the path/permissions to enable it."
         }

@@ -8,7 +8,7 @@ handling of reported shares.
 - **Note:** the procedural operator **runbook** (install, env, backup, upgrade) belongs in the repo's
   infrastructure docs, not here — this feature is the *product* surface of administration. Where a runbook has a
   use-case, the split is: the use-case owns the **goal, the flow's shape, the failure modes and the acceptance
-  criteria**; [`infra/`](../../../infra/README.md) owns the **commands**. A procedure with no stated failure
+  criteria**; the docs site's [Run area](../../../site/src/content/docs/run/index.md) owns the **commands**. A procedure with no stated failure
   modes is the thing that gets executed wrong.
 
 ## Use-cases
@@ -52,7 +52,7 @@ handling of reported shares.
   **refined** ([ADR 0057](../../decisions/0057-release-identity-and-deployment-recipe.md); the release version is
   the operator's, the pre-auth `major`/`build` is the client's; they are to share the major
   ([ADR 0085](../../decisions/0085-one-major-moved-on-a-yearly-train.md), not built) and the precise release never goes pre-auth)
-- Upgrade the instance — the runbook is **written** (`infra/README.md` § An upgrade, step by step) and no longer
+- Upgrade the instance — the runbook is **written** ([Upgrade](../../../site/src/content/docs/run/upgrade.mdx), the docs site's Run area) and no longer
   blocked: the release identity above is what let its rollback target be named, and an upgrade whose rollback
   target cannot be named is advice rather than a procedure. It begins with the backup above by decision, not by
   advice — the schema migrates at boot with no gate and the migration set has no downgrade path
