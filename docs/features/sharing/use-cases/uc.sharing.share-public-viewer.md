@@ -133,3 +133,4 @@ im Footer erklärt die Details.
 - Cross-cutting: [Security Model](../../../crosscutting/security-model.md),
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md)
 - Related: [Memory](../../memory/_index.md) (what a Memory is — the thing being shared)
+- Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)

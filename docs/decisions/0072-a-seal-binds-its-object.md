@@ -120,3 +120,5 @@ a vector with no live purpose is deleted. `journalSeal` (empty AAD, no caller) i
   make a static string name the object, and the upload chain lives entirely inside correct-looking static
   contexts.
 - **(e) Bind parents** — Decision 4.
+
+Explained for security researchers on the docs site: [Threat model](../../site/src/content/docs/security/threat-model.md), [Known limitations](../../site/src/content/docs/security/known-limitations.md).

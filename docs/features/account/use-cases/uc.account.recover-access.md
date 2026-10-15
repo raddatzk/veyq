@@ -136,3 +136,4 @@ Secret Key dort also noch einmal ein.
 - [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) — why a new password means a new auth keypair
 - End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/is-my-data-safe.md)
 - End-user view (docs site): [Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)
+- Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)

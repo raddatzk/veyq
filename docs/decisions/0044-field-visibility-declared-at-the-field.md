@@ -138,3 +138,5 @@ The point is the **default**. Today silence means "nobody classified this". Afte
   catches what someone already thought to forbid, and the field that breaks this invariant will be one nobody
   anticipated — that is what makes it a breach rather than a typo. The marker inverts the default instead of
   extending a blacklist.
+
+Explained for security researchers on the docs site: [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md), [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md).

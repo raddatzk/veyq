@@ -154,3 +154,5 @@ and which is confidential even from the tenant owner.**
   orphan rule, key rotation.
 - **Deferred, on purpose:** the fingerprint verification stance (G2), grace length + restore + rotation
   mechanics (G3), and email-invite onboarding (later). They are recorded here so the slices inherit the frame.
+
+Explained for security researchers on the docs site: [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md).

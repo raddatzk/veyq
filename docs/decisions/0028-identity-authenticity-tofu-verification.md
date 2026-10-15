@@ -219,3 +219,5 @@ thing remains:
 - **Decision 4, strict mode.** It needs redesigning before it is wired: an *account-global* toggle cannot protect
   shared-scope content, because any co-member may key an unverified identity. The verification ceremony does not
   wait for it (Decision 3).
+
+Explained for security researchers on the docs site: [Threat model](../../site/src/content/docs/security/threat-model.md), [Known limitations](../../site/src/content/docs/security/known-limitations.md).

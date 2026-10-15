@@ -1,0 +1,153 @@
+---
+title: What the server sees
+description: The metadata a veyq server can read by design, what stays sealed, and the five deliberate concessions with their reasons.
+sources:
+  - docs/crosscutting/security-model.md
+  - docs/decisions/0044-field-visibility-declared-at-the-field.md
+  - docs/decisions/0047-inline-video-playback-range-streaming.md
+  - docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md
+  - docs/decisions/0014-group-scopes-and-governance.md
+---
+
+The server never sees content, only structure. Operator-blind does not mean metadata-blind: a defined set of
+operational facts stays readable so the server can sort, paginate, route, authorize and bill without decrypting.
+This page lists that set by category, what is sealed instead, and the five places where veyq knowingly shows the
+operator more than the general rule would suggest
+([security model § What is encrypted vs. server-visible](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-is-encrypted-vs-server-visible)).
+
+A stricter mode that also seals operational metadata is possible, at the cost of exactly those server capabilities;
+it is a conscious trade-off, not an oversight.
+
+## How the line is held: every field declares its class
+
+The split above is written in kinds ("sizes", "timestamps"); the API contracts are written in field names.
+[ADR 0044](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0044-field-visibility-declared-at-the-field.md)
+connects the two, and the build fails without it:
+
+- A field with `contentEncoding: base64` is **opaque**: ciphertext, a wrapped key, a public key, a signature, a
+  salt or a blinded token. The server derives no meaning from it.
+- **Every other scalar** in `contracts/api/` carries `x-veyq-visibility` with one of nine classes: `id`,
+  `structure`, `measure`, `time`, `enum`, `flag`, `token`, `public`, `pii`. An unmarked scalar fails the build.
+- **`pii` also requires `x-veyq-rationale`**, naming the mechanism that forces the plaintext. The set of
+  deliberately sensitive plaintext fields is therefore a standing, greppable budget, and every addition to it is
+  argued in the diff that adds it.
+
+The point is the default: silence fails. The limit is stated in the ADR itself: this checks the **contract, not
+the traffic**. A client that writes plaintext into a field marked opaque satisfies it completely, and it does not
+see path or query parameters, presigned-URL query strings, database columns with no contract, error message text,
+undeclared headers, or the object-store key. A green run means "no unclassified field in a JSON body and no
+unclassified declared header", never "operator-blind, verified". What the server actually receives is a separate
+sensor ([ADR 0053](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0053-wire-assertion-canary-sweep.md));
+[Verify it yourself](/veyq/security/verify-it-yourself/) covers both.
+
+## What is sealed
+
+Sealed client-side, never readable by the server:
+
+- media bytes and every derivative; journal text and embeds;
+- sensitive metadata: titles, captions, descriptions, places, people and faces, participant relationships, tags;
+  track and playlist details; GPS position and capture time, which the client seals itself rather than letting the
+  server read them off the file;
+- node names (folders, Memories, chapters, files): navigation uses a per-parent keyed MAC of the name, which the
+  server stores and enforces uniqueness on without being able to reverse it;
+- a blob's **type, upload name and modification time**, in a seal under the blob's own key, padded to a 256-byte
+  bucket so its length shows one of four sizes, never how long a name is. A Memories original's file name and media
+  type (photo, video or PDF) live there, so the operator learns neither;
+- bucket and uploader names, a share's note and private name, and the identity pin store.
+
+## What is server-visible
+
+### Identity and membership
+
+- **Scope and membership:** who belongs to which tenant and group, and in which role.
+- **Per member, per tenant:** the username, the identity public key and the group-add-consent flag. Any fellow
+  tenant member can enumerate these (concession 4 below).
+- Whether a member **has a profile picture** and how often it changed (`avatar_version`); the picture itself is a
+  constant-size sealed blob. Contract, crypto and backend are built; the web client is not yet.
+- The account's **Ed25519 auth public key**, which verifies a signed login challenge. It is not a credential, and
+  the password never reaches the server
+  ([ADR 0003](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0003-operator-blind-password-auth.md)).
+
+### Structure and ids
+
+- Existence and ids of nodes, media and shares; the tree's shape (parentage). Seals do not bind a node's parent,
+  so a move re-seals one node, not its subtree
+  ([ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md)
+  Decision 4).
+- Each node's **kind** (concession 3) and its content-key **epoch index**.
+- Per-parent blinded name tokens.
+- A medium's **uploader attribution and bucket structure**: an opaque owner key per medium (`user:{id}` or
+  `share:{id}`), its bucket, and the buckets' shape and counts; a Files file's uploader attribution, served to
+  members only.
+- A medium's **trash state**: a flag, who trashed it and when, until the scheduled purge.
+- Job-queue and op-log offsets, presence facts, and a grant-delivery decline status.
+
+### Timestamps
+
+Stored **as written**, to the second, and in two places to the millisecond (a medium's change time; a node's
+creation time, served to members to order equal-named siblings). Nothing rounds them: they tell *when*, never
+*what*.
+
+**A time is stored only where something reads it**: a sort, a purge or expiry cutoff, a served field, or, named as
+such, an operator reading the database for audit evidence. The root test `EveryStoredTimeHasAReaderTest` names
+each stored time's reader and fails on one without. So the database does **not** hold, for example, when an
+account, tenant, scope, blob or upload session was created, when a share link was deleted, when a scope's key
+epoch rotated, when a member re-sealed their pins or device register, or when a share guest joined; the request
+time the server observes live is not kept for them. What it does hold, each with its reader, is listed in the
+[security model](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-is-encrypted-vs-server-visible).
+
+### Sizes and access
+
+- Sizes: a blob's plaintext size is on its row; the blob-meta seal shows one of four padded sizes.
+- Access: every read except range-streamed playback fetches a blob **whole**, so the operator learns only *that*
+  a blob was accessed. Playback is concession 1.
+
+### Sharing
+
+- A share's id (stored raw: members rebuild links from it and seals bind it), its role, its state, and its
+  creation time.
+- Whether it has a password, and the salt and verifier that check one; the password itself is held only sealed
+  under the link's own key.
+- To a **public share's guest**: the shared node's scope id (concession 5) and the root node's kind.
+- Nothing about an accountless visitor's acceptance of the tenant's terms: that lives in the visitor's browser.
+
+### Mail and SMTP
+
+- A tenant's **SMTP configuration** (host, port, from, username, TLS) and the owner-authored invite template text.
+- The **send fact** of every mail veyq sends — a member invite, a password-recovery link, an address confirmation:
+  recipient and send time.
+- The SMTP **password** is a server-held secret sealed at rest under a key file the server manages, never stored in
+  the database in the clear
+  ([ADR 0050](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0050-operator-config-secret-encryption.md)).
+- A mail itself carries only a link, the domain, an expiry and neutral copy, never sealed metadata.
+
+### Account email
+
+The **account email**, in plaintext (concession 2), and `email_confirmed_at`, when its holder last showed they read
+that address.
+
+### Terms acceptance
+
+The tenant's **terms text and version** are the operator's public policy, served to everyone. A member's
+**accepted terms versions and when they accepted each** are kept as a history, one row per version, never
+overwritten: audit evidence for a dispute, served by no API.
+
+## The five concessions
+
+Each of these shows the operator something finer than, or outside, the general rule, and each was accepted for a
+stated reason.
+
+| # | Concession | What the operator learns | Why it was accepted | Decided in |
+|---|---|---|---|---|
+| 1 | **Range streaming of video** | Which ciphertext chunks a playing client fetches, and when: which parts of a video were watched, re-watched, skipped or seeked to. Finer than a per-blob timestamp. | Hiding it means either downloading the whole original before the first frame or routing bytes through a decrypting server, which would break operator-blindness and self-hostability. Scoped to playback (the same route also plays audio, and a file on a Files file's page); read-ahead is a playback setting, not a privacy control. A download also streams but reads every chunk in order, so it shows no more than a whole-blob read. | [ADR 0047](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0047-inline-video-playback-range-streaming.md#the-accepted-seek-leak--stated-plainly) |
+| 2 | **Plaintext account email** | Each account's email address. | It is the login identifier and the source of the deterministic auth salt, which makes the server answer identically for existing and non-existing accounts. | [ADR 0003](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0003-operator-blind-password-auth.md) |
+| 3 | **Node `kind`** | The kind of every node (`FOLDER`, `MEMORY`, `CHAPTER`, `FILE`, `FILES_DROPBOX` today), and so which applications a scope uses and the rows, timestamps and sizes each kind produces. | The node tree belongs to the platform, not to one application, so sharing, trash and move are built once; the server applies each kind's placement and guest rules through fail-closed seams that read the kind. | [ADR 0079](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) |
+| 4 | **Member enumeration within a tenant** | To any fellow tenant member: every member's username, identity public key and group-add-consent flag. | Adding someone to a group resolves a username to an identity public key on the server. The resolve is owner-gated, but any member can create a group and own it at once, so the gate is convenience, not confidentiality, and is not presented as such. | [ADR 0014](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0014-group-scopes-and-governance.md) §5 |
+| 5 | **Share linkability via the scope id** | A guest learns the shared node's scope id, so two links into one space are linkable by anyone holding both. | Every node-key seal the viewer opens is bound to its scope, so the id travels with the subtree. The shared node's and its media's ids already made one subtree linkable; the scope id extends that to sibling Memories of the same space. | [ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md) |
+
+
+:::note
+Every server-visible fact on this page is also visible to a [passive operator](/veyq/security/threat-model/) and
+to anyone holding a database dump. What an *active* operator can do beyond reading it is the subject of the
+[Threat model](/veyq/security/threat-model/).
+:::

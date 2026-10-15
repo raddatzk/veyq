@@ -249,3 +249,4 @@ object moved **out of the Memories module into the platform's**:
 - Decisions: [ADR 0012](0012-content-key-hierarchy.md) (`K_SC` sealing),
   [ADR 0024](0024-scope-key-rotation.md) (the epoch chain behind `E_0`),
   [ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md) (the wrap primitives)
+- Security area of the docs site: [Known limitations](../../site/src/content/docs/security/known-limitations.md)

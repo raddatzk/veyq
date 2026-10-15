@@ -52,7 +52,18 @@ export default defineConfig({
         {
           label: 'Security',
           translations: { de: 'Sicherheit' },
-          items: [],
+          items: [
+            'security/start-here',
+            'security/threat-model',
+            'security/what-the-server-sees',
+            'security/cryptography',
+            'security/key-hierarchy',
+            'security/protocols',
+            'security/verify-it-yourself',
+            'security/known-limitations',
+            'security/roadmap',
+            'security/reporting',
+          ],
         },
       ],
       // Fails the build on a broken internal link or anchor — the link check of `npm run check`. A link to a

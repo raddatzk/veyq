@@ -1,0 +1,591 @@
+---
+title: Protocols
+description: The six key-handling protocols veyq runs, each with its steps, what the server learns, what it cannot do, and what stays open.
+sources:
+  - docs/crosscutting/security-model.md
+  - docs/features/account/enablers/en.account.key-model.md
+  - docs/features/account/use-cases/uc.account.onboard-device.md
+  - docs/features/spaces/use-cases/uc.spaces.add-member.md
+  - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
+  - docs/features/account/use-cases/uc.account.recover-access.md
+---
+import Mermaid from '../../../components/Mermaid.astro';
+
+This page walks through every protocol in which veyq creates, moves, or replaces key material: account birth and
+login, device linking, member admission, sharing, rotation and revocation, and recovery. Each section names its
+participants, gives the steps in prose and as one sequence diagram, and then states what the server learns, what it
+cannot do, and what remains open. Byte formats are not restated here. They live in the conformance-pinned suite
+[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts) and its vectors
+[`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/blob/main/contracts/crypto/vectors/v1.json).
+
+:::caution[Which client the claims apply to]
+Every protocol below is enforced by the client. When this page says an **active** operator *cannot* do something,
+that holds only on a client whose code the operator does not serve: a web client you serve yourself against someone
+else's server (a trusted or attested origin and native apps are not built yet, see the
+[Roadmap](/veyq/security/roadmap/)). On a web client the operator serves, every protocol here protects against a
+**passive** operator only, because an active one can ship code that captures keys
+([ADR 0026](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0026-client-trust-tiers.md)). On a self-hosted
+instance the operator is you, so the question does not arise. How much of the design is built against an active
+operator is kept in one table:
+[security-model § What holds today](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve).
+This page claims nothing beyond it.
+:::
+
+## Conventions
+
+| Symbol | Meaning |
+|---|---|
+| Master Key | The account's 32-byte root. It is wrapped once per unlock method and opens the identity private key. |
+| Identity key | A hybrid post-quantum encryption key and an Ed25519 signing key. Others seal scope keys to the public half; its owner signs every grant it issues. See [Cryptography](/veyq/security/cryptography/). |
+| Secret Key | 256 random bits, held by the user in the Emergency Kit. The server never stores it. |
+| `K_SC` / epoch key | A scope's content key. It is a forward chain of epochs, and a grant carries the latest epoch the member is entitled to. |
+| `K_mem` | A random per-Memory content key, wrapped independently, which makes it the unit a share hands out. |
+| `K_share` | A random per-link key. It travels in the URL fragment. |
+| Seal | Authenticated encryption that binds its purpose and the object it is stored as ([ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md)), so the server cannot serve one object's ciphertext as another's. |
+
+The full hierarchy is on [Key hierarchy](/veyq/security/key-hierarchy/).
+
+## 1. Account birth and login
+
+**Purpose.** Create an account whose keys the server never holds, and later authenticate to the server without
+sending it the password. Authentication and unlock are two separate layers on purpose. Login yields a session.
+Opening content needs the Master Key, which only the unlock step produces.
+
+**Participants.** The account holder, their client, and the server.
+
+**Steps.**
+
+1. **Birth (on the device).** The client generates the identity keypair, a random Master Key, and a random
+   Secret Key. It seals the identity private key under the Master Key. It then writes two wraps of the Master Key:
+   - the `PASSWORD` wrap, under a key derived with Argon2id from the Secret Key **and** the password. This is
+     two-secret key derivation (2SKD), and it is the mandatory floor;
+   - the `RECOVERY` wrap, under a key derived with Argon2id from the Secret Key alone. The server withholds it
+     (section 6).
+
+   From the password and a deterministic auth salt (derived from an instance salt and the email address), the
+   client derives an Ed25519 **auth keypair**, separate from the unlock derivation. From the Secret Key alone it
+   derives an Ed25519 **Secret-Key proof key**. The Secret Key is shown as the **Emergency Kit**, and the user must
+   confirm they saved it before the account is created.
+2. **Registration.** The client sends the email, the identity public key, the wrapped identity private key, the
+   two Master Key wraps, the auth **public** key, the proof **public** key and the suite id. The password, the
+   Secret Key and the Master Key never leave the device. The same birth runs at first-run setup (the Server Owner)
+   and when an account is born by joining a tenant through an invite
+   ([`accountBirth.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/accountBirth.ts)).
+3. **Login (challenge-response).** The client re-derives the auth keypair, asks for a challenge, and gets a
+   single-use, time-bounded nonce. The server issues one whether or not the account exists. The client signs the
+   nonce and sends back the email, the nonce and the signature. The server consumes that one challenge, checks the
+   signature against the stored auth public key, and issues a session. A failure is generic.
+4. **Unlock.** With a session, the client fetches its `PASSWORD` wrap and its key-derivation parameters. It refuses
+   any derivation profile other than the one it writes itself
+   ([ADR 0017](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md)
+   rule 5). It then derives the key from password and Secret Key, opens the Master Key and through it the identity
+   private key, and discards the derived key. A wrong password or Secret Key fails on the device, and the server
+   is not involved.
+5. **Personal scope.** After the first unlock, the client creates its personal scope by itself: a random scope key,
+   sealed to its own identity public key and **signed with its own identity key**. The server stores only the
+   scope row and that signed ciphertext.
+
+<Mermaid code={`
+sequenceDiagram
+  actor U as Account holder
+  participant C as Client
+  participant S as Server
+  U->>C: email, password
+  C->>C: generate identity keypair, Master Key, Secret Key
+  C->>C: PASSWORD wrap (Argon2id over Secret Key and password)<br>RECOVERY wrap (Argon2id over Secret Key)<br>auth keypair from password, proof key from Secret Key
+  C->>U: Emergency Kit (Secret Key), must be confirmed
+  C->>S: register: email, identity public key, wrapped identity private key,<br>both wraps, auth public key, proof public key
+  Note over C,S: login
+  C->>S: request challenge (email)
+  S-->>C: single-use nonce (issued for unknown accounts too)
+  C->>S: email, nonce, signature with auth private key
+  S-->>C: session, or a generic failure
+  Note over C,S: unlock
+  C->>S: fetch PASSWORD wrap
+  S-->>C: wrap and derivation parameters (ciphertext)
+  C->>C: derive key from Secret Key and password<br>open Master Key, then identity private key
+`} />
+
+**What the server learns.** The email address in plaintext (it is the login identifier and the source of the auth
+salt), the identity public key, the auth and proof public keys, ciphertext wraps, the suite id, and when sessions
+are created and refreshed. It never receives the password, the Secret Key, the Master Key or any derived key.
+
+**What it cannot do.**
+
+- **Turn a database copy into a login or into content.** The stored auth public key is not a credential. Forging a
+  login means brute-forcing the password through Argon2id, and that buys a session and operational metadata, never
+  content ([ADR 0003](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0003-operator-blind-password-auth.md)).
+  A cracked password alone opens no wrap, because the `PASSWORD` wrap also needs the Secret Key.
+- **Replay a login.** What crosses the wire is a signature over a fresh nonce, consumed once.
+- **Tell an existing account from a missing one** through login. The salt is deterministic, a nonce is always
+  issued, and failures are generic.
+- **Make every unlock derive almost forever** by serving a costly derivation profile. A client derives only with
+  the profile it writes ([ADR 0017](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5).
+- **Plant a personal scope key.** A personal-scope grant opens only if it is self-signed under the vault's own
+  key, and the signed scope kind stops a group's grant posing as the personal one
+  ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md) Decision 6).
+
+**Residual.** An active operator **can** install an identity of its own on an account, because it writes the key
+directory itself. Through the API, a session or a password is no longer enough to replace an identity or mint a cold
+credential: those requests need a signature of the Secret-Key proof key
+([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
+Decision 2). That check runs on the server, so it binds every caller except the operator. Until Key Transparency
+exists, the only detector is a contact who pinned the old key and now sees it as changed (section 3). A weak
+password stays crackable at Argon2id cost. The auth keypair is Ed25519; a post-quantum signature is planned but not
+built. See [Known limitations](/veyq/security/known-limitations/) and the [Roadmap](/veyq/security/roadmap/).
+
+## 2. Linking a device
+
+**Purpose.** Let a second device sign in **and** unlock without typing the password or the Secret Key. An unlocked
+device seals the Master Key and a fresh session to the new device over a channel the server only relays
+([ADR 0059](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0059-device-linking.md)). This is the one
+mechanism in veyq that turns an auth-layer fact into an unlock-layer one, so its ceremony is the whole defence.
+
+**Participants.** The account holder, a trusted device (signed in and unlocked), a new device, and the server as
+relay.
+
+**Two directions, one mechanism.** In **Add a new device**, the trusted device shows a code and the new device scans
+it. The binding step is to **compare** a short number on both screens, which works because both screens are in front
+of the user. In **Sign in with a QR code**, the new device shows the code and the trusted device scans it. Here the
+attacker could have authored the code, so comparing would prove nothing. Instead the trusted device shows a short
+code that the user **types into the new device**, and the trusted device seals only after the new device proves it
+knows that code. There is exactly one attempt. The rule: comparing a code means nothing unless you already know the
+other screen is yours; where you don't, the code must travel in the direction the attacker does not control. The
+diagram shows the first direction.
+
+**Steps (add a new device).**
+
+1. The trusted device draws a 32-byte secret and derives from it, with two HKDF labels, a routing **handle** and a
+   **channel key**. It opens the channel under the handle. The server only ever receives the handle.
+2. The secret is shown as a QR code. The code never names a server, and no client follows an address out of a
+   scan: each side talks only to the instance it already has open.
+3. The new device scans the code, derives the same handle and channel key, generates a single-use **ephemeral
+   transport keypair**, and posts its public key with a **MAC under the channel key**.
+4. The trusted device refuses an answer whose MAC does not verify. Both devices then show a short check number
+   derived from the answering key, and the user confirms they match, names the device, and confirms with a slide
+   gesture whose text says that signing the device out later will not take the key back.
+5. The trusted device mints a new session family for its own account and seals the Master Key, that family's
+   refresh token, the label and its own trust-state marks to the transport public key. It posts this envelope with a
+   MAC under the channel key.
+6. The new device fetches the envelope (unauthenticated on purpose, since only the ephemeral private key opens it),
+   verifies the MAC and opens it. It first **adopts** the refresh token into a session of its own, which spends the
+   handed-over value. Only then does it unlock, write its device-register entry, and enrol a `DEVICE_KEY` wrap. It
+   never enrols a password-bound wrap, because it has never seen the password.
+
+<Mermaid code={`
+sequenceDiagram
+  actor U as Account holder
+  participant T as Trusted device
+  participant S as Server (relay)
+  participant N as New device
+  T->>T: secret = 32 random bytes<br>derive handle and channel key
+  T->>S: open pairing channel (handle only)
+  T-->>N: QR code carries the secret (camera, never the server)
+  N->>N: derive handle and channel key<br>generate ephemeral transport keypair
+  N->>S: answer: transport public key and MAC under channel key
+  S-->>T: relay answer
+  T->>T: verify MAC, else abandon
+  Note over T,N: both screens show the same check number
+  U->>T: numbers match, name device, slide to confirm
+  T->>S: envelope sealed to transport key<br>(Master Key, refresh token, label, trust marks) and MAC
+  S-->>N: relay envelope
+  N->>N: verify MAC, open with ephemeral private key
+  N->>S: adopt refresh token into its own session
+  N->>S: unlock, write register entry, enrol DEVICE_KEY wrap
+`} />
+
+**What the server learns.** That this account opened a pairing and minted one more session family, which then
+appears in the account's session list. It relays a handle, a public key with its MAC, and one ciphertext envelope.
+It never sees the secret, the channel key, the Master Key, the label, the check number or the pairing code, and it
+learns no account identifier from the new device's side. Pairings are short-lived and single-use, and only one is
+open per account at a time.
+
+**What it cannot do.** Link a device of its own while the user links theirs. The QR code carries a secret the relay
+never receives, and both relayed values carry a MAC under the channel key derived from it: the trusted device seals
+only to an answer whose MAC verifies, and the new device opens only an envelope whose MAC verifies
+([ADR 0059](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0059-device-linking.md) §11). Without that
+MAC the relay could grind the compared number or the transcribed code offline and get the Master Key sealed to
+itself, or hand the new device a Master Key of its own making. The codes stop someone who is not the relay (a
+photographed or phished QR code); the channel key stops the relay.
+
+**Residual.** An attacker who both reads the QR code **and** runs the relay holds the channel key and can grind the
+codes again. A grant is irreversible: revoking the linked device's session takes its server access, not the Master
+Key it holds ([ADR 0058](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0058-revoke-never-takes-key-material.md)).
+The remedy that works going forward is rotation (section 5), and it needs the Secret Key, which a linked device
+never received. See [Known limitations](/veyq/security/known-limitations/).
+
+## 3. Admitting a member, TOFU and safety numbers
+
+**Purpose.** Give another person a shared scope's key without the server ever holding it, and without letting the
+server invent a member or substitute a key unnoticed
+([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md),
+[ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)).
+
+**Participants.** The owner who admits, the invitee, any existing key-holder (every member of the scope holds its
+key), and the server.
+
+**Steps.**
+
+1. **Admission.** From an unlocked vault, the owner mints a member invite. It carries an **admission tag**: an
+   HMAC under a key derived from the scope's current epoch key, over the scope id, that epoch and a client-minted
+   admission id (for a group add, also the target's user id). Only a holder of the epoch key can compute it. The
+   server mails the single-use invite and stores the invite secret only as a hash.
+2. **Registration.** The invitee's identity is born on their device (section 1) and its public key published. They
+   become a member **without a grant**, shown as *awaiting access*.
+3. **Delivery, automatic.** The next key-holder to come online reads the scope's member directory, sees the pending
+   member with their identity public key, and checks the admission tag under its **own** current epoch key. It runs
+   the **TOFU gate** on the member's key: a first-seen key is pinned and used; a key that differs from the pin is
+   **not** wrapped to. The automated worker declines the job back to the server, and a human reviews the change in
+   the UI. If both checks pass, it seals the epoch key to the member's identity public key and **signs the grant**
+   with its identity key. The signature covers the scope id, the scope kind, the epoch, the recipient's user id, a
+   digest of the recipient's identity key and a digest of the grant ciphertext. The first key-holder wins; the rest
+   find the grant present and do nothing.
+4. **Opening.** The new member's client runs the same TOFU gate on the **granter's** key (pins a first-seen one,
+   refuses a changed one), verifies the signature, and only then opens the grant.
+5. **Verification (optional, built).** Each member's profile shows their own **safety number**, a digest of their
+   identity public key shown as 6×5 digits, and a QR code of it. Another member scans that code or compares the
+   digits aloud. On a match the pin becomes *verified* (an unpinned member is pinned at that moment with the compared
+   key), and member lists show the mark. A *verified* contact whose key later changes is flagged as such. Accepting
+   the change re-pins it as only *pinned*, and *verified* comes back only through a new compare.
+
+The pin store lives on the client, is synced across the user's devices, and is sealed under the Master Key. Each
+device also keeps a local high-water mark of the highest pin-store version it has opened, and refuses an older,
+missing or unopenable store ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)
+Decision 7). That way, rolling back the store cannot turn a detected key change into a silent first use.
+
+<Mermaid code={`
+sequenceDiagram
+  actor O as Owner
+  participant S as Server
+  participant I as Invitee client
+  participant K as Any key-holder
+  O->>O: admission tag = HMAC under epoch-derived key<br>over scope, epoch, admission id
+  O->>S: mint invite (email, role, admission id, tag)
+  S-->>I: invite by mail (server keeps only its hash)
+  I->>S: register (identity public key) and accept<br>member without grant
+  K->>S: read member directory
+  S-->>K: pending member, identity public key, admission tag
+  K->>K: tag verifies under own current epoch?<br>TOFU: pin first-seen key, refuse a changed one
+  K->>S: grant = epoch key sealed to member, signed by K
+  I->>S: fetch own grant
+  S-->>I: grant and granter signature
+  I->>I: TOFU-pin granter, verify signature, open grant
+  I-->>K: out of band: compare safety numbers (QR or digits)
+`} />
+
+**What the server learns.** Invite metadata (recipient address, role, send time), the admission tag, identity public
+keys, which memberships hold a grant, signed grant ciphertext, and when a worker declines a delivery. It never
+sees a scope key, a pin, or who verified whom. The trust graph stays on the clients.
+
+**What it cannot do.**
+
+- **Get a scope's key by admitting an account of its own** through an owner's session or on its own. Every wrap to
+  another member needs an admission tag that only a holder of the current epoch key computes, and every key-holder's
+  client checks it before wrapping. A session without the vault, like the operator, can create a membership but
+  not a tag ([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md) move 6).
+- **Plant a scope key of its own choosing** in a personal-scope grant, or under a granter the recipient has already
+  pinned (Decision 6).
+- **Swap a key silently after first contact.** A client that pinned a contact sees the change. The UI shows a
+  notice and the worker refuses to wrap.
+- **Wipe or roll back the pin store** on a device that has held one (Decision 7).
+
+**Residual.**
+
+- **TOFU's first-use gap.** If the operator substitutes a key before anyone pinned the real one, nothing looks
+  wrong until the two people compare safety numbers. That covers a genuine tenant invite redeemed with the operator's
+  key (a tenant invite cannot name a key, because the invitee has none yet), a shared grant signed by a granter
+  identity the operator fabricated (pinned on first sight), and a device with no trust-state mark yet.
+- **A worker's refusal is per key-holder, not a global veto.** A key-holder who never saw the contact has no
+  conflicting pin and accepts the new key.
+- **A departing member colluding with the operator** can tag a sockpuppet under the epoch they still hold before
+  their removal ([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md) § Consequences).
+- **Strict mode** (verified-before-share as a hard gate) is **not built**, and its shape is still open. **Key
+  Transparency** is not built.
+
+See [Known limitations](/veyq/security/known-limitations/) and the [Roadmap](/veyq/security/roadmap/).
+
+## 4. Sharing
+
+**Purpose.** Hand one node (a Memory, a chapter or a folder) to people outside the scope, including anonymous
+visitors with no account, without exposing the rest of the scope and without the server holding the link's key
+([ADR 0029](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0029-public-viewer-share.md)).
+
+**Participants.** A curator (a member who can open the node), the server, the object store, and a guest who holds
+the link.
+
+**Steps (public viewer link).**
+
+1. The curator's client draws a random `K_share` and a random 256-bit share id. It wraps the node's `K_mem` under
+   `K_share` and seals the node's name under `K_share`.
+2. It also writes a **recovery copy** of `K_share`, sealed under the scope key at the scope's current epoch
+   ([ADR 0036](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0036-editable-share-note-recoverable-share-key.md)
+   point 4). This lets any member of the scope reveal, edit or re-copy the link later. It is deliberately not sealed
+   under `K_mem`, because a viewer link carries `K_mem`.
+3. It writes a **write verifier**: the SHA-256 of a write token derived with HKDF from `K_share` and bound to the
+   share id ([ADR 0076](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)).
+4. It posts the record. The link is `/s/{shareId}#k=…`, with `K_share` in the **URL fragment**, which browsers do
+   not send to the server.
+5. The guest's client resolves the share without authentication and receives the record and the sealed subtree. It
+   unwraps `K_mem` with the fragment key and decrypts everything locally. For media it asks a share-scoped endpoint,
+   which issues a presigned object-store URL only for a blob attached under the shared node. The client fetches the
+   ciphertext directly from the store.
+
+<Mermaid code={`
+sequenceDiagram
+  actor C as Curator
+  participant S as Server
+  participant O as Object store
+  actor V as Guest
+  C->>C: K_share and shareId random<br>wrap K_mem under K_share, seal name under K_share
+  C->>C: recovery copy: K_share sealed under scope key (current epoch)<br>write verifier = SHA-256 of token derived from K_share
+  C->>S: create share: id, node, role, wrap, sealed name,<br>recovery copy, write verifier
+  C-->>V: link with K_share in the URL fragment (out of band)
+  V->>S: resolve share (no auth, fragment never sent)
+  S-->>V: record and sealed subtree
+  V->>V: unwrap K_mem with K_share, decrypt locally
+  V->>S: request blob (allowed only under the shared node)
+  S-->>V: presigned store URL
+  V->>O: fetch ciphertext, decrypt locally
+  opt link allows writes
+  V->>S: name yourself: write token and sealed name
+  S-->>V: contributor token, only if SHA-256(token) matches
+  end
+`} />
+
+**Variants.**
+
+- **Contributor link (READ_WRITE)**
+  ([ADR 0030](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0030-contributor-public-share.md)). The guest
+  can view and add media. Naming yourself presents the write token, which the server checks against the stored hash,
+  and returns a contributor token that gates every later upload. The guest seals uploads and their display name under
+  `K_mem`, exactly as a member would.
+- **Uploader link (WRITE_ONLY)**
+  ([ADR 0031](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0031-uploader-public-share.md) point 7). The
+  link carries **no** wrap of `K_mem`. It carries only the Memory's **drop public key** (a hybrid post-quantum
+  keypair whose private half is sealed under `K_mem`), sealed under `K_share`. Each guest draws an identity key of
+  its own, wraps it to the drop key, and seals its uploads and name under it. Members open those uploads through the
+  drop private key; the guest sees nothing but what it added in the current session.
+- **Password-protected link**
+  ([ADR 0037](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0037-password-protected-shares.md)). This is
+  an **access gate, not cryptography**. The guest's client derives a token from the password with Argon2id and a
+  per-share salt. The server stores only the token's SHA-256 and, without a valid token, serves nothing but the
+  challenge. Content stays under the unchanged `K_share`. Wrong attempts are rate-limited per share. A copy of the
+  password, sealed under `K_share`, lets members reveal it.
+
+**What the server learns.** The raw share id (it is the primary key, and members rebuild links from it), the node
+id, the role, enabled and expiry state, whether a password is required, the creation time, opaque wraps and sealed
+fields, hashes of the write, contributor and password tokens, and, for a guest, which share and which blobs are
+requested. A public share's guest is also served the scope id. It never receives `K_share`, `K_mem` or a name in
+clear.
+
+**What it cannot do.**
+
+- **Read anything outside the shared subtree through a link.** Every node key is random and wrapped independently,
+  so a link reveals neither the scope key nor the key of anything beside or above its root.
+- **Read an uploader link's Memory, with the link and a database dump.** The link carries only the drop public key,
+  so it plus a dump reads what its own guests uploaded and nothing else.
+- **Read another share's password, label or note, or rebuild its link, with a viewer or contributor link of the same
+  Memory and a dump.** Each share's recovery copy is sealed under the scope key, which no link carries.
+
+**Residual.**
+
+- The no-install guest page is operator-served web code, so against an active operator it is passive-safe only.
+- The password and the write token are layer-1 controls. They stop a leaked link or a database copy against an
+  honest server, not the operator, who can skip the check.
+- Revocation is soft. Disabling, expiring or deleting a link stops new access, but what a guest already downloaded
+  stays downloaded. A scope-key rotation does not revoke a share, because `K_mem` does not change.
+- Every member can rebuild every link of a Memory, so a member removed from a space may hold those links until they
+  are **re-issued** (a new id and a new `K_share`;
+  [ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)).
+- A viewer or contributor link plus a dump reads the names guests gave.
+- A reported link carries its key, so the operator can decrypt a reported public share. That is the intended
+  trust-and-safety path, though no report intake is built yet.
+- A cryptographic password gate is a possible later upgrade, not built.
+
+See [Known limitations](/veyq/security/known-limitations/) and the [Roadmap](/veyq/security/roadmap/).
+
+## 5. Rotation and revocation
+
+**Purpose.** Cut a party off. veyq does this in two layers
+([ADR 0026](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0026-client-trust-tiers.md),
+[ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md)):
+
+- **Layer 1, access invalidation.** The server stops honouring a membership, a share or a session. It takes effect at
+  once and needs no keys, but it is a defence only under an honest operator.
+- **Layer 2, epoch rotation.** A key-holder's client mints a new content-key epoch and grants it only to the parties
+  who remain, so content sealed afterwards is out of the removed party's reach. Nothing is re-encrypted. Each new
+  epoch wraps its predecessor, so holding the latest epoch derives every earlier one, and an old epoch never
+  derives a newer one.
+
+**When layer 2 runs is a per-scope policy**
+([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)).
+A **group** rotates on every removal. The **tenant** removes by layer 1 alone, and an owner can run an explicit
+"re-key this space" for the compromise case. A **personal** scope never rotates on removal (it has one member).
+A removal does not turn links off by itself: a link minted before it can no longer be re-activated, only re-issued,
+and until then it keeps working for whoever holds it; the remover may tick *also turn off every link* of the space in
+the same act ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)).
+
+**Participants (group removal).** The removing owner, the server, the remaining members, and the removed member.
+
+**Steps.**
+
+1. The owner's client reads the member list **before** the removal and the current epoch `E(n)`.
+2. It mints `E(n+1)` and the chain link, which wraps `E(n)` under `E(n+1)`.
+3. For every member it read, **except** the one being removed, it verifies that member's admission tag under `E(n)`,
+   re-tags it under `E(n+1)`, runs the TOFU gate, and seals and signs a grant of `E(n+1)`.
+4. It sends the removal, the chain link, the grants and the re-tags in **one request**. The server deletes the
+   membership and commits epoch `n+1` in one transaction, and only if it is exactly the current epoch plus one.
+   Otherwise it refuses with `stale_epoch`, and the client rebuilds with a fresh key.
+5. The removed member is refused at once (layer 1). The remaining members open the new grant. Each device raises
+   its per-scope **epoch floor** and never seals under a lower epoch again, whatever epoch the server reports.
+
+<Mermaid code={`
+sequenceDiagram
+  actor R as Removing owner
+  participant S as Server
+  participant M as Remaining member
+  participant D as Removed member
+  R->>S: read members, keys, tags, current epoch E(n)
+  S-->>R: member list (read before the removal)
+  R->>R: mint E(n+1), chain link = E(n) wrapped under E(n+1)
+  R->>R: for each member except D: verify tag under E(n),<br>re-tag under E(n+1), TOFU gate, seal and sign grant
+  R->>S: one request: remove D, chain link, grants, re-tags, epoch n+1
+  S->>S: one transaction: delete D membership, commit epoch n+1<br>only if current + 1, else stale_epoch
+  D->>S: any request on the scope
+  S-->>D: refused (layer 1)
+  M->>S: fetch grant
+  S-->>M: grant of E(n+1)
+  M->>M: verify signature, open, raise epoch floor<br>peel chain for older content
+  M->>S: new content sealed under E(n+1)
+`} />
+
+**Revoke never takes key material**
+([ADR 0058](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0058-revoke-never-takes-key-material.md)).
+Revoking a session family removes server access and leaves wraps and the revoked device's local keys untouched. A
+separate, explicitly named action deletes that device's saved wrap, which brings back the Secret-Key requirement for
+it at its next sign-in. Neither action takes back a key a device already holds.
+
+**Account rotation after a compromise**
+([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md),
+[uc.account.rotate-keys](https://github.com/raddatzk/veyq/blob/main/docs/features/account/use-cases/uc.account.rotate-keys.md)).
+When someone else holds the Master Key (a phished device link is the case that forces this), the Master Key and the
+identity keypair are replaced **together**. It is one mode with no choice, because the identity private key exists
+only under the Master Key.
+
+1. **Cold gate.** The holder supplies password and Secret Key. The client re-derives the floor key and requires it
+   to open the stored `PASSWORD` wrap to the Master Key it already holds, which proves possession now. The request
+   carries a signature of the **Secret-Key proof key**, which the server checks. A device-linked attacker holds the
+   Master Key but not the Secret Key, so it cannot rotate first and lock the holder out.
+2. The device mints a new Master Key and identity, rewrites the `PASSWORD` and `RECOVERY` wraps (the Emergency Kit
+   stays valid), deletes every device wrap, and re-seals the pin store and the device register in the same request.
+3. The new identity public key is published. Every contact who pinned the old one now sees *changed*.
+4. The personal scope gets a new epoch granted to the new identity. For each shared scope a rotation job is queued
+   for **another owner** to complete. The rotator is excluded and is refused by the server if it tries. Re-admission
+   runs through each scope's human changed-key review, which is what stops an attacker who holds the old identity
+   from rotating its way back in.
+5. Every other session is revoked. The result screen shows each scope's status (waiting, stalled, secured, failed)
+   as the server reports it.
+
+**What the server learns.** That a membership was deleted and an epoch committed, the epoch index on each node, the
+grant-present and granted-epoch markers, the rotation jobs and their status, and the new directory value after an
+account rotation. It never sees an epoch key.
+
+**What it cannot do.**
+
+- **Get a removed group member re-granted by the removal's own rotation.** The removal and its rotation are one
+  request, and the remover's client wraps only to the members it read, minus the one it removes, however the server
+  lists them afterwards ([ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md) Decision 4).
+- **Make a member seal new content under an epoch the removed member holds**, once that member's device has held the
+  newer epoch (Decision 6).
+- **Undo the past.** Nothing here retracts content already read. Rotation is forward secrecy, not repair.
+
+**Residual.**
+
+- **A withheld rotation (a fork).** A member who never learns of the newer epoch keeps writing under the old one.
+- **Queued rotations** know only the server's member list, so they hold against an honest operator only. Examples
+  are a tenant removal that cuts a co-shared group, and an account rotation's shared scopes.
+- **The tenant default is layer 1 only.** A removed member who kept keys and ciphertext and colludes with a
+  malicious operator keeps that narrow reach until an explicit re-key.
+- **Item favorites** are sealed under `E0` by choice, so a former member can read a set written after their removal.
+- **The proof-key check runs on the server**, so it binds every caller except the operator.
+- Account rotation is impossible without the Emergency Kit. Containment (revoke sessions, remove saved keys) is
+  all that remains.
+
+See [Known limitations](/veyq/security/known-limitations/).
+
+## 6. Recovery
+
+**Purpose.** Make sure a forgotten password does not mean lost memories, **without escrow**. The property that stops
+the operator reading data also stops it rescuing data
+([ADR 0054](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0054-password-recovery-two-factor-release.md),
+[uc.account.recover-access](https://github.com/raddatzk/veyq/blob/main/docs/features/account/use-cases/uc.account.recover-access.md)).
+Everything hangs off the Master Key, so recovering it by any route restores every scope. There are three
+independent paths:
+
+1. **Another enrolled device** still holds the keys. Linking a device (section 2) is this path.
+2. **Emergency Kit plus password** on a fresh device: the ordinary unlock of section 1.
+3. **Emergency Kit plus a mailed one-time token**, for a forgotten password with no device. The diagram shows this
+   path.
+
+There is no separate recovery code. The Secret Key *is* the recovery factor.
+
+**Participants (path 3).** The account holder, their client, the server, and the holder's mailbox.
+
+**Steps.**
+
+1. The holder enters their email under "Forgot password". The server gives the same answer, in content and timing,
+   whether or not the address is known. Only if the address belongs to a member of the tenant the request arrived on
+   does it mint a one-time token, store only its SHA-256 hash with a short expiry, and mail the raw token in the
+   link's **URL fragment**, through that tenant's own mail relay. Without working mail there is no recovery and no
+   copy-link fallback.
+2. The client presents the token to **release** the `RECOVERY` wrap. This is the only path that ever serves it.
+3. The holder supplies the Secret Key. The client derives the recovery key with Argon2id from the Secret Key alone,
+   opens the Master Key, and derives the Secret-Key proof key. A wrong Secret Key fails on the device.
+4. The holder chooses a new password. The client derives a new auth keypair and a new `PASSWORD` wrap over the
+   **same** Master Key, and signs both with the proof key.
+5. The server checks the signature against the registered proof public key. In one transaction it then replaces
+   the `PASSWORD` wrap and the auth public key, deletes every wrap except `PASSWORD` and `RECOVERY`, revokes every
+   session, and spends the token. No content is re-encrypted, and the Emergency Kit stays valid.
+
+<Mermaid code={`
+sequenceDiagram
+  actor U as Account holder
+  participant C as Client
+  participant S as Server
+  participant MB as Mailbox
+  U->>C: forgot password, email
+  C->>S: request recovery (email)
+  S-->>C: same answer whether the address is known or not
+  S->>MB: if a member of this tenant: link with one-time token in the fragment<br>(server keeps only the hash)
+  U->>C: open link (token stays in the fragment)
+  C->>S: release RECOVERY wrap (token)
+  S-->>C: RECOVERY wrap, wrapped identity private key (ciphertext)
+  U->>C: Secret Key from the Emergency Kit
+  C->>C: derive recovery key, open Master Key<br>derive Secret-Key proof key
+  U->>C: new password
+  C->>C: new auth keypair, new PASSWORD wrap over the same Master Key<br>sign both with the proof key
+  C->>S: token, signature, new wrap, new auth public key
+  S->>S: verify signature, then in one transaction: replace wrap and auth key,<br>delete other wraps, revoke sessions, spend token
+`} />
+
+**What the server learns.** That a recovery mail was sent (recipient and send time), and the new ciphertext wrap and
+auth public key. A completed reset is also recorded as the address being confirmed. It never
+learns the Secret Key, the old or new password, or the Master Key.
+
+**What it cannot do.**
+
+- **Open the `RECOVERY` wrap.** It holds only ciphertext, released to a party who must already hold the key that opens
+  it. Recovery gives the server no new power and is not escrow.
+- **Let either factor alone succeed.** A mailbox takeover yields a wrap that cannot be opened. A stolen Emergency
+  Kit yields no token. Releasing the wrap is gated on the mailed token and never on a session, so a live session plus
+  the Secret Key cannot bypass the password.
+
+**Residual.**
+
+- Losing **every** path (no enrolled device, no Emergency Kit, no password) means the content is gone. This is
+  accepted and stated.
+- An account in no tenant (the Server Owner after first-run setup) has no mail path until it joins one.
+- The proof-key check is a server check, so it binds every caller except the operator (section 1, residual).
+- Re-issuing an Emergency Kit (rotating the Secret Key) does not exist yet.
+
+See [Known limitations](/veyq/security/known-limitations/) and the [Roadmap](/veyq/security/roadmap/).

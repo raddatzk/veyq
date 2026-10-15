@@ -110,3 +110,4 @@ strategy; they do not choose it.
 - [Security Model](../crosscutting/security-model.md) (the concern doc; now points here for the stance),
   [Account & Key Model](../features/account/enablers/en.account.key-model.md).
 - [ADR 0003](0003-operator-blind-password-auth.md), [ADR 0012](0012-content-key-hierarchy.md).
+- Security area of the docs site: [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md), [Roadmap](../../site/src/content/docs/security/roadmap.md)

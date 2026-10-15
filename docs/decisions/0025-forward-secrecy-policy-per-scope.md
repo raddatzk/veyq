@@ -87,3 +87,5 @@ vault") is an explicit, rare action. This is the established practice for per-us
   routine removal from the largest, primary scope, for a threat (operator + ex-member collusion) outside the default
   posture — the wrong default for the primary content home. **Rejected — `m-of-n` threshold as a cost reducer:**
   wrong access model (collusion-to-read), saves nothing for per-member individual access.
+
+Explained for security researchers on the docs site: [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md).

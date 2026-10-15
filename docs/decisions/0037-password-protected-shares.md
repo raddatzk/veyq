@@ -134,3 +134,4 @@ READ_WRITE album, and a WRITE_ONLY drop-box alike; the password field lives in t
 - Cross-cutting: [security-model](../crosscutting/security-model.md) (the operational-metadata list gains
   `password_required` + the verifier/salt; `sealed_password` is one more opaque ciphertext),
   [cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md) (the online brute-force bound).
+- Security area of the docs site: [Roadmap](../../site/src/content/docs/security/roadmap.md)

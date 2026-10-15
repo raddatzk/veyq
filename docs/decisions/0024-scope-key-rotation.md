@@ -150,3 +150,5 @@ opened, or a rotation it made, raises it, and a grant below it — whatever `cur
 with — opens as the same *awaiting the current key* state as layer 1. No read-only open: one closed state for
 both halves (owner decision, 2026-09-28), so a rolled-back scope shows neither old nor new content. What the floor
 cannot see is the § Guarantee list above — above all the fork, a member who never learnt of the newer epoch.
+
+Explained for security researchers on the docs site: [Threat model](../../site/src/content/docs/security/threat-model.md), [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md), [Known limitations](../../site/src/content/docs/security/known-limitations.md).

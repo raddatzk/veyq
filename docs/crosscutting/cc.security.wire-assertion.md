@@ -209,3 +209,5 @@ mailbox is read decoded; and that the token needles are derived by marker from e
 searched raw and armed by their hashes ([`scripts/validate_wire_log_matcher.py`](../../scripts/validate_wire_log_matcher.py)).
 The recorder's own half — every `Set-Cookie` recorded, the token cookie not masked by the clearing one sent after
 it — is a web unit test, `web/src/test/wireRecorder.test.ts`.
+
+Explained for security researchers on the docs site: [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md).

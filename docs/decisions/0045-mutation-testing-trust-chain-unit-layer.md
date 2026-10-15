@@ -183,3 +183,5 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
   exists to pre-empt), so a bare `.toThrow()` passes with the guard deleted and proves nothing. Its second
   rejection, the served-profile check ([ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md) rule 5),
   is the same kind and pinned the same way: one negative per field, each on the refusal's own message.
+
+Explained for security researchers on the docs site: [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md).

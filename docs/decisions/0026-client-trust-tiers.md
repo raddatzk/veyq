@@ -83,3 +83,5 @@ SaaS-era build.
   Passkeys defend against phishing and against a server harvesting passwords — not against a server rewriting the
   client that uses them. **Unlock convenience and client integrity are orthogonal axes; a method on one never
   moves the other.** This is the tempting wrong turn here, so it is recorded rather than left to be re-proposed.
+
+Explained for security researchers on the docs site: [Start here](../../site/src/content/docs/security/start-here.md), [Threat model](../../site/src/content/docs/security/threat-model.md), [Roadmap](../../site/src/content/docs/security/roadmap.md).

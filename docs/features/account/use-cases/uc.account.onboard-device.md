@@ -206,3 +206,4 @@ fügst es erneut hinzu.
   [remember-this-device](uc.account.remember-this-device.md) (the tier a linked device is born at),
   [unlock](uc.account.unlock.md) (the Secret-Key path this exists to avoid needing)
 - End-user view (docs site): [Adding another device](../../../../site/src/content/docs/adding-another-device.md)
+- Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)

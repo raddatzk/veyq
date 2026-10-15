@@ -226,3 +226,4 @@ claim that it upgrades an instance of its predecessor; a run shows it — `scrip
 - Run area of the docs site: [Verify a release](../../site/src/content/docs/run/verify-a-release.md) — the operator's
   signature check, [Set up a new instance](../../site/src/content/docs/run/new-instance.mdx) — the stack the recipe
   describes, and [Upgrade](../../site/src/content/docs/run/upgrade.mdx)
+- Security area of the docs site: [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md)

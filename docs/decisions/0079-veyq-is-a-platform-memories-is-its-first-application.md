@@ -378,3 +378,5 @@ on their own.
   "created on demand" already solves. Switching **off** (decision 8, ADR 0088) is a different thing: it serves
   policy, not clutter, the default is on, and the one gate sits at creation.
 - **Rejected: re-deriving Memories' keys under an application context** — Decision 9.
+
+Explained for security researchers on the docs site: [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md).

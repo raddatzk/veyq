@@ -1,0 +1,22 @@
+---
+// One Mermaid diagram on an `.mdx` page: `<Mermaid code={`sequenceDiagram …`} />`. The source is drawn in the
+// browser by the bundled `mermaid` package, in the site's current colour theme. Written here rather than taken
+// from an integration: the Astro Mermaid integrations still pin mermaid 11 (2026-10), and a build-time SVG
+// renderer needs a headless browser downloaded outside the npm deprecation gate.
+interface Props {
+  code: string;
+}
+const { code } = Astro.props;
+---
+
+<pre class="mermaid" data-pagefind-ignore>{code.trim()}</pre>
+
+<script>
+  const diagrams = document.querySelectorAll<HTMLElement>('pre.mermaid');
+  if (diagrams.length > 0) {
+    const { default: mermaid } = await import('mermaid');
+    const dark = document.documentElement.dataset.theme === 'dark';
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
+    await mermaid.run({ nodes: diagrams });
+  }
+</script>

@@ -213,3 +213,5 @@ type) with the same page-side chunk provider the download uses. The worker still
 - **A download is whole-blob and sequential**, so it adds no access pattern beyond what a whole-blob read already
   shows. The page must stay open while it runs, since it holds the key. What only a browser can prove (memory flat at
   gigabyte scale, the SW's lifetime during a long download, Safari and iOS) is still open in inbox #371.
+
+Explained for security researchers on the docs site: [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md).

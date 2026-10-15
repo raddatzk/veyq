@@ -119,3 +119,5 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
 - **A re-issue breaks a link for its guests by design.** The product copy says so: the old link stops working,
   hand out the new one, guests keep their photos but give their name again.
 - That curators actually redistribute the new link is product copy, not something any test can prove.
+
+Explained for security researchers on the docs site: [Known limitations](../../site/src/content/docs/security/known-limitations.md).

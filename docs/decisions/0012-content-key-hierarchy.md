@@ -131,3 +131,4 @@ holds one more opaque wrap and nothing else.
   contract).
 - Feature: [Memory](../features/memory/_index.md); the foundation enabler
   [en.memory.tree](../features/memory/enablers/en.memory.tree.md).
+- Security area of the docs site: [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md)

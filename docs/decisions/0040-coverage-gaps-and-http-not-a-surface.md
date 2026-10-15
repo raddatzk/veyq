@@ -150,3 +150,5 @@ proven, whatever colour its column is. **The unit is the test, not the surface.*
     and invents a taxonomy only to dodge the overlap check.
   - *Forbid all overlap naively* (the finding's first proposal) — breaks legitimate partial coverage; it is the
     reason this needed a model decision rather than a one-line validator tweak.
+
+Explained for security researchers on the docs site: [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md).

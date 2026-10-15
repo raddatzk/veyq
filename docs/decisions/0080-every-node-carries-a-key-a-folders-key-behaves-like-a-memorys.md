@@ -261,3 +261,5 @@ there — the placement rule above refuses it, and the web offers no control.
 19. A guest renames the share root → refused; a member renames it → the share's `sealedName` opens to the new name.
 20. A `READ` share on a `FOLDER` is created although no application implements guest writes for it.
 21. A chapter share (once enabled): the guest opens the chapter's media and nothing of the parent Memory.
+
+Explained for security researchers on the docs site: [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md).
