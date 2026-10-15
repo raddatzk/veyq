@@ -133,6 +133,12 @@ a plain revoke does *not* do it, is [ADR 0058](../../../decisions/0058-revoke-ne
   *Devices and sessions* row says so. No silent downgrade. The check is presence only
   (`isRememberSupported`): an ordinary private window has both APIs, so it **enrols** — its local key dies with
   the window and its server wrap is left as harmless E1 ciphertext.
+- **E5 — the wrap is withheld by a switch:** with `core.remember-device` switched off, the server leaves every
+  DEVICE wrap out of the key material and deletes none
+  ([ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+  decision 5). The device keeps its key and its trust record (E1), asks for the password and the Secret Key at
+  once with the field's hint saying why (`unlock.deviceHeldBack`), and is not replaced by another tier, so it
+  unlocks with the password alone again once the switch is back on.
 
 ## Trust state
 

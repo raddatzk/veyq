@@ -17,7 +17,8 @@
 2. They see the register as a tree. Each entry shows its title, what it is for, and whether it is **on**, **off**,
    or **off through its parent**. The text is in the console's language, or in the CLI's locale.
 3. They switch an entry **off**. Before it takes effect, the console shows what switching it off does to new and
-   to existing data, in the entry's own words, and asks for confirmation. The CLI prints the same text.
+   to existing data, in the entry's own words, and asks for confirmation. The CLI asks nothing: `capabilities off
+   <id>` switches and then prints the same text, taken from the backend's answer for the entry it switched.
 4. The backend stores the switch and answers with the new state. From then on the entry is missing from the
    pre-auth manifest (`GET /api/setup`). Its gates refuse with `422 capability_disabled`. Where the entry acts on
    existing data (ADR 0088 decision 5), that takes effect too.
@@ -27,10 +28,16 @@
 ## Alternate / exception flows
 
 - **A1, an unknown id** (CLI typo, an id a later release removed): refused, and nothing is stored.
-- **A2, a device switch:** when `core.remember-device` or `core.remember-device.passwordless` is switched off,
-  remembered devices stop unlocking without what that wrap replaced. Without the `DEVICE` wrap a member needs the
-  password **and the Secret Key**. Without the `DEVICE_KEY` wrap a member needs the password. The `PASSWORD` wrap
-  is always served, so nobody is locked out, and the confirmation text says so in those words.
+- **A2, a device switch:** when `core.remember-device` or `core.remember-device.passwordless` is switched off, the
+  key material leaves that wrap out, and remembered devices stop unlocking without what it replaced. Without the
+  `DEVICE` wrap a member needs the password **and the Secret Key**. Without the `DEVICE_KEY` wrap a member needs the
+  password **and the Secret Key** too: a device holds one convenience wrap
+  ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §9), so a password-less device has no
+  `DEVICE` wrap to fall back on, only the `PASSWORD` floor. The unlock screen asks for the Secret Key at once, and
+  the field's hint line says why (`unlock.deviceHeldBack`) instead of the first-sign-in hint. The device keeps its
+  local key and is never re-enrolled to the other tier while its wrap is withheld, so switching back on restores
+  it. The `PASSWORD` wrap is always served, so nobody is locked out, and the confirmation text says so in those
+  words.
 - **E1, not the Server Owner:** `403 not_server_owner`; an ordinary member's session never reaches this.
 
 ## Quality notes
@@ -47,13 +54,15 @@
 
 **EN —** The person who runs your instance can decide that some things are not offered on it, for example public
 links or devices that unlock without your password. Switching something off never deletes what you stored. If
-remembered devices are switched off, your device asks for your password again, and sometimes for your Secret Key
-from the Emergency Kit. Your data stays readable with them.
+remembered devices are switched off, your device asks for your password and your Secret Key from the Emergency Kit,
+and says why. Your data stays readable with them, and your device keeps what it had: once the switch is back on, it
+opens as before.
 
 **DE —** Die Person, die deine Instanz betreibt, kann festlegen, dass manches dort nicht angeboten wird, zum
 Beispiel öffentliche Links oder Geräte, die sich ohne dein Passwort entsperren. Abschalten löscht nie etwas, das du
-gespeichert hast. Werden gemerkte Geräte abgeschaltet, fragt dein Gerät wieder nach deinem Passwort und manchmal nach
-deinem Secret Key aus dem Emergency Kit. Mit ihnen bleiben deine Daten lesbar.
+gespeichert hast. Werden gemerkte Geräte abgeschaltet, fragt dein Gerät nach deinem Passwort und deinem Secret Key aus
+dem Emergency Kit und sagt dir, warum. Mit ihnen bleiben deine Daten lesbar, und dein Gerät behält, was es hatte:
+Sobald wieder eingeschaltet ist, öffnet es wie zuvor.
 
 ## Related
 
@@ -67,3 +76,5 @@ deinem Secret Key aus dem Emergency Kit. Mit ihnen bleiben deine Daten lesbar.
   [ADR 0089](../../../decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md),
   [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md),
   [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md).
+- **On the docs site:** [Moderation](../../../../site/src/content/docs/run/moderation.md) (the panel and the CLI
+  commands, for the Server Owner).

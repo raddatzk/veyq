@@ -46,8 +46,9 @@
   advertised active only once its use-case(s) are built.
 - **Seeded with seven operator-policy capabilities**, all under `core` and arranged as a tree (ADR 0088), sharing being
   the worked end-to-end proof; each is advertised, soft-gated by `hasCapability` and refused with `422` at its
-  create/enable path. The authoritative list is the catalog file, not this page; no instance-wide switch to turn one off
-  is built until inbox #443.
+  create/enable path. The authoritative list is the catalog file, not this page. The Server Owner turns one off for
+  the instance in admin-web or its CLI ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md));
+  no tenant level is built.
 
 ## What this means for you / Was das für dich bedeutet
 

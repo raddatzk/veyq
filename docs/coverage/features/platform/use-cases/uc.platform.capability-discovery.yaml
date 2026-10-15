@@ -7,7 +7,8 @@ title: A client discovers an instance's version + capabilities, and refuses to b
 # with conformance tests). The web client hard-gates on a major mismatch (a blocking, direction-specific screen
 # before login) and soft-gates each optional feature on hasCapability. An operator disables a capability
 # instance-wide — omitted from the manifest AND rejected at its create/enable gate (422 capability_disabled); the
-# switch itself is not built until inbox #443, so the gates are proven with a registry handed a switched-off set. The ids
+# switch itself is uc.admin.switch-capabilities' (the Admin API, stored in the database), and the gates below are proven
+# with a row written through its store (CapabilitySwitchFixtures). The ids
 # are a tree under `core` (ADR 0088); the catalog is the list. Sharing is the worked end-to-end proof. Lean-core scope: no
 # deprecation lifecycle / notices / audience filter yet.
 acceptanceCriteria:
@@ -32,10 +33,7 @@ acceptanceCriteria:
     text: A switched-off capability is omitted from the manifest AND its endpoint answers 422 capability_disabled; the manifest is a UX hint and the server-side enforcement is the authority (a stale or ignoring client still cannot use it). One slice test per gate - share links (create, reactivate, reissue), the drop-box node, the group create, the two device wraps, every pairing endpoint.
     coverage:
       backend:
-        integration: [CapabilityDisabledSliceTest.aSwitchedOffParentDropsEveryShareIdAndRefusesADropBoxLink, CapabilityDisabledSliceTest.aSwitchedOffChildRefusesItsRoleAndLeavesTheParentsRoleThrough, CapabilityDisabledSliceTest.groupSpaceOffRefusesANewGroupAndKeepsAnExistingOneUsable, CapabilityDisabledSliceTest.passwordlessOffRefusesADeviceKeyWrapAndStillEnrolsADeviceWrap, CapabilityDisabledSliceTest.rememberDeviceOffRefusesBothMethods, CapabilityDisabledSliceTest.deviceLinkingOffRefusesEveryPairingEndpointAndStopsAPairingInFlight, DropBoxCapabilitySliceTest.dropBoxOffRefusesANewDropBoxAndCreatesAFolderAtTheSameParent, ReactivateShareCapabilitySliceTest.reactivatingALinkWhoseCapabilityIsOffIs422, ReactivateShareCapabilitySliceTest.reissuingALinkWhoseCapabilityIsOffIs422]
-    gaps:
-      - surface: backend
-        reason: The operator half - a Server Owner switching an id off in a running instance - is not built; no instance-wide switch exists until inbox #443 (ADR 0088 decision 3), and a built instance cannot switch an id off at all. The tests above hand the registry a switched-off set through its test seam, so they prove the manifest and the gates, not the switch.
+        integration: [CapabilityDisabledSliceTest.aSwitchedOffParentDropsEveryShareIdAndRefusesADropBoxLink, CapabilityDisabledSliceTest.aSwitchedOffChildRefusesItsRoleAndLeavesTheParentsRoleThrough, CapabilityDisabledSliceTest.groupSpaceOffRefusesANewGroupAndKeepsAnExistingOneUsable, CapabilityDisabledSliceTest.passwordlessOffRefusesADeviceKeyWrapAndStillEnrolsADeviceWrap, CapabilityDisabledSliceTest.rememberDeviceOffRefusesBothMethods, CapabilityDisabledSliceTest.deviceLinkingOffRefusesEveryPairingEndpointAndStopsAPairingInFlight, DropBoxCapabilitySliceTest.dropBoxOffRefusesANewDropBoxAndCreatesAFolderAtTheSameParent, ReactivateShareCapabilitySliceTest.reactivatingALinkWhoseCapabilityIsOffIs422, ReactivateShareCapabilitySliceTest.reissuingALinkWhoseCapabilityIsOffIs422, InstanceCapabilitiesSliceTest.aSwitchOffLeavesTheManifestAndRefusesTheGateAndSwitchingOnRestoresBoth]
   - id: capability-not-permission
     text: A capability is instance-wide + pre-auth, NOT a per-scope/role permission. A feature is offered only when (capability present) AND (policy permits here) — e.g. core.public-shares present AND the node is a Memory the caller may share. The manifest carries no identity/permission data.
     coverage:

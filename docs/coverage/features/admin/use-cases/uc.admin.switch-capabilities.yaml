@@ -1,20 +1,75 @@
 useCase: uc.admin.switch-capabilities
 feature: admin
 title: Switch the instance's capabilities on and off
-status: planned
 # Refined 2026-10-15 from inbox #443 (ADR 0088 decisions 5, 12 and 13); built by cr-operator-capability-switches.
+# The switch lives on the admin channel, so the criteria's refs are the backend's slice and unit tests; the web's
+# are the client meeting a withheld wrap. `admin-web`'s suites (the Capabilities panel, the CLI, the console's nav)
+# wait under `gaps` until its CI job has executed (ADR 0040), as uc.admin.configure-object-store's do.
 acceptanceCriteria:
   - id: register-listed
     text: The Server Owner lists the register as a tree with each entry's title, purpose, effect-when-off and state (on, off, off through its parent), in the console's language or the CLI's locale, from text the API serves.
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords]
+        integration: [InstanceCapabilitiesSliceTest.theRegisterIsListedInCatalogOrderWithItsWordsAndEveryEntryOn, InstanceCapabilitiesSliceTest.aParentOffSwitchesItsChildrenOffAndTheirOwnSwitchesSurviveIt]
+    gaps:
+      - surface: backend
+        reason: >-
+          The backend serves the list in catalog order with both languages and each entry's `off` and `effective`.
+          The tree, the "off through" ancestor it names and the choice of language are admin-web's
+          (`CapabilitiesPanel.test.ts`, `cli.test.ts`), which wait under the use-case gap below.
   - id: switch-without-restart
     text: Switching an entry off or on through the Admin API is stored in the database and takes effect for the manifest and every gate without a restart; an entry's own state survives while its parent is off.
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.theSwitchesAreAskedOnEveryCall]
+        integration: [InstanceCapabilitiesSliceTest.aSwitchOffLeavesTheManifestAndRefusesTheGateAndSwitchingOnRestoresBoth, InstanceCapabilitiesSliceTest.aParentOffSwitchesItsChildrenOffAndTheirOwnSwitchesSurviveIt, InstanceCapabilitiesSliceTest.writingTheStateAnEntryHasChangesNothing, InstanceCapabilitiesSliceTest.twoSimultaneousSwitchOffsOfOneEntryBothAnswerAndStoreOneRow, CapabilityManifestSliceTest.theDefaultProfileWiresTheProductionSwitchesAndServesEveryAdvertisedId, CapabilityDisabledSliceTest.aSwitchedOffParentDropsEveryShareIdAndRefusesADropBoxLink, CapabilityDisabledSliceTest.groupSpaceOffRefusesANewGroupAndKeepsAnExistingOneUsable, CapabilityDisabledSliceTest.rememberDeviceOffRefusesBothMethods, CapabilityDisabledSliceTest.deviceLinkingOffRefusesEveryPairingEndpointAndStopsAPairingInFlight]
+    gaps:
+      - surface: backend
+        reason: >-
+          Through the Admin API itself the slice reaches the manifest and one gate (device linking's pairing).
+          Every other gate is proven by `CapabilityDisabledSliceTest`, whose row `CapabilitySwitchFixtures` writes
+          through the same store and cache invalidation as the handler, minus the HTTP. "Without a restart" is the
+          same process reading the next request; a second replica is not covered and not deployed (one replica,
+          `charts/veyq/values.yaml`).
   - id: unknown-id-refused
     text: Switching an id the register does not hold is refused and stores nothing.
+    coverage:
+      backend:
+        integration: [InstanceCapabilitiesSliceTest.anUnknownIdIsRefusedAndStoresNothing, InstanceCapabilitiesSliceTest.aWriteWithoutOffIsRefusedAndStoresNothing, InstanceCapabilitiesSliceTest.onlyTheServerOwnerReadsOrSwitches]
   - id: device-switch-acts-at-once
     text: With core.remember-device off, DEVICE wraps are withheld from the key material; with core.remember-device.passwordless off (or its parent), DEVICE_KEY wraps are withheld. Neither is deleted, the PASSWORD wrap is always served, and switching back on restores every remembered device.
+    coverage:
+      backend:
+        integration: [InstanceCapabilitiesSliceTest.aDeviceSwitchWithholdsItsWrapsFromTheNextKeyMaterialReadAndSwitchingOnRestoresThem, AccountKeyMaterialSliceTest.rememberDeviceOffWithholdsBothDeviceWrapsAndServesThePasswordWrap, AccountKeyMaterialSliceTest.passwordlessOffWithholdsOnlyTheDeviceKeyWrap]
+      web:
+        unit: [src/views/LoginView.test.ts, src/features/account/rememberMe/deviceKeyWrap.test.ts, src/features/account/unlock/unlock.device.test.ts, src/features/account/trustDevice/trustDevice.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The web suites run over mocked key material: a withheld wrap keeps the device's record and key, the
+          sign-in asks for the password and the Secret Key with the `unlock.deviceHeldBack` hint, the device is not
+          re-enrolled to the other tier, and the same wrap served again opens it with no new enrolment. A real
+          browser restoring a device after a switch-on is the phase 5 browser pass, not yet run.
   - id: off-state-in-a-browser
     text: In a real browser, a switched-off drop box, device linking and password-less remember are absent from the web client, and a device remembered before its switch went off asks for what its wrap replaced.
+    coverage:
+      web:
+        unit: [src/views/LoginView.test.ts, src/views/SettingsHubView.test.ts, src/shared/state/useCapabilities.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          Phase 5 browser pass not yet run (cr-operator-capability-switches). The refs are component tests over a
+          hand-set manifest and mocked key material - the toggle, the "sign in with code" entry and the drop-box
+          id absent, and a remembered device asking for the password and the Secret Key - not a real browser
+          against an instance switched off through admin-web.
 gaps:
-  backend: "Not built: the boot-time list was deleted by cr-capability-register-recut, and the only production CapabilitySwitches answers nothing off (backend/core/.../platform/capabilities/CapabilitySwitches.kt)."
-  admin-web: "Not built: the console's Server section holds Release, Store and Config-secret key only."
-  web: "Not built: the client's behaviour when its own DEVICE or DEVICE_KEY wrap is withheld is unmeasured."
+  admin-web: >-
+    The console's Server → Capabilities panel and `veyq-admin capabilities list | off <id> | on <id>` live in
+    `admin-web` (ADR 0065), and their suites (`CapabilitiesPanel.test.ts` for the tree, the three states, the
+    confirmation with `whenOff` in both locales and the refusal; `cli.test.ts` for the commands, the locale from
+    `--lang`, `LC_ALL` and `LANG`, and the exit codes; `AdminConsoleView.test.ts` for the nav) exist and pass
+    locally, but `admin-web`'s job (`container.yml` → `test` → "Admin surface checks") has never executed, so ADR
+    0040 admits none of them. They are mocked-client tests that pin the call and the rendering, never the server's
+    answer. On the first run of that job they flip to refs on register-listed, switch-without-restart and
+    unknown-id-refused.

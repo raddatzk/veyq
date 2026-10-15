@@ -3,6 +3,7 @@ title: Moderation
 description: What a Server Owner can do about abuse on an instance they cannot read, and what is not built.
 sources:
   - docs/features/admin/use-cases/uc.admin.suspend-tenant.md
+  - docs/features/admin/use-cases/uc.admin.switch-capabilities.md
   - docs/decisions/0066-tenant-suspension.md
   - docs/crosscutting/security-model.md
   - docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md
@@ -55,6 +56,8 @@ You still cannot read anything private, which is the design working as intended.
   ([Plan your instance](/veyq/run/plan/#storage-and-quotas)).
 - **Revoking a tenant** that was created but never accepted (a pending one) deletes it. There is no operation that
   deletes an active tenant.
+- **Switching a feature off for the whole instance**, for example public links or devices that unlock without a
+  password (below).
 
 ## The register behind the switches
 
@@ -66,19 +69,48 @@ refuses the action itself with `422 capability_disabled`, so an app that ignores
 group space or a link that already exists stays usable when its switch goes off. Switching a share role off is
 meant to stop its existing links too, which is not built yet.
 
-**What you cannot do yet:** turn any of them off. No setting, console screen or command exists for it, so an
-instance advertises all seven. The tests prove the refusals by handing the server a switched-off set. The full design,
-with the planned and idea entries, is on the [Security roadmap](/veyq/security/roadmap/#feature-switches).
+## Switch a feature off
+
+**Server → Capabilities** in the admin console shows the seven as a tree. Each entry says what it is for and whether
+it is on, off, or off through its parent, in the console's language. Switching one off first shows what that does to
+new and to existing data, in the entry's own words, and asks you to confirm. Switching it on again asks nothing.
+
+The CLI does the same:
+
+```sh
+docker compose -f infra/docker-compose.prod.yml exec \
+  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
+  admin veyq-admin capabilities list
+```
+
+`capabilities off <id>` switches an entry off and then prints what that does, and `capabilities on <id>` switches it
+back. `--lang de` prints the entries' text in German; without it the CLI follows `LC_ALL`, then `LANG`, inside the
+container (German when it starts with `de`). An id the instance does not know is refused, and nothing is stored.
+
+What a switch does ([uc.admin.switch-capabilities](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.switch-capabilities.md)):
+
+- It is stored in the database and acts on the next request, with no restart.
+- Nothing a member stored is deleted. Switching back on restores the entry, and a child switched off on its own stays
+  off while its parent is switched on again.
+- **The two device switches act at once.** With remembered devices off, or only the password-less kind, the server
+  stops handing out what those devices unlock with, without deleting it. Members on such a device then need their
+  password **and** their Secret Key from the Emergency Kit, and the sign-in screen tells them why. The password with
+  the Secret Key always works, so nobody is locked out, and switching back on lets every device unlock as before.
+  Tell your members before you switch one off.
+
+The off states have not yet been checked in a real browser against a switched instance; the tests cover them. The
+full design, with the planned and idea entries, is on the
+[Security roadmap](/veyq/security/roadmap/#feature-switches).
 
 ## Not built
 
 - **Report intake.** There is no form or address that collects abuse reports; a report reaches you however your
   members reach you.
 - **An operator action on a single share.**
-- **Switching a feature off for the whole instance** (for example public links). The register behind the switches
-  is built, the switch is not: see the section below.
+- **A share switch reaching existing links.** Switching a kind of link off stops new links of it; the links that
+  already exist keep working.
 
 These are on the security model's target; see the [Security roadmap](/veyq/security/roadmap/).
 
-**How far this is proven.** Suspension and reactivation are covered by the backend's tests of the use-case. No
-moderation path has run on a deployed instance.
+**How far this is proven.** Suspension, reactivation and the feature switches are covered by the backend's tests of
+their use-cases. No moderation path has run on a deployed instance.

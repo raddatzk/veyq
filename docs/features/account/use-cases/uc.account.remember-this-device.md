@@ -83,6 +83,12 @@ sequenceDiagram
   drops it on the spot.
 - **E3 — a genuinely untrusted machine:** there is **no** app-level "remember nothing" mode (ADR 0005 §19 —
   "every device is mine"); use the browser's **private / incognito** window (no persisted IndexedDB/cookie).
+- **E4 — the wrap is withheld by a switch:** with `core.remember-device.passwordless` (or its parent) switched off,
+  the server leaves every DEVICE_KEY wrap out of the key material and deletes none
+  ([ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+  decision 5). The device keeps its key, asks for the password and the Secret Key with the field's hint saying why
+  (`unlock.deviceHeldBack`), and is not replaced: unlike E2, that sign-in neither clears it nor enrols a DEVICE
+  wrap, so it opens by itself again once the switch is back on.
 
 ## Quality notes
 

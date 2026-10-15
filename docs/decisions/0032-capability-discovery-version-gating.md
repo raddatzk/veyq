@@ -85,9 +85,10 @@ response and a client-side gate that reads them.
 
 An operator disables a capability **instance-wide**: in `admin-web` or its CLI, through the Admin API, without a
 restart ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 12).
-**Built today** is the gate and the manifest, not the switch: no instance-wide switch exists until inbox #443 (the
-`veyq.capabilities.disabled` config list is gone), so a built instance advertises every entry and the gates are proven
-by tests that hand the registry a switched-off set. A disabled capability is then:
+This is built: admin-web's Server → Capabilities panel and `veyq-admin capabilities off <id>` call
+`PUT /api/instance/capabilities/{capabilityId}`, the state is a row in the database (`veyq_capability_switch`), and the
+next request reads it. There is no configuration property for it (the `veyq.capabilities.disabled` list is gone). A
+disabled capability is then:
 
 - **Omitted from the manifest** → every client **hides** the feature (soft, graceful — the ShareDialog simply
   doesn't offer the role).
@@ -97,13 +98,15 @@ by tests that hand the registry a switched-off set. A disabled capability is the
   first creates it. A client that ignores the manifest (or is stale) still cannot use a disabled capability.
 
 Both are required: the manifest alone is only UX; the endpoint gate alone gives a broken-looking UI. Together
-they are honest and safe. A tenant owner switches a `+` entry off for their tenant the same way, from the tenant
-settings in `web/`, and the same gate answers `422` (ADR 0088 decisions 2, 5 and 12).
+they are honest and safe. A device switch also acts on what exists: the key material withholds the switched-off wraps
+without deleting them (ADR 0088 decision 5). A tenant owner is to switch a `+` entry off for their tenant the same way,
+from the tenant settings in `web/`, with the same gate answering `422` (ADR 0088 decisions 2, 5 and 12); that level is
+not built (inbox #439).
 
 ### 5. The built entries
 
 The catalog holds the capabilities whose features exist **and** that an operator has a plausible reason to switch off.
-Two computation sources feed the same active manifest: an operator **disabled set** (policy, not built until #443) and,
+Two computation sources feed the same active manifest: an operator **disabled set** (policy, stored in the database, §4) and,
 separately, an infra **preflight** (runtime). These seven are what is built (`contracts/platform/capabilities.json`, whose
 `description` per entry is the reference for what off does); a child is switched off by its own id or by its parent's,
 the AND along the path being the server's (ADR 0088 decision 2):

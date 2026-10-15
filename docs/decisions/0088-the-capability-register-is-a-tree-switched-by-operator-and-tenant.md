@@ -1,6 +1,6 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
-- Status: Accepted 2026-10-15; not built (§ Consequences; inbox #439). It replaces
+- Status: Accepted 2026-10-15; the instance level is built, the tenant level is not (§ Consequences; inbox #439). It replaces
   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
   [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match.
 - Date: 2026-10-15
@@ -154,9 +154,23 @@ both off a place still works, named by hand. The user's own consent to the two
 - **Built today** (measured: `contracts/platform/capabilities.json`): seven `core.*` entries - `core.public-shares`
   with `.contribute` and `.drop-box`, `core.group-space`, `core.remember-device` with `.passwordless`, and
   `core.device-linking`. The server computes the AND along the path (`CapabilityRegistry`); each client reads one leaf.
-  No instance-wide switch is built until inbox #443 and no tenant level until #439, so a built instance advertises every
-  entry; the gates are proven by tests that hand the registry a switched-off set. Share switches act on new links only
-  until #442.
+- **The instance-wide switch is built** (decision 12, measured: `InstanceResource.listInstanceCapabilities` /
+  `setInstanceCapability`, `StoredCapabilitySwitches`, `admin-web/src/cli/commands.ts`). The Server Owner switches an
+  entry in admin-web's Server → Capabilities panel or with `veyq-admin capabilities list | off <id> | on <id>`,
+  through the Admin API (`GET /api/instance/capabilities`, `PUT /api/instance/capabilities/{capabilityId}`). The state
+  is one row per switched-off entry in `veyq_capability_switch`, read through an in-process cache that the write
+  invalidates after commit, so it acts without a restart on the one replica the chart runs. The words both surfaces
+  show are the catalog's (decision 13), generated into the backend (`CapabilityIds`, `CapabilityTexts`) and served,
+  never copied by a client.
+- **A device switch withholds its wraps** (decision 5, measured: `KeyMaterialHandler.forUser`):
+  `GET /api/account/key-material` leaves out every `DEVICE` wrap while `core.remember-device` is effectively off and
+  every `DEVICE_KEY` wrap while `core.remember-device.passwordless` is, and deletes neither. The web client keeps the
+  device's local key, asks for the password and the Secret Key with a line saying why, and does not re-enrol the
+  device to the other tier, so switching back on restores it. Without `DEVICE_KEY` that is the Secret Key too, not
+  the password alone: a device holds one convenience wrap ([ADR 0005](0005-unlock-methods-and-device-trust.md) §9).
+- **Not built:** the tenant level and the post-auth tenant set (#439); share switches reaching existing links (#442),
+  so a share switch refuses new links only; requirements (decision 8); configuration as code (#444). The off states
+  have not yet been seen in a real browser.
 - **The two enforcement gaps of the flat ids are closed.** The server gated `core.group-space` only at group creation
   although the catalog names five use-cases - decided a doc fault, since a feature switch refuses only what is new
   (decision 5), so group creation is the one gate. Depot let a member create a drop box while uploader links were off,

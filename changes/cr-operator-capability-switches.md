@@ -334,14 +334,30 @@ deleting them. Inbox #443 asked for this, and **it must land before V1**.
   - In the web client, see each one's affordance gone, and a device remembered beforehand ask for what its wrap
     replaced. Switch everything back on and see each one return.
   - **Done when:** each step is recorded with what was seen.
-- [ ] **6 docs + coverage.**
+- [x] **6 docs + coverage.** Done except the browser criterion (phase 5 has not run), in the commit after b51c61c7.
+  - **Coverage.** `uc.admin.switch-capabilities.yaml` lost `status: planned`. Backend refs on every criterion
+    (`InstanceCapabilitiesSliceTest`, `AccountKeyMaterialSliceTest`, `CapabilityDisabledSliceTest`,
+    `CapabilityRegistryTest`, `CapabilityManifestSliceTest`). Web refs on `device-switch-acts-at-once` (`LoginView`,
+    `deviceKeyWrap`, `unlock.device`, `trustDevice`) and on `off-state-in-a-browser` (`LoginView`, `SettingsHubView`,
+    `useCapabilities`), the latter with the explicit gap "phase 5 browser pass not yet run". The admin-web suites
+    (`CapabilitiesPanel.test.ts`, `cli.test.ts`, `AdminConsoleView.test.ts`) wait under the ADR 0040 use-case gap, as
+    the store's do. **When phase 5 has run:** replace that criterion gap, and the web gap on
+    `device-switch-acts-at-once`, with what was seen.
+  - **Beyond the brief, because this CR made them false:** `uc.platform.capability-discovery` (doc and coverage:
+    the "not built until #443" sentence and the `operator-disable-enforced` gap, which now cites the Admin API slice)
+    and the site's `security/roadmap.md` § Feature switches.
+  - **Docs.** The use-case's A2 says the measured truth (password and Secret Key for both tiers, the hint, no
+    re-enrolment) and step 3 the CLI's print-after; ADR 0088 § Consequences + Status and ADR 0032 §4/§5 say the switch
+    is built; `uc.account.trust-device` E5 and `uc.account.remember-this-device` E4 cover the withheld wrap; the
+    admin `_index.md` row and inbox #443 say built, browser pass pending; `site/.../run/moderation.md` describes the
+    panel and the CLI (no German counterpart: `run/` is English by design).
   - `uc.admin.switch-capabilities` coverage carries real refs. Admin-web suites go under the ADR 0040
     awaiting-a-first-run reason, as the store's coverage does.
   - ADR 0088 § Consequences and ADR 0032 §4 say the switch is built.
   - `docs/features/admin/_index.md` marks the row built.
   - The site's Run area: `site/src/content/docs/run/moderation.md` (it says the instance advertises all seven)
     describes the panel and the CLI.
-  - Inbox #443 is done.
+  - Inbox #443 is built, browser pass pending (it is done once phase 5 has run).
   - **Done when:** `python3 scripts/validate_coverage.py`, `validate_capabilities.py` and the full guard glob are
     green.
 
