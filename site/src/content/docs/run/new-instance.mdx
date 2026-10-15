@@ -200,7 +200,8 @@ keeps it for the whole 180 days, switched off or not.
 
 **The config-secret volume is the point of the production compose file.** `veyq-config-secret` is mounted at `/var/lib/veyq` and
 `VEYQ_SECURITY_CONFIG_SECRET_FILE` points into it. Without it, every `up -d --force-recreate app` regenerates the
-KEK, the instance reports `configSecretState: MISMATCH`, and member invites and password resets refuse with
+KEK, the instance's config-secret state reads `MISMATCH` (admin console **Server → Config-secret key**, or
+`veyq-admin config-secret`), and member invites and password resets refuse with
 `503 mail_unavailable` — an instance that boots, serves every page, and cannot admit anybody.
 `scripts/validate_config_secret_persistence.py` holds the three files that have to agree about that path
 (`Dockerfile`, `VeyqConfig.kt`, `infra/docker-compose.prod.yml`) to each other on every push.

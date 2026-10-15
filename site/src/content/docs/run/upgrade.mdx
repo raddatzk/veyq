@@ -99,9 +99,10 @@ fields and claims are compared on rendered manifests by `scripts/chart_upgrade_c
    The schema migrates during this boot. There is no gate and no prompt.
 
 7. **Verify, and not by "it started".** Read the instance's config-secret state as the Server Owner
-   (`GET /api/tenants/{id}/mail-settings` → `configSecretState: OK`), then have a person sign in and **open a
-   Memory that contains media**. That is the one assertion touching all three legs at once — the row, the
-   object and the key are three different failures wearing the same "it looked fine".
+   on the admin channel — the admin console's **Server → Config-secret key**, or `veyq-admin config-secret` — and
+   expect `OK`; then have a person sign in and **open a Memory that contains media**. That is the one assertion
+   touching all three legs at once — the row, the object and the key are three different failures wearing the
+   same "it looked fine".
 
   </TabItem>
   <TabItem label="Kubernetes">

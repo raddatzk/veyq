@@ -173,10 +173,12 @@ layout are recreated idempotently by the app itself, on every start. This has no
 layout step is satisfied by a node already carrying a role at any version, and applies `current + 1` where it
 has work to do.
 
-The final step is not "it started". Read the instance's **config-secret state** (`GET
-/api/tenants/{id}/mail-settings` → `configSecretState: OK`), then have a person sign in and **open a Memory that
-contains media**. That is the only assertion that touches all three legs at once: the row, the object and the key
-are three different failures with the same symptom of *"it looked fine"*.
+The final step is not "it started". Read the instance's **config-secret state** as the Server Owner, on the admin
+channel — the admin console's **Server → Config-secret key**, or `veyq-admin config-secret` — and expect `OK`. This
+read changes nothing on the instance. A tenant's mail settings carry the same state, but only that tenant's owner may
+read them. Then have a person sign in and **open a Memory that contains media**. That is the only assertion that
+touches all three legs at once: the row, the object and the key are three different failures with the same symptom
+of *"it looked fine"*.
 
 ### Restore under Helm
 
@@ -196,7 +198,7 @@ kubectl -n veyq cp ./veyq-config-secret.key "$(kubectl -n veyq get pod -l app.ku
   -o jsonpath='{.items[0].metadata.name}')":/var/lib/veyq/config-secret.key   # 4. leg (c) in
 rm ./veyq-config-secret.key
 kubectl -n veyq rollout restart deploy/veyq-app         # 5. NOT optional — see below
-# 6. verify as Restore says: configSecretState: OK, then a person opens a Memory with media
+# 6. verify as Restore says: veyq-admin config-secret reads OK, then a person opens a Memory with media
 ```
 
 The restart is part of the procedure: anything that touched the seal between step 3 and step 4 holds the fresh

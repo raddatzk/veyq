@@ -173,12 +173,23 @@ acceptanceCriteria:
       against the database it was taken with, before anyone restores it — the check a volume copy cannot offer,
       and the reason this form was chosen.
   - id: the-server-owner-reads-the-config-secret-state
-    # Not built: today the state is readable only through GET /api/tenants/{id}/mail-settings, which is owner-gated
-    # to that tenant, so a Server Owner who owns no tenant cannot run step 11. cr-config-secret-state-on-admin-channel
-    # adds the admin-channel read and its backend test.
+    # GET /api/instance/config-secret on the admin listener (admin console Server → Config-secret key,
+    # `veyq-admin config-secret`). The Server Owner seeded here owns no tenant. "Changes nothing" is pinned by the
+    # row, read in a transaction of its own: with the adopting `ConfigSecretKeyGuard.state()` swapped in, the
+    # no-fingerprint case goes red naming the adopted value — and it was green on that swap until the read moved
+    # out of the test thread's request-scoped session, whose cached entity hid the write. The refusals (403 for a
+    # member, 404 on the public port) were each bitten by a lever that let them through (200).
     text: >-
       A signed-in Server Owner reads the instance's config-secret state (OK, ABSENT or MISMATCH) on the admin
       channel, without owning any tenant, and reading it changes nothing — in particular it adopts no fingerprint.
+    coverage:
+      backend:
+        integration:
+          - InstanceConfigSecretSliceTest.serverOwnerWhoOwnsNoTenantReadsTheState
+          - InstanceConfigSecretSliceTest.aReadOnAnInstanceWithNoFingerprintLeavesItWithNone
+          - InstanceConfigSecretSliceTest.aKeyThatIsNotTheOneThatSealedReadsAsMismatch
+          - InstanceConfigSecretSliceTest.aMemberIsNotTheServerOwnerAndGetsNoState
+          - InstanceConfigSecretSliceTest.onThePublicPortTheOperationDoesNotExist
   - id: the-store-leg-restores-onto-a-different-store
     # No coverage: no harness stands up a second store. The rehearsal restores into a different BUCKET that the
     # target's own first start provisioned (`restore_hook`: `veyq-e2e-dst-<n>`), which is the "recreated rather
@@ -192,10 +203,18 @@ acceptanceCriteria:
       changed with ADR 0067 and the claim did not: it is the target application's own first start, from the
       declared store type, rather than a compose sidecar — which is also why the target must be *installed*
       before a restore rather than merely created.
+# Backend covers one criterion only — the Server Owner's config-secret read, a request the running app answers.
+# For the rest no backend test is planned: what a backend test could observe there is either the app itself — and
+# "the app is stopped" is exactly what it cannot be — or an operator tool's output, which is not a coverage
+# surface (ADR 0040); the criteria no surface reaches say on themselves how they are proven instead. The
+# config-secret MISMATCH verdict itself is already covered under uc.admin.tenant-mail-settings; what this
+# use-case adds is reaching it BY WAY OF a restore, which is a live-instance property and therefore web's.
 gaps:
-  backend: >-
-    No backend test, and none is planned. What a backend test could observe here is either the app itself — and
-    "the app is stopped" is exactly what it cannot be — or an operator tool's output, which is not a coverage
-    surface (ADR 0040); the criteria no surface reaches say on themselves how they are proven instead. The
-    config-secret MISMATCH verdict itself is already covered under uc.admin.tenant-mail-settings; what this
-    use-case adds is reaching it BY WAY OF a restore, which is a live-instance property and therefore web's.
+  admin-web: >-
+    Where step 11 is run: the admin console's Server → Config-secret key and `veyq-admin config-secret`. Their
+    suites exist and pass locally, but `admin-web`'s job has never executed, so ADR 0040 admits none of them.
+    `src/features/instance/ConfigSecretPanel.test.ts` renders each state with what it means for the operator
+    (MISMATCH and ABSENT kept apart, because restoring the key file and making it readable are different
+    repairs) and keeps a failed READ from reading as a wrong key; `src/cli/cli.test.ts` pins that the command
+    reaches `getInstanceConfigSecret()` and prints its JSON. On the first run whose log shows admin-web's suites
+    executed, both go under `the-server-owner-reads-the-config-secret-state`.

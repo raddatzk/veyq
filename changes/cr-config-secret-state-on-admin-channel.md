@@ -52,7 +52,7 @@ today's `ConfigSecretKeyGuard.state()` adopts a fingerprint when none is stored,
 - [x] 2 admin-web + CLI — the state shown in the Server section beside release and store provisioning, with what
       ABSENT and MISMATCH mean for the operator; `veyq-admin config-secret` printing it. · Done when: `npm run check`
       in `admin-web/` green; a browser pass shows the state on a dev instance.
-- [ ] 3 docs + site — the runbooks' verification step (`site/src/content/docs/run/upgrade.mdx`,
+- [x] 3 docs + site — the runbooks' verification step (`site/src/content/docs/run/upgrade.mdx`,
       `backup-and-restore.md`, `new-instance.mdx`) reads the state on the admin channel instead of through a
       tenant's mail settings; the coverage criterion gets its backend ref. · Done when: trust-chain green and
       `npm run check` in `site/` green.
