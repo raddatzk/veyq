@@ -64,7 +64,11 @@ class StoreCheck(
     private val s3For: (StoreConnection) -> S3Client,
     private val signerFor: (StoreConnection) -> BlobStore,
     private val provision: (StoreConnection) -> Unit,
-    private val http: HttpClient = HttpClient.newBuilder().connectTimeout(TIMEOUT).build(),
+    // HTTP/1.1, never the JDK default HTTP/2: on a plain-http public endpoint that default asks every first request to
+    // upgrade (`Upgrade: h2c`), and a proxy in front of the store may never answer such a request — Vite's dev proxy,
+    // measured: the probe PUT timed out where the same PUT without the header got its answer in milliseconds, so every
+    // fresh dev instance failed PROBE_PUT. A browser never sends h2c, so the probe must not either.
+    private val http: HttpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(TIMEOUT).build(),
     private val now: () -> Instant = Instant::now,
 ) {
 

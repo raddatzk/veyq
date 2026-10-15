@@ -23,7 +23,10 @@ import java.util.Collections
  *    on `/<bucket>` here;
  *  - the check never deletes ([aPassingCheckWritesOneProbeAndDeletesNothing]) — object deletion keeps its one
  *    caller, `StoreReclaimSweep` (`validate_store_reclaim_arity.py`);
- *  - a CORS rule that does not name the instance's origin is a failure of the CORS step, not a pass.
+ *  - a CORS rule that does not name the instance's origin is a failure of the CORS step, not a pass;
+ *  - the probe asks for no protocol upgrade ([aProxyThatNeverAnswersAnUpgradeRequestStillPassesBecauseTheProbeAsksForNone]):
+ *    with the JDK's default HTTP/2 client the PUT carried `Upgrade: h2c`, and a proxy that never answers one failed the
+ *    check on its timeout.
  *
  * No fixed port and nothing outside localhost: the fake binds an ephemeral one.
  */
@@ -34,6 +37,8 @@ class StoreCheckTest {
 
     @Volatile private var bucketExists = true
     @Volatile private var corsAllowsOrigin = true
+    @Volatile private var stallUpgrades = false
+    private val upgrades: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val objects = Collections.synchronizedMap(HashMap<String, ByteArray>())
 
     @BeforeEach
@@ -49,6 +54,9 @@ class StoreCheckTest {
     private fun handle(ex: HttpExchange) {
         val path = ex.requestURI.path
         requests += "${ex.requestMethod} $path"
+        ex.requestHeaders.getFirst("Upgrade")?.let { upgrades += "${ex.requestMethod} $path: $it" }
+        // A proxy that never answers an upgrade request (Vite's dev proxy): the exchange is left open, no response.
+        if (stallUpgrades && ex.requestHeaders.containsKey("Upgrade")) return
         var status = 400
         var body = ByteArray(0)
         when {
@@ -138,6 +146,18 @@ class StoreCheckTest {
         assertEquals(StoreCheckOutcome.PASSED, result.outcomes()[StoreCheckStep.PROBE_GET], "everything before CORS passed")
         assertEquals(StoreCheckOutcome.FAILED, result.outcomes()[StoreCheckStep.CORS])
         assertTrue(result.steps.last().detail!!.contains("https://veyq.example.com"), result.toString())
+    }
+
+    @Test
+    fun aProxyThatNeverAnswersAnUpgradeRequestStillPassesBecauseTheProbeAsksForNone() {
+        stallUpgrades = true
+
+        val result = check().run(connection(), null, "https://veyq.example.com")
+
+        // The bite: with the JDK's default HTTP/2 the probe PUT carries `Upgrade: h2c`, this fake never answers it,
+        // and PROBE_PUT fails on its timeout — every fresh dev instance behind Vite's proxy did.
+        assertTrue(result.passed, result.toString())
+        assertEquals(emptyList<String>(), upgrades.toList(), "the check must speak plain HTTP/1.1, as a browser does")
     }
 
     @Test
