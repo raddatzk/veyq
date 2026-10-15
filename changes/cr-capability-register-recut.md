@@ -7,7 +7,7 @@ adrs: ["0088", "0032", "0059", "0079"]
 invariants:
   - "Operator-blind E2EE everywhere: the manifest stays identical for every caller and carries no identity; every new gate refuses on a handle the server already sees (a share role, a wrap method, an endpoint, a node kind)"
   - "API-first: contracts/platform/capabilities.json is the source of truth; the backend CapabilityIds and the web constants follow it, pinned by their conformance tests"
-  - "Self-hostable by default: until inbox #443 replaces it, veyq.capabilities.disabled keeps switching off what it names, under the new ids and with the AND along the path"
+  - "Production cannot reach the test seam: between this CR and inbox #443 no id can be switched off in a built instance, and nothing outside src/test may change that"
 ---
 
 ## Goal
@@ -71,18 +71,33 @@ Each decision carries the line that settles it.
   catalog's `note` is rewritten: it describes a tree, AND along the path, a strict append-only rule from V1, and one cut
   before it (ADR 0088 decision 10). It stops restating what the registry and the conformance tests do.
 - **D2 — AND along the path, in the registry.** `isActive(id)` holds when `id` is advertised by this build and
-  neither `id` nor any ancestor entry is in the disabled list. An ancestor is each dotted prefix that is itself a
+  neither `id` nor any ancestor entry is in the switched-off set (D3). An ancestor is each dotted prefix that is itself a
   catalog entry; `core` is not an entry. `active`, which the manifest serves (`SetupHandler.kt:59`), is the
   advertised list filtered by `isActive`, in `ADVERTISED` order. So disabling `core.public-shares` drops all three
   share ids from the manifest and makes all three gates refuse. Today's computation is exact membership with no
   prefix logic (`CapabilityRegistry.kt:21-28`).
-- **D3 — the boot-time list stays, under the new ids, and nothing more.** `veyq.capabilities.disabled` is read once at
-  boot (`CapabilityRegistry.kt:21-22`). ADR 0088 decision 12 retires it in favour of the Admin API (inbox #443), so this
-  CR only makes it name the new ids and go through D2's AND. Like today, an unknown id in it is ignored. No refusal and
-  no warning are added: decision 12 retires that question together with the list. The cost of that is close to nil.
-  `infra/.env.example`, the compose file and the Helm values do not pass the list through (inbox #443, measured
-  there), so no deployed operator can hold a stale id. Only the comment example (`application.properties:45-49`)
-  and the tests name ids, and both change here.
+- **D3 — `veyq.capabilities.disabled` is deleted. Until #443 every built id is active, and only tests can switch one
+  off** (owner, 2026-10-15). ADR 0088 decision 12 moves the Server Owner's switches to the Admin API as database state
+  (inbox #443). Moving the boot-time list to the new ids and then deleting it in #443 would be double work for a
+  mechanism no operator can reach. Measured: `grep -rn "VEYQ_CAPABILITIES\|capabilities.disabled" infra/ charts/ .run/`
+  → no output. So `infra/.env.example`, `infra/docker-compose.prod.yml` and the Helm values never pass it through,
+  and the release is pre-V1. So:
+  - **Main.** `Capabilities` leaves `VeyqConfig` (`VeyqConfig.kt:34,100-103`), and its comment block leaves
+    `application.properties` (`:44-49`). SmallRye then refuses a stray `veyq.capabilities.*` key at boot (SRCFG00050,
+    `VeyqConfig.kt:25-27`). The registry reads the switched-off set from a `CapabilitySwitches` interface in main. Its
+    one production bean answers "nothing is off", and #443 replaces that bean with the database-backed one. The
+    registry asks on every call and caches nothing, which is the shape #443's switching without a restart needs anyway.
+  - **Test seam, `src/test` only.** One `@Alternative` implementation holds a mutable set. It is enabled per test
+    profile (`QuarkusTestProfile.getEnabledAlternatives()`), never by `@Priority`, because `@Priority` would enable it in
+    every test. The precedent for an alternative is `AppShellAbsentSliceTest.kt:29`. A test that sets the set restores
+    it in the same edit (`changes/README.md` § shared singleton state). It is never a config property.
+  - **The leak bite.** A slice test in the default profile, with no alternative enabled, asserts two things: the wired
+    `CapabilitySwitches` is the production bean, and `/api/setup` lists every `ADVERTISED` id. It is bitten by copying
+    the test alternative into `src/main` with `@Priority` on a detached worktree. Then it goes red, because the default
+    profile now gets the leaked switches.
+  - **The gap is accepted.** Between this CR and #443 no built instance can switch anything off. That costs nothing
+    real today, because no operator could set the list (the command above). **#443 must land before V1**, and its
+    inbox row says so.
 - **D4 — the share gates map role → leaf.** `capabilityFor(role)` (`SharingHandler.kt:710-712`) becomes `READ` →
   `core.public-shares`, `READ_WRITE` → `.contribute`, `WRITE_ONLY` → `.drop-box`. The three call sites stay where they
   are: create `:263`, reactivate `:450`, reissue `:501`. One behaviour changes on purpose: `WRITE_ONLY` now also needs
@@ -170,9 +185,9 @@ file lists.
 
 | surface | what changes | locator |
 |---|---|---|
-| contracts | the catalog (D1). The OpenAPI prose and examples that name ids: `setup`, `sharing`, `scopes`, `account`. `422 capability_disabled` responses/examples on the five pairing operations (D7) and on `createNode` (D8; `createNode`'s `422` at `content.openapi.yaml:85` today names only `illegal_structure`) | the two angles above, over `contracts/`; `grep -n "operationId" contracts/api/auth.openapi.yaml \| grep -i pair` |
+| contracts | the catalog (D1). The OpenAPI prose and examples that name ids: `setup`, `sharing`, `scopes`, `account`. `setup.openapi.yaml:130`, which says the manifest is the catalog "minus the veyq.capabilities.disabled config list", now says: minus the switched-off ids (none until #443). `422 capability_disabled` responses/examples on the five pairing operations (D7) and on `createNode` (D8; `createNode`'s `422` at `content.openapi.yaml:85` today names only `illegal_structure`) | the two angles above, over `contracts/`; `grep -n "operationId" contracts/api/auth.openapi.yaml \| grep -i pair` |
 | guard | `scripts/validate_capabilities.py` (D10). No other guard anchors on the catalog or the ids | `grep -rln "capabilities.json\|capability_disabled\|platform-capabilities" scripts/` (at refine: only a comment in `validate_coverage.py`, plus `chart_meta_check.py`'s unrelated Kubernetes `capabilities`) |
-| backend main | `CapabilityIds`, `CapabilityRegistry` (D2, D3), `SharingHandler.capabilityFor` (D4), `KeyMaterialHandler.addWrap` (D6), the pairing handler (D7), `NodeKindRules` + `FilesNodeKindRules` + `NodesHandler.createInScope` (D8), the KDoc ids in `ScopesHandler.kt:44`/`KeyMaterialHandler.kt:19`, the comment example in `application.properties:45-49` | `grep -rn --exclude-dir=build "isActive(\|capabilities\.active\|CapabilityRegistry\|CapabilityIds\." backend/*/src/main backend/apps/*/src/main`; `grep -rn "createInScope(" backend/core/src/main backend/apps/*/src/main` |
+| backend main | `CapabilityIds`, `CapabilityRegistry` (D2, D3), `SharingHandler.capabilityFor` (D4), `KeyMaterialHandler.addWrap` (D6), the pairing handler (D7), `NodeKindRules` + `FilesNodeKindRules` + `NodesHandler.createInScope` (D8), the KDoc ids in `ScopesHandler.kt:44`/`KeyMaterialHandler.kt:19`. Deleted (D3): `VeyqConfig.Capabilities` and the `application.properties:44-49` block. Added: `CapabilitySwitches` and its production bean | `grep -rn --exclude-dir=build "isActive(\|capabilities\.active\|CapabilityRegistry\|CapabilityIds\." backend/*/src/main backend/apps/*/src/main`; `grep -rn "createInScope(" backend/core/src/main backend/apps/*/src/main`; for the property: `grep -rn --exclude-dir=build --exclude-dir=node_modules "capabilities.disabled\|VEYQ_CAPABILITIES\|fun capabilities()" .`, which must return nothing outside `changes/` and `docs/decisions/` at the end |
 | backend test | `CapabilityRegistryTest`, `CapabilityManifestSliceTest`, `CapabilityDisabledSliceTest`, `apps/memories ReactivateShareCapabilitySliceTest`. No opt-in suite seeds through these gates | `grep -rln "capability_disabled\|CapabilityDisabled\|veyq.capabilities\|CapabilityIds" backend --include='*.kt' \| grep /src/test`; `grep -rln EnabledIfEnvironmentVariable backend/*/src/test backend/apps/*/src/test \| xargs grep -l "shares\|scopes/groups\|wraps\|pairing"` (empty at refine) |
 | web main | `features/platform/capabilities.ts`, `core/access.ts`, `views/MemoryHomeView.vue`, `features/memory/capabilities.ts`, `features/files/capabilities.ts`, the two share dialogs, `AppSidebar.vue`, `SettingsHubView.vue`, `LoginView.vue`, `ChangePasswordPanel.vue`, `useGrantReceiver.ts` (D9). `admin-web` reads no capability | `grep -rnE "hasCapability\|useCapabilities\|publicLinks\|uploaderLinks" web/src \| grep -v '\.test\.'`; `grep -rn "pairing\|AddDevicePanel\|JoinDeviceCard\|SignInWithCode" web/src/views` |
 | web test | the matrix tests, `access.test.ts`, `LevelView.test.ts`, `MemoryDetail.test.ts`, `FileDetail.test.ts`, the three `MemoryHomeView*.test.ts`, `ShareCreateDialog.test.ts`, and the `hasCapability` mocks in `LoginView.test.ts`, `useGrantReceiver.test.ts`, `ChangePasswordPanel.policy.test.ts`, `JoinDeviceCard.test.ts`, `SignInWithCodeCard.test.ts` (each only ever answers one way). The shared fixture `web/src/test/models.ts:97` | `grep -rlnE "hasCapability\|capabilityState\|useCapabilities\|SHARING_\|SPACES_GROUPS\|ACCOUNT_DEVICE_TRUST\|publicLinks\|uploaderLinks\|capable\(" web/src \| grep '\.test\.\|test/'` |
@@ -212,8 +227,13 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   - **Pairing.** `core.device-linking` off: each pairing endpoint → 422, and `/api/setup` → 200 (control).
   - **Drop box.** `.drop-box` off: `createNode(FILES_DROPBOX)` → 422, and `createNode(FOLDER)` at the same parent →
     created (control).
-  - **D3.** A disabled list naming a parent (`core.public-shares`) disables its children through the registry. This is
-    the unit half of the path-AND bite; its control is a sibling that stays active.
+  - **D3.** The registry, handed switches that name a parent (`core.public-shares`), refuses its children. This is the
+    unit half of the path-AND bite; its control is a sibling that stays active. Also the leak bite from D3, recorded
+    with its red output.
+
+  Every off-switch test reaches its state through the test seam (D3), never through a config override. That includes
+  the existing `CapabilityDisabledSliceTest` and `apps/memories ReactivateShareCapabilitySliceTest`, whose
+  `getConfigOverrides()` go, and `CapabilityRegistryTest`'s `testVeyqConfig(...)` construction.
   - **Reissue.** Its gate (`SharingHandler.kt:501`) has no test today. One case, with its control.
 
   The conformance test (`CapabilityRegistryTest`) stays one-directional (code ⊆ catalog), because a catalog id may be
@@ -223,21 +243,25 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   (§ Context). The matrix tests gain the rows this CR adds: drop box on/off on `createDropBox` and on the drop box's
   `share`, and contribute on/off on the offered roles. Each `hasCapability` mock that only ever answers one way gets
   its other answer: the hidden "stay signed in" branch in `JoinDeviceCard`/`SignInWithCodeCard`, the hidden pairing
-  entry points, and the toggle-off DEVICE-wrap path in `LoginView`. **Browser pass:** in a real browser against a
-  backend started with `VEYQ_CAPABILITIES_DISABLED=core.public-shares.drop-box,core.device-linking,core.remember-device.passwordless`:
-  - Files' "New" menu has no drop box, and a Memory has no uploader action.
-  - The share dialog still offers `READ` and `READ_WRITE`.
-  - The login page has no "sign in with code" and no "remember this device".
-  - Settings has no add-device entry.
+  entry points, and the toggle-off DEVICE-wrap path in `LoginView`. These unit and mount tests are the only proof
+  of the off states. A built backend can no longer switch an id off (D3), and the test seam is not reachable from a
+  running instance. **Browser pass, on state only**, against the dev backend:
+  - Files' "New" menu offers a drop box, and the drop box's links open.
+  - A Memory offers both share and uploader.
+  - The share dialogs offer `READ` and `READ_WRITE`.
+  - The login page offers "sign in with code" and "remember this device".
+  - Settings has its add-device entry.
 
-  Then repeat with the variable unset: everything is back. *Machine hint, holds for this CR's planned form:* the dev
-  backend runs from the user's IntelliJ. Stopping it and restarting it with that environment is allowed (memory: local
-  dev machine facts), with `PUBLIC_ENDPOINT` set to the origin being browsed. Tell the user afterwards so they restart
-  it from IntelliJ. · **Done when:** `npm run generate:api && npm run check` green in `web/`, the web half of the two
+  That proves the rename reached every gate, because a missed constant hides its feature. The off-state browser pass
+  moves to #443's Definition of done, the first CR that can switch an id off in a running instance.
+  · **Done when:** `npm run generate:api && npm run check` green in `web/`, the web half of the two
   angles returns nothing, and the browser pass is recorded.
 - [ ] **4 docs + coverage.** Edit the docs rows of the inventory in place (current state, no addendum). In the
   coverage file:
-  - `operator-disable-enforced` cites phase 2's slice tests, one per gate.
+  - `operator-disable-enforced` cites phase 2's slice tests, one per gate, for "a switched-off id is omitted and
+    refused". Its *operator* half (a Server Owner switches it) is gapped with the reason: not switchable in a built
+    instance until #443 (D3). Its text and the YAML header comment (`:9`, which names the config list) drop the config
+    list.
   - `sharing-first-consumer` names the new ids and the roles they gate.
   - `catalog-serves-usecases` loses its hand count. "4 capabilities over 12 use-cases" was already wrong (the catalog
     serves 10): point at the catalog.
@@ -245,8 +269,9 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   - A new criterion `feature-switch-refuses-only-new` covers D5 and D6 (the group-rename and DEVICE controls are its
     refs).
 
-  Inbox: #439 records step 1 as done and points at the next step. #440 closes and says that gap 1 was resolved as a
-  doc fault (D5). #442 and #443 are already open and need nothing from this CR beyond the new ids. ·
+  ADR 0032 §4's "Built today" sentence (`:89`, the config list read at boot) now says that no instance-wide switch is
+  built until #443. The use case's E1 says the same. Inbox: #439 records step 1 as done and points at the next step. #440 closes and says that gap 1 was resolved as a
+  doc fault (D5). #442 and #443 are already open, and #443's row was brought in line with D3 at refine. ·
   **Done when:** `python3 scripts/validate_coverage.py` and `python3 scripts/validate_capabilities.py` green, and the
   literal-id angle over `docs/` returns nothing.
 
