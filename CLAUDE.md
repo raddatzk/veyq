@@ -9,7 +9,8 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   sizes, exact server-observed timestamps, scope/membership, blinded tokens). A user's unshared personal space
   is confidential even from the operator. No path may break this.
 - **Product language: Memory / Chapter** — it belongs to the Memories application. Folders organize only.
-  Never "Album" / "Explorer". Say "application" (de: *Anwendung*), never "plugin" or "app".
+  Never "Album" / "Explorer". Say "application" (de: *Anwendung*), never "plugin"; "app" means only an installable native client, never an
+  application ([ADR 0086](docs/decisions/0086-one-word-per-meaning.md) holds the other word rules).
 - **Self-hostable by default**; central infrastructure always optional. This is **also the security
   guarantee**, not only a sovereignty one: confidentiality is designed to hold against an *actively* malicious
   operator exactly where the user serves their own client ([ADR 0026](docs/decisions/0026-client-trust-tiers.md));

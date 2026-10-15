@@ -50,7 +50,8 @@ handling of reported shares.
   capture that stops only the writer, and a store leg captured as objects rather than volumes)
 - ★ [Know which release runs, and which a backup came from](use-cases/uc.admin.identify-instance-release.md) —
   **refined** ([ADR 0057](../../decisions/0057-release-identity-and-deployment-recipe.md); the release version is
-  the operator's, the pre-auth `major`/`build` is the client's, and they are never merged)
+  the operator's, the pre-auth `major`/`build` is the client's; they are to share the major
+  ([ADR 0085](../../decisions/0085-one-major-moved-on-a-yearly-train.md), not built) and the precise release never goes pre-auth)
 - Upgrade the instance — the runbook is **written** (`infra/README.md` § An upgrade, step by step) and no longer
   blocked: the release identity above is what let its rollback target be named, and an upgrade whose rollback
   target cannot be named is advice rather than a procedure. It begins with the backup above by decision, not by

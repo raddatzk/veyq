@@ -35,15 +35,19 @@ response and a client-side gate that reads them.
 
 ### 1. `version: { major, build }` — the hard compatibility gate
 
-- **`major`** is the **only** hard gate. It is incremented **exclusively when a capability is removed** (a
-  breaking removal of an ability a client might rely on). Everything additive — a new capability, a new field, a
-  new endpoint — bumps **`build`**, never `major`.
-- Each client is **compiled with the `major` it was built against** (`expectedMajor`). On reaching `/api/setup`
-  it compares:
-  - `server.major == client.expectedMajor` → **compatible**, proceed.
-  - `server.major > client.expectedMajor` → the client is **too old** → a **blocking** "update your app" state.
-  - `server.major < client.expectedMajor` → the **server** is too old → a **blocking** "update this server" state.
-  - Any mismatch is a hard stop **before** login — no silent partial operation.
+- **`major`** is the **only** hard gate, and it is the platform's one major: the same number as the release major
+  in `VERSION`, moved only by a removal after deprecation, on the yearly train or in an unscheduled security
+  major ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) owns when and why). Everything additive (a new
+  capability, field or endpoint) is a minor and never moves `major`.
+- Each client is **compiled with the majors it speaks**. On reaching `/api/setup` it checks the server's `major`:
+  - a major it speaks → **compatible**, proceed;
+  - a server major **newer** than any it speaks → the client is **too old** → a **blocking** "update your app"
+    state;
+  - a server major **older** than any it speaks → the **server** is too old → a **blocking** "update this server"
+    state;
+  - any mismatch is a hard stop **before** login, never a silent partial operation.
+- The web client and `admin-web` ship in the server's own image and speak exactly its major. A store-shipped
+  client speaks every major released since the train before last (ADR 0085 decision 5).
 - `build` is informational (diagnostics, "what's new"); it is **never** a gate.
 
 ### 2. `capabilities: [{ id }]` — the active capability manifest
@@ -162,9 +166,9 @@ Two rules follow, so the catalog stays honest instead of being invented in paral
 
 ## Alternatives considered
 
-- **A min/max version range instead of a single `major`.** Rejected — ranges invite "works but degraded"
-  ambiguity; a single removal-only `major` keeps the gate binary and cheap to reason about (a capability that
-  still exists is `build`-additive; one that's gone is a `major` bump).
+- **A min/max version range advertised by the server.** Rejected: ranges invite "works but degraded" ambiguity.
+  The server advertises one removal-only `major`, which keeps the gate binary. The set of majors a client speaks
+  is the client's own, fixed when it is built (ADR 0085), not a range the server negotiates.
 - **Semantic per-endpoint versioning (Accept-Version headers, /v2/).** Rejected for now — heavier, and it
   answers "which shape" not "does this instance do X at all"; the capability manifest answers the discovery
   question directly and the `major` gate covers breaking removals.

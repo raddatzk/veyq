@@ -36,8 +36,8 @@ Five facts, measured on this tree:
 
 A sixth fact shapes the decision rather than motivating it: a version already exists on the wire.
 [ADR 0032](0032-capability-discovery-version-gating.md) puts `version: { major, build }` on the pre-auth
-`GET /api/setup` as the client-compatibility gate. It is a different number answering a different question, and
-merging the two is the obvious mistake this ADR exists to prevent.
+`GET /api/setup` as the client-compatibility gate. The precise release is a different number answering a different
+question, and putting it on that pre-auth surface is the obvious mistake this ADR exists to prevent (Decision 4).
 
 A seventh fact surfaced when the first push was planned, and it reshaped Decision 1. The first form of this
 decision kept `major.minor` in `VERSION` by hand and published on every push to `main`. Under that form the
@@ -96,7 +96,9 @@ of that image** rather than fetching them from a URL. Two things follow that no 
   what verifies can agree. Both images are verified, and the recipe is extracted and deployed **by the
   verified digest**, never by the tag, because a tag can move between the verify and the pull.
 
-**4. There are two version notions and they are never merged.**
+**4. One major, and the precise release never pre-auth.** The release major in `VERSION` *is* the protocol major
+([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 1, not built yet): both count the same event, a
+removal, and two counters for one event drift. What stays apart is the precision.
 
 - The **protocol version** (`major` / `build`, pre-auth, ADR 0032) answers *"can these two sides talk to each
   other?"* — for the web client, and for the native client that will drift from its server because a store, not
@@ -217,7 +219,8 @@ claim that it upgrades an instance of its predecessor; a run shows it — `scrip
 ## Related
 
 - [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) — the backup that an upgrade begins with, and the rollback that needs a name
-- [ADR 0032](0032-capability-discovery-version-gating.md) — the protocol version this one must not be merged with
+- [ADR 0032](0032-capability-discovery-version-gating.md) — the protocol version, whose major this one shares and whose pre-auth surface never carries the precise release
+- [ADR 0085](0085-one-major-moved-on-a-yearly-train.md) — when that one major moves, and which majors a client speaks
 - [ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md) — why a workflow that has never run proves nothing
 - [uc.admin.identify-instance-release](../features/admin/use-cases/uc.admin.identify-instance-release.md) — the operator-facing half
 - [infra/README](../../infra/README.md) — the stack the recipe describes

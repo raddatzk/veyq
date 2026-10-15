@@ -2,7 +2,8 @@
 
 veyq is a platform; an **application** is a set of node kinds with its own domain data and client screens, built
 on it ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) owns the decision and
-the rejected alternatives). German: *Anwendung*. Never "plugin" or "app".
+the rejected alternatives). German: *Anwendung*. Never "plugin", and never "app": an app is an installable native client
+([ADR 0086](../decisions/0086-one-word-per-meaning.md), which also names the second application **Depot**).
 
 **What the platform is.** veyq is a platform for sealed, shareable objects. The core provides:
 - **who**: tenants, central users, groups and personal scopes, memberships, invitations, keys, devices;
