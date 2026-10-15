@@ -65,4 +65,24 @@ nothing, and every runbook step that asks for the state names a surface the Serv
 
 ## Retrospective
 
-(filled at close)
+- **Planning.** The CR named three bites but not their levers (§ *The CR says PER bite-test how it will be
+  bitten*). They were improvised at implement time, and that worked here: a method-level `@PermitAll` for the
+  role, the contract's `x-veyq-channel` removed for the port, the adopting `state()` swapped in for the write.
+  The sibling note held, too: "do not anticipate the per-value fingerprint". The store CR replaced the global
+  fingerprint a few hours later and only had to re-point one test. One gap: the CR never asked how the restore and
+  upgrade e2e suites read the state. They still go through a tenant's mail settings, so the admin-channel read has a
+  backend test and a browser pass, but no e2e path.
+- **Execution.** The "the read adopts nothing" test was green with the adopting call swapped in. It read the row
+  outside a transaction and saw the request-scoped session's stale entity. The bite caught that; the test now reads
+  in a transaction of its own (now a rule in `changes/README.md`). A second bite ran on stale classes: Gradle's
+  file-system watching missed an edit in the shared tree and reported `UP-TO-DATE` (now a rule in
+  `changes/README.md`). Root cause of both: a green was trusted before checking that the lever had reached the code.
+- **Process & collaboration.** I emptied `site/src/content/docs/run/backup-and-restore.md` under the docs-site
+  session's uncommitted rewrite. The cause was a Python one-liner, `open(p, 'w').write(edit(open(p).read()))`, which
+  truncates the file before reading it. `git` had no copy. That session rebuilt the file from its own context, and I
+  committed my hunks only on top of its commit, staged as `HEAD` plus my edits. The rule existed in spirit — stage
+  only your own hunks, never revert theirs — and I broke it with a tool habit, not a decision. I told both sessions at
+  once and left an incident note in the shared notes folder. The CR-size choice worked: three small phases, each
+  with its own commit, landed before the bigger store CR started editing the same files.
+- **Next time:** in a tree other sessions write, read a file into a variable before opening it for writing,
+  snapshot any file you do not own before the first edit, and run bites with `--no-watch-fs`.
