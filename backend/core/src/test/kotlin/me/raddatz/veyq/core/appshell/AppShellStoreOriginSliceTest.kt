@@ -2,18 +2,22 @@ package me.raddatz.veyq.core.appshell
 
 import me.raddatz.veyq.core.appshell.AppShellSliceTest.Companion.HTML
 import me.raddatz.veyq.core.blobstore.BlobStore
+import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
 import java.net.URI
 
 /**
- * The store origin reaching a **real response**: the wiring from `veyq.blob-store.*` through `BlobStoreProducer`
- * and the real `S3BlobStore` into the shell's header. [AppShellTest] proves each mode's origin against the signer
+ * The store origin reaching a **real response**: the wiring from the store setting (here: the bundled hint, chosen) through
+ * `SwitchingBlobStore` and the real `S3BlobStore` into the shell's header. [AppShellTest] proves each mode's origin against the signer
  * in isolation; this is the one place both meet in a booted app, in the mode that needs it (ADR 0064's
  * Kubernetes shape, where a `<meta>`-only policy blocks every store fetch).
  *
@@ -22,17 +26,24 @@ import java.net.URI
  */
 @QuarkusTest
 @TestProfile(AppShellStoreOriginSliceTest.StoreOriginProfile::class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AppShellStoreOriginSliceTest {
 
     class StoreOriginProfile : QuarkusTestProfile {
         override fun getConfigOverrides(): Map<String, String> = mapOf(
-            "veyq.blob-store.endpoint" to "http://app-shell-store.invalid:3900",
-            "veyq.blob-store.public-endpoint" to "https://store.example.net",
-            "veyq.blob-store.signing-mode" to "store-origin",
-            "veyq.blob-store.access-key" to "access",
-            "veyq.blob-store.secret-key" to "secret",
+            "veyq.bundled-store.endpoint" to "http://app-shell-store.invalid:3900",
+            "veyq.bundled-store.admin-endpoint" to "http://app-shell-store.invalid:3903",
+            "veyq.bundled-store.admin-token" to "admin-token",
+            "veyq.bundled-store.public-endpoint" to "https://store.example.net",
+            "veyq.bundled-store.signing-mode" to "store-origin",
         )
     }
+
+    @BeforeAll
+    fun chooseTheBundledStore() = StoreSettingFixtures.chooseBundled()
+
+    @AfterAll
+    fun forgetTheStore() = StoreSettingFixtures.clear()
 
     @Inject
     lateinit var blobStore: BlobStore

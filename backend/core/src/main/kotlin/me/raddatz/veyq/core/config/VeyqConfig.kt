@@ -40,6 +40,8 @@ interface VeyqConfig {
     fun node(): Node
     fun blob(): Blob
     fun blobStore(): BlobStore
+
+    fun bundledStore(): BundledStore
     fun storeReclaim(): StoreReclaim
     fun tasks(): Tasks
     fun ratelimit(): RateLimit
@@ -387,86 +389,67 @@ interface VeyqConfig {
         }
     }
 
+    /**
+     * `veyq.blob-store.*` — what is left of the store in configuration once the store itself is a Server-Owner
+     * setting in the database (ADR 0089): tuning that is no part of a connection. Which store, where, and with
+     * which credentials is [me.raddatz.veyq.core.blobstore.StoreSettings]' answer; the deployment's bundled
+     * store is [bundledStore].
+     */
     interface BlobStore {
-        /**
-         * Which **kind** of store this connection points at, and therefore how far veyq may go in bringing it
-         * up (ADR 0067 Decision 1). The default is [StoreType.S3] deliberately: an unknown store is **never
-         * poked**, so pointing veyq at somebody else's bucket changes nothing about it.
-         *
-         * The member is named `type` and not `storeType` on purpose — property names are derived from the
-         * method path (see this interface's KDoc), there is no `@WithName` anywhere in this codebase to
-         * override that, and `storeType()` would silently bind `veyq.blob-store.store-type` instead of
-         * `veyq.blob-store.type`.
-         *
-         * It belongs to the **connection**, not to the environment: there is one connection in V1, and a SaaS
-         * instance with several (`docs/inbox.md` #41) gets a type per connection without reshaping anything.
-         */
-        @WithDefault("s3")
-        fun type(): StoreType
-
-        /** Internal S3 endpoint (blank/absent fails startup — blob storage is not gracefully degraded). */
-        fun endpoint(): Optional<String>
-
-        /** Client-reachable URL used purely to SIGN presigned URLs (blank ⇒ endpoint). */
-        fun publicEndpoint(): Optional<String>
-
-        /**
-         * **Which origin a presigned URL is signed for** (ADR 0067 Decision 5) — a named mode, not a shape
-         * inferred from the other members. The default is [SigningMode.TENANT_DOMAIN], which is bit-for-bit
-         * what every deployment did before this member existed: no instance moves, and the compose recipe
-         * needs no new line.
-         *
-         * **Never inferred**, and the tempting inference is a specific one: *"the public endpoint's host
-         * matches no tenant domain, so the store must be on its own origin"*. That reads the `tenant` table,
-         * which is runtime state — creating a tenant would silently change how a running instance signs.
-         *
-         * Read once at boot like everything else under `veyq.blob-store.*`: [me.raddatz.veyq.core.blobstore.S3BlobStore]
-         * caches one presigner per resolved endpoint and never invalidates it, so a runtime-settable mode
-         * would leave stale presigners behind with no code path that notices.
-         */
-        @WithDefault("tenant-domain")
-        fun signingMode(): SigningMode
-
-        fun accessKey(): Optional<String>
-
-        fun secretKey(): Optional<String>
-
-        @WithDefault("blobs")
-        fun bucket(): String
-
-        @WithDefault("us-east-1")
-        fun region(): String
-
         @WithDefault("600")
         fun presignTtlSeconds(): Int
 
-        /** `veyq.blob-store.garage.*` — reached only when [type] is [StoreType.GARAGE]. */
+        /** `veyq.blob-store.garage.*` — how veyq lays out a Garage it provisions (the bundled one, or a setting's). */
         fun garage(): Garage
 
-        /**
-         * The bundled store's own admin plane, nested so these members are structurally scoped to the type
-         * that uses them rather than free-floating on `veyq.blob-store.*` (the shape of [Tasks.Lease] and
-         * [RateLimit.Recovery]). Both absent is the correct state of every non-Garage instance.
-         */
         interface Garage {
-            /**
-             * Garage's Admin API base URL (`http://garage:3903`), which is a **different port from the S3
-             * endpoint** and is deliberately not published outside the compose network. Absent ⇒ provisioning
-             * cannot run; it reports that rather than failing the boot.
-             */
-            fun adminEndpoint(): Optional<String>
-
-            /** The bearer token that admin plane requires (`GARAGE_ADMIN_TOKEN`). Operator env, never persisted. */
-            fun adminToken(): Optional<String>
-
-            /** Storage capacity advertised for the single bundled node when veyq assigns it a layout role. */
+            /** Storage capacity advertised for the single node when veyq assigns it a layout role. */
             @WithDefault("1G")
             fun nodeCapacity(): String
 
-            /** The zone name the single bundled node is assigned to. One node, so its value is arbitrary and fixed. */
+            /** The zone name the single node is assigned to. One node, so its value is arbitrary and fixed. */
             @WithDefault("local")
             fun nodeZone(): String
         }
+    }
+
+    /**
+     * `veyq.bundled-store.*` — **the bundled-store hint** (ADR 0089 decision 3), the one store value the
+     * environment still carries: the recipe that brings a Garage along says where it is and passes its admin token,
+     * because that Garage needs the token at its own start. It is a hint, not a setting: it makes *Use the bundled
+     * store* available in the admin console, and choosing that stores a reference to the hint, never a copy of it.
+     * The hint exists when [endpoint], [adminEndpoint] and [adminToken] are all set.
+     *
+     * Besides "endpoint and admin token" it carries how this deployment exposes that store to browsers
+     * ([publicEndpoint], [signingMode]) and its [bucket] and [region]: the topology is the recipe's, not something
+     * a Server Owner could know or choose for a store the recipe wired. Its S3 credentials are not passed at all —
+     * [me.raddatz.veyq.core.blobstore.BundledStoreCredentials] derives them from [adminToken], so the bundled case
+     * never depends on the config-secret key.
+     */
+    interface BundledStore {
+        /** The bundled store's S3 endpoint as the backend reaches it (`http://garage:3900`). */
+        fun endpoint(): Optional<String>
+
+        /** The origin browsers fetch it from, when it is not [endpoint]. */
+        fun publicEndpoint(): Optional<String>
+
+        /** How presigned URLs name that origin (ADR 0067 Decision 5) — the deployment's routing shape. */
+        @WithDefault("tenant-domain")
+        fun signingMode(): SigningMode
+
+        /** Garage's Admin API base URL (`http://garage:3903`) — a different port from the S3 one, never published. */
+        fun adminEndpoint(): Optional<String>
+
+        /** The bearer token that admin plane requires (`GARAGE_ADMIN_TOKEN`). Operator env, never persisted. */
+        fun adminToken(): Optional<String>
+
+        /** Fixed once an instance is installed: an install that must move pins its old name instead. */
+        @WithDefault("blobs")
+        fun bucket(): String
+
+        /** Must match `s3_region` in `infra/garage.toml` — SigV4 signs the region. */
+        @WithDefault("us-east-1")
+        fun region(): String
     }
 
     /**

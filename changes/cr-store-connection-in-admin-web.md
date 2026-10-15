@@ -64,7 +64,7 @@ store credentials from the operator.
       bundled choice), run its check and read the check's result per step, and read whether a bundled hint exists;
       tenant creation's refusal while no store has passed its check. Each new operation in `OperatorBlindProbeTest`.
       · Done when: `generate:api` in `admin-web/` and the contracts guards green, and the predicted reds named.
-- [ ] 2 backend — the settings table in the baseline (and in `instance_backup.py`'s `NOT_DATA`); sealing with a
+- [x] 2 backend — the settings table in the baseline (and in `instance_backup.py`'s `NOT_DATA`); sealing with a
       fingerprint per value for the store secrets and the tenant SMTP passwords; a store that follows the current
       setting (the signing client, the presigner cache, the CSP store origin, the ingress store route); no boot
       failure and no in-memory store without a setting outside `%test` — uploads refused with a reason; Garage
@@ -74,6 +74,14 @@ store credentials from the operator.
       check against a store with no bucket fails at that step and creates none; a tenant create before a passed
       check is refused; a store secret re-entered under a new key leaves the SMTP secret reported unreadable;
       object deletion still has its one caller (`validate_store_reclaim_arity.py`).
+      *Built (what phases 3–5 start from):* the environment keeps `veyq.bundled-store.*` (endpoint, admin-endpoint,
+      admin-token, public-endpoint, signing-mode, bucket, region) and `veyq.blob-store.presign-ttl-seconds` /
+      `veyq.blob-store.garage.node-*`; every other `veyq.blob-store.*` key is gone. The bundled store's S3 key pair
+      is **derived** from its admin token (`BundledStoreCredentials`, HKDF; the backup tool must derive the same
+      pair — phase 4), so the bundled case seals nothing. `application-dev/-e2e.properties` already carry the hint,
+      and a dev or e2e instance **must now choose the bundled store** (admin-web or `PUT /api/instance/store`)
+      before an upload works. Under `%test` an unset store is the in-memory stub and tenant creation is open
+      without a check; any other profile refuses both. The check's CORS origin is `https://<bootstrap-domain>`.
 - [ ] 3 admin-web + CLI — Server → Store: the type list, the fields, *Use the bundled store* where a hint exists,
       save, check with each step's result, the re-entry prompt when credentials cannot be opened; create-tenant
       closed with the reason until a check passed; `veyq-admin store show | set | check`. · Done when: `npm run check`

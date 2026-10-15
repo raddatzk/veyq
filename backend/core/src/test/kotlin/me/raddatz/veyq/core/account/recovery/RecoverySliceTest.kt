@@ -385,7 +385,7 @@ class RecoverySliceTest {
             tenant.id,
             MailSettingsRow(
                 host = "127.0.0.1", port = port, from = "noreply@${tenant.domain}",
-                username = null, passwordCiphertext = null, passwordNonce = null,
+                username = null, passwordCiphertext = null, passwordNonce = null, passwordFingerprint = null,
                 tls = false, enabled = true, subjectTemplate = null, bodyTemplate = null,
             ),
         )

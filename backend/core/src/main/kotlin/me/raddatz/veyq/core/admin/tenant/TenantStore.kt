@@ -64,6 +64,8 @@ data class MailSettingsRow(
     val username: String?,
     val passwordCiphertext: String?,
     val passwordNonce: String?,
+    /** The fingerprint of the key that sealed the password (ADR 0089 decision 4); non-null iff it is stored. */
+    val passwordFingerprint: String?,
     val tls: Boolean,
     val enabled: Boolean,
     val subjectTemplate: String?,
@@ -465,6 +467,7 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         e.username = row.username
         e.passwordCiphertext = row.passwordCiphertext
         e.passwordNonce = row.passwordNonce
+        e.passwordFingerprint = row.passwordFingerprint
         e.tls = row.tls
         e.enabled = row.enabled
         e.subjectTemplate = row.subjectTemplate
@@ -474,7 +477,7 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
 
     private fun TenantMailSettingsEntity.toRow() = MailSettingsRow(
         host = host, port = port, from = fromAddress, username = username,
-        passwordCiphertext = passwordCiphertext, passwordNonce = passwordNonce,
+        passwordCiphertext = passwordCiphertext, passwordNonce = passwordNonce, passwordFingerprint = passwordFingerprint,
         tls = tls, enabled = enabled, subjectTemplate = subjectTemplate, bodyTemplate = bodyTemplate,
     )
 

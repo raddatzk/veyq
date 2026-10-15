@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.sharing.SharingStore
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.tasks.TasksStore
 import me.raddatz.veyq.core.generated.model.DeliveryResult
+import me.raddatz.veyq.core.blobstore.StoreSettings
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.http.FailureStatus
@@ -32,6 +33,9 @@ import java.time.Instant
 sealed interface CreateTenantOutcome {
     data class Created(val tenantId: String, val expiresAt: Instant, val bootstrapSecret: String, val delivery: DeliveryResult) : CreateTenantOutcome
     data object DomainTaken : CreateTenantOutcome, HttpFailure by httpFailure("domain_taken", FailureStatus.CONFLICT)
+
+    /** No object store has passed its check yet (ADR 0089 decision 6): a tenant is the first thing that stores blobs. */
+    data object StoreNotReady : CreateTenantOutcome, HttpFailure by httpFailure("store_not_ready", FailureStatus.CONFLICT)
 }
 
 /** Result of a resend/reassign on a pending tenant's invite. */
@@ -163,6 +167,7 @@ class TenantHandler(
     private val profiles: TenantProfileStore,
     private val access: ScopeAccess,
     private val quota: StorageUsage,
+    private val storeSettings: StoreSettings,
     config: VeyqConfig,
 ) {
     private val inviteTtl: Duration = config.tenant().invite().ttl()
@@ -199,6 +204,7 @@ class TenantHandler(
         val normalizedDomain = domain.lowercase()
         val normalizedEmail = normalizeEmail(ownerEmail)
         val outcome = commitThenSend {
+            if (!storeSettings.readyForTenants()) return@commitThenSend MintResult.Rejected(CreateTenantOutcome.StoreNotReady)
             if (store.domainExists(normalizedDomain)) return@commitThenSend MintResult.Rejected(CreateTenantOutcome.DomainTaken)
             val token = Tokens.random()
             val expiresAt = Instant.now().plus(inviteTtl)

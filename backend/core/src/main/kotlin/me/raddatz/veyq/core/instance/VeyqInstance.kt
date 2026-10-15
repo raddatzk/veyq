@@ -9,7 +9,7 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
 
 /** Instance-wide constants that exist from first boot. Exactly one row (id = 1). Holds the public instance salt
- *  (ADR 0003) and the config-secret KEK fingerprint (ADR 0050). */
+ *  (ADR 0003). The config-secret KEK's fingerprint lives on each sealed value instead (ADR 0089 decision 4). */
 @Entity
 @Table(name = "veyq_instance")
 @DynamicUpdate
@@ -20,12 +20,6 @@ class VeyqInstance : PanacheEntityBase {
 
     @Column(name = "instance_salt", nullable = false)
     lateinit var instanceSalt: String
-
-    /** HKDF fingerprint of the config-secret KEK that sealed the stored secrets (ADR 0050); null until a secret
-     *  is sealed or a mail path first adopts the current key — never set by the Server Owner's read, which must
-     *  change nothing. A hash, never the key — safe at rest. */
-    @Column(name = "config_secret_fingerprint")
-    var configSecretFingerprint: String? = null
 
     companion object : PanacheCompanionBase<VeyqInstance, Int> {
         const val SINGLETON_ID = 1

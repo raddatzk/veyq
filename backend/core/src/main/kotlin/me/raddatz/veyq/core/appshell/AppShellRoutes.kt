@@ -36,21 +36,44 @@ class AppShellFiles {
 @ApplicationScoped
 class AppShellRoutes(
     config: VeyqConfig,
-    blobStore: BlobStore,
+    private val blobStore: BlobStore,
     files: AppShellFiles,
 ) {
+    private val policy: String? = files.read(AppShell.POLICY_FILE)?.toString(Charsets.UTF_8)
+
+    // Decided at boot: whether there is a shell, and that its policy is whole. Its store origin is NOT — the store is
+    // a runtime setting (ADR 0089 decision 5), so the header's policy is read per response through [cspNow].
     private val shell: AppShell = AppShell.from(
         indexHtml = files.read(AppShell.INDEX_FILE),
-        policy = files.read(AppShell.POLICY_FILE)?.toString(Charsets.UTF_8),
+        policy = policy,
         storeOrigin = blobStore.storeOrigin,
     )
+
+    init {
+        // Fail closed for every store a Server Owner may set later, not only the one at boot: a policy with no
+        // `connect-src` cannot take a store origin, and learning that at the first request after a setting changes
+        // would be a 500 on every response.
+        if (shell is AppShell.Present) AppShell.withStoreOrigin(policy!!, "https://boot-check.invalid")
+    }
+
+    private class Emitted(val storeOrigin: String?, val csp: String)
+
+    @Volatile
+    private var emitted: Emitted? = null
+
+    /** The policy for the store the backend signs against right now: the base policy plus that store's origin. */
+    private fun cspNow(): String {
+        val origin = blobStore.storeOrigin
+        emitted?.let { if (it.storeOrigin == origin) return it.csp }
+        return AppShell.withStoreOrigin(policy!!, origin).also { emitted = Emitted(origin, it) }
+    }
 
     private val hsts: String? = config.http().hsts().let { if (it.enabled()) "max-age=${it.maxAge().seconds}" else null }
 
     fun register(@Observes router: Router) {
         when (shell) {
             AppShell.Absent -> log.info("app shell: no web client on the classpath — serving the API only")
-            is AppShell.Present -> log.infof("app shell: serving the web client; policy %s", shell.csp)
+            is AppShell.Present -> log.infof("app shell: serving the web client; policy %s", cspNow())
         }
         // First, so the end handler is registered before anything can write a response — including a JAX-RS
         // error, a static file and Vert.x's own 404.
@@ -80,7 +103,7 @@ class AppShellRoutes(
         if (isUnder(path, API_PREFIX)) return
         // Every response the shell serves, sw.js included: a worker takes its policy from its own script's
         // response, so this is what puts the playback Service Worker under the policy.
-        headers.set(CSP_HEADER, shell.csp)
+        headers.set(CSP_HEADER, cspNow())
         // Revalidate everything but the content-hashed chunks, whose name changes whenever their bytes do. An
         // `immutable` index.html or sw.js survives an upgrade by a day and asks for chunks the new image lacks.
         if (!path.startsWith(ASSETS_PREFIX)) headers.set(HttpHeaders.CACHE_CONTROL, "no-cache")

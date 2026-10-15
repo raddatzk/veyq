@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.blobstore
 
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.config.VeyqConfig.SigningMode
+import io.quarkus.runtime.LaunchMode
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Produces
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
@@ -19,7 +20,6 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
 import java.net.URI
 import java.time.Duration
-import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -27,10 +27,10 @@ import java.util.concurrent.ConcurrentHashMap
  * objects; the **bytes never flow through it**. Operator-blind — the store only ever holds AEAD ciphertext
  * sealed client-side. One object key per chunk: `storageKey/<index>`.
  *
- * [canPresign] is the capability switch: an [S3BlobStore] presigns + stats real objects, the
- * [InMemoryBlobStore] cannot presign and has no transport path (`%test`-only metadata stub — a configured store
- * is a hard requirement of `%dev`/`%prod`, enforced by [BlobStoreStartupCheck]; the byte transfer itself is
- * exercised by opt-in e2e against a real S3-compatible store).
+ * [canPresign] is the capability switch: an [S3BlobStore] presigns + stats real objects; the [InMemoryBlobStore]
+ * (`%test`-only metadata stub) and the [UnconfiguredBlobStore] (no usable store set yet, ADR 0089) cannot presign and
+ * have no transport path. Which one answers is [SwitchingBlobStore]'s, following the store setting at runtime; the
+ * byte transfer itself is exercised by opt-in e2e against a real S3-compatible store.
  */
 interface BlobStore {
     /** True when the store can produce presigned URLs (and therefore carry bytes); false for the dev store. */
@@ -122,7 +122,7 @@ fun BlobStore.presignGets(storageKey: String, chunkCount: Int, domain: String?):
  * `%test`-only store (cr-0105): holds no bytes and **cannot presign** (ADR 0013 §1). It exists purely so the
  * hermetic slice suite can drive the metadata control plane (`start`/`complete`/`list` — blob and application rows, the
  * wrap, the budget *declaration*) without a real store; the byte transfer is covered by the opt-in store e2e.
- * `%dev`/`%prod` never reach it — [BlobStoreStartupCheck] fails loud there if no store is configured.
+ * `%dev`/`%prod` never reach it — without a usable store setting they get [UnconfiguredBlobStore].
  */
 class InMemoryBlobStore : BlobStore {
     override val canPresign = false
@@ -151,7 +151,8 @@ class InMemoryBlobStore : BlobStore {
  * 0013 §1) via the **vendor-neutral AWS SDK for Java v2** — not tied to any single vendor's client. An
  * [S3Client] connects to the internal endpoint for `stat`/`delete`; the **sign-only** [S3Presigner]s compute
  * presigned URLs by local HMAC and never connect. Path-style addressing is forced so custom endpoints resolve.
- * Credentials come from operator env, are never persisted, logged, or returned by any endpoint.
+ * Credentials come from the store setting (sealed at rest, ADR 0089) or the bundled hint, and are never logged or
+ * returned by any endpoint.
  *
  * **Signing is per-request, not per-instance** (ADR 0063, amending ADR 0013 §4). A presigned URL is only
  * same-origin — the whole reason there is no CORS policy to configure — if it is signed for the origin the
@@ -197,8 +198,8 @@ class S3BlobStore(
      * rather than as a second predicate inside [endpointFor]: a blank `public-endpoint` leaves nothing to swap
      * a host into and nothing to sign verbatim, so it is [SigningMode.INTERNAL_ENDPOINT] and no other mode is
      * expressible. Folding it in at construction is what keeps [endpointFor] a total `when` over three
-     * constants — and it reads config, never the `tenant` table, so it is fixed at boot like the connection it
-     * describes.
+     * constants — and it reads the connection, never the `tenant` table, so it is fixed for the life of this
+     * store object; a changed setting builds a new one ([SwitchingBlobStore]).
      */
     private val mode: SigningMode =
         if (publicEndpoint.isBlank()) SigningMode.INTERNAL_ENDPOINT else signingMode
@@ -332,53 +333,105 @@ class S3BlobStore(
 }
 
 /**
- * Picks the store from config: a non-blank `veyq.blob-store.endpoint` ⇒ [S3BlobStore], otherwise the
- * [InMemoryBlobStore] (the default for dev/test). The public endpoint (client-reachable) is what signing
- * resolves against, and `veyq.blob-store.signing-mode` says how — empty public endpoint ⇒ sign against the
- * internal endpoint (external S3 / any publicly reachable store, ADR 0013 §4).
+ * The store outside `%test` while no usable store is set (ADR 0089 decision 5): the instance runs and answers
+ * `/api/setup`, and every upload is refused with a reason (`canPresign` false is `store_unavailable`) — never the
+ * silent [InMemoryBlobStore], whose `delete` reports every key gone. This one reports every key it was asked to
+ * delete as NOT deleted, so a reclaim row waits for a store instead of being dropped.
+ */
+object UnconfiguredBlobStore : BlobStore {
+    override val canPresign = false
+    override val storeOrigin: String? = null
+    override fun presignPut(key: String, contentLength: Long, domain: String?): String? = null
+    override fun presignGet(key: String, domain: String?): String? = null
+    override fun stat(key: String): Long? = null
+    override fun delete(keys: List<String>): List<String> = keys
+}
+
+/**
+ * The store every caller injects: it follows the current store setting (ADR 0089 decision 5), with no restart. Each
+ * call reads [StoreSettings.current] — a cached resolution, a field read until a change invalidates it — and builds
+ * the delegate again only when that resolution is a different object, so the signing client, the presigner cache and
+ * [storeOrigin] (the app shell's CSP) all move together when the setting moves; nothing outlives the setting it was
+ * built from. A replaced delegate is left to the garbage collector rather than closed, because a request on another
+ * thread may still be signing with it; a store setting changes a handful of times in an instance's life.
+ *
+ * With no usable setting it is [InMemoryBlobStore] under `%test` (the hermetic suite's metadata stub) and
+ * [UnconfiguredBlobStore] everywhere else.
+ */
+class SwitchingBlobStore(
+    private val settings: StoreSettings,
+    private val presignTtlSeconds: Int,
+    private val hermetic: Boolean,
+) : BlobStore {
+    private class Built(val resolution: StoreResolution, val store: BlobStore)
+
+    @Volatile
+    private var built: Built? = null
+
+    /** The store for the current setting. */
+    fun delegate(): BlobStore {
+        val resolution = settings.current()
+        built?.let { if (it.resolution === resolution) return it.store }
+        val store = when (resolution) {
+            is StoreResolution.Ready -> BlobStoreProducer.connect(resolution.connection, presignTtlSeconds)
+            else -> if (hermetic) InMemoryBlobStore() else UnconfiguredBlobStore
+        }
+        built = Built(resolution, store)
+        return store
+    }
+
+    override val canPresign: Boolean get() = delegate().canPresign
+    override val storeOrigin: String? get() = delegate().storeOrigin
+    override fun presignPut(key: String, contentLength: Long, domain: String?): String? = delegate().presignPut(key, contentLength, domain)
+    override fun presignGet(key: String, domain: String?): String? = delegate().presignGet(key, domain)
+    override fun stat(key: String): Long? = delegate().stat(key)
+    override fun delete(keys: List<String>): List<String> = delegate().delete(keys)
+}
+
+/**
+ * Produces the [SwitchingBlobStore] every caller injects, and is the one place an S3 client is built from a
+ * [StoreConnection] — the request path, the check and provisioning all connect the same way.
  */
 @ApplicationScoped
 class BlobStoreProducer(
+    private val settings: StoreSettings,
     config: VeyqConfig,
 ) {
-    private val endpoint: Optional<String> = config.blobStore().endpoint()
-    private val publicEndpoint: Optional<String> = config.blobStore().publicEndpoint()
-    private val signingMode: SigningMode = config.blobStore().signingMode()
-    private val accessKey: Optional<String> = config.blobStore().accessKey()
-    private val secretKey: Optional<String> = config.blobStore().secretKey()
-    private val bucket: String = config.blobStore().bucket()
-    private val region: String = config.blobStore().region()
     private val presignTtlSeconds: Int = config.blobStore().presignTtlSeconds()
 
     @Produces
     @ApplicationScoped
-    fun blobStore(): BlobStore {
-        val endpointUrl = endpoint.orElse("")
-        // A blank endpoint only reaches here in %test — [BlobStoreStartupCheck] already aborted %dev/%prod boot.
-        if (endpointUrl.isBlank()) return InMemoryBlobStore()
-        val creds = StaticCredentialsProvider.create(
-            AwsBasicCredentials.create(accessKey.orElse(""), secretKey.orElse("")),
-        )
-        // Path-style: custom endpoints (Garage/MinIO/…) can't serve virtual-host-style bucket subdomains.
-        val pathStyle = S3Configuration.builder().pathStyleAccessEnabled(true).build()
-        val s3 = S3Client.builder()
-            .endpointOverride(URI.create(endpointUrl))
-            .region(Region.of(region))
-            .credentialsProvider(creds)
-            .serviceConfiguration(pathStyle)
-            .build()
-        // The presigners are built lazily, one per resolved sign endpoint, because *which* endpoint a URL is
-        // signed for is now a per-request answer (ADR 0063) — so this hands over the ingredients rather than a
-        // finished presigner.
-        return S3BlobStore(
-            s3 = s3,
-            bucket = bucket,
-            presignTtlSeconds = presignTtlSeconds,
-            internalEndpoint = endpointUrl,
-            publicEndpoint = publicEndpoint.orElse(""),
-            signingMode = signingMode,
-            credentials = creds,
-            region = region,
-        )
+    fun blobStore(): BlobStore = SwitchingBlobStore(settings, presignTtlSeconds, LaunchMode.current() == LaunchMode.TEST)
+
+    companion object {
+        /** A path-style S3 client for [connection]'s internal endpoint: custom endpoints (Garage/MinIO/…) cannot
+         *  serve virtual-host-style bucket subdomains. */
+        fun s3Client(connection: StoreConnection): S3Client =
+            S3Client.builder()
+                .endpointOverride(URI.create(connection.endpoint))
+                .region(Region.of(connection.region))
+                .credentialsProvider(credentials(connection))
+                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .build()
+
+        /**
+         * The request-path store for [connection]. The presigners are built lazily, one per resolved sign endpoint,
+         * because *which* endpoint a URL is signed for is a per-request answer (ADR 0063) — so this hands over the
+         * ingredients rather than a finished presigner.
+         */
+        fun connect(connection: StoreConnection, presignTtlSeconds: Int): S3BlobStore =
+            S3BlobStore(
+                s3 = s3Client(connection),
+                bucket = connection.bucket,
+                presignTtlSeconds = presignTtlSeconds,
+                internalEndpoint = connection.endpoint,
+                publicEndpoint = connection.publicEndpoint.orEmpty(),
+                signingMode = connection.signingMode,
+                credentials = credentials(connection),
+                region = connection.region,
+            )
+
+        private fun credentials(connection: StoreConnection): StaticCredentialsProvider =
+            StaticCredentialsProvider.create(AwsBasicCredentials.create(connection.accessKey, connection.secretKey))
     }
 }

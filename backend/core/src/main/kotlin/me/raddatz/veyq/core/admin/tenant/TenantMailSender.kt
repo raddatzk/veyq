@@ -51,7 +51,7 @@ class TenantMailSender(
      */
     fun sendable(s: MailSettingsRow?): Boolean =
         s != null && s.enabled && !s.host.isNullOrBlank() &&
-            (s.username.isNullOrBlank() || (s.passwordCiphertext != null && keyState.state() == ConfigSecretKeyState.OK))
+            (s.username.isNullOrBlank() || (s.passwordCiphertext != null && keyState.stateOf(s.passwordFingerprint) == ConfigSecretKeyState.OK))
 
     /** The tenant's own from-address, falling back to a neutral one on its domain. */
     fun fromAddress(s: MailSettingsRow, domain: String): String =

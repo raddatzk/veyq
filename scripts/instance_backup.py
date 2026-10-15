@@ -172,11 +172,11 @@ def utc_now() -> str:
 # --------------------------------------------------------------------------------------------------------
 
 
-# The two tables a freshly installed instance legitimately holds rows in, and therefore the two the emptiness
-# gate must not read as data. Each is excluded for its own reason — see [Database.populated_tables] — and the
+# The tables a freshly installed or freshly configured instance legitimately holds rows in, and therefore the ones the
+# emptiness gate must not read as data. Each is excluded for its own reason — see [Database.populated_tables] — and the
 # list is short and named rather than pattern-matched, because "which tables are not data" is a judgement about
 # this schema and not something a regex can decide.
-NOT_DATA = ("flyway_schema_history", "veyq_instance")
+NOT_DATA = ("flyway_schema_history", "veyq_instance", "veyq_store_setting")
 NOT_DATA_SQL = ", ".join(f"'{t}'" for t in NOT_DATA)
 
 
@@ -294,8 +294,13 @@ class Database:
           - `flyway_schema_history` is the SCHEMA's own record, not data. A migrated instance necessarily has
             rows here and an unmigrated one cannot be a target at all.
           - `veyq_instance` is the `id = 1` singleton that "exists from first boot" (its entity KDoc), holding
-            the public instance salt and the config-secret fingerprint. A fresh install always has exactly this
-            one row, and the dump replaces it wholesale — see below.
+            the public instance salt. A fresh install always has exactly this one row, and the dump replaces it
+            wholesale — see below.
+          - `veyq_store_setting` is the object-store setting (ADR 0089): one row once the Server Owner has chosen a
+            store in the console, and no data of anybody's — a Server Owner who connected the new install's store
+            before restoring (which is the order the restore runbook gives, so the bundled bucket exists) must not
+            find the restore refused for it. The dump replaces it wholesale too: the restored setting wins, its
+            secrets sealed under the restored config-secret key.
 
         The table set is read out of `information_schema` rather than listed here, so a table a future migration
         adds is covered without anyone remembering to add it (changes/README.md § a guard derives its anchor set

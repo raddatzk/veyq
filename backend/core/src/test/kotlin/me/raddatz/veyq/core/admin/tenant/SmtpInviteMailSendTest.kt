@@ -49,7 +49,7 @@ class SmtpInviteMailSendTest {
                     tenantIdByDomain(domain),
                     MailSettingsRow(
                         host = "127.0.0.1", port = SMTP_PORT, from = "noreply@$domain", username = "smtpuser",
-                        passwordCiphertext = sealed.ciphertext, passwordNonce = sealed.nonce,
+                        passwordCiphertext = sealed.ciphertext, passwordNonce = sealed.nonce, passwordFingerprint = keyState.currentFingerprint(),
                         tls = false, enabled = true,
                         subjectTemplate = "Invite to {{domain}}",
                         bodyTemplate = "Hi! You are invited to {{domain}}. Accept {{link}} before {{expiry}}.",
@@ -112,7 +112,7 @@ class SmtpInviteMailSendTest {
                     tenantIdByDomain(domain),
                     MailSettingsRow(
                         host = "127.0.0.1", port = AUTHLESS_SMTP_PORT, from = "noreply@$domain",
-                        username = null, passwordCiphertext = null, passwordNonce = null,
+                        username = null, passwordCiphertext = null, passwordNonce = null, passwordFingerprint = null,
                         tls = false, enabled = true, subjectTemplate = "Invite to {{domain}}",
                         bodyTemplate = "Accept {{link}} before {{expiry}}.",
                     ),
@@ -143,7 +143,7 @@ class SmtpInviteMailSendTest {
                 tenantIdByDomain(domain),
                 MailSettingsRow(
                     host = "127.0.0.1", port = DEAD_SMTP_PORT, from = "noreply@$domain", username = "smtpuser",
-                    passwordCiphertext = sealed.ciphertext, passwordNonce = sealed.nonce,
+                    passwordCiphertext = sealed.ciphertext, passwordNonce = sealed.nonce, passwordFingerprint = keyState.currentFingerprint(),
                     tls = false, enabled = true, subjectTemplate = null, bodyTemplate = null,
                 ),
             )
@@ -170,19 +170,18 @@ class SmtpInviteMailSendTest {
             greenMail.setUser("smtpuser", "smtppass")
             val domain = "key-changed.example.com"
             seedTenant(domain = domain, ownerEmail = "owner@$domain", tenantScope = false)
-            val sealed = seal.seal("smtppass") // sealed under the CURRENT (OK) key
+            val sealed = seal.seal("smtppass") // the ciphertext is real; the fingerprint it carries names ANOTHER key
             QuarkusTransaction.requiringNew().run {
                 store.saveMailSettings(
                     tenantIdByDomain(domain),
                     MailSettingsRow(
                         host = "127.0.0.1", port = MISMATCH_SMTP_PORT, from = "noreply@$domain", username = "smtpuser",
-                        passwordCiphertext = sealed.ciphertext, passwordNonce = sealed.nonce,
+                        passwordCiphertext = sealed.ciphertext, passwordNonce = sealed.nonce, passwordFingerprint = "not-the-current-key",
                         tls = false, enabled = true, subjectTemplate = null, bodyTemplate = null,
                     ),
                 )
             }
-            // Simulate the running key no longer matching what the DB fingerprint recorded ⇒ state() = MISMATCH.
-            QuarkusTransaction.requiringNew().run { instance.setConfigSecretFingerprint("not-the-current-key") }
+            // The row's fingerprint names another key than the running one ⇒ stateOf() = MISMATCH.
 
             val delivery = mailer.sendInvite(tenantIdByDomain(domain), domain, "x@elsewhere.example", "TOKEN-k", Instant.parse("2026-07-31T12:00:00Z"))
 
@@ -190,7 +189,9 @@ class SmtpInviteMailSendTest {
             assertFalse(greenMail.waitForIncomingEmail(1_000, 1), "a MISMATCH key must not send SMTP")
             assertEquals(0, greenMail.receivedMessages.size)
         } finally {
-            keyState.recordReseal() // restore OK for the rest of the JVM-shared suite
+            // The row's fingerprint names a key that is not running — and the instance-wide state sees every sealed
+            // value in the JVM-shared database, so it must not outlive this case.
+            QuarkusTransaction.requiringNew().run { TenantMailSettingsEntity.deleteById(tenantIdByDomain("key-changed.example.com")) }
             greenMail.stop()
         }
     }

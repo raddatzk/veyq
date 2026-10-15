@@ -1,6 +1,11 @@
 package me.raddatz.veyq.core.crypto
 
-import me.raddatz.veyq.core.instance.InstanceStore
+import me.raddatz.veyq.core.admin.tenant.MailSettingsRow
+import me.raddatz.veyq.core.admin.tenant.TenantMailSettingsEntity
+import me.raddatz.veyq.core.admin.tenant.TenantStore
+import me.raddatz.veyq.core.blobstore.SealedValue
+import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -8,12 +13,13 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 /**
- * The config-secret KEK tripwire (ADR 0050). Proves the load-bearing behaviour: a key that no longer
- * matches the one that sealed the stored secrets is **detected** ([ConfigSecretKeyState.MISMATCH]) rather than
- * silently producing unseal garbage, and a reseal under the current key recovers to OK.
+ * The config-secret KEK tripwire (ADR 0050), **per sealed value** (ADR 0089 decision 4). A value sealed under a key
+ * that is no longer the running one is **detected** ([ConfigSecretKeyState.MISMATCH]) rather than silently producing
+ * unseal garbage, and the instance-wide state sees every sealed value — so re-entering ONE secret under the current
+ * key cannot hide that another is still sealed under the old one, which a single instance-wide fingerprint advanced
+ * on every reseal did.
  *
- * The H2 mem DB + the config-secret key file are shared across the test JVM, so this mutates the stored fingerprint
- * and **always restores** it (finally → recordReseal) to keep the suite isolated.
+ * The H2 mem DB is JVM-shared, so the store setting each case stores is cleared in its `finally`.
  */
 @QuarkusTest
 class ConfigSecretKeyGuardTest {
@@ -22,20 +28,69 @@ class ConfigSecretKeyGuardTest {
     lateinit var guard: ConfigSecretKeyGuard
 
     @Inject
-    lateinit var instance: InstanceStore
+    lateinit var seal: ConfigSecretSeal
+
+    @Inject
+    lateinit var store: TenantStore
 
     @Test
-    fun detectsAChangedKeyThenRecoversOnReseal() {
-        // Steady state: the running key matches the adopted fingerprint (adopting it now if this runs first).
-        assertEquals(ConfigSecretKeyState.OK, guard.state(), "the running key matches the adopted fingerprint")
+    fun aValueSealedUnderAnotherKeyIsDetectedPerValue() {
+        val current = guard.currentFingerprint()
+        assertEquals(ConfigSecretKeyState.OK, guard.stateOf(current), "sealed under the running key")
+        assertEquals(ConfigSecretKeyState.MISMATCH, guard.stateOf("not-the-current-key"), "a changed key is DETECTED, not silent")
+        assertEquals(ConfigSecretKeyState.OK, guard.stateOf(null), "nothing stored, nothing to open")
+    }
+
+    @Test
+    fun theInstanceWideStateSeesEveryHolderOfASealedValue() {
+        assertEquals(ConfigSecretKeyState.OK, committedState(), "precondition: nothing is sealed under another key")
         try {
-            // Simulate the key file changing under a running server: the stored fingerprint no longer matches.
-            QuarkusTransaction.requiringNew().run { instance.setConfigSecretFingerprint("not-the-current-key") }
-            assertEquals(ConfigSecretKeyState.MISMATCH, guard.state(), "a changed key is DETECTED, not silent")
+            StoreSettingFixtures.chooseS3(secretKey = sealedUnder("not-the-current-key"))
+            assertEquals(ConfigSecretKeyState.MISMATCH, committedState(), "the store's secret, sealed under another key, is seen")
+
+            StoreSettingFixtures.chooseS3(secretKey = sealedUnder(guard.currentFingerprint()!!))
+            assertEquals(ConfigSecretKeyState.OK, committedState(), "re-entered under the running key, it reads OK")
         } finally {
-            // Recovery (and suite isolation): a reseal re-adopts the current key.
-            guard.recordReseal()
+            StoreSettingFixtures.clear()
         }
-        assertEquals(ConfigSecretKeyState.OK, guard.state(), "recordReseal clears MISMATCH back to OK")
+    }
+
+    @Test
+    fun aStoreSecretReEnteredUnderTheNewKeyLeavesTheSmtpSecretUnreadable() {
+        // The bite of per-value fingerprints: one instance-wide fingerprint advanced by every reseal would read OK
+        // here, hiding an SMTP password still sealed under the lost key behind a store secret that was re-entered.
+        val tenantId = seedTenant()
+        val smtp = seal.seal("smtp-secret")
+        QuarkusTransaction.requiringNew().run {
+            store.saveMailSettings(
+                tenantId,
+                MailSettingsRow(
+                    host = "smtp.example.com", port = 587, from = null, username = "u",
+                    passwordCiphertext = smtp.ciphertext, passwordNonce = smtp.nonce, passwordFingerprint = "the-lost-key",
+                    tls = true, enabled = true, subjectTemplate = null, bodyTemplate = null,
+                ),
+            )
+        }
+        try {
+            StoreSettingFixtures.chooseS3(secretKey = sealedUnder(guard.currentFingerprint()!!))
+
+            assertEquals(ConfigSecretKeyState.MISMATCH, committedState(), "the SMTP password is still sealed under the lost key")
+            assertEquals(ConfigSecretKeyState.MISMATCH, guard.stateOf("the-lost-key"), "and says so of itself")
+        } finally {
+            StoreSettingFixtures.clear()
+            QuarkusTransaction.requiringNew().run { TenantMailSettingsEntity.deleteById(tenantId) }
+        }
+    }
+
+    /**
+     * The instance-wide state as committed, read in a transaction of its own. Read outside one, the test thread's
+     * request-scoped session hands back the entity it loaded earlier — so a re-entered secret would still read as the
+     * old one. A real request has a session of its own.
+     */
+    private fun committedState(): ConfigSecretKeyState = QuarkusTransaction.requiringNew().call { guard.readState() }
+
+    private fun sealedUnder(fingerprint: String): SealedValue {
+        val sealed = seal.seal("a-secret")
+        return SealedValue(sealed.ciphertext, sealed.nonce, fingerprint)
     }
 }

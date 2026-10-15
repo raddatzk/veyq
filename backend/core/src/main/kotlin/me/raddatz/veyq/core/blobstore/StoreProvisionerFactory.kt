@@ -4,86 +4,70 @@ import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.config.VeyqConfig.StoreType
 import jakarta.enterprise.context.ApplicationScoped
 import org.jboss.logging.Logger
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
-import software.amazon.awssdk.regions.Region
-import software.amazon.awssdk.services.s3.S3Client
-import software.amazon.awssdk.services.s3.S3Configuration
-import java.net.URI
 
 /**
- * Turns the declared store type into a [StoreProvisioner], **or into none at all**.
+ * Turns a store into a [StoreProvisioner], **or into none at all**.
  *
- * "None at all" is the important half and is not a degraded case: `type: s3` — the default — means veyq
- * provisions nothing, so [StoreProvisioningRunner] gets `null` and reports
- * [StoreProvisioningState.NOT_ATTEMPTED] for the life of the instance. That is what makes ADR 0067 Decision 1's
- * *"an unknown store is never poked"* true structurally: there is no Garage code for a `type: s3` instance to
- * reach, because none was ever built (ADR 0067 § Consequences bounds the cost of the type this way — a shared
- * path that "mostly" branches is the version that stops being bounded).
+ * "None at all" is the important half and is not a degraded case: an S3-compatible store — the default type —
+ * means veyq provisions nothing, so [StoreProvisioningRunner] reports [StoreProvisioningState.NOT_ATTEMPTED] for it.
+ * That is what makes ADR 0067 Decision 1's *"an unknown store is never poked"* true structurally: there is no Garage
+ * code for an `S3` store to reach, because none was ever built for it.
+ *
+ * **Which store is provisioned at boot** follows ADR 0089: the store setting when one is set (a Garage one is
+ * provisioned, an S3-compatible one is not), and otherwise the deployment's bundled-store hint — so a fresh install,
+ * the target of a restore above all, has its bundled bucket before anybody has chosen it in the console. The check
+ * provisions a Garage setting again, synchronously, before it probes ([forConnection]).
  *
  * **A plain factory rather than a `@Produces` method**, deliberately: a producer for a normal-scoped bean may
- * not return `null` at all, and `Instance.isUnsatisfied` reports whether a *bean* exists rather than what it
- * produced — so the CDI spelling of "sometimes there is nothing" would have been a `@Dependent` producer plus a
- * nullable `get()`, which is more machinery than Kotlin's own `?` for the same answer.
+ * not return `null` at all, and Kotlin's own `?` says "sometimes there is nothing" with less machinery.
  */
 @ApplicationScoped
 class StoreProvisionerFactory(
     private val config: VeyqConfig,
+    private val settings: StoreSettings,
+    private val hint: BundledStoreHint,
 ) {
     private val log = Logger.getLogger(StoreProvisionerFactory::class.java)
 
-    /** The provisioner this instance's store type calls for, or `null` when veyq must provision nothing. */
-    fun forConfiguredStore(): StoreProvisioner? {
-        val store = config.blobStore()
-        if (store.type() != StoreType.GARAGE) return null
+    /** What to provision at boot: the setting's Garage, or with no setting the bundled hint's, or nothing. */
+    fun forBoot(): StoreProvisioner? = when (val current = settings.current()) {
+        is StoreResolution.Ready -> forConnection(current.connection)
+        StoreResolution.NotSet -> hint.connection?.let { forConnection(it) }
+        is StoreResolution.Unavailable -> {
+            if (current.hintMissing) {
+                log.warn("The bundled store is chosen, but this deployment passes no bundled-store hint — nothing is provisioned.")
+            } else {
+                log.warnf("The store's %s cannot be opened under the current config-secret key — nothing is provisioned until it is entered again.", current.unreadable)
+            }
+            null
+        }
+    }
 
-        val adminEndpoint = store.garage().adminEndpoint().orElse("")
-        val adminToken = store.garage().adminToken().orElse("")
+    /** The provisioner [connection]'s type calls for, or `null` when veyq must provision nothing (`S3`). */
+    fun forConnection(connection: StoreConnection): StoreProvisioner? {
+        if (connection.type != StoreType.GARAGE) return null
+        val adminEndpoint = connection.garageAdminEndpoint.orEmpty()
+        val adminToken = connection.garageAdminToken.orEmpty()
         if (adminEndpoint.isBlank() || adminToken.isBlank()) {
-            // A misconfiguration, not a failure of the boot: ADR 0013 §1 makes the *byte path* a hard startup
-            // requirement and BlobStoreStartupCheck already enforces it; the admin plane is not that, and
-            // aborting here would put a network-shaped dependency back into the startup path Decision 3
-            // removed it from.
-            log.warn(
-                "veyq.blob-store.type=garage but veyq.blob-store.garage.admin-endpoint/admin-token are not both " +
-                    "set — the store will not be provisioned. Set both, or declare veyq.blob-store.type=s3 if " +
-                    "you bring the store up yourself.",
-            )
+            // The setting is validated on write and the hint is complete or absent, so this is unreachable short of
+            // a hand-edited row — reported, never thrown: provisioning is no startup requirement (ADR 0067 Decision 3).
+            log.warn("A Garage store without its admin endpoint and token cannot be provisioned.")
             return null
         }
-
+        val garage = config.blobStore().garage()
         return GarageStoreProvisioner(
             adminEndpoint = adminEndpoint,
             adminToken = adminToken,
-            bucket = store.bucket(),
-            accessKey = store.accessKey().orElse(""),
-            secretKey = store.secretKey().orElse(""),
-            nodeZone = store.garage().nodeZone(),
-            nodeCapacity = store.garage().nodeCapacity(),
-            cors = S3BucketCorsPolicy(provisioningS3Client()),
+            bucket = connection.bucket,
+            accessKey = connection.accessKey,
+            secretKey = connection.secretKey,
+            nodeZone = garage.nodeZone(),
+            nodeCapacity = garage.nodeCapacity(),
+            // A separate client from the request path's, so nothing about provisioning can touch the client the
+            // request path presigns with, and it reaches the provisioner as nothing wider than BucketCorsPolicy.
+            cors = S3BucketCorsPolicy(BlobStoreProducer.s3Client(connection)),
             corsOrigins = CORS_ORIGINS,
         )
-    }
-
-    /**
-     * A short-lived S3 client for the provisioning seam's one genuinely-S3 step, built the same way
-     * [BlobStoreProducer] builds the request-path one (path-style addressing, the internal endpoint, the store
-     * credentials) — but a separate instance, so nothing about provisioning can touch the client the request
-     * path presigns with, and so it never reaches [GarageStoreProvisioner] as anything wider than
-     * [BucketCorsPolicy]'s two methods.
-     */
-    private fun provisioningS3Client(): S3Client {
-        val store = config.blobStore()
-        return S3Client.builder()
-            .endpointOverride(URI.create(store.endpoint().orElse("")))
-            .region(Region.of(store.region()))
-            .credentialsProvider(
-                StaticCredentialsProvider.create(
-                    AwsBasicCredentials.create(store.accessKey().orElse(""), store.secretKey().orElse("")),
-                ),
-            )
-            .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
-            .build()
     }
 
     private companion object {

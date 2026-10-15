@@ -25,7 +25,9 @@ This asserts, with no daemon and no root:
      `44`, a longer number that sorts first as a string, trailing zeros), that a NEWER backup is refused with a
      message naming the release it came from (and saying so when the manifest records none), that the same and
      an older one are accepted, that a target with no applied migration is refused, and the closing log an older
-     backup gets — that it will be migrated up, and that a rollback needs the backup's own release.
+     backup gets — that it will be migrated up, and that a rollback needs the backup's own release;
+  6. the emptiness gate's exclusions (`NOT_DATA`): the object-store setting is among them, and every one still names
+     a table a migration creates.
 
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key
 in a running container — that is the live proof on the production recipe, recorded where the coverage of
@@ -40,6 +42,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import stat
 import sys
 import tempfile
@@ -245,6 +248,22 @@ def version_cases() -> None:
           "ROLLBACK" in notice and "release 0.3" in notice and "A7" in notice, notice)
 
 
+def not_data_cases() -> None:
+    """The restore's emptiness gate (A5) must not read a table a fresh install holds rows in as data — and must not
+    name a table that no longer exists, which would be a gate with a hole nobody sees. Both halves are read from the
+    migrations, not recalled (ADR 0089: the object-store setting is one row once a Server Owner has chosen a store)."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    created = set()
+    for sql in root.glob("backend/**/src/main/resources/db/migration/*.sql"):
+        created.update(re.findall(r"CREATE TABLE (\w+)", sql.read_text()))
+    check("the gate excludes the object-store setting, which a Server Owner fills before a restore",
+          "veyq_store_setting" in ib.NOT_DATA)
+    check("every table the gate excludes is one a migration creates (flyway's own record aside)",
+          all(t in created for t in ib.NOT_DATA if t != "flyway_schema_history"),
+          str(sorted(t for t in ib.NOT_DATA if t != "flyway_schema_history" and t not in created)))
+    check("the exclusion list is the three named tables, no pattern", len(ib.NOT_DATA) == 3, str(ib.NOT_DATA))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyq-backup-selftest-") as tmp:
         tmp_path = pathlib.Path(tmp)
@@ -253,6 +272,7 @@ def main() -> int:
         restore_cases(tmp_path)
         capture_cases(tmp_path)
     version_cases()
+    not_data_cases()
     if failures:
         print(f"[selftest] {len(failures)} failure(s)", file=sys.stderr)
         return 1

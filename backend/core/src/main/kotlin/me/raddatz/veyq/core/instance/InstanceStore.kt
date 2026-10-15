@@ -20,18 +20,6 @@ class InstanceStore {
         VeyqInstance.findById(VeyqInstance.SINGLETON_ID)?.instanceSalt
             ?: error("instance salt not seeded")
 
-    /** The stored config-secret KEK fingerprint, or null if not adopted yet (ADR 0050). */
-    fun configSecretFingerprint(): String? =
-        VeyqInstance.findById(VeyqInstance.SINGLETON_ID)?.configSecretFingerprint
-
-    /** Set/advance the stored config-secret KEK fingerprint (adopt on first read, or reseal recovery). The instance
-     *  row is always present (seeded at startup, before any request). Must run in a transaction (caller-provided). */
-    fun setConfigSecretFingerprint(fingerprint: String) {
-        val row = VeyqInstance.findById(VeyqInstance.SINGLETON_ID) ?: error("instance not seeded")
-        row.configSecretFingerprint = fingerprint
-        row.persist()
-    }
-
     @Transactional
     fun seedOnStartup(@Observes ev: StartupEvent) {
         if (VeyqInstance.findById(VeyqInstance.SINGLETON_ID) == null) {

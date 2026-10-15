@@ -330,10 +330,10 @@ class TenantIngressProjectorTest {
     private fun traefikSink(adminDomain: String? = null) = TraefikFileIngressSink(
         Path.of("build/test-tenant-ingress-render-only/tenants.yml"), BOOTSTRAP_DOMAIN, adminDomain,
         TraefikFileIngressSink.Upstreams(app = "http://app:8080", blobs = "http://garage:3900", admin = "http://admin:8080"),
-        bucket = config.blobStore().bucket(),
+        bucket = config.bundledStore().bucket(),
     )
 
-    private fun blobsPrefix() = "/${config.blobStore().bucket()}/"
+    private fun blobsPrefix() = "/${config.bundledStore().bucket()}/"
 
     /** The router names, in file order — duplicates kept, since a duplicate is what some tests look for. */
     private fun routerNames(file: String): List<String> =

@@ -88,6 +88,12 @@ class TenantMailSettingsEntity : PanacheEntityBase {
     @Column(name = "password_nonce")
     var passwordNonce: String? = null
 
+    /** The fingerprint of the config-secret KEK that sealed [passwordCiphertext] (ADR 0089 decision 4) — a hash,
+     *  never the key. Non-null iff the ciphertext is; compared per value, so a re-sealed store secret cannot hide
+     *  that this password is still sealed under a lost key. */
+    @Column(name = "password_fingerprint", length = 64)
+    var passwordFingerprint: String? = null
+
     @Column(name = "tls", nullable = false)
     var tls: Boolean = true
 

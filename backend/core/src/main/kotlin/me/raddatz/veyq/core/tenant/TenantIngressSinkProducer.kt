@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.tenant
 
+import me.raddatz.veyq.core.blobstore.StoreSettings
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.config.VeyqConfig.IngressSinkType
 import me.raddatz.veyq.core.config.VeyqConfig.IngressTlsMode
@@ -27,6 +28,7 @@ import java.nio.file.Path
 @ApplicationScoped
 class TenantIngressSinkProducer(
     private val config: VeyqConfig,
+    private val store: StoreSettings,
     /**
      * An `Instance`, so a deployment that projects into a file — or into nothing — never constructs a
      * Kubernetes client at all. Building one reads a kubeconfig or a ServiceAccount token; a self-hoster on a
@@ -64,7 +66,7 @@ class TenantIngressSinkProducer(
             bootstrapDomain = bootstrapDomain,
             adminDomain = hostname(ingress.adminDomain().orElse(null), "admin-domain"),
             upstreams = TraefikFileIngressSink.Upstreams(app = upstream.app(), blobs = upstream.blobs(), admin = upstream.admin()),
-            bucket = config.blobStore().bucket(),
+            bucket = { store.routeBucket() },
         )
     }
 

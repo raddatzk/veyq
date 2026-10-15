@@ -15,8 +15,8 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
 /** A tenant's mail settings **as they leave the server** — the SMTP password redacted to [passwordSet] (ADR 0050).
- *  [configSecretState] is the server's config-secret KEK state so the owner sees honestly whether a stored password
- *  can actually be used (ADR 0050). */
+ *  [configSecretState] says honestly whether a stored password can actually be used: the state of the key that
+ *  sealed it, by the fingerprint it carries (ADR 0089 decision 4) — or, with none stored, the instance-wide state. */
 data class MailSettingsView(
     val host: String?,
     val port: Int?,
@@ -78,8 +78,8 @@ class TenantMailSettingsHandler(
             .refusal(MailSettingsReadOutcome.NotFound, MailSettingsReadOutcome.Suspended)?.let { return it }
         if (store.findTenant(tenantId) == null) return MailSettingsReadOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return MailSettingsReadOutcome.NotOwner
-        val state = keyState.state()
-        return MailSettingsReadOutcome.Ok(store.mailSettingsFor(tenantId)?.toView(state) ?: emptyView(state))
+        val row = store.mailSettingsFor(tenantId)
+        return MailSettingsReadOutcome.Ok(row?.toView(stateFor(row)) ?: emptyView(keyState.readState()))
     }
 
     /**
@@ -118,14 +118,19 @@ class TenantMailSettingsHandler(
         val supplied = password.blankToNull()
         val ciphertext: String?
         val nonce: String?
+        val fingerprint: String?
         if (supplied != null) {
-            if (!seal.configured) return MailSettingsUpdateOutcome.SealUnavailable
+            // Sealed together with the fingerprint of the key that sealed it (ADR 0089 decision 4).
+            val current = keyState.currentFingerprint()
+            if (!seal.configured || current == null) return MailSettingsUpdateOutcome.SealUnavailable
             val sealed = seal.seal(supplied)
             ciphertext = sealed.ciphertext
             nonce = sealed.nonce
+            fingerprint = current
         } else {
             ciphertext = existing?.passwordCiphertext
             nonce = existing?.passwordNonce
+            fingerprint = existing?.passwordFingerprint
         }
 
         val row = MailSettingsRow(
@@ -135,17 +140,21 @@ class TenantMailSettingsHandler(
             username = username.blankToNull(),
             passwordCiphertext = ciphertext,
             passwordNonce = nonce,
+            passwordFingerprint = fingerprint,
             tls = tls,
             enabled = enabled,
             subjectTemplate = subject,
             bodyTemplate = body,
         )
         store.saveMailSettings(tenantId, row)
-        // A freshly-sealed password was sealed under the CURRENT key: advance the stored fingerprint so a prior
-        // MISMATCH clears to OK (the recovery path). A no-op when the fingerprint already matches.
-        if (supplied != null) keyState.recordReseal()
-        return MailSettingsUpdateOutcome.Ok(row.toView(keyState.state()))
+        // A freshly-sealed password carries the CURRENT key's fingerprint, so a prior MISMATCH of THIS password
+        // clears to OK (the recovery path) — and only of this one.
+        return MailSettingsUpdateOutcome.Ok(row.toView(stateFor(row)))
     }
+
+    /** A stored password's own state (its fingerprint); with none stored, the instance-wide one. */
+    private fun stateFor(row: MailSettingsRow): ConfigSecretKeyState =
+        if (row.passwordSet) keyState.stateOf(row.passwordFingerprint) else keyState.readState()
 
     private fun MailSettingsRow.toView(state: ConfigSecretKeyState) = MailSettingsView(
         host = host, port = port, from = from, username = username,

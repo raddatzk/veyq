@@ -1,18 +1,18 @@
 package me.raddatz.veyq.core.admin.instance
 
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
-import me.raddatz.veyq.core.instance.InstanceStore
-import me.raddatz.veyq.core.instance.VeyqInstance
+import me.raddatz.veyq.core.blobstore.SealedValue
+import me.raddatz.veyq.core.blobstore.StoreSettingEntity
+import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.containsString
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.not
-import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -21,17 +21,14 @@ import org.junit.jupiter.api.Test
  * the verification step of a restore and an upgrade (uc.admin.back-up-and-restore-instance step 11), run by a
  * Server Owner who owns no tenant and so cannot read it through a tenant's mail settings.
  *
- * **The read changes nothing.** The mail paths' [me.raddatz.veyq.core.crypto.ConfigSecretKeyGuard.state] adopts
- * the current key's fingerprint when none is stored; this read must not, or a restore's verification would write
- * the row a later comparison trusts. [aReadOnAnInstanceWithNoFingerprintLeavesItWithNone] pins that, by the row.
+ * **The read changes nothing.** Every sealed value carries the fingerprint of the key that sealed it (ADR 0089
+ * decision 4), so there is nothing to adopt and nothing for a read to write — a restore's verification must not write
+ * the row a later comparison trusts. [aReadWritesNothing] pins that, by the row count.
  *
- * The H2 mem DB is JVM-shared, so every test that moves the stored fingerprint puts back the value it found.
+ * The H2 mem DB is JVM-shared, so every test that stores a sealed value clears it again.
  */
 @QuarkusTest
 class InstanceConfigSecretSliceTest {
-
-    @Inject
-    lateinit var instance: InstanceStore
 
     @BeforeEach
     fun seed() {
@@ -48,24 +45,26 @@ class InstanceConfigSecretSliceTest {
     }
 
     @Test
-    fun aReadOnAnInstanceWithNoFingerprintLeavesItWithNone() {
-        withStoredFingerprint(null) {
-            assertNull(stored(), "precondition: no fingerprint is stored before the read")
-            givenAdminChannel().header("Authorization", bearer(OWNER_ID))
-                .`when`().get("/api/instance/config-secret")
-                .then().statusCode(200)
-                .body("state", equalTo("OK"))
-            assertNull(stored(), "the read adopted the current key's fingerprint")
-        }
+    fun aReadWritesNothing() {
+        StoreSettingFixtures.clear()
+        assertEquals(0L, rows(), "precondition: no store setting row")
+        givenAdminChannel().header("Authorization", bearer(OWNER_ID))
+            .`when`().get("/api/instance/config-secret")
+            .then().statusCode(200)
+            .body("state", equalTo("OK"))
+        assertEquals(0L, rows(), "the read wrote a row")
     }
 
     @Test
-    fun aKeyThatIsNotTheOneThatSealedReadsAsMismatch() {
-        withStoredFingerprint("not-the-current-key") {
+    fun aStoredValueSealedUnderAnotherKeyReadsAsMismatch() {
+        try {
+            StoreSettingFixtures.chooseS3(secretKey = SealedValue("c2VhbGVk", "bm9uY2U=", "not-the-current-key"))
             givenAdminChannel().header("Authorization", bearer(OWNER_ID))
                 .`when`().get("/api/instance/config-secret")
                 .then().statusCode(200)
                 .body("state", equalTo("MISMATCH"))
+        } finally {
+            StoreSettingFixtures.clear()
         }
     }
 
@@ -93,27 +92,7 @@ class InstanceConfigSecretSliceTest {
             .body(not(containsString("\"state\"")))
     }
 
-    /** Runs [block] with the stored fingerprint set to [value], then restores what was stored before. */
-    private fun withStoredFingerprint(value: String?, block: () -> Unit) {
-        val before = stored()
-        setStored(value)
-        try {
-            block()
-        } finally {
-            setStored(before)
-        }
-    }
-
-    /**
-     * The row as committed, read in a transaction of its own. Read outside one, the test thread's request-scoped
-     * session hands back the entity it loaded earlier — so a read that DID adopt would still look unadopted, and
-     * the test that exists to catch that would pass on it (it did, on the first bite).
-     */
-    private fun stored(): String? = QuarkusTransaction.requiringNew().call { instance.configSecretFingerprint() }
-
-    private fun setStored(value: String?) = QuarkusTransaction.requiringNew().run {
-        VeyqInstance.findById(VeyqInstance.SINGLETON_ID)!!.configSecretFingerprint = value
-    }
+    private fun rows(): Long = QuarkusTransaction.requiringNew().call { StoreSettingEntity.count() }
 
     private companion object {
         /** Distinct from every other class's: the `%test` H2 mem DB is JVM-shared across test classes. */

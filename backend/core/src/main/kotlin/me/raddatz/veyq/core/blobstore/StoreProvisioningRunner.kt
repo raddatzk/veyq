@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** What the operator can do about the store's bring-up. The wire vocabulary of `GET /api/instance/store-provisioning`. */
 enum class StoreProvisioningState {
-    /** No bring-up is attempted on this instance and none ever will be — a `type: s3` store veyq must not poke. */
+    /** No bring-up is attempted: an S3-compatible store veyq must not poke, or no store set and none bundled. */
     NOT_ATTEMPTED,
 
     /** A bring-up is running or waiting to retry. Uploads may fail until it finishes. */
@@ -79,9 +79,9 @@ class StoreProvisioningRunner(
         // two calls above `writeAtomically`'s try were the only ones an unwritable directory ever threw on.
         try {
             if (LaunchMode.current() == LaunchMode.TEST) return
-            // null ⇒ a `type: s3` store veyq must not poke, or a `garage` one whose admin plane is not
-            // configured (already logged by the factory). Both are states the operator reads, not errors.
-            val target = provisioners.forConfiguredStore() ?: return
+            // null ⇒ an S3-compatible store veyq must not poke, or no store to provision at all (no setting and
+            // no bundled hint). Both are states the operator reads, not errors.
+            val target = provisioners.forBoot() ?: return
             current.set(StoreProvisioningState.IN_PROGRESS)
             worker.execute { current.set(runBounded(target)) }
         } catch (e: Exception) {
@@ -91,6 +91,14 @@ class StoreProvisioningRunner(
             current.set(StoreProvisioningState.FAILED)
             log.error("Store provisioning could not be started; the store will not be brought up", e)
         }
+    }
+
+    /**
+     * Record a provisioning the check ran itself, synchronously ([StoreCheck]'s PROVISION step), so the read reports
+     * the store as it now is rather than what the boot reached before the setting existed.
+     */
+    fun recordCheckProvisioning(succeeded: Boolean) {
+        current.set(if (succeeded) StoreProvisioningState.PROVISIONED else StoreProvisioningState.FAILED)
     }
 
     @PreDestroy

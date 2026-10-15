@@ -144,19 +144,20 @@ class ConfigSecretSeal(config: VeyqConfig) {
         runCatching { Files.setPosixFilePermissions(path, setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE)) }
     }
 
-    private companion object {
-        const val KEY_BYTES = 32
-        const val NONCE_BYTES = 12
-        const val TAG_BITS = 128
-        const val TRANSFORMATION = "AES/GCM/NoPadding"
-        const val HMAC = "HmacSHA256"
-        val FINGERPRINT_INFO = "veyq/v1/config-secret-key-fingerprint".toByteArray(Charsets.UTF_8)
-        val rng = SecureRandom()
-        val encoder: Base64.Encoder = Base64.getEncoder()
-        val decoder: Base64.Decoder = Base64.getDecoder()
-        val log: Logger = Logger.getLogger(ConfigSecretSeal::class.java)
+    companion object {
+        private const val KEY_BYTES = 32
+        private const val NONCE_BYTES = 12
+        private const val TAG_BITS = 128
+        private const val TRANSFORMATION = "AES/GCM/NoPadding"
+        private const val HMAC = "HmacSHA256"
+        private val FINGERPRINT_INFO = "veyq/v1/config-secret-key-fingerprint".toByteArray(Charsets.UTF_8)
+        private val rng = SecureRandom()
+        private val encoder: Base64.Encoder = Base64.getEncoder()
+        private val decoder: Base64.Decoder = Base64.getDecoder()
+        private val log: Logger = Logger.getLogger(ConfigSecretSeal::class.java)
 
-        /** HKDF-SHA256 (RFC 5869): extract-then-expand. Used only for the non-secret KEK fingerprint. */
+        /** HKDF-SHA256 (RFC 5869): extract-then-expand. The non-secret KEK fingerprint, and the bundled store's
+         *  derived key pair ([me.raddatz.veyq.core.blobstore.BundledStoreCredentials]). */
         fun hkdfSha256(ikm: ByteArray, salt: ByteArray, info: ByteArray, length: Int): ByteArray {
             val prk = hmac(if (salt.isEmpty()) ByteArray(mac().macLength) else salt, ikm)
             val out = ByteArray(length)

@@ -50,12 +50,37 @@ CREATE TABLE veyq_master_key_wrap (
     CONSTRAINT fk_master_key_wrap_user FOREIGN KEY (user_id) REFERENCES veyq_user (id)
 );
 
--- The instance singleton: the public auth salt (ADR 0003) and a non-invertible fingerprint of the active
--- config-secret KEK (ADR 0050; null until the first configured read adopts it).
+-- The instance singleton: the public auth salt (ADR 0003). The config-secret KEK's fingerprint is no longer
+-- held here: every sealed value carries the fingerprint of the key that sealed it (ADR 0089 decision 4).
 CREATE TABLE veyq_instance (
-    id                        INT NOT NULL PRIMARY KEY,
-    instance_salt             TEXT NOT NULL,
-    config_secret_fingerprint TEXT
+    id            INT NOT NULL PRIMARY KEY,
+    instance_salt TEXT NOT NULL
+);
+
+-- The object-store setting (ADR 0089): one row once the Server Owner has set a store, none before. bundled = a
+-- reference to the deployment's bundled-store hint, whose values are never copied here, so every connection
+-- column is null for it. The secrets are sealed under the config-secret KEK (ADR 0050), each with the
+-- fingerprint of the key that sealed it. check_* is the last check of THIS setting, cleared when it changes;
+-- check_steps is its per-step result as JSON.
+CREATE TABLE veyq_store_setting (
+    id                          INT          NOT NULL PRIMARY KEY,
+    bundled                     BOOLEAN      NOT NULL,
+    store_type                  VARCHAR(16),
+    endpoint                    VARCHAR(2048),
+    public_endpoint             VARCHAR(2048),
+    bucket                      VARCHAR(63),
+    region                      VARCHAR(64),
+    access_key                  VARCHAR(256),
+    secret_key_ciphertext       TEXT,
+    secret_key_nonce            TEXT,
+    secret_key_fingerprint      VARCHAR(64),
+    garage_admin_endpoint       VARCHAR(2048),
+    garage_admin_token_ciphertext TEXT,
+    garage_admin_token_nonce    TEXT,
+    garage_admin_token_fingerprint VARCHAR(64),
+    check_passed                BOOLEAN,
+    checked_at                  TIMESTAMP(3),
+    check_steps                 TEXT
 );
 
 -- A login challenge is keyed by its nonce, not by the email: one row per email let anyone who knew an address
@@ -446,15 +471,17 @@ CREATE TABLE veyq_tenant_terms_acceptance (
     CONSTRAINT fk_terms_acceptance_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id) ON DELETE CASCADE
 );
 
--- Per-tenant SMTP settings (ADR 0048-0050). The password is sealed under the env KEK, never plaintext.
+-- Per-tenant SMTP settings (ADR 0048-0050). The password is sealed under the env KEK, never plaintext, and
+-- carries the fingerprint of the key that sealed it (ADR 0089 decision 4).
 CREATE TABLE veyq_tenant_mail_settings (
-    tenant_id           UUID  NOT NULL PRIMARY KEY,
-    host                VARCHAR(253),
-    port                INT,
-    from_address        VARCHAR(254),
-    username            VARCHAR(254),
-    password_ciphertext TEXT,
-    password_nonce      TEXT,
+    tenant_id            UUID  NOT NULL PRIMARY KEY,
+    host                 VARCHAR(253),
+    port                 INT,
+    from_address         VARCHAR(254),
+    username             VARCHAR(254),
+    password_ciphertext  TEXT,
+    password_nonce       TEXT,
+    password_fingerprint VARCHAR(64),
     tls                 BOOLEAN      NOT NULL DEFAULT TRUE,
     enabled             BOOLEAN      NOT NULL DEFAULT FALSE,
     subject_template    VARCHAR(200),

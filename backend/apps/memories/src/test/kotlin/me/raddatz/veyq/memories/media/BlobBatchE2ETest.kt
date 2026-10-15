@@ -1,5 +1,7 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.blobstore.BundledStoreCredentials
+import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -19,6 +21,7 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
@@ -50,11 +53,6 @@ class BlobBatchE2ETest {
 
     class S3Profile : QuarkusTestProfile {
         override fun getConfigOverrides(): Map<String, String> = mapOf(
-            "veyq.blob-store.endpoint" to (System.getenv("VEYQ_S3_ENDPOINT") ?: "http://localhost:19000"),
-            "veyq.blob-store.access-key" to (System.getenv("VEYQ_S3_ACCESS_KEY") ?: DEV_KEY_ID),
-            "veyq.blob-store.secret-key" to (System.getenv("VEYQ_S3_SECRET_KEY") ?: DEV_SECRET),
-            "veyq.blob-store.bucket" to (System.getenv("VEYQ_S3_BUCKET") ?: "blobs"),
-            "veyq.blob-store.region" to (System.getenv("VEYQ_S3_REGION") ?: "us-east-1"),
             // A window of two chunks, so a blob of a few frames crosses windows without megabytes of test data.
             "veyq.blob.presign-window" to "$WINDOW",
         )
@@ -213,9 +211,11 @@ class BlobBatchE2ETest {
     }
 
     companion object {
-        // Deterministic dev credentials the bundled Garage imports (infra/docker-compose.yml --profile s3).
-        const val DEV_KEY_ID = "GK0123456789abcdef01234567"
-        const val DEV_SECRET = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        // The dev credentials the bundled Garage imports (infra/docker-compose.yml --profile s3): derived from its
+        // admin token (ADR 0089 decision 3), which is the documented dev throwaway unless the run says otherwise.
+        private val DEV = BundledStoreCredentials.derive(System.getenv("VEYQ_S3_ADMIN_TOKEN") ?: "veyq-dev-admin-token")
+        val DEV_KEY_ID: String get() = DEV.accessKey
+        val DEV_SECRET: String get() = DEV.secretKey
 
         /** The presign window this suite runs with — small, so crossing windows costs a few frames. */
         const val WINDOW = 2
@@ -251,6 +251,18 @@ class BlobBatchE2ETest {
         @BeforeAll
         fun ensureBucket() {
             runCatching { devS3().use { it.createBucket { b -> b.bucket(bucket()) } } }
+            // The store is a setting now (ADR 0089): an S3-compatible one, the secret sealed as the console seals it.
+            StoreSettingFixtures.chooseS3Sealing(
+                secretKey = System.getenv("VEYQ_S3_SECRET_KEY") ?: DEV_SECRET,
+                endpoint = System.getenv("VEYQ_S3_ENDPOINT") ?: "http://localhost:19000",
+                accessKey = System.getenv("VEYQ_S3_ACCESS_KEY") ?: DEV_KEY_ID,
+                bucket = bucket(),
+                region = System.getenv("VEYQ_S3_REGION") ?: "us-east-1",
+            )
         }
+
+        @JvmStatic
+        @AfterAll
+        fun forgetTheStore() = StoreSettingFixtures.clear()
     }
 }

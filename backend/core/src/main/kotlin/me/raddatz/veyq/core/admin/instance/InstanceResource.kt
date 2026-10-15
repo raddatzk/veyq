@@ -5,6 +5,18 @@ import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
 import me.raddatz.veyq.core.generated.api.InstanceApi
 import me.raddatz.veyq.core.generated.model.InstanceConfigSecret
 import me.raddatz.veyq.core.generated.model.InstanceRelease
+import me.raddatz.veyq.core.generated.model.InstanceStore
+import me.raddatz.veyq.core.generated.model.InstanceStoreCheck
+import me.raddatz.veyq.core.generated.model.InstanceStoreCheckStep
+import me.raddatz.veyq.core.generated.model.InstanceStoreSecret
+import me.raddatz.veyq.core.generated.model.InstanceStoreSetting
+import me.raddatz.veyq.core.generated.model.InstanceStoreType
+import me.raddatz.veyq.core.generated.model.InstanceStoreUpdate
+import me.raddatz.veyq.core.blobstore.StoreCheckResult
+import me.raddatz.veyq.core.config.VeyqConfig.StoreType
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
+import java.time.ZoneOffset
 import me.raddatz.veyq.core.generated.model.InstanceStoreProvisioning
 import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
@@ -27,16 +39,17 @@ import jakarta.ws.rs.core.Response
  */
 @RolesAllowed(SERVER_OWNER)
 @RateLimitExempt(
-    reason = "Server-Owner-only reads of instance-wide values already held in memory — a release stamp fixed " +
-        "at startup, the store-provisioning state a background runner last reached, and the config-secret " +
-        "state (one primary-key read of the instance row). There is no per-caller state to enumerate and no " +
-        "work to amplify (none of them touches the store or writes), and the role gate already bounds the " +
-        "caller set to one account.",
+    reason = "Server-Owner-only reads of instance-wide values — a release stamp fixed at startup, the " +
+        "store-provisioning state a background runner last reached, the config-secret state, and the store " +
+        "setting — and the owner's own store write and check (the check reaches only the store the owner set, " +
+        "each step bounded by a ten-second timeout). There is no per-caller state to enumerate and no work an " +
+        "anonymous caller could amplify, and the role gate already bounds the caller set to one account.",
 )
 class InstanceResource(
     private val release: ReleaseIdentity,
     private val storeProvisioning: StoreProvisioningReport,
     private val configSecret: ConfigSecretKeyGuard,
+    private val store: StoreHandler,
 ) : InstanceApi {
 
     override fun getInstanceRelease(): Response =
@@ -55,4 +68,53 @@ class InstanceResource(
                 },
             ),
         ).build()
+
+    override fun getInstanceStore(): Response = Response.ok(store.read().toWire()).build()
+
+    override fun setInstanceStore(instanceStoreUpdate: InstanceStoreUpdate): Response =
+        when (val outcome = store.set(instanceStoreUpdate.toUpdate())) {
+            is StoreSetOutcome.Stored -> Response.ok(outcome.view.toWire()).build()
+            is HttpFailure -> httpError(outcome)
+        }
+
+    override fun checkInstanceStore(): Response =
+        when (val outcome = store.check()) {
+            is StoreCheckRun.Done -> Response.ok(outcome.result.toWire()).build()
+            is HttpFailure -> httpError(outcome)
+        }
+
+    private fun InstanceStoreUpdate.toUpdate() = StoreUpdate(
+        bundled = bundled == true,
+        type = type?.let { StoreType.valueOf(it.name) },
+        endpoint = endpoint, publicEndpoint = publicEndpoint, bucket = bucket, region = region, accessKey = accessKey,
+        secretKey = secretKey, garageAdminEndpoint = garageAdminEndpoint, garageAdminToken = garageAdminToken,
+    )
+
+    private fun StoreView.toWire() = InstanceStore(
+        bundledAvailable = bundledAvailable,
+        blobsStored = blobsStored,
+        setting = setting?.let {
+            InstanceStoreSetting(
+                bundled = it.bundled,
+                type = InstanceStoreType.valueOf(it.type.name),
+                endpoint = it.endpoint, publicEndpoint = it.publicEndpoint, bucket = it.bucket, region = it.region,
+                accessKey = it.accessKey, garageAdminEndpoint = it.garageAdminEndpoint,
+                secretKeySet = it.secretKeySet, garageAdminTokenSet = it.garageAdminTokenSet,
+                unreadable = it.unreadable.map { secret -> InstanceStoreSecret.valueOf(secret.name) },
+            )
+        },
+        lastCheck = lastCheck?.toWire(),
+    )
+
+    private fun StoreCheckResult.toWire() = InstanceStoreCheck(
+        passed = passed,
+        checkedAt = checkedAt.atOffset(ZoneOffset.UTC),
+        steps = steps.map {
+            InstanceStoreCheckStep(
+                step = InstanceStoreCheckStep.Step.valueOf(it.step.name),
+                outcome = InstanceStoreCheckStep.Outcome.valueOf(it.outcome.name),
+                detail = it.detail,
+            )
+        },
+    )
 }

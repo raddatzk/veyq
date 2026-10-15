@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.tenant
 
+import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
@@ -13,7 +14,7 @@ import java.nio.file.Path
 import java.util.UUID
 
 /**
- * **A bucket other than the default routes with configuration alone** (ADR 0013 §4). Presigned URLs are
+ * **A bucket other than the default routes with the store setting alone** (ADR 0013 §4, ADR 0089 decision 5). Presigned URLs are
  * path-style, so an object's path is `/<bucket>/<key>`, and the blobs router must claim exactly that prefix. A
  * router that spells the bucket itself serves the default and 404s every object of any other — silently, since
  * nothing reports a route that matches nothing.
@@ -35,7 +36,6 @@ class TenantIngressBucketRouteTest {
         override fun getConfigOverrides() = mapOf(
             "veyq.tenant.ingress.dynamic-config-path" to CONFIG_PATH,
             "veyq.tenant.ingress.bootstrap-domain" to BOOTSTRAP_DOMAIN,
-            "veyq.blob-store.bucket" to BUCKET,
         )
     }
 
@@ -46,9 +46,21 @@ class TenantIngressBucketRouteTest {
     fun everyBlobsRouterRoutesTheConfiguredBucketAndNothingElse() {
         val tenant = "b-${UUID.randomUUID()}.example.com"
         seedTenant(domain = tenant)
+        // The bucket is the store setting's (ADR 0089), read at every render — set after boot, no restart.
+        StoreSettingFixtures.chooseS3(bucket = BUCKET)
+        try {
+            projector.regenerate()
+            assertRoutesOnly(BUCKET, tenant)
 
-        projector.regenerate()
+            StoreSettingFixtures.chooseS3(bucket = "moved-media")
+            projector.regenerate()
+            assertRoutesOnly("moved-media", tenant)
+        } finally {
+            StoreSettingFixtures.clear()
+        }
+    }
 
+    private fun assertRoutesOnly(bucket: String, tenant: String) {
         val file = Files.readString(Path.of(CONFIG_PATH))
         val blobs = BLOBS_ROUTER.findAll(file).associate { it.groupValues[1] to it.groupValues[2] }
         // Control: both kinds of blobs router are present — the bootstrap domain's, rendered from configuration,
@@ -57,9 +69,9 @@ class TenantIngressBucketRouteTest {
         assertTrue(blobs.keys.containsAll(listOf("veyq-blobs", tenantRouter)), "the bootstrap and the tenant blobs router:\n$file")
         blobs.forEach { (name, rule) ->
             val domain = if (name == "veyq-blobs") BOOTSTRAP_DOMAIN else HOST.find(rule)!!.groupValues[1]
-            assertEquals("Host(`$domain`) && PathPrefix(`/$BUCKET/`)", rule, "$name routes the configured bucket's path")
+            assertEquals("Host(`$domain`) && PathPrefix(`/$bucket/`)", rule, "$name routes the configured bucket's path")
         }
-        assertEquals(listOf("/$BUCKET/"), PATH_PREFIX.findAll(file).map { it.groupValues[1] }.distinct().toList(),
+        assertEquals(listOf("/$bucket/"), PATH_PREFIX.findAll(file).map { it.groupValues[1] }.distinct().toList(),
             "no router anywhere in the file claims any other path:\n$file")
     }
 

@@ -234,7 +234,7 @@ class MemberAddSliceTest {
                 tenantId,
                 MailSettingsRow(
                     host = "127.0.0.1", port = DEAD_SMTP_PORT, from = "noreply@$domain",
-                    username = null, passwordCiphertext = null, passwordNonce = null,
+                    username = null, passwordCiphertext = null, passwordNonce = null, passwordFingerprint = null,
                     tls = false, enabled = true, subjectTemplate = null, bodyTemplate = null,
                 ),
             )

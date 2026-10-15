@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.blob
 
+import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
@@ -12,7 +13,10 @@ import io.restassured.http.ContentType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
 import java.net.URI
 import java.util.UUID
 
@@ -26,7 +30,7 @@ import java.util.UUID
  * a *request*: what the `Host` header can and cannot make the server do. Reaching that needs the whole chain
  * live — `TenantHostResolver` reading the `tenant` table, `BlobUploadHandler` handing what it found to the store, and
  * a **real** [me.raddatz.veyq.core.blobstore.S3BlobStore] built by [me.raddatz.veyq.core.blobstore.BlobStoreProducer]
- * from this profile's config. `MediaPresignDomainSliceTest` deliberately runs against
+ * from this profile's bundled-store hint, chosen as the store setting. `MediaPresignDomainSliceTest` deliberately runs against
  * `FakePresigningBlobStore`, which echoes whatever domain it is handed and therefore cannot see a signing mode
  * at all; a store-origin assertion there would pass against an unimplemented mode.
  *
@@ -37,23 +41,30 @@ import java.util.UUID
  */
 @QuarkusTest
 @TestProfile(StoreOriginPresignSliceTest.StoreOriginProfile::class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class StoreOriginPresignSliceTest {
 
     /**
-     * Pure config overrides, so the `BlobStore` the suite injects is the real one: `RecordingBlobStore` wins the
-     * injection point everywhere and delegates to `BlobStoreProducer.blobStore()`, which builds an
-     * `S3BlobStore` as soon as an endpoint is configured (the same seam `BlobBatchE2ETest` uses).
+     * A bundled-store hint plus the setting that chooses it (ADR 0089), so the `BlobStore` the suite injects is the
+     * real one: `RecordingBlobStore` wins the injection point everywhere and delegates to the `SwitchingBlobStore`,
+     * which builds an `S3BlobStore` as soon as the setting resolves (the same seam `BlobBatchE2ETest` uses).
      */
     class StoreOriginProfile : QuarkusTestProfile {
         override fun getConfigOverrides(): Map<String, String> = mapOf(
-            "veyq.blob-store.endpoint" to INTERNAL_ENDPOINT,
-            "veyq.blob-store.public-endpoint" to "https://$STORE_HOST",
-            "veyq.blob-store.signing-mode" to "store-origin",
-            "veyq.blob-store.access-key" to "access",
-            "veyq.blob-store.secret-key" to "secret",
-            "veyq.blob-store.bucket" to BUCKET,
+            "veyq.bundled-store.endpoint" to INTERNAL_ENDPOINT,
+            "veyq.bundled-store.admin-endpoint" to "http://store-admin.invalid:3903",
+            "veyq.bundled-store.admin-token" to "admin-token",
+            "veyq.bundled-store.public-endpoint" to "https://$STORE_HOST",
+            "veyq.bundled-store.signing-mode" to "store-origin",
+            "veyq.bundled-store.bucket" to BUCKET,
         )
     }
+
+    @BeforeAll
+    fun chooseTheBundledStore() = StoreSettingFixtures.chooseBundled()
+
+    @AfterAll
+    fun forgetTheStore() = StoreSettingFixtures.clear()
 
     @Test
     fun aHostNoTenantClaimsCannotChooseTheOriginInStoreOriginMode() {
