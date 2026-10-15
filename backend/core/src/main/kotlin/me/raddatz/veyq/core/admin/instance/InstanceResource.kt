@@ -3,6 +3,9 @@ package me.raddatz.veyq.core.admin.instance
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyGuard
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
 import me.raddatz.veyq.core.generated.api.InstanceApi
+import me.raddatz.veyq.core.generated.model.InstanceCapability
+import me.raddatz.veyq.core.generated.model.InstanceCapabilityText
+import me.raddatz.veyq.core.generated.model.InstanceCapabilityUpdate
 import me.raddatz.veyq.core.generated.model.InstanceConfigSecret
 import me.raddatz.veyq.core.generated.model.InstanceRelease
 import me.raddatz.veyq.core.generated.model.InstanceStore
@@ -19,6 +22,8 @@ import me.raddatz.veyq.core.http.httpError
 import java.time.ZoneOffset
 import me.raddatz.veyq.core.generated.model.InstanceStoreProvisioning
 import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
+import me.raddatz.veyq.core.platform.capabilities.CapabilityText
+import me.raddatz.veyq.core.validation.validated
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import jakarta.annotation.security.RolesAllowed
 import jakarta.ws.rs.core.Response
@@ -35,14 +40,16 @@ import jakarta.ws.rs.core.Response
  * `GET /api/setup`, whose response is unchanged (ADR 0057 §4). The store-provisioning read sits behind the
  * same gate for the same reason: it describes the operator's own infrastructure and what is wrong with it.
  * So does the config-secret state (ADR 0050), read through [ConfigSecretKeyGuard.readState] because a restore's
- * verification read must change nothing.
+ * verification read must change nothing. The capability switches ([CapabilitySwitchHandler], ADR 0088 decision 12) are
+ * the instance's other setting: the register with its catalog words, and one entry's switch per write.
  */
 @RolesAllowed(SERVER_OWNER)
 @RateLimitExempt(
     reason = "Server-Owner-only reads of instance-wide values — a release stamp fixed at startup, the " +
         "store-provisioning state a background runner last reached, the config-secret state, and the store " +
-        "setting — and the owner's own store write and check (the check reaches only the store the owner set, " +
-        "each step bounded by a ten-second timeout). There is no per-caller state to enumerate and no work an " +
+        "setting and the capability register — and the owner's own store write and check (the check reaches only " +
+        "the store the owner set, each step bounded by a ten-second timeout) and capability switch (one row, one " +
+        "entry of a fixed register). There is no per-caller state to enumerate and no work an " +
         "anonymous caller could amplify, and the role gate already bounds the caller set to one account.",
 )
 class InstanceResource(
@@ -50,6 +57,7 @@ class InstanceResource(
     private val storeProvisioning: StoreProvisioningReport,
     private val configSecret: ConfigSecretKeyGuard,
     private val store: StoreHandler,
+    private val capabilities: CapabilitySwitchHandler,
 ) : InstanceApi {
 
     override fun getInstanceRelease(): Response =
@@ -83,6 +91,14 @@ class InstanceResource(
             is HttpFailure -> httpError(outcome)
         }
 
+    override fun listInstanceCapabilities(): Response = Response.ok(capabilities.list().map { it.toWire() }).build()
+
+    override fun setInstanceCapability(capabilityId: String, instanceCapabilityUpdate: InstanceCapabilityUpdate): Response =
+        when (val outcome = capabilities.set(capabilityId, instanceCapabilityUpdate.off.validated())) {
+            is CapabilitySetOutcome.Stored -> Response.ok(outcome.view.toWire()).build()
+            is HttpFailure -> httpError(outcome)
+        }
+
     private fun InstanceStoreUpdate.toUpdate() = StoreUpdate(
         bundled = bundled == true,
         type = type?.let { StoreType.valueOf(it.name) },
@@ -105,6 +121,14 @@ class InstanceResource(
         },
         lastCheck = lastCheck?.toWire(),
     )
+
+    private fun CapabilityView.toWire() = InstanceCapability(
+        id = state.id,
+        title = texts.title.toWire(), purpose = texts.purpose.toWire(), whenOff = texts.whenOff.toWire(),
+        off = state.off, effective = state.effective,
+    )
+
+    private fun CapabilityText.toWire() = InstanceCapabilityText(en = en, de = de)
 
     private fun StoreCheckResult.toWire() = InstanceStoreCheck(
         passed = passed,

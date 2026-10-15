@@ -83,6 +83,14 @@ CREATE TABLE veyq_store_setting (
     check_steps                 TEXT
 );
 
+-- The capability switches (ADR 0088 decision 12): one row per register entry the Server Owner switched off, none
+-- for an entry that is on. id is the catalog's dotted id (contracts/platform/capabilities.json), not a row id, so
+-- VARCHAR. An entry's effective state is the AND along its path, computed by the server, never stored.
+CREATE TABLE veyq_capability_switch (
+    id              VARCHAR(64)  NOT NULL PRIMARY KEY,
+    switched_off_at TIMESTAMP    NOT NULL
+);
+
 -- A login challenge is keyed by its nonce, not by the email: one row per email let anyone who knew an address
 -- replace or burn the challenge a device was still signing. VARCHAR because a TEXT cannot be a MariaDB key.
 CREATE TABLE veyq_login_challenge (

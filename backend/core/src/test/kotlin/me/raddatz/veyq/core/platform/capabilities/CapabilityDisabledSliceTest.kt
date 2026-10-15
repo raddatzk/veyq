@@ -16,11 +16,9 @@ import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
-import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.Response
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.hasItems
@@ -34,8 +32,8 @@ import kotlin.random.Random
 /**
  * Proves a switched-off capability is enforced at every gate core holds (uc.platform.capability-discovery,
  * ADR 0032, ADR 0088): it vanishes from the manifest AND its endpoint answers `422 capability_disabled`. Each state is
- * reached through the test seam [SwitchableCapabilities], never through config — no built instance can switch an id
- * off until inbox #443.
+ * a stored switch row ([CapabilitySwitchFixtures]), read by the production switches on the default profile, as the
+ * Server Owner's `PUT /api/instance/capabilities/{capabilityId}` leaves it.
  *
  * **Every negative has a positive control on the same predicate**, so "the call failed" can never pass for "the gate
  * refused": a sibling or parent that stays on reaches past the gate (the `404 node_not_found` of an unknown node, a
@@ -43,11 +41,9 @@ import kotlin.random.Random
  * lookup, so an unknown node is enough to tell the two apart.
  */
 @QuarkusTest
-@TestProfile(CapabilitySwitchesProfile::class)
 class CapabilityDisabledSliceTest {
 
-    @Inject
-    lateinit var capabilities: SwitchableCapabilities
+    private val capabilities = CapabilitySwitchFixtures
 
     // --- shares: one leaf per role, ANDed with the parent ------------------------------------------------------------
 

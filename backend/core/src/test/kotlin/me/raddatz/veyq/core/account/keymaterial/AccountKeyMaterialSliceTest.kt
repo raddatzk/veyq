@@ -6,6 +6,8 @@ import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
+import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
 import me.raddatz.veyq.core.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -13,8 +15,10 @@ import io.restassured.RestAssured.given
 import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.not
+import org.hamcrest.Matchers.containsInAnyOrder
 import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.hasItems
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -24,7 +28,8 @@ import java.util.UUID
  * Slice tests for the authenticated key-material read (uc.account.unlock, server side). The server only
  * serves ciphertext: a valid session fetches the caller's own wraps + identity blob; a stolen-but-dead
  * token (missing / malformed / expired / revoked family) is a generic 401; and one user's token never
- * returns another user's material.
+ * returns another user's material. RECOVERY is always withheld, a device wrap while its switch is off (ADR 0088
+ * decision 5), and PASSWORD never.
  */
 @QuarkusTest
 class AccountKeyMaterialSliceTest {
@@ -61,6 +66,31 @@ class AccountKeyMaterialSliceTest {
         get(issueToken(USER_A))
             .then().statusCode(200)
             .body("wraps.method", not(hasItem("RECOVERY")))
+    }
+
+    @Test
+    fun rememberDeviceOffWithholdsBothDeviceWrapsAndServesThePasswordWrap() {
+        val userId = seedDeviceAccount("6b65796d-6174-4000-8000-0000000d0001")
+        val token = issueToken(userId)
+        get(token).then().statusCode(200).body("wraps.method", containsInAnyOrder("PASSWORD", "DEVICE", "DEVICE_KEY")) // control
+        CapabilitySwitchFixtures.with(CapabilityIds.REMEMBER_DEVICE) {
+            // DEVICE_KEY's own switch is on; the AND along the path withholds it with its parent.
+            get(token).then().statusCode(200).body("wraps.method", containsInAnyOrder("PASSWORD"))
+        }
+        // Back on: every wrap is served again, because none was deleted.
+        get(token).then().statusCode(200).body("wraps.method", containsInAnyOrder("PASSWORD", "DEVICE", "DEVICE_KEY"))
+        assertEquals(4L, wrapCount(userId), "the switch deleted a wrap")
+    }
+
+    @Test
+    fun passwordlessOffWithholdsOnlyTheDeviceKeyWrap() {
+        val userId = seedDeviceAccount("6b65796d-6174-4000-8000-0000000d0002")
+        val token = issueToken(userId)
+        CapabilitySwitchFixtures.with(CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS) {
+            get(token).then().statusCode(200).body("wraps.method", containsInAnyOrder("PASSWORD", "DEVICE"))
+        }
+        get(token).then().statusCode(200).body("wraps.method", containsInAnyOrder("PASSWORD", "DEVICE", "DEVICE_KEY"))
+        assertEquals(4L, wrapCount(userId), "the switch deleted a wrap")
     }
 
     @Test
@@ -141,6 +171,23 @@ class AccountKeyMaterialSliceTest {
         }
     }
 
+    /** An account holding every wrap a remembered device can have, beside the PASSWORD floor and RECOVERY. */
+    private fun seedDeviceAccount(userId: String): String {
+        QuarkusTransaction.requiringNew().run {
+            if (VeyqUser.findById(userId) == null) {
+                newUser(id = userId, email = "$userId@example.com", serverRole = "MEMBER", wrappedIdentityPrivateKey = A_PRIV).persist()
+                persistWrap(userId, "PASSWORD", A_PW_WRAP)
+                persistWrap(userId, "RECOVERY", A_REC_WRAP)
+                persistWrap(userId, "DEVICE", A_DEVICE_WRAP)
+                persistWrap(userId, "DEVICE_KEY", A_DEVICE_KEY_WRAP)
+            }
+        }
+        return userId
+    }
+
+    private fun wrapCount(userId: String): Long =
+        QuarkusTransaction.requiringNew().call { MasterKeyWrapEntity.count("userId", userId) }
+
     private fun persistWrap(userId: String, method: String, wrappedKey: String) {
         MasterKeyWrapEntity().apply {
             id = UUID.randomUUID().toString()
@@ -157,6 +204,8 @@ class AccountKeyMaterialSliceTest {
         private const val USER_B = "6b65796d-6174-4000-8000-00000000000b"
         private const val A_PW_WRAP = "QS1wYXNzd29yZC13cmFw"
         private const val A_REC_WRAP = "QS1yZWNvdmVyeS13cmFw"
+        private const val A_DEVICE_WRAP = "QS1kZXZpY2Utd3JhcA=="
+        private const val A_DEVICE_KEY_WRAP = "QS1kZXZpY2Uta2V5LXdyYXA="
         private const val A_PRIV = "QS1pZGVudGl0eS1wcml2"
         private const val B_PW_WRAP = "Qi1wYXNzd29yZC13cmFw"
         private const val B_REC_WRAP = "Qi1yZWNvdmVyeS13cmFw"

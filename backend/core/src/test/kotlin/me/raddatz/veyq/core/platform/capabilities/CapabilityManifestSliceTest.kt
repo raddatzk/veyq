@@ -17,9 +17,10 @@ import org.junit.jupiter.api.Test
  * pre-auth, identity-free and identical for every caller (operator-blind-safe).
  *
  * **It runs on the default profile, and that is half its point** (the leak guard of cr-capability-register-recut's
- * D3): no alternative is enabled here, so the wired [CapabilitySwitches] must be the production
- * [NoCapabilitySwitchedOff] and every advertised id must be served. The test seam [SwitchableCapabilities] reaching
- * this profile — a `@Priority` on it, or a copy in `src/main` — turns the first assertion red.
+ * D3): the wired [CapabilitySwitches] must be the production [StoredCapabilitySwitches], and with no switch stored
+ * every advertised id must be served. Every gate test switches through that same bean ([CapabilitySwitchFixtures]),
+ * so a test seam that came back — an `@Alternative` with a `@Priority` in the test fixtures, enabled in every
+ * project that consumes them — turns the first assertion red.
  */
 @QuarkusTest
 class CapabilityManifestSliceTest {
@@ -30,7 +31,7 @@ class CapabilityManifestSliceTest {
     @Test
     fun theDefaultProfileWiresTheProductionSwitchesAndServesEveryAdvertisedId() {
         assertEquals(
-            NoCapabilitySwitchedOff::class.java, ClientProxy.unwrap(switches).javaClass,
+            StoredCapabilitySwitches::class.java, ClientProxy.unwrap(switches).javaClass,
             "the default profile must get the production CapabilitySwitches, never a test seam",
         )
         given().`when`().get("/api/setup")

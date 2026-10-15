@@ -44,10 +44,22 @@ class KeyMaterialHandler(
      *  (`KEK = Argon2id(secretKey)`) — it must be released **only** by the future email-gated recovery flow,
      *  never in the normal material; otherwise a live session + the Secret Key would open the vault **without
      *  the password**, silently demoting the password from a content factor (cr-0052). PASSWORD / DEVICE /
-     *  PASSKEY stay (their KEKs are device- or password-bound); the client's normal unlock uses PASSWORD. */
+     *  PASSKEY stay (their KEKs are device- or password-bound); the client's normal unlock uses PASSWORD.
+     *
+     *  **A device switch acts at once** (ADR 0088 decision 5): every DEVICE wrap is withheld while
+     *  [CapabilityIds.REMEMBER_DEVICE] is effectively off, and every DEVICE_KEY wrap while
+     *  [CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS] is (its parent's switch included, the AND along the path). A
+     *  remembered device then asks for what its wrap replaced. Nothing is deleted, so switching back on restores every
+     *  such device, and PASSWORD is never withheld, so no switch locks a member out. */
     @Transactional
-    fun forUser(userId: String): KeyMaterial? =
-        store.find(userId)?.let { m -> m.copy(wraps = m.wraps.filterNot { it.method == WrapMethod.RECOVERY.name }) }
+    fun forUser(userId: String): KeyMaterial? {
+        val withheld = buildSet {
+            add(WrapMethod.RECOVERY.name)
+            if (!capabilities.isActive(CapabilityIds.REMEMBER_DEVICE)) add(WrapMethod.DEVICE.name)
+            if (!capabilities.isActive(CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS)) add(WrapMethod.DEVICE_KEY.name)
+        }
+        return store.find(userId)?.let { m -> m.copy(wraps = m.wraps.filterNot { it.method in withheld }) }
+    }
 
     /**
      * Add a wrap for the authenticated caller. Caps DEVICE enrolments per account so a buggy/malicious client can't
@@ -85,8 +97,9 @@ class KeyMaterialHandler(
 
     /** The instance capability enrolling a wrap of [method] needs (ADR 0088): DEVICE_KEY, the passwordless wrap,
      *  needs [CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS] (and through the AND along the path its parent); DEVICE, the
-     *  one other method the contract lets through, needs [CapabilityIds.REMEMBER_DEVICE]. Only enrolling is gated:
-     *  unlocking with a wrap that exists and [deleteWrap] stay allowed, a feature switch refuses only what is new. */
+     *  one other method the contract lets through, needs [CapabilityIds.REMEMBER_DEVICE]. Enrolling is refused here;
+     *  a wrap that exists is withheld from the material while its switch is off ([forUser]), never deleted, and
+     *  [deleteWrap] stays allowed. */
     private fun capabilityFor(method: String): String =
         if (method == WrapMethod.DEVICE_KEY.name) CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS else CapabilityIds.REMEMBER_DEVICE
 

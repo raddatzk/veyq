@@ -6,16 +6,13 @@ import me.raddatz.veyq.core.membership.ScopeAccessWorld
 import me.raddatz.veyq.core.membership.ScopeAccessWorld.Companion.B64
 import me.raddatz.veyq.core.membership.TestAdmission
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
-import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchesProfile
-import me.raddatz.veyq.core.platform.capabilities.SwitchableCapabilities
+import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
-import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import java.time.Instant
 import java.util.UUID
 import org.hamcrest.Matchers.equalTo
@@ -27,14 +24,13 @@ import me.raddatz.veyq.memories.testing.MemoriesWorldContent
  * Re-activating and re-issuing a share publish its link again, so each passes the check creating one does: the
  * instance capability for the share's role (uc.sharing.share-shared-scope A2, ADR 0032, ADR 0088). Each negative's
  * control is a link of another role in the same group, whose capability is still on — so the 422 is the role's
- * capability and not the call failing. The switch is the test seam [SwitchableCapabilities], never config.
+ * capability and not the call failing. The switch is a stored switch row ([CapabilitySwitchFixtures]), as the Server
+ * Owner's Admin API leaves it.
  */
 @QuarkusTest
-@TestProfile(CapabilitySwitchesProfile::class)
 class ReactivateShareCapabilitySliceTest {
 
-    @Inject
-    lateinit var capabilities: SwitchableCapabilities
+    private val capabilities = CapabilitySwitchFixtures
 
     @Test
     fun reactivatingALinkWhoseCapabilityIsOffIs422() {

@@ -3,16 +3,13 @@ package me.raddatz.veyq.depot
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_DROP_BOX
-import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchesProfile
-import me.raddatz.veyq.core.platform.capabilities.SwitchableCapabilities
+import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import io.quarkus.test.junit.QuarkusTest
-import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.ValidatableResponse
-import jakarta.inject.Inject
 import java.util.Base64
 import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
@@ -22,8 +19,8 @@ import org.junit.jupiter.api.Test
  * The drop-box creation gate (ADR 0088, #440 gap 2): Depot's [DepotNodeKindRules.capabilityToCreate] names
  * `core.public-shares.drop-box` for a `DEPOT_DROPBOX`, and core's `NodesHandler.createInScope` refuses a new one with
  * `422 capability_disabled` while that id — or its parent, by the AND along the path — is switched off. Each state is
- * reached through the test seam [SwitchableCapabilities], never through config (no built instance can switch an id off
- * until inbox #443).
+ * a stored switch row ([CapabilitySwitchFixtures]), read by the production switches, as the Server Owner's Admin API
+ * leaves it.
  *
  * **Every negative has a positive control on the same predicate**: a `FOLDER` created at the same parent under the
  * same switch (the parent, the caller and the route are fine — only the kind's capability is refused), and the very
@@ -32,11 +29,9 @@ import org.junit.jupiter.api.Test
  * (ADR 0088 decision 5, a feature switch refuses only what is new).
  */
 @QuarkusTest
-@TestProfile(CapabilitySwitchesProfile::class)
 class DropBoxCapabilitySliceTest {
 
-    @Inject
-    lateinit var capabilities: SwitchableCapabilities
+    private val capabilities = CapabilitySwitchFixtures
 
     @Test
     fun dropBoxOffRefusesANewDropBoxAndCreatesAFolderAtTheSameParent() {
