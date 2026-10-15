@@ -36,6 +36,9 @@ import jakarta.ws.rs.core.Response
  *   no caller at all, so that reasoning does not transfer.
  * - `delegate` and `seal` are `@Authenticated` and keyed on USER: they act on the caller's own account.
  *
+ * **Every endpoint asks [PairingHandler.refusal] first** — `422 capability_disabled` while device linking is switched
+ * off (`core.device-linking`), the one instance-wide answer, before any channel is read.
+ *
  * **Every dead channel answers `404 pairing_channel_invalid`** — unknown, expired, spent and wrong-state alike,
  * mirroring `RecoveryResource.releaseRecoveryMaterial`'s single `recovery_token_invalid`. That is
  * uc.account.onboard-device E1, and it is why nothing here reads a row back to explain itself.
@@ -48,6 +51,7 @@ class PairingResource(
 
     @RateLimit(key = RateLimitKey.IP)
     override fun openPairingChannel(pairingOpenRequest: PairingOpenRequest): Response {
+        handler.refusal()?.let { return httpError(it) }
         // 204 whatever happened, including for a handle that is already live: refusing a duplicate would confirm
         // that a channel exists, which is the oracle E1 closes.
         handler.open(pairingOpenRequest.handle)
@@ -55,17 +59,20 @@ class PairingResource(
     }
 
     @RateLimit(key = RateLimitKey.IP)
-    override fun answerPairingChannel(pairingAnswerRequest: PairingAnswerRequest): Response =
-        if (handler.answer(pairingAnswerRequest.handle, pairingAnswerRequest.answer)) {
+    override fun answerPairingChannel(pairingAnswerRequest: PairingAnswerRequest): Response {
+        handler.refusal()?.let { return httpError(it) }
+        return if (handler.answer(pairingAnswerRequest.handle, pairingAnswerRequest.answer)) {
             Response.noContent().build()
         } else {
             channelInvalid()
         }
+    }
 
     @Authenticated
     @RateLimit(key = RateLimitKey.USER)
-    override fun delegatePairingSession(pairingDelegateRequest: PairingDelegateRequest): Response =
-        when (
+    override fun delegatePairingSession(pairingDelegateRequest: PairingDelegateRequest): Response {
+        handler.refusal()?.let { return httpError(it) }
+        return when (
             val outcome = handler.delegate(
                 pairingDelegateRequest.handle,
                 identity.principal.name,
@@ -76,18 +83,22 @@ class PairingResource(
             DelegateOutcome.ChannelInvalid -> channelInvalid()
             is HttpFailure -> httpError(outcome)
         }
+    }
 
     @Authenticated
     @RateLimit(key = RateLimitKey.USER)
-    override fun sealPairingChannel(pairingSealRequest: PairingSealRequest): Response =
-        if (handler.seal(pairingSealRequest.handle, identity.principal.name, pairingSealRequest.envelope)) {
+    override fun sealPairingChannel(pairingSealRequest: PairingSealRequest): Response {
+        handler.refusal()?.let { return httpError(it) }
+        return if (handler.seal(pairingSealRequest.handle, identity.principal.name, pairingSealRequest.envelope)) {
             Response.noContent().build()
         } else {
             channelInvalid()
         }
+    }
 
     @RateLimit(key = RateLimitKey.IP)
     override fun collectPairingChannel(pairingCollectRequest: PairingCollectRequest): Response {
+        handler.refusal()?.let { return httpError(it) }
         val channel = handler.collect(pairingCollectRequest.handle) ?: return channelInvalid()
         return Response.ok(PairingChannel(answer = channel.answer, envelope = channel.envelope)).build()
     }

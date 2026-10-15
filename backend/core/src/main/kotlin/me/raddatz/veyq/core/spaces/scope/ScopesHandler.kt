@@ -41,7 +41,9 @@ sealed interface CreateGroupOutcome {
     data class Created(val scopeId: String) : CreateGroupOutcome
     object Suspended : CreateGroupOutcome, HttpFailure by Failures.tenantSuspended
     object NoTenant : CreateGroupOutcome, HttpFailure by Failures.tenantNotFound
-    /** The `spaces.groups` capability is disabled instance-wide (ADR 0032) — a 422, a personal-only instance. */
+    /** The `core.group-space` capability is switched off instance-wide (ADR 0032) — a 422, a personal-only instance.
+     *  Only creation is refused: a feature switch refuses only what is new, so an existing group stays usable (ADR 0088
+     *  decision 5) and no other group operation asks the capability. */
     object CapabilityDisabled : CreateGroupOutcome, HttpFailure by Failures.capabilityDisabled
     object IdTaken : CreateGroupOutcome, HttpFailure by Failures.idTaken
 }
@@ -276,9 +278,9 @@ class ScopesHandler(
     fun createGroup(
         userId: String, tenantId: String?, scopeId: String, encryptedName: String, grant: SignedGrant, admission: Admission,
     ): CreateGroupOutcome {
-        // Instance policy first (ADR 0032): a personal-only instance disables group scopes → 422, enforced
+        // Instance policy first (ADR 0032): a personal-only instance switches group scopes off → 422, enforced
         // server-side even if a stale client still offers the affordance.
-        if (!capabilities.isActive(CapabilityIds.SPACES_GROUPS)) return CreateGroupOutcome.CapabilityDisabled
+        if (!capabilities.isActive(CapabilityIds.GROUP_SPACE)) return CreateGroupOutcome.CapabilityDisabled
         tenantId ?: return CreateGroupOutcome.NoTenant
         access.check(userId, tenantId, WRITE)
             .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return it }

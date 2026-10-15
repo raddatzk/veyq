@@ -28,10 +28,7 @@ import org.hamcrest.Matchers.notNullValue
  */
 @Singleton
 @Unremovable
-class MemoriesWorldContent(
-    /** The role of the seeded share — a profile that switches READ links off hands in a WRITE_ONLY one. */
-    private val shareRole: String = "READ",
-) : WorldContent {
+class MemoriesWorldContent : WorldContent {
 
     override fun seed(space: ScopeAccessWorld.Space, auth: String): Map<String, String> {
         val scopeId = space.scopeId
@@ -54,7 +51,7 @@ class MemoriesWorldContent(
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets")
             .then().statusCode(200).extract().path<String>("bucketId")
         val shareId = given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$shareRole",${shareKeysJson(shareRole, nodeId, B64)},"sealedName":"$B64",${ShareWriteProof.recovery()}}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ",${shareKeysJson("READ", nodeId, B64)},"sealedName":"$B64",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         return mapOf(

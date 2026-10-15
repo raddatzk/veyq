@@ -31,7 +31,6 @@ import java.util.Optional
 interface VeyqConfig {
     fun version(): Version
     fun release(): Release
-    fun capabilities(): Capabilities
     fun tenant(): Tenant
     fun session(): Session
     fun recovery(): Recovery
@@ -95,11 +94,6 @@ interface VeyqConfig {
          * (uc.admin.identify-instance-release A1).
          */
         fun version(): Optional<String>
-    }
-
-    interface Capabilities {
-        /** Operator off-switch: capability ids to disable (absent ⇒ all enabled). */
-        fun disabled(): Optional<List<String>>
     }
 
     interface Tenant {

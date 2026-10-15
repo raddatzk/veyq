@@ -2,33 +2,42 @@ package me.raddatz.veyq.core.platform.capabilities
 
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
+import io.quarkus.arc.ClientProxy
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
+import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
-import org.hamcrest.CoreMatchers.hasItem
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 
 /**
  * Slice test for the capability-discovery manifest on GET /api/setup (uc.platform.capability-discovery
- * discover-manifest, cr-0103, ADR 0032): it advertises `version { major, build }` + the active capability set,
- * and stays pre-auth, identity-free and identical for every caller (operator-blind-safe). Runs on the default
- * profile (nothing disabled ⇒ every seeded capability is active).
+ * discover-manifest, ADR 0032): it advertises `version { major, build }` + the active capability set, and stays
+ * pre-auth, identity-free and identical for every caller (operator-blind-safe).
+ *
+ * **It runs on the default profile, and that is half its point** (the leak guard of cr-capability-register-recut's
+ * D3): no alternative is enabled here, so the wired [CapabilitySwitches] must be the production
+ * [NoCapabilitySwitchedOff] and every advertised id must be served. The test seam [SwitchableCapabilities] reaching
+ * this profile — a `@Priority` on it, or a copy in `src/main` — turns the first assertion red.
  */
 @QuarkusTest
 class CapabilityManifestSliceTest {
 
+    @Inject
+    lateinit var switches: CapabilitySwitches
+
     @Test
-    fun advertisesVersionAndTheActiveCapabilitySet() {
+    fun theDefaultProfileWiresTheProductionSwitchesAndServesEveryAdvertisedId() {
+        assertEquals(
+            NoCapabilitySwitchedOff::class.java, ClientProxy.unwrap(switches).javaClass,
+            "the default profile must get the production CapabilitySwitches, never a test seam",
+        )
         given().`when`().get("/api/setup")
             .then().statusCode(200)
             .body("version.major", equalTo(1))
             .body("version.build", equalTo(1))
-            .body("capabilities.id", hasItem("sharing.public-links"))
-            .body("capabilities.id", hasItem("sharing.uploader-links"))
-            .body("capabilities.id", hasItem("spaces.groups"))
-            .body("capabilities.id", hasItem("account.device-trust"))
+            .body("capabilities.id", equalTo(CapabilityIds.ADVERTISED))
     }
 
     @Test

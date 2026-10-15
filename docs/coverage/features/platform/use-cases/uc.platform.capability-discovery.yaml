@@ -15,7 +15,7 @@ acceptanceCriteria:
     text: GET /api/setup (pre-auth, no identity) returns version { major, build } and capabilities [{ id }] — the instance's ACTIVE capability set, sourced from the append-only catalog contracts/platform/capabilities.json. The response is identical for every caller (operator-blind-safe, no per-user data).
     coverage:
       backend:
-        integration: [CapabilityManifestSliceTest.advertisesVersionAndTheActiveCapabilitySet, CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller]
+        integration: [CapabilityManifestSliceTest.theDefaultProfileWiresTheProductionSwitchesAndServesEveryAdvertisedId, CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller]
       web:
         unit: [src/shared/state/useCapabilities.test.ts]
   - id: major-hard-gate
@@ -32,18 +32,18 @@ acceptanceCriteria:
     text: An operator disables a capability instance-wide (config); the server BOTH drops it from the manifest AND rejects the corresponding endpoint with 422 capability_disabled. The manifest is a UX hint; the server-side enforcement is the authority (a stale/ignoring client still cannot use it).
     coverage:
       backend:
-        unit: [CapabilityRegistryTest.disabledIdsAreSubtractedFromActive]
-        integration: [CapabilityDisabledSliceTest.disabledCapabilityIsOmittedFromTheManifestButActiveOnesRemain, CapabilityDisabledSliceTest.createUploaderShareIsRejectedWhileViewerPassesTheGate]
+        unit: [CapabilityRegistryTest.aSwitchedOffParentSwitchesOffItsChildrenAndNotItsSiblings]
+        integration: [CapabilityDisabledSliceTest.aSwitchedOffParentDropsEveryShareIdAndRefusesADropBoxLink, CapabilityDisabledSliceTest.aSwitchedOffDropBoxRefusesWriteOnlyAndLeavesReadWriteThrough]
   - id: capability-not-permission
     text: A capability is instance-wide + pre-auth, NOT a per-scope/role permission. A feature is offered only when (capability present) AND (policy permits here) — e.g. sharing.public-links present AND the node is a personal-scope Memory the caller owns. The manifest carries no identity/permission data.
     coverage:
       backend:
-        integration: [CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller, CapabilityDisabledSliceTest.createUploaderShareIsRejectedWhileViewerPassesTheGate]
+        integration: [CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller, CapabilityDisabledSliceTest.aSwitchedOffDropBoxRefusesWriteOnlyAndLeavesReadWriteThrough]
   - id: sharing-first-consumer
     text: Sharing gates on sharing.public-links / sharing.uploader-links. The normal share create dialog offers only READ/READ_WRITE (ShareCreateDialog.test.ts); the uploader is a SEPARATE memory action + its own dialog variant, gated on sharing.uploader-links in MemoryDetail. Disabling sharing.uploader-links hides the uploader action AND makes createShare(role=WRITE_ONLY) return 422 capability_disabled. Proves the full loop (manifest -> client gate -> server enforcement) on a real feature.
     coverage:
       backend:
-        integration: [CapabilityDisabledSliceTest.createUploaderShareIsRejectedWhileViewerPassesTheGate]
+        integration: [CapabilityDisabledSliceTest.aSwitchedOffDropBoxRefusesWriteOnlyAndLeavesReadWriteThrough]
       web:
         unit: [src/features/memory/components/ShareCreateDialog.test.ts]
   - id: catalog-serves-usecases

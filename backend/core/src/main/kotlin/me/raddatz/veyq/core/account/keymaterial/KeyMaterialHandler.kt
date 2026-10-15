@@ -16,7 +16,7 @@ import jakarta.transaction.Transactional
 sealed interface AddWrapOutcome {
     data class Created(val id: String) : AddWrapOutcome
     object LimitReached : AddWrapOutcome, HttpFailure by httpFailure("too_many_devices", CONFLICT)
-    /** The `account.device-trust` capability is disabled instance-wide (ADR 0032) — a 422, full password only. */
+    /** The capability the wrap's method needs is switched off instance-wide (ADR 0032, [capabilityFor]) — a 422. */
     object CapabilityDisabled : AddWrapOutcome, HttpFailure by Failures.capabilityDisabled
     /** The caller's session was revoked by a reset, a password change or a rotation this request waited for. */
     object SessionEnded : AddWrapOutcome, HttpFailure by Failures.authenticationFailed
@@ -67,9 +67,8 @@ class KeyMaterialHandler(
         wrappedKey: String,
         kdfParams: String?,
     ): AddWrapOutcome {
-        // Instance policy first (ADR 0032): an instance mandating a full password every time disables the
-        // device-local convenience wraps (DEVICE / DEVICE_KEY) this endpoint serves → 422, server-enforced.
-        if (!capabilities.isActive(CapabilityIds.ACCOUNT_DEVICE_TRUST)) return AddWrapOutcome.CapabilityDisabled
+        // Instance policy first (ADR 0032): the capability this method needs must be active, else 422, server-enforced.
+        if (!capabilities.isActive(capabilityFor(method))) return AddWrapOutcome.CapabilityDisabled
         accounts.lock(userId)
         if (!sessions.isLiveSessionOf(userId, presentedAccessToken)) return AddWrapOutcome.SessionEnded
         if (store.countWraps(userId, method) >= MAX_WRAPS_PER_METHOD) return AddWrapOutcome.LimitReached
@@ -83,6 +82,13 @@ class KeyMaterialHandler(
     fun deleteWrap(userId: String, id: String) {
         store.deleteWrap(userId, id)
     }
+
+    /** The instance capability enrolling a wrap of [method] needs (ADR 0088): DEVICE_KEY, the passwordless wrap,
+     *  needs [CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS] (and through the AND along the path its parent); DEVICE, the
+     *  one other method the contract lets through, needs [CapabilityIds.REMEMBER_DEVICE]. Only enrolling is gated:
+     *  unlocking with a wrap that exists and [deleteWrap] stay allowed, a feature switch refuses only what is new. */
+    private fun capabilityFor(method: String): String =
+        if (method == WrapMethod.DEVICE_KEY.name) CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS else CapabilityIds.REMEMBER_DEVICE
 
     companion object {
         const val MAX_WRAPS_PER_METHOD = 20L

@@ -706,10 +706,14 @@ class SharingHandler(
         return ShareBlobOutcome.Found(gets)
     }
 
-    /** The instance capability a role's public share needs (ADR 0032): WRITE_ONLY → the uploader-links toggle,
-     *  READ/READ_WRITE → the public-links toggle. Kept coarser than the role (2 capabilities, 3 roles). */
-    private fun capabilityFor(role: String): String =
-        if (role == ShareEntity.WRITE_ONLY) CapabilityIds.SHARING_UPLOADER_LINKS else CapabilityIds.SHARING_PUBLIC_LINKS
+    /** The instance capability a role's public share needs (ADR 0032, ADR 0088): one leaf per role. READ_WRITE and
+     *  WRITE_ONLY are children of [CapabilityIds.PUBLIC_SHARES], so through the registry's AND along the path they
+     *  also need it. READ, the one role left, needs the parent alone. */
+    private fun capabilityFor(role: String): String = when (role) {
+        ShareEntity.READ_WRITE -> CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
+        ShareEntity.WRITE_ONLY -> CapabilityIds.PUBLIC_SHARES_DROP_BOX
+        else -> CapabilityIds.PUBLIC_SHARES
+    }
 
     /**
      * The application that takes a guest's uploads into a node of [targetKind] — the kind of the upload's target

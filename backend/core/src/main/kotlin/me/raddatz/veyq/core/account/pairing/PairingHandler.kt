@@ -6,6 +6,8 @@ import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Instant
@@ -41,9 +43,19 @@ class PairingHandler(
     private val store: PairingStore,
     private val sessions: SessionService,
     private val accounts: AccountStore,
+    private val capabilities: CapabilityRegistry,
     config: VeyqConfig,
 ) {
     private val ttl = config.pairing().channel().ttl()
+
+    /**
+     * Instance policy first (ADR 0032): every pairing endpoint asks this before it does anything, and answers
+     * `422 capability_disabled` while [CapabilityIds.DEVICE_LINKING] is switched off. A pairing is a transient exchange,
+     * not existing data, so "refuse only what is new" (ADR 0088 decision 5) is the whole exchange — which also stops a
+     * pairing in flight. Independent of `core.remember-device` (decision 11). It reads no channel, so it is the same
+     * answer for every handle and adds nothing to the dead-channel oracle E1 closes.
+     */
+    fun refusal(): HttpFailure? = if (capabilities.isActive(CapabilityIds.DEVICE_LINKING)) null else Failures.capabilityDisabled
 
     /**
      * Open a channel under the client's handle.
