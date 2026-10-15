@@ -23,7 +23,7 @@ handling of reported shares.
   the socket, never by a header — and 404s it on the public origin)
 - ★ [Switch the instance's capabilities on and off](use-cases/uc.admin.switch-capabilities.md) — **built (backend +
   admin-web + web); the browser pass is pending** (ADR 0088 decisions 5, 12, 13;
-  `changes/cr-operator-capability-switches.md`): the register in the admin console and the CLI, each entry with its
+  built 2026-10-15): the register in the admin console and the CLI, each entry with its
   purpose and effect-when-off, stored in the database and acting without a restart; a device switch withholds its
   wraps at once, and the web client keeps the device and asks for the password and the Secret Key.
 - ★ [Create a tenant & invite its owner](use-cases/uc.admin.create-tenant.md) — **built (backend + admin-web; the owner accepts in web)**

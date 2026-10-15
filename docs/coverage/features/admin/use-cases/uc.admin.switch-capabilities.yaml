@@ -50,7 +50,7 @@ acceptanceCriteria:
           The web suites run over mocked key material: a withheld wrap keeps the device's record and key, the
           sign-in asks for the password and the Secret Key with the `unlock.deviceHeldBack` hint, the device is not
           re-enrolled to the other tier, and the same wrap served again opens it with no new enrolment. A real
-          browser restoring a device after a switch-on is the phase 5 browser pass, not yet run.
+          browser restoring a device after a switch-on is inbox #447, not yet run.
   - id: off-state-in-a-browser
     text: In a real browser, a switched-off drop box, device linking and password-less remember are absent from the web client, and a device remembered before its switch went off asks for what its wrap replaced.
     coverage:
@@ -59,7 +59,7 @@ acceptanceCriteria:
     gaps:
       - surface: web
         reason: >-
-          Phase 5 browser pass not yet run (cr-operator-capability-switches). The refs are component tests over a
+          The browser pass was waived by the owner on 2026-10-15 and is held as inbox #447. The refs are component tests over a
           hand-set manifest and mocked key material - the toggle, the "sign in with code" entry and the drop-box
           id absent, and a remembered device asking for the password and the Secret Key - not a real browser
           against an instance switched off through admin-web.
