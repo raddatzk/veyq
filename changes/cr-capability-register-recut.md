@@ -259,7 +259,7 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   `Expected status code <422> but was <201>`, and `DepotNodeKindRulesTest`'s pin), the rename control green; restored.
   The guest path maps the refusal to a new `CreateShareNodeOutcome.CapabilityDisabled`, unreachable today (no kind a
   guest may create names a capability); whether `createShareNode`'s contract names it is handed back.
-- [ ] **3 web — leaves, matrices, gates (D9).** Start only when the sibling's pairing files are committed
+- [x] **3 web — leaves, matrices, gates (D9).** Start only when the sibling's pairing files are committed
   (§ Context) **and** `cr-files-becomes-depot` has committed its web rename of `web/src/features/files`, which D9
   edits. Re-derive D9's Files/Depot paths against that result. The matrix tests gain the rows this CR adds: drop box on/off on `createDropBox` and on the drop box's
   `share`, and contribute on/off on the offered roles. Each `hasCapability` mock that only ever answers one way gets
@@ -277,6 +277,13 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   moves to #443's Definition of done, the first CR that can switch an id off in a running instance.
   · **Done when:** `npm run generate:api && npm run check` green in `web/`, the web half of the two
   angles returns nothing, and the browser pass is recorded.
+  **Recorded 2026-10-15** (`HEAD` backend plus the sibling CR's uncommitted store work, a fresh dev instance on :8099, Vite
+  on :8089, signed in through `?devlogin`): the "New" menu offers "Neuer Briefkasten" and creating one succeeds, its
+  "Link teilen" opens the links dialog; a Memory shows "Teilen" and "Upload anfragen", its dialog offers "Nur ansehen" and
+  "Ansehen + Fotos hinzufügen"; a folder's dialog offers "Nur ansehen" and "Ansehen + mitwirken"; the login page shows
+  "Über QR-Code anmelden" and "Auf diesem Gerät angemeldet bleiben"; `/settings/pairing` opens "Gerät hinzufügen" and its
+  nav entry is there. `npm run check`: the full run timed out on 13 files under load ~190, those files passed on their own
+  (612 tests), build and all `verify:*` green. A file's share dialog was not driven (no file uploaded).
 - [ ] **4 docs + coverage.** Edit the docs rows of the inventory in place (current state, no addendum). In the
   coverage file:
   - `operator-disable-enforced` cites phase 2's slice tests, one per gate, for "a switched-off id is omitted and

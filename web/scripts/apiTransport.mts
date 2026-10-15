@@ -76,3 +76,16 @@ export async function describeFailure(e: unknown): Promise<string> {
   if (response instanceof Response) return `${response.status} ${await response.text().catch(() => '')}`
   return e instanceof Error ? `${e.message}${e.cause instanceof Error ? ` (${e.cause.message})` : ''}` : String(e)
 }
+
+/** One Server-Owner call on the admin listener with a hand-built JSON body — for an admin operation the web client does not
+ *  generate (`/api/instance/store`, ADR 0089: web has no `instance` client, admin-web does). The seeder reads only the fields
+ *  it names from the answer. Returns the status and the parsed body, never throws on a non-2xx. */
+export async function adminCall<T>(token: string, method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown): Promise<{ status: number; json: T }> {
+  const res = await fetch(`${ADMIN_BASE}${path}`, {
+    method,
+    headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  const text = await res.text()
+  return { status: res.status, json: (text ? JSON.parse(text) : null) as T }
+}

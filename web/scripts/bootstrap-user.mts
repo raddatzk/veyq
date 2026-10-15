@@ -34,7 +34,7 @@ import { AccountApi, Configuration as AccountConfiguration } from '../src/api/ge
 import { Configuration as TenantsConfiguration, TenantsApi } from '../src/api/generated/tenants'
 import { Configuration as ScopesConfiguration, ScopesApi } from '../src/api/generated/scopes'
 import { Configuration as TasksConfiguration, TasksApi, type ClaimedJob } from '../src/api/generated/tasks'
-import { BASE, adminChannel, describeFailure, publicChannel, tenantChannel } from './apiTransport.mts'
+import { BASE, adminCall, adminChannel, describeFailure, publicChannel, tenantChannel } from './apiTransport.mts'
 
 const ENV_FILE = fileURLToPath(new URL('../../.run/.env', import.meta.url))
 /** Where the backend reaches Mailpit's SMTP. Dotted on purpose: `TenantMailSettingsUpdate.host` is pinned to
@@ -147,6 +147,22 @@ const { accessToken: token } = await orFail('login', loginApi.verifyLogin({
   loginVerifyRequest: { email, nonce: ch.nonce, signature: b64std(v1.authSign(auth.privateKey, fromB64std(ch.nonce))) },
 }))
 const onTenant = tenantChannel(domain, token)
+
+// 2b — the object store is a Server-Owner setting with a passed check (ADR 0089): the server refuses a tenant (409
+// `store_not_ready`) until one has passed. A fresh dev instance has none, so choose the deployment's bundled store and check it.
+type StoreState = { bundledAvailable?: boolean; setting?: unknown; lastCheck?: { passed?: boolean } | null }
+const storeNow = await adminCall<StoreState>(token, 'GET', '/api/instance/store')
+if (storeNow.status !== 200) fail(`store: GET /api/instance/store answered ${storeNow.status}`)
+if (!storeNow.json.lastCheck?.passed) {
+  if (!storeNow.json.setting) {
+    if (!storeNow.json.bundledAvailable) fail('store: no store is set and the deployment offers no bundled one — set one in the admin console first')
+    const put = await adminCall<unknown>(token, 'PUT', '/api/instance/store', { bundled: true })
+    if (put.status !== 200) fail(`store: PUT /api/instance/store answered ${put.status} ${JSON.stringify(put.json)}`)
+  }
+  const checked = await adminCall<NonNullable<StoreState['lastCheck']>>(token, 'POST', '/api/instance/store/check')
+  if (checked.status !== 200 || !checked.json.passed) fail(`store: the check did not pass — ${checked.status} ${JSON.stringify(checked.json)}`)
+  console.log('store: bundled store chosen and checked')
+}
 const tenantsApi = new TenantsApi(new TenantsConfiguration(onTenant))
 
 // 3 — the configured-domain tenant, accepted as the existing user (TENANT grant sealed to our own identity)
