@@ -45,6 +45,21 @@ safely" without promising more. Its code id follows the product name (`depot`), 
 names. The worker's capability tags keep their name: they also mean "what this side can do", they never reach a
 client, and they live in the database baseline, so a rename would cost a migration for no reader.
 
+Where the name *Files* sits today decides what moves, and the test is Memories' precedent: the application's id
+names its directories, module, package, i18n namespace and app-prefixed seams (`MemoriesNodeKinds`), while its API
+is named by **resource** (`media`, `/api/scopes/{scopeId}/media`). So for Depot:
+- **Moves to `depot`:** `contracts/api/files/` and the Gradle module `:apps:files` with its package
+  `me.raddatz.veyq.files` (one commit — the build derives each from the other), `web/src/features/files`, the
+  i18n namespace, every `Files…` seam that names the application, the stored node kind `FILES_DROPBOX` →
+  `DEPOT_DROPBOX` (it carries the application's prefix and the operator reads it in `veyq_node.kind`), and the
+  export ids (`files.file` / `files.drop-box` → `depot.file` / `depot.drop-box`, application id `files` → `depot`),
+  with no alias for old archives: before V1 there are none to read. The application's tab in a level is labelled
+  *Depot*.
+- **Stays, because it is the generic word *file*:** the node kind `FILE`, the blob role `FILE_CONTENT` (it is
+  bound into every sealed wrap's context), the API's tags, paths and schema names (`files`, `/files`, `File…`),
+  and the UI's *file* / *Datei* wherever it means a file rather than the application.
+- **Has nothing to move:** Depot claims no route segment (ADR 0015), so there is no slug.
+
 **The shape of the apps** (owner's direction, 2026-10-15; native work is parked until the web V1 stands): the
 **veyq app** is core plus Depot, and each further application is its own app, reached from the others by deep
 link. Shares open in the browser with an "open in the app" banner. The decisions this needs (one sign-in shared
@@ -56,9 +71,7 @@ across apps, how a link's key reaches an app safely) belong to the native client
   [`docs/apps/README.md`](../apps/README.md).
 - **Not built**, open work tracked in the inbox. Pre-V1 there is no released client to stay compatible with, so
   the wire renames cost no major.
-  - Files → Depot: the Gradle module `:apps:files` and package `me.raddatz.veyq.files`, `contracts/api/files/`,
-    `web/src/features/files`, its route slug, i18n, `docs/apps/files.md`, `docs/features/files/` and the wiki in
-    both languages.
+  - Files → Depot, as the Depot paragraph above sorts it — `changes/cr-files-becomes-depot.md`.
   - `…Capabilities` → `…Rights` (web only).
   - `metaVersion` → `metaRevision` (contract → backend → web, a wire rename).
 - **The cost:** one more word for a reader to learn ("rights" next to "permission"). It pays for itself where
