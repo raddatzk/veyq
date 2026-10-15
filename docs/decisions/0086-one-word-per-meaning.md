@@ -75,8 +75,6 @@ across apps, how a link's key reaches an app safely) belong to the native client
   the wire renames cost no major.
   - `…Capabilities` → `…Rights` (web only).
   - `metaVersion` → `metaRevision` (contract → backend → web, a wire rename).
-  - `K_mem` → `K_node` in prose, contract descriptions, comments and the `kMem` identifiers — no wire label
-    carries it — `changes/cr-k-mem-becomes-k-node.md`.
 - **The cost:** one more word for a reader to learn ("rights" next to "permission"). It pays for itself where
   ADR 0032 §3 needs it most: in a review, "capability" now always means the operator's switch.
 
