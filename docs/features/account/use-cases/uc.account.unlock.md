@@ -145,3 +145,4 @@ Gerät so einrichten, dass es sich nur mit deinem Passwort (oder Biometrie) ents
 - Related use-cases: [login](uc.account.login.md) (gates the session that lets you fetch the wrap); [trust
   this device](uc.account.trust-device.md) (DEVICE wrap for routine re-unlock); [recover access](uc.account.recover-access.md)
   (RECOVERY wrap); [manage active sessions](uc.account.sessions.md) (its E2EE names need this unlock)
+- End-user view (docs site): [Sign in](../../../../site/src/content/docs/getting-started/sign-in.mdx)

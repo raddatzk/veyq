@@ -1,0 +1,43 @@
+---
+title: "Dein Notfall-Kit"
+sources:
+  - docs/features/account/enablers/en.account.key-model.md
+  - docs/features/account/use-cases/uc.account.recover-access.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Wenn du dein Konto anlegst, erstellt veyq dein **Notfall-Kit**: ein PDF mit deiner E-Mail-Adresse, deinem **Secret
+Key** und einem QR-Code, der beides enthält. Bewahre es so sorgfältig auf wie einen Hausschlüssel.
+
+<Screenshot id="getting-started-kit-pdf" shows="Das Notfall-Kit als PDF: die Überschrift veyq — Notfall-Kit, die E-Mail-Adresse, der Secret Key und der QR-Code" />
+
+## Wofür du es brauchst
+
+- **Anmelden auf einem neuen Gerät.** Beim ersten Mal auf jedem Gerät fragt veyq nach deinem Passwort **und** deinem
+  Secret Key: [Anmelden](/veyq/de/getting-started/sign-in/). Danach fragt das Gerät meist nicht wieder danach.
+- **Ein vergessenes Passwort.** Zum Zurücksetzen brauchst du einen Link, den wir dir mailen, **und** den Secret Key
+  aus deinem Kit. Keines von beiden reicht allein.
+- **Deine Schlüssel ersetzen**, nachdem jemand in dein Konto gelangt ist, und die E-Mail-Adresse ändern, mit der du
+  dich anmeldest.
+
+## Bewahre es sicher auf
+
+- Druck es aus oder speichere es dort, wo du andere wichtige Unterlagen hast, etwa in einem Passwort-Manager. Nicht nur
+  auf dem Gerät, mit dem du veyq nutzt: Geht das Gerät verloren, soll das Kit nicht mit verloren gehen.
+- Gib es nicht weiter. Wer dein Kit **und** dein Passwort hat, kann alles öffnen, was du aufbewahrst.
+- veyq erstellt das Kit einmal, wenn du dein Konto anlegst, und kann es dir später nicht noch einmal zeigen. Ein neues
+  bekommst du nur, nachdem du deine E-Mail-Adresse geändert hast; das alte funktioniert weiter.
+
+## Wenn es verloren ist
+
+Solange du dein Passwort kennst und auf einem Gerät angemeldet bist, ist nichts verloren: Du nutzt veyq weiter wie
+bisher.
+
+Verlierst du **beides**, dein Passwort und dein Notfall-Kit, kann niemand zurückholen, was du aufbewahrst: nicht wer
+deinen Bereich besitzt und nicht die Person, die den Server betreibt. Bei ihnen liegt kein Hauptschlüssel und es gibt
+keine Hintertür. Was sie daran hindert, deine Fotos zu lesen, hindert sie auch daran, sie zu retten.
+
+Der Secret Key ist lang und völlig zufällig, niemand kann ihn erraten. Weil deine Daten ihn zusätzlich zu deinem
+Passwort brauchen, öffnet ein erratenes oder geleaktes Passwort allein nichts:
+[Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

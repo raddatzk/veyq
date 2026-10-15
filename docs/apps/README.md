@@ -117,3 +117,4 @@ map the same way the level does, the same component over the person's Memories t
 A concept doc is **not** state the code answers to: nothing in it is built, refined into use-cases or planned.
 
 - End-user view (docs site): [Applications](../../site/src/content/docs/applications/index.mdx)
+- End-user view (docs site): [What veyq is](../../site/src/content/docs/getting-started/index.mdx)

@@ -1,0 +1,40 @@
+---
+title: "Your Emergency Kit"
+sources:
+  - docs/features/account/enablers/en.account.key-model.md
+  - docs/features/account/use-cases/uc.account.recover-access.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+When you create your account, veyq makes your **Emergency Kit**: a PDF with your email address, your **Secret Key**
+and a QR code that holds both. Keep it as carefully as a house key.
+
+<Screenshot id="getting-started-kit-pdf" shows="The Emergency Kit PDF: the heading veyq — Emergency Kit, the email address, the Secret Key and the QR code" />
+
+## What you need it for
+
+- **Signing in on a new device.** The first time on each device, veyq asks for your password **and** your Secret
+  Key: [Sign in](/veyq/getting-started/sign-in/). After that, that device usually doesn't ask for it again.
+- **A forgotten password.** Resetting it takes a link we email you **and** the Secret Key from your kit. Neither
+  works alone.
+- **Replacing your keys** after someone got into your account, and changing the email address you sign in with.
+
+## Keep it safe
+
+- Print it, or save it where you keep other important papers, such as a password manager. Not only on the device you
+  use veyq on: if that device is lost, the kit should not be lost with it.
+- Don't share it. Someone who has your kit **and** your password can open everything you keep.
+- veyq makes the kit once, when you create your account, and cannot show it to you again later. The only time you
+  get a new one is after you change your email address; the old kit keeps working.
+
+## If it is lost
+
+As long as you know your password and are signed in on a device, nothing is lost: you keep using veyq as before.
+
+If you lose **both** your password and your Emergency Kit, nobody can bring back what you keep, not the people who
+own your space and not the person who runs the server. There is no master key on their side and no back door. The
+same thing that stops them from reading your photos stops them from rescuing them.
+
+The Secret Key is long and completely random, so nobody can guess it. Because your data needs it as well as your
+password, a guessed or leaked password alone opens nothing: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

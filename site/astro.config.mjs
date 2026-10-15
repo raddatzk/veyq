@@ -33,6 +33,16 @@ export default defineConfig({
           items: [
             { slug: 'index', label: 'Start', translations: { de: 'Start' } },
             {
+              label: 'Getting started',
+              translations: { de: 'Erste Schritte' },
+              items: [
+                'getting-started',
+                'getting-started/accept-an-invitation',
+                'getting-started/emergency-kit',
+                'getting-started/sign-in',
+              ],
+            },
+            {
               label: 'Your account',
               translations: { de: 'Dein Konto' },
               items: ['account/adding-another-device', 'account-keys-and-recovery'],

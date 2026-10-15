@@ -139,3 +139,4 @@ bleibt nichts zurück.
   [trust-device](uc.account.trust-device.md) (the DEVICE wrap),
   [sessions](uc.account.sessions.md) (removing this wrap for a device that is not in hand).
 - End-user view (docs site): [Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)
+- End-user view (docs site): [Sign in](../../../../site/src/content/docs/getting-started/sign-in.mdx)

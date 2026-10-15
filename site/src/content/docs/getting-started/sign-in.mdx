@@ -1,0 +1,65 @@
+---
+title: "Sign in"
+sources:
+  - docs/features/account/use-cases/uc.account.login.md
+  - docs/features/account/use-cases/uc.account.unlock.md
+  - docs/features/account/use-cases/uc.account.remember-this-device.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+The first time you sign in on a device, veyq asks for three things: your email, your password and the Secret Key
+from your [Emergency Kit](/veyq/getting-started/emergency-kit/). After that, the device asks for less: how much
+depends on one choice you make while signing in.
+
+## Sign in on a new device
+
+1. Open your space's address. The page **Sign in** opens.
+2. Enter your **Email** and your **Password**.
+3. Give veyq your **Secret Key**, in whichever way is easiest:
+   - **Type or paste it** into the field.
+   - Choose **Upload Emergency Kit** (the upload arrow in the field) and pick the kit's PDF, or a photo or screenshot
+     of its QR code. This fills in your email too.
+   - Choose **Scan QR code** (the QR-code symbol in the field) and hold the kit's QR code up to your camera. This
+     button only appears where the browser can use a camera.
+4. Decide on **Stay signed in on this device**: on, this device opens straight to your space next time; off, it asks
+   for your email and password only.
+5. Choose **Sign in**.
+
+<Screenshot id="getting-started-sign-in" shows="The Sign in page on a new device with Email, Password and Secret Key filled in, the upload and scan buttons inside the Secret Key field, and Stay signed in on this device ticked" />
+
+Use **Stay signed in on this device** only on a device that is yours. On someone else's computer, sign in in a
+private window and sign out when you are done: an ordinary window keeps a saved key here that, together with your
+password, opens your space without the Secret Key.
+
+## On a device you have used before
+
+- **Stay signed in on this device was on:** the space opens without asking anything. Once you sign out, though, the
+  next sign-in here asks for your Secret Key again.
+- **It was off:** as soon as you type your email, the Secret Key field disappears: your email and password are
+  enough.
+
+## Without your Emergency Kit at hand
+
+- **Sign in with a QR code** lets a device you are already signed in on vouch for the new one:
+  [Add another device](/veyq/account/adding-another-device/).
+- **I don't have my Secret Key with me** signs you in without opening what you keep, so that you can sign your other
+  devices out, for example after losing one.
+- **Forgot your password?** starts a reset. It needs your Secret Key as well.
+
+## What you see first
+
+If your space has terms, veyq shows them first: read them and choose **I agree**. Then the shared space opens. If
+its key has not reached you yet, you start in **Personal**, and the shared space is marked **Awaiting access** until
+another member's device hands it over.
+
+## If it does not work
+
+- **Sign-in failed. Check your email and password.** The email or the password is wrong.
+- **Unlock failed. Check your password and Secret Key.** The Secret Key does not belong to this account, or has a
+  typo.
+- **Couldn't read that kit.** The file is not your Emergency Kit, or the QR code is not readable in it. Try the PDF
+  itself, or type the Secret Key.
+
+Your password and your Secret Key never leave this device. The server never gets anything it could use to open what
+you keep: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

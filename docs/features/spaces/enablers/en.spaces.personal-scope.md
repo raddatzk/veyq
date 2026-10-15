@@ -119,3 +119,4 @@ sequenceDiagram
   [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) (the hybrid-KEM grant)
 - Related use-cases: [unlock](../../account/use-cases/uc.account.unlock.md) (yields the identity that opens the
   grant), [create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) (the TENANT scope this sits beside)
+- End-user view (docs site): [What veyq is](../../../../site/src/content/docs/getting-started/index.mdx)

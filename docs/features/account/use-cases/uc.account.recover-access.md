@@ -137,3 +137,4 @@ Secret Key dort also noch einmal ein.
 - End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)
 - End-user view (docs site): [Account keys & recovery](../../../../site/src/content/docs/account-keys-and-recovery.md)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
+- End-user view (docs site): [Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx)

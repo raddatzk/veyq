@@ -1,0 +1,52 @@
+---
+title: "Accept an invitation"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.add-member.md
+  - docs/features/account/enablers/en.account.key-model.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+You get into veyq when someone who owns a space invites you. The invitation comes by email, in English and German,
+with a link that works until the date it names.
+
+## Create your account
+
+1. Open the link in the email. The page **Accept your invitation** says which space you have been invited to join.
+2. Enter a **Username**. It is how the others in this space find you (letters, digits, `.`, `_` and `-`), and it
+   must not be taken yet.
+3. Choose a **Password** of at least 10 characters. When you leave the field, veyq checks whether the password is
+   known from data breaches; if it is, choose another one, or tick **Use it anyway**.
+4. Choose **Continue**.
+
+<Screenshot id="getting-started-accept-form" shows="The Accept your invitation page with the space's name, the Username and Password fields and the Continue button" />
+
+Your email address is the one the invitation was sent to; you do not type it. If you were invited to **own** a new
+space, the page also offers your first and last name and a picture (all optional, and changeable later in the
+settings), and the last button below says **Accept & activate**.
+
+## Save your Emergency Kit
+
+5. Choose **Download Emergency Kit (PDF)** and keep the file somewhere safe. What it is and where to keep it:
+   [Your Emergency Kit](/veyq/getting-started/emergency-kit/).
+6. Tick **I have saved my Emergency Kit somewhere safe.**
+7. Choose **Accept & join**.
+
+<Screenshot id="getting-started-accept-kit" shows="The Save your Emergency Kit step with the Download Emergency Kit (PDF) button, the confirmation checkbox ticked and the Accept & join button" />
+
+The page then says **You’ve joined “Example Family”.**, with your space's name. Choose **Sign in** and sign in with your
+email, your password and the Secret Key from the kit you just saved: [Sign in](/veyq/getting-started/sign-in/).
+
+You may first see only **Personal**, and the shared space marked **Awaiting access**. The key to the shared space
+reaches you from another member's device, by itself, the next time one of them is online. You do not need to do
+anything.
+
+## If it does not work
+
+- **This invitation is no longer valid.** It has expired. Ask whoever invited you to send a new one.
+- **This invitation link is invalid.** The link is incomplete or was already used. Open it again from the email.
+- **That email already has an account — sign in instead.** You already have a veyq account with this address on
+  this server. The page then asks for your password and your Secret Key instead of a new password.
+
+Your password and your Secret Key never leave your device. veyq turns them into keys on your device, and the server
+only ever receives locked data: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

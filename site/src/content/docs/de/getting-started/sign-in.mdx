@@ -1,0 +1,64 @@
+---
+title: "Anmelden"
+sources:
+  - docs/features/account/use-cases/uc.account.login.md
+  - docs/features/account/use-cases/uc.account.unlock.md
+  - docs/features/account/use-cases/uc.account.remember-this-device.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Wenn du dich zum ersten Mal auf einem Gerät anmeldest, fragt veyq nach drei Dingen: deiner E-Mail, deinem Passwort
+und dem Secret Key aus deinem [Notfall-Kit](/veyq/de/getting-started/emergency-kit/). Danach fragt das Gerät nach
+weniger: wie viel, hängt von einer Wahl ab, die du beim Anmelden triffst.
+
+## Auf einem neuen Gerät anmelden
+
+1. Öffne die Adresse deines Bereichs. Die Seite **Anmelden** öffnet sich.
+2. Gib deine **E-Mail** und dein **Passwort** ein.
+3. Gib veyq deinen **Secret Key**, wie es dir am leichtesten fällt:
+   - **Tippe ihn ein oder füge ihn ein.**
+   - Wähle **Notfall-Kit hochladen** (der Hochlade-Pfeil im Feld) und wähle das PDF des Kits oder ein Foto oder
+     einen Screenshot seines QR-Codes. Das füllt auch deine E-Mail aus.
+   - Wähle **QR-Code scannen** (das QR-Code-Symbol im Feld) und halte den QR-Code des Kits vor deine Kamera. Diese
+     Schaltfläche erscheint nur, wo der Browser eine Kamera nutzen kann.
+4. Entscheide dich bei **Auf diesem Gerät angemeldet bleiben**: an öffnet dieses Gerät beim nächsten Mal direkt deinen
+   Bereich; aus fragt es nur nach E-Mail und Passwort.
+5. Wähle **Anmelden**.
+
+<Screenshot id="getting-started-sign-in" shows="Die Seite Anmelden auf einem neuen Gerät mit ausgefüllter E-Mail, Passwort und Secret Key, den Schaltflächen zum Hochladen und Scannen im Secret-Key-Feld und gesetztem Haken bei Auf diesem Gerät angemeldet bleiben" />
+
+Setze **Auf diesem Gerät angemeldet bleiben** nur auf einem Gerät, das dir gehört. Auf einem fremden Computer melde
+dich in einem privaten Fenster an und melde dich ab, wenn du fertig bist: Ein gewöhnliches Fenster behält hier einen
+gespeicherten Schlüssel, der zusammen mit deinem Passwort deinen Bereich ohne Secret Key öffnet.
+
+## Auf einem Gerät, das du schon benutzt hast
+
+- **Auf diesem Gerät angemeldet bleiben war an:** Der Bereich öffnet sich, ohne etwas zu fragen. Sobald du dich
+  abmeldest, fragt die nächste Anmeldung hier allerdings wieder nach deinem Secret Key.
+- **Es war aus:** Sobald du deine E-Mail eingibst, verschwindet das Secret-Key-Feld: E-Mail und Passwort reichen.
+
+## Ohne dein Notfall-Kit zur Hand
+
+- **Über QR-Code anmelden** lässt ein Gerät, auf dem du schon angemeldet bist, für das neue bürgen:
+  [Ein weiteres Gerät hinzufügen](/veyq/de/account/adding-another-device/).
+- **Ich habe meinen Secret Key nicht dabei** meldet dich an, ohne zu öffnen, was du aufbewahrst, damit du deine anderen
+  Geräte abmelden kannst, etwa nachdem du eines verloren hast.
+- **Passwort vergessen?** startet das Zurücksetzen. Dafür brauchst du ebenfalls deinen Secret Key.
+
+## Was du zuerst siehst
+
+Hat dein Bereich Bedingungen, zeigt veyq sie zuerst: Lies sie und wähle **Ich stimme zu**. Dann öffnet sich der
+geteilte Bereich. Hat dich sein Schlüssel noch nicht erreicht, beginnst du in **Persönlich**, und der geteilte
+Bereich ist mit **Wartet auf Zugang** markiert, bis das Gerät eines anderen Mitglieds ihn übergibt.
+
+## Wenn es nicht klappt
+
+- **Anmeldung fehlgeschlagen. Prüfe E-Mail und Passwort.** Die E-Mail oder das Passwort stimmt nicht.
+- **Entsperren fehlgeschlagen. Prüfe Passwort und Secret Key.** Der Secret Key gehört nicht zu diesem Konto oder hat
+  einen Tippfehler.
+- **Konnte das Kit nicht lesen.** Die Datei ist nicht dein Notfall-Kit, oder der QR-Code darin ist nicht lesbar.
+  Versuche es mit dem PDF selbst oder tippe den Secret Key ein.
+
+Dein Passwort und dein Secret Key verlassen dieses Gerät nie. Der Server bekommt nichts, womit er öffnen könnte, was
+du aufbewahrst: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

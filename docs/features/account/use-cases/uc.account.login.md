@@ -135,3 +135,4 @@ Passwort nicht von einem nicht existierenden Konto unterscheiden und verrät so 
   opened); [setup-server](../../admin/use-cases/uc.admin.setup-server.md) (registers
   `authPublicKey`); [unlock](uc.account.unlock.md) (opens the Master Key);
   [change-password](uc.account.change-password.md); log in with a passkey — planned
+- End-user view (docs site): [Sign in](../../../../site/src/content/docs/getting-started/sign-in.mdx)

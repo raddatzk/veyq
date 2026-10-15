@@ -1,0 +1,55 @@
+---
+title: "Eine Einladung annehmen"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.add-member.md
+  - docs/features/account/enablers/en.account.key-model.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+In veyq kommst du, wenn dich jemand einlädt, der einen Bereich besitzt. Die Einladung kommt per E-Mail, auf Deutsch und
+Englisch, mit einem Link, der bis zu dem genannten Zeitpunkt gilt.
+
+## Dein Konto anlegen
+
+1. Öffne den Link aus der E-Mail. Die Seite **Einladung annehmen** sagt, welchem Bereich du beitreten sollst.
+2. Gib einen **Benutzernamen** ein. Unter ihm finden dich die anderen in diesem Bereich (Buchstaben, Ziffern, `.`,
+   `_` und `-`), und er darf noch nicht vergeben sein.
+3. Wähle ein **Passwort** mit mindestens 10 Zeichen. Wenn du das Feld verlässt, prüft veyq, ob das Passwort aus
+   Datenlecks bekannt ist; wenn ja, wähle ein anderes oder setze den Haken bei **Trotzdem verwenden**.
+4. Wähle **Weiter**.
+
+<Screenshot id="getting-started-accept-form" shows="Die Seite Einladung annehmen mit dem Namen des Bereichs, den Feldern Benutzername und Passwort und der Schaltfläche Weiter" />
+
+Deine E-Mail-Adresse ist die, an die die Einladung ging; du tippst sie nicht ein. Wurdest du eingeladen, einen neuen
+Bereich zu **besitzen**, bietet die Seite außerdem Vorname, Nachname und ein Bild an (alles freiwillig und später in
+den Einstellungen änderbar), und die letzte Schaltfläche unten heißt **Annehmen & aktivieren**.
+
+## Dein Notfall-Kit sichern
+
+5. Wähle **Notfall-Kit herunterladen (PDF)** und bewahre die Datei sicher auf. Was es ist und wo es hingehört:
+   [Dein Notfall-Kit](/veyq/de/getting-started/emergency-kit/).
+6. Setze den Haken bei **Ich habe mein Notfall-Kit sicher gespeichert.**
+7. Wähle **Annehmen & beitreten**.
+
+<Screenshot id="getting-started-accept-kit" shows="Der Schritt Notfall-Kit sichern mit der Schaltfläche Notfall-Kit herunterladen (PDF), dem gesetzten Bestätigungshaken und der Schaltfläche Annehmen & beitreten" />
+
+Die Seite sagt dann **Du bist „Familie Beispiel“ beigetreten.**, mit dem Namen deines Bereichs. Wähle **Anmelden** und
+melde dich mit deiner E-Mail, deinem Passwort und dem Secret Key aus dem gerade gesicherten Kit an:
+[Anmelden](/veyq/de/getting-started/sign-in/).
+
+Vielleicht siehst du zuerst nur **Persönlich**, und der geteilte Bereich ist mit **Wartet auf Zugang** markiert. Der
+Schlüssel zum geteilten Bereich erreicht dich von selbst vom Gerät eines anderen Mitglieds, sobald eines online ist.
+Du musst nichts tun.
+
+## Wenn es nicht klappt
+
+- **Diese Einladung ist nicht mehr gültig.** Sie ist abgelaufen. Bitte die Person, die dich eingeladen hat, um eine
+  neue.
+- **Dieser Einladungslink ist ungültig.** Der Link ist unvollständig oder wurde schon benutzt. Öffne ihn noch einmal
+  aus der E-Mail.
+- **Diese E-Mail hat bereits ein Konto — bitte stattdessen anmelden.** Du hast auf diesem Server schon ein veyq-Konto
+  mit dieser Adresse. Die Seite fragt dann nach deinem Passwort und deinem Secret Key statt nach einem neuen Passwort.
+
+Dein Passwort und dein Secret Key verlassen dein Gerät nie. veyq macht daraus auf deinem Gerät Schlüssel, und der
+Server bekommt immer nur verschlossene Daten: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)
