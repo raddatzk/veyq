@@ -27,6 +27,13 @@
       "port": 8081,
       "url": "http://veyq.localhost:8081",
       "autoPort": false
+    },
+    {
+      "name": "veyq-site",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-lc", "cd /Users/kevin.raddatz/IdeaProjects/veyq/site && npm run build && npm run preview -- --host 127.0.0.1 --port 4321"],
+      "port": 4321,
+      "autoPort": false
     }
   ]
 }

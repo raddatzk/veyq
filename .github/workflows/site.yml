@@ -1,0 +1,80 @@
+name: Site
+
+# The published documentation site (ADR 0087): `check` proves site/ on every push and pull request that touches it,
+# and on `main` the build it checked is what `deploy` publishes to GitHub Pages — so nothing is deployed that the
+# link check has not seen, and site/'s lockfile is installed exactly once per run. That one install is therefore
+# the one that asks the registry (scripts/validate_npm_installs_gated.py § 3, per lockfile).
+#
+# Prerequisite, once, in the repository settings: Pages → Build and deployment → Source "GitHub Actions". There is
+# no remote yet, so the first deploy is unproven until the first push.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - "scripts/npm_ci_no_deprecated.py"
+      - ".github/workflows/site.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - "scripts/npm_ci_no_deprecated.py"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Site checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      # site/ is outside the root workspace with a lockfile of its own; this is its only install, so it asks the
+      # registry (no --skip-registry-check).
+      - name: Install dependencies
+        run: python3 scripts/npm_ci_no_deprecated.py --package-dir site
+
+      # astro check + astro build; the build fails on a broken internal link (starlight-links-validator).
+      - name: Run site checks
+        working-directory: site
+        run: npm run check
+
+      - name: Keep the built site for Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Only this job may publish, and only through the Pages OIDC token; `check` stays read-only.
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Deploys queue in commit order; one is never cancelled halfway by the next.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy the checked build
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

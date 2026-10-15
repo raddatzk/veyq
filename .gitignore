@@ -287,3 +287,5 @@ config-secret.key
 # `/graphify --update`, so it is never a source of truth — and it embeds absolute local paths. `_SKIP_DIRS` in
 # graphify's own detector already ignores it, so the graph never ingests itself; this only keeps it out of git.
 graphify-out/
+# The docs site's generated content types (ADR 0087), rebuilt by `astro check` / `astro build`.
+site/.astro/
