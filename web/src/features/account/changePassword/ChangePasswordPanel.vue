@@ -22,7 +22,7 @@ import { useBreachCheck } from '../passwordWarning'
 import PasswordBreachNotice from '../PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../../../shared/passwordPolicy'
 import { useCapabilities } from '../../../shared/state/useCapabilities'
-import { ACCOUNT_DEVICE_TRUST } from '../../platform/capabilities'
+import { CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../../platform/capabilities'
 import { isHttpStatus, HttpStatus } from '../../../shared/httpError'
 
 const { t } = useI18n()
@@ -37,7 +37,9 @@ const done = ref(false)
 
 const { state: breachState, useAnyway, checkNow: checkBreaches, proceed: breachCheckPasses } = useBreachCheck(newPassword)
 
-const rememberSupported = isRememberSupported() && hasCapability(ACCOUNT_DEVICE_TRUST)
+// The re-enrol offer is a password-less DEVICE_KEY wrap (`enrolDeviceKey`), so it needs `core.remember-device.passwordless`
+// — the same leaf as the sign-in screen's "remember this device", whose wrap it re-creates.
+const rememberSupported = isRememberSupported() && hasCapability(CORE_REMEMBER_DEVICE_PASSWORDLESS)
 // The length floor is a CLIENT-side floor and cannot be anything else: under Model B (ADR 0003) the password
 // never leaves this device — the server receives an Ed25519 public key derived from it and stores no
 // credential at all — so there is no server-side rule this could mirror and none that would catch a bypass.

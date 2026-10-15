@@ -353,7 +353,8 @@ export interface NodeDetailProps {
 }
 /** Events a `detail` component emits to the host: `rename` (core's `FolderNameDialog`, any kind), `delete`,
  *  `createChild` (the KIND of the child to create: the host mounts that kind's `createDialog` under the opened node),
- *  `openNode` (a child), `share` and `shareUpload` (the opened kind's `shareDialog`, the second with `uploader`). */
+ *  `openNode` (a child), `share` and `shareUpload` (the opened kind's `shareDialog`, the second with `uploader`). `share`
+ *  carries the {@link NodeShareOffer} of the capability function that showed the button, which the host hands on. */
 export interface NodeDetailEmits {
   rename: []
   delete: []
@@ -366,8 +367,16 @@ export interface NodeDetailEmits {
   copy: []
   createChild: [kind: NodeKind]
   openNode: [node: TreeNode]
-  share: []
+  share: [offer: NodeShareOffer]
   shareUpload: []
+}
+
+/** What a `share` emit hands the host for the dialog it mounts: the share rights beyond "may share at all" that the
+ *  application's capability function answered for the node (`contribute`: offer the READ_WRITE role for a new link,
+ *  `core.public-shares.contribute`). The host passes them on as `NodeShareDialogProps`, so a dialog never reads a
+ *  capability itself (web/CLAUDE.md: never a `hasCapability` read inline). */
+export interface NodeShareOffer {
+  contribute: boolean
 }
 
 /** What the host hands a kind's `createDialog`: the kind to create (one component may serve several kinds), the scope,
@@ -389,7 +398,9 @@ export interface NodeCreateDialogEmits {
 /** What the host hands a kind's `shareDialog`: the node, its content key as the key chain opens it (what a link wraps;
  *  key material), the scope's epoch keys (each link's recovery copy opens under `K_SC`), the node's name as the tree
  *  opened it (re-sealed under `K_share`) and its kind. `uploader`: the uploader (WRITE_ONLY drop) variant, set only on
- *  the detail's `shareUpload` — a kind whose dialog has no such variant ignores it. Mounted while open; emits `close`. */
+ *  the detail's `shareUpload` — a kind whose dialog has no such variant ignores it. `contribute`: offer the READ_WRITE role
+ *  for a new link, from the `share` emit's {@link NodeShareOffer}; absent, it is not offered (fail closed) — a dialog
+ *  with no role choice ignores it. Mounted while open; emits `close`. */
 export interface NodeShareDialogProps {
   scopeId: string
   nodeId: string
@@ -398,6 +409,7 @@ export interface NodeShareDialogProps {
   nodeName: string
   nodeKind: NodeKind
   uploader?: boolean
+  contribute?: boolean
 }
 
 /** The shell's `sidebarPins` list slot: each component an application adds to it is mounted in the left rail

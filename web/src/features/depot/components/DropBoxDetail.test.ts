@@ -48,12 +48,13 @@ const ANNA_1 = node('a2000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Anna',
 const ANNA_2 = node('a1000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Anna', BOX.id, { shareIdentityId: 'i2', createdAt: 2_000 })
 const BEN = node('c0000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Ben', BOX.id, { shareIdentityId: 'i3', createdAt: 3_000 })
 
-/** `publicLinks`: the instance offers public links (the share button's capability). */
-function mountDetail(publicLinks = true) {
+/** `dropBox`: the instance offers drop-box links (`core.public-shares.drop-box`, the share button's capability); the READ
+ *  leaf `publicShares` stays on or off on its own (`publicShares`). */
+function mountDetail(dropBox = true, publicShares = true) {
   return mount(DropBoxDetail, {
     props: {
       node: BOX, scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps["children"],
-      access: memberAccessOf({ scopeId: SCOPE, publicLinks }), tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
+      access: memberAccessOf({ scopeId: SCOPE, publicSharesDropBox: dropBox, publicShares }), tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
     },
     global: { plugins: [realI18n()] },
   })
@@ -137,10 +138,12 @@ describe('DropBoxDetail', () => {
     expect(card.find('.pi-inbox').exists()).toBe(true)
     await card.find('button[aria-label="Share link"]').trigger('click')
     await card.find('button[aria-label="Delete drop box"]').trigger('click')
-    expect(w.emitted('share')).toHaveLength(1)
+    expect(w.emitted('share')).toEqual([[{ contribute: false }]]) // a drop box's dialog has no role to offer
     expect(w.emitted('delete')).toHaveLength(1)
     // control: no share offered where the host says the kind cannot be shared
     expect(mountDetail(false).find('button[aria-label="Share link"]').exists()).toBe(false)
+    // …and the READ leaf is not the drop box's: public shares off alone keeps the WRITE_ONLY links manageable
+    expect(mountDetail(true, false).find('button[aria-label="Share link"]').exists()).toBe(true)
   })
 
   it('deletes a guest’s folder after a confirm, and nothing without one', async () => {

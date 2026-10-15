@@ -59,7 +59,7 @@ import type { TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { capabilityState } from '../shared/state/capabilities'
-import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
+import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'
 import { targetOf, type Access, type TreeSource } from '../core/access'
@@ -71,7 +71,7 @@ import { titlesOf } from '../test/levelRows'
 // capability function needs both for a share.
 const Detail = defineComponent({
   props: ['node', 'access', 'tree'],
-  setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${(p.access as Access).mode === 'member' && (p.access as Access & { mode: 'member' }).publicLinks && targetOf(p.tree as TreeSource, p.node).shareable}`),
+  setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${(p.access as Access).mode === 'member' && (p.access as Access & { mode: 'member' }).publicShares && targetOf(p.tree as TreeSource, p.node).shareable}`),
 })
 // The smallest row factory: one plain row per node (core draws it as its `li.veyq-level-item`).
 const rows: LevelRowsFactory = () => ({
@@ -105,7 +105,7 @@ async function mountAt(hash: string) {
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
   holder.reg = fullRegistry()
-  capabilityState.ids = [SHARING_PUBLIC_LINKS]
+  capabilityState.ids = [CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
   treeStore.nodes = [
     node({ id: 'mem', kind: MEMORY_KIND, name: 'Mem' }),
     node({ id: 'chap', kind: CHAPTER_KIND, name: 'Chap', parentId: 'mem' }),
@@ -171,7 +171,7 @@ describe('MemoryHomeView fail-closed rules', () => {
     const w = await mountAt('#~me/mem')
     expect(w.find('.detail').text()).toBe('Mem|false')
     // …and the host mounts no share dialog for it, whatever a detail emits
-    w.findComponent(Detail).vm.$emit('share')
+    w.findComponent(Detail).vm.$emit('share', { contribute: false })
     await flushPromises()
     expect(w.find('.share').exists()).toBe(false)
     holder.reg = fullRegistry()
@@ -190,7 +190,7 @@ describe('MemoryHomeView fail-closed rules', () => {
     holder.reg = fullRegistry() // control: the same kind with its dialog is shared, and the dialog is the kind's own
     const w = await mountAt('#~me/mem')
     expect(w.find('.detail').text()).toBe('Mem|true')
-    w.findComponent(Detail).vm.$emit('share')
+    w.findComponent(Detail).vm.$emit('share', { contribute: false })
     await flushPromises()
     expect(w.find('.share').text()).toBe('mem')
   })

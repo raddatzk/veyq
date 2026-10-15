@@ -86,7 +86,7 @@ const headerActions = computed(() =>
   standardNodeActions(
     t,
     { share: caps.value.share, move: caps.value.moveNode, remove: caps.value.deleteNode, shareLabel: t('depot.dropBox.share'), deleteLabel: t('depot.dropBox.delete') },
-    { share: () => emit('share'), move: () => source.move?.(props.node), remove: () => emit('delete') },
+    { share: () => emit('share', { contribute: caps.value.shareContribute }), move: () => source.move?.(props.node), remove: () => emit('delete') },
   ),
 )
 

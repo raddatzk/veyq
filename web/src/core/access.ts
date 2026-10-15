@@ -41,10 +41,14 @@ export interface MemberAccess {
   /** The scope is pending deletion (cr-0090, uc.spaces.scope-access): the server refuses every write during the grace
    *  window, so no write is offered. Reads, downloads, pins and the listing of links stay. */
   readonly readonly: boolean
-  /** The instance offers public links at all (`sharing.public-links`, ADR 0032). */
-  readonly publicLinks: boolean
-  /** The instance offers uploader (WRITE_ONLY) links (`sharing.uploader-links`, ADR 0032). */
-  readonly uploaderLinks: boolean
+  /** The instance offers READ public links (`core.public-shares`, ADR 0032, ADR 0088). One boolean per register leaf,
+   *  each filled from ONE manifest id by the host: the server computes the AND along the path (a child whose parent is
+   *  off is absent from the manifest, ADR 0088 decision 2), so no capability function ANDs two of these. */
+  readonly publicShares: boolean
+  /** The instance offers READ_WRITE (contribute) public links (`core.public-shares.contribute`). */
+  readonly publicSharesContribute: boolean
+  /** The instance offers WRITE_ONLY (drop-box) public links and the drop-box node (`core.public-shares.drop-box`). */
+  readonly publicSharesDropBox: boolean
 }
 
 /** A guest of a public share link. Built by the share page after its gates (`guestAccess`, core/sharing/guestAccess.ts);
@@ -189,6 +193,9 @@ export interface FolderCapabilities {
   deleteNode: boolean
   /** Manage the folder's public links. */
   share: boolean
+  /** The share dialog offers the READ_WRITE (contribute) role for a new link (`core.public-shares.contribute`); handed to
+   *  the dialog as a prop by the host (`NodeShareDialogProps.contribute`), never read there. */
+  shareContribute: boolean
   /** Open the scope's node trash (its restore is a write). */
   nodeTrash: boolean
   /** Move the folder on screen elsewhere (core's `MoveNodeDialog`, inbox #358). */
@@ -196,7 +203,8 @@ export interface FolderCapabilities {
 }
 
 const NO_FOLDER_CAPABILITIES: FolderCapabilities = Object.freeze({
-  navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, nodeTrash: false, move: false,
+  navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, shareContribute: false, nodeTrash: false,
+  move: false,
 })
 
 /**
@@ -205,8 +213,9 @@ const NO_FOLDER_CAPABILITIES: FolderCapabilities = Object.freeze({
  *
  * - **Member:** everything, but no write during a pending deletion and no placement in a guest's identity folder (a
  *   member deletes there file by file — the application's section — never the folder's own rename/delete here). A
- *   share needs the instance's `publicLinks`, a shareable kind and a folder (none at the scope root, none of an identity
- *   folder); listing links is a read, so a pending deletion keeps it. A folder moves — a guest's identity folder too:
+ *   share needs the instance's `publicShares`, a shareable kind and a folder (none at the scope root, none of an identity
+ *   folder), and its dialog offers the contribute role where `publicSharesContribute` is on; listing links is a read, so
+ *   a pending deletion keeps it. A folder moves — a guest's identity folder too:
  *   a member's move OUT of a drop box is the one placement it takes (ADR 0080 decision 11, inbox #377 (a)); nothing
  *   moves INTO one (the move dialog offers no such destination, the server refuses it).
  * - **Guest `READ`:** navigate. **`READ_WRITE`:** navigate, create a folder (core's `FolderGuestNodeRules`), and move the
@@ -220,13 +229,15 @@ export function folderCapabilities(access: Access, at: CapabilityTarget): Folder
   if (access.mode === 'member') {
     const write = !access.readonly && !at.inIdentityFolder
     const folder = at.kind === FOLDER_KIND
+    const shareableFolder = at.shareable && folder && !at.inIdentityFolder
     return {
       ...NO_FOLDER_CAPABILITIES,
       navigate: true,
       createFolder: write,
       rename: write && folder,
       deleteNode: write && folder,
-      share: access.publicLinks && at.shareable && folder && !at.inIdentityFolder,
+      share: access.publicShares && shareableFolder,
+      shareContribute: access.publicSharesContribute && shareableFolder,
       nodeTrash: !access.readonly && !at.inIdentityFolder,
       move: !access.readonly && folder,
     }

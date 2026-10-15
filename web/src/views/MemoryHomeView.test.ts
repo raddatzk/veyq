@@ -91,8 +91,8 @@ vi.mock('../features/memory/components/ShareDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
-      props: { nodeId: String, uploader: Boolean, nodeName: String, nodeKey: Uint8Array, nodeKind: String },
-      setup: (p) => () => h('div', { class: 'share-stub', 'data-name': p.nodeName, 'data-key': String(p.nodeKey?.[0]), 'data-kind': p.nodeKind },
+      props: { nodeId: String, uploader: Boolean, contribute: Boolean, nodeName: String, nodeKey: Uint8Array, nodeKind: String },
+      setup: (p) => () => h('div', { class: 'share-stub', 'data-name': p.nodeName, 'data-key': String(p.nodeKey?.[0]), 'data-kind': p.nodeKind, 'data-contribute': String(p.contribute) },
         `${p.nodeId}|${p.uploader ? 'uploader' : 'viewer'}`),
     }),
   }
@@ -126,7 +126,7 @@ import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { FILE_KIND } from '../features/depot/kinds'
 import { capabilityState } from '../shared/state/capabilities'
-import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
+import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
 import { chooseNew, hasNewMenu, newMenuLabels } from '../test/newMenu'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../test/levelRows'
@@ -173,7 +173,7 @@ beforeEach(() => {
   stubApi(filesApi, { listFiles: { items: [] } })
   vi.mocked(isFavorite).mockReturnValue(false)
   treeStore.nodes = TREE.map((n) => ({ ...n }))
-  capabilityState.ids = [SHARING_PUBLIC_LINKS]
+  capabilityState.ids = [CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
 })
 
 describe('MemoryHomeView over the real registry', () => {
@@ -309,7 +309,7 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.detail-stub').attributes('data-shareable')).toBe('true')
 
     const detail = w.findComponent({ name: 'MemoryDetailStub' })
-    detail.vm.$emit('share')
+    detail.vm.$emit('share', { contribute: true })
     detail.vm.$emit('shareUpload')
     await flushPromises()
     const dialogs = w.findAll('.share-stub')
@@ -318,6 +318,8 @@ describe('MemoryHomeView over the real registry', () => {
     expect(dialogs.map((s) => s.attributes('data-key')), "the chapter's own key, not its Memory's (9)").toEqual(['7', '7'])
     // the node's kind travels with it, so the application's dialog can say "chapter" (5b.5)
     expect(dialogs.map((s) => s.attributes('data-kind'))).toEqual(['CHAPTER', 'CHAPTER'])
+    // the offer the detail's capability function made reaches the dialog as a prop (the host never reads it again)
+    expect(dialogs[0].attributes('data-contribute')).toBe('true')
   })
 
   it('hides the share affordance when the instance turns public links off, even for a shareable kind', async () => {
@@ -341,10 +343,12 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.create-stub').attributes('data-key')).toBe('9')
     expect(w.find('.name-stub').exists()).toBe(false)
 
-    detail.vm.$emit('share')
+    detail.vm.$emit('share', { contribute: false })
     detail.vm.$emit('shareUpload')
     await flushPromises()
     expect(w.findAll('.share-stub').map((s) => s.text())).toEqual(['italy|viewer', 'italy|uploader'])
+    // control: an offer without contribute reaches the dialog as false (fail closed)
+    expect(w.find('.share-stub').attributes('data-contribute')).toBe('false')
 
     detail.vm.$emit('delete')
     await flushPromises()

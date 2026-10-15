@@ -45,6 +45,9 @@ const props = defineProps<{
   uploader?: boolean
   /** The shared node is a chapter: the hints say "chapter", not "Memory" (inbox #363; the parent decides by `nodeKind`). */
   chapter?: boolean
+  /** Offer the READ_WRITE (contribute) role: the capability function's `shareContribute` (`core.public-shares.contribute`),
+   *  handed down by the host, never read here. Absent: viewer only (fail closed). */
+  contribute?: boolean
 }>()
 // `reissue`: the edit asks its parent to renew this share instead (#303) — the renew is the parent's own dialog.
 const emit = defineEmits<{ close: []; saved: []; reissue: [share: ManagedShare] }>()
@@ -115,10 +118,14 @@ onMounted(() => {
   }
 })
 
-// The normal flow's switcher offers READ + READ_WRITE only — the uploader is its own action/dialog (no switcher).
+// The normal flow's switcher offers READ + READ_WRITE only — the uploader is its own action/dialog (no switcher). READ_WRITE
+// only where `contribute` is on — or on the edit of a link that already is one: a feature switch refuses only what is new
+// (ADR 0088 decision 5), so an existing contributor link keeps its role on screen instead of showing no selection.
 const roleOptions = computed(() => [
   { label: t('share.roleViewer'), value: ShareRole.Read },
-  { label: t('share.roleContributor'), value: ShareRole.ReadWrite },
+  ...(props.contribute || props.editShare?.role === ShareRole.ReadWrite
+    ? [{ label: t('share.roleContributor'), value: ShareRole.ReadWrite }]
+    : []),
 ])
 const roleHint = computed(() =>
   role.value === ShareRole.ReadWrite

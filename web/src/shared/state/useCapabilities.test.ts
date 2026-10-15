@@ -10,7 +10,7 @@ function status(over: Partial<SetupStatus> = {}): SetupStatus {
     suites: ['v1'],
     instanceSalt: 'AAAA',
     version: { major: EXPECTED_MAJOR, build: 1 },
-    capabilities: [{ id: 'sharing.public-links' }],
+    capabilities: [{ id: 'core.public-shares' }],
     ...over,
   } as SetupStatus
 }
@@ -25,11 +25,11 @@ beforeEach(() => {
 describe('useCapabilities', () => {
   it('hasCapability reflects the discovered manifest; false before discovery and for absent ids', () => {
     const { hasCapability } = useCapabilities()
-    expect(hasCapability('sharing.public-links')).toBe(false) // not discovered yet ⇒ hide
-    setCapabilities(status({ capabilities: [{ id: 'sharing.public-links' }, { id: 'spaces.groups' }] }))
-    expect(hasCapability('sharing.public-links')).toBe(true)
-    expect(hasCapability('spaces.groups')).toBe(true)
-    expect(hasCapability('sharing.uploader-links')).toBe(false) // absent from the manifest ⇒ hidden
+    expect(hasCapability('core.public-shares')).toBe(false) // not discovered yet ⇒ hide
+    setCapabilities(status({ capabilities: [{ id: 'core.public-shares' }, { id: 'core.group-space' }] }))
+    expect(hasCapability('core.public-shares')).toBe(true)
+    expect(hasCapability('core.group-space')).toBe(true)
+    expect(hasCapability('core.public-shares.drop-box')).toBe(false) // absent from the manifest ⇒ hidden
   })
 
   it('incompatibility is null when the major matches, and before discovery; build never gates', () => {

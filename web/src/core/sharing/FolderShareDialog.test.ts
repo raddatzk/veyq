@@ -62,9 +62,9 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
   ...over,
 })
 
-function mountDialog() {
+function mountDialog(extra: { contribute?: boolean } = { contribute: true }) {
   return mount(FolderShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeName: 'Trips', nodeKind: 'FOLDER' },
+    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -92,6 +92,16 @@ describe('FolderShareDialog — a new link', () => {
     expect(w.text()).not.toContain(t('share.roleUploader'))
     // The folder wording, not the Memory's photo promise.
     expect(w.text()).toContain(t('share.folder.roleViewerHint'))
+  })
+
+  it('offers READ only where the host hands no contribute (core.public-shares.contribute off); the READ mint stays possible', async () => {
+    const w = mountDialog({})
+    await flushPromises()
+    await byText(w, t('share.createNew')).trigger('click')
+    expect(w.findAll('.opt').map((o) => o.attributes('data-value'))).toEqual([ShareRole.Read])
+    await byText(w, t('share.create')).trigger('click')
+    await flushPromises()
+    expect(mintShare).toHaveBeenCalledTimes(1)
   })
 
   it('the contributor wording names no application and says a replace is final, in both languages (inbox #383)', () => {

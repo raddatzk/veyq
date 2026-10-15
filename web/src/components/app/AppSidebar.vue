@@ -25,7 +25,7 @@ import { useObjectUrls } from '../../shared/state/useObjectUrls'
 import { activeSpace } from '../../app/activeSpace'
 import CreateGroupDialog from '../../features/spaces/CreateGroupDialog.vue'
 import { useCapabilities } from '../../shared/state/useCapabilities'
-import { SPACES_GROUPS } from '../../features/platform/capabilities'
+import { CORE_GROUP_SPACE } from '../../features/platform/capabilities'
 import { useThemeState } from '../../shared/state/useThemeState'
 import { registry } from '../../core/applications/registry'
 import { parseHash, TENANT_SCOPE, isPersonalScope, personalScope } from '../../core/node/location'
@@ -38,10 +38,10 @@ import PinnedNodes from '../../core/favorites/PinnedNodes.vue'
 
 const { t } = useI18n()
 const { hasCapability } = useCapabilities()
-// Group creation is gated on the `spaces.groups` capability (ADR 0032): a personal-only instance disables it,
+// Group creation is gated on the `core.group-space` capability (ADR 0032, ADR 0088): a personal-only instance disables it,
 // so the "New group" affordance is hidden (and the group-create endpoint rejects with 422). Existing groups
 // stay listed/manageable — only creation is gated, matching the server.
-const canCreateGroup = computed(() => hasCapability(SPACES_GROUPS))
+const canCreateGroup = computed(() => hasCapability(CORE_GROUP_SPACE))
 const route = useRoute()
 const router = useRouter()
 const { resolvedTheme } = useThemeState()

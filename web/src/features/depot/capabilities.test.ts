@@ -24,17 +24,23 @@ const rows: [string, Access, CapabilityTarget, DepotCapabilities][] = [
   // …and moves a file out of it (a move out of a drop box is a member's, #358, #377 (a)); nothing is placed in it
   ['member in a guest\'s identity folder: download, delete and move out per file (#391, #358)', member, at(FOLDER_KIND, { inIdentityFolder: true }), grants('download', 'deleteFile', 'moveFile')],
   ['member, pending deletion: download only', pending, at(FOLDER_KIND), grants('download')],
+  ['member at the scope root, drop box off: no createDropBox (#440 gap 2)', memberAccessOf({ publicSharesDropBox: false }), at(null), grants('download', 'upload', 'replace', 'rename', 'deleteFile', 'moveFile')],
+  ['member in a folder, drop box off: no createDropBox', memberAccessOf({ publicSharesDropBox: false }), at(FOLDER_KIND), grants('download', 'upload', 'replace', 'rename', 'deleteFile', 'moveFile')],
   ['member, pending deletion, identity folder', pending, at(FOLDER_KIND, { inIdentityFolder: true }), grants('download')],
   // --- member on a drop box ---
   ['member on a drop box: moves it, and its guests\' folders out', member, at(DROPBOX_KIND), grants('download', 'share', 'deleteFile', 'deleteNode', 'moveFile', 'moveNode')],
-  ['member on a drop box, public links off', memberAccessOf({ publicLinks: false }), at(DROPBOX_KIND), grants('download', 'deleteFile', 'deleteNode', 'moveFile', 'moveNode')],
+  // drop box leaf: its links are WRITE_ONLY, so the READ leaf does not touch them (D9)
+  ['member on a drop box, drop box off', memberAccessOf({ publicSharesDropBox: false }), at(DROPBOX_KIND), grants('download', 'deleteFile', 'deleteNode', 'moveFile', 'moveNode')],
+  ['member on a drop box, public shares off: its WRITE_ONLY links are not the READ leaf\'s', memberAccessOf({ publicShares: false }), at(DROPBOX_KIND), grants('download', 'share', 'deleteFile', 'deleteNode', 'moveFile', 'moveNode')],
   ['member on a drop box the registry will not share', member, at(DROPBOX_KIND, { shareable: false }), grants('download', 'deleteFile', 'deleteNode', 'moveFile', 'moveNode')],
   ['member on a drop box, pending deletion: its links are a read', pending, at(DROPBOX_KIND), grants('download', 'share')],
   // --- member on an opened file (FileDetail) ---
-  ['member on an opened file: everything', member, at(FILE_KIND), grants('download', 'replace', 'rename', 'share', 'deleteNode', 'moveNode')],
-  ['member on an opened file, public links off', memberAccessOf({ publicLinks: false }), at(FILE_KIND), grants('download', 'replace', 'rename', 'deleteNode', 'moveNode')],
+  ['member on an opened file: everything', member, at(FILE_KIND), grants('download', 'replace', 'rename', 'share', 'shareContribute', 'deleteNode', 'moveNode')],
+  ['member on an opened file, public shares off', memberAccessOf({ publicShares: false }), at(FILE_KIND), grants('download', 'replace', 'rename', 'shareContribute', 'deleteNode', 'moveNode')],
+  ['member on an opened file, contribute off: READ link stays, no READ_WRITE role', memberAccessOf({ publicSharesContribute: false }), at(FILE_KIND), grants('download', 'replace', 'rename', 'share', 'deleteNode', 'moveNode')],
+  ['member on an opened file, drop box off: file share untouched', memberAccessOf({ publicSharesDropBox: false }), at(FILE_KIND), grants('download', 'replace', 'rename', 'share', 'shareContribute', 'deleteNode', 'moveNode')],
   ['member on an opened file the registry will not share', member, at(FILE_KIND, { shareable: false }), grants('download', 'replace', 'rename', 'deleteNode', 'moveNode')],
-  ['member on an opened file, pending deletion: download and its links (a read)', pending, at(FILE_KIND), grants('download', 'share')],
+  ['member on an opened file, pending deletion: download and its links (a read)', pending, at(FILE_KIND), grants('download', 'share', 'shareContribute')],
   ['member on a guest\'s file in an identity folder: download, delete, move out; no replace, rename, share', member, at(FILE_KIND, { inIdentityFolder: true }), grants('download', 'deleteNode', 'moveNode')],
   ['member on another application\'s kind', member, at('MEMORY'), grants()],
   // --- guest READ ---

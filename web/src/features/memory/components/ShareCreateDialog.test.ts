@@ -61,7 +61,7 @@ const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
 
 function mountDialog(props: Record<string, unknown>) {
   return mount(ShareCreateDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', ...props },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...props },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -79,6 +79,17 @@ describe('ShareCreateDialog (cr-0116)', () => {
     expect(w.text()).toContain(t('share.roleViewer'))
     expect(w.text()).toContain(t('share.roleContributor'))
     expect(w.text()).not.toContain(t('share.roleUploader'))
+  })
+
+  it('normal flow without contribute (core.public-shares.contribute off): view only; an edit of a READ_WRITE link keeps its role on offer', () => {
+    const create = mountDialog({ contribute: false })
+    expect(create.text()).toContain(t('share.roleViewer'))
+    expect(create.text()).not.toContain(t('share.roleContributor'))
+    // a feature switch refuses only what is new: the existing contributor link still shows its own role
+    const edit = mountDialog({ contribute: false, editShare: editShareWith({ role: ShareRole.ReadWrite }) })
+    expect(edit.text()).toContain(t('share.roleContributor'))
+    // control: an edit of a READ link offers no contributor role without the leaf
+    expect(mountDialog({ contribute: false, editShare: editShareWith({}) }).text()).not.toContain(t('share.roleContributor'))
   })
 
   it('uploader flow: no role switcher at all (role fixed to WRITE_ONLY)', () => {
@@ -239,7 +250,7 @@ describe("ShareCreateDialog — the note's acceptance switch", () => {
   // The real Checkbox needs PrimeVue's config, which the stubbed suite above does not install.
   const mountWithPrime = (props: Record<string, unknown>) =>
     mount(ShareCreateDialog, {
-      props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', ...props },
+      props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...props },
       global: { plugins: [realI18n(), PrimeVue], stubs },
     })
   const mustAccept = (w: ReturnType<typeof mountWithPrime>) => w.find('#share-note-must-accept')

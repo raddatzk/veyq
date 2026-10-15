@@ -74,7 +74,7 @@ import Tab from 'primevue/tab'
 import type { TreeNode } from './tree'
 import type { Level } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
-import { registry, type LevelActionContext, type LevelMenuItem } from '../applications/registry'
+import { registry, type LevelActionContext, type LevelMenuItem, type NodeShareOffer } from '../applications/registry'
 import { createLevelActions } from './levelActions'
 import { folderCapabilities, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
@@ -141,7 +141,8 @@ const emit = defineEmits<{
   renameNode: [node: TreeNode]
   deleteFolder: []
   openTrash: []
-  share: []
+  /** Manage the folder's links: the host mounts its kind's share dialog with this offer (`NodeShareOffer`). */
+  share: [offer: NodeShareOffer]
 }>()
 
 const { t, locale } = useI18n()
@@ -187,7 +188,7 @@ const folderActions = computed(() =>
     t,
     { share: caps.value.share, rename: caps.value.rename, move: caps.value.move, remove: caps.value.deleteNode },
     {
-      share: () => emit('share'),
+      share: () => emit('share', { contribute: caps.value.shareContribute }),
       rename: () => emit('renameFolder'),
       move: () => props.folder && emit('moveNode', props.folder),
       remove: () => emit('deleteFolder'),

@@ -93,7 +93,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVers
     @delete="emit('delete')"
     @create-chapter="emit('createChild', CHAPTER_KIND)"
     @open-chapter="emit('openNode', $event)"
-    @share="emit('share')"
+    @share="emit('share', $event)"
     @share-upload="emit('shareUpload')"
     @meta-updated="onMetaUpdated"
     @edit-cover="cover.open(node)"

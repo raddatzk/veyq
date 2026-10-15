@@ -17,7 +17,7 @@ import { enrolDeviceKey, clearDeviceKey, isRememberSupported } from '../features
 import { cacheSessionVault, clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
-import { ACCOUNT_DEVICE_TRUST } from '../features/platform/capabilities'
+import { CORE_DEVICE_LINKING, CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../features/platform/capabilities'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { parseKit, type KitData } from '@veyq/crypto/emergencyKit'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
@@ -59,11 +59,19 @@ const sessionReady = ref(session.accessToken !== null)
 // The single per-device choice. Drives the login cookie (on → persistent) AND which convenience wrap is
 // auto-enrolled. Only offered where IndexedDB + WebCrypto exist (a wrap can't otherwise be persisted).
 const remember = ref(false)
-// "Remember this device" needs BOTH this browser's device-key support AND the instance's `account.device-trust`
-// capability (ADR 0032): an operator can mandate a full password every time, disabling device-local convenience
-// wraps. When off, the toggle is hidden AND enrolConvenienceWrap enrols no wrap — matching the server, which
-// rejects enrolling one with 422 capability_disabled.
-const rememberSupported = isRememberSupported() && hasCapability(ACCOUNT_DEVICE_TRUST)
+// The two convenience wraps are two register leaves (ADR 0088), each needing this browser's device-key support too:
+// - "Remember this device" (the toggle, and the password-less DEVICE_KEY wrap it enrols) needs
+//   `core.remember-device.passwordless`;
+// - the password DEVICE wrap enrolled on the toggle-off path needs `core.remember-device`.
+// An operator can mandate a full password every time, disabling either. Where one is off its wrap is never enrolled —
+// matching the server, which refuses that method with 422 capability_disabled — and where the passwordless one is off
+// the toggle is hidden. Each reads ONE id: the server ANDs the path, so passwordless is absent when its parent is off.
+const rememberSupported = isRememberSupported() && hasCapability(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+const deviceWrapSupported = isRememberSupported() && hasCapability(CORE_REMEMBER_DEVICE)
+// Linking a device (uc.account.onboard-device, `core.device-linking`): off, neither direction is offered — no "sign in
+// with code" entry, and a scanned pairing code is not recognised, so the join card never replaces the form. The server
+// refuses every /api/pairing/* call then anyway (422 capability_disabled).
+const linkingSupported = hasCapability(CORE_DEVICE_LINKING)
 // uc.account.sessions §E3 — the LOCKED entry point. The screen built for a lost laptop is reached from the
 // device you would actually be holding: a fresh or foreign one, with no Emergency Kit. The Secret-Key field is
 // `required`, and HTML5 constraint validation (not the router — `/login` carries no `meta` at all) is what
@@ -129,7 +137,7 @@ async function enrolConvenienceWrap() {
     }
   } else {
     await cacheSessionVault(email.value, mk) // survive reloads this browser session
-    if (rememberSupported) {
+    if (deviceWrapSupported) {
       await clearDeviceKey().catch(() => {}) // drop a prior password-less DEVICE_KEY wrap
       await noteWrapOfThisDevice(await trustThisDevice(email.value, password.value, mk).catch(() => null))
     }
@@ -266,13 +274,13 @@ function applyKit(kit: KitData) {
  *  no-camera path — in the one place where a subtly different second solution is worst — and it would ask the
  *  user to know which of two visually identical codes they are holding. */
 function acceptsScan(text: string): boolean {
-  return parseKit(text) !== null || parsePairingPayload(text) !== null
+  return parseKit(text) !== null || (linkingSupported && parsePairingPayload(text) !== null)
 }
 
 /** The half of that dispatch the shared control cannot own: a decoded string it accepted but did not
  *  recognise as a kit is this screen's pairing payload. */
 function onForeignScan(text: string) {
-  joinSecret.value = parsePairingPayload(text) ?? ''
+  joinSecret.value = linkingSupported ? (parsePairingPayload(text) ?? '') : ''
 }
 
 /** The join completed: this device now holds its own session and an open vault, so it leaves like any other
@@ -439,7 +447,7 @@ onMounted(async () => {
              DISPLAYS a code; the camera it needs is on the other one. Gating it here would withhold the entry
              from exactly the hardware it exists for (ADR 0059 §1). -->
         <Button
-          v-if="!sessionReady"
+          v-if="!sessionReady && linkingSupported"
           type="button"
           :label="t('pairing.signInEntry')"
           icon="pi pi-qrcode"

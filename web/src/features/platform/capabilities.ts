@@ -1,17 +1,29 @@
 // The client-facing capability ids the web client pins from the append-only catalog
-// (`contracts/platform/capabilities.json`, ADR 0032). A capability is instance-wide + pre-auth ("this server
+// (`contracts/platform/capabilities.json`, ADR 0032, ADR 0088). A capability is instance-wide + pre-auth ("this server
 // can do X at all"), discovered from GET /api/setup — NOT a per-scope/role permission. The client soft-gates
-// each optional feature on the presence of its id (absent ⇒ hidden, graceful degradation). A conformance test
-// asserts these equal the catalog (drift-proofing — the same guard the crypto vectors + task tags get).
+// each optional feature on the presence of its id (absent ⇒ hidden, graceful degradation). The ids are a tree, and the
+// SERVER computes the AND along the path (ADR 0088 decision 2): a child whose parent is off is absent from the manifest.
+// So the client reads the leaf it has UI for and never ANDs two ids itself (decision 3). A conformance test asserts
+// each one is a catalog entry (drift-proofing — the same guard the crypto vectors + task tags get).
 
-/** Public read/contribute share links (viewer + contributor) of a personal-scope Memory (uc.sharing.*). */
-export const SHARING_PUBLIC_LINKS = 'sharing.public-links'
+/** Public share links in the READ access mode, of any shareable node (uc.sharing.share-public-viewer). */
+export const CORE_PUBLIC_SHARES = 'core.public-shares'
 
-/** Write-only uploader (drop-box) share links (uc.sharing.share-uploader). */
-export const SHARING_UPLOADER_LINKS = 'sharing.uploader-links'
+/** Public share links in the READ_WRITE access mode — the contribute role (uc.sharing.share-contributor). */
+export const CORE_PUBLIC_SHARES_CONTRIBUTE = 'core.public-shares.contribute'
 
-/** Shared group spaces — create a group + manage its membership (uc.spaces.* group use-cases). */
-export const SPACES_GROUPS = 'spaces.groups'
+/** Public share links in the WRITE_ONLY access mode — a drop box, and creating Depot's drop-box node
+ *  (uc.sharing.share-uploader). */
+export const CORE_PUBLIC_SHARES_DROP_BOX = 'core.public-shares.drop-box'
 
-/** Device trust / passwordless remember-me unlock levels (uc.account.* device use-cases). */
-export const ACCOUNT_DEVICE_TRUST = 'account.device-trust'
+/** Shared group spaces — creating a group (uc.spaces.* group use-cases; an existing group stays usable when off). */
+export const CORE_GROUP_SPACE = 'core.group-space'
+
+/** Remembering a device with a password DEVICE wrap (uc.account.trust-device). */
+export const CORE_REMEMBER_DEVICE = 'core.remember-device'
+
+/** Passwordless unlock on a remembered device — a DEVICE_KEY wrap (uc.account.remember-this-device). */
+export const CORE_REMEMBER_DEVICE_PASSWORDLESS = 'core.remember-device.passwordless'
+
+/** Linking a device from one already unlocked, every /api/pairing/* endpoint (uc.account.onboard-device, ADR 0059). */
+export const CORE_DEVICE_LINKING = 'core.device-linking'

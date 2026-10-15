@@ -295,7 +295,7 @@ here; the server is blind.
   unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's
   header (core's `NodeHeader`, which every node page opens with too - see above). Its `createDialog` - props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the shell when the "New" menu or a detail `createChild` emits that KIND; and its
-  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?}`; a
+  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?}` (`contribute`: offer READ_WRITE for a new link — the capability function's `shareContribute`, carried by the detail's `share` emit as a `NodeShareOffer`, never read by the dialog); a
   kind without one offers no share. There is no guest-only list or detail: core's page of a `READ`/`READ_WRITE` public
   share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node -
   the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
@@ -324,7 +324,7 @@ here; the server is blind.
   Master Key (Memories' item marks; the node pins are core's, re-sealed by `rotateKeys` itself) is otherwise unverifiable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
   `detail` (`NodeDetailProps`) and a row factory (`LevelRowsContext`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
-  (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's `publicLinks`/`uploaderLinks`) or a share guest
+  (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's three share leaves `publicShares`/`publicSharesContribute`/`publicSharesDropBox`, one boolean per register id the host fills from ONE `hasCapability` each — the server ANDs the path, a capability function never does, ADR 0088) or a share guest
   (`shareId`, `role`, `head`, `pwToken`, `fragmentKey`, `requestGuest`, `reload` — `guestAccess`, built by
   `views/ShareView.vue`, which owns the re-resolve after a guest's write and the page's one naming flow, core's `core/sharing/GuestNaming.vue` with its "Not you?"; every naming place uses that one
   component) — and `tree`, a `TreeSource` (`node`,

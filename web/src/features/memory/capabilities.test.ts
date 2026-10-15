@@ -22,7 +22,7 @@ const WO = guestAccessOf('WRITE_ONLY')
 /** A member on an opened Memory or chapter, as the detail has always offered it (cr-0049 … cr-0113). */
 const MEMBER_ON_NODE: Grant = {
   navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setCover: true, mark: true,
-  share: true, shareUpload: true, rename: true, deleteNode: true, move: true, mediaTrash: true, buckets: true,
+  share: true, shareContribute: true, shareUpload: true, rename: true, deleteNode: true, move: true, mediaTrash: true, buckets: true,
 }
 
 const rows: [string, Access, CapabilityTarget, Grant][] = [
@@ -34,11 +34,13 @@ const rows: [string, Access, CapabilityTarget, Grant][] = [
   // --- member, on a node (the detail) ---
   ['member on a Memory', member, at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true }],
   ['member on a chapter: no chapter inside a chapter, no participants (a Memory\'s)', member, at(CHAPTER_KIND), MEMBER_ON_NODE],
-  ['member, public links off', memberAccessOf({ publicLinks: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true, share: false, shareUpload: false }],
-  ['member, uploader links off', memberAccessOf({ uploaderLinks: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true, shareUpload: false }],
-  ['member, a kind the registry will not share', member, at(MEMORY_KIND, { shareable: false }), { ...MEMBER_ON_NODE, createChapter: true, participants: true, share: false, shareUpload: false }],
+  // each leaf is read on its own: the server ANDs the path, so no row here ANDs two (ADR 0088 decision 3)
+  ['member, public shares off: no READ link', memberAccessOf({ publicShares: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true, share: false }],
+  ['member, contribute off: no READ_WRITE role, READ link stays', memberAccessOf({ publicSharesContribute: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true, shareContribute: false }],
+  ['member, drop box off: no uploader link', memberAccessOf({ publicSharesDropBox: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true, shareUpload: false }],
+  ['member, a kind the registry will not share', member, at(MEMORY_KIND, { shareable: false }), { ...MEMBER_ON_NODE, createChapter: true, participants: true, share: false, shareContribute: false, shareUpload: false }],
   ['member, pending deletion, on a Memory: reads, links, marks only', pending, at(MEMORY_KIND), {
-    navigate: true, download: true, mark: true, share: true, shareUpload: true, mediaTrash: true, buckets: true, participants: true,
+    navigate: true, download: true, mark: true, share: true, shareContribute: true, shareUpload: true, mediaTrash: true, buckets: true, participants: true,
   }],
   ['member on another application\'s kind', member, at(FILE), {}],
   ['member on an unknown kind', member, at('ZULU'), {}],

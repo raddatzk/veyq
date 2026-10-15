@@ -8,7 +8,7 @@
 // node's sealed meta (date, place, cover), the media trash and the contributions organizer (`MemoryBuckets`, member
 // globals) — no guest role grants them, whatever a source implements.
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { Access, CapabilityTarget } from '../../core/access'
+import type { Access, CapabilityTarget, MemberAccess } from '../../core/access'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
 
 export interface MemoryCapabilities {
@@ -34,6 +34,8 @@ export interface MemoryCapabilities {
   mark: boolean
   /** Manage the node's public links (READ / READ_WRITE). */
   share: boolean
+  /** The share dialog offers the READ_WRITE (contribute) role for a new link (`core.public-shares.contribute`). */
+  shareContribute: boolean
   /** Create an uploader (WRITE_ONLY) link — its own action and dialog. */
   shareUpload: boolean
   /** Rename the node on screen. */
@@ -64,6 +66,7 @@ export const NO_MEMORY_CAPABILITIES: Readonly<MemoryCapabilities> = Object.freez
   setCover: false,
   mark: false,
   share: false,
+  shareContribute: false,
   shareUpload: false,
   rename: false,
   deleteNode: false,
@@ -80,13 +83,13 @@ const isLevel = (kind: string | null) => kind === null || kind === FOLDER_KIND
  *  `CHAPTER` opened (the detail), or the folder level whose Memories the section shows (`FOLDER`; null at a member's
  *  scope root). */
 export function memoryCapabilities(access: Access, at: CapabilityTarget): MemoryCapabilities {
-  if (access.mode === 'member') return memberCapabilities(access.readonly, access.publicLinks, access.uploaderLinks, at)
+  if (access.mode === 'member') return memberCapabilities(access, at)
   if (access.mode === 'guest') return guestCapabilities(access.role, at)
   return NO_MEMORY_CAPABILITIES
 }
 
-function memberCapabilities(readonly: boolean, publicLinks: boolean, uploaderLinks: boolean, at: CapabilityTarget): MemoryCapabilities {
-  const write = !readonly
+function memberCapabilities(access: MemberAccess, at: CapabilityTarget): MemoryCapabilities {
+  const write = !access.readonly
   if (isLevel(at.kind)) {
     // A guest's identity folder (Depot's drop box) takes no Memory. (The favorite heart is core's: `core/favorites`.)
     return { ...NO_MEMORY_CAPABILITIES, navigate: true, createMemory: write && !at.inIdentityFolder }
@@ -97,9 +100,11 @@ function memberCapabilities(readonly: boolean, publicLinks: boolean, uploaderLin
     navigate: true,
     download: true,
     mark: true,
-    // Listing and copying links is a read: a pending deletion keeps them (a new link is refused server-side).
-    share: publicLinks && at.shareable,
-    shareUpload: publicLinks && uploaderLinks && at.shareable,
+    // Listing and copying links is a read: a pending deletion keeps them (a new link is refused server-side). Each right
+    // reads ONE register leaf: the server ANDs the path, so `publicSharesDropBox` is already off when public shares are.
+    share: access.publicShares && at.shareable,
+    shareContribute: access.publicSharesContribute && at.shareable,
+    shareUpload: access.publicSharesDropBox && at.shareable,
     // The media trash and the organizer are views first; their writes are refused during a pending deletion.
     mediaTrash: true,
     buckets: true,

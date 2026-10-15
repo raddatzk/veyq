@@ -14,6 +14,7 @@ vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template
 vi.mock('../features/tenant/TenantMailSettingsPanel.vue', () => ({ default: { template: '<div class="stub-mail" />' } }))
 vi.mock('../features/tenant/TenantStoragePanel.vue', () => ({ default: { template: '<div class="stub-storage" />' } }))
 vi.mock('../features/spaces/CreateGroupDialog.vue', () => ({ default: { template: '<div class="stub-create-group" />' } }))
+vi.mock('../features/account/pairing/AddDevicePanel.vue', () => ({ default: { template: '<div class="stub-add-device" />' } }))
 vi.mock('../features/account/trustReset/TrustResetPanel.vue', () => ({ default: { template: '<div class="stub-trust-reset" />' } }))
 vi.mock('../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn() }))
 
@@ -23,6 +24,8 @@ import { refusedDocuments } from '../features/account/trustReset/refusedDocument
 import { activeSpace, clearActiveSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 import { realI18n, t } from '../test/i18n'
+import { capabilityState } from '../shared/state/capabilities'
+import { CORE_DEVICE_LINKING } from '../features/platform/capabilities'
 
 async function mountHub(path = '/settings') {
   const router = createRouter({
@@ -55,7 +58,10 @@ beforeEach(() => {
   vi.mocked(refusedDocuments).mockResolvedValue([])
   stubMatchMedia(false) // narrow by default → /settings stays the list; the wide-redirect case opts in
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  capabilityState.ids = null
+})
 
 describe('SettingsHubView — starting a refused trust list over (ADR 0028 Decision 7)', () => {
   it('offers the section only while this device refuses a document, and opens its panel', async () => {
@@ -110,6 +116,20 @@ describe('SettingsHubView — a section the caller may not see leads back to /se
     ])
     expect(pathOf(await mountHub('/settings/group-g-9'))).toBe('/settings')
     expect(pathOf(await mountHub('/settings/group-g-1'))).toBe('/settings/group-g-1')
+  })
+
+  it('adding a device needs core.device-linking: its entry and its address are there with the leaf, gone without it', async () => {
+    capabilityState.ids = [CORE_DEVICE_LINKING]
+    const on = await mountHub('/settings/pairing')
+    expect(navText(on)).toContain(t('pairing.navTitle'))
+    expect(pathOf(on)).toBe('/settings/pairing')
+    expect(on.find('.stub-add-device').exists()).toBe(true)
+
+    capabilityState.ids = [] // the control on the same predicate: the instance serves other ids, not this one
+    const off = await mountHub('/settings/pairing')
+    expect(navText(off)).not.toContain(t('pairing.navTitle'))
+    expect(pathOf(off)).toBe('/settings')
+    expect(off.find('.stub-add-device').exists()).toBe(false)
   })
 
   it('the trust reset page leads back unless this device refuses a document', async () => {

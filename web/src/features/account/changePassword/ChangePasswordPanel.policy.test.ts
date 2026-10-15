@@ -18,7 +18,9 @@ vi.mock('../rememberMe/deviceKeyWrap', () => ({
   isRememberSupported: vi.fn(),
   rememberThisDevice: vi.fn(),
 }))
-vi.mock('../../../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: () => false }) }))
+// Off by default; a test puts the ids it is about into `switchedOn`, so each leaf is read on its own (ADR 0088 decision 3).
+const { switchedOn } = vi.hoisted(() => ({ switchedOn: new Set<string>() }))
+vi.mock('../../../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: (id: string) => switchedOn.has(id) }) }))
 // The breach lookup is the only thing stubbed of the check: the dialog's real guard runs, which is what the wiring
 // cases below pin. Clean by default — the check is automatic, so every submit here passes through it.
 vi.mock('../../../shared/pwned', () => ({ pwnedCount: vi.fn() }))
@@ -28,6 +30,7 @@ import { changePassword } from './changePassword'
 import { pwnedCount } from '../../../shared/pwned'
 import { isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { realI18n, t } from '../../../test/i18n'
+import { CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../../platform/capabilities'
 
 const stubs = {
   // The panel's only route link — recovery, where a forgotten password goes now that this screen refuses to
@@ -59,6 +62,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(changePassword).mockResolvedValue(undefined)
   vi.mocked(isRememberSupported).mockReturnValue(false)
+  switchedOn.clear()
   vi.mocked(pwnedCount).mockResolvedValue(0)
 })
 
@@ -174,5 +178,42 @@ describe('ChangePasswordPanel — the password floor', () => {
     await flushPromises()
     expect(changePassword).toHaveBeenCalledOnce()
     expect(pwnedCount).toHaveBeenCalledOnce()
+  })
+})
+
+describe('ChangePasswordPanel — the re-enrol offer after a change', () => {
+  // The offer enrols a password-less DEVICE_KEY wrap, so only `core.remember-device.passwordless` (and this browser's
+  // support) gates it: its parent leaf alone does not, because the server ANDs the path (ADR 0088 decision 2).
+  async function changeDone(): Promise<ReturnType<typeof mount>> {
+    const w = mount(ChangePasswordPanel, { global: { plugins: [realI18n()], stubs } })
+    await flushPromises()
+    const pw = passwords(w)
+    await pw[0].setValue('the-current-one')
+    await pw[1].setValue('0123456789')
+    await pw[2].setValue('0123456789')
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await flushPromises()
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(changePassword).toHaveBeenCalledOnce()
+    return w
+  }
+  const offered = (w: ReturnType<typeof mount>) => w.text().includes(t('changePassword.rememberDevice'))
+
+  it('is offered where the browser supports it and the passwordless leaf is on', async () => {
+    vi.mocked(isRememberSupported).mockReturnValue(true)
+    switchedOn.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    expect(offered(await changeDone())).toBe(true)
+  })
+
+  it('is not offered with the passwordless leaf off, even if its parent and the browser allow it', async () => {
+    vi.mocked(isRememberSupported).mockReturnValue(true)
+    switchedOn.add(CORE_REMEMBER_DEVICE)
+    expect(offered(await changeDone())).toBe(false)
+  })
+
+  it('is not offered where the browser cannot hold a device key — the control on the leaf being on', async () => {
+    switchedOn.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    expect(offered(await changeDone())).toBe(false)
   })
 })

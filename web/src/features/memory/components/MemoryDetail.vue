@@ -30,6 +30,7 @@ import Tab from 'primevue/tab'
 import TabPanels from 'primevue/tabpanels'
 import TabPanel from 'primevue/tabpanel'
 import type { TreeNode } from '../../../core/node/tree'
+import type { NodeShareOffer } from '../../../core/applications/registry'
 import { hasDerivatives, originalMediaType, isVideoMediaType, type MediaItem } from '../media'
 import { useMemoryDate } from '../useMemoryDate'
 import { useMemoryLocation } from '../useMemoryLocation'
@@ -88,7 +89,7 @@ const emit = defineEmits<{
   delete: []
   openChapter: [node: TreeNode]
   createChapter: []
-  share: []
+  share: [offer: NodeShareOffer]
   shareUpload: []
   metaUpdated: [NodeMetaUpdate]
   /** The cover tile: open core's cover dialog (the host mounts it). */
@@ -112,7 +113,7 @@ const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null
  *  with fewer entries. The uploader (drop-box) link is its own action with its own dialog (no role switcher). */
 const headerActions = computed<NodeHeaderAction[]>(() => [
   { id: 'upload', label: t('media.upload'), icon: 'pi pi-cloud-upload', severity: 'primary', shown: can.value.upload, disabled: !props.memoryKey, onClick: () => triggerUpload() },
-  { id: 'share', label: t('share.share'), icon: 'pi pi-share-alt', shown: can.value.share, disabled: !props.memoryKey, onClick: () => emit('share') },
+  { id: 'share', label: t('share.share'), icon: 'pi pi-share-alt', shown: can.value.share, disabled: !props.memoryKey, onClick: () => emit('share', { contribute: can.value.shareContribute }) },
   { id: 'shareUpload', label: t('share.uploadRequest'), icon: 'pi pi-user-plus', shown: can.value.shareUpload, disabled: !props.memoryKey, onClick: () => emit('shareUpload') },
   // Who was there (ADR 0083, owner decision 2026-10-14): the picker opens from here, not from the row under the title. Shown by
   // `participants` (a member's alone, fail-closed) where the list may be written - never in a personal scope, never during a

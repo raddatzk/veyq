@@ -23,9 +23,9 @@ vi.mock('./onboardTail', async (importOriginal) => ({
   runOnboardTail: vi.fn(),
 }))
 vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRememberSupported: vi.fn() }))
-const capable = vi.fn(() => true)
+const capable = vi.fn((_id: string) => true)
 vi.mock('../../../shared/state/useCapabilities', () => ({
-  useCapabilities: () => ({ hasCapability: () => capable() }),
+  useCapabilities: () => ({ hasCapability: (id: string) => capable(id) }),
 }))
 
 import JoinDeviceCard from './JoinDeviceCard.vue'
@@ -34,6 +34,7 @@ import { runOnboardTail, OnboardTailError } from './onboardTail'
 import { isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { readTransportAnswer, checkNumber, sealGrant, channelKeys, mintPairingSecret, type PairingGrant } from './pairing'
 import { realI18n, t } from '../../../test/i18n'
+import { CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../../platform/capabilities'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -158,6 +159,24 @@ describe('JoinDeviceCard — the device being let in (uc.account.onboard-device,
       expect(tail.mock.calls[0][1]).toBe(stay)
       w.unmount()
     }
+  })
+
+  it('asks only where core.remember-device.passwordless is on — its parent leaf alone does not offer a DEVICE_KEY wrap (ADR 0088 decision 11)', async () => {
+    rememberSupported.mockReturnValue(true)
+    capable.mockImplementation((id) => id !== CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    const off = mountCard()
+    expect(off.find('#join-stay').exists()).toBe(false)
+    await started(off)
+    await grantArrives(off)
+    expect(tail.mock.calls[0][1]).toBe(false)
+    off.unmount()
+
+    // the control on the same predicate: switch the OTHER leaf off instead and the question is put
+    vi.clearAllMocks()
+    capable.mockImplementation((id) => id !== CORE_REMEMBER_DEVICE)
+    const on = mountCard()
+    expect(on.find('#join-stay').exists()).toBe(true)
+    await started(on)
   })
 
   it('does not ask where it cannot honour the answer, and then takes the only reachable tier', async () => {

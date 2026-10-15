@@ -52,8 +52,6 @@ div.veyq-node-host
               "Memories"
             button.p-tab [role="tab"]
               "Depot"
-            button.p-tab [role="tab"]
-              "Drop boxes"
             span.p-tablist-active-bar [role="presentation"]
         button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
           svg.p-icon

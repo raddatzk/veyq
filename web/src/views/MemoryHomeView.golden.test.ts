@@ -68,7 +68,7 @@ import type { TreeNode } from '../core/node/tree'
 import { setViewMode, type ViewMode } from '../shared/state/useViewMode'
 import { setLevelTab } from '../shared/state/useLevelTab'
 import { capabilityState } from '../shared/state/capabilities'
-import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
+import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n } from '../test/i18n'
@@ -140,7 +140,7 @@ beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(isFavorite).mockImplementation((id) => id === uid('Solo')) // one favourite, so both pin states show
   treeStore.nodes = TREE.map((n) => ({ ...n }))
-  capabilityState.ids = [SHARING_PUBLIC_LINKS]
+  capabilityState.ids = [CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
   activeSpace.deletedAt = null
   activeSpace.purgeAfter = null
 })

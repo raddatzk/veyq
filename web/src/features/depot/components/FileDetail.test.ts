@@ -77,14 +77,14 @@ const sealedBlob = (size: number) => {
 const BLOB = sealedBlob(123_456)
 let listFiles: ReturnType<typeof stubApi<typeof filesApi, 'listFiles'>>['listFiles']
 
-function mountDetail(o: { pending?: boolean; publicLinks?: boolean; identityFolder?: boolean; file?: TreeNode } = {}) {
+function mountDetail(o: { pending?: boolean; publicShares?: boolean; identityFolder?: boolean; file?: TreeNode } = {}) {
   const epochs = epochsOf(v1.randomBytes(32))
   const file = o.file ?? REPORT
   const tree = memberTreeOf(() => [DOCS, file], { scopeId: SCOPE, epochs })
   return mount(FileDetail, {
     props: {
       node: file, scopeId: SCOPE, epochs, contentKey: keyFor(file.id), children: { folders: [], byKind: new Map() },
-      access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: o.pending ?? false, publicLinks: o.publicLinks ?? true }),
+      access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: o.pending ?? false, publicShares: o.publicShares ?? true }),
       tree: { ...tree, inIdentityFolder: () => o.identityFolder ?? false },
     },
     global: { plugins: [realI18n()], directives: { tooltip: {} } },
@@ -254,7 +254,7 @@ describe('an opened file: its page for a member', () => {
   })
 
   it('no share without the instance\'s public links; during a pending deletion it downloads and lists links, writes nothing', async () => {
-    const off = mountDetail({ publicLinks: false })
+    const off = mountDetail({ publicShares: false })
     await flushPromises()
     expect(byLabel(off, t('share.share')).exists()).toBe(false)
     const pending = mountDetail({ pending: true })

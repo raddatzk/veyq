@@ -27,13 +27,16 @@ import { activeSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 import { listMyGroups, listMyTenants, type GroupSpace } from '../features/spaces/scopes'
 import { useCapabilities } from '../shared/state/useCapabilities'
-import { SPACES_GROUPS } from '../features/platform/capabilities'
+import { CORE_DEVICE_LINKING, CORE_GROUP_SPACE } from '../features/platform/capabilities'
 
 type NavItem = { id: string; label: string; icon: string }
 type NavCategory = { key: string; label: string; items: NavItem[]; collapsible: boolean; create?: { label: string; run: () => void }; empty?: string }
 
 const { t } = useI18n()
 const { hasCapability } = useCapabilities()
+// Adding a device (uc.account.onboard-device) needs the instance's `core.device-linking`: the server refuses every
+// /api/pairing/* call without it.
+const deviceLinking = hasCapability(CORE_DEVICE_LINKING)
 const route = useRoute()
 const router = useRouter()
 
@@ -103,8 +106,9 @@ const categories = computed<NavCategory[]>(() => {
         { id: 'password', label: t('settings.password'), icon: 'pi pi-key' },
         // Adding a device (uc.account.onboard-device) sits beside the sessions it produces. The route's own
         // `requiresUnlock: true` is the gate and it is the correct one here: the granting device is unlocked by
-        // premise — it seals the Master Key it is holding.
-        { id: 'pairing', label: t('pairing.navTitle'), icon: 'pi pi-qrcode' },
+        // premise — it seals the Master Key it is holding. Offered only where the instance links devices at all
+        // (`core.device-linking`); off, its address leads back to /settings like any hidden section (`isHidden`).
+        ...(deviceLinking ? [{ id: 'pairing', label: t('pairing.navTitle'), icon: 'pi pi-qrcode' }] : []),
         // Replacing the account's keys after a compromise (uc.account.rotate-keys). It sits below the rubric
         // whose failure it answers — a device trusted by mistake, a session that revoking cannot reach — because
         // that is the order the person arrives in. The route's `requiresUnlock: true` is the
@@ -144,9 +148,9 @@ const categories = computed<NavCategory[]>(() => {
       label: t('shell.groups'),
       collapsible: true,
       empty: t('groups.noneOwned'),
-      // Group creation is gated on the `spaces.groups` capability (ADR 0032): a personal-only instance disables
-      // it, so the create affordance is dropped (owned groups stay listed/manageable — only creation is gated).
-      ...(hasCapability(SPACES_GROUPS)
+      // Group creation is gated on the `core.group-space` capability (ADR 0032, ADR 0088): a personal-only instance
+      // disables it, so the create affordance is dropped (owned groups stay listed/manageable — only creation is gated).
+      ...(hasCapability(CORE_GROUP_SPACE)
         ? { create: { label: t('shell.groupCreate'), run: () => { createGroupOpen.value = true } } }
         : {}),
       // A group in pending-deletion (cr-0090) is badged with a trash icon so the roster shows it's on its way out.
@@ -170,16 +174,19 @@ const hasSection = computed(() => Boolean(route.params.section))
 
 // A section the caller may not see is not offered in the rail, and its address does not open it either: it leads back to
 // /settings (which, on a wide screen, opens the default section). Judged only once the answers are in: the owner-only pages
-// (mail, storage) need the tenant role, a trust reset needs a refused document, a group page needs the group to be the caller's.
+// (mail, storage) need the tenant role, a trust reset needs a refused document, a group page needs the group to be the caller's;
+// adding a device needs the instance's `core.device-linking`, known at mount.
 const OWNER_ONLY = new Set(['mail', 'storage'])
 const isHidden = (id: string): boolean =>
-  OWNER_ONLY.has(id)
-    ? !isTenantOwner.value
-    : id === 'trust-reset'
-      ? !trustRefused.value
-      : id.startsWith('group-')
-        ? !ownedGroups.value.some((g) => `group-${g.scopeId}` === id)
-        : false
+  id === 'pairing'
+    ? !deviceLinking
+    : OWNER_ONLY.has(id)
+      ? !isTenantOwner.value
+      : id === 'trust-reset'
+        ? !trustRefused.value
+        : id.startsWith('group-')
+          ? !ownedGroups.value.some((g) => `group-${g.scopeId}` === id)
+          : false
 // The page itself is not mounted while it is hidden (it would ask the server for what it may not read) - nor, for the
 // pages that depend on an answer still on its way, before that answer is in.
 const detailVisible = computed(() => !isHidden(activeId.value) && (settled.value || !OWNER_ONLY.has(activeId.value)))

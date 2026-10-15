@@ -45,11 +45,12 @@ beforeEach(() => {
 
 describe('Access: the two shapes', () => {
   it('a member carries its scope, its keys, its pending deletion and the instance\'s sharing switches — nothing of a link', () => {
-    const a = memberAccess({ scopeId: 's', epochs: EPOCHS, readonly: true, publicLinks: true, uploaderLinks: false })
-    expect(a).toEqual({ mode: 'member', scopeId: 's', epochs: EPOCHS, readonly: true, publicLinks: true, uploaderLinks: false })
+    const a = memberAccess({ scopeId: 's', epochs: EPOCHS, readonly: true, publicShares: true, publicSharesContribute: false, publicSharesDropBox: true })
+    expect(a).toEqual({ mode: 'member', scopeId: 's', epochs: EPOCHS, readonly: true, publicShares: true, publicSharesContribute: false, publicSharesDropBox: true })
+    // One boolean per register leaf (ADR 0088), each from one manifest id: no field is an AND of two.
     expectTypeOf<MemberAccess>().toEqualTypeOf<{
       readonly mode: 'member'; readonly scopeId: string; readonly epochs: EpochKeys | null; readonly readonly: boolean
-      readonly publicLinks: boolean; readonly uploaderLinks: boolean
+      readonly publicShares: boolean; readonly publicSharesContribute: boolean; readonly publicSharesDropBox: boolean
     }>()
   })
 
@@ -186,22 +187,26 @@ describe('targetOf: the node as a capability is asked about it', () => {
 // Core's matrix for FOLDER (`folderCapabilities`). Every row names the rights it grants; every other right must be
 // false — so a right that turns true by accident (a default flipped, a role or kind falling through) is red.
 describe('folderCapabilities: core\'s fail-closed matrix', () => {
-  const NONE: FolderCapabilities = { navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, nodeTrash: false, move: false }
+  const NONE: FolderCapabilities = { navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, shareContribute: false, nodeTrash: false, move: false }
   const at = (kind: string | null, o: Partial<CapabilityTarget> = {}): CapabilityTarget => ({ kind, inIdentityFolder: false, shareable: kind === FOLDER_KIND, ...o })
   const grants = (...keys: (keyof FolderCapabilities)[]) => ({ ...NONE, ...Object.fromEntries(keys.map((k) => [k, true])) })
   const member = memberAccessOf()
   const pending = memberAccessOf({ readonly: true })
-  const noLinks = memberAccessOf({ publicLinks: false })
+  // `core.public-shares` off: by the server's AND along the path its two children are absent from the manifest too.
+  const noLinks = memberAccessOf({ publicShares: false, publicSharesContribute: false, publicSharesDropBox: false })
+  // Only `core.public-shares.contribute` off: READ links stay, the contribute role is not offered.
+  const noContribute = memberAccessOf({ publicSharesContribute: false })
 
   const rows: [string, Access, CapabilityTarget, FolderCapabilities][] = [
     // member
     ['member at the scope root', member, at(null), grants('navigate', 'createFolder', 'nodeTrash')],
-    ['member in a folder', member, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'nodeTrash', 'move')],
-    ['member in a folder at the scope root\'s top level', member, at(FOLDER_KIND, { parentKind: null }), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'nodeTrash', 'move')],
+    ['member in a folder', member, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'shareContribute', 'nodeTrash', 'move')],
+    ['member in a folder at the scope root\'s top level', member, at(FOLDER_KIND, { parentKind: null }), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'shareContribute', 'nodeTrash', 'move')],
     ['member in a folder, public links off', noLinks, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'nodeTrash', 'move')],
+    ['member in a folder, contribute off: shares, offers no READ_WRITE', noContribute, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'nodeTrash', 'move')],
     ['member in a folder, kind not shareable', member, at(FOLDER_KIND, { shareable: false }), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'nodeTrash', 'move')],
     ['member, pending deletion, root', pending, at(null), grants('navigate')],
-    ['member, pending deletion, folder (links are a read)', pending, at(FOLDER_KIND), grants('navigate', 'share')],
+    ['member, pending deletion, folder (links are a read)', pending, at(FOLDER_KIND), grants('navigate', 'share', 'shareContribute')],
     // a member's move OUT of a drop box is the identity folder's one placement (inbox #358, #377 (a))
     ['member in a guest\'s identity folder: moves it out', member, at(FOLDER_KIND, { inIdentityFolder: true }), grants('navigate', 'move')],
     ['member, pending deletion, identity folder', pending, at(FOLDER_KIND, { inIdentityFolder: true }), grants('navigate')],
@@ -231,7 +236,7 @@ describe('folderCapabilities: core\'s fail-closed matrix', () => {
         for (const inIdentityFolder of [false, true]) {
           for (const parentKind of [undefined, null, FOLDER_KIND, 'ALPHA']) {
             const c = folderCapabilities(guestAccessOf(role), { kind, inIdentityFolder, shareable: true, parentKind })
-            expect([c.rename, c.deleteNode, c.share, c.nodeTrash]).toEqual([false, false, false, false])
+            expect([c.rename, c.deleteNode, c.share, c.shareContribute, c.nodeTrash]).toEqual([false, false, false, false, false])
             // a move only for READ_WRITE, only of a folder a folder holds, never in an identity folder (#358, #377 (a))
             const mayMove = role === 'READ_WRITE' && kind === FOLDER_KIND && !inIdentityFolder && parentKind === FOLDER_KIND
             expect(c.move, `${role} at ${kind} in ${parentKind}, identity ${inIdentityFolder}`).toBe(mayMove)

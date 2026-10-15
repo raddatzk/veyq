@@ -91,10 +91,14 @@ export const treeNode = (o: Partial<TreeNode> = {}): TreeNode => ({
   ...o,
 })
 
-/** A member's `Access` (core/access.ts): an unlocked scope, not pending deletion, public and uploader links on — a test
- *  passes only what it is about. */
+/** A member's `Access` (core/access.ts): an unlocked scope, not pending deletion, every public-share leaf on (READ,
+ *  contribute, drop box) — a test passes only what it is about. */
 export const memberAccessOf = (o: Partial<Omit<MemberAccess, 'mode'>> = {}): MemberAccess =>
-  memberAccess({ scopeId: 'scope-1', epochs: null, readonly: false, publicLinks: true, uploaderLinks: true, ...o })
+  memberAccess({
+    scopeId: 'scope-1', epochs: null, readonly: false,
+    publicShares: true, publicSharesContribute: true, publicSharesDropBox: true,
+    ...o,
+  })
 
 /** A share guest's `Access` with `role` (an unknown token too, as a server could send one): the head is a stub — a
  *  capability reads the role alone. */

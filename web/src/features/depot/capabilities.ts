@@ -4,7 +4,7 @@
 // `docs/apps/depot.md` § Guests (ADR 0080 decision 6); this is its code. Every field defaults to false: an unknown mode,
 // role or kind grants nothing.
 import { FOLDER_KIND } from '../../core/node/kind'
-import { folderCapabilities, type Access, type CapabilityTarget } from '../../core/access'
+import { folderCapabilities, type Access, type CapabilityTarget, type MemberAccess } from '../../core/access'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 
 export interface DepotCapabilities {
@@ -19,10 +19,13 @@ export interface DepotCapabilities {
   rename: boolean
   /** Delete a file (into the scope's trash) — also a guest's folder of a drop box. */
   deleteFile: boolean
-  /** Create a drop box at this level. */
+  /** Create a drop box at this level (needs `core.public-shares.drop-box`: the server refuses the node without it). */
   createDropBox: boolean
-  /** Manage the drop box's (WRITE_ONLY) links. */
+  /** Manage the node's public links: an opened file's READ / READ_WRITE ones, a drop box's WRITE_ONLY ones. */
   share: boolean
+  /** The file's share dialog offers the READ_WRITE (contribute) role for a new link (`core.public-shares.contribute`). A
+   *  drop box's dialog has no role to offer, so it is false there. */
+  shareContribute: boolean
   /** Delete the drop box on screen. */
   deleteNode: boolean
   /** Move a file of the level elsewhere — also a guest's folder out of a drop box (core's `MoveNodeDialog`, inbox #358). */
@@ -39,6 +42,7 @@ export const NO_DEPOT_CAPABILITIES: Readonly<DepotCapabilities> = Object.freeze(
   deleteFile: false,
   createDropBox: false,
   share: false,
+  shareContribute: false,
   deleteNode: false,
   moveFile: false,
   moveNode: false,
@@ -49,13 +53,13 @@ export const NO_DEPOT_CAPABILITIES: Readonly<DepotCapabilities> = Object.freeze(
  *  file (`FileDetail`: the page of one file, the root of a single-file link included). On an opened file `replace`,
  *  `rename`, `share`, `deleteNode` and `moveNode` are about THAT file. */
 export function depotCapabilities(access: Access, at: CapabilityTarget): DepotCapabilities {
-  if (access.mode === 'member') return memberCapabilities(access.readonly, access.publicLinks, at)
+  if (access.mode === 'member') return memberCapabilities(access, at)
   if (access.mode === 'guest') return guestCapabilities(access.role, at)
   return NO_DEPOT_CAPABILITIES
 }
 
-function memberCapabilities(readonly: boolean, publicLinks: boolean, at: CapabilityTarget): DepotCapabilities {
-  const write = !readonly
+function memberCapabilities(access: MemberAccess, at: CapabilityTarget): DepotCapabilities {
+  const write = !access.readonly
   // Nothing is placed in a guest's identity folder (a server placement rule), but a member removes what a guest sent,
   // file by file (inbox #391), and moves it out (a move out of a drop box is a member's, inbox #377 (a); the move dialog
   // offers no identity folder as a destination).
@@ -68,7 +72,7 @@ function memberCapabilities(readonly: boolean, publicLinks: boolean, at: Capabil
       replace: place,
       rename: place,
       deleteFile: write,
-      createDropBox: place,
+      createDropBox: place && access.publicSharesDropBox,
       moveFile: write,
     }
   }
@@ -76,23 +80,26 @@ function memberCapabilities(readonly: boolean, publicLinks: boolean, at: Capabil
     // The opened file: what its row offers, plus its own share (not in a guest's identity folder, where the guest's
     // folder is the owner's to delete or move out only) and delete/move of itself. Download stays during a pending
     // deletion; a share's links are a read there, like a drop box's.
+    const shareable = at.shareable && !at.inIdentityFolder
     return {
       ...NO_DEPOT_CAPABILITIES,
       download: true,
       replace: place,
       rename: place,
-      share: publicLinks && at.shareable && !at.inIdentityFolder,
+      share: access.publicShares && shareable,
+      shareContribute: access.publicSharesContribute && shareable,
       deleteNode: write,
       moveNode: write,
     }
   }
   if (at.kind === DROPBOX_KIND) {
     // A drop box's listing and links stay readable during a pending deletion; deleting or moving it, or a guest's folder
-    // (out of it: the folder's identity ends, ADR 0080 decision 11), is a write.
+    // (out of it: the folder's identity ends, ADR 0080 decision 11), is a write. Its links are WRITE_ONLY ones, so its
+    // share needs the drop-box leaf, not the READ one.
     return {
       ...NO_DEPOT_CAPABILITIES,
       download: true,
-      share: publicLinks && at.shareable,
+      share: access.publicSharesDropBox && at.shareable,
       deleteFile: write,
       deleteNode: write,
       moveFile: write,

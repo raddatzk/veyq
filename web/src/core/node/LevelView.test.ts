@@ -45,17 +45,17 @@ function node(id: string, kind: NodeKind, parentId: string | null = null, over: 
 
 const TRIPS = node('Trips', FOLDER_KIND)
 /** The level as a member sees it. `pending`: the scope is pending deletion (`access.readonly`); `identityFolder`: the folder
- *  is a guest's identity folder (what the member's tree answers); `publicLinks`: the instance offers public links. */
+ *  is a guest's identity folder (what the member's tree answers); `publicShares`: the instance offers public links. */
 function mountLevel(
   tree: TreeNode[],
-  over: { folder?: TreeNode | null; pending?: boolean; identityFolder?: boolean; publicLinks?: boolean; folderName?: string; liveTick?: number; unlocked?: boolean } = {},
+  over: { folder?: TreeNode | null; pending?: boolean; identityFolder?: boolean; publicShares?: boolean; folderName?: string; liveTick?: number; unlocked?: boolean } = {},
 ) {
   const folder = over.folder ?? null
   const source = memberTreeOf(() => tree)
   return mount(LevelView, {
     props: {
       folder, level: childrenOf(tree, folder?.id ?? null),
-      access: memberAccessOf({ readonly: over.pending ?? false, publicLinks: over.publicLinks ?? false, epochs: over.unlocked ? epochsOf(new Uint8Array(32)) : null }),
+      access: memberAccessOf({ readonly: over.pending ?? false, publicShares: over.publicShares ?? false, epochs: over.unlocked ? epochsOf(new Uint8Array(32)) : null }),
       tree: { ...source, inIdentityFolder: () => over.identityFolder ?? false },
       folderName: over.folderName,
       liveTick: over.liveTick,
@@ -290,7 +290,7 @@ describe('LevelView: the folder header', () => {
   })
 
   it('shows the share button on a shareable folder and emits share', async () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true })
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true })
     expect(shareButton(w).exists()).toBe(true)
     expect(shareButton(w).find('.pi-share-alt').exists()).toBe(true)
     await shareButton(w).trigger('click')
@@ -298,7 +298,7 @@ describe('LevelView: the folder header', () => {
   })
 
   it('shows none when the instance offers no public links', () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: false })
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: false })
     expect(shareButton(w).exists()).toBe(false)
     expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card actions render').toBe(true)
   })
@@ -315,7 +315,7 @@ describe('LevelView: the folder header', () => {
   // memory.css hid at 721–1120 px and ≤ 720 px — and this card has no overflow menu to offer them instead. jsdom has no
   // layout, so the contract pinned is the DOM one: no width-hiding class on any of them.
   it('keeps share, rename, move and delete free of any width-hiding class (the card has no overflow menu)', () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true })
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true })
     const actions = w.findAll('.veyq-node-header-actions button')
     expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete')])
     for (const b of actions) {
@@ -325,7 +325,7 @@ describe('LevelView: the folder header', () => {
   })
 
   it('keeps the share (a read of the links) but no rename/delete during a pending deletion', () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true, pending: true })
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true, pending: true })
     expect(shareButton(w).exists()).toBe(true)
     expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists()).toBe(false)
   })
@@ -333,7 +333,7 @@ describe('LevelView: the folder header', () => {
   // A guest's identity folder (inbox #385): a member looks, downloads and deletes there — the folder itself offers no
   // share, rename or delete; its one action is the move OUT of the drop box (inbox #358, #377 (a)).
   it('offers only the move out on a guest\'s identity folder', async () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true, identityFolder: true })
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true, identityFolder: true })
     const actions = w.findAll('.veyq-node-header-actions button')
     expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('node.move.action')])
     await actions[1].trigger('click')
@@ -341,7 +341,7 @@ describe('LevelView: the folder header', () => {
   })
 
   it('offers no move during a pending deletion', () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true, pending: true })
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true, pending: true })
     expect(w.find(`button[aria-label="${t('node.move.action')}"]`).exists()).toBe(false)
   })
 })

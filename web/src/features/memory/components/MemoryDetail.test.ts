@@ -61,7 +61,7 @@ function stubDeriver(): MediaDeriver {
 
 function mountDetail(memoryKey: Uint8Array, props: Partial<Record<string, unknown>> = {}) {
   return mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicLinks: false }), ...props },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicShares: false }), ...props },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
 }
@@ -434,7 +434,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
       template: `<button class="stub-save" @click="$emit('save', { mode: 'single', from: '2026-06-15', to: '2026-06-15' })" />`,
     }
     const wrapper = mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicLinks: false }) },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicShares: false }) },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryDateEditor: DateEditorStub } },
     })
     await flushPromises()
@@ -471,7 +471,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   function mountWithLocationStub(memoryKey: Uint8Array, wrappedMeta: string | null) {
     setMapsConsent(true) // skip the consent dialog — go straight into the (stubbed) editor
     return mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicLinks: false }) },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicShares: false }) },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub } },
     })
   }
@@ -665,7 +665,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     setMapsConsent(false)
     const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dlg"><slot /></div>' }
     const wrapper = mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), caps: memberMemoryCaps({ publicLinks: false }) },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), caps: memberMemoryCaps({ publicShares: false }) },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub, Dialog: DialogStub } },
     })
     await flushPromises()
@@ -705,7 +705,7 @@ describe('share actions on a chapter', () => {
   })
 
   it('shows neither when the instance offers no public links (live control above)', async () => {
-    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, caps: memberMemoryCaps({ publicLinks: false }, CHAPTER_KIND) })
+    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, caps: memberMemoryCaps({ publicShares: false, publicSharesDropBox: false }, CHAPTER_KIND) })
     await flushPromises()
     expect(wrapper.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
     expect(wrapper.find(`button[aria-label="${t('share.uploadRequest')}"]`).exists()).toBe(false)

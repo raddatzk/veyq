@@ -10,7 +10,7 @@ import { startGrantEnvelopePolling, stopGrantEnvelopePolling } from './grantEnve
 import { runOnboardTail, OnboardTailError } from './onboardTail'
 import { isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { useCapabilities } from '../../../shared/state/useCapabilities'
-import { ACCOUNT_DEVICE_TRUST } from '../../platform/capabilities'
+import { CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../../platform/capabilities'
 import { isHttpStatus, HttpStatus } from '../../../shared/httpError'
 import type * as v1 from '@veyq/crypto/v1'
 
@@ -34,10 +34,11 @@ export function useGrantReceiver<S extends string>(initial: S) {
    *  grant is unreadable without it. */
   const transportKey: v1.Identity = mintTransportKey()
 
-  // The same gate the sign-in form puts on its own "remember me" (ADR 0032): without IndexedDB or with device
-  // trust switched off instance-wide there is nowhere to enrol a wrap, so the question is not asked — and the
-  // declined arm is then the only reachable tier (ADR 0005 §22).
-  const staySupported = isRememberSupported() && hasCapability(ACCOUNT_DEVICE_TRUST)
+  // The same gate the sign-in form puts on its own "remember me" (ADR 0032): a linked device enrols only a DEVICE_KEY
+  // wrap (ADR 0059), so without IndexedDB or with `core.remember-device.passwordless` off there is nowhere to enrol one,
+  // the question is not asked, and the device gets a session and no stored key (ADR 0088 decision 11; the declined arm
+  // of ADR 0005 §22).
+  const staySupported = isRememberSupported() && hasCapability(CORE_REMEMBER_DEVICE_PASSWORDLESS)
   const stay = ref(false)
   /** ADR 0059 §2 / ADR 0004 § web refresh cookie lifetimes: answered HERE, before the session exists, because
    *  adoption fixes the lifetime and no later refresh can move it. It is also ADR 0005 §22's tier choice. */

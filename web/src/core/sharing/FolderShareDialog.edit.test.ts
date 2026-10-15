@@ -48,10 +48,10 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
   ...over,
 })
 
-function mountDialog() {
+function mountDialog(extra: { contribute?: boolean } = { contribute: true }) {
   return mount(FolderShareDialog, {
     attachTo: document.body,
-    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeName: 'Trips', nodeKind: 'FOLDER' },
+    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
     global: {
       plugins: [realI18n(), PrimeVue],
       stubs: {
@@ -91,6 +91,18 @@ describe('FolderShareDialog — edit a link in place (#364)', () => {
     await flushPromises()
     const rows = w.findAll('.folder-share-row')
     expect(rows.map((r) => r.find(`button[aria-label="${t('share.edit')}"]`).exists())).toEqual([true, false, false])
+  })
+
+  it.each([
+    [ShareRole.ReadWrite, [t('share.roleViewer'), t('share.folder.roleContributor')]],
+    [ShareRole.Read, [t('share.roleViewer')]], // control: the same dialog on a READ link offers no contributor role
+  ])('without contribute (core.public-shares.contribute off), the edit of a %s link offers %j: a switch refuses only what is new', async (role, offered) => {
+    listSharesFor.mockResolvedValue([row({ role })])
+    const w = mountDialog({})
+    await flushPromises()
+    click(byLabel(w, t('share.edit'))[0].element)
+    await flushPromises()
+    expect(w.findAll('.folder-share-roles button').map((b) => b.text())).toEqual(offered)
   })
 
   it('opens the form pre-filled from the link and saves it with updateShare on the same link — no new link', async () => {

@@ -36,7 +36,7 @@ import { listMyTenants } from '../features/spaces/scopes'
 import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
 import { ScopeKind, type MyTenant } from '../api/generated/scopes'
 import { useCapabilities } from '../shared/state/useCapabilities'
-import { SHARING_PUBLIC_LINKS, SHARING_UPLOADER_LINKS } from '../features/platform/capabilities'
+import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
 import type { TreeNode } from '../core/node/tree'
 import Message from 'primevue/message'
 import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
@@ -54,7 +54,7 @@ import type { ImportOffer } from '../core/export/importSource'
 import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
 import MoveNodesDialog from '../core/node/MoveNodesDialog.vue'
 import { nodeMover } from '../core/node/move'
-import { registry } from '../core/applications/registry'
+import { registry, type NodeShareOffer } from '../core/applications/registry'
 import { favoritesStore, loadFavoritesFor } from '../core/favorites/favoritesStore'
 import { memberAccess, memberTreeSource } from '../core/access'
 import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
@@ -121,7 +121,7 @@ const shareDialog = computed(() => {
 })
 // A share dialog opens only for a node whose kind descriptor says it is shareable AND brings a share dialog (cr-0104; the
 // backend refuses a share root of a kind no application declares). Whether the share BUTTON shows is the capability
-// function's (the `sharing.public-links` capability, ADR 0032: an operator can turn public sharing off instance-wide,
+// function's (the `core.public-shares` register leaves, ADR 0032/0088: an operator can turn public sharing off instance-wide,
 // and the server then rejects createShare with 422); this is the host's second gate on what it mounts.
 const kindShareable = computed(() => {
   if (!currentNode.value) return false
@@ -137,8 +137,10 @@ const access = computed(() =>
     scopeId: activeSpace.scopeId ?? '',
     epochs: epochs.value,
     readonly: isPendingDeletion.value,
-    publicLinks: hasCapability(SHARING_PUBLIC_LINKS),
-    uploaderLinks: hasCapability(SHARING_UPLOADER_LINKS),
+    // One manifest id per leaf, never an AND here: the server computes the AND along the path (ADR 0088 decision 2).
+    publicShares: hasCapability(CORE_PUBLIC_SHARES),
+    publicSharesContribute: hasCapability(CORE_PUBLIC_SHARES_CONTRIBUTE),
+    publicSharesDropBox: hasCapability(CORE_PUBLIC_SHARES_DROP_BOX),
   }),
 )
 const tree = memberTreeSource({
@@ -148,6 +150,13 @@ const tree = memberTreeSource({
   scope: () => currentScope.value,
 })
 const shareVisible = ref(false)
+// What the capability function that showed the share button grants the dialog beyond sharing at all (`NodeShareOffer`):
+// handed to the dialog as props, so no dialog reads a capability itself. Fail closed until a `share` emit sets it.
+const shareOffer = ref<NodeShareOffer>({ contribute: false })
+function openShare(offer: NodeShareOffer) {
+  shareOffer.value = offer
+  shareVisible.value = true
+}
 const uploaderVisible = ref(false) // the uploader (drop-box) variant of the same dialog — a separate detail action
 
 // At most one name dialog is open: core's folder-create/rename one, or the create dialog of the kind being created.
@@ -384,7 +393,7 @@ async function onDeleteDone() {
         @copy="startCopy([currentNode])"
         @create-child="startCreate"
         @open-node="openNode"
-        @share="shareVisible = true"
+        @share="openShare"
         @share-upload="uploaderVisible = true"
       />
       <p v-else-if="isOpenable" class="home-state-unsupported">{{ t('home.unsupportedKind') }}</p>
@@ -408,7 +417,7 @@ async function onDeleteDone() {
         @copy-nodes="startCopy"
         @import-archive="importing = $event"
         @open-trash="trashVisible = true"
-        @share="shareVisible = true"
+        @share="openShare"
       />
     </template>
 
@@ -518,6 +527,7 @@ async function onDeleteDone() {
       :epochs="epochs"
       :node-name="currentNode.name"
       :node-kind="currentNode.kind"
+      :contribute="shareOffer.contribute"
       @close="shareVisible = false"
     />
     <!-- The SAME dialog component, uploader variant (no role switcher, uploader shares only) — a separate detail action;

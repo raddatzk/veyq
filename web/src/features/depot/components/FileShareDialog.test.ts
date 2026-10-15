@@ -45,9 +45,9 @@ const stubs = {
   DatePicker: true,
   LocaleMarkdownEditor: true,
 }
-const mountDialog = () =>
+const mountDialog = (extra: { contribute?: boolean } = { contribute: true }) =>
   mount(FileShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: FILE_ID, nodeKey: FILE_KEY, epochs: EPOCHS, nodeName: 'Report.pdf', nodeKind: FILE_KIND },
+    props: { scopeId: SCOPE_ID, nodeId: FILE_ID, nodeKey: FILE_KEY, epochs: EPOCHS, nodeName: 'Report.pdf', nodeKind: FILE_KIND, ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 const byText = (w: ReturnType<typeof mountDialog>, text: string) => w.findAll('button').find((b) => b.text() === text)!
@@ -90,6 +90,13 @@ describe('FileShareDialog', () => {
     await w.find('.opt[data-value="READ_WRITE"]').trigger('click')
     expect(w.text()).toContain(t('depot.share.roleContributorHint'))
     expect(w.text()).not.toContain(t('share.folder.roleContributorHint'))
+  })
+
+  it('offers READ only where the host hands no contribute (control of the test above)', async () => {
+    const w = mountDialog({})
+    await flushPromises()
+    await byText(w, t('share.createNew')).trigger('click')
+    expect(w.findAll('.opt').map((o) => o.attributes('data-value'))).toEqual([ShareRole.Read])
   })
 
   it.each([ShareRole.Read, ShareRole.ReadWrite])('mints a %s link of THE FILE with its own key, and shows the link', async (role) => {

@@ -32,7 +32,10 @@ vi.mock('../features/account/rememberMe/sessionVault', () => ({
   cacheSessionVault: vi.fn(),
   clearSessionVault: vi.fn(),
 }))
-vi.mock('../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: () => true }) }))
+// Every id is on unless a test puts it in `switchedOff`: the view reads each leaf on its own (ADR 0088 decision 3), so a
+// test switches ONE leaf off and the others stay the control.
+const { switchedOff } = vi.hoisted(() => ({ switchedOff: new Set<string>() }))
+vi.mock('../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: (id: string) => !switchedOff.has(id) }) }))
 // `parseKit` mirrors the real contract (a kit payload or `null`) rather than being asserted on: what this file
 // owns is the DISPATCH between the two codes, and the payload formats themselves are pinned in their own
 // modules' tests (`@veyq/crypto/emergencyKit`, and `pairing.test.ts` for D5, both directions).
@@ -71,6 +74,7 @@ import { cacheSessionVault, clearSessionVault } from '../features/account/rememb
 import { revokeOtherSessionFamilies } from '../features/account/sessions/sessions'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { realI18n, t } from '../test/i18n'
+import { CORE_DEVICE_LINKING, CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../features/platform/capabilities'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
 
 const stubs = {
@@ -176,6 +180,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     vi.mocked(clearSessionVault).mockResolvedValue(undefined)
     vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)
     confirmAsk.mockResolvedValue(true)
+    switchedOff.clear()
     // The scan entry is capability-gated on a camera; happy-dom has none, so the control would not render.
     Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn() }, configurable: true })
   })
@@ -285,6 +290,57 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     await flushPromises()
 
     expect(enrolDeviceKey).toHaveBeenCalled()
+  })
+
+  // ADR 0088 decision 11: the toggle and the two wraps are two leaves, each read on its own. Every case switches ONE off and
+  // asserts on the same submit as the positive control above.
+  async function submitOrdinary(w: VueWrapper, remember: boolean) {
+    await fillCredentials(w)
+    if (remember) await turnRememberOn(w)
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+  }
+
+  it('remember-device.passwordless off: no toggle and no DEVICE_KEY wrap, but the password DEVICE wrap is still enrolled', async () => {
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    const w = mountView()
+    await submitOrdinary(w, false)
+    expect(w.find('#remember-me').exists()).toBe(false)
+    expect(enrolDeviceKey).not.toHaveBeenCalled()
+    expect(trustThisDevice).toHaveBeenCalled()
+  })
+
+  it('remember-device off: the toggle stays and enrols its DEVICE_KEY; the toggle-off path enrols no DEVICE wrap', async () => {
+    switchedOff.add(CORE_REMEMBER_DEVICE)
+    const off = mountView()
+    await submitOrdinary(off, false)
+    expect(cacheSessionVault).toHaveBeenCalled() // control: the sign-in itself went through
+    expect(trustThisDevice).not.toHaveBeenCalled()
+
+    vi.clearAllMocks()
+    vi.mocked(isTrusted).mockResolvedValue(false)
+    vi.mocked(enrolDeviceKey).mockResolvedValue('wrap-2')
+    const on = mountView()
+    expect(on.find('#remember-me').exists()).toBe(true)
+    await submitOrdinary(on, true)
+    expect(enrolDeviceKey).toHaveBeenCalled()
+  })
+
+  it('device-linking off: no "sign in with code" entry, and a scanned pairing code is not accepted (the kit still is)', async () => {
+    switchedOff.add(CORE_DEVICE_LINKING)
+    const w = mountView()
+    await fillCredentials(w)
+    expect(buttonLabelled(w, t('pairing.signInEntry'))).toBeUndefined()
+    await scanButton(w)!.trigger('click')
+    const accepts = w.findComponent({ name: 'KitScanner' }).props('accepts') as (t: string) => boolean
+    expect(accepts(`veyqpair:${PAIRING_SECRET}`)).toBe(false)
+    expect(accepts('veyqkit:whatever')).toBe(true) // control: the kit scan is unrelated to linking
+    // …and with the leaf on (the default), both are offered: the control of the three tests above
+    switchedOff.clear()
+    const on = mountView()
+    await fillCredentials(on)
+    expect(buttonLabelled(on, t('pairing.signInEntry'))).toBeDefined()
   })
 
   it('signs this device out too, through the one sign-out', async () => {
