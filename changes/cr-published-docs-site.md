@@ -64,7 +64,7 @@ changes nothing in the image.
 
 ## Phases
 
-- [ ] 1 scaffold — `site/` as an Astro + Starlight project outside the npm workspace, own `package-lock.json`,
+- [x] 1 scaffold — `site/` as an Astro + Starlight project outside the npm workspace, own `package-lock.json`,
       `base: '/veyq/'`, English root locale and `de`, Pagefind search, `docsSchema` extended with `sources:`, the
       three areas as an empty sidebar with one English and one German placeholder page, and a German page
       deliberately missing to see the fallback. `npm run check` in `site/` = `astro check` + build + an internal
