@@ -39,6 +39,7 @@ One meaning per word, in docs, code and the wiki (EN+DE):
 | **revision** | a concurrency or change counter: `metaRevision` (was `metaVersion`), `mediaRevision`, a tree revision | compatibility |
 | **format** | a sealed payload's schema, per node kind, readable forever (ADR 0079 decision 7) | the platform's major |
 | **history** (*Verlauf*) | reserved for a future earlier-contents-of-a-file feature | "versions" of a file |
+| **`K_node`** (identifier `kNode`) | the random content key every node carries — a Memory, a Chapter, a folder, a Depot file or drop box — wrapped under its parent's key (ADR 0012, ADR 0080) | `K_mem`, which named it when only a Memory had a key; the wire labels (seal purposes, derivation info strings) never carried the name and do not change |
 
 **Depot is the second application's name** (*Depot* in English and German alike). It says "where I put things
 safely" without promising more. Its code id follows the product name (`depot`), so the product never has two
@@ -74,6 +75,8 @@ across apps, how a link's key reaches an app safely) belong to the native client
   the wire renames cost no major.
   - `…Capabilities` → `…Rights` (web only).
   - `metaVersion` → `metaRevision` (contract → backend → web, a wire rename).
+  - `K_mem` → `K_node` in prose, contract descriptions, comments and the `kMem` identifiers — no wire label
+    carries it — `changes/cr-k-mem-becomes-k-node.md`.
 - **The cost:** one more word for a reader to learn ("rights" next to "permission"). It pays for itself where
   ADR 0032 §3 needs it most: in a review, "capability" now always means the operator's switch.
 
