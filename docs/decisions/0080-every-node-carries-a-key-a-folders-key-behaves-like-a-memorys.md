@@ -5,7 +5,7 @@
 
 ## Context
 
-[ADR 0012](0012-content-key-hierarchy.md) gives every content node a random `K_mem` wrapped under its parent's key,
+[ADR 0012](0012-content-key-hierarchy.md) gives every content node a random `K_node` wrapped under its parent's key,
 and says "folders carry no key". Names and slug tokens of every node sit under `K_SC` (`web/src/core/node/tree.ts`
 `sealName`), so a holder of one Memory's key reads none of the names below it: `ShareNode` serves no name
 (`contracts/api/sharing.openapi.yaml` ~:1312). A core `FOLDER` therefore cannot be a share root, and Depot
@@ -24,7 +24,7 @@ Memory, an expense and a file side by side).
 
 1. **Every node has a random content key**, `FOLDER` included, wrapped under its parent's content key, or under
    `K_SC` at the node's epoch for a scope-root node. `wrapped_content_key` becomes `NOT NULL`. One key type,
-   recursively, as ADR 0012's *Recursive `K_mem`*.
+   recursively, as ADR 0012's *Recursive `K_node`*.
 2. **A node's directory entry lives under its parent's key.** The `node-name` seal and the slug key
    (`HKDF(parentKey, "veyq/v1/slug-token:" + parentSlot)`) take the parent's content key, `K_SC` at the root.
    Whoever holds a folder's key reads every name and opens every key below it. The slug key is stable per parent key
@@ -38,14 +38,14 @@ Memory, an expense and a file side by side).
    same parent). Seals bind
    (scope, node, epoch, placement version) ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 1); parents stay
    unbound (Decision 4) — the new parent's key is the binding.
-4. **No per-node epochs, no root rotation.** A keyed folder, like `K_mem`, never re-keys
+4. **No per-node epochs, no root rotation.** A keyed folder, like `K_node`, never re-keys
    ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) Context). Revocation stays layer 1:
    server-side, re-issue never revive. Only `K_SC` rotates. The `epoch` of a node matters only for **entries at the scope root**:
    they are sealed and re-sealed at the **current** epoch and the server refuses any other (`409 stale_epoch` on
    create, rename and move whose destination is the root). Off the root an epoch above the current one is refused at
    any destination (`NodesHandler.sealableOffRoot`), a move out of the root stores the epoch it states, and a move
    between non-root parents keeps the stored one.
-5. **Folders inherit the `K_mem` residual, accepted for parity.** A former guest or removed member who kept a
+5. **Folders inherit the `K_node` residual, accepted for parity.** A former guest or removed member who kept a
    folder's key reads everything later created under it, and a group-member removal re-keys no folder. Today that
    reach is one Memory; it widens to a folder subtree. Honest-server revocation is the cut, as ADR 0075 states.
 6. **Tree operations for a guest are core operations behind `ShareGuestGate`; content operations are the
@@ -120,7 +120,7 @@ Memory, an expense and a file side by side).
     `ShareSummary` stay nullable: a tombstoned share clears them (`SharingStore.tombstone`), so the baseline does not
     change.
 13. **Attachments ([#327](../inbox.md)).** A node attachment's `K_blob` is wrapped under its owning node's key,
-   whatever the kind. A chapter's media already work this way: a chapter has its own `K_mem` and `K_blob` hangs under
+   whatever the kind. A chapter's media already work this way: a chapter has its own `K_node` and `K_blob` hangs under
    it (`memoryNodes.ts:29-33`, `media.ts:368-371`), so a chapter share is cryptographically ready. Memories decided
    it: a `CHAPTER` is a share root with all three roles, a smaller Memory link (`MemoriesNodeKinds.SHARE_ROOTS`, which
    `MemoryShareRoots`, `MediaShareGuestWrites` and `MediaUploadAdmission` all answer from; a chapter link's guest

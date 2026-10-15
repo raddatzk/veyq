@@ -54,7 +54,7 @@ sequenceDiagram
   V->>S: GET /api/shares/{id}   X-Share-Password: pwToken
   S->>S: SHA-256(pwToken) == pw_verifier ?
   S-->>V: FULL share (wrap, sealedName, sealedNote, media…)  — or 403 if wrong
-  V->>V: K_mem = unwrap(wrap, K_share from #35;fragment)#59; decrypt
+  V->>V: K_node = unwrap(wrap, K_share from #35;fragment)#59; decrypt
   Note right of S: stores password_required + pw_salt + pw_verifier + sealed_password (ciphertext).<br>Never the raw password, never content.
 ```
 
@@ -69,7 +69,7 @@ sequenceDiagram
   share is non-enumerable regardless of the password.
 - **A4 — curator forgets the password:** they **reveal** it from the manage list (recovering `K_share` from its copy
   under `K_SC`), or **change** it — they are never locked out of their own share. The reveal is for the Memory's
-  scope members only: the holder of another link to the same Memory — who holds `K_mem` — cannot open it even with
+  scope members only: the holder of another link to the same Memory — who holds `K_node` — cannot open it even with
   a database dump (ADR 0036 point 4).
 
 ## Quality notes

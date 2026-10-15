@@ -17,7 +17,7 @@ member renames a shared node, their client re-seals the name of every share on i
   [Scopes & Tenancy](../../crosscutting/scopes-and-tenancy.md).
 - **Decisions:** [ADR 0029](../../decisions/0029-public-viewer-share.md) (the public viewer share — the sealed
   per-share key + the anonymous access path), [ADR 0012](../../decisions/0012-content-key-hierarchy.md) (the
-  `symWrap(K_share, K_mem)` share keying), [ADR 0015](../../decisions/0015-operator-blind-readable-urls.md) (the
+  `symWrap(K_share, K_node)` share keying), [ADR 0015](../../decisions/0015-operator-blind-readable-urls.md) (the
   key in the URL fragment), [ADR 0013](../../decisions/0013-blob-storage-presigned-direct-to-store.md) (gated
   presigned blob reads), [ADR 0026](../../decisions/0026-client-trust-tiers.md) (why an operator-served no-install
   viewer is passive-safe, not operator-proof).
@@ -30,7 +30,7 @@ member renames a shared node, their client re-seals the name of every share on i
   [share-shared-scope](use-cases/uc.sharing.share-shared-scope.md) and ADR 0080)
 - [uc.sharing.share-contributor](use-cases/uc.sharing.share-contributor.md) — **built (web)** (cr-0101: a
   **READ_WRITE** link where an anonymous visitor can **view + add photos** after naming themselves — the name
-  **sealed under `K_mem`** → an anonymous share identity, the buckets hook; direct-append (personal-scope only until share-shared-scope);
+  **sealed under `K_node`** → an anonymous share identity, the buckets hook; direct-append (personal-scope only until share-shared-scope);
   [ADR 0030](../../decisions/0030-contributor-public-share.md))
 - [uc.sharing.share-uploader](use-cases/uc.sharing.share-uploader.md) — **built (web)** (cr-0102: a **WRITE_ONLY**
   write-only drop-box — add photos but **cannot see** the Memory or others'; the resolve returns no media (the
@@ -41,7 +41,7 @@ member renames a shared node, their client re-seals the name of every share on i
   the personal-scope-only restriction so **any member** of a **group/tenant** scope may public-share a Memory (since
   ADR 0080 also a chapter or a folder) there,
   across all three roles; **member removal soft-revokes** the removed member's shares, **re-activation transfers
-  ownership**; `K_mem` is stable across rotation so the share follows new content and the server-side deactivation
+  ownership**; `K_node` is stable across rotation so the share follows new content and the server-side deactivation
   is the honest-server revocation; [ADR 0029](../../decisions/0029-public-viewer-share.md) §6)
 
 - [uc.sharing.share-note](use-cases/uc.sharing.share-note.md) — **built (web, cr-0115 + cr-0116)** (an optional

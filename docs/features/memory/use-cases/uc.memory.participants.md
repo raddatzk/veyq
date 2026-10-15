@@ -5,7 +5,7 @@
   person's profile (to see their Memories).
 - **Goal:** Record, on a Memory, **who took part**, show it in the Memory's header, and let a member open a person to see
   every Memory of theirs that the member may open — without the server learning who was on which Memory.
-- **Preconditions:** The Memory's `K_mem` is held and its `wrappedMeta` exists
+- **Preconditions:** The Memory's `K_node` is held and its `wrappedMeta` exists
   ([en.memory.node-meta](../enablers/en.memory.node-meta.md)); the Memory lives in a tenant or group scope (a personal
   scope has no participants); the scope's member directory is readable (`listScopeMembers`).
 - **Postconditions (success):** The Memory's sealed `wrappedMeta.participants` holds the chosen user ids, one version
@@ -27,7 +27,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
    Memory — from `listScopeMembers`, each by display name (real name when it opens, else username).
 3. The member ticks and unticks; the client accepts only ids the directory returned (the server cannot check: the list
    is sealed).
-4. On save the client writes the `participants` sub-object (user ids only) into the Memory's `wrappedMeta` under `K_mem`
+4. On save the client writes the `participants` sub-object (user ids only) into the Memory's `wrappedMeta` under `K_node`
    with the node-meta compare-and-set, stating the `metaVersion` it read.
 5. The line under the title shows the participants as overlapping avatars; **with no participant it shows nothing** —
    no "nobody yet" text, the action button is the way in. The header re-renders with the participants as overlapping avatars (the member's profile picture, else the letter): up to three, and past three the third slot is a "+N" (two avatars and "+2" for four people). Hovering the
@@ -76,7 +76,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 - **E1 — a guest:** the interface shows a guest **no participants**: the capability is false for every share role, so
   there is no section, no control and no profile link, and a guest never reaches `#/people/<userId>`. This is an
   interface boundary, **not a cryptographic one**: a share serves the node's `wrappedMeta` unchanged and the guest holds
-  `K_mem`, so a link holder with developer tools could read the **count and the opaque ids** — but no names (the list
+  `K_node`, so a link holder with developer tools could read the **count and the opaque ids** — but no names (the list
   holds ids only, no snapshot is stored, a guest has no member directory, [inbox #190](../../../inbox.md)). Accepted
   residual, comparable to [ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8; it must be re-decided
   if participants ever carry names. A per-share opt-in is a possible future decision, not now.

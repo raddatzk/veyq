@@ -58,7 +58,7 @@ password, nothing is readable" holds at the access-control layer.
   without one, or removing one, is just toggling the server-side gate — **no new link**, unlike the crypto-gate.
 - **Reveal:** the curator — any member of the Memory's scope — recovers `K_share` from `sealed_share_key`, sealed
   under `K_SC` at its epoch ([ADR 0036](0036-editable-share-note-recoverable-share-key.md) point 4), and opens
-  `sealed_password` → a 👁 "show password" in the manage UI. Never under `K_mem`: every READ/READ_WRITE link of
+  `sealed_password` → a 👁 "show password" in the manage UI. Never under `K_node`: every READ/READ_WRITE link of
   the Memory carries that key, so such a copy would hand this password to another link's holder with a dump.
 
 **All roles.** The gate sits in front of every guest endpoint, so it protects a READ greeting page, a

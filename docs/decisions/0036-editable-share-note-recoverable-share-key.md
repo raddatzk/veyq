@@ -20,7 +20,7 @@ and — the product requirement — **editable after the share is created withou
 
 That last requirement collides with two facts: (1) the natural per-share key is `K_share` (it mirrors `sealedName`
 exactly and binds the note to *this* link), but (2) `K_share` isn't retained, so a `K_share`-sealed field can't be
-re-sealed later. Sealing under `K_mem` instead would be editable (the curator always re-derives `K_mem` from their
+re-sealed later. Sealing under `K_node` instead would be editable (the curator always re-derives `K_node` from their
 scope) but keys the note to the *Memory*, not the share, and still leaves every other sealed field unshowable in
 the management list.
 
@@ -30,13 +30,13 @@ Make the share key **recoverable by the curator**, then seal the note under `K_s
 parts.
 
 1. **Recoverable share key (the enabler).** At `createShare`, in addition to the existing outer wrap
-   `wrap = symWrap(K_share, K_mem)` (lets a link-holder unwrap `K_mem`), store a recovery copy of `K_share`
+   `wrap = symWrap(K_share, K_node)` (lets a link-holder unwrap `K_node`), store a recovery copy of `K_share`
    **`sealed_share_key = seal(share-key-recovery, K_SC(epoch), K_share)`** on the share row — sealed under the
    scope key at the scope's current write epoch, bound to (scope, Memory, share, epoch)
    ([ADR 0072](0072-a-seal-binds-its-object.md)), with that epoch stored beside it (`sealed_share_key_epoch`).
    Every **scope member** holds the epoch chain, so the curator and every co-member can **recover `K_share`
    anytime** and thereby read or re-seal **any `K_share`-sealed field** of a minted share. The server stores only
-   this ciphertext; it never sees `K_share` in the clear (it lacks `K_SC`). Why `K_SC` and not `K_mem`: point 4.
+   this ciphertext; it never sees `K_share` in the clear (it lacks `K_SC`). Why `K_SC` and not `K_node`: point 4.
 
 2. **The curator note.** Add **`sealed_note`** to the share — the note text sealed under **`K_share`** with a
    dedicated AAD context **`share-note`** (mirrors `sealName`/`openName` byte-for-byte, just a distinct context).
@@ -61,14 +61,14 @@ parts.
    recovers `K_share`, re-seals the new note, and PATCHes it — **the link stays valid**. The op is deliberately
    extensible: cr-0116 added the private **`sealedShareName`** (both sealed fields are a full replace), and
    **cr-0119** added an optional **`role`** — the first *grant-affecting* field, a **pure server-side authorization
-   change** (no re-crypto: READ and READ_WRITE share one `symWrap(K_share, K_mem)`, so the wrap/`K_share`/link
+   change** (no re-crypto: READ and READ_WRITE share one `symWrap(K_share, K_node)`, so the wrap/`K_share`/link
    are untouched). The role change is restricted to **READ ↔ READ_WRITE** (a `422 invalid_role_change` rejects
    setting `role = WRITE_ONLY` or changing a WRITE_ONLY share's role — a write-only drop-box's "cannot see" promise
    can't be honestly flipped on already-distributed links, and a WRITE_ONLY share carries the Memory's drop public
    key instead of that wrap, [ADR 0031](0031-uploader-public-share.md) point 7). `role` is omitted for a plain note/name edit.
 
 4. **The recovery copy is for the Memory's members only — never for a link.** A READ or READ_WRITE link
-   carries `K_mem` (it is what the link exists to hand over), so a recovery copy sealed under `K_mem` would let
+   carries `K_node` (it is what the link exists to hand over), so a recovery copy sealed under `K_node` would let
    that link's holder, with a database dump, open **every other share of the same Memory**: its `K_share`, and
    through it the share's password in plain text ([ADR 0037](0037-password-protected-shares.md)), its private
    label, its note, and — the dump holds every share id in clear — the whole link. `K_SC` is the key no share
@@ -87,7 +87,7 @@ parts.
      later password, label or note edits). Re-sealing the copy under a new epoch on rotation would not help;
      cutting such a member off an existing link means **re-issuing** it — a new id and a new `K_share`
      ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md)). Shares minted after the removal are
-     out of their reach. The Memory's content under `K_mem` stays the class of `K_mem` not rotating on removal
+     out of their reach. The Memory's content under `K_node` stays the class of `K_node` not rotating on removal
      (ADR 0012 *Rotation / revocation*).
    - **Rejected alternatives.** Storing only the password verifier (drop the reveal) closes the password, even
      against members, but leaves the label, the note and the link; sealing only the password under `K_SC` costs
@@ -113,14 +113,14 @@ crosses the boundary.
   had `K_share`; now a **scope member** (who holds `K_SC`) can recover `K_share` for any share of that Memory —
   e.g. reconstruct a co-member's link. This grants **nothing new in practice**: a scope member already decrypts
   the Memory's content, and **revoke stays `owner_account`-gated** (a member can't revoke another's share; an
-  owner who has left the scope can't either). It is **not** "every `K_mem`-holder": a READ or READ_WRITE link
-  holds `K_mem` too, and it recovers nothing (point 4). Recorded in the
+  owner who has left the scope can't either). It is **not** "every `K_node`-holder": a READ or READ_WRITE link
+  holds `K_node` too, and it recovers nothing (point 4). Recorded in the
   [security model](../crosscutting/security-model.md).
 - **Fixes a real limitation** (a bonus): the share-management list can now **show and edit every minted share's
   sealed content** (recover `K_share` through the scope's epoch keys), not just the one fresh link — closing the
   gap noted in the current `ShareDialog`.
 - **Shares stop being strictly write-once.** `updateShare` introduces controlled mutability into the capability;
-  it is owner-gated, swaps ciphertext for ciphertext, and doesn't touch `K_share`/`K_mem`/`role`/the wrap — the
+  it is owner-gated, swaps ciphertext for ciphertext, and doesn't touch `K_share`/`K_node`/`role`/the wrap — the
   capability's *identity and grant* stay immutable, only its curator-authored decoration changes. The shared root's
   own `sealedName` is the one sealed field outside this gate: when any member renames the root, that member re-seals
   it through this recovery copy with `setShareSealedName`, which every member with write access may call
@@ -131,7 +131,7 @@ crosses the boundary.
 - **(A) `K_share`, note immutable (edit = revoke + re-share).** Cleanest and zero new crypto, consistent with the
   write-once model — but a note typo means a **new link** you must redistribute. Rejected: poor UX for the exact
   thing (a message) people tweak, and it leaves the management list unable to show minted shares' content.
-- **(B) `K_mem`-sealed note + `updateShare`.** Editable (curator always has `K_mem`), but the note is keyed to the
+- **(B) `K_node`-sealed note + `updateShare`.** Editable (curator always has `K_node`), but the note is keyed to the
   **Memory**, not the share (weaker per-share binding), and it does **not** make other `K_share`-sealed fields
   (name, future settings) recoverable/editable — so the management-visibility gap remains. Rejected: solves less
   for the same new op.
@@ -143,8 +143,8 @@ crosses the boundary.
 ## Related
 
 - [ADR 0029](0029-public-viewer-share.md) (the share model + `K_share` in the fragment), [ADR 0030](0030-contributor-public-share.md)
-  (READ_WRITE + the `K_mem`-sealed display name — a *different* sealed field), [ADR 0031](0031-uploader-public-share.md)
-  (WRITE_ONLY write-only), [ADR 0012](0012-content-key-hierarchy.md) (`K_SC`/`K_mem` hierarchy).
+  (READ_WRITE + the `K_node`-sealed display name — a *different* sealed field), [ADR 0031](0031-uploader-public-share.md)
+  (WRITE_ONLY write-only), [ADR 0012](0012-content-key-hierarchy.md) (`K_SC`/`K_node` hierarchy).
 - Use-case: [uc.sharing.share-note](../features/sharing/use-cases/uc.sharing.share-note.md).
 - [security-model](../crosscutting/security-model.md) (the new `sealed_share_key` operational-metadata line + the
   `K_share`-derivability note), [ADR 0035](0035-server-terms-of-service.md) (the reused markdown renderer).

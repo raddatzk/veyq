@@ -2,7 +2,7 @@ useCase: uc.sharing.share-public-viewer
 feature: sharing
 title: Share a Memory as a public viewer link (web)
 # Built (web vertical, cr-0100 + ADR 0029): a public READ share of one Memory (any scope, ADR 0029 §6) —
-# symWrap(K_share, K_mem), the key in the URL fragment, an unguessable 256-bit shareId, an unauthenticated
+# symWrap(K_share, K_node), the key in the URL fragment, an unguessable 256-bit shareId, an unauthenticated
 # resolve + gated presigned blob reads, soft (L1) revoke/expiry, and the operator-served-viewer trust-tier
 # honesty carried by a footer link. The six criteria are covered by the backend slice (create -> anonymous
 # resolve -> gated blob -> revoke/expiry -> subtree isolation), the http guest-boundary assertions, and the web
@@ -11,14 +11,14 @@ title: Share a Memory as a public viewer link (web)
 # and notices are separate later slices.
 acceptanceCriteria:
   - id: create-public-share
-    text: A curator turns one of their personal-scope Memories into a public share — the client generates a random K_share and a 256-bit unguessable shareId, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role READ, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id; it never sees K_share, K_mem, or the name. The link is /s/{shareId}#k=base64url(K_share) with the key in the fragment.
+    text: A curator turns one of their personal-scope Memories into a public share — the client generates a random K_share and a 256-bit unguessable shareId, computes symWrap(K_share, K_node), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role READ, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id; it never sees K_share, K_node, or the name. The link is /s/{shareId}#k=base64url(K_share) with the key in the fragment.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.listReturnsCallersSharesForTheMemory]
       web:
         unit: [src/features/memory/share.test.ts]
   - id: anonymous-resolve-decrypt
-    text: GET /api/shares/{shareId} is unauthenticated and returns the record plus the sealed subtree (Memory node + chapters, under K_mem). The viewer unwraps K_mem with the fragment key and decrypts names/layout/metadata locally, rendering the Memory read-only. The shareId alone is inert — without the fragment key nothing decrypts; both halves are required.
+    text: GET /api/shares/{shareId} is unauthenticated and returns the record plus the sealed subtree (Memory node + chapters, under K_node). The viewer unwraps K_node with the fragment key and decrypts names/layout/metadata locally, rendering the Memory read-only. The shareId alone is inert — without the fragment key nothing decrypts; both halves are required.
     coverage:
       # cr-sharing-contributor-e2e: the live proof rides in on the contributor suite, because a READ_WRITE share
       # resolves through the identical resolveShare path — an anonymous, session-less caller recovering the Memory
@@ -29,7 +29,7 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: anonymous-media-read
-    text: GET /api/shares/{shareId}/media is unauthenticated, passes the same password gate as the resolve, and returns the Memory's media metadata (sealed under K_mem) plus the wrapped keys of the uploader identities whose media it holds — never a name. The viewer decrypts it locally with the K_mem the resolve's wrap yields.
+    text: GET /api/shares/{shareId}/media is unauthenticated, passes the same password gate as the resolve, and returns the Memory's media metadata (sealed under K_node) plus the wrapped keys of the uploader identities whose media it holds — never a name. The viewer decrypts it locally with the K_node the resolve's wrap yields.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName, SharePasswordSliceTest.theMediaReadRequiresThePasswordToken]
@@ -54,7 +54,7 @@ acceptanceCriteria:
     text: A share-scoped blob endpoint authorizes a read iff the blob is attached under the shared subtree (a structural check on opaque ids), returns a presigned store URL, and the viewer fetches bytes directly from the object store. The operator never learns which media a viewer opens. A cross-share/out-of-subtree blob id is 404.
     coverage:
       # The slice proves the authorization decision; the e2e proves the whole gated read — presign, fetch the
-      # ciphertext straight from the store, decrypt under the right K_mem, bytes intact — plus the negative half
+      # ciphertext straight from the store, decrypt under the right K_node, bytes intact — plus the negative half
       # against a live stack (a blob that leaves the subtree's live set is a non-enumerable 404, asserted on the
       # status code rather than on "it threw").
       backend:
@@ -78,14 +78,14 @@ acceptanceCriteria:
           - src/features/memory/components/ShareCreateDialog.test.ts
           - src/features/memory/components/ShareDialog.test.ts
   - id: least-privilege-personal-only
-    text: A share exposes only that one Memory subtree — K_mem is random and independently wrapped, so the link reveals neither K_SC (the rest of the scope) nor any sibling Memory's K_mem (crypto-enforced least privilege, ADR 0012). Which node kinds may be a share root, with which roles, is the kind's owner's (ShareRoots, ADR 0080) — a MEMORY and a CHAPTER with every role (a chapter link is a smaller Memory link — its guest reads the chapter and nothing of the Memory above or of a sibling chapter, ADR 0080 decisions 9 and 13), a FOLDER with READ or READ_WRITE (never WRITE_ONLY), any other kind none (422). This use-case's v1 was personal-scope only; group/tenant Memories became shareable in cr-0104 (uc.sharing.share-shared-scope), gated on scope membership.
+    text: A share exposes only that one Memory subtree — K_node is random and independently wrapped, so the link reveals neither K_SC (the rest of the scope) nor any sibling Memory's K_node (crypto-enforced least privilege, ADR 0012). Which node kinds may be a share root, with which roles, is the kind's owner's (ShareRoots, ADR 0080) — a MEMORY and a CHAPTER with every role (a chapter link is a smaller Memory link — its guest reads the chapter and nothing of the Memory above or of a sibling chapter, ADR 0080 decisions 9 and 13), a FOLDER with READ or READ_WRITE (never WRITE_ONLY), any other kind none (422). This use-case's v1 was personal-scope only; group/tenant Memories became shareable in cr-0104 (uc.sharing.share-shared-scope), gated on scope membership.
     coverage:
       backend:
         integration: [ShareSliceTest.resolveLeaksNothingOutsideTheSubtree, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole, ShareRootsSliceTest.aFolderIsNoDropBox, ChapterShareSliceTest.aChapterGuestReadsTheChapterAndNothingOfItsMemory]
       web:
         unit: [src/features/memory/share.test.ts]
   - id: operator-blind-and-tier-honesty
-    text: The server stores only shareId, the wrap, the plaintext role, the K_share-sealed name, and nodeId — never K_share/K_mem/names/viewer/which-media. The no-install viewer is operator-served web (passive-operator-safe, not operator-proof against an active foreign operator); this is surfaced honestly via a footer link to veyq's security documentation, not an explicit in-viewer warning. Self-hosted (operator = curator) makes the gap moot.
+    text: The server stores only shareId, the wrap, the plaintext role, the K_share-sealed name, and nodeId — never K_share/K_node/names/viewer/which-media. The no-install viewer is operator-served web (passive-operator-safe, not operator-proof against an active foreign operator); this is surfaced honestly via a footer link to veyq's security documentation, not an explicit in-viewer warning. Self-hosted (operator = curator) makes the gap moot.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.createRequiresAuth]

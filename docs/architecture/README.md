@@ -135,7 +135,7 @@ flowchart TB
   MK["Master Key<br>(one per account, one wrap per method)"]
   ID["Identity private key<br>(hybrid KEM + signing)"]
   KSC["K_SC — scope content key<br>(one per scope; scope-root names + slug tokens)"]
-  KMEM["K_mem — per-Memory key<br>(recursive: a chapter has its own)"]
+  KNODE["K_node — per-Memory key<br>(recursive: a chapter has its own)"]
   KBLOB["K_blob — per-media key"]
   WM["wrappedMeta<br>(date / place sealed on the node)"]
   SH["Share wrap<br>(per-share key / recipient identity)"]
@@ -143,18 +143,18 @@ flowchart TB
   U -->|"each opens (KEK from its source)"| MK
   MK -->|"unwraps"| ID
   ID -->|"unwraps via the scope grant (K_SC wrapped to identity)"| KSC
-  KSC -->|"wraps (top-level Memory)"| KMEM
-  KMEM -->|"wraps (chapter — recursive)"| KMEM
-  KMEM -->|"wraps (media)"| KBLOB
-  KMEM -->|"seals (node-meta context)"| WM
-  KMEM -->|"one Memory/chapter key wrapped to a share"| SH
+  KSC -->|"wraps (top-level Memory)"| KNODE
+  KNODE -->|"wraps (chapter — recursive)"| KNODE
+  KNODE -->|"wraps (media)"| KBLOB
+  KNODE -->|"seals (node-meta context)"| WM
+  KNODE -->|"one Memory/chapter key wrapped to a share"| SH
 ```
 
 Where each level is owned: **unlock + Master Key + identity** →
 [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 ([ADR 0005](../decisions/0005-unlock-methods-and-device-trust.md)) · **K_SC / grants** →
 [scopes & tenancy](../crosscutting/scopes-and-tenancy.md)
-([ADR 0007](../decisions/0007-membership-role-grant-relation.md)) · **K_mem / K_blob / recursion / sharing** →
+([ADR 0007](../decisions/0007-membership-role-grant-relation.md)) · **K_node / K_blob / recursion / sharing** →
 [en.memory.tree](../features/memory/enablers/en.memory.tree.md) +
 [en.memory.media](../features/memory/enablers/en.memory.media.md)
 ([ADR 0012](../decisions/0012-content-key-hierarchy.md)) · **wrappedMeta** →
@@ -236,7 +236,7 @@ flowchart TB
   [ADR 0007](../decisions/0007-membership-role-grant-relation.md),
   [ADR 0014](../decisions/0014-group-scopes-and-governance.md))
 - **Media data-flow** — the client generates derivatives and seals each blob under its own `K_blob` (under
-  `K_mem`), uploads ciphertext chunks direct-to-store via presigned URLs, then records opaque metadata + the
+  `K_node`), uploads ciphertext chunks direct-to-store via presigned URLs, then records opaque metadata + the
   wraps. → [en.memory.media](../features/memory/enablers/en.memory.media.md) +
   [en.memory.derivatives](../features/memory/enablers/en.memory.derivatives.md)
   ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md))
@@ -323,7 +323,7 @@ The words this project uses precisely. Where a term has a tempting synonym, the 
 | **Secret Key** | the user's high-entropy second factor, combined with the password to derive the unlock KEK. **Never reaches the server.** Lives in the Emergency Kit. |
 | **Emergency Kit** | the email + Secret Key, saved when the account is born (server setup or joining a tenant). With the password it opens the account on a new device; alone, after a mailed recovery link, it is the only path back after a forgotten password (there is no separate recovery code). Its format: [en.account.key-model](../features/account/enablers/en.account.key-model.md#the-emergency-kit). |
 | **Epoch** | a generation of a scope's content key. Removing a member rotates the scope forward one epoch. |
-| **K_SC / K_mem / K_blob** | scope content key / per-Memory key / per-media key. Each random, each wrapped by the level above — that is what makes every level an independent sharing grain. |
+| **K_SC / K_node / K_blob** | scope content key / per-Memory key / per-media key. Each random, each wrapped by the level above — that is what makes every level an independent sharing grain. |
 | **Operator-blind** | the server stores and serves only ciphertext + opaque metadata, and *cannot* do otherwise — it holds no content key. The operator is modelled as the adversary. |
 | **Server Owner** | the person who installed the instance. A server role over ciphertext — **not** a reader of content. |
 | **Tenant Owner** | governs one tenant (members, groups, terms). In the common self-hosted case, the same person as the Server Owner — and still not a reader. |

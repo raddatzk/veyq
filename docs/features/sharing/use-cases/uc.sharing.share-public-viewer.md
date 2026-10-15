@@ -1,12 +1,12 @@
 # UC: Share a Memory as a public viewer link
 
 - **ID:** uc.sharing.share-public-viewer
-- **Primary actor:** **a curator** — the owner of a **personal-scope** Memory (holds its `K_mem`).
+- **Primary actor:** **a curator** — the owner of a **personal-scope** Memory (holds its `K_node`).
 - **Secondary actor:** **an anonymous viewer** — no account, no identity keypair.
 - **Goal:** publish **one** of your own Memories as a **read-only, anonymous, revocable** link that anyone with the
   link can open — while the server stays operator-blind and the rest of your content stays private.
 - **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
-  (v1 restriction); the caller can open it (holds `K_mem`).
+  (v1 restriction); the caller can open it (holds `K_node`).
 - **Share roots today:** a viewer link can be rooted at a **Memory**, a **chapter** or a **folder**
   ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 9 and 13); it shows that node and what lies below it, never what is beside or above
   it. This use-case walks the Memory case; the other roots take the same steps with that node's own key. What each
@@ -18,7 +18,7 @@
   a guest's page adds: the breadcrumb up to the link's root, the curator's note, the role badge.
 - **Postconditions (success):** a share record exists server-side (opaque), and a link `/s/{shareId}#k=<K_share>` opens
   the Memory subtree read-only for any anonymous visitor — until the curator revokes it or it expires. Operator-blind
-  throughout: the server never sees `K_share`, `K_mem`, any name, the viewer, or which media the viewer opens.
+  throughout: the server never sees `K_share`, `K_node`, any name, the viewer, or which media the viewer opens.
 
 This is the first sharing slice ([ADR 0029](../../../decisions/0029-public-viewer-share.md)): **public viewer
 only**. Contributor/uploader writes, password protection, and public-sharing of group/tenant Memories are later
@@ -27,7 +27,7 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
 ## Main flow
 
 1. **Create.** The curator opens one of their Memories → **Share** → *create public link*. The client generates a
-   fresh 32-byte `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_mem)`, re-seals the **Memory
+   fresh 32-byte `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_node)`, re-seals the **Memory
    name under `K_share`**, and `POST`s the share record `{ shareId, nodeId, role: READ, wrap, sealedName,
    expiresAt? }`. The server stores the record opaquely under that id (a taken id is `409 id_taken`).
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` lives in
@@ -38,7 +38,7 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
    `/api/shares/{shareId}/media` → the Memory's media metadata and the wrapped keys of the uploader identities
    whose media it holds (Memories' `listShareMedia`). Both pass the same password gate; without a token the
    resolve answers the locked challenge and the media read a `404`.
-   The client **unwraps `K_mem` with the fragment key**, derives each chapter's key and opens its title down the
+   The client **unwraps `K_node` with the fragment key**, derives each chapter's key and opens its title down the
    chain, decrypts layout/metadata **locally**, and renders the Memory **read-only** in the member's Memory view (the
    guest reads the chapter titles; the Memory's own title is the share's `sealedName`): the Memory's own media in the
    gallery, its date and place as the members sealed them, and the Chapters tab; a chapter opens like a member's — its
@@ -52,27 +52,27 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
 
 ```mermaid
 ---
-title: Public viewer share — operator-blind (server never sees K_share/K_mem)
+title: Public viewer share — operator-blind (server never sees K_share/K_node)
 ---
 sequenceDiagram
   actor C as Curator<br>(unlocked)
   participant S as Server<br>(blind)
   participant O as Object store
   actor V as Anonymous<br>viewer
-  C->>C: K_share = random#59; wrap = symWrap(K_share, K_mem)#59; sealName under K_share
+  C->>C: K_share = random#59; wrap = symWrap(K_share, K_node)#59; sealName under K_share
   C->>S: POST share { shareId (client-minted), nodeId, READ, wrap, sealedName }
   S-->>C: shareId
   Note over C: link = /s/{shareId}#35;k=base64url(K_share)   (fragment, never sent)
   C->>V: hand off link out-of-band
   V->>S: GET /api/shares/{shareId}   (no auth)
-  S-->>V: record + sealed subtree (under K_mem)
+  S-->>V: record + sealed subtree (under K_node)
   V->>S: GET /api/shares/{shareId}/media   (no auth, same gate)
-  S-->>V: media metadata (under K_mem) + uploader identities' wrapped keys
-  V->>V: K_mem = unwrap(wrap, K_share from fragment) → decrypt locally
+  S-->>V: media metadata (under K_node) + uploader identities' wrapped keys
+  V->>V: K_node = unwrap(wrap, K_share from fragment) → decrypt locally
   V->>S: GET share blob (gated: attached under nodeId?)
   S-->>V: presigned store URL
   V->>O: GET bytes (direct) → decrypt locally
-  Note right of S: sees shareId, wrap, role, sealedName, nodeId —<br>never K_share, K_mem, names, viewer, or which media
+  Note right of S: sees shareId, wrap, role, sealedName, nodeId —<br>never K_share, K_node, names, viewer, or which media
 ```
 
 ## Alternate / exception flows
@@ -81,13 +81,13 @@ sequenceDiagram
 - **A2 — revoked:** `enabled = false` → the resolve **and** the gated blob endpoint `404`; a visitor who already
   downloaded ciphertext can still replay *that*, but gets nothing new (no key rotation — see Quality notes).
 - **E1 — link without the fragment key:** the `shareId` alone is **inert** — the server returns the wrapped key,
-  but without `K_share` the client cannot unwrap `K_mem`, so nothing decrypts. Both halves are required.
+  but without `K_share` the client cannot unwrap `K_node`, so nothing decrypts. Both halves are required.
 - **E2 — wrong / guessed id:** unknown `shareId` → `404`. The 256-bit id is unguessable; there is no enumeration.
 
 ## Quality notes
 
-- **Operator-blind.** The server stores only `shareId`, the wrap `symWrap(K_share, K_mem)`, the plaintext `role`,
-  the `K_share`-sealed name, and `nodeId`. It never sees `K_share`, `K_mem`, a name, the viewer, or — because
+- **Operator-blind.** The server stores only `shareId`, the wrap `symWrap(K_share, K_node)`, the plaintext `role`,
+  the `K_share`-sealed name, and `nodeId`. It never sees `K_share`, `K_node`, a name, the viewer, or — because
   blobs are fetched direct-from-store — **which media a viewer opens**.
 - **Least-privilege, crypto-enforced.** A share exposes **only the subtree under its root** (a Memory, a chapter or
   a folder): every node's key is random and independently wrapped, so the link reveals neither `K_SC` (the rest of
@@ -126,7 +126,7 @@ im Footer erklärt die Details.
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
 - Feature: [Sharing](../_index.md)
 - Decisions: [ADR 0029](../../../decisions/0029-public-viewer-share.md) (this share's resource + anonymous access
-  path), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (the `K_mem` second-wrap keying),
+  path), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (the `K_node` second-wrap keying),
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) (fragment key),
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (gated presigned blob reads),
   [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (client-integrity trust tier)

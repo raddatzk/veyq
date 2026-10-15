@@ -53,7 +53,7 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
    `E_{n+1}`, signed by the rotator, to the remaining members it can reach (`asymWrap` to each identity); the
    **grant-delivery** reconciler finishes the rest — its trigger widened from *grant-less* to *grant-less or
    stale-epoch*, first-online-wins, idempotent ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)).
-3. New content (names, `slug_token`s, `K_mem`-wraps) seals under `E_{n+1}`; each new node carries epoch index `n+1`.
+3. New content (names, `slug_token`s, `K_node`-wraps) seals under `E_{n+1}`; each new node carries epoch index `n+1`.
 4. The removed member holds ≤ `E_n` → decrypts pre-removal content, never `E_{n+1}` content.
 
 ```mermaid

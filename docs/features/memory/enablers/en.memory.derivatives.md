@@ -13,9 +13,9 @@
 - **Serves (use-cases):** [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (grid = thumbnail, lightbox =
   preview, download = original); the **add-media** upload flow is where the derivatives are generated.
 - **Depends on:** [en.memory.media](en.memory.media.md) — a derivative is **just another blob**, sealed by the
-  exact same `K_blob`-under-`K_mem` chunked-AEAD transport; through it [en.memory.tree](en.memory.tree.md) +
-  `uc.account.unlock` (identity → `K_SC` → `K_mem`).
-- **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_mem` is unwrapped; a configured object
+  exact same `K_blob`-under-`K_node` chunked-AEAD transport; through it [en.memory.tree](en.memory.tree.md) +
+  `uc.account.unlock` (identity → `K_SC` → `K_node`).
+- **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_node` is unwrapped; a configured object
   store — a **hard instance requirement** ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md),
   so a running instance always has one).
 - **Postconditions (success):** for a media item, up to **three role-tagged blobs** (thumbnail, preview,
@@ -48,7 +48,7 @@
   fetched on **play or download**. A compressed/streamable video *tier* is still future work (it needs a
   transcode enabler).
 - Each tier is sealed **exactly like any media blob** — chunked AEAD under its **own fresh random `K_blob`**
-  wrapped under the Memory's `K_mem` ([en.memory.media](en.memory.media.md)). **No new crypto primitive** — a
+  wrapped under the Memory's `K_node` ([en.memory.media](en.memory.media.md)). **No new crypto primitive** — a
   derivative is another blob with a role tag.
 - **Operator-blind generation.** Thumbnail + preview are produced **on the client** (decode → downscale →
   re-encode → seal), so the operator never sees a derivable pixel. Re-encoding strips EXIF from the
@@ -99,13 +99,13 @@ video.
 
 1. **Attachment / keying.** The `media` record carries `original` + `derivatives: [{ kind, blob }]` —
    **role-tagged, opaque blob ids**, a contract delta on `media.openapi.yaml` (start/complete/list). Each blob
-   keeps **its own `K_blob`** (wrapped under `K_mem`) — **not** a key shared across the three. *Why per-blob:*
+   keeps **its own `K_blob`** (wrapped under `K_node`) — **not** a key shared across the three. *Why per-blob:*
    the `chunk_frame` AAD binds only `index ‖ total` (position **within** a blob); a shared key would give
    thumbnail-chunk-`i` and preview-chunk-`i` the same `(key, AAD)`, letting the blind store **splice a chunk
    across derivatives undetectably**. Per-blob keys forbid that for free — no `chunk_frame`/vector change. The
    `<original-name>-<thumbnail|preview>.<suffix>` naming is a **client-side download-filename** convention only
    (derived from the decrypted original name); **storage stays opaque blob ids** — filenames are operator-blind
-   under `K_mem`.
+   under `K_node`.
 2. **No backfill.** The instance is treated as **fresh** — any current pre-derivative media (cr-0028) is
    simply wiped, not migrated. Every image/video media therefore has its derivatives from upload; the gallery
    may **assume** they exist (the only fallback is the rare non-image/non-video type).
@@ -139,9 +139,9 @@ video.
 
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.media](en.memory.media.md) (the blob transport this reuses),
-  [en.memory.tree](en.memory.tree.md) (the Memory + `K_mem`)
+  [en.memory.tree](en.memory.tree.md) (the Memory + `K_node`)
 - Use-cases: [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (consumes the three tiers)
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (deferred
   thumbnails/previews — **this enabler is where they land**),
-  [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_blob` under `K_mem`)
+  [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_blob` under `K_node`)
 - Run area of the docs site: [Plan your instance](../../../../site/src/content/docs/run/plan.md)

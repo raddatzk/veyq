@@ -6,7 +6,7 @@
 - **Goal:** Whatever one member sets on a Memory or a photo — a date, a place, a cover, a photo's corrected time
   — survives the other member's edits and the app's own automatic updates, unless the other member changed
   **that same thing** on purpose.
-- **Preconditions:** Both members hold the Memory's `K_mem`. Each client holds a copy of the Memory's sealed
+- **Preconditions:** Both members hold the Memory's `K_node`. Each client holds a copy of the Memory's sealed
   `wrappedMeta` (from the tree it loaded) and of each photo's sealed `wrappedMeta` (from the gallery list), each
   with the `metaVersion` it was listed at.
 - **Postconditions (success):** Every sealed meta blob on the server is the result of each writer applying

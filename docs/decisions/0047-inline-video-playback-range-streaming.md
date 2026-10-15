@@ -14,7 +14,7 @@ stopgap `CLAUDE.md` forbids (*structured over fast*).
 
 So the question this ADR settles is narrow: **how does the client feed decrypted video bytes to a `<video>`
 element while the server stays operator-blind?** Media is stored as **chunked AEAD** — a fresh random `K_blob`
-per blob (wrapped under `K_mem`), each chunk `nonce ‖ AEAD(K_blob, nonce, plaintext, aad = index ‖ total)`,
+per blob (wrapped under `K_node`), each chunk `nonce ‖ AEAD(K_blob, nonce, plaintext, aad = index ‖ total)`,
 transferred **direct-to-store** via presigned URLs ([en.memory.media](../features/memory/enablers/en.memory.media.md),
 [ADR 0013](0013-blob-storage-presigned-direct-to-store.md), [ADR 0012](0012-content-key-hierarchy.md)). Every
 existing read path — grid, lightbox, download — fetches a blob **whole**: presign all chunk GETs, fetch every
@@ -36,7 +36,7 @@ Concretely: before playback the page **registers** it with the SW (`postMessage`
 bytes=A-B` request the SW computes the covering chunk indices `[⌊A/CHUNK⌋ … ⌊B/CHUNK⌋]` from the registered
 `{chunkCount, byteSize}`, asks the page for those chunks' plaintext over the port (with a small in-memory
 read-ahead cache), assembles the window and answers `206`. **No key, no auth token and no plaintext-at-rest ever
-enters the SW; the URL carries only an opaque handle, never a credential.** `K_blob`/`K_mem` stay exactly where
+enters the SW; the URL carries only an opaque handle, never a credential.** `K_blob`/`K_node` stay exactly where
 they live today — in the page.
 
 **The handle is opaque because a `blobId` could not carry the auth context.** A route keyed on `blobId` would
@@ -69,7 +69,7 @@ is named here because it is the shortcut a later change is most tempted to take.
   fetches, instead of asking the page for plaintext. Rejected. Presign and auth have to stay in the page
   regardless (see the handle, above), so moving the key buys no round trip; what it costs is a **second
   key-bearing context** whose lifetime must be managed and whose key must be purged on vault-lock. The safest
-  way to clean up a key in a Service Worker is to never put one there. `K_mem` in the SW is strictly worse — it
+  way to clean up a key in a Service Worker is to never put one there. `K_node` in the SW is strictly worse — it
   opens every blob of the Memory — and was never an option. This is what makes the trust-tier note below
   *stronger* rather than weaker: the SW is operator-served code that holds no confidential key at all.
 

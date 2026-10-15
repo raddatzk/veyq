@@ -9,25 +9,25 @@
   ([uc.memory.participants](../use-cases/uc.memory.participants.md)). The envelope itself is core's since inbox #411
   (`web/src/core/node/nodeMeta.ts`).
 - **Provides:** **one** optional, opaque, **client-versioned** metadata blob (`wrappedMeta`) on a content node
-  (MEMORY/CHAPTER), sealed under that node's **`K_mem`** — the single sealed home for a Memory's curated
+  (MEMORY/CHAPTER), sealed under that node's **`K_node`** — the single sealed home for a Memory's curated
   node-level metadata (its **date**, and next its **place**). Materialized so a browse card / a tenant map can
   show + sort by it **without loading the Memory's media**.
 - **Serves (use-cases):** [uc.memory.date](../use-cases/uc.memory.date.md) (the `date` sub-object),
   [uc.memory.place](../use-cases/uc.memory.place.md) (the `location` sub-object),
   [uc.memory.concurrent-curation](../use-cases/uc.memory.concurrent-curation.md) (every writer of the blob,
   version-checked).
-- **Depends on:** [en.memory.tree](en.memory.tree.md) — the node model + `K_mem` birth/open this seals under;
-  through it `uc.account.unlock` (identity → `K_SC` → `K_mem`). Applies
-  [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) ("capture time, location" as `K_mem` content) at
+- **Depends on:** [en.memory.tree](en.memory.tree.md) — the node model + `K_node` birth/open this seals under;
+  through it `uc.account.unlock` (identity → `K_SC` → `K_node`). Applies
+  [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) ("capture time, location" as `K_node` content) at
   the **node** level.
-- **Preconditions:** an **unlocked** vault; the node's **`K_mem`** is unwrapped (its Memory is open, or its
+- **Preconditions:** an **unlocked** vault; the node's **`K_node`** is unwrapped (its Memory is open, or its
   parent chain resolved).
 - **Postconditions (success):** the node carries an opaque `wrappedMeta` ciphertext; the server stored + echoes
   it verbatim and never inspected it — no day, coordinate, or place name crosses.
 
 ## The envelope
 
-- **`wrappedMeta`** — an optional field on a content node, **AEAD-sealed under the node's `K_mem`** (purpose
+- **`wrappedMeta`** — an optional field on a content node, **AEAD-sealed under the node's `K_node`** (purpose
   `node-meta`, bound to the node — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)),
   wire-encoded as opaque **base64**. It carries a **client-only, versioned** JSON blob whose shape can **grow
   without a contract change** (the operator never learns a field — the lesson from the media EXIF
@@ -77,7 +77,7 @@
 The browse card grid (and, later, the tenant map) show + sort by this metadata **but never load a Memory's
 media**. So the effective value must **already be sealed on the node**, not computed at display from the media.
 That is the whole reason `wrappedMeta` sits on the node and is returned by `listNodes`: a client unseals each
-node's blob under its `K_mem` and renders — no media fetch, no server-side computation, operator-blind. Each
+node's blob under its `K_node` and renders — no media fetch, no server-side computation, operator-blind. Each
 use-case defines **how** its sub-object is materialized — the date's `auto` reconcile over the media; the
 place's deliberate **"set location"** (the medoid of the media GPS, formed on demand).
 
@@ -101,6 +101,6 @@ open).
 
 - Use-cases: [uc.memory.date](../use-cases/uc.memory.date.md), [uc.memory.place](../use-cases/uc.memory.place.md),
   [uc.memory.concurrent-curation](../use-cases/uc.memory.concurrent-curation.md)
-- Enablers: [en.memory.tree](en.memory.tree.md) (the node + `K_mem` substrate this builds on)
-- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (content-key hierarchy; `K_mem` seals
+- Enablers: [en.memory.tree](en.memory.tree.md) (the node + `K_node` substrate this builds on)
+- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (content-key hierarchy; `K_node` seals
   "capture time, location")

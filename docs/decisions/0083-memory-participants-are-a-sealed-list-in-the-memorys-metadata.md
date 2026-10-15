@@ -11,7 +11,7 @@ a field: the server is **operator-blind** (a relation "person P is on Memory M" 
 operator must not learn), and a **share is the member view** with rights removed ([inbox #401](../inbox.md), the owner's
 principle of 2026-10-09), which raises what a guest may see of it.
 
-A Memory already has the right home for sealed per-Memory facts: the `wrappedMeta` blob under `K_mem` (purpose
+A Memory already has the right home for sealed per-Memory facts: the `wrappedMeta` blob under `K_node` (purpose
 `node-meta`) that carries its date, place and cover, written with a compare-and-set on `metaVersion`
 ([ADR 0077](0077-a-write-carries-the-version-it-read.md), [en.memory.node-meta](../features/memory/enablers/en.memory.node-meta.md)).
 
@@ -26,7 +26,7 @@ group members for one in a group scope. A Memory in a personal scope has no part
 it**, because the list is sealed.
 
 **2. Storage: a sealed `participants` sub-object in the Memory's `wrappedMeta`.** It holds **user ids only**, sits next
-to `date`, `location` and `cover` under `K_mem` (purpose `node-meta`), and is written through the same
+to `date`, `location` and `cover` under `K_node` (purpose `node-meta`), and is written through the same
 compare-and-set write as the rest (`writeNodeMeta`, stating the `metaVersion` it read). **No server-visible relation**:
 no `veyq_node_participant` table. Such a table would hand the operator who was on which trip.
 
@@ -53,7 +53,7 @@ members*, who agreed to be in the space, not to be named to a link holder.
 *Corrected 2026-10-13.* The first draft said the participants are "stripped from every meta re-sealed for a share" and
 that the exclusion is cryptographic. That was wrong: **no meta is re-sealed for a share.** A share serves the node's
 `wrappedMeta` unchanged (`ShareNode.wrappedMeta`, [sharing.openapi.yaml](../../contracts/api/sharing.openapi.yaml)) and the
-guest holds the node's `K_mem` through the key chain, so a link holder can open the very blob a member writes. Making the
+guest holds the node's `K_node` through the key chain, so a link holder can open the very blob a member writes. Making the
 exclusion cryptographic would need a new AEAD purpose (a nested seal under a key guests lack) or a share-specific meta
 on the server — both rejected for the first version.
 **Accepted residual:** a link holder with developer tools can read the participant **count and the opaque user ids**

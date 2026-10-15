@@ -115,7 +115,7 @@ changes nothing in the image.
         `cr-hybrid-kem-is-x-wing` is done, so the page describes X-Wing as built.
       - **Key hierarchy** — account (one KEK per unlock method → Master Key → identity keypair; separately the
         auth and Secret-Key-proof keypairs), scope (`K_SC` epochs, signed grants, admission tag), content
-        (`K_mem` per node incl. folders and chapters → `K_blob` → frames), sharing (`K_share` in the fragment,
+        (`K_node` per node incl. folders and chapters → `K_blob` → frames), sharing (`K_share` in the fragment,
         its recovery copy under `K_SC`, the uploader drop keypair). Per key: how it is made, what wraps it, who
         holds it, when it rotates, what losing it means. Sources: en.account.key-model, ADRs 0012, 0024, 0036,
         0080, security-model § Key hierarchy.

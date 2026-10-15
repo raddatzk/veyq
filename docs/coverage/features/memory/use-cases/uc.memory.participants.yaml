@@ -4,14 +4,14 @@ title: Memory participants — opaque ids in the sealed meta, a profile that lis
 # Built 2026-10-13, WEB ONLY (ADR 0083, inbox #20): the participants sub-object rides on the existing `wrappedMeta` write, so
 # there is no backend or contract change (and the existing NodesSliceTest wrappedMeta round trip is not claimed for it). The
 # guest exclusion is an INTERFACE boundary, not a cryptographic one - a share serves the node's meta unchanged and the guest
-# holds K_mem; the list holds opaque ids only, so the accepted residual is the count and the ids, never a name (ADR 0083
+# holds K_node; the list holds opaque ids only, so the accepted residual is the count and the ids, never a name (ADR 0083
 # decision 4, comparable to ADR 0030 point 8). Not built: a user avatar (inbox #414), the uploader on Depot (inbox #415).
 # The header action and "I was there" were clicked through on the dev instance (2026-10-14); the rest of the first build was
 # not verified in a real browser. The profile's covers load per visit only. The profile's map (inbox #417, 2026-10-14) is the
 # level's own SpaceMap; its unit tests stub Leaflet, so the drawn map on the profile was not seen in a real browser here.
 acceptanceCriteria:
   - id: participants-sealed-in-node-meta
-    text: A Memory's participants are a `participants` sub-object of opaque user ids (`{ userIds }`, unique, at most 100) inside its `wrappedMeta` under K_mem, written read-modify-write with the metaVersion compare-and-set; nothing but ids is stored (no name, no snapshot), unknown siblings are kept, an empty list drops the sub-object, and the server stores one opaque blob and no participant relation.
+    text: A Memory's participants are a `participants` sub-object of opaque user ids (`{ userIds }`, unique, at most 100) inside its `wrappedMeta` under K_node, written read-modify-write with the metaVersion compare-and-set; nothing but ids is stored (no name, no snapshot), unknown siblings are kept, an empty list drops the sub-object, and the server stores one opaque blob and no participant relation.
     coverage:
       web:
         unit:

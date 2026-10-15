@@ -60,7 +60,7 @@ acceptanceCriteria:
           - src/shared/state/livePoller.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: operator-blind-live
-    text: The server sees only an opaque revision counter, opaque mediaIds, exact timestamps (a medium's updatedAt, to the millisecond), and the poll access-pattern it already sees on reads — never content, never a key. No new operator-visible signal; K_mem/K_share never touch the server.
+    text: The server sees only an opaque revision counter, opaque mediaIds, exact timestamps (a medium's updatedAt, to the millisecond), and the poll access-pattern it already sees on reads — never content, never a key. No new operator-visible signal; K_node/K_share never touch the server.
     coverage:
       backend:
         integration:

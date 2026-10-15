@@ -7,7 +7,7 @@
   prev/next), and **download** an original — with every byte decrypted **on device**; **mark** the good ones and
   narrow the grid to *everyone's favorites* or *only mine*.
 - **Preconditions:** The user has unlocked the vault and is browsing the tree
-  ([uc.memory.browse](uc.memory.browse.md)); the Memory exists and its **`K_mem`** can be unwrapped; its media
+  ([uc.memory.browse](uc.memory.browse.md)); the Memory exists and its **`K_node`** can be unwrapped; its media
   carry **derivatives** ([en.memory.derivatives](../enablers/en.memory.derivatives.md); a non-derivable item
   shows an icon tile).
 - **Postconditions (success):** The user sees the Memory's media as a grid, opens any item in a lightbox and
@@ -18,7 +18,7 @@
 ## Main flow
 
 1. From the shell ([uc.memory.browse](uc.memory.browse.md)) the user clicks a Memory → it **opens**: the
-   client unwraps the Memory's **`K_mem`** (already held from the tree).
+   client unwraps the Memory's **`K_node`** (already held from the tree).
 2. The client **lists the Memory's media** ([en.memory.media](../enablers/en.memory.media.md)) and fetches each
    item's **thumbnail** ([en.memory.derivatives](../enablers/en.memory.derivatives.md)) via presigned GET,
    decrypts on device, and renders a **grid** under a header (title, item count, pin toggle, and — in a group
@@ -96,7 +96,7 @@
 - **E1 — an item has no derivable frame** (a type that is neither image nor video): the grid shows an **icon +
   name**. (There is **no backfill** — on a fresh instance every image/video media carries its derivatives from
   upload, [en.memory.derivatives](../enablers/en.memory.derivatives.md).)
-- **E2 — vault locked / Memory not open:** without `K_mem` the media can't be read → the gallery is unavailable
+- **E2 — vault locked / Memory not open:** without `K_node` the media can't be read → the gallery is unavailable
   until unlock + the Memory is opened.
 - **E3 — empty Memory:** the grid shows an empty state.
 - **E4 — personal scope:** *"everyone's favorites"* is degenerate when the user is the only member, so the
@@ -187,9 +187,9 @@ anhält, sobald du etwas berührst. Journal, Kapitel, Karten und Playlists komme
 - Enablers: [en.memory.derivatives](../enablers/en.memory.derivatives.md) (the three tiers),
   [en.memory.media](../enablers/en.memory.media.md) (the blob transport),
   [en.memory.favorites](../enablers/en.memory.favorites.md) (the Memory pin **and** the item mark),
-  [en.memory.tree](../enablers/en.memory.tree.md) (`K_mem`)
+  [en.memory.tree](../enablers/en.memory.tree.md) (`K_node`)
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (direct-to-store
-  media), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_mem` → `K_blob`),
+  media), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_node` → `K_blob`),
   [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) (the two favorite objects, the
   aggregate-only rule, and why the copy above says what it says)
 - Related use-cases: [uc.memory.browse](uc.memory.browse.md) (done — the shell this opens from);

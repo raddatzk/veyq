@@ -2,7 +2,7 @@
 
 - **ID:** uc.sharing.share-note
 - **Primary actor:** The **curator** (the person who owns/shares the Memory), signed in with the Memory open in
-  their scope — so they hold the scope's epoch keys (**`K_SC`**) and the Memory's **`K_mem`**.
+  their scope — so they hold the scope's epoch keys (**`K_SC`**) and the Memory's **`K_node`**.
 - **Goal:** Attach an **optional short note** to a share link (a greeting / instruction), **set when creating the
   share and editable in place afterward**, shown E2EE on the share page to whoever opens the link. One-way
   (curator → viewer).
@@ -23,13 +23,13 @@ sealed under the scope key **`K_SC` at the scope's current epoch** (AAD `share-k
 Memory, share and epoch — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), with the epoch stored
 beside it — so every scope member can recover `K_share` **anytime** to re-seal (edit) the note without minting a
 new link ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
-**The recovery copy is for the Memory's members only.** It is deliberately *not* under `K_mem`: every READ or
-READ_WRITE link carries `K_mem`, so such a copy would let one link plus a database dump open every other share of
+**The recovery copy is for the Memory's members only.** It is deliberately *not* under `K_node`: every READ or
+READ_WRITE link carries `K_node`, so such a copy would let one link plus a database dump open every other share of
 the Memory — its password, its private label, its note, and (the dump holds every share id) its whole link.
 `K_SC` is a key no share carries (ADR 0036 point 4). A create sealed at a stale epoch is `409 stale_epoch`; the
 client re-opens its scope key and retries once.
 **Operator-blind:** the server stores only the two ciphertexts + the opaque note; it never sees `K_share`,
-`K_SC`, `K_mem`, or the note text. The share page renders the note with the **safe markdown renderer** reused from tenant
+`K_SC`, `K_node`, or the note text. The share page renders the note with the **safe markdown renderer** reused from tenant
 terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up).
 
 ## Main flow
@@ -65,7 +65,7 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 - **A co-member reconstructs the link** (group/tenant scope) → possible (they hold `K_SC`), but grants nothing
   new — they can already read the Memory, and **revoke stays owner-gated** ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)
   consequences).
-- **A link holder tries the same** → nothing opens: a READ or READ_WRITE link holds `K_mem` and its own
+- **A link holder tries the same** → nothing opens: a READ or READ_WRITE link holds `K_node` and its own
   `K_share`, neither of which is `K_SC`, so even with a dump it reads no other share's password, label or note and
   rebuilds no other link (ADR 0036 point 4).
 - **A member removed from a group scope** keeps the `K_share` of every share they ever opened — it does not change

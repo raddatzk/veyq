@@ -4,10 +4,10 @@
 - **Primary actor:** A member with an **unlocked vault** who has a Memory (or chapter) open and wants to give it
   a **place**.
 - **Goal:** Curate a Memory's **place** — **one named location**: a map position derived from the Memory's own
-  photo GPS, plus a name that is either typed or reverse-geocoded — **sealed under the Memory's `K_mem`** and
+  photo GPS, plus a name that is either typed or reverse-geocoded — **sealed under the Memory's `K_node`** and
   shown on the Memory's detail header and on the **places map** — **operator-blind** (the veyq server never
   sees a coordinate or a place name).
-- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_mem`** is held). The node's
+- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_node`** is held). The node's
   `wrappedMeta` blob already exists (shipped for the date, [uc.memory.date](uc.memory.date.md)); place adds a
   `location` sub-object to it.
 - **Postconditions (success):** Once set, the Memory shows its named location; the user can "set location" (a
@@ -29,7 +29,7 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
    - **typed** → `manual` (e.g. "at grandma's"); or
    - **framed on the map**, if the reverse lookup is enabled → its centre + zoom become the `nameAnchor`, the
      provider returns a name at that resolution → `geocoded`, still editable.
-4. On save the client seals `{ v, …, location }` under `K_mem` and PATCHes `wrappedMeta`. The Memory's detail
+4. On save the client seals `{ v, …, location }` under `K_node` and PATCHes `wrappedMeta`. The Memory's detail
    header shows the named location, and it appears as a pin on the places map.
 
 ## Alternate / exception flows
@@ -46,7 +46,7 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
 - **A3 — browse the map:** a **toggle in the tenant root** shows every Memory as a pin, read from each node's
   sealed `location` via `listNodes` — no media load, no locations endpoint. Clicking a pin opens the Memory.
 
-- **E1 — vault locked / Memory not open:** without the node's `K_mem` the `wrappedMeta` can't be unsealed → the
+- **E1 — vault locked / Memory not open:** without the node's `K_node` the `wrappedMeta` can't be unsealed → the
   place is unavailable until unlock + open.
 - **E2 — malformed / wrong-key `wrappedMeta`:** best-effort — treated as no location; never a broken header/pin.
 - **E3 — "set location" with no photo GPS:** `derived` can't be formed. The user still types a **name**
@@ -68,7 +68,7 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   they get **no map** and see an already-resolved name only as **text**; they give up the map to keep their
   privacy (not a free-ride). **Unanimity binds:** once all members consent it is binding for new members (a
   ratchet — to withdraw you leave the space, you don't stay as a text-only rider). A resolved name is sealed in
-  the shared `wrappedMeta`, so members holding `K_mem` see it without their own device contacting the provider.
+  the shared `wrappedMeta`, so members holding `K_node` see it without their own device contacting the provider.
 - **Multilingual names.** A stored `name` is a **single frozen string**. For **shared** content it resolves in
   the **tenant's configured language** (a tenant setting) — consistent across members, not the random locale of
   whoever resolved it first; a personal space uses the user's own locale. Because `nameAnchor` is kept, an
@@ -91,7 +91,7 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   reads GPS **list-level**, the way date-`auto` reads `capturedAt` — GPS is promoted into the always-listed
   capture tier rather than left in the per-item EXIF blob. The lazy alternative (fetch each media's sealed EXIF
   on demand) was rejected: it would make `derivedMode: 'auto'` re-medoid an N-fetch operation on every upload.
-  Still sealed under `K_mem`, still operator-blind; no backfill — older media without the listed tier don't
+  Still sealed under `K_node`, still operator-blind; no backfill — older media without the listed tier don't
   contribute to the medoid (exactly as they don't to date-`auto`).
 - **A per-PHOTO place name is a different shape, and does not reopen the rejection above.** What was rejected is
   N per-item fetches to compute **one** answer (the medoid), repeated on **every open**. The detail panel
@@ -126,7 +126,7 @@ veyq sieht sie nie.
 - Use-cases: [uc.memory.date](uc.memory.date.md) (introduced the shared `wrappedMeta` blob this reuses),
   [uc.memory.browse](uc.memory.browse.md) (the node CRUD + `updateNode` this folds into),
   [uc.memory.gallery](uc.memory.gallery.md) (the media EXIF/GPS tier the medoid derives from)
-- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (K_mem seals "capture time, location"
+- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (K_node seals "capture time, location"
   — this UC applies it at the node level), [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md)
   (reverse-only, provider-neutral geocoding; Nominatim reference; veyq-blind),
   [ADR 0018](../../../decisions/0018-map-tiles-provider-neutrality.md) (map tiles: raster via Leaflet,

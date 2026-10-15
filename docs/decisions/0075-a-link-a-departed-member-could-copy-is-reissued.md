@@ -5,7 +5,7 @@
 
 ## Context
 
-A public share link is a bearer capability: `/s/{shareId}#k=K_share`. `K_mem` never re-keys
+A public share link is a bearer capability: `/s/{shareId}#k=K_share`. `K_node` never re-keys
 ([ADR 0012](0012-content-key-hierarchy.md) *Rotation / revocation*), so a scope-key rotation does not touch a link,
 and a link keeps showing photos added after a removal ([ADR 0029](0029-public-viewer-share.md) Consequences).
 
@@ -17,7 +17,7 @@ Who may hold a link is wider than "the people it was handed to":
   copying. A member removed from a group may therefore hold every link that existed on the group's Memories while
   they belonged — the server cannot know which ones they copied.
 - **Using a link needs no dump.** Against an honest server the link alone works. A removed member who also holds a
-  database dump already holds `K_mem` and reads the Memory whatever the link does; that is the ADR 0012 class and
+  database dump already holds `K_node` and reads the Memory whatever the link does; that is the ADR 0012 class and
   this decision does not move it. What is decided here is the **honest-server** cut.
 - **Re-activation revived the removed member's own link.** A removal soft-revokes the removed member's shares
   (ADR 0029 §6), and re-activation by a remaining member turned the very same link — same id, same fragment — back
@@ -112,7 +112,7 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
 
 - **What this buys is honest-server only.** Revocation is layer 1: a malicious operator can keep serving a revoked
   id. Against a dump, a new `K_share` keeps only the *new* share's later password, label and note edits out of a
-  departed member's reach; the Memory's content under `K_mem` stays the ADR 0012 class.
+  departed member's reach; the Memory's content under `K_node` stays the ADR 0012 class.
 - **The operator learns nothing new.** A re-issue is a create plus a tombstone of the old row, whose deletion the
   operator serves anyway; the removal counter counts membership deletes the operator already performs, and `reissue_only` records a
   switch-off it already served.

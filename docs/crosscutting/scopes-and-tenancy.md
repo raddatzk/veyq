@@ -75,16 +75,16 @@ flowchart TB
   ma["Member A<br>identity key"]
   mb["Member B<br>identity key"]
   ksc["Scope content key K_SC<br>(current epoch)"]
-  kmem["Per-Memory content keys K_mem"]
+  knode["Per-Memory content keys K_node"]
   content["Content<br>(nodes, media, journal, metadata)"]
   share["Public share<br>(per-share key)"]
   NB["A grant = the scope's current content-epoch key<br>sealed to a member's identity public key (one wrap<br>= the whole scope). Each member opens it with their<br>own identity private key."]
 
   ma -->|"opens (holds a grant)"| ksc
   mb -->|"opens (holds a grant)"| ksc
-  ksc -->|"unwraps"| kmem
-  kmem -->|"encrypts"| content
-  kmem -->|"one Memory's K_mem wrapped<br>to a per-share key (token-unlocked)"| share
+  ksc -->|"unwraps"| knode
+  knode -->|"encrypts"| content
+  knode -->|"one Memory's K_node wrapped<br>to a per-share key (token-unlocked)"| share
   ksc -.- NB
 
   classDef note fill:#fffdf0,stroke:#c9b458,stroke-dasharray:4 3,color:#5c5326
@@ -95,7 +95,7 @@ flowchart TB
   their identity public key** — one wrap grants the whole scope ([ADR 0024](../decisions/0024-scope-key-rotation.md)).
   Membership *is* this cryptographic grant; the server stores that a grant exists, not a readable role that
   confers content.
-- **Shares are least-privilege.** A public share gets only the *specific* Memory's content key (`K_mem`)
+- **Shares are least-privilege.** A public share gets only the *specific* Memory's content key (`K_node`)
   wrapped to a per-share key, unlocked by the share token — never the scope key. (Detail in the sharing
   feature.)
 - **Group/tenant roles** live in membership rows (`OWNER` / `MEMBER`) and gate *management*

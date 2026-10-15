@@ -8,7 +8,7 @@
   tiles, removed media **drops out** — with **no manual reload**; and a re-open is **fast** because a cheap
   "nothing changed" check skips the media re-list. **Operator-blind** throughout (an opaque revision counter +
   opaque `mediaId`s; the server never sees content).
-- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_mem`** is held to decrypt media). The
+- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_node`** is held to decrypt media). The
   gallery lists the node's **own** media ([uc.memory.gallery](uc.memory.gallery.md)).
 - **Postconditions (success):** The grid stays current with the server's media set while open; re-opens that
   found no change did **no** media query (a `304`). The server stored/served only the opaque revision counter,
@@ -36,7 +36,7 @@
   (a *set*, not a count) — the removed tile drops, any concurrent add inserts.
 - **E3 — tab backgrounded:** the poll **pauses** (visibility-gated) and **ticks once immediately on return** to
   foreground, so a returning viewer catches up at once without polling in the background.
-- **E4 — vault locked / Memory not open:** no `K_mem`, no polling — live updates only run for an open, unlocked
+- **E4 — vault locked / Memory not open:** no `K_node`, no polling — live updates only run for an open, unlocked
   gallery.
 - **E5 — a media that fails to decrypt (wrong/rotated key, corrupt):** best-effort — that tile is skipped, never a
   broken grid; the rest render.

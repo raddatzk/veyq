@@ -19,7 +19,7 @@ true: the server checked only the id.
   WRITE_ONLY link and uploaded. And the id rides every guest request path (`/s/{id}`, `/api/shares/{id}/…`), so any
   reverse-proxy access log an operator turns on holds it too (none is on in the bundled stack or the chart).
 - **What that bought was junk and spent quota, never a read.** Without `K_share` the writer can seal neither under
-  `K_mem` (READ_WRITE) nor to the link's drop key (WRITE_ONLY, [ADR 0031](0031-uploader-public-share.md) point 7),
+  `K_node` (READ_WRITE) nor to the link's drop key (WRITE_ONLY, [ADR 0031](0031-uploader-public-share.md) point 7),
   so its uploads open for nobody. Bounded per link ([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)
   §4) and by the per-share identity rate limit — integrity and availability, not confidentiality.
 

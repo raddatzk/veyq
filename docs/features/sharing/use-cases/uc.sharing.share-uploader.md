@@ -1,13 +1,13 @@
 # UC: Share a Memory as an uploader link (a write-only drop-box)
 
 - **ID:** uc.sharing.share-uploader
-- **Primary actor:** **a curator** — the owner of a **personal-scope** Memory (holds its `K_mem`).
+- **Primary actor:** **a curator** — the owner of a **personal-scope** Memory (holds its `K_node`).
 - **Secondary actor:** **an anonymous uploader** — no account, no identity keypair; names themselves once.
 - **Goal:** publish **one** of your own Memories as a **write-only drop-box** link — anyone with the link can **add
   photos** but **cannot see** the Memory's existing content (nor other contributors'), while the server stays
   operator-blind.
 - **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
-  (v1 restriction); the caller can open it (holds `K_mem`).
+  (v1 restriction); the caller can open it (holds `K_node`).
 - **Share roots today:** an uploader link can be rooted at a **Memory** or a **chapter** (sealed to the chapter's
   own drop key, its photos land in the chapter — [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 13), never at a folder (`422`). This
   use-case walks the Memory case; what each root kind allows is the [role matrix](../../../apps/memories.md#what-a-guest-may-do--the-role-matrix).
@@ -27,15 +27,15 @@ client-local** own-view. **v1: role WRITE_ONLY, personal scope, direct-append** 
 
 1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Uploader** role. The client
    mints `K_share`, re-seals the name, and seals the Memory's **drop public key** under `K_share` — **no wrap of
-   `K_mem`** ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). The Memory's first WRITE_ONLY
-   share mints the drop keypair and brings its private half sealed under `K_mem`, which the server sets on the
+   `K_node`** ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). The Memory's first WRITE_ONLY
+   share mints the drop keypair and brings its private half sealed under `K_node`, which the server sets on the
    Memory once. It `POST`s `{ shareId, nodeId, role: WRITE_ONLY, sealedDropPublicKey, sealedDropPrivateKey?, sealedName,
    writeVerifier }` — the hash of a write token derived from `K_share` ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)).
 2. **Hand off.** The client shows the link `/s/{shareId}#k=<base64url(K_share)>` to copy.
 3. **Open + name yourself (anonymous).** The visitor opens the link; the client `GET`s `/api/shares/{shareId}`
    (**no auth**) → `{ role: WRITE_ONLY, rootKind, sealedDropPublicKey, nodeId, sealedName }`; a WRITE_ONLY link's media
    read answers empty lists, so the client does not ask it (**no gallery** and
-   **no `K_mem`** — the uploader is never handed others' media, nor the key to read them). Because the role is
+   **no `K_node`** — the uploader is never handed others' media, nor the key to read them). Because the role is
    WRITE_ONLY, the client shows a **mandatory name pre-screen** with a **clear note that uploads are visible only in
    this browser tab**; the visitor names themselves → the client mints the identity's own key `K_up`, seals the
    name under it, and creates an anonymous **share identity** carrying `K_up` wrapped to the drop public key, plus
@@ -65,7 +65,7 @@ sequenceDiagram
   S-->>C: shareId
   C->>V: hand off link /s/{shareId}#35;k=…
   V->>S: GET /api/shares/{shareId}   (no auth)
-  S-->>V: { role: WRITE_ONLY, rootKind, sealedDropPublicKey, sealedName }   ← no K_mem
+  S-->>V: { role: WRITE_ONLY, rootKind, sealedDropPublicKey, sealedName }   ← no K_node
   Note right of V: no media read — for WRITE_ONLY it answers empty lists (no gallery)
   V->>V: drop public key = open(K_share)#59; mint K_up#59; seal name under K_up#59; keep ids + LOCAL previews
   V->>S: POST /identities { K_up wrapped to the drop key } + X-Share-Write → identityId + contributorToken
@@ -98,10 +98,10 @@ sequenceDiagram
   so even a *leaked* in-subtree id downloads nothing. On top of that it stays structural (an uploader is never
   handed anyone else's ids; ids are unguessable **identifiers**, not authorizers). The own-view is **client-local**
   (this session's uploads); upload + delete are **token-authorized** (the `contributorToken`).
-- **The guest never holds `K_mem` — write-only is cryptographic, not only a server refusal.** A WRITE_ONLY link
-  carries the Memory's drop public key instead of a wrap of `K_mem`; each guest identity seals its name and uploads
+- **The guest never holds `K_node` — write-only is cryptographic, not only a server refusal.** A WRITE_ONLY link
+  carries the Memory's drop public key instead of a wrap of `K_node`; each guest identity seals its name and uploads
   under a key of its own, wrapped to that drop key. Every reader of the Memory — its members, a viewer or
-  contributor link — opens those uploads through the drop private key the Memory keeps under `K_mem`, and a member
+  contributor link — opens those uploads through the drop private key the Memory keeps under `K_node`, and a member
   who edits one's metadata re-seals under the same key, so no media changes path. A leaked link plus a database
   and store dump reads only what that link's guests uploaded ([ADR 0031](../../../decisions/0031-uploader-public-share.md)
   point 7). A viewer or contributor link is served each uploader identity whose media it shows as its wrapped key
@@ -147,7 +147,7 @@ Galerie. Du als Kurator:in siehst jeden Beitrag in deiner eigenen Erinnerung und
   client-local, session-only own-view + delete-own), [ADR 0030](../../../decisions/0030-contributor-public-share.md)
   (the sealed identity + share-scoped upload path it reuses), [ADR 0029](../../../decisions/0029-public-viewer-share.md)
   (the share resource + anonymous access path), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (the
-  `K_mem` keying), [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (the direct-to-store
+  `K_node` keying), [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (the direct-to-store
   upload), [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (client-integrity trust tier).
 - Cross-cutting: [Security Model](../../../crosscutting/security-model.md),
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md).

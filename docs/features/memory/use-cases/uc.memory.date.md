@@ -4,9 +4,9 @@
 - **Primary actor:** A member with an **unlocked vault** who has a Memory (or chapter) open and wants to give it
   a **date**.
 - **Goal:** Curate a Memory's **date** — a mode-switch (`auto` / `single` / `range` / `ongoing`) — **sealed under
-  the Memory's `K_mem`** and shown on the Memory's **browse card** (cover + title + range, grid sorted by start
+  the Memory's `K_node`** and shown on the Memory's **browse card** (cover + title + range, grid sorted by start
   date) and its detail header — **operator-blind** (the veyq server never sees a day).
-- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_mem`** is held). The node model
+- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_node`** is held). The node model
   already carries per-node sealed fields (`encryptedName`, `wrappedContentKey`); this adds one more,
   `wrappedMeta`.
 - **Postconditions (success):** The Memory shows its effective date; the user can switch the date mode and enter
@@ -14,7 +14,7 @@
 
 ## How `auto` is derived
 
-The date's sealed **shape** + envelope (sealing under `K_mem`, versioning, `updateNode` / `listNodes` threading,
+The date's sealed **shape** + envelope (sealing under `K_node`, versioning, `updateNode` / `listNodes` threading,
 materialization on the node) is the enabler [en.memory.node-meta](../enablers/en.memory.node-meta.md). What this
 use-case adds is the **`auto`** behaviour — the other three modes just carry the user's typed days:
 
@@ -36,11 +36,11 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
 
 1. **In the browse grid**, each Memory **card** shows its sealed range (cover + title + range), and the grid is
    **sorted by start date**. The range is read from the node's `wrappedMeta` (unsealed under that node's
-   `K_mem`) — no media load.
+   `K_node`) — no media load.
 2. With a Memory **open**, the header shows the same **effective date**, and the user **edits** it → a **mode
    switch** (`auto` / `single` / `range` / `ongoing`) reveals the fitting inputs: none for `auto`; one day
    picker for `single`; from/to for `range`; a start for `ongoing`.
-3. On save, the client seals `{ v, date }` under the Memory's **`K_mem`** and PATCHes `wrappedMeta`; the header
+3. On save, the client seals `{ v, date }` under the Memory's **`K_node`** and PATCHes `wrappedMeta`; the header
    (and, next browse, the card) re-render. Choosing `auto` re-materializes the range from the current media.
 4. **When media is added or removed** from an `auto` Memory, the client recomputes min/max over its media and
    re-seals `wrappedMeta` so the card stays correct (self-healed on the next open as a safety net).
@@ -48,7 +48,7 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
 ## Alternate / exception flows
 
 - **E1 — no dated media in `auto`:** the header shows a neutral "no date yet" state; adding dated media fills it.
-- **E2 — vault locked / Memory not open:** without the node's `K_mem` the `wrappedMeta` can't be unsealed → the
+- **E2 — vault locked / Memory not open:** without the node's `K_node` the `wrappedMeta` can't be unsealed → the
   date is unavailable until unlock + open.
 - **E3 — malformed / wrong-key `wrappedMeta`:** best-effort for display — treated as no manual date (falls back
   to `auto`), never a broken header. It is never *written* over: the self-heal stops and a date save is refused
@@ -65,7 +65,7 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
 
 - **Operator-blind.** The veyq server sees the node shape + its timestamps (when it was created or
   trashed, to the second) + the **opaque `wrappedMeta`** blob; never the Memory's day. The date is sealed under
-  `K_mem` and unsealed only on device. (The blob envelope +
+  `K_node` and unsealed only on device. (The blob envelope +
   operator-blindness at the node level: [en.memory.node-meta](../enablers/en.memory.node-meta.md).)
 - **`auto` reuses the capture-time tier** the gallery already lists (cr-0064/0066); it is materialized into
   `wrappedMeta` by a full-list reconcile at settle points (a small extra `updateNode` PATCH) so the browse grid
@@ -98,6 +98,6 @@ Daten und erfährt nie den Tag, an dem du dort warst.
   [uc.memory.browse](uc.memory.browse.md) (the node CRUD + `updateNode` this folds into),
   [uc.memory.gallery](uc.memory.gallery.md) (the capture-time tier that `auto` derives from),
   [uc.memory.chapters](uc.memory.chapters.md) (a chapter is a node too — it carries `wrappedMeta` the same way)
-- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (K_mem seals "capture time, location"
+- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (K_node seals "capture time, location"
   — this UC applies it at the node level)
 - Future: the **aggregated** chronological date/gallery across a Memory + its chapters

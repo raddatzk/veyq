@@ -2,7 +2,7 @@
 
 - **ID:** uc.memory.cover
 - **Primary actor:** A member with an **unlocked vault** who has a Memory open and wants to give it a **cover**.
-- **Goal:** Curate a Memory's **cover** — pick **one image** and **crop** it — **sealed under the Memory's `K_mem`**
+- **Goal:** Curate a Memory's **cover** — pick **one image** and **crop** it — **sealed under the Memory's `K_node`**
   and shown identically wherever the Memory appears: its **browse card**, its **detail header**, its **map pin**
   ([uc.memory.place](uc.memory.place.md)) and its entry in the **sidebar's Favorites**. **A cover is core's since inbox
    #411** ([uc.platform.node-cover](../../platform/use-cases/uc.platform.node-cover.md)): the action ("Set cover" /
@@ -12,7 +12,7 @@
   (`memoryPhotoSource` in `memoryCover.ts`) and the gallery's **Set as cover** that feeds it. The sidebar showed the cover until the Favorites section
   became core's and drew each kind's icon (#409); #411 restored it, for every kind that has one.
   **Operator-blind** — the server never sees which image, or the crop.
-- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_mem`** is held). The node already carries
+- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_node`** is held). The node already carries
   the sealed `wrappedMeta` blob ([en.memory.node-meta](../enablers/en.memory.node-meta.md)); this adds a `cover`
   sub-object beside the `date`/`location`.
 - **Postconditions (success):** The Memory shows its chosen cover everywhere it appears — browse card, detail
@@ -26,12 +26,12 @@ nothing; unset ⇒ a placeholder shows, like a location is never auto-created). 
 - **an existing Memory media** — referenced by `mediaId` (this use-case's first slice, cr-0072); or
 - **a brand-new uploaded image** that is **not** added to the Memory's media — a **standalone cover blob** committed
   to the node with **no `veyq_media` row** (so it never appears in the gallery), sealed under a `K_blob` wrapped by
-  `K_mem` and served over the existing presigned transport (cr-0073).
+  `K_node` and served over the existing presigned transport (cr-0073).
 
 The **crop is normalized `{ x, y, width, height }` in 0..1** against the source image (the pre-E2EE design source's
 `CoverCrop`), so **one stored crop renders identically at any size** — a rail tile, a small card, a larger detail
 header, or a map pin — with no per-surface crop and no cropped-image upload. The whole `cover { source, crop }` is sealed in the
-node's `wrappedMeta` under `K_mem`; the display just expands the decrypted thumbnail inside an `overflow:hidden` box
+node's `wrappedMeta` under `K_node`; the display just expands the decrypted thumbnail inside an `overflow:hidden` box
 and offsets it.
 
 ## Main flow
@@ -50,7 +50,7 @@ and offsets it.
    the lightbox**, an **uploaded image**, or the **current cover re-framed**; the user **drag-pans** and **zooms**
    (1–3×) to frame it. Save normalizes the pan/zoom back to the `0..1` crop rectangle.
 3. On save, the client seals `cover { source, crop }` — `source` = the media `mediaId` or the uploaded blob ref —
-   into the node's `wrappedMeta` under `K_mem` (read-modify-write — the sibling date/location are preserved) and sends it with
+   into the node's `wrappedMeta` under `K_node` (read-modify-write — the sibling date/location are preserved) and sends it with
    core's write: a new image is `setNodeCover` (the open upload AND the meta that names it, one transaction), a switch away
    from an uploaded cover or its removal is `removeNodeCover` (the blob freed in the same write), anything else a plain
    `updateNode`. The blob step is decided from the cover the write replaced
@@ -72,7 +72,7 @@ and offsets it.
   placeholder is what appears.
 - **E2 — the chosen media was deleted:** the `cover.mediaId` dangles → best-effort fall back to the placeholder
   (never a broken card, pin or rail tile); the user can pick a new cover.
-- **E3 — vault locked / Memory not open:** without the node's `K_mem` the `wrappedMeta` can't be unsealed → the
+- **E3 — vault locked / Memory not open:** without the node's `K_node` the `wrappedMeta` can't be unsealed → the
   cover is unavailable until unlock + open.
 - **E4 — malformed / wrong-key `wrappedMeta` or crop:** best-effort — a bad crop normalizes to the full frame; an
   unopenable blob shows the placeholder. Never a throw.
@@ -80,7 +80,7 @@ and offsets it.
 ## Quality notes
 
 - **Operator-blind.** The server holds the node shape + the **opaque `wrappedMeta`**; never the chosen image id or
-  the crop. The cover is sealed under `K_mem` and unsealed only on device. (Envelope + node-level blindness:
+  the crop. The cover is sealed under `K_node` and unsealed only on device. (Envelope + node-level blindness:
   [en.memory.node-meta](../enablers/en.memory.node-meta.md).)
 - **One normalized crop, one image, everywhere.** A single `0..1` crop drives the card, the detail header, the
   map pin through one shared display formula — a Memory reads as itself wherever
@@ -92,7 +92,7 @@ and offsets it.
   pin auto-picked the media nearest the place.)
 - **Reuse the existing UI/UX — never invent.** The picker + hand-rolled pan/zoom crop + the crop-display formula
   are existing components (core's `CoverDialog` with the shared `ImageCropper`, `MemoryCoverImage`, `CoverCrop`);
-  only the data layer is swapped to the contracts client + `K_mem` sealing. No crop library is added.
+  only the data layer is swapped to the contracts client + `K_node` sealing. No crop library is added.
 
 ## What this means for you / Was das für dich bedeutet
 
@@ -113,7 +113,7 @@ Gerät verschlüsselt; der Server speichert nur verschlüsselte Daten.
 - Use-cases: [uc.memory.date](uc.memory.date.md) + [uc.memory.place](uc.memory.place.md) (the sibling curated
   sub-objects on the same `wrappedMeta`), [uc.memory.gallery](uc.memory.gallery.md) (the media tiers the cover is
   chosen from + displayed with), [uc.memory.browse](uc.memory.browse.md) (the card + `updateNode` this folds into)
-- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (K_mem seals node content)
+- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (K_node seals node content)
 - Core's feature: [uc.platform.node-cover](../../platform/use-cases/uc.platform.node-cover.md) (inbox #411 — Memories' two
   cover endpoints became core's `setNodeCover` / `removeNodeCover`; the crop model, the store and the writer moved to
   `core/node/cover/`; the follow-up of 2026-10-12 moved the dialog there too — the Memory keeps its photo source and the lightbox

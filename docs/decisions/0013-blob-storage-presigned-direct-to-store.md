@@ -6,7 +6,7 @@
 ## Context
 
 [ADR 0012](0012-content-key-hierarchy.md) fixed the content-key hierarchy down to **`K_blob`** (a per-blob
-random key, wrapped under its Memory's `K_mem`, encrypting the blob's `chunk_frame`s). What it did **not**
+random key, wrapped under its Memory's `K_node`, encrypting the blob's `chunk_frame`s). What it did **not**
 settle is *where the encrypted bytes live and how they travel* — the media transport. That is this ADR.
 
 Forces:
@@ -292,7 +292,7 @@ serves uploader-chosen bytes on the app origin applies it, and the playback Serv
 
 ## Related
 
-- [ADR 0012](0012-content-key-hierarchy.md) (`K_blob` per blob, random, under `K_mem`),
+- [ADR 0012](0012-content-key-hierarchy.md) (`K_blob` per blob, random, under `K_node`),
   [ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md) (`chunk_frame` is vector-pinned).
 - [ADR 0063](0063-database-driven-tenant-ingress.md) (per-tenant-domain presigning on a multi-domain server),
   [ADR 0064](0064-kubernetes-helm-deployment-target.md) (the Kubernetes CORS branch of §4).

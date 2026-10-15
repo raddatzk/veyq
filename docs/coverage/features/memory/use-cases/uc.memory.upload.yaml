@@ -6,7 +6,7 @@ title: Upload media into a Memory (web)
 # backend + web refs; the tray + queue are web unit-tested; the end-to-end browser flow is the cr-0058 smoke.
 acceptanceCriteria:
   - id: seal-and-upload-operator-blind
-    text: Each picked file is sealed under a fresh K_blob (wrapped to K_mem), its chunks PUT direct-to-store, and one role-tagged media is attached to the node — the server sees only ciphertext + opaque sizes/counts. Metadata is sealed under K_mem in two tiers (cr-0064/0068) — the always-listed wrappedMeta tier (geometry + capture time + GPS, returned with every list) and the lazy, panel-only wrappedExif bundle (kept out of the list, fetched via getMediaExif) — so the gallery lays out + sorts and the detail panel fills without the server ever seeing a single field. Neither tier's contents are enumerated here — both are versioned client-only shapes, and an enumeration in a place that cannot read them only goes stale.
+    text: Each picked file is sealed under a fresh K_blob (wrapped to K_node), its chunks PUT direct-to-store, and one role-tagged media is attached to the node — the server sees only ciphertext + opaque sizes/counts. Metadata is sealed under K_node in two tiers (cr-0064/0068) — the always-listed wrappedMeta tier (geometry + capture time + GPS, returned with every list) and the lazy, panel-only wrappedExif bundle (kept out of the list, fetched via getMediaExif) — so the gallery lays out + sorts and the detail panel fills without the server ever seeing a single field. Neither tier's contents are enumerated here — both are versioned client-only shapes, and an enumeration in a place that cannot read them only goes stale.
     coverage:
       backend:
         integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.derivativesRoundTripWithOwnWraps, MediaSliceTest.mediaExifWithoutExifIsNull]
@@ -15,7 +15,7 @@ acceptanceCriteria:
   - id: upload-seals-only-under-its-own-memory-key
     text: >-
       An upload into a Memory seals only under that Memory's own key; a server that serves another Memory's key
-      wrap on its row makes the upload refuse, not land under the other key. Every `K_mem` wrap is sealed bound to
+      wrap on its row makes the upload refuse, not land under the other key. Every `K_node` wrap is sealed bound to
       the node it belongs to (ADR 0072) — the id the client minted at creation and the server stores verbatim — so
       resolving a Memory's key from a wrap that belongs to another Memory is refused at the seal instead of
       yielding the other Memory's key (under which every upload would otherwise be sealed, and readable through

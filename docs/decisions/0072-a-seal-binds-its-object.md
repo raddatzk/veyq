@@ -13,11 +13,11 @@ decides which one a client receives for which object. Measured 2026-09-23 agains
 that yields three things:
 
 - **Swap between objects under one shared key.** Node names (under `K_SC`), `K_blob` wraps, derivative refs and
-  media metadata (under `K_mem`), member names (under the tenant key), bucket and contributor names, share-key
+  media metadata (under `K_node`), member names (under the tenant key), bucket and contributor names, share-key
   recovery wraps, item favorites: the server can serve any of them for any sibling.
-- **A confidentiality break, not only an integrity one.** A Memory's `K_mem` is `symWrap(K_SC, K_mem, 'content-key')`
+- **A confidentiality break, not only an integrity one.** A Memory's `K_node` is `symWrap(K_SC, K_node, 'content-key')`
   for every Memory in the scope. A server that serves shared Memory S's wrap on private Memory X's row makes the
-  client unwrap `K_mem(S)` cleanly and seal every new upload and chapter under X to it, where S's public share
+  client unwrap `K_node(S)` cleanly and seal every new upload and chapter under X to it, where S's public share
   link reads them.
 - **Cross-scope and cross-epoch grant swaps.** Every self-grant is `asymWrap(ownPub, K, 'scope-grant')`, so one
   scope's grant opens in another scope's row, and the client takes the epoch a grant belongs to from the server.

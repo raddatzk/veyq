@@ -2,7 +2,7 @@ useCase: uc.sharing.share-contributor
 feature: sharing
 title: Share a Memory as a contributor link (anyone with the link can add photos)
 # Built (web vertical, cr-0101 + ADR 0030): a READ_WRITE public share of one Memory (any scope, ADR 0029 §6) — the viewer
-# share (symWrap(K_share, K_mem), key in the URL fragment) plus a mandatory display name sealed under K_mem → an
+# share (symWrap(K_share, K_node), key in the URL fragment) plus a mandatory display name sealed under K_node → an
 # anonymous share identity (the buckets forward-compat hook), share-scoped UNAUTHENTICATED upload endpoints
 # (presign mirror + complete, gated by role READ_WRITE + enabled + a contributor token), and direct-append
 # attribution. Covered by the backend slice (create READ_WRITE → identity-create → share-scoped upload attaches
@@ -19,7 +19,7 @@ title: Share a Memory as a contributor link (anyone with the link can add photos
 # authenticated upload path never exercises.
 acceptanceCriteria:
   - id: create-contributor-share
-    text: A curator turns one of their personal-scope Memories into a READ_WRITE share — the curator picks the Contributor role in the Share dialog; the client mints K_share and a 256-bit shareId, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role READ_WRITE, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
+    text: A curator turns one of their personal-scope Memories into a READ_WRITE share — the curator picks the Contributor role in the Share dialog; the client mints K_share and a 256-bit shareId, computes symWrap(K_share, K_node), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role READ_WRITE, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
     coverage:
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
@@ -38,10 +38,10 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts, src/features/memory/components/ShareDialog.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: sealed-name-anonymous-identity
-    text: Before contributing, the visitor must enter a display name (mandatory) — asked at its first write in the share page's one naming dialog, never on a screen in front of the content. The client seals it under K_mem and creates an anonymous share identity under a client-minted id via POST /api/shares/{shareId}/identities { identityId, sealedDisplayName } -> { identityId, contributorToken }. The server stores only the K_mem-sealed name (ciphertext) + the token hash + shareId; it never sees the name. The sealed name -> identity is the forward-compat hook for buckets (a later slice).
+    text: Before contributing, the visitor must enter a display name (mandatory) — asked at its first write in the share page's one naming dialog, never on a screen in front of the content. The client seals it under K_node and creates an anonymous share identity under a client-minted id via POST /api/shares/{shareId}/identities { identityId, sealedDisplayName } -> { identityId, contributorToken }. The server stores only the K_node-sealed name (ciphertext) + the token hash + shareId; it never sees the name. The sealed name -> identity is the forward-compat hook for buckets (a later slice).
     coverage:
       # The e2e proves the CROSS-ACTOR half no other layer reaches: an anonymous stranger seals a display name
-      # under K_mem, the server relays it as ciphertext onto the contributor's primary bucket, and the curator —
+      # under K_node, the server relays it as ciphertext onto the contributor's primary bucket, and the curator —
       # who never met them — opens it with openBucketName. The route is the bucket copy because it is the only
       # read that serves a guest's name at all: no public resolve does (ADR 0030 point 8; uc.memory.buckets
       # guest-names-for-members-only).
@@ -61,7 +61,7 @@ acceptanceCriteria:
       web:
         unit: [src/views/ShareView.naming.test.ts, src/views/ShareView.memory.test.ts, src/views/ShareView.test.ts, src/features/depot/components/DropBoxShareBody.test.ts, src/features/memory/source.test.ts]
   - id: share-scoped-upload
-    text: Three share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role READ_WRITE + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads opens sessions and presigns their first window of PUTs, POST /api/shares/{shareId}/blob-upload-windows presigns each next window, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_mem and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
+    text: Three share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role READ_WRITE + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads opens sessions and presigns their first window of PUTs, POST /api/shares/{shareId}/blob-upload-windows presigns each next window, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_node and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
     coverage:
       # The slice proves the endpoints' authz; only the e2e proves the TRANSPORT — real presigned PUTs of real
       # sealed chunks into the bundled store, and the bytes coming back out through the gated presign byte-equal.
@@ -92,7 +92,7 @@ acceptanceCriteria:
       web:
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: operator-blind
-    text: The server stores only the share record (shareId + wrap + plaintext role + sealed name + nodeId), an opaque share_identity (K_mem-sealed contributor name + token hash + shareId), a share_identity_id stamp on media, and ciphertext blobs. It never sees K_share, K_mem, the Memory name, the contributor's name, the photo bytes, or who the person is. The no-install contributor page carries the same trust-tier honesty (footer link, ADR 0026); a reported share is decryptable (T&S corollary), intended.
+    text: The server stores only the share record (shareId + wrap + plaintext role + sealed name + nodeId), an opaque share_identity (K_node-sealed contributor name + token hash + shareId), a share_identity_id stamp on media, and ciphertext blobs. It never sees K_share, K_node, the Memory name, the contributor's name, the photo bytes, or who the person is. The no-install contributor page carries the same trust-tier honesty (footer link, ADR 0026); a reported share is decryptable (T&S corollary), intended.
     coverage:
       # The e2e is the only ref here that reads the STORED BYTES rather than the client's intent: its
       # wire-assertion sweep (ADR 0053) proves the five values this flow sealed — the Memory name, the note's two

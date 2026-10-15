@@ -16,8 +16,8 @@ Two constraints shape the mechanism:
   retract *already-seen* content — an accepted limit ([security-model](../crosscutting/security-model.md) revocation).
 - **`K_SC` is the navigation root** ([ADR 0012](0012-content-key-hierarchy.md)): node **names**, `slug_token`s and
   the (deferred) `dedup_token` key off it. A naïve full rotation would therefore have to re-seal the whole tree —
-  and to deny a removed member *existing* media it would have to change every `K_mem` and **re-encrypt + re-upload
-  every blob** (they hold the old `K_SC`, so the old `K_mem`-wrap still opens for them). That is gigabytes re-keyed
+  and to deny a removed member *existing* media it would have to change every `K_node` and **re-encrypt + re-upload
+  every blob** (they hold the old `K_SC`, so the old `K_node`-wrap still opens for them). That is gigabytes re-keyed
   on every leave, for the narrow gain of protecting *existing-but-unopened* content against a **malicious operator**
   — a threat veyq otherwise punts on pre-key-transparency. Rejected.
 
@@ -35,7 +35,7 @@ members; new content seals under it. Nothing is re-encrypted.**
    binds the scope and that epoch ([ADR 0072](0072-a-seal-binds-its-object.md)).
 
 2. **Content is tagged with the epoch it was sealed under.** Node **names**, `slug_token`s and each Memory's
-   `K_mem`-wrap seal under the **current** epoch at creation time; every node carries a **server-visible epoch
+   `K_node`-wrap seal under the **current** epoch at creation time; every node carries a **server-visible epoch
    index** (a small integer). A member reads a node of epoch `k` iff the highest epoch they hold ≥ `k` (they peel
    down to `E_k`). The epoch index is not sensitive: the operator already sees membership changes + node
    `createdAt`, so "which key generation" is inferable from timing — exposing it adds no semantic leak and saves an

@@ -18,7 +18,7 @@ Gradle module of its own; the web half is separated by import direction only (se
   `me.raddatz.veyq.memories.generated`; the blob transfer an upload runs on is core's `contracts/api/blob.openapi.yaml`,
   a guest's is core's `sharing.openapi.yaml`, and every guest operation passes core's `ShareGuestGate` first. Core's
   resolve serves the link and the shared nodes only.
-- **Keys:** `K_mem` per Memory (the share grain) and `K_blob` per blob under it
+- **Keys:** `K_node` per Memory (the share grain) and `K_blob` per blob under it
   ([ADR 0012](../decisions/0012-content-key-hierarchy.md)). These derive as they always have, the documented
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
 - **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
@@ -69,7 +69,7 @@ no declaration allows nothing. This is Memories' answer, measured from the code 
 
 What the cells rest on:
 
-- **A `CHAPTER` link is a smaller `MEMORY` link.** The chapter has its own `K_mem`, its media's `K_blob` hang under
+- **A `CHAPTER` link is a smaller `MEMORY` link.** The chapter has its own `K_node`, its media's `K_blob` hang under
   it, and the resolve, the media list and the blob GET all read the subtree under the share's root
   (`SharingStore.subtree`, `ShareGuestGate.viewGate`, `SharingStore.authorizedBlob`): a chapter guest is served the
   chapter (without its own entry, which is sealed under the Memory's key) and nothing of the Memory or a sibling

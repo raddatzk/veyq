@@ -4,7 +4,7 @@ title: Buckets — group a Memory's media by who contributed it
 # Built by cr-0113 (contracts → backend → web). A bucket = a per-uploader
 # container within one Memory, the attribution axis orthogonal to Chapters: a real veyq_bucket table keyed by an
 # opaque owner_key ("user:{id}" | "share:{shareIdentityId}"), a lazy virtual primary + one-level sub-buckets,
-# K_mem-sealed names, media linked via a nullable bucket_id + a denormalized created_by; reparent-on-delete. The
+# K_node-sealed names, media linked via a nullable bucket_id + a denormalized created_by; reparent-on-delete. The
 # curation authz was relaxed in cr-0123 (a member curates any owner-root's sub-buckets + moves media within one
 # root — never a primary, never across owners). The web ships the "Beiträge" tab with per-tile selection + an
 # explicit action bar (cr-0122). A camera filter is a later slice. A full live
@@ -23,14 +23,14 @@ acceptanceCriteria:
       backend:
         integration: [MediaBucketsSliceTest.uploadStampsOwnerKeyAndMaterializesPrimary, MediaBucketsSliceTest.createSubBucketMoveThenDeleteReparents]
   - id: sub-bucket-endpoints
-    text: Sub-buckets sit one level under a primary (parent must be primary), owner inherited, K_mem-sealed name; the backend exposes create/rename/delete/move endpoints; delete reparents the sub-bucket's media to the owner's primary and never deletes media, primaries are neither renameable nor deletable. Curation authz (cr-0123) — a scope member may create a sub under any primary root, rename/delete any sub (own or a contributor's), and move media WITHIN one owner-root, but never a primary and never across owners (a single distinct source owner_key is required, else 403).
+    text: Sub-buckets sit one level under a primary (parent must be primary), owner inherited, K_node-sealed name; the backend exposes create/rename/delete/move endpoints; delete reparents the sub-bucket's media to the owner's primary and never deletes media, primaries are neither renameable nor deletable. Curation authz (cr-0123) — a scope member may create a sub under any primary root, rename/delete any sub (own or a contributor's), and move media WITHIN one owner-root, but never a primary and never across owners (a single distinct source owner_key is required, else 403).
     coverage:
       backend:
         integration: [MediaBucketsSliceTest.createSubBucketMoveThenDeleteReparents, MediaBucketsSliceTest.renameSubBucketUpdatesSealedName, MediaBucketsSliceTest.memberMayManageAnotherRootsSubBucket, MediaBucketsSliceTest.memberCreatesSubUnderAnotherRootInheritingItsOwner, MediaBucketsSliceTest.createSubRejectsNonPrimaryParent, MediaBucketsSliceTest.crossOwnerMoveIsRejected, MediaBucketsSliceTest.primaryBucketNotRenameableNorDeletable, MediaBucketsSliceTest.aMetaEditOverlappingASubBucketDeleteKeepsTheReparent, MediaBucketsSliceTest.aMoveIntoASubBucketBeingDeletedIsRefused]
       web:
         unit: [src/features/memory/media.buckets.test.ts, src/features/memory/components/MemoryBuckets.test.ts]
   - id: contributions-tab-primary-grouping
-    text: A "Beiträge" tab lists the Memory's uploaders by their primary bucket (with per-bucket counts); selecting one filters the existing MediaGrid + lightbox to that uploader. Bucket names are unsealed under K_mem client-side (a contributor's sealed name, shown marked as a guest's - "Ben (guest)", inbox #433 - while a sub-bucket's name, a member's, is not; a member's the per-tenant username), an unsealable name falling back to a neutral placeholder. An explicit action bar (cr-0122) adds per-tile selection (checkbox top-left, 3-dot top-right), a select-all/deselect toggle, and visible Move / Delete (delete = a straight soft-delete to trash with a local undo bar); the bucket actions (upload / new sub / rename / delete) are buttons beside the picker, enabled per the cr-0123 curation authz.
+    text: A "Beiträge" tab lists the Memory's uploaders by their primary bucket (with per-bucket counts); selecting one filters the existing MediaGrid + lightbox to that uploader. Bucket names are unsealed under K_node client-side (a contributor's sealed name, shown marked as a guest's - "Ben (guest)", inbox #433 - while a sub-bucket's name, a member's, is not; a member's the per-tenant username), an unsealable name falling back to a neutral placeholder. An explicit action bar (cr-0122) adds per-tile selection (checkbox top-left, 3-dot top-right), a select-all/deselect toggle, and visible Move / Delete (delete = a straight soft-delete to trash with a local undo bar); the bucket actions (upload / new sub / rename / delete) are buttons beside the picker, enabled per the cr-0123 curation authz.
     coverage:
       web:
         unit: [src/features/memory/media.buckets.test.ts, src/features/memory/components/MemoryBuckets.test.ts]

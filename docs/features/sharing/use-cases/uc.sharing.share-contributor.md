@@ -1,12 +1,12 @@
 # UC: Share a Memory as a contributor link (anyone with the link can add photos)
 
 - **ID:** uc.sharing.share-contributor
-- **Primary actor:** **a curator** — the owner of a **personal-scope** Memory (holds its `K_mem`).
+- **Primary actor:** **a curator** — the owner of a **personal-scope** Memory (holds its `K_node`).
 - **Secondary actor:** **an anonymous contributor** — no account, no identity keypair; names themselves once.
 - **Goal:** publish **one** of your own Memories as a **contributor link** — anyone with the link can **view it and
   add photos** — while the server stays operator-blind and the rest of your content stays private.
 - **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
-  (v1 restriction); the caller can open it (holds `K_mem`).
+  (v1 restriction); the caller can open it (holds `K_node`).
 - **Share roots today:** a contributor link can be rooted at a **Memory**, a **chapter** (its photos land in the
   chapter) or a **folder** ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 6 and 13): a folder's contributor creates folders and
   uploads files inside it — never a Memory, a drop box or another application's node (owner decision 2026-10-14; the
@@ -18,19 +18,19 @@
   `/s/{shareId}#k=<K_share>` lets any anonymous visitor open the Memory **and contribute photos** — after naming
   themselves — until the curator revokes it or it expires. Contributed photos appear in the Memory immediately
   (direct-append) and are attributed to the contributor's **sealed** name. Operator-blind throughout: the server
-  never sees `K_share`, `K_mem`, any name (the Memory's or the contributor's), or the photo bytes.
+  never sees `K_share`, `K_node`, any name (the Memory's or the contributor's), or the photo bytes.
 
 This is the second sharing slice ([ADR 0030](../../../decisions/0030-contributor-public-share.md)), building on
 the public **viewer** share ([uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md),
 [ADR 0029](../../../decisions/0029-public-viewer-share.md)). The crypto is the same per-Memory second-wrap of
-[ADR 0012](../../../decisions/0012-content-key-hierarchy.md); a contributor unwraps `K_mem` from the fragment key
+[ADR 0012](../../../decisions/0012-content-key-hierarchy.md); a contributor unwraps `K_node` from the fragment key
 exactly as a viewer does, then seals new media under it. **v1 is deliberately narrow: role READ_WRITE only
 (view + add), direct-append, personal-scope Memories.**
 
 ## Main flow
 
 1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Contributor** role (instead of
-   Viewer). The client mints `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_mem)`, re-seals
+   Viewer). The client mints `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_node)`, re-seals
    the Memory name under `K_share`, and `POST`s the share record `{ shareId, nodeId, role: READ_WRITE, wrap,
    sealedName, writeVerifier, expiresAt? }` — `writeVerifier` is the hash of a write token derived from `K_share`
    ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)). The server stores the record opaquely under that id.
@@ -40,7 +40,7 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
    auth**) → the record + the sealed subtree, and renders the Memory exactly as a member sees it (inbox #401) — the
    same view, with the functions a contributor lacks removed. At the visitor's **first write** the page asks for a
    **mandatory display name** in its one naming dialog (core's `GuestNaming`; nothing is sent before it). The
-   visitor enters a display name; the client **seals it under `K_mem`** and creates an
+   visitor enters a display name; the client **seals it under `K_node`** and creates an
    **anonymous share identity** under an `identityId` it mints (`POST /api/shares/{shareId}/identities
    { identityId, sealedDisplayName }` → `{ identityId, contributorToken }`, held on device). The request proves the
    visitor holds the whole link: `X-Share-Write` carries the token derived from the fragment key, and the server
@@ -56,7 +56,7 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
    [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md) § E3 (Safari's Photos gallery populates
    `input.files` late) holds here unchanged; it is a property of the picker, not of the screen, and a visitor
    is exactly the person who cannot be told to retry. The client then seals each under a fresh `K_blob`
-   (wrapped under `K_mem`) with its
+   (wrapped under `K_node`) with its
    derivatives + metadata, uploads the ciphertext chunks **direct-to-store** via the **share-scoped** presign
    (`POST /api/shares/{shareId}/blob-uploads`, presenting the `contributorToken`), then completes + attaches
    (`POST /api/shares/{shareId}/media`) — stamped with the contributor's `identityId` — to the shared Memory root, or,
@@ -71,27 +71,27 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
 
 ```mermaid
 ---
-title: Contributor share — operator-blind (server never sees K_share/K_mem/the name)
+title: Contributor share — operator-blind (server never sees K_share/K_node/the name)
 ---
 sequenceDiagram
   actor C as Curator<br>(unlocked)
   participant S as Server<br>(blind)
   participant O as Object store
   actor V as Anonymous<br>contributor
-  C->>C: K_share = random#59; wrap = symWrap(K_share, K_mem)#59; sealName under K_share
+  C->>C: K_share = random#59; wrap = symWrap(K_share, K_node)#59; sealName under K_share
   C->>S: POST share { shareId (client-minted), nodeId, READ_WRITE, wrap, sealedName, writeVerifier }
   S-->>C: shareId
   C->>V: hand off link /s/{shareId}#35;k=…   (fragment, never sent)
   V->>S: GET /api/shares/{shareId}   (no auth)
   S-->>V: record (role READ_WRITE) + sealed subtree — no guest's name
-  V->>V: K_mem = unwrap(wrap, K_share)#59; seal display name under K_mem
+  V->>V: K_node = unwrap(wrap, K_share)#59; seal display name under K_node
   V->>S: POST /identities { identityId (client-minted), sealedDisplayName } + X-Share-Write (from K_share)
   S-->>V: identityId + contributorToken
-  V->>V: seal photo under fresh K_blob (wrapped under K_mem) + derivatives + meta
+  V->>V: seal photo under fresh K_blob (wrapped under K_node) + derivatives + meta
   V->>S: POST /blob-uploads (token) → presigned PUTs
   V->>O: PUT ciphertext chunks (direct)
   V->>S: POST /media (token) → attach to nodeId, stamp identityId
-  Note right of S: sees shareId, wrap, role, sealedName, nodeId,<br>the sealed contributor name + identityId,<br>ciphertext blobs — never a name, K_share, K_mem, or the person
+  Note right of S: sees shareId, wrap, role, sealedName, nodeId,<br>the sealed contributor name + identityId,<br>ciphertext blobs — never a name, K_share, K_node, or the person
 ```
 
 ## Alternate / exception flows
@@ -122,7 +122,7 @@ sequenceDiagram
   ([uc.sharing.share-link-storage-limit](uc.sharing.share-link-storage-limit.md)); too many uploads in a window are
   rate-limited (per-share, best-effort) — defense against an abusive link holder.
 - **E3 — link without the fragment key:** inert — without `K_share` nothing decrypts and nothing can be sealed
-  under `K_mem`, so neither viewing nor contributing is possible (both halves required). The server enforces the
+  under `K_node`, so neither viewing nor contributing is possible (both halves required). The server enforces the
   write half too: naming yourself without the key-derived proof is the link's non-enumerable `404`, and so is
   naming yourself on a link minted before the proof existed, until a curator re-issues it — the manage list marks
   each such link ("Takes no new guests"), so the curator knows which to renew.
@@ -130,8 +130,8 @@ sequenceDiagram
 ## Quality notes
 
 - **Operator-blind.** The server stores the share record (as in ADR 0029) **plus** an opaque `share_identity`
-  (the `K_mem`-sealed contributor name + a token hash) and a `share_identity_id` stamp on each contributed media.
-  It never sees `K_share`, `K_mem`, the Memory name, the contributor's name, the photo bytes, or *who* the person
+  (the `K_node`-sealed contributor name + a token hash) and a `share_identity_id` stamp on each contributed media.
+  It never sees `K_share`, `K_node`, the Memory name, the contributor's name, the photo bytes, or *who* the person
   is — only that an opaque identity contributed opaque ciphertext.
 - **Mandatory name = the buckets hook.** The contributor names themselves once; the sealed name → the anonymous
   identity → its `share:{shareIdentityId}` **`owner_key`** → a per-contributor **bucket** grouping their uploads
@@ -185,7 +185,7 @@ das?"-Link erklärt die Details.
 - Decisions: [ADR 0030](../../../decisions/0030-contributor-public-share.md) (this contributor share — the sealed
   anonymous identity + the share-scoped upload path), [ADR 0029](../../../decisions/0029-public-viewer-share.md)
   (the share resource + anonymous access path it extends),
-  [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (the `K_mem` second-wrap keying),
+  [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (the `K_node` second-wrap keying),
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (the direct-to-store upload path
   the share-scoped presign mirrors), [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) (fragment
   key), [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (client-integrity trust tier).

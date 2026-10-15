@@ -115,7 +115,7 @@ into the tier the medoid already reads.
 ## Consequences
 
 - **The veyq operator never sees a coordinate or a place name** — the request is client-direct to a party the
-  operator doesn't run, identity-free, and the stored result is sealed under `K_mem`. Self-hosting the geocoder
+  operator doesn't run, identity-free, and the stored result is sealed under `K_node`. Self-hosting the geocoder
   would forfeit this, so it is not offered.
 - **No vendor lock-in.** Swapping Nominatim for another OSM-based geocoder is an endpoint + a thin adapter behind
   the same `reverse()` seam.

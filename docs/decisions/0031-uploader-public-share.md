@@ -76,26 +76,26 @@ uploads and a token-gated **delete-own**. **v1: role WRITE_ONLY, personal scope,
    client-integrity trust-tier honesty (footer link, [ADR 0026](0026-client-trust-tiers.md)); personal-scope-only;
    the T&S decryptable-on-report corollary.
 
-7. **The uploader never holds `K_mem`: uploads are sealed to the Memory's drop key.** Points 1–6 make write-only a
+7. **The uploader never holds `K_node`: uploads are sealed to the Memory's drop key.** Points 1–6 make write-only a
    server capability. A capability the server enforces does not survive a dump, and an uploader link is the one
    link handed to people who are *meant* not to see — so a leaked link plus a database and store dump must read
    nothing beyond what that link-holder uploaded.
    - **The drop keypair belongs to the Memory.** An X-Wing (X25519 + ML-KEM-768) keypair, held as its 32-byte seed and minted by the owner's
-     client when the Memory's first WRITE_ONLY share is created. Its private half is sealed under `K_mem` on the
+     client when the Memory's first WRITE_ONLY share is created. Its private half is sealed under `K_node` on the
      Memory, so everyone who reads the Memory — members, viewer and contributor links — opens what uploaders
      sealed. Its public half is sealed under `K_share` on each WRITE_ONLY share, so the server can neither read
-     nor substitute it. A WRITE_ONLY share carries no `symWrap(K_share, K_mem)`.
+     nor substitute it. A WRITE_ONLY share carries no `symWrap(K_share, K_node)`.
    - **Each uploader identity seals under a key of its own.** The guest's client mints a random identity key,
      posts it `asymWrap`ped to the drop public key together with the identity, and seals everything of that
      identity under it — every blob key, media metadata and EXIF, the display name — at today's field sizes: one
      asymmetric wrap per identity, not per blob.
    - **A media's key path is fixed by where it came from.** A reader opens an uploaded media through its
-     identity: drop private key (under `K_mem`) → identity key → the media's keys. A member who later edits that
+     identity: drop private key (under `K_node`) → identity key → the media's keys. A member who later edits that
      media's metadata re-seals it under the same identity key, so no media ever changes path.
    - **What the guest holds:** `K_share` (the title, the note, the drop public key) and its own identity key. The
      sibling shares' `K_share` is out of reach as well, because `sealed_share_key` opens only under `K_SC`
      ([ADR 0036](0036-editable-share-note-recoverable-share-key.md) point 4) — which is also what keeps it out of a
-     READ or READ_WRITE link's reach, since those do hold `K_mem`.
+     READ or READ_WRITE link's reach, since those do hold `K_node`.
 
 ## Consequences
 

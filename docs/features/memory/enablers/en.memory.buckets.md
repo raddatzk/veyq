@@ -1,11 +1,11 @@
-# Enabler: Media uploader buckets (`owner_key` + `K_mem`-sealed names, virtual primary + sub-buckets)
+# Enabler: Media uploader buckets (`owner_key` + `K_node`-sealed names, virtual primary + sub-buckets)
 
 - **ID:** en.memory.buckets
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
 - **Provides:** the **bucket data layer** for a Memory — a per-**uploader** container within a Memory node, keyed
   by an opaque **`owner_key`**, with a **lazy, virtual primary** bucket per uploader + optional **one-level
-  sub-buckets**, names **sealed under `K_mem`**, and media attached through a nullable **`bucket_id`**. It is the
+  sub-buckets**, names **sealed under `K_node`**, and media attached through a nullable **`bucket_id`**. It is the
   **attribution + organization substrate** (who contributed a medium, and into which of *their* containers); the
   *experience* — the "Beiträge" grouping tab, the sub-bucket management UI — is the use-cases on top.
 - **Serves (use-cases):** [uc.memory.buckets](../use-cases/uc.memory.buckets.md) (the "Beiträge" per-uploader
@@ -13,10 +13,10 @@
   also **grounds the grouping** the contributor share earmarked
   ([uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md), ADR 0030).
 - **Depends on:** [en.memory.media](en.memory.media.md) (the media rows a bucket groups + the upload/attach path),
-  [en.memory.tree](en.memory.tree.md) (a **Memory** owns a `K_mem` — the key the sealed names wrap under), and the
+  [en.memory.tree](en.memory.tree.md) (a **Memory** owns a `K_node` — the key the sealed names wrap under), and the
   anonymous **share identity** ([ADR 0030](../../../decisions/0030-contributor-public-share.md) / cr-0101) for the
   guest `owner_key`.
-- **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_mem` is unwrapped (bucket names + any
+- **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_node` is unwrapped (bucket names + any
   sub-bucket names wrap under it — except a WRITE_ONLY guest's primary, whose name is under that guest's own key,
   [ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7); media with an uploader (a member or a share
   contributor).
@@ -39,7 +39,7 @@
   id, node_id,
   owner_key,                 -- "user:{userId}" | "share:{shareIdentityId}"
   parent_bucket_id?,         -- null = primary; else exactly ONE level under a primary
-  sealed_name? + suite_id,   -- AEAD under K_mem; primary's derived name is sealed too; sub-buckets carry their own
+  sealed_name? + suite_id,   -- AEAD under K_node; primary's derived name is sealed too; sub-buckets carry their own
   is_primary
   -- One primary per (node_id, owner_key) -- content-blind (owner_key is not ciphertext); held by the node
   -- row's lock, not an index (the schema carries only a plain ix_bucket_node_owner). See "Lifecycle" below.
@@ -54,12 +54,12 @@
 - **Virtual-until-upload primary.** A primary bucket materializes **lazily** — a find-or-create keyed on
   `(node_id, owner_key)` on the uploader's **first upload** (or first sub-bucket). An uploader with no media has
   **no row** and does not appear. Its name is **derived** (member = the per-tenant username; contributor = the
-  identity's sealed name) and **sealed under `K_mem`** so the grouping view is uniform + operator-blind; the
+  identity's sealed name) and **sealed under `K_node`** so the grouping view is uniform + operator-blind; the
   primary is **not renameable**. Exactly **one primary per `(node, owner_key)`**: the find-or-create runs under
   the node row's lock, so two concurrent first uploads share one
   ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md) §4).
 - **Sub-buckets.** **One level** under a primary (the parent must be a primary), **owner inherited** from the
-  parent, a **`K_mem`-sealed** user-chosen name. **No reparenting**, no arbitrary nesting.
+  parent, a **`K_node`-sealed** user-chosen name. **No reparenting**, no arbitrary nesting.
 - **Reparent-on-delete.** Deleting a sub-bucket sets its media **`bucket_id = null`** (they fall back to the
   owner's primary) — media are **never lost**. **Primaries are not deletable.** *(This reverses the pre-E2EE
   code, which hard-deleted a sub-bucket's media — see ADR 0034.)*

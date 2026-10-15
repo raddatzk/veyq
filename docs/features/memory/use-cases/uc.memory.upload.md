@@ -5,9 +5,9 @@
 - **Goal:** Add photos/videos to the open Memory — sealed on-device and uploaded direct-to-store — with a
   **global uploads tray** (a TopBar button + popup) that shows every in-flight upload's progress and lets the
   user cancel, while they keep navigating.
-- **Preconditions:** Signed in + unlocked; a Memory is open (its `K_mem` is available); the media data layer +
+- **Preconditions:** Signed in + unlocked; a Memory is open (its `K_node` is available); the media data layer +
   blob store exist (en.memory.media, cr-0028/0029) and derivatives are generated on-device (cr-0045).
-- **Postconditions (success):** Each picked file is sealed under a fresh `K_blob` (wrapped to `K_mem`), its
+- **Postconditions (success):** Each picked file is sealed under a fresh `K_blob` (wrapped to `K_node`), its
   chunks `PUT` straight to the store, and one logical media (original + role-tagged derivatives) is attached to
   the Memory node. The gallery refreshes to show it. Operator-blind throughout — the server sees only ciphertext
   + opaque sizes/counts.
@@ -68,7 +68,7 @@
 
 ## Quality notes
 
-- **Operator-blind, unchanged.** The client seals every chunk under a random `K_blob` (wrapped to `K_mem`) and
+- **Operator-blind, unchanged.** The client seals every chunk under a random `K_blob` (wrapped to `K_node`) and
   PUTs raw sealed bytes; the server stores ciphertext + opaque sizes/counts (ADR 0013). No plaintext, key, or
   filename reaches the server in the clear.
 - **The tray is global + non-blocking.** Uploads continue while the user browses other Memories; the queue is a

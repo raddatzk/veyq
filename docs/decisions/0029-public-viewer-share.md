@@ -8,10 +8,10 @@
 Sharing lets a curator hand **one Memory** to people **outside** the scope — including **anonymous visitors
 with no veyq account and no identity keypair**. (Sharing *with* a registered veyq user is already what groups /
 scope grants do; the new job of "sharing" is reaching non-members.) The **crypto** for this is already pinned in
-[ADR 0012](0012-content-key-hierarchy.md): a share adds an **independent second wrap of that Memory's `K_mem`** —
-for a public link, `symWrap(K_share, K_mem)` with a fresh per-share key `K_share` whose secret rides the **URL
-fragment**, never the server. Because `K_mem` is random and wrapped independently, a share reveals **neither
-`K_SC`** (the rest of the scope) **nor any other Memory's `K_mem`** — least-privilege is crypto-enforced.
+[ADR 0012](0012-content-key-hierarchy.md): a share adds an **independent second wrap of that Memory's `K_node`** —
+for a public link, `symWrap(K_share, K_node)` with a fresh per-share key `K_share` whose secret rides the **URL
+fragment**, never the server. Because `K_node` is random and wrapped independently, a share reveals **neither
+`K_SC`** (the rest of the scope) **nor any other Memory's `K_node`** — least-privilege is crypto-enforced.
 
 What is **not yet decided** is the **share resource** and the **anonymous access path**: the server-side record
 shape, how an account-less viewer resolves and decrypts a share, how blobs reach them operator-blind, revocation,
@@ -24,11 +24,11 @@ writes, password protection, persisted shares and notices are later slices.
 Adopt a **public viewer share** as a standalone, operator-blind resource addressed by an unguessable link.
 
 1. **The share resource (opaque server state).** A share record holds: a **256-bit random `shareId`**
-   (base64url, unguessable — the id is half the capability), the wrap **`symWrap(K_share, K_mem)`**, the fixed
+   (base64url, unguessable — the id is half the capability), the wrap **`symWrap(K_share, K_node)`**, the fixed
    **`role = READ`** (renamed 2026-10-06 from `VIEWER` —
    [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)'s three access modes), the shared Memory's **name re-sealed under `K_share`**, the **`nodeId`** of the shared
    Memory (the subtree root, used only to gate blob reads), `enabled`, and an optional `expiresAt`. The server
-   **never** sees `K_share`, `K_mem`, any name, or the viewer — only ciphertext + these opaque fields.
+   **never** sees `K_share`, `K_node`, any name, or the viewer — only ciphertext + these opaque fields.
 
 2. **The link.** `/s/{shareId}#k=<base64url(K_share)>` — `K_share` lives in the **fragment**
    ([ADR 0015](0015-operator-blind-readable-urls.md)) and is never transmitted. Access needs **both** the id (from
@@ -38,8 +38,8 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
    ([ADR 0076](0076-a-guest-write-proves-it-holds-the-links-key.md)).
 
 3. **Anonymous resolve.** `GET /api/shares/{shareId}` is **unauthenticated** and returns the record **plus the
-   sealed subtree** (nodes + media metadata under `nodeId`, all still sealed under `K_mem`). The viewer unwraps
-   `K_mem` with the fragment key, then decrypts names, layout, media metadata and blob frames **locally**. This is
+   sealed subtree** (nodes + media metadata under `nodeId`, all still sealed under `K_node`). The viewer unwraps
+   `K_node` with the fragment key, then decrypts names, layout, media metadata and blob frames **locally**. This is
    a **parallel authorization path keyed on share state** — never a relaxed tenant/scope filter.
 
 4. **Blob access, gated + direct-from-store.** A share-scoped endpoint authorizes a blob GET **iff the blob is
@@ -64,7 +64,7 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
      lets the removal, or any owner of the scope on its own, turn off every link of the scope). Re-activation, which transfers ownership to the
      re-activating member, stays for a share no departed member could hold, and is gated like creation: the
      instance capability for the share's role still applies. This deactivation is
-     the **honest-server forward-secrecy layer for a public link**: because `K_mem` is stable and never re-keyed
+     the **honest-server forward-secrecy layer for a public link**: because `K_node` is stable and never re-keyed
      (Consequences — *scope rotation does not revoke a share*), a link **cannot be rotated away**, so the
      server-side soft-revoke *is* the revocation. It composes with, and is independent of, the scope-key rotation
      that member-removal also triggers for a **group** ([ADR 0024](0024-scope-key-rotation.md)); the **tenant**,
@@ -105,7 +105,7 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
    There is **no
    content-key rotation** for a viewer share: already-downloaded ciphertext (and a saved fragment link) cannot be
    retracted — a **stated limitation**, consistent with [ADR 0012](0012-content-key-hierarchy.md) (already-read
-   content is never retractable). Heavier defense (re-seal under a fresh `K_mem`) stays available but is not part
+   content is never retractable). Heavier defense (re-seal under a fresh `K_node`) stays available but is not part
    of viewer-share revoke.
 
 8. **Client-integrity honesty (the trust tier), surfaced by reference.** The crypto keeps the operator blind — the
@@ -125,15 +125,15 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
 - **New server-visible operational surface** (all non-sensitive): the opaque `shareId`, the wrapped key, the
   plaintext `role`, and the `K_share`-sealed name. No content, no identity, no viewer. A deleted link leaves its
   id, scope, node, role and its `deleted_at` (to the second) behind — the operator served its deletion anyway.
-- **Scope rotation does not revoke a share.** A share wraps `symWrap(K_share, K_mem)`, independent of `K_SC`.
+- **Scope rotation does not revoke a share.** A share wraps `symWrap(K_share, K_node)`, independent of `K_SC`.
   Removing a scope member rotates `K_SC` forward (a new epoch, [ADR 0024](0024-scope-key-rotation.md)) but leaves
-  `K_mem` — and therefore the share — **untouched**: the publicly-shared Memory keeps working, **including content
-  added after the removal** (new blobs seal under the same stable `K_mem`). So a removed member who kept the link
+  `K_node` — and therefore the share — **untouched**: the publicly-shared Memory keeps working, **including content
+  added after the removal** (new blobs seal under the same stable `K_node`). So a removed member who kept the link
   keeps reading until the **share is revoked separately** (soft revoke → the resolve + gated blob GET `404`, after
   which they can only replay already-downloaded ciphertext). *Scope rotation ≠ share revocation* — two distinct
   surfaces. This is consistent (the Memory was **deliberately** made public), but it breaks the naive expectation
   that "removing a member cuts their access to everything" — which is exactly **why member removal auto-deactivates
-  the removed member's shares** (§6): since `K_mem` cannot be rotated away, that server-side soft-revoke is the
+  the removed member's shares** (§6): since `K_node` cannot be rotated away, that server-side soft-revoke is the
   only revocation available, and it is the honest-server forward layer that makes group/tenant sharing sound.
 - **T&S "decryptable-on-report" corollary** ([security model](../crosscutting/security-model.md)): an abuse report
   necessarily includes the full share URL — hence the fragment key — so an operator **can** decrypt a **reported
@@ -148,7 +148,7 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
 
 ## Alternatives considered
 
-- **Member share first** (`asymWrap(recipientIdentityPub, K_mem)`, [ADR 0012](0012-content-key-hierarchy.md)) —
+- **Member share first** (`asymWrap(recipientIdentityPub, K_node)`, [ADR 0012](0012-content-key-hierarchy.md)) —
   an identity-targeted grant to a *registered* user. Deferred: it overlaps what groups already do (share with
   veyq users) and is not the product-defining "reach someone outside" capability. It stays a crypto earmark, not
   a built feature.

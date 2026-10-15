@@ -4,7 +4,7 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
 - **Provides:** the **encrypted media data layer** for a Memory — a media **blob** sealed client-side as
-  **chunked AEAD** under a fresh random **`K_blob`** (wrapped under the Memory's `K_mem`), transferred
+  **chunked AEAD** under a fresh random **`K_blob`** (wrapped under the Memory's `K_node`), transferred
   **direct-to-store** via presigned URLs ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)),
   and **attached** to a node (a Memory or one of its Chapters). Bytes only — the *curation* of media into a
   gallery (covers, ordering, captions, the UI) is the use-case on top.
@@ -12,10 +12,10 @@
   flow + UI) and [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (reads the blobs back), plus later
   *journal attachments* / *places & tracks* media. Storing one encrypted blob is not itself a user goal; it is
   the substrate those carry.
-- **Depends on:** [en.memory.tree](en.memory.tree.md) (a **Memory** exists and owns a `K_mem`) → through it
+- **Depends on:** [en.memory.tree](en.memory.tree.md) (a **Memory** exists and owns a `K_node`) → through it
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) and `uc.account.unlock`
-  (identity → scope key → `K_SC` → `K_mem`).
-- **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_mem` is unwrapped (the blob keys wrap
+  (identity → scope key → `K_SC` → `K_node`).
+- **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_node` is unwrapped (the blob keys wrap
   under it); a configured object store — a **hard instance requirement** (`%dev`/`%prod` fail loud without one,
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)), so a running instance always has
   a byte path.
@@ -25,8 +25,8 @@
 
 ## Key & blob model (ADR 0012 + ADR 0013)
 
-- **`K_blob`** — a fresh **random 32-byte key per blob**, wrapped under the Memory's **`K_mem`**
-  (`symWrap(K_mem, K_blob)`) — or, for a media a WRITE_ONLY guest added, under that guest's own identity key, which
+- **`K_blob`** — a fresh **random 32-byte key per blob**, wrapped under the Memory's **`K_node`**
+  (`symWrap(K_node, K_blob)`) — or, for a media a WRITE_ONLY guest added, under that guest's own identity key, which
   every reader opens through the Memory's drop key; its metadata tiers follow the same key, including after a
   member edits them ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). It encrypts that blob's chunk frames and nothing else. **No dedup** — identical
   content yields a different `K_blob` and a different ciphertext ([ADR 0013 §5](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup);
@@ -45,7 +45,7 @@
   `application/octet-stream`), its file name and modified time; a THUMBNAIL/PREVIEW tier and a derived cover declare
   `{type: image/jpeg}`. Lives in a scope.
 - **media** — the link record attaching a blob to a **node** (a Memory or a Chapter), carrying any per-use
-  metadata under `K_mem` — capture time, GPS and the resolved place name in the listed tier (written whole by
+  metadata under `K_node` — capture time, GPS and the resolved place name in the listed tier (written whole by
   any member, so every write carries the tier's `metaVersion` and a stale one answers `409 stale_version` —
   [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)), and the camera/editor bundle in the
   lazy EXIF tier. The original's **filename and media type** are not in either tier: they are the original's blob
@@ -58,7 +58,7 @@
   metadata reference the members already see, not content dedup. Each media record also carries its **bucket
   linkage** — a **`bucket_id`** (nullable; `null` = the uploader's primary) and a denormalized **`created_by`** =
   the uploader's opaque **`owner_key`** (`user:{id}` / `share:{id}`), the operator-visible attribution the
-  [buckets](../use-cases/uc.memory.buckets.md) grouping reads. The bucket data model + the `K_mem`-sealed names
+  [buckets](../use-cases/uc.memory.buckets.md) grouping reads. The bucket data model + the `K_node`-sealed names
   live in [en.memory.buckets](en.memory.buckets.md)
   ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md)).
 
@@ -68,10 +68,10 @@
 > this enabler describes a **single** blob for clarity, and the first slice sends length-1 lists. A
 > gallery later sends longer lists — same shape, no contract change.
 
-1. The client has the Memory open: `K_mem` is unwrapped (via `K_SC`, en.memory.tree).
+1. The client has the Memory open: `K_node` is unwrapped (via `K_SC`, en.memory.tree).
 2. **Key:** mint the media's and the blob's ids (UUIDv4 — the client names what it seals,
    [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), generate a random **`K_blob`** and seal it
-   under `K_mem` bound to the scope, the media, the blob and its role. The blob's `byteSize` and `chunkCount`
+   under `K_node` bound to the scope, the media, the blob and its role. The blob's `byteSize` and `chunkCount`
    are known from the plaintext length alone, before any frame is sealed.
 3. **Start:** POST a blob-start declaring the ids, `byteSize` + `chunkCount` (+ the `K_blob` wrap and the blob meta
    sealed under `K_blob`, `wrappedBlobMeta`); the server checks
@@ -86,20 +86,20 @@
    promotes the staged objects to a blob, and creates the **media** record, under the id the client minted,
    linking it to the node.
 6. **Read back:** to display, the client asks for **presigned `GET` URLs**, fetches the raw frames directly,
-   unwraps `K_blob` (via `K_mem`), and `openFrame`s each (the AAD position check verifies order/count).
+   unwraps `K_blob` (via `K_node`), and `openFrame`s each (the AAD position check verifies order/count).
 
 ```mermaid
 ---
 title: Add a media blob (direct-to-store, operator-blind)
 ---
 sequenceDiagram
-  actor U as Member<br>(Memory open, holds K_mem)
+  actor U as Member<br>(Memory open, holds K_node)
   participant C as Client
   participant S as Server<br>(blind, control plane)
   participant O as Object store<br>(blind)
   U->>C: add photo
   C->>C: mediaId, blobId = random UUIDs#59; K_blob = random(32)
-  C->>C: wrappedBlobKey = seal(K_mem, blob-key of scope, mediaId, blobId, role, K_blob)
+  C->>C: wrappedBlobKey = seal(K_node, blob-key of scope, mediaId, blobId, role, K_blob)
   C->>C: wrappedBlobMeta = sealBlobMeta(K_blob, {type, name, modifiedAt})
   C->>S: start blob { mediaId, blobId, chunkCount:n, byteSize, wrappedBlobKey, wrappedBlobMeta }
   S-->>C: { uploadId, presignedPut[first window] }
@@ -132,7 +132,7 @@ sequenceDiagram
   stale-session GC, row and staged objects both.
 - **E3a — the upload right is gone mid-upload** (membership removed, share revoked or expired): the next window
   or the complete is refused; what was already staged is reclaimed as an abandoned upload.
-- **E4 — vault locked / Memory not open:** without `K_mem` the client can neither key nor read a blob → the
+- **E4 — vault locked / Memory not open:** without `K_node` the client can neither key nor read a blob → the
   action is unavailable until unlock + the Memory is opened.
 - **E5 — chunk tampered / reordered:** `openFrame` fails the AAD position check → the frame is rejected (the
   server cannot forge a valid frame without `K_blob`).
@@ -171,8 +171,8 @@ sequenceDiagram
 - Feature: [Memory](../_index.md)
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (S3-only, presigned
   direct-to-store, no dedup), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_blob` under
-  `K_mem`), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) (`chunk_frame` vector)
+  `K_node`), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) (`chunk_frame` vector)
 - Concepts: [Security Model](../../../crosscutting/security-model.md) (key hierarchy),
   [Account & Key Model](../../account/enablers/en.account.key-model.md)
-- Related enablers: [en.memory.tree](en.memory.tree.md) (the Memory + `K_mem` this attaches media to),
+- Related enablers: [en.memory.tree](en.memory.tree.md) (the Memory + `K_node` this attaches media to),
   [en.memory.derivatives](en.memory.derivatives.md) (the thumbnail/preview/original tiers built on this transport)

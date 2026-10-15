@@ -6,7 +6,7 @@
   **recoverable trash** for a retention window, and is **hard-purged** (rows + blobs + store objects) by a
   scheduled system job afterwards. **Operator-blind** — the server flips a trash flag and, at purge, removes opaque
   blob objects; it never sees content.
-- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_mem`** is held); the caller **belongs to
+- **Preconditions:** The vault is unlocked and the Memory is open (its **`K_node`** is held); the caller **belongs to
   the scope**. The media data layer + blob store exist ([en.memory.media](../enablers/en.memory.media.md)); the
   live-updates reconcile is in place ([uc.memory.live-updates](uc.memory.live-updates.md), the `delete_revision`
   substrate).
@@ -143,7 +143,7 @@ löscht später verschlüsselte Dateien, die er nicht lesen kann.
 - Cross-cutting: [security model](../../../crosscutting/security-model.md) — *Deletion & erasure* (reversible
   any-member audited trash vs. irreversible system purge) + the server-visible trash-state metadata
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (blob store + purge),
-  [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_mem` seals content),
+  [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_node` seals content),
   [ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md) (the revision reconcile)
 - Reference impl: the anonymous share *delete-own* (cr-0102) — the blob-reclaim + `NodeItemsRevisions.bump(deleted = true)` (core's item-list revision)
   path the purge parallels. Built: **cr-0110** (contracts → backend → web + the scheduled purge job) + **cr-0111**

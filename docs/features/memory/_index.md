@@ -9,14 +9,14 @@ tokens; it never sees a name or a content key.
 - **Cross-cutting:** [Security Model](../../crosscutting/security-model.md) (the key hierarchy + sharing),
   [Scopes & Tenancy](../../crosscutting/scopes-and-tenancy.md) (the navigation contract; content lives in a
   scope), [Account & Key Model](../account/enablers/en.account.key-model.md).
-- **Decisions:** [ADR 0012](../../decisions/0012-content-key-hierarchy.md) (per-Memory content key `K_mem`,
+- **Decisions:** [ADR 0012](../../decisions/0012-content-key-hierarchy.md) (per-Memory content key `K_node`,
   random + many-wrapped — the unit of sharing; `K_SC` for navigation; `K_blob` per blob),
   [ADR 0017](../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) (the vector-pinned content crypto).
 - **Product language (hard rule):** Memory / Chapter. Folders **organize only**. Never "Album" / "Explorer".
 
 ## Key model (ADR 0012, in one line)
 
-`scope key (grant) → K_SC` (per scope: the scope-root entries' names + slugs, dedup) `→ K_mem` (per Memory, random:
+`scope key (grant) → K_SC` (per scope: the scope-root entries' names + slugs, dedup) `→ K_node` (per Memory, random:
 chapter/journal/media + sensitive metadata + the names and slugs of the nodes directly below it; **the share grain**)
 `→ K_blob` (per media blob). A folder carries a random key of its own too, and a Memory inside it wraps its key and
 seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)).
@@ -24,10 +24,10 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
 ## Enablers
 
 - ★ [en.memory.tree](enablers/en.memory.tree.md) — **built (web + backend)** (the encrypted node tree: FOLDER/MEMORY/CHAPTER,
-  encrypted names, blinded slugs, per-Memory `K_mem` birth/open — the substrate the use-cases below build on;
+  encrypted names, blinded slugs, per-Memory `K_node` birth/open — the substrate the use-cases below build on;
   [ADR 0012](../../decisions/0012-content-key-hierarchy.md))
 - ★ [en.memory.media](enablers/en.memory.media.md) — **built (web + backend)** (the encrypted media data layer: a blob sealed
-  as chunked AEAD under a random `K_blob` wrapped under `K_mem`, transferred direct-to-store via presigned URLs,
+  as chunked AEAD under a random `K_blob` wrapped under `K_node`, transferred direct-to-store via presigned URLs,
   attached to a node; **no content dedup** — operator-blind trade-off;
   [ADR 0013](../../decisions/0013-blob-storage-presigned-direct-to-store.md),
   [ADR 0012](../../decisions/0012-content-key-hierarchy.md))
@@ -41,12 +41,12 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
   [ADR 0013](../../decisions/0013-blob-storage-presigned-direct-to-store.md)'s deferred thumbnails/previews land)
 - ★ [en.memory.node-meta](enablers/en.memory.node-meta.md) — **built** (the sealed, client-versioned
   `wrappedMeta` blob on a content node — one opaque envelope for a Memory's node-level metadata, sealed under
-  `K_mem`, threaded through `createNode` / partial `updateNode` / `listNodes`, materialized so a card/map reads
+  `K_node`, threaded through `createNode` / partial `updateNode` / `listNodes`, materialized so a card/map reads
   it without loading media. The envelope + `date` shipped with cr-0067, then `location` (cr-0069), `cover` (cr-0072) and
   `participants` (ADR 0083); the envelope itself now lives in core, `web/src/core/node/nodeMeta.ts`, inbox #411)
 - ★ [en.memory.buckets](enablers/en.memory.buckets.md) — **built (web + backend)** (the bucket data layer: a per-uploader
   container within a Memory, a real `owner_key`-keyed `veyq_bucket` table — `user:{id}` / `share:{id}` — with a
-  lazy virtual primary + one-level sub-buckets, names sealed under `K_mem`, media linked via a nullable `bucket_id`
+  lazy virtual primary + one-level sub-buckets, names sealed under `K_node`, media linked via a nullable `bucket_id`
   + denormalized `created_by`; reparent-on-delete + member-gated sub-bucket authz (cr-0123);
   [ADR 0034](../../decisions/0034-media-uploader-buckets.md))
 
@@ -65,7 +65,7 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
   Zoom and a slideshow came with cr-lightbox-zoom-slideshow (inbox #90, #91); rescaling on device rotation was dropped
   (inbox #89, the owner's call)
 - [uc.memory.chapters](use-cases/uc.memory.chapters.md) — **built (web)** (cr-0060; nested Memories inside a Memory — each
-  chapter a full Memory with its own recursive `K_mem`, wrapped under the parent's;
+  chapter a full Memory with its own recursive `K_node`, wrapped under the parent's;
   [ADR 0012](../../decisions/0012-content-key-hierarchy.md))
 - [uc.memory.date](use-cases/uc.memory.date.md) — **done** (cr-0067): a curatable date (auto/single/range/ongoing),
   sealed on the node's `wrappedMeta`; browse card range + date-sort
@@ -109,12 +109,12 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
   member-gated by cr-0123) ([ADR 0034](../../decisions/0034-media-uploader-buckets.md),
   on [en.memory.buckets](enablers/en.memory.buckets.md)): group a Memory's media by **who contributed it** — the
   attribution axis, orthogonal to Chapters; a real **`owner_key`-keyed bucket table** (lazy virtual primary +
-  one-level sub-buckets, `K_mem`-sealed names, reparent-on-delete, member-gated sub-bucket authz).
+  one-level sub-buckets, `K_node`-sealed names, reparent-on-delete, member-gated sub-bucket authz).
   **cr-0113** shipped the full data layer + backend + the primary-grouping **"Beiträge"** tab (reusing the
   gallery grid); **cr-0122** the sub-bucket management UI (create / rename / delete, and a Move / Delete selection
   bar); a camera filter is not built
-- Memory journal — planned: markdown sealed under `K_mem`
-- Tracks (GPX) — planned: sealed under `K_mem` (the sealed *location* is now [uc.memory.place](use-cases/uc.memory.place.md))
-- Share a Memory — wrap its `K_mem` to a per-share key (least-privilege, ADR 0012) → the
+- Memory journal — planned: markdown sealed under `K_node`
+- Tracks (GPX) — planned: sealed under `K_node` (the sealed *location* is now [uc.memory.place](use-cases/uc.memory.place.md))
+- Share a Memory — wrap its `K_node` to a per-share key (least-privilege, ADR 0012) → the
   [Sharing](../sharing/_index.md) feature ([uc.sharing.share-public-viewer](../sharing/use-cases/uc.sharing.share-public-viewer.md),
   **built**, [ADR 0029](../../decisions/0029-public-viewer-share.md))

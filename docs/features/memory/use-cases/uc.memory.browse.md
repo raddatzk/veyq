@@ -139,7 +139,7 @@ späteren Schritt; vorerst ist dies das Zuhause, das deinen verschlüsselten Ber
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (`K_SC`, auto-birth),
   [en.memory.media](../enablers/en.memory.media.md) (media — displayed by [uc.memory.gallery](uc.memory.gallery.md)),
   [en.memory.favorites](../enablers/en.memory.favorites.md) (the heart on every row, and the sidebar Favorites section)
-- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_SC`→`K_mem`)
+- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_SC`→`K_node`)
 - Related use-cases: [login](../../account/use-cases/uc.account.login.md), unlock — done; the **Memory detail
   view** — [gallery](uc.memory.gallery.md) and [chapters](uc.memory.chapters.md) built, the journal planned;
   [multi-space switching](../../spaces/use-cases/uc.spaces.switch-spaces.md) built; search — planned

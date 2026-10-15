@@ -15,7 +15,7 @@ title: Share a Memory as an uploader link (a write-only drop-box)
 # protection and moderation are separate later slices.
 acceptanceCriteria:
   - id: create-uploader-share
-    text: A curator turns one of their personal-scope Memories into a WRITE_ONLY share — picks the Uploader role in the Share dialog; the client mints K_share, re-seals the name, and seals the Memory's drop public key under K_share (the Memory's first WRITE_ONLY share also mints the drop keypair and brings its private half sealed under K_mem, set on the Memory once), and POSTs { nodeId, role WRITE_ONLY, sealedDropPublicKey, sealedName } with no wrap. The server stores it opaquely (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
+    text: A curator turns one of their personal-scope Memories into a WRITE_ONLY share — picks the Uploader role in the Share dialog; the client mints K_share, re-seals the name, and seals the Memory's drop public key under K_share (the Memory's first WRITE_ONLY share also mints the drop keypair and brings its private half sealed under K_node, set on the Memory once), and POSTs { nodeId, role WRITE_ONLY, sealedDropPublicKey, sealedName } with no wrap. The server stores it opaquely (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.theKeysAShareCarriesFollowItsRole, ShareUploaderSliceTest.theDropKeyIsSetOnceOnTheMemory]
@@ -38,7 +38,7 @@ acceptanceCriteria:
         unit: [src/features/memory/shareUploader.test.ts]
         e2e: [src/features/memory/shareUploader.e2e.test.ts]
   - id: write-only-no-view-of-others
-    text: The canView gate ({READ,READ_WRITE}) is enforced at BOTH guest read paths. The anonymous resolve returns nodes=[] for a WRITE_ONLY share (only role + the sealed drop public key + sealedName + the root's kind, rootKind, which tells the client which application renders the drop — not even the root node, so no K_mem-decryptable node metadata leaks), and its media read answers an empty list with no identities. The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - a WRITE_ONLY share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={READ_WRITE,WRITE_ONLY}.
+    text: The canView gate ({READ,READ_WRITE}) is enforced at BOTH guest read paths. The anonymous resolve returns nodes=[] for a WRITE_ONLY share (only role + the sealed drop public key + sealedName + the root's kind, rootKind, which tells the client which application renders the drop — not even the root node, so no K_node-decryptable node metadata leaks), and its media read answers an empty list with no identities. The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - a WRITE_ONLY share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={READ_WRITE,WRITE_ONLY}.
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.viewerShareRejectsUploadAndDelete, ShareRootKindSliceTest.aWriteOnlyShareNamesItsRootKindThoughItIsServedNoNode]
@@ -68,7 +68,7 @@ acceptanceCriteria:
       web:
         unit: [src/i18n/setLocale.test.ts, src/features/memory/components/MemoryShareBody.test.ts]
   - id: operator-blind
-    text: The server serves the uploader NO gallery and NO bytes (resolve nodes=[], the media read an empty list; the blob endpoint is role-gated to 404 for an uploader). It holds only the opaque share record + the sealed anonymous identity + the share_identity_id stamp (for the curator's own view + the delete ownership check) + ciphertext blobs — never K_share/K_mem/any name/the photo bytes/a per-guest content listing. The no-install page carries the same trust-tier honesty (footer link, ADR 0026).
+    text: The server serves the uploader NO gallery and NO bytes (resolve nodes=[], the media read an empty list; the blob endpoint is role-gated to 404 for an uploader). It holds only the opaque share record + the sealed anonymous identity + the share_identity_id stamp (for the curator's own view + the delete ownership check) + ciphertext blobs — never K_share/K_node/any name/the photo bytes/a per-guest content listing. The no-install page carries the same trust-tier honesty (footer link, ADR 0026).
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn]
