@@ -1,0 +1,24 @@
+---
+title: "Set the date"
+sources:
+  - docs/features/memory/use-cases/uc.memory.date.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+A Memory can show **when** it happened.
+
+1. Open the Memory.
+2. Choose the date in the header (it says **No date yet** until there is one), or **Edit date**.
+3. Choose how the date should work:
+   - **Automatic** takes it from your photos, from the earliest to the latest. It says "Derived from your photos."
+     once there are dated photos; until then it asks you to add some or to set a date yourself.
+   - **Single day**: pick the **Day**.
+   - **Range**: pick **From** and **To**. The end cannot be before the start.
+   - **Ongoing**: pick the **Start**, and the Memory shows "Since …".
+4. Choose **Save**.
+
+<Screenshot id="memories-date-dialog" shows="The Date dialog with the four choices Automatic, Single day, Range and Ongoing, and the date fields of Range" />
+
+The date is locked together with the Memory on your device. The server never learns the day you were there.
+If two people change the date at the same time, veyq shows you what the other person chose and lets you decide again.

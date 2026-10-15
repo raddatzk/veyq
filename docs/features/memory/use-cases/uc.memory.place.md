@@ -135,3 +135,4 @@ veyq sieht sie nie.
   third-party services are a separate consented boundary)
 - Future: **on-device coarse names** (a bundled gazetteer, ADR 0016); **derived** place from GPS clusters
   aggregated across a Memory *plus its chapters*
+- End-user view (docs site): [Set the location](../../../../site/src/content/docs/memories/set-the-location.mdx)

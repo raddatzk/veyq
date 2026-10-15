@@ -1,0 +1,40 @@
+---
+title: "Die Galerie durchsehen"
+sources:
+  - docs/features/memory/use-cases/uc.memory.gallery.md
+  - docs/features/memory/use-cases/uc.memory.live-updates.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Der Reiter **Galerie** ist das Erste, was du siehst, wenn du eine Erinnerung öffnest: alle Fotos und Videos als Raster.
+
+## Ein Foto ansehen
+
+1. Öffne eine Erinnerung.
+2. Klicke auf ein Foto. Es öffnet sich groß; mit **Zurück** und **Weiter** oder durch Wischen kommst du durch die
+   übrigen.
+3. Ein Video hat auf seiner Kachel ein kleines Abspiel-Zeichen. Öffne es und wähle **Video abspielen**.
+4. Wähle **Details**, um zu sehen, was das Bild über sich weiß: die Datei und ihre Größe, Kamera und Objektiv, wie
+   belichtet wurde, wer es gemacht hat und wann es **Aufgenommen** wurde. Wenn es mit eingeschaltetem Standort
+   aufgenommen wurde, siehst du auch, **wo**, als Ortsname und kleine Karte.
+5. Mit Doppelklick oder zwei Fingern **vergrößerst** du ein Foto. **Diashow starten** blättert alle fünf Sekunden von
+   selbst weiter und hält an, sobald du etwas berührst.
+6. **Original herunterladen** gibt dir das Bild in voller Qualität.
+
+<Screenshot id="memories-photo-open" shows="Ein Foto groß geöffnet mit der Werkzeugleiste (Original herunterladen, Als Cover festlegen, In den Papierkorb, Diashow starten) und dem Bereich Details daneben" />
+
+Das Raster und die Großansicht nutzen kompakte Kopien, die dein Gerät gemacht hat, deshalb geht es flott. Das Original
+in voller Qualität wird nur geladen, wenn du es herunterlädst oder weiter hineinzoomst, als die kompakte Kopie zeigt.
+Ein Video wird Stück für Stück abgespielt, geladen werden also nur die Teile, die du ansiehst.
+
+## Reihenfolge
+
+Die Fotos sind nach Aufnahmezeit sortiert. Die Schaltfläche über dem Raster wechselt zwischen **Neueste zuerst** und
+**Älteste zuerst**. Stimmt die Zeit der Kamera nicht, öffne die **Details** des Fotos und wähle **Aufnahmezeit
+bearbeiten**; **Auf Original zurücksetzen** bringt die Zeit der Kamera zurück.
+
+## Live
+
+In einer Erinnerung, zu der auch andere etwas hinzufügen, siehst du deren Fotos erscheinen und entfernte verschwinden,
+ohne neu zu laden.

@@ -1,0 +1,44 @@
+---
+title: "Den Ort festlegen"
+sources:
+  - docs/features/memory/use-cases/uc.memory.place.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Eine Erinnerung kann zeigen, **wo** es war, und als Pin auf der Karte deines Bereichs erscheinen.
+
+## Karten einschalten (einmalig)
+
+Wenn du zum ersten Mal einen Ort festlegst, fragt veyq: **Karten für Orte aktivieren?** Eine Karte braucht Hilfe von
+außen. Die Kartenbilder werden von einem Kartenanbieter geladen, und wenn du einen Namen für einen Ort willst, wird
+der gewählte Punkt an einen Dienst geschickt, der daraus einen Namen macht. Beides geht direkt von deinem Gerät zu
+diesem Anbieter und nie über den veyq-Server. Du kannst es jederzeit wieder ausschalten. Wähle **Karten aktivieren**,
+um fortzufahren, oder **Abbrechen**, um Karten ausgeschaltet zu lassen.
+
+<Screenshot id="memories-maps-consent" shows="Der Dialog Karten für Orte aktivieren? mit seinem Text und den Schaltflächen Abbrechen und Karten aktivieren" />
+
+## Einen Ort festlegen
+
+1. Öffne die Erinnerung und wähle in der Kopfzeile **Ort festlegen** (dort steht **Ort bearbeiten**, sobald es einen
+   gibt).
+2. Eine Karte öffnet sich. Wurden deine Fotos mit eingeschaltetem Standort aufgenommen, beginnt sie an der Stelle, auf
+   die sie zeigen (**Folgt deinen Fotos**). Verschiebe den Pin, wenn du magst; dann steht dort **Eigener Ort**, und
+   **wieder folgen** nimmt es zurück.
+3. Gib dem Ort einen Namen: tippe einen eigenen ein („bei Oma“) oder wähle **Namen aus der Karte**, damit der
+   Kartendienst einen vorschlägt. **Eigenen Namen eingeben** wechselt zurück.
+4. Wähle **Speichern**. **Ort entfernen** nimmt den Ort wieder weg.
+
+<Screenshot id="memories-location-dialog" shows="Der Dialog Ort mit der Karte, dem Pin, dem Namensfeld und den Schaltflächen Ort entfernen, Abbrechen und Speichern" />
+
+Beim Anlegen einer Erinnerung kannst du stattdessen **Ort automatisch ermitteln** anhaken; der Ort folgt dann deinen
+Fotos.
+
+## Die Karte
+
+Erinnerungen mit einem Ort sind Pins in der **Kartenansicht** eines Ordners. Eine Erinnerung ohne Ort ist dort einfach
+nicht zu sehen.
+
+Der Ort wird zusammen mit der Erinnerung auf deinem Gerät verschlüsselt; veyqs Server erfährt weder den Ort noch die
+Koordinaten. Das Einzige, was dein Gerät je verlässt, ist der Punkt, der an den Kartenanbieter geht, und nur, wenn du
+Karten aktiviert hast.

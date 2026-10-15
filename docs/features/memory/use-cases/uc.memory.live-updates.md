@@ -87,3 +87,4 @@ Erinnerung auf deinem Gerät verschlüsselt; der Server bewegt nur verschlüssel
   conditional GET + keyset delta + delete-reconcile, short-poll v1), [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)
   (the media transport the tiles fetch through)
 - Future: long-poll / push (sub-second, shared with live journal co-edit #6); Memory+chapters aggregated live grid
+- End-user view (docs site): [Look through the gallery](../../../../site/src/content/docs/memories/the-gallery.mdx)

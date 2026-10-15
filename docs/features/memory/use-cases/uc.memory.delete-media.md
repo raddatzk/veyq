@@ -149,3 +149,4 @@ löscht später verschlüsselte Dateien, die er nicht lesen kann.
   path the purge parallels. Built: **cr-0110** (contracts → backend → web + the scheduled purge job) + **cr-0111**
   (the member-expedited `purgeMedia` + the Trash-tab redesign — the same `MediaGrid`, batch-select + a 3-dot
   restore/purge menu — and the upload per-file reconcile + the trashed-in-grid tombstone fixes).
+- End-user view (docs site): [Remove photos and bring them back](../../../../site/src/content/docs/memories/photo-trash.mdx)

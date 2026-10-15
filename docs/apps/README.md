@@ -115,3 +115,5 @@ presentation (`presentation(mode)` beside `row`, named in its kinds' `list.views
 map the same way the level does, the same component over the person's Memories that have a place ([inbox #417](../inbox.md)).
 
 A concept doc is **not** state the code answers to: nothing in it is built, refined into use-cases or planned.
+
+- End-user view (docs site): [Applications](../../site/src/content/docs/applications/index.mdx)

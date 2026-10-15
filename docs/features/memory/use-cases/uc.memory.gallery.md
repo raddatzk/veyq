@@ -195,3 +195,5 @@ anhält, sobald du etwas berührst. Journal, Kapitel, Karten und Playlists komme
 - Related use-cases: [uc.memory.browse](uc.memory.browse.md) (done — the shell this opens from);
   [chapters](uc.memory.chapters.md) and the places map ([uc.memory.place](uc.memory.place.md)) — built; the journal — planned
 - End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)
+- End-user view (docs site): [Mark the best photos](../../../../site/src/content/docs/memories/marked-photos.mdx)
+- End-user view (docs site): [Look through the gallery](../../../../site/src/content/docs/memories/the-gallery.mdx)

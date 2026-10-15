@@ -1,0 +1,26 @@
+---
+title: "Das Datum festlegen"
+sources:
+  - docs/features/memory/use-cases/uc.memory.date.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Eine Erinnerung kann zeigen, **wann** es war.
+
+1. Öffne die Erinnerung.
+2. Wähle das Datum in der Kopfzeile (dort steht **Noch kein Datum**, bis es eines gibt) oder **Datum bearbeiten**.
+3. Wähle, wie das Datum funktionieren soll:
+   - **Automatisch** übernimmt es aus deinen Fotos, vom frühesten bis zum spätesten. Sobald es datierte Fotos gibt,
+     steht dort „Aus deinen Fotos ermittelt.“; vorher bittet dich die Seite, welche hinzuzufügen oder selbst ein
+     Datum zu setzen.
+   - **Einzelner Tag**: wähle den **Tag**.
+   - **Zeitraum**: wähle **Von** und **Bis**. Das Ende darf nicht vor dem Anfang liegen.
+   - **Fortlaufend**: wähle den **Beginn**, und die Erinnerung zeigt „Seit …“.
+4. Wähle **Speichern**.
+
+<Screenshot id="memories-date-dialog" shows="Der Dialog Datum mit den vier Auswahlmöglichkeiten Automatisch, Einzelner Tag, Zeitraum und Fortlaufend und den Datumsfeldern von Zeitraum" />
+
+Das Datum wird zusammen mit der Erinnerung auf deinem Gerät verschlüsselt. Der Server erfährt nie, an welchem Tag du
+dort warst. Ändern zwei Menschen das Datum gleichzeitig, zeigt veyq dir, was die andere Person gewählt hat, und du
+entscheidest neu.

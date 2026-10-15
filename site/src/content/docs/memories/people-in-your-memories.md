@@ -62,4 +62,3 @@ Names follow one rule everywhere: the **real name** if the person gave one, othe
   the letter. The operator can tell only that you have a picture and how often you changed it. A picture belongs to one
   space — another space you belong to shows its own (or the letter). If you are removed from a space, your picture there
   is cleared.
-- Not built yet: showing who added a **file** in Depot. This page has not been checked in a real browser yet.

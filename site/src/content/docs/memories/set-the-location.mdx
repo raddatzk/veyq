@@ -1,0 +1,40 @@
+---
+title: "Set the location"
+sources:
+  - docs/features/memory/use-cases/uc.memory.place.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+A Memory can show **where** it happened, and appear as a pin on the map of your space.
+
+## Turn on maps (once)
+
+The first time you set a location, veyq asks **Enable maps for locations?** A map needs help from outside. Map
+pictures are loaded from a map provider, and, if you want a name for a place, the point you chose is sent to a service
+that turns it into a name. Both go straight from your device to that provider and never through the veyq server. You
+can turn this off again at any time. Choose **Enable maps** to continue, or **Cancel** to leave maps off.
+
+<Screenshot id="memories-maps-consent" shows="The dialog Enable maps for locations? with its text and the Cancel and Enable maps buttons" />
+
+## Set a location
+
+1. Open the Memory and choose **Set location** in the header (it says **Edit location** once there is one).
+2. A map opens. If your photos were taken with location switched on, it starts at the spot they point to
+   (**Follows your photos**). Move the pin if you like; it then says **Your own spot**, and **follow photos** takes it
+   back.
+3. Give the place a name: type your own ("at grandma's"), or choose **Use the map's name** to let the map service
+   suggest one. **Enter your own name** switches back.
+4. Choose **Save**. **Remove location** takes the place away again.
+
+<Screenshot id="memories-location-dialog" shows="The Location dialog with the map, the pin, the name field and the Remove location, Cancel and Save buttons" />
+
+When you create a Memory you can tick **Determine location automatically** instead; the place then follows your photos.
+
+## The map
+
+Memories with a place are pins on the **Map view** of a folder. A Memory without a place is simply not on it.
+
+The place is locked together with the Memory on your device; veyq's server learns neither the place nor the
+coordinates. The only thing that ever leaves your device is the point sent to the map provider, and only if you have
+enabled maps.

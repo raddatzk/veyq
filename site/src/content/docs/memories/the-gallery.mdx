@@ -1,0 +1,38 @@
+---
+title: "Look through the gallery"
+sources:
+  - docs/features/memory/use-cases/uc.memory.gallery.md
+  - docs/features/memory/use-cases/uc.memory.live-updates.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+The **Gallery** tab is the first thing you see when you open a Memory: all its photos and videos as a grid.
+
+## Look at a photo
+
+1. Open a Memory.
+2. Click a photo. It opens large; use **Previous** and **Next**, or swipe, to go through the rest.
+3. A video has a small play badge on its tile. Open it and choose **Play video**.
+4. Choose **Details** to see what the picture knows about itself: the file and its size, the camera and lens, how it was
+   exposed, who made it, and when it was **Taken**. If it was taken with location switched on, you also see **where**,
+   as a place name and a small map.
+5. Double-click a photo, or pinch it, to **zoom** in. Choose **Start slideshow** to move on by itself every five
+   seconds; it stops as soon as you touch anything.
+6. **Download original** gives you the picture in full quality.
+
+<Screenshot id="memories-photo-open" shows="One photo opened large with the toolbar (Download original, Set as cover, Move to trash, Start slideshow) and the Details panel next to it" />
+
+The grid and the large view use compact copies that your device made, so they are quick. The full-quality original is
+fetched only when you download it or zoom in further than the compact copy shows. A video plays piece by piece, so only
+the parts you watch are fetched.
+
+## Order
+
+Photos are ordered by when they were taken. The button above the grid switches between **Newest first** and **Oldest
+first**. If the camera's time is wrong, open the photo's **Details** and choose **Edit capture time**; **Reset to
+original** brings the camera's time back.
+
+## Live
+
+In a Memory that others can add to, you see their photos appear, and their removals disappear, without reloading.

@@ -126,3 +126,4 @@ Gerät verschlüsselt; der Server speichert nur verschlüsselte Daten.
   **"Set as cover"** from a one-click full-frame set into **opening the crop editor seeded on that photo** (the
   lightbox stays open beneath the modal, its keyboard suspended) so the 16:9 crop is framed at pick time — the
   editor gained a third `media` crop source alongside `upload`/`keep`.
+- End-user view (docs site): [Choose a cover](../../../../site/src/content/docs/memories/set-a-cover.mdx)

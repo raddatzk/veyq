@@ -73,3 +73,4 @@ Gerät verschlüsselt alles, der Server sieht nur verschlüsselte Daten.
 - Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (content-key hierarchy — this UC
   applies its **recursive `K_node`** decision for chapters)
 - Future: chapter **sharing** (#19) — the key layout here is the groundwork
+- End-user view (docs site): [Create a Memory and chapters](../../../../site/src/content/docs/memories/create-a-memory-and-chapters.mdx)

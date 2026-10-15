@@ -101,3 +101,4 @@ Daten und erfährt nie den Tag, an dem du dort warst.
 - Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (K_node seals "capture time, location"
   — this UC applies it at the node level)
 - Future: the **aggregated** chronological date/gallery across a Memory + its chapters
+- End-user view (docs site): [Set the date](../../../../site/src/content/docs/memories/set-the-date.mdx)

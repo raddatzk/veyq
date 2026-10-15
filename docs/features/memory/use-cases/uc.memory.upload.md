@@ -99,3 +99,4 @@ verschlüsselten Teile.
 - Use-cases: [browse](uc.memory.browse.md), [gallery](uc.memory.gallery.md) (where the upload affordance lives).
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (blob store + transport;
   windowed presigning; resuming **across a page reload** deferred).
+- End-user view (docs site): [Add photos and videos](../../../../site/src/content/docs/memories/add-photos-and-videos.mdx)

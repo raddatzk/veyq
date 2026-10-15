@@ -141,7 +141,7 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | move the node (core's move dialog, inbox #358) | ✓ a Memory to the root or a folder, a chapter into another Memory | ✗ | ✗ | ✓ a Memory a folder of the subtree holds, between the subtree's folders; ✗ a chapter, the link's root | ✗ |
 | copy the node (core's "Copy to…", [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)) | ✓ a Memory with its chapters to the root or a folder, a chapter into a Memory: each medium's original and its existing tiers read by frame and uploaded as they are under fresh keys, its sealed facts (capture time and its correction, coordinates, place name, EXIF) sealed anew - nothing decoded (`exportImport.ts`, `addCopiedMedia`, [ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md) decision 11); an uploaded cover as its blob, a photo cover by its medium; participants and contributors do not come along | ✗ | ✗ | ✗ | ✗ |
 | item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
-| share (and the uploader link) | the instance's public (and uploader) links | the same | ✗ | ✗ | ✗ |
+| share (and the uploader link) | the instance's `core.public-shares` (and, for the READ_WRITE role, `.contribute`; for the uploader link, `.drop-box`) | the same | ✗ | ✗ | ✗ |
 
 At a folder level (Memories' rows in core's one list): a member creates a Memory (not during a pending deletion, never in a guest's
 identity folder); a share guest creates none — the "New" menu offers a guest no Memory (owner decision 2026-10-14, ADR 0080 decision 6); every role that reads opens
@@ -202,3 +202,5 @@ the three, `memoryViews.ts`), and its create and share dialogs ride on its kinds
 the sidebar pins are ordered lists, today unused by Memories: the sidebar's Favorites section is core's; the upload status in the top bar is core's, not Memories' tray item, and lists Memories'
 batches with every other application's). What core still knows of Memories, and what is open on both sides,
 [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences lists.
+
+- End-user view (docs site): [Memories](../../site/src/content/docs/memories/index.mdx)

@@ -84,6 +84,9 @@ phase closes only after the owner has read its pages in conversation. Done when,
       that says what Memories is for (photos, videos and journals that belong to an occasion) and links one page per
       function, never one long page: create a Memory and chapters; add photos; gallery; date and location (with the map consent);
       who was there; cover; marked photos; contributions; the photo trash.
+      *Built, waiting for the owner's read:* `applications/` (overview), `memories/` (landing + ten pages, date and
+      location as two pages); steps written from `web/src/i18n/index.ts` and the Memory components, **not yet
+      checked live in the web client**. Screenshot placeholders are in; `npm run shots` lists them.
 - [ ] 6 Depot — a *Depot* landing page that says what Depot is for (documents, PDFs, any file you want to keep;
       the goal, not the feature list), then one page per function: upload files and folders, view a file, replace,
       rename, delete, move and copy, select several, covers and views, drop boxes. The single `depot.md` is split
