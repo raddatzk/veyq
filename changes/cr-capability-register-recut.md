@@ -7,7 +7,7 @@ adrs: ["0088", "0032", "0059", "0079"]
 invariants:
   - "Operator-blind E2EE everywhere: the manifest stays identical for every caller and carries no identity; every new gate refuses on a handle the server already sees (a share role, a wrap method, an endpoint, a node kind)"
   - "API-first: contracts/platform/capabilities.json is the source of truth; the backend CapabilityIds and the web constants follow it, pinned by their conformance tests"
-  - "Self-hostable by default: an operator's veyq.capabilities.disabled must keep switching off what it names; a renamed id must not turn an operator's off-switch into a silent no-op"
+  - "Self-hostable by default: until inbox #443 replaces it, veyq.capabilities.disabled keeps switching off what it names, under the new ids and with the AND along the path"
 ---
 
 ## Goal
@@ -42,7 +42,9 @@ nowhere in the tree except in this CR, and the catalog becomes strictly append-o
 - [uc.platform.capability-discovery](../docs/features/platform/use-cases/uc.platform.capability-discovery.md) and its
   coverage file `docs/coverage/features/platform/use-cases/uc.platform.capability-discovery.yaml`.
 - **Out of scope**, each its own later CR (inbox #439 steps 2–4): the post-auth tenant set and the tenant settings UI
-  (`+`), requirements, external services, every `<application>.*` entry, and `download-originals`.
+  (`+`), requirements, external services, every `<application>.*` entry, and `download-originals`. Also out of
+  scope: share switches reaching existing links (#442, D11), the Server Owner's switches in admin-web and the CLI with
+  decision 13's self-describing entries (#443, D3, D12), and configuration as code (#444).
 - **A sibling in flight touches the same web files.** At refine time the shared tree held uncommitted edits by another
   session (`git status --short` showed `web/src/features/account/pairing/{SignInWithCodeCard.vue,JoinDeviceCard.test.ts,
   SignInWithCodeCard.test.ts,pairing.ts}` and `web/src/views/TenantJoinView.vue`, apparently
@@ -74,12 +76,13 @@ Each decision carries the line that settles it.
   advertised list filtered by `isActive`, in `ADVERTISED` order. So disabling `core.public-shares` drops all three
   share ids from the manifest and makes all three gates refuse. Today's computation is exact membership with no
   prefix logic (`CapabilityRegistry.kt:21-28`).
-- **D3 — an unknown id in `veyq.capabilities.disabled` refuses to boot.** Today an unknown id is silently ignored,
-  because `ADVERTISED.filterNot { it in disabledSet }` only subtracts. After a rename, every stale operator config
-  would therefore switch nothing off without saying so. The registry fails at startup instead, and its message names
-  the unknown id and the catalog's ids. This closes the gap exactly where the rename opens it. From V1 on no
-  switchable id can disappear, because presence ids (decision 9) are never switchable. So the rule never refuses a
-  config that once was valid. **Open, owner** — see § Open before go, Q2.
+- **D3 — the boot-time list stays, under the new ids, and nothing more.** `veyq.capabilities.disabled` is read once at
+  boot (`CapabilityRegistry.kt:21-22`). ADR 0088 decision 12 retires it in favour of the Admin API (inbox #443), so this
+  CR only makes it name the new ids and go through D2's AND. Like today, an unknown id in it is ignored. No refusal and
+  no warning are added: decision 12 retires that question together with the list. The cost of that is close to nil.
+  `infra/.env.example`, the compose file and the Helm values do not pass the list through (inbox #443, measured
+  there), so no deployed operator can hold a stale id. Only the comment example (`application.properties:45-49`)
+  and the tests name ids, and both change here.
 - **D4 — the share gates map role → leaf.** `capabilityFor(role)` (`SharingHandler.kt:710-712`) becomes `READ` →
   `core.public-shares`, `READ_WRITE` → `.contribute`, `WRITE_ONLY` → `.drop-box`. The three call sites stay where they
   are: create `:263`, reactivate `:450`, reissue `:501`. One behaviour changes on purpose: `WRITE_ONLY` now also needs
@@ -98,7 +101,8 @@ Each decision carries the line that settles it.
 - **D7 — `core.device-linking` gates every `/api/pairing/*` endpoint.** These are open, answer, delegate, seal and
   collect (`PairingResource.kt:50,58,67,82,90`; spec `contracts/api/auth.openapi.yaml:487,523,563,617,664`). The
   register names the handle as `/api/pairing/*`. A pairing is a transient exchange, not existing data, so "only what is
-  new" means the whole exchange. The disabled list is read at boot, so no pairing survives a switch anyway. The gate is
+  new" means the whole exchange. Gating every endpoint, and not only `open`, also stops a pairing in flight. That
+  matters once #443 switches without a restart. The gate is
   independent of `remember-device` (decision 11). The two combine only on the receiving device: there, the "stay
   signed in" choice needs `.passwordless` (`useGrantReceiver.ts:40`).
 - **D8 — the drop-box creation gate is the application's kind rule, asked by core.** Core cannot name `FILES_DROPBOX`.
@@ -138,17 +142,19 @@ Each decision carries the line that settles it.
   guard's module docstring must carry): the defect that bought it, and its limit. The limit: the guard does not prove
   that code gates an id or that the constants match. Those are `CapabilityRegistryTest` and `capabilities.test.ts`.
 
-## Open before go — owner
-
-- **Q1 — ADR 0088 decision 5's "a share switch acts at once, on existing links too" is not built.** Measured:
-  `grep -rln Capabilit backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/` → `SharingHandler.kt` only, and its
-  `isActive` calls are create, reactivate and reissue. Every guest endpoint serves an existing link regardless.
-  **Recommendation: a separate CR, with its own inbox row.** It is independent of the rename. It touches every guest
-  endpoint in core and both applications. And it has a question no doc settles: what a guest sees, a `404`-shaped
-  "unavailable" or a `422`, and how `ShareView`'s unavailable state reads it. Until it lands, this CR's catalog
-  descriptions say what is built (new links refused, existing ones keep working). They do not say what is decided.
-- **Q2 — D3 (an unknown disabled id refuses to boot) or a startup warning?** I recommend the refusal. A warning in a
-  log nobody reads leaves the switch on.
+- **D11 — share switches do not reach existing links yet. Inbox #442 does that.** ADR 0088 decision 5 says a share
+  switch acts at once, on existing links too. Built today: only create, reactivate and reissue are gated
+  (`grep -rln Capabilit backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/` → `SharingHandler.kt` only, its
+  `isActive` calls at `:263,450,501`). The owner made this its own CR (#442, decided there: a guest of a switched-off
+  link gets the same 404-shaped unavailable page as an expired one). So this CR's catalog descriptions state what is
+  built: new links of the role are refused, and existing ones keep working until #442. They point at #442.
+- **D12 — the catalog's text fields stay as they are. Decision 13's shape belongs to #443.** ADR 0088 decision 13 gives
+  every switchable entry a purpose and an effect-when-off, in EN and DE, served by the API. This CR rewrites every
+  entry anyway, so laying the field down now looks cheap, but it is not. The field would have no reader until #443,
+  and #443 decides what it is (which endpoint serves it, whether a tenant owner sees the same text, how the effect
+  on existing data reads once #442 has changed it). A bilingual text with no renderer is a claim nothing backs, and #442
+  would rewrite every share entry's "effect" text again. So the entries keep today's single English `description`, and
+  #443 replaces it with decision 13's fields.
 
 ## Inventory
 
@@ -206,8 +212,8 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   - **Pairing.** `core.device-linking` off: each pairing endpoint → 422, and `/api/setup` → 200 (control).
   - **Drop box.** `.drop-box` off: `createNode(FILES_DROPBOX)` → 422, and `createNode(FOLDER)` at the same parent →
     created (control).
-  - **D3.** A registry built with an unknown disabled id throws, and the message names it. The same registry built
-    with a known one does not throw (control).
+  - **D3.** A disabled list naming a parent (`core.public-shares`) disables its children through the registry. This is
+    the unit half of the path-AND bite; its control is a sibling that stays active.
   - **Reissue.** Its gate (`SharingHandler.kt:501`) has no test today. One case, with its control.
 
   The conformance test (`CapabilityRegistryTest`) stays one-directional (code ⊆ catalog), because a catalog id may be
@@ -240,7 +246,7 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
     refs).
 
   Inbox: #439 records step 1 as done and points at the next step. #440 closes and says that gap 1 was resolved as a
-  doc fault (D5). If Q1 went to a separate CR, its row is opened here, unless the owner already opened it. ·
+  doc fault (D5). #442 and #443 are already open and need nothing from this CR beyond the new ids. ·
   **Done when:** `python3 scripts/validate_coverage.py` and `python3 scripts/validate_capabilities.py` green, and the
   literal-id angle over `docs/` returns nothing.
 
