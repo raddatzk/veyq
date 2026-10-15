@@ -35,10 +35,12 @@ via the **vendor-neutral AWS S3 SDK** (works against any S3-compatible store). T
 
 **`--profile s3 up` starts the store; it does not make it usable.** A fresh Garage has no layout, no bucket, no
 access key and no grant, and since [ADR 0067](../docs/decisions/0067-store-provisioning-from-a-declared-type.md)
-the **backend** closes that gap on its first start, from the declared store type
-(`veyq.blob-store.type=garage` plus the admin endpoint and token). It assigns a single-node layout, creates the
-bucket `veyq.blob-store.bucket` names (`blobs` by default), imports the **deterministic dev credentials** (so the
-e2e and a dev backend use fixed keys), grants them, and writes the bucket CORS policy. Every step is idempotent on
+the **backend** closes that gap on its first start, from the **bundled-store hint** (`veyq.bundled-store.*`: the
+endpoint, the admin endpoint and the admin token; [ADR 0089](../docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
+It assigns a single-node layout, creates the bucket `veyq.bundled-store.bucket` names (`blobs` by default), imports the key
+pair **derived from the admin token** (so the e2e, a dev backend and the backup tool agree on one pair without any being
+told it), grants it, and writes the bucket CORS policy. **A fresh instance must also choose the bundled store** — admin-web's
+Server → Store page, `veyq-admin store set --bundled`, or `npm run bootstrap:user` — before an upload works. Every step is idempotent on
 its own, so a later start repairs a missing piece rather than skipping the lot, and a `down -v` wipe self-heals on
 the next start.
 
@@ -53,8 +55,8 @@ the Server Owner (the admin console's **Object store** rubric), which reports `P
 `FAILED`, or `NOT_ATTEMPTED` for a store you brought yourself. Provisioning never gates the boot, so the app
 starts and looks healthy either way.
 
-- **S3 API** → `http://localhost:19000`. Dev key `GK0123456789abcdef01234567` / secret
-  `0123…` (64 hex, see `application-dev.properties`), bucket `blobs`, region `us-east-1` — local throwaway only.
+- **S3 API** → `http://localhost:19000`. The dev key pair is derived from the dev admin token (`BundledStoreCredentials`),
+  bucket `blobs`, region `us-east-1` — local throwaway only.
 - **Admin API** → `http://localhost:19003`, token `veyq-dev-admin-token` — how the backend provisions the
   store, published local-only in dev and **not published at all** in production (the app reaches it on the
   compose network as `http://garage:3903`).
@@ -62,13 +64,11 @@ starts and looks healthy either way.
   then
   `VEYQ_S3_E2E=1 ./gradlew :apps:memories:test --tests '*BlobBatchE2ETest'` from `backend/` (the test lives in the
   Memories module; defaults match the compose; override via
-  `VEYQ_S3_ENDPOINT`/`VEYQ_S3_ACCESS_KEY`/`VEYQ_S3_SECRET_KEY`/`VEYQ_S3_BUCKET`/`VEYQ_S3_REGION`).
-- **Backend against the store** (`quarkusDev`): point it at the store via env —
-  `veyq.blob-store.endpoint=http://localhost:19000`, `…access-key=GK0123456789abcdef01234567`,
-  `…secret-key=0123…`. A blank `endpoint` **aborts startup** outside the hermetic `%test` profile
-  (`BlobStoreStartupCheck`, ADR 0013 §1 / cr-0105) — media is not an optional feature, so a store-less instance
-  is misconfigured, not gracefully degraded. The in-memory stub exists only in `%test`, and there is no
-  client-facing `directTransport` flag left to soft-gate on.
+  `VEYQ_S3_ENDPOINT`/`VEYQ_S3_ADMIN_TOKEN`/`VEYQ_S3_BUCKET`/`VEYQ_S3_REGION`).
+- **Backend against the store** (`quarkusDev`): `application-dev.properties` already carries the hint for this Garage, so
+  there is nothing to point it at; only `VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` is yours (the origin you browse — the run
+  configuration sets it). An instance with no store chosen **starts** and refuses uploads with a reason; the in-memory stub
+  exists only in `%test`.
 
 ### Same-origin via Traefik (web, no CORS)
 
@@ -77,7 +77,7 @@ unless the store is **same-origin**. `traefik` path-routes the bucket so it is, 
 [`traefik-dev/blobs.yml`](traefik-dev/blobs.yml) — its only provider, as in production, so it holds no Docker
 socket. It forwards `/<bucket>/…` **without stripping the prefix** and **preserving the Host header** (SigV4 signs host+path+query, so a
 stripPrefix or host rewrite would break the signature). Entry is `http://localhost:18080`; sign presigned URLs
-for that public endpoint via `veyq.blob-store.public-endpoint=http://localhost:18080` (CORS-free, ADR 0013 §4).
+for that public endpoint via `veyq.bundled-store.public-endpoint=http://localhost:18080` (CORS-free, ADR 0013 §4).
 (The backend + web are added behind Traefik in a fuller deployment; this profile routes only the bucket path.)
 
 ## Mail (test mailbox, `--profile mail`)

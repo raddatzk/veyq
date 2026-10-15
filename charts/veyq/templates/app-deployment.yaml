@@ -77,31 +77,23 @@ spec:
             # HSTS on the app's responses (ADR 0069) — the deployment's switch, `hsts.enabled` in values.yaml.
             - name: VEYQ_HTTP_HSTS_ENABLED
               value: {{ .Values.hsts.enabled | quote }}
-            # The store is reached INTERNALLY; presigned URLs are signed for the store's OWN public host,
-            # verbatim — the departure from compose's same-origin path route (ADR 0064, ADR 0067 Decision 5).
-            - name: VEYQ_BLOB_STORE_ENDPOINT
+            # The BUNDLED-STORE HINT (ADR 0089) — the one store value the environment carries: where the chart's
+            # Garage is, the host browsers reach it at, and its admin token. The Server Owner chooses "Use the
+            # bundled store" in the admin console and enters nothing else: the S3 key pair is DERIVED from the
+            # token, so the chart holds no key pair. The store is reached INTERNALLY; presigned URLs are signed
+            # for the store's OWN public host, verbatim — the departure from compose's same-origin path route
+            # (ADR 0064, ADR 0067 Decision 5).
+            - name: VEYQ_BUNDLED_STORE_ENDPOINT
               value: http://veyq-garage:3900
-            - name: VEYQ_BLOB_STORE_PUBLIC_ENDPOINT
+            - name: VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT
               value: https://{{ required "storeDomain is required" .Values.storeDomain }}
-            - name: VEYQ_BLOB_STORE_SIGNING_MODE
+            - name: VEYQ_BUNDLED_STORE_SIGNING_MODE
               value: store-origin
-            - name: VEYQ_BLOB_STORE_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "veyq.secretName" . }}
-                  key: s3AccessKey
-            - name: VEYQ_BLOB_STORE_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "veyq.secretName" . }}
-                  key: s3SecretKey
             # The app brings the bundled store from RUNNING to USABLE itself (ADR 0067) over its admin API — a
             # different port from the S3 one, reachable on the Service and deliberately on no Ingress.
-            - name: VEYQ_BLOB_STORE_TYPE
-              value: garage
-            - name: VEYQ_BLOB_STORE_GARAGE_ADMIN_ENDPOINT
+            - name: VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT
               value: http://veyq-garage:3903
-            - name: VEYQ_BLOB_STORE_GARAGE_ADMIN_TOKEN
+            - name: VEYQ_BUNDLED_STORE_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "veyq.secretName" . }}

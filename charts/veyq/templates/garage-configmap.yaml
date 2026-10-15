@@ -26,7 +26,7 @@ data:
     rpc_public_addr = "veyq-garage:3901"
 
     [s3_api]
-    # Must match veyq.blob-store.region (default us-east-1) — SigV4 signs the region.
+    # Must match veyq.bundled-store.region (default us-east-1) — SigV4 signs the region.
     s3_region = "us-east-1"
     api_bind_addr = "[::]:3900"
 

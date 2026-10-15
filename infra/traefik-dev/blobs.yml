@@ -3,7 +3,7 @@
 # TraefikFileIngressSink renders for every domain in production — prefix not stripped, Host preserved (SigV4 signs
 # host+path+query, so either rewrite breaks every presigned URL), the store-response middleware attached (ADR 0013
 # §6) — minus the Host matcher and TLS, which a local entrypoint has no use for. Change the two together.
-# `/blobs/` is the backend's default `veyq.blob-store.bucket`, spelled here because a static file cannot read the
+# `/blobs/` is the backend's default `veyq.bundled-store.bucket`, spelled here because a static file cannot read the
 # setting; the trailing slash keeps the store off every app path that merely begins with the name.
 http:
   routers:

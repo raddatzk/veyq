@@ -27,8 +27,6 @@ secrets:
   mariadbRootPassword: ci-only-not-a-password
   garageRpcSecret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   garageAdminToken: ci-only-not-a-token
-  s3AccessKey: GK0123456789abcdef01234567
-  s3SecretKey: ci-only-not-a-secret
 ingress:
   className: nginx
   tls:

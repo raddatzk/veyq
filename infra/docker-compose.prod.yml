@@ -132,20 +132,19 @@ services:
       # this service, so every origin this stack serves answers to the one value — https://raddatzk.github.io/veyq/run/new-instance/ says when to
       # turn it off. Traefik adds nothing: the app sends its own headers.
       VEYQ_HTTP_HSTS_ENABLED: ${VEYQ_HSTS_ENABLED:-true}
-      # The store is reached INTERNALLY; presigned URLs are SIGNED for the public origin so a browser fetches
-      # them same-origin, with no CORS (ADR 0013 §4). Both must be set — signing for the internal name would
-      # produce URLs no client can reach.
-      VEYQ_BLOB_STORE_ENDPOINT: http://garage:3900
-      VEYQ_BLOB_STORE_PUBLIC_ENDPOINT: https://${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}
-      VEYQ_BLOB_STORE_ACCESS_KEY: ${VEYQ_S3_ACCESS_KEY:?set VEYQ_S3_ACCESS_KEY in infra/.env}
-      VEYQ_BLOB_STORE_SECRET_KEY: ${VEYQ_S3_SECRET_KEY:?set VEYQ_S3_SECRET_KEY in infra/.env}
+      # The BUNDLED-STORE HINT (ADR 0089) — the one store value the environment carries: where this stack's
+      # Garage is and its admin token. The Server Owner then chooses "Use the bundled store" in the admin console
+      # (or `veyq-admin store set --bundled`) and enters nothing else: the S3 key pair is DERIVED from the token,
+      # so no key pair lives in this file. The store is reached INTERNALLY; presigned URLs are SIGNED for the
+      # public origin so a browser fetches them same-origin, with no CORS (ADR 0013 §4) — both must be set.
       # The app brings the bundled store from RUNNING to USABLE itself (ADR 0067) — layout, bucket, key, grant
       # and CORS policy — which is why this recipe has no init sidecar and builds nothing. It runs in the
       # background and can never fail the boot; `GET /api/instance/store-provisioning` reports how it went.
-      # The admin plane is a DIFFERENT port from the S3 one above, and is deliberately not published.
-      VEYQ_BLOB_STORE_TYPE: garage
-      VEYQ_BLOB_STORE_GARAGE_ADMIN_ENDPOINT: http://garage:3903
-      VEYQ_BLOB_STORE_GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/.env}
+      # The admin plane is a DIFFERENT port from the S3 one, and is deliberately not published.
+      VEYQ_BUNDLED_STORE_ENDPOINT: http://garage:3900
+      VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT: https://${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}
+      VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT: http://garage:3903
+      VEYQ_BUNDLED_STORE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/.env}
       # Leg (c) of the backup, on the volume below. An ABSOLUTE path outside /work on purpose: /work holds
       # quarkus-app/, and a volume mounted there would be seeded from the image once and never refreshed — an
       # upgrade would silently keep running the first image's jar. See the Dockerfile comment on runtime-jvm.

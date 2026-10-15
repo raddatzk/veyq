@@ -119,20 +119,16 @@
         "mariadbPassword": { "type": "string" },
         "mariadbRootPassword": { "type": "string" },
         "garageRpcSecret": { "type": "string" },
-        "garageAdminToken": { "type": "string" },
-        "s3AccessKey": { "type": "string" },
-        "s3SecretKey": { "type": "string" }
+        "garageAdminToken": { "type": "string" }
       },
       "if": { "properties": { "existingSecret": { "maxLength": 0 } } },
       "then": {
-        "required": ["mariadbPassword", "mariadbRootPassword", "garageRpcSecret", "garageAdminToken", "s3AccessKey", "s3SecretKey"],
+        "required": ["mariadbPassword", "mariadbRootPassword", "garageRpcSecret", "garageAdminToken"],
         "properties": {
           "mariadbPassword": { "$ref": "#/$defs/nonEmpty" },
           "mariadbRootPassword": { "$ref": "#/$defs/nonEmpty" },
           "garageRpcSecret": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-          "garageAdminToken": { "$ref": "#/$defs/nonEmpty" },
-          "s3AccessKey": { "type": "string", "pattern": "^GK[0-9a-f]{24}$" },
-          "s3SecretKey": { "$ref": "#/$defs/nonEmpty" }
+          "garageAdminToken": { "$ref": "#/$defs/nonEmpty" }
         }
       }
     },

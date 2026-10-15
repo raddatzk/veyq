@@ -19,7 +19,7 @@ domain: ""
 # The bundled store's OWN host — a second Ingress, not a path under `domain`. An operator-chosen ingress
 # controller is not guaranteed to preserve the prefix and Host header a SigV4 signature needs, so on this
 # target the store gets its own origin and every presigned URL is signed against it verbatim
-# (`veyq.blob-store.signing-mode=store-origin`, ADR 0067 Decision 5; ADR 0013 §4's CORS branch). The bucket's
+# (`veyq.bundled-store.signing-mode=store-origin`, ADR 0067 Decision 5; ADR 0013 §4's CORS branch). The bucket's
 # CORS policy is written by the backend at runtime and is `*` — the only policy the bundled store can express
 # for a multi-tenant instance — so the chart templates no origin list.
 storeDomain: ""
@@ -197,7 +197,7 @@ ingress:
 
 secrets:
   # Name an existing Secret carrying the keys below (mariadbPassword, mariadbRootPassword, garageRpcSecret,
-  # garageAdminToken, s3AccessKey, s3SecretKey) and the chart renders none of its own — for sealed-secrets,
+  # garageAdminToken) and the chart renders none of its own — for sealed-secrets,
   # external-secrets or any operator who keeps key material out of values files. Leave empty to have the chart
   # render a Secret from the values below.
   existingSecret: ""
@@ -207,12 +207,11 @@ secrets:
   mariadbRootPassword: ""
   # Object store. The RPC secret must be exactly 64 hex characters (`openssl rand -hex 32`); the admin token
   # is read by TWO components — the store, and the app, which brings the store from running to usable on
-  # first start (ADR 0067: layout, bucket, key, grant, CORS). The S3 key pair is what the app signs presigned
-  # URLs with and what it imports INTO the store; the access key must be a Garage key id, `GK` + 24 hex.
+  # first start (ADR 0067: layout, bucket, key, grant, CORS). The app DERIVES the bundled store's S3 key pair
+  # from that token (ADR 0089), so there is no key pair to set here: the Server Owner chooses "Use the bundled
+  # store" in the admin console and nothing else.
   garageRpcSecret: ""
   garageAdminToken: ""
-  s3AccessKey: ""
-  s3SecretKey: ""
 
 mariadb:
   # false = an operator-managed database (ADR 0064's escape hatch); then set externalDatabase below.

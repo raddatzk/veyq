@@ -14,32 +14,24 @@
         </list>
       </option>
       <option name="vmOptions" />
-      <!-- Store config for the IntelliJ dev flow. Without an endpoint the backend does NOT degrade — it aborts
-           startup (BlobStoreStartupCheck, ADR 0013 §1 / cr-0105: media is not optional, so a store-less instance
-           is misconfigured, not gracefully degraded). The in-memory stub survives only in the %test profile, and
-           there is no client-facing directTransport flag left to soft-gate on.
-           Endpoint + creds point at the bundled compose Garage; these are the documented
-           throwaway dev creds (infra/README.md, garage.toml) — not secrets.
-           TYPE + GARAGE_ADMIN_* are what let this backend bring that store from RUNNING to USABLE itself
-           (ADR 0067): bringing the s3 profile up no longer seeds the bucket, so the first start after a fresh
-           `down -v` assigns the layout and creates the bucket, key, grant and CORS policy. The admin API is a
-           different port from the S3 one and is published as 19003:3903 in infra/docker-compose.yml. It runs in
-           the background and can never fail the boot; GET /api/instance/store-provisioning reports how it went.
-           A double hyphen is illegal inside an XML comment — spell such a flag out in prose, or IntelliJ
+      <!-- Store config for the IntelliJ dev flow. The object store is a Server-Owner setting held in the database
+           (ADR 0089), not configuration: the backend STARTS without one and refuses uploads with a reason until
+           the Server Owner has chosen a store. What %dev carries is the BUNDLED-STORE HINT for the compose Garage
+           (application-dev.properties: endpoint, admin endpoint, the documented throwaway admin token; the S3 key
+           pair is derived from that token), so the only thing set here is the one developer-specific value.
+           After a fresh `down -v` (or any new database) choose the bundled store once: the console's Server > Store
+           page, or `npm run bootstrap:user`. The backend then brings Garage from RUNNING to USABLE itself
+           (ADR 0067): layout, bucket, key, grant and CORS. It runs in the background and can never fail the boot;
+           GET /api/instance/store-provisioning reports how it went.
+           A double hyphen is illegal inside an XML comment - spell such a flag out in prose, or IntelliJ
            fails to parse this file and silently offers no run config at all.
            PUBLIC_ENDPOINT is the browser origin the presigned PUT/GET URLs are signed for: it MUST equal the host
            in the address bar (SigV4 signs host+path; the Vite dev server proxies /blobs/ same-origin to the store).
-           It is developer-specific — set it to whatever origin you browse. Here: veyq.localhost:8081 (the *.localhost
+           It is developer-specific - set it to whatever origin you browse. Here: veyq.localhost:8081 (the *.localhost
            per-tenant workspace flow, cr-0051, served by Vite on VITE_PORT=8081). Adjust per setup. -->
       <option name="env">
         <map>
-          <entry key="VEYQ_BLOB_STORE_ENDPOINT" value="http://localhost:19000" />
-          <entry key="VEYQ_BLOB_STORE_ACCESS_KEY" value="GK0123456789abcdef01234567" />
-          <entry key="VEYQ_BLOB_STORE_SECRET_KEY" value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" />
-          <entry key="VEYQ_BLOB_STORE_PUBLIC_ENDPOINT" value="http://veyq.localhost:8081" />
-          <entry key="VEYQ_BLOB_STORE_TYPE" value="garage" />
-          <entry key="VEYQ_BLOB_STORE_GARAGE_ADMIN_ENDPOINT" value="http://localhost:19003" />
-          <entry key="VEYQ_BLOB_STORE_GARAGE_ADMIN_TOKEN" value="veyq-dev-admin-token" />
+          <entry key="VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT" value="http://veyq.localhost:8081" />
         </map>
       </option>
     </ExternalSystemSettings>
