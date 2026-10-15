@@ -946,7 +946,7 @@ paths:
       tags: [tenants]
       operationId: acceptTenantTerms
       x-veyq-concurrency:
-        mode: version
+        mode: revision
         fields:
           - field: version
             conflictCode: terms_version_changed

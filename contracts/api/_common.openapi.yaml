@@ -85,13 +85,13 @@ components:
           example: { code: scope_deleting }
   schemas:
     StaleSealedMeta:
-      # The 409 body of every version-checked sealed-meta write (ADR 0077): core's node payload and any
+      # The 409 body of every revision-checked sealed-meta write (ADR 0077): core's node payload and any
       # application's own sealed blob. Shared because every such blob answers the same way, and a loser may have
       # no single-item read to re-GET: the conflict body IS the re-read.
       type: object
       description: >
         A refused write. With `code: stale_version` the blob moved since the caller read it: nothing was written,
-        and the body carries the blob's current `wrappedMeta` (null when it has none) and its `metaVersion` — the
+        and the body carries the blob's current `wrappedMeta` (null when it has none) and its `metaRevision` — the
         base the caller re-applies its own change to before retrying (ADR 0077). Any other 409 code
         (`scope_deleting`, `slug_taken`) carries `code` alone. Operator-blind: the ciphertext is what the caller
         can already list.
@@ -115,11 +115,11 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
-        metaVersion:
+        metaRevision:
           x-veyq-visibility: structure
           type: [integer, "null"]
           format: int64
-          description: The blob's current version, present with `stale_version` — a retry states this one.
+          description: The blob's current revision, present with `stale_version` — a retry states this one.
           example: 4
 
     TenantStatus:

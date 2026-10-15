@@ -409,9 +409,9 @@ paths:
       tags: [media]
       operationId: updateMediaMeta
       x-veyq-concurrency:
-        mode: version
+        mode: revision
         fields:
-          - field: metaVersion
+          - field: metaRevision
       summary: Overwrite a media's sealed listed-metadata blob (e.g. a corrected date) — opaque.
       description: >
         Re-store the media's `wrappedMeta` verbatim: the client re-seals the listed blob
@@ -419,8 +419,8 @@ paths:
         added/removed) and PUTs the new opaque base64 (or null to clear it). The only user-editable field is the
         date correction; geometry and GPS are derived-only. Operator-blind — the server overwrites the ciphertext
         it holds and never inspects the fields inside. Guards: the caller holds a grant for the scope; a media
-        target must exist; and the `metaVersion` the blob was built from still matches — else nothing is
-        written and the answer is `409 stale_version` with the current blob and version (ADR 0077).
+        target must exist; and the `metaRevision` the blob was built from still matches — else nothing is
+        written and the answer is `409 stale_version` with the current blob and revision (ADR 0077).
       security:
         - bearerAuth: []
       parameters:
@@ -433,7 +433,7 @@ paths:
             schema: { $ref: "#/components/schemas/MediaMetaUpdate" }
             example:
               wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0
-              metaVersion: 2
+              metaRevision: 2
       responses:
         "200":
           description: The stored listed-metadata blob (echoed opaque base64, or null when cleared).
@@ -455,11 +455,11 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
         "409":
           description: >
-            The media's `wrappedMeta` moved since the stated `metaVersion` (`stale_version`, with the current blob
-            and version — nothing was written, ADR 0077); or the space is being deleted and read-only
+            The media's `wrappedMeta` moved since the stated `metaRevision` (`stale_version`, with the current blob
+            and revision — nothing was written, ADR 0077); or the space is being deleted and read-only
             (`scope_deleting`, uc.spaces.delete-group A4).
           content:
-            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0, metaVersion: 2 } }
+            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0, metaRevision: 2 } }
 
   /api/scopes/{scopeId}/media/{mediaId}:
     delete:
@@ -815,7 +815,7 @@ components:
             The bucket this media lives in: its uploader's primary from the upload on, another of that owner's
             buckets after a move. Null reads as the uploader's primary.
           example: null
-        metaVersion:
+        metaRevision:
           x-veyq-visibility: structure
           type: integer
           format: int64
@@ -950,19 +950,19 @@ components:
       type: object
       description: >
         Overwrite a media's sealed listed-metadata blob (re-sealed client-side under `K_node`), e.g. to persist a
-        corrected date. Null clears it. Opaque to the server. `metaVersion` is the `MediaSummary.metaVersion` the
+        corrected date. Null clears it. Opaque to the server. `metaRevision` is the `MediaSummary.metaRevision` the
         blob was built from (ADR 0077).
-      required: [metaVersion]
+      required: [metaRevision]
       properties:
-        metaVersion:
+        metaRevision:
           x-veyq-visibility: structure
           # Nullable in the TYPE on purpose, and refused null by the annotation: a required `type: integer` generates a
           # primitive Kotlin `Long`, which Jackson fills with 0 when the field is missing — measured with
-          # `MediaSliceTest.mediaMetaWithoutVersionIs400` answering 200 — so an old client would write at version 0
+          # `MediaSliceTest.mediaMetaWithoutRevisionIs400` answering 200 — so an old client would write at revision 0
           # unnoticed. Nullable makes the absence visible; `@NotNull` turns it into the boundary's 400.
           type: [integer, "null"]
           format: int64
-          description: The version the re-sealed blob was built from; the write succeeds only if it still matches. Never null.
+          description: The revision the re-sealed blob was built from; the write succeeds only if it still matches. Never null.
           example: 2
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         wrappedMeta:
