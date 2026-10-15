@@ -215,7 +215,7 @@ Spot-check before trusting the table: D5 leans hardest on "only `createGroup` is
 that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and `validate_capabilities.py`.
   Backend and web are red only at the conformance tests that still hold old ids. Those fail because they compare the
   code against the new catalog; name the failing tests.
-- [ ] **2 backend — ids, registry, gates.** Covers D2, D3, D4, D5's test, D6, D7. **D8 moved to phase 2b**
+- [x] **2 backend — ids, registry, gates.** Covers D2, D3, D4, D5's test, D6, D7. **D8 moved to phase 2b**
   (coordinator, 2026-10-15). While this phase ran, `cr-files-becomes-depot` was mid-rename, with uncommitted edits in
   `backend/apps/depot/**`, D8's site. Two writers never share files, and everything else in this phase is core. Before
   each commit, check `git status --short` on the exact paths staged; never stage one that carries a neighbour's edit.
@@ -318,3 +318,19 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   `DEPOT_DROPBOX`. Within minutes of phase 1's commit it had already rewritten the drop-box entry's text in the
   working tree. Phase 2 re-derives D8's locators after that CR lands. Next time: at implement start, `ls changes/`
   and grep each live sibling CR for the files this CR's locators name.
+- **Phase 2, planning: "src/test only" could not hold one seam for two projects.** D3 put the test alternative in
+  `src/test`, but `apps/memories ReactivateShareCapabilitySliceTest` needs the same seam, and one `@Alternative`
+  in two `src/test` trees is two. It went to `:core`'s test fixtures (`SwitchableCapabilities` +
+  `CapabilitySwitchesProfile`), the precedent being `FakePresigningBlobStore` + `FakePresignProfile`; test fixtures
+  never reach the fast-jar, so the invariant (production cannot reach the seam) holds and the leak bite proves the
+  default profile still wires `NoCapabilitySwitchedOff`. Next time: a CR that places a seam names every project whose
+  tests consume it, and picks the source set from that list.
+- **Phase 2, planning: a test rename is a coverage edit, whatever phase owns the coverage prose.** Phase 4 owns the
+  coverage file, but four of its refs named test methods this phase renamed, so `validate_coverage.py` would have
+  been red at phase 2's close. The refs were re-pointed here (names only; the texts stay phase 4's). Next time: a
+  phase that renames or deletes a test greps `docs/coverage/` for `<Class>.<method>` and carries the refs.
+- **Phase 2, execution: one bite lever reached a test it was not batched for.** Run A's "READ_WRITE back on the
+  parent" lever also reddened the reissue test (it switches `.contribute` off on a READ_WRITE link). The reissue
+  gate's own lever had been put in a separate run for exactly that reason, so nothing was left unproven, but the
+  prediction listed one red too few. Next time: before batching, list per lever every test whose fixture passes
+  through the changed mapping, not only the test written for it.
