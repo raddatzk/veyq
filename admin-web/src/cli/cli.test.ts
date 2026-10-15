@@ -28,6 +28,12 @@ vi.mock('../features/instance/store', async (importOriginal) => ({
   setInstanceStore: vi.fn(),
   checkInstanceStore: vi.fn(),
 }))
+vi.mock('../features/instance/capabilities', async (importOriginal) => ({
+  // the tree and the text choice stay real: what the commands print is what is asserted on
+  ...(await importOriginal<typeof import('../features/instance/capabilities')>()),
+  listInstanceCapabilities: vi.fn(),
+  setInstanceCapability: vi.fn(),
+}))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
 import { run } from './cli'
@@ -37,6 +43,9 @@ import { getInstanceRelease } from '../features/instance/release'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import { checkInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
 import type { InstanceStore, InstanceStoreCheck } from '../features/instance/store'
+import { listInstanceCapabilities, setInstanceCapability } from '../features/instance/capabilities'
+import type { InstanceCapability } from '../features/instance/capabilities'
+import { httpError } from '../test/httpError'
 import type { TenantCreated, TenantInviteState, TenantSummary } from '../features/tenants/tenants'
 
 const ENV = { VEYQ_ADMIN_EMAIL: 'owner@example.com', VEYQ_ADMIN_PASSWORD: 'pw' }
@@ -77,8 +86,29 @@ const failedCheck: InstanceStoreCheck = {
   ],
 }
 
+// Invented entry texts, not the catalog's: the CLI must print what the server serves.
+function capability(id: string, name: string, off: boolean, effective: boolean): InstanceCapability {
+  return {
+    id,
+    title: { en: `${name} EN`, de: `${name} DE` },
+    purpose: { en: `What ${name} is for.`, de: `Wofür ${name} da ist.` },
+    whenOff: { en: `Without ${name}, new ones are refused.`, de: `Ohne ${name} wird Neues abgelehnt.` },
+    off,
+    effective,
+  }
+}
+const register: InstanceCapability[] = [
+  capability('core.x', 'Ex', false, true),
+  capability('core.a', 'Alpha', true, false),
+  capability('core.a.b', 'Bravo', true, false),
+  capability('core.a.b.c', 'Charlie', false, false),
+  capability('core.a.d', 'Delta', false, false),
+]
+
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(listInstanceCapabilities).mockResolvedValue(register)
+  vi.mocked(setInstanceCapability).mockImplementation(async (id, off) => capability(id, 'Ex', off, !off))
   vi.mocked(getInstanceStore).mockResolvedValue(storeRead)
   vi.mocked(setInstanceStore).mockResolvedValue(storeRead)
   vi.mocked(checkInstanceStore).mockResolvedValue(failedCheck)
@@ -248,11 +278,103 @@ describe('veyq-admin — the object store (uc.admin.configure-object-store)', ()
   })
 })
 
+describe('veyq-admin — the capability switches (uc.admin.switch-capabilities)', () => {
+  /** The line of one entry in `capabilities list`, split into its id, its state token and its title. */
+  const lineOf = (out: string, id: string) => {
+    const line = out.split('\n').find((l) => l.trim().split(/\s{2,}/)[0] === id)!
+    return line.trim().split(/\s{2,}/)
+  }
+
+  it('capabilities list prints the tree with each entry’s state, title and purpose', async () => {
+    const r = await invoke(['capabilities', 'list'])
+    expect(r.code).toBe(0)
+    expect(listInstanceCapabilities).toHaveBeenCalledOnce()
+    expect(lineOf(r.out, 'core.x')).toEqual(['core.x', 'on', 'Ex EN'])
+    expect(lineOf(r.out, 'core.a')).toEqual(['core.a', 'off', 'Alpha EN'])
+    expect(lineOf(r.out, 'core.a.b')).toEqual(['core.a.b', 'off', 'Bravo EN'])
+    // the NEAREST ancestor that is itself off, by the id `capabilities on` takes
+    expect(lineOf(r.out, 'core.a.b.c')).toEqual(['core.a.b.c', 'off through core.a.b', 'Charlie EN'])
+    expect(lineOf(r.out, 'core.a.d')).toEqual(['core.a.d', 'off through core.a', 'Delta EN'])
+    // the tree: a child is indented under its parent, a grandchild one step further
+    const indent = (id: string) => r.out.split('\n').find((l) => l.trim().startsWith(`${id} `))!.search(/\S/)
+    expect([indent('core.a'), indent('core.a.b'), indent('core.a.b.c')]).toEqual([0, 2, 4])
+    expect(r.out).toContain('What Charlie is for.')
+  })
+
+  it('takes the locale from LC_ALL, then LANG — de* is German, anything else English', async () => {
+    expect((await invoke(['capabilities', 'list'], { ...ENV, LANG: 'de_DE.UTF-8' })).out).toContain('Wofür Ex da ist.')
+    expect((await invoke(['capabilities', 'list'], { ...ENV, LC_ALL: 'de_AT.UTF-8', LANG: 'en_US.UTF-8' })).out).toContain('Ex DE')
+    // a set LC_ALL wins even when it is not German
+    expect((await invoke(['capabilities', 'list'], { ...ENV, LC_ALL: 'C', LANG: 'de_DE.UTF-8' })).out).toContain('Ex EN')
+    expect((await invoke(['capabilities', 'list'], ENV)).out).toContain('Ex EN')
+  })
+
+  it('--lang overrides the locale either way', async () => {
+    expect((await invoke(['capabilities', 'list', '--lang', 'en'], { ...ENV, LC_ALL: 'de_DE.UTF-8' })).out).toContain('Ex EN')
+    expect((await invoke(['capabilities', 'list', '--lang', 'de'], { ...ENV, LANG: 'en_US.UTF-8' })).out).toContain('Ex DE')
+  })
+
+  it('--lang refuses a language the catalog does not write, before signing in', async () => {
+    const r = await invoke(['capabilities', 'list', '--lang', 'fr'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("--lang must be one of en, de (got 'fr')")
+    expect(signIn).not.toHaveBeenCalled()
+  })
+
+  it('capabilities off <id> switches it off and prints the served effect-when-off in the locale', async () => {
+    const r = await invoke(['capabilities', 'off', 'core.x'], { ...ENV, LANG: 'de_DE.UTF-8' })
+    expect(r.code).toBe(0)
+    expect(setInstanceCapability).toHaveBeenCalledWith('core.x', true)
+    expect(r.out.split('\n')[0]).toBe('Ohne Ex wird Neues abgelehnt.')
+    expect(r.out).toContain('core.x  off  Ex DE')
+    const en = await invoke(['capabilities', 'off', '--lang', 'en', 'core.x'])
+    expect(en.out.split('\n')[0]).toBe('Without Ex, new ones are refused.')
+  })
+
+  it('capabilities on <id> switches it back on and prints no effect text', async () => {
+    const r = await invoke(['capabilities', 'on', 'core.x'])
+    expect(r.code).toBe(0)
+    expect(setInstanceCapability).toHaveBeenCalledWith('core.x', false)
+    expect(r.out).toBe('core.x  on  Ex EN')
+  })
+
+  it('capabilities on under a parent that is still off says the entry stays off through it', async () => {
+    vi.mocked(setInstanceCapability).mockResolvedValueOnce(capability('core.a.b.c', 'Charlie', false, false))
+    const r = await invoke(['capabilities', 'on', 'core.a.b.c'])
+    expect(r.out).toBe('core.a.b.c  off through a parent  Charlie EN')
+  })
+
+  it('an unknown id exits 1 with the backend’s refusal and prints no effect text', async () => {
+    vi.mocked(setInstanceCapability).mockRejectedValueOnce(httpError(404, 'capability_not_found'))
+    const r = await invoke(['capabilities', 'off', 'core.nope'])
+    expect(r.code).toBe(1)
+    expect(r.err).toBe('veyq-admin: request failed: HTTP 404 capability_not_found')
+    expect(r.out).toBe('')
+  })
+
+  it('off and on need exactly one id, refused before signing in', async () => {
+    const none = await invoke(['capabilities', 'off'])
+    expect(none.code).toBe(1)
+    expect(none.err).toContain('<id> is required')
+    const two = await invoke(['capabilities', 'on', 'core.x', 'core.a'])
+    expect(two.code).toBe(1)
+    expect(two.err).toContain('exactly one <id>')
+    expect(signIn).not.toHaveBeenCalled()
+    expect(setInstanceCapability).not.toHaveBeenCalled()
+  })
+
+  it('list takes no id: a stray word is still an unknown command', async () => {
+    const r = await invoke(['capabilities', 'list', 'core.x'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("unknown command 'capabilities list core.x'")
+  })
+})
+
 describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

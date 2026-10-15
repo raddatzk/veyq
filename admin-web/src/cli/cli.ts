@@ -27,6 +27,7 @@ export function usage(): string {
     '  VEYQ_ADMIN_PASSWORD  its password (required) — used once per invocation, never stored',
     '  VEYQ_STORE_SECRET_KEY, VEYQ_STORE_GARAGE_ADMIN_TOKEN  the secrets `store set` seals (optional: unset keeps the stored one)',
     '  BACKEND_URL          the backend\'s admin listener (default http://app:8090)',
+    '  LC_ALL, LANG         the language `capabilities` prints the entry texts in (de* German, else English; --lang overrides)',
   ].join('\n')
 }
 
@@ -36,12 +37,21 @@ export function usage(): string {
  * Command words are the leading arguments that are not flags — which is why this is done by hand instead of by
  * `parseArgs`: the flags a command accepts are only knowable *after* the command is known, and parsing twice
  * with the right table beats parsing once with the union of every command's flags (which would happily accept
- * `--domain` on `release`).
+ * `--domain` on `release`). A command that takes an operand (`capabilities off <id>`) is matched on its own words,
+ * and what follows them stays in the rest; for every other command all leading words are its name, so a stray
+ * word still reads as the unknown command it is.
  */
 function splitCommand(argv: string[]): { name: string; rest: string[] } {
   let i = 0
   while (i < argv.length && !argv[i].startsWith('-')) i += 1
-  return { name: argv.slice(0, i).join(' '), rest: argv.slice(i) }
+  const words = argv.slice(0, i).join(' ')
+  if (!COMMANDS[words]) {
+    for (let n = i - 1; n > 0; n -= 1) {
+      const name = argv.slice(0, n).join(' ')
+      if (COMMANDS[name]?.operand) return { name, rest: argv.slice(n) }
+    }
+  }
+  return { name: words, rest: argv.slice(i) }
 }
 
 /** Parse `rest` against exactly this command's flags. Throws {@link CliError} for an unknown or missing one. */
@@ -50,14 +60,26 @@ function readFlags(command: Command, rest: string[]): Record<string, string> {
     Object.entries(command.flags).map(([f, spec]) => [f, { type: spec.switch ? ('boolean' as const) : ('string' as const) }]),
   )
   let values: Record<string, string | boolean | undefined>
+  let positionals: string[]
   try {
-    values = parseArgs({ args: rest, options, strict: true, allowPositionals: false }).values
+    ;({ values, positionals } = parseArgs({ args: rest, options, strict: true, allowPositionals: command.operand !== undefined }))
   } catch (e) {
     // parseArgs' own message names the offending token ("Unknown option '--foo'"), which is the useful half.
     throw new CliError(`${(e as Error).message}\nusage: ${NAME} ${command.usage}`)
   }
   for (const [flag, spec] of Object.entries(command.flags)) {
     if (spec.required && !values[flag]) throw new CliError(`--${flag} is required (${spec.describe})\nusage: ${NAME} ${command.usage}`)
+    const value = values[flag]
+    if (spec.oneOf && typeof value === 'string' && !spec.oneOf.includes(value)) {
+      throw new CliError(`--${flag} must be one of ${spec.oneOf.join(', ')} (got '${value}')\nusage: ${NAME} ${command.usage}`)
+    }
+  }
+  if (command.operand) {
+    const { name, describe } = command.operand
+    if (positionals.length !== 1) {
+      throw new CliError(`${positionals.length ? `exactly one <${name}> is taken` : `<${name}> is required (${describe})`}\nusage: ${NAME} ${command.usage}`)
+    }
+    values[name] = positionals[0]
   }
   // A switch given reads as 'true' and absent as missing, so every command sees the one `Record<string, string>`.
   return Object.fromEntries(
@@ -90,7 +112,7 @@ export async function run(
     const flags = readFlags(command, rest)
     await signIn(env)
     const result = await command.run(flags, env)
-    out(renderResult(result))
+    out(command.render ? command.render(result, flags, env) : renderResult(result))
     return command.exitCode?.(result) ?? 0
   } catch (e) {
     err(`${NAME}: ${await describeFailure(e)}`)

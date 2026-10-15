@@ -23,6 +23,7 @@ import ReleaseVersionPanel from '../features/instance/ReleaseVersionPanel.vue'
 import StorePanel from '../features/instance/StorePanel.vue'
 import { getInstanceStore, storeReady, type InstanceStore } from '../features/instance/store'
 import ConfigSecretPanel from '../features/instance/ConfigSecretPanel.vue'
+import CapabilitiesPanel from '../features/instance/CapabilitiesPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
 import { formatBytes } from '../shared/formatBytes'
 import { probeServerRole, serverRole } from '../app/serverRole'
@@ -43,7 +44,7 @@ const tenants = ref<TenantSummary[]>([])
 const createOpen = ref(false)
 const selected = ref<string | null>(null)
 // One rubric at a time under `Server`, so a second boolean cannot leave two panels open at once.
-const serverPanel = ref<'release' | 'store' | 'configSecret' | null>(null)
+const serverPanel = ref<'release' | 'store' | 'configSecret' | 'capabilities' | null>(null)
 const loading = ref(true)
 // The object store as last read or changed (ADR 0089 decision 6): a tenant waits for a store that passed its check.
 // Null until read, and when the read failed — then nothing is blocked here and the server decides.
@@ -166,6 +167,11 @@ async function signOut() {
               <span class="pi pi-key" aria-hidden="true" /> {{ t('configSecret.navTitle') }}
             </button>
           </li>
+          <li>
+            <button type="button" :class="{ 'is-active': serverPanel === 'capabilities' }" @click="serverPanel = 'capabilities'">
+              <span class="pi pi-sliders-h" aria-hidden="true" /> {{ t('capabilities.navTitle') }}
+            </button>
+          </li>
         </ul>
       </nav>
 
@@ -173,6 +179,7 @@ async function signOut() {
         <ReleaseVersionPanel v-if="serverPanel === 'release'" />
         <StorePanel v-else-if="serverPanel === 'store'" @changed="store = $event" />
         <ConfigSecretPanel v-else-if="serverPanel === 'configSecret'" />
+        <CapabilitiesPanel v-else-if="serverPanel === 'capabilities'" />
         <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" />
       </section>
     </div>

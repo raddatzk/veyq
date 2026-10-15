@@ -1,6 +1,8 @@
 // How the CLI speaks: one JSON document on stdout for a success, one line on stderr for a failure. Both halves
 // exist so a script can consume the first and a human can read the second — the CLI's own code is argument
-// parsing and output formatting, and this is the formatting half (cr-admin-cli).
+// parsing and output formatting, and this is the formatting half (cr-admin-cli). The one exception is a command
+// whose output is the served words in the operator's language (`capabilities`): it prints text through its own
+// `Command.render`, because those words are for a person and a script reads nothing from them.
 import { decodeHttpError } from '../shared/httpError'
 
 /** A failure the CLI itself diagnosed (bad usage, missing credential) — already phrased for the operator. */

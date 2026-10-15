@@ -5,7 +5,8 @@
 // in the facade, where the UI gets it too.
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
-// + the tenant storage quota + release info + the config-secret state + the object-store setting and its check. Per-tenant mail settings, terms authoring and the per-link storage
+// + the tenant storage quota + release info + the config-secret state + the object-store setting and its check + the
+// capability switches. Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
 // they are not Server-Owner commands.
 // First-run **setup** is excluded on purpose (cr-admin-cli): it is a one-time interactive ceremony that mints
@@ -33,25 +34,87 @@ import {
   ownStoreUpdate,
   setInstanceStore,
 } from '../features/instance/store'
+import {
+  capabilityTree,
+  inLocale,
+  listInstanceCapabilities,
+  setInstanceCapability,
+  type CapabilityLocale,
+  type CapabilityNode,
+  type InstanceCapability,
+} from '../features/instance/capabilities'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
-export type Flag = { describe: string; required: boolean; /** A bare `--flag` with no value; it reads as `'true'` when given and is absent otherwise. */ switch?: boolean }
+export type Flag = {
+  describe: string
+  required: boolean
+  /** A bare `--flag` with no value; it reads as `'true'` when given and is absent otherwise. */
+  switch?: boolean
+  /** The only values the flag takes; anything else is refused before signing in. */
+  oneOf?: string[]
+}
 
 export type Command = {
   /** How the command is written on the command line, flags included — the one line `--help` prints. */
   usage: string
   summary: string
   flags: Record<string, Flag>
+  /** The one positional argument the command takes after its words (`capabilities off <id>`); it reaches `run`
+   *  under its `name` beside the flags. Required when declared. */
+  operand?: { name: string; describe: string }
   /** Resolves to the API result, or `undefined` for a 204 operation that returns no body. */
   run: (flags: Record<string, string>, env: Record<string, string | undefined>) => Promise<unknown>
   /** The exit code for a result the command printed — 0 when absent. Lets a read that finds a problem (a failed
    *  check) still print the whole document and then fail a script. */
   exitCode?: (result: unknown) => number
+  /** Text for a person instead of the JSON document — for a command whose output is the served words in the
+   *  operator's language, which a script has no use for and a person cannot read as JSON. */
+  render?: (result: unknown, flags: Record<string, string>, env: Record<string, string | undefined>) => string
 }
 
 const tenantId: Flag = { describe: 'tenant id', required: true }
 const domain: Flag = { describe: 'domain the tenant is reached at', required: true }
 const ownerEmail: Flag = { describe: "owner's email address", required: true }
+const lang: Flag = { describe: 'the language of the entry texts (default: from LC_ALL, then LANG)', required: false, oneOf: ['en', 'de'] }
+const capabilityId = { name: 'id', describe: 'the capability id, as `capabilities list` prints it' }
+
+/**
+ * The language the served entry texts are printed in: `--lang` if given, else the POSIX locale — `LC_ALL`, then
+ * `LANG`, as the C library reads them (a set `LC_ALL` wins even when it is not German). `de*` is German, anything
+ * else (`C`, `POSIX`, unset, a language the catalog does not write) is English.
+ */
+export function cliLocale(flags: Record<string, string>, env: Record<string, string | undefined>): CapabilityLocale {
+  if (flags.lang) return flags.lang as CapabilityLocale
+  const tag = env.LC_ALL || env.LANG || ''
+  return tag.toLowerCase().startsWith('de') ? 'de' : 'en'
+}
+
+/** The state token of one entry: `on`, `off`, or `off through <id>`. A fixed token, like `config-secret`'s `MISMATCH`:
+ *  it reads the same in every locale, and the id it names is what `capabilities on` takes. */
+function stateToken(node: CapabilityNode): string {
+  return node.state.kind === 'offThrough' ? `off through ${node.state.through.id}` : node.state.kind
+}
+
+/** The tree as columns: the id indented by its depth, the state token, the served title, and the served purpose on
+ *  the line below, under the title. */
+function renderCapabilities(entries: InstanceCapability[], locale: CapabilityLocale): string {
+  const tree = capabilityTree(entries)
+  const ids = tree.map((n) => `${'  '.repeat(n.depth)}${n.entry.id}`)
+  const states = tree.map(stateToken)
+  const idWidth = Math.max(...ids.map((i) => i.length))
+  const stateWidth = Math.max(...states.map((st) => st.length))
+  const under = ' '.repeat(idWidth + stateWidth + 4)
+  return tree
+    .map((n, i) => `${ids[i].padEnd(idWidth)}  ${states[i].padEnd(stateWidth)}  ${inLocale(n.entry.title, locale)}\n${under}${inLocale(n.entry.purpose, locale)}`)
+    .join('\n')
+}
+
+/** A switched entry's line, read from the PUT's answer. Which ancestor it is off through is not in that answer
+ *  (`capabilities list` names it), so the line says only that it is one. */
+function renderSwitched(entry: InstanceCapability, locale: CapabilityLocale): string {
+  const state = entry.off ? 'off' : entry.effective ? 'on' : 'off through a parent'
+  return `${entry.id}  ${state}  ${inLocale(entry.title, locale)}`
+}
 
 /**
  * Keyed by the command words as typed (`tenant create`, `release`) — a flat map rather than a nested tree,
@@ -183,5 +246,34 @@ export const COMMANDS: Record<string, Command> = {
     flags: {},
     run: () => checkInstanceStore(),
     exitCode: (r) => ((r as { passed?: boolean }).passed === true ? 0 : 1),
+  },
+  'capabilities list': {
+    usage: 'capabilities list [--lang en|de]',
+    summary: 'Print the capability register as a tree: each entry on, off, or off through its nearest switched-off ancestor, with its title and purpose.',
+    flags: { lang },
+    run: () => listInstanceCapabilities(),
+    render: (r, f, env) => renderCapabilities(r as InstanceCapability[], cliLocale(f, env)),
+  },
+  'capabilities off': {
+    usage: 'capabilities off <id> [--lang en|de]',
+    summary: 'Switch an entry off at once and print what that does to new and to existing data. Deletes nothing.',
+    flags: { lang },
+    operand: capabilityId,
+    run: (f) => setInstanceCapability(f.id, true),
+    // The effect is printed from the PUT's answer, so it is the server's word for the entry it actually switched,
+    // and nothing is printed for an id it refused (404 capability_not_found, exit 1).
+    render: (r, f, env) => {
+      const entry = r as InstanceCapability
+      const locale = cliLocale(f, env)
+      return `${inLocale(entry.whenOff, locale)}\n\n${renderSwitched(entry, locale)}`
+    },
+  },
+  'capabilities on': {
+    usage: 'capabilities on <id> [--lang en|de]',
+    summary: 'Switch an entry back on at once. Under a parent that is still off, it stays off until that parent is on.',
+    flags: { lang },
+    operand: capabilityId,
+    run: (f) => setInstanceCapability(f.id, false),
+    render: (r, f, env) => renderSwitched(r as InstanceCapability, cliLocale(f, env)),
   },
 }

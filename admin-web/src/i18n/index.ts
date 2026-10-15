@@ -164,6 +164,21 @@ const en = {
     "absent": "No config-secret key is available: it could not be created, or this server cannot read the key file. After a restore, the file must be readable by the application's runtime user. Until it is, nothing can be sealed, and tenants whose mail needs a password cannot send — member invites and password resets are refused.",
     "mismatch": "The config-secret key is not the one this server's stored secrets were sealed with — the key file was lost, replaced, or not restored. Content is unaffected, but the sealed settings cannot be opened, so member invites and password resets are refused. Put the original key file back and restart, or have each tenant owner re-enter their SMTP password to seal it under the current key."
   },
+  "capabilities": {
+    "navTitle": "Capabilities",
+    "sub": "What this instance offers at all. Switching something off takes effect at once, without a restart, and never deletes what a member stored. Each entry says in its own words what switching it off does.",
+    "loading": "Reading the capabilities…",
+    "loadFailed": "Couldn’t read the capabilities.",
+    "notOwner": "Only the server owner can see and switch this instance's capabilities.",
+    "on": "On",
+    "off": "Off",
+    "offThrough": "Off through “{parent}”",
+    "switchOff": "Switch off",
+    "switchOn": "Switch on",
+    "confirmTitle": "Switch off “{title}”?",
+    "notFound": "This server no longer knows “{title}”. Reload the page to see its capabilities as they are now.",
+    "switchFailed": "Couldn’t switch “{title}”. Please try again."
+  },
   "setup": {
     "title": "Set up this instance",
     "sub": "Create the first owner account. All keys are generated on this device — the server only ever sees ciphertext.",
@@ -375,6 +390,21 @@ const de: typeof en = {
     "ok": "Der Konfigurationsschlüssel ist vorhanden, und er ist der, mit dem die gespeicherten Geheimnisse dieses Servers versiegelt wurden — oder es wurde noch nichts versiegelt. Versiegelte Einstellungen lassen sich öffnen.",
     "absent": "Es ist kein Konfigurationsschlüssel verfügbar: Er konnte nicht erzeugt werden, oder dieser Server kann die Schlüsseldatei nicht lesen. Nach einer Wiederherstellung muss die Datei für den Laufzeitbenutzer der Anwendung lesbar sein. Bis dahin lässt sich nichts versiegeln, und Tenants, deren Mail ein Passwort braucht, können nicht senden — Mitgliedseinladungen und Passwort-Zurücksetzungen werden abgelehnt.",
     "mismatch": "Der Konfigurationsschlüssel ist nicht der, mit dem die gespeicherten Geheimnisse dieses Servers versiegelt wurden — die Schlüsseldatei ging verloren, wurde ersetzt oder nicht wiederhergestellt. Inhalte sind nicht betroffen, aber die versiegelten Einstellungen lassen sich nicht öffnen, deshalb werden Mitgliedseinladungen und Passwort-Zurücksetzungen abgelehnt. Lege die ursprüngliche Schlüsseldatei zurück und starte neu, oder lass die Besitzperson jedes Tenants ihr SMTP-Passwort neu eingeben, damit es unter dem aktuellen Schlüssel versiegelt wird."
+  },
+  "capabilities": {
+    "navTitle": "Funktionen",
+    "sub": "Was diese Instanz überhaupt anbietet. Abschalten wirkt sofort, ohne Neustart, und löscht nie etwas, das ein Mitglied gespeichert hat. Jeder Eintrag sagt in eigenen Worten, was Abschalten bewirkt.",
+    "loading": "Funktionen werden gelesen…",
+    "loadFailed": "Die Funktionen konnten nicht gelesen werden.",
+    "notOwner": "Nur der Server-Eigentümer sieht und schaltet die Funktionen dieser Instanz.",
+    "on": "An",
+    "off": "Aus",
+    "offThrough": "Aus, weil „{parent}“ aus ist",
+    "switchOff": "Abschalten",
+    "switchOn": "Einschalten",
+    "confirmTitle": "„{title}“ abschalten?",
+    "notFound": "Dieser Server kennt „{title}“ nicht mehr. Lade die Seite neu, um seine Funktionen im aktuellen Stand zu sehen.",
+    "switchFailed": "„{title}“ konnte nicht geschaltet werden. Bitte erneut versuchen."
   },
   "setup": {
     "title": "Diese Instanz einrichten",

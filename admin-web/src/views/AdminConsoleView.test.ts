@@ -38,6 +38,7 @@ vi.mock('../features/instance/store', async (importOriginal) => ({
 vi.mock('../features/instance/StorePanel.vue', () => ({ default: { template: '<div class="stub-store" />' } }))
 vi.mock('../features/tenants/TenantDetailPanel.vue', () => ({ default: { template: '<div class="stub-detail" />' } }))
 vi.mock('../features/instance/ReleaseVersionPanel.vue', () => ({ default: { template: '<div class="stub-release" />' } }))
+vi.mock('../features/instance/CapabilitiesPanel.vue', () => ({ default: { template: '<div class="stub-capabilities" />' } }))
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
@@ -61,6 +62,7 @@ const i18n = createI18n({
       },
       tenant: { create: 'Create' },
       release: { navTitle: 'Release' },
+      capabilities: { navTitle: 'Capabilities' },
     },
   },
 })
@@ -142,6 +144,18 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     await item.trigger('click')
     await flushPromises()
     expect(w.find('.stub-detail').exists()).toBe(true)
+  })
+
+  it('opens Server → Capabilities from the nav in place of the open tenant (uc.admin.switch-capabilities)', async () => {
+    vi.mocked(listTenants).mockResolvedValue([
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null },
+    ])
+    const { w } = await mountConsole()
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!.trigger('click')
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Capabilities'))!.trigger('click')
+    await flushPromises()
+    expect(w.find('.stub-capabilities').exists()).toBe(true)
+    expect(w.find('.stub-detail').exists()).toBe(false)
   })
 })
 
