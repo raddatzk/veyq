@@ -87,8 +87,7 @@ CREATE TABLE veyq_store_setting (
 -- for an entry that is on. id is the catalog's dotted id (contracts/platform/capabilities.json), not a row id, so
 -- VARCHAR. An entry's effective state is the AND along its path, computed by the server, never stored.
 CREATE TABLE veyq_capability_switch (
-    id              VARCHAR(64)  NOT NULL PRIMARY KEY,
-    switched_off_at TIMESTAMP    NOT NULL
+    id VARCHAR(64) NOT NULL PRIMARY KEY
 );
 
 -- A login challenge is keyed by its nonce, not by the email: one row per email let anyone who knew an address

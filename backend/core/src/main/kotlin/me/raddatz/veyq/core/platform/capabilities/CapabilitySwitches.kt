@@ -11,7 +11,6 @@ import jakarta.persistence.Id
 import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
-import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -27,8 +26,7 @@ fun interface CapabilitySwitches {
 
 /**
  * One register entry the Server Owner switched off (ADR 0088 decision 12); an entry that is on has no row. [id] is the
- * catalog's dotted id, not a row id. [switchedOffAt] is when the switch went off, kept for a person reading the
- * database and not served: the console shows the state, not its history.
+ * catalog's dotted id, not a row id, and the row's only column: the console shows the state, not its history.
  */
 @Entity
 @Table(name = "veyq_capability_switch")
@@ -37,9 +35,6 @@ class CapabilitySwitchEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 64)
     lateinit var id: String
-
-    @Column(name = "switched_off_at", nullable = false)
-    lateinit var switchedOffAt: Instant
 
     companion object : PanacheCompanionBase<CapabilitySwitchEntity, String>
 }
@@ -52,7 +47,7 @@ class CapabilitySwitchStore {
 
     /**
      * Store [id]'s own switch: a row while it is off, none while it is on. Writing the state it already has changes
-     * nothing, so an entry switched off twice keeps the time it first went off.
+     * nothing, so an entry switched off twice keeps its one row.
      *
      * **Under the instance singleton's row lock.** Two writes of one entry would otherwise both read "no row" and both
      * insert, and the second would fail on the primary key instead of answering what the first already stored. Only
@@ -62,10 +57,7 @@ class CapabilitySwitchStore {
         VeyqInstance.findById(VeyqInstance.SINGLETON_ID, LockModeType.PESSIMISTIC_WRITE)
         val row = CapabilitySwitchEntity.findById(id)
         when {
-            off && row == null -> CapabilitySwitchEntity().apply {
-                this.id = id
-                switchedOffAt = Instant.now()
-            }.persist()
+            off && row == null -> CapabilitySwitchEntity().apply { this.id = id }.persist()
             !off && row != null -> row.delete()
         }
     }

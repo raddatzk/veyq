@@ -79,9 +79,6 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_node.deleted_at" to "NodeSubtreePurge's cutoff; the trash list's order",
             "veyq_upload_session.last_window_at" to "BlobUploadStore purges a session with no window inside the retention",
             "veyq_store_setting.checked_at" to "InstanceResource serves it as the last check's checkedAt",
-            "veyq_capability_switch.switched_off_at" to "when the Server Owner switched an entry off, read by a person " +
-                "from the database and deliberately not served (cr-operator-capability-switches D3); instance " +
-                "configuration, never a member's action",
             "veyq_store_reclaim.created_at" to "StoreReclaimSweep takes the oldest due rows first",
             "veyq_store_reclaim.next_attempt_at" to "StoreReclaimSweep's not-before",
             "veyq_store_reclaim.abandoned_at" to "StoreReclaimSweep skips an abandoned row",

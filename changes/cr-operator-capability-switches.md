@@ -62,8 +62,8 @@ deleting them. Inbox #443 asked for this, and **it must land before V1**.
   specs, `backend/buildSrc/.../OpenApiTasks.kt`) generates `CapabilityIds` and a texts table from the catalog.
   The hand-pinned constants and their drift test retire. Their job is now the generator's. The web constants are
   generated the same way if that is cheap; if not, they keep their conformance test, and the CR says which.
-- **D3, the state.** A table `veyq_capability_switch` holds one row per entry switched off (`id` primary key,
-  `switched_off_at`), added in the core baseline with its pin line. The production `CapabilitySwitches` reads it
+- **D3, the state.** A table `veyq_capability_switch` holds one row per entry switched off (`id` primary key
+  only), added in the core baseline with its pin line. The production `CapabilitySwitches` reads it
   through an in-process cache that the write invalidates after commit, as `StoreSettings` does.
   `NoCapabilitySwitchedOff` retires.
 - **D4, the API.** Both live on the admin channel for the Server Owner, with 401/403 as for the store:
@@ -147,14 +147,13 @@ deleting them. Inbox #443 asked for this, and **it must land before V1**.
     the order was red there). **Web constants: phase 3/4's question, untouched.** The Dockerfile now copies
     `contracts/platform/capabilities.json` (it copied only `contracts/api`, so the image build would have had no
     register; not rebuilt here).
-  - **State (D3).** `veyq_capability_switch (id VARCHAR(64) PK, switched_off_at TIMESTAMP NOT NULL)` in the core
+  - **State (D3).** `veyq_capability_switch (id VARCHAR(64) PK)` in the core
     baseline, pin line updated. `StoredCapabilitySwitches` caches the set, and its `invalidate()` after commit bumps a
     generation that the cached set is tagged with. A plain null-out, as `StoreSettings` does it, lets a reader that
     queried just before the commit re-cache the old set after the invalidate; the same window exists in
     `StoreSettings` and is left alone here. A write takes `VeyqInstance`'s row lock, so two first switch-offs of one
-    entry cannot both insert. `NoCapabilitySwitchedOff` retired. `EveryStoredTimeHasAReaderTest` names
-    `switched_off_at`'s reader as a person reading the database, as the terms acceptance time is named; it is not
-    served. If the owner would rather not store the time, drop the column and the entry.
+    entry cannot both insert. `NoCapabilitySwitchedOff` retired. The baseline first carried a `switched_off_at`
+    nobody served; the owner dropped it (2026-10-15), with its pin line and its `EveryStoredTimeHasAReaderTest` entry.
   - **API (D4).** `CapabilitySwitchHandler` (commit → invalidate → read back, as `StoreHandler.set` does);
     `CapabilityRegistry.register()` gives `off` and `effective` from one read of the switches.
   - **Withholding (D5).** `KeyMaterialHandler.forUser`, where RECOVERY was already withheld.

@@ -128,9 +128,8 @@ class InstanceCapabilitiesSliceTest {
     @Test
     fun writingTheStateAnEntryHasChangesNothing() {
         put(PUBLIC_SHARES_DROP_BOX, off = true).statusCode(200)
-        val first = switchedOffAt(PUBLIC_SHARES_DROP_BOX)
         put(PUBLIC_SHARES_DROP_BOX, off = true).statusCode(200).body("off", equalTo(true))
-        assertEquals(first, switchedOffAt(PUBLIC_SHARES_DROP_BOX), "a second switch-off keeps the first one's row")
+        assertEquals(setOf(PUBLIC_SHARES_DROP_BOX), storedIds(), "a second switch-off keeps the first one's row")
 
         put(PUBLIC_SHARES_DROP_BOX, off = false).statusCode(200)
         put(PUBLIC_SHARES_DROP_BOX, off = false).statusCode(200).body("off", equalTo(false))
@@ -202,9 +201,6 @@ class InstanceCapabilitiesSliceTest {
 
     private fun storedIds(): Set<String> =
         QuarkusTransaction.requiringNew().call { CapabilitySwitchEntity.listAll().mapTo(mutableSetOf()) { it.id } }
-
-    private fun switchedOffAt(id: String) =
-        QuarkusTransaction.requiringNew().call { CapabilitySwitchEntity.findById(id)!!.switchedOffAt }
 
     private fun persistWrap(userId: String, method: String) {
         QuarkusTransaction.requiringNew().run {
