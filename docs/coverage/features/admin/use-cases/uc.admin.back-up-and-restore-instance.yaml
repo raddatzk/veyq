@@ -34,8 +34,11 @@ acceptanceCriteria:
       # rehearsal cannot see it — it restores as the same user that runs the backend. The tool's owner rule is
       # proven docker-free by `scripts/instance_backup_selftest.py` (every plan branch, and a refusal before the
       # first write), which `ci.yml`'s `web-e2e` job runs; a Python operator tool is no coverage surface, so it is
-      # named here rather than cited. The production recipe's live run (root over the 10001-owned volume →
-      # `10001:10001 600` and `configSecretState: OK`) has NOT been recorded: it needs a production stack and root.
+      # named here rather than cited. The production recipe's live run was recorded once, on 2026-10-15, in
+      # cr-restore-places-the-key-as-the-runtime-user phase 3. It ran in containers on Docker Desktop's Linux VM, with
+      # the tool as root in a container that mounted the 10001-owned volume, not as `sudo` on a Linux host. Today's
+      # tool gave `10001:10001 600` and `configSecretState: OK`. The tool before the fix gave `0:0 600` and `ABSENT`.
+      # A one-off run is no CI surface, so the self-test above is what keeps holding the rule.
       web:
         e2e:
           - src/features/instanceBackup/legthree.a-capture.e2e.test.ts

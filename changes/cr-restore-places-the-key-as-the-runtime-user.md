@@ -1,7 +1,7 @@
 ---
 id: cr-restore-places-the-key-as-the-runtime-user
 title: A restore places the config-secret key where the app can read it — on both deployment targets
-status: in-progress     # phases 1, 2, 4 landed 2026-10-01; phase 3 (live, root, production stack) is the owner's
+status: in-progress     # phases 1, 2, 4 landed 2026-10-01; phase 3 run 2026-10-15 (containers on Docker Desktop); the main session closes it
 satisfies: [uc.admin.back-up-and-restore-instance]
 adrs: ["0050", "0056", "0064"]
 invariants: [self-hostable by default]
@@ -120,13 +120,52 @@ The instance behaves as if leg (c) were missing, even though the key is sitting 
       Helm. The use-case gets step 9's clause. Update the module docstring's "Everything this tool writes is
       owner-only" paragraph with the new owner rule.
       · Done when: `for f in scripts/validate_*.py; do python3 "$f"; done` is green.
-- [ ] 3 live proof on the production recipe, with the owner, because it needs Docker and root. Restore a capture
+- [x] 3 live proof on the production recipe, with the owner, because it needs Docker and root. Restore a capture
       onto a freshly installed `infra/docker-compose.prod.yml` stack whose app has **not** read mail settings, so
       the key is absent (Inventory 3). Then run:
       - `sudo stat -c '%u:%g %a' <mountpoint>/config-secret.key`, which must print `10001:10001 600`;
       - `GET /api/tenants/{id}/mail-settings`, which must report `configSecretState: OK`.
 
       · Done when: both are recorded in this CR.
+
+      **Run 2026-10-15, on the owner's go: reproduced on the owner's Mac, in containers, not on a Linux host.**
+      What that is: Docker Desktop's Linux VM (engine 29.8.2). The volumes are ext4 inside that VM, so ownership
+      and modes behave as on Linux. The tool ran **as root inside a container**: `docker:27.5.1-cli` plus
+      `python3`, with the docker socket, the repo (read-only) and the scratch directory at their host paths, and the
+      stack's `veyq-config-secret` volume mounted at `/keyvol`. So `--config-secret-file` was
+      `/keyvol/config-secret.key`, not a host `sudo` path under `/var/lib/docker/volumes`.
+      - **Image:** `docker build --target runtime-jvm` of `main` @ `02e5d233`, image id
+        `sha256:31ffe8992c50009fa039bd9240bd7a72e73a3e9c745e92699f29fcc757eb1e35`, `USER 10001`. Its
+        `/var/lib/veyq` is `10001:10001 700` and empty, and the volume was seeded the same way (measured on each
+        fresh install).
+      - **Stack:** `infra/docker-compose.prod.yml` unchanged, run as its own project
+        (`docker compose -p veyqp3 --env-file <throwaway env> -f infra/docker-compose.prod.yml`, and
+        `COMPOSE_PROJECT_NAME=veyqp3` for the tool's own unqualified `docker compose -f` calls). Started:
+        `volume-ownership mariadb garage app traefik`. **The `admin` service was not built or started.** First-run
+        setup went to the app's admin listener (8090) through a test-only TCP forwarder container on `veyqp3_edge`,
+        with the same generated-client calls `web/scripts/bootstrap-user.mts` makes. Traefik ran with ACME staging
+        and served nothing that was used. The dev stack (project `infra`) was the same before and after
+        (`docker compose ls`, `docker volume ls`).
+      - **Source:** fresh install. Setup created the Server Owner, then a tenant `p3.veyq.localhost` accepted by that
+        owner. Mail settings were stored **with an SMTP password**, which made the app generate its key, and
+        `configSecretState` read `OK`. Then `stop app`, and a capture as root with today's tool:
+        `capture --compose-file infra/docker-compose.prod.yml --docker-network veyqp3_edge --config-secret-file /keyvol/config-secret.key --into <scratch>/backup/src --key-into <scratch>/keys/src.key`.
+        Result: 1 domain, schema `V202610041201`, 0 objects, leg (c) `separate`, and `verify` passed. The source key
+        was `10001:10001 600`. Then `down -v`.
+      - **Each target:** a fresh `up` of the same services. Wait for the app's log line
+        `Object store provisioned (attempt 1)` (see the Retrospective for why it is the log line). The key
+        directory then read `10001:10001 700`, empty: **no key, so this is Inventory 3's `O_CREAT` path**. Then
+        `stop app`, and the restore as root (`id` → `0:0`):
+        `restore <scratch>/backup/src --domain p3.veyq.localhost --compose-file infra/docker-compose.prod.yml --docker-network veyqp3_edge --config-secret-file /keyvol/config-secret.key --key-from <scratch>/keys/src.key`.
+        Then `stat -c '%u:%g %a'` on the key from a second container (the pinned `busybox`) mounting the same volume,
+        `start app`, and `GET /api/tenants/{id}/mail-settings` as the tenant owner. Each target ended with `down -v`.
+      - **Green, today's tool (`main` @ `02e5d233`):** the restore exited `0` and logged
+        `the key belongs to 10001:10001, the owner of its directory — the application's user`. `stat` →
+        **`10001:10001 600`**. `GET …/mail-settings` → **`configSecretState: OK`**, `passwordSet: true`. No
+        config-secret line in the app's log after the start: the key was read, and nothing was generated.
+      - **Not run:** the non-root refusal at the gates, as a live run. The container's uid 1000 could not read the
+        bind-mounted repo, so the run never reached the tool. That branch is held by
+        `scripts/instance_backup_selftest.py`.
 - [x] 4 coverage: `docs/coverage/…/uc.admin.back-up-and-restore-instance.yaml` notes where the ownership
       precondition is proven: the self-test, and phase 3's recorded run.
       · Done when: `python3 scripts/validate_coverage.py` is green.
@@ -137,6 +176,18 @@ The instance behaves as if leg (c) were missing, even though the key is sitting 
   `0:0 600` and `configSecretState: ABSENT`, with a log line
   `Could not read or generate the config-secret key … AccessDenied`. Record it. Then land the fix and re-run
   the same procedure for green. **Lever:** the live defect itself. No injection is needed while it exists.
+
+  **Recorded 2026-10-15, after the fix and against the tool as it was before it.** The run was phase 3's
+  procedure on the same capture and image. The tool was the file at `8cf67e65^` (`3b8e9d1b`; the file was last
+  changed in `70400c99`), extracted with `git show 8cf67e65^:scripts/instance_backup.py`, so the tree was not
+  checked out. It ran as root in the container, onto a fresh target whose key directory was `10001:10001 700` and
+  empty. The restore exited `0` and logged `placing the config-secret key from … at /keyvol/config-secret.key`.
+  It printed no owner line. `stat` → **`0:0 600`**. After `start app`, `GET …/mail-settings` →
+  **`configSecretState: ABSENT`**, `passwordSet: true`, with the key sitting right there. The app's log:
+  `ERROR [….ConfigSecretSeal] Could not read or generate the config-secret key at /var/lib/veyq/config-secret.key (/var/lib/veyq/config-secret.key) — config-secret sealing is UNAVAILABLE; …`.
+  One difference from the expected line: the parenthesis carries the exception's **message**, which for an
+  `AccessDeniedException` is only the path. The word `AccessDenied` never appears, so the log says *that* the read
+  failed, not *why* (Retrospective). Green is under phase 3.
 - **Self-test bite:** make `key_owner_plan` return *as-is* unconditionally. The root-invoker/10001-directory case
   must go red. Separately, drop the gate call from `cmd_restore`. A test that drives `cmd_restore` up to its
   first write against a stub `Database` must see the refusal disappear. If no such seam exists without Docker,
@@ -148,6 +199,9 @@ The instance behaves as if leg (c) were missing, even though the key is sitting 
 - The trust-chain glob is green.
 
 ## Where it stands
+
+**2026-10-15.** Phase 3 and the red-first run are recorded (above). The reproduction ran in containers on Docker
+Desktop, on the owner's go, and is described as that. Every phase is ticked; the main session closes the CR.
 
 **2026-10-01.** Phases 1, 2 and 4 are in; the self-test's two bites went red on the named case
 (plan forced to *as-is* → the #188 case; the gate call dropped → "refused at the gates, before the database"),
@@ -170,3 +224,19 @@ derived, not rehearsed.
   agent-runnable red (here: the self-test against today's tool, which has no gate to refuse with).
 - **One finding beyond the CR:** the native target cannot take part in either Helm `kubectl cp` (no `tar`), which
   no doc said; written into infra/README's Helm restore block.
+- **Phase 3 needed no Linux host.** "Docker and root" was satisfiable on the owner's Mac: the tool ran as root in a
+  container that mounted the volume as the key's directory. The volume lives on ext4 inside Docker Desktop's VM,
+  so it has the real ownership semantics. What that does **not** prove: the documented host form, `sudo -E` with
+  a key path under `/var/lib/docker/volumes/…`. There the directory's owner is the same `10001`, so the same
+  branch of `key_owner_plan` runs. It is still a different invocation. A refine that asks for a host-only proof
+  could name this container form as the cheaper equivalent.
+- **The runbook's restore step 1 could not be done as written on a production target.** It said to wait until
+  `GET /api/instance/store-provisioning` reports `PROVISIONED`. That endpoint is Server-Owner only. A restore
+  target must not be set up, because setup writes rows and A5 then refuses it, so the target has no Server Owner
+  and the endpoint answers nobody. The observable is the app's log line `Object store provisioned`.
+  `infra/README.md` § Restore now says so.
+- **The red's log line names no cause.** `ConfigSecretSeal.readOrGenerate` logs `e.message`, and for an
+  `AccessDeniedException` that is only the path. The CR's expected `… AccessDenied` was remembered, not
+  measured. An operator who meets the line learns *that* the key is unreadable, not that it is an ownership
+  problem. Logging the exception class would fix that. It is not done here, because the CR has no backend phase:
+  it is handed back.

@@ -705,6 +705,10 @@ and the application migrates the data up at its next start, the same forward mig
 "install the backup's release, restore, upgrade" is "restore, start". When the backup is older the restore says
 so, because that is an upgrade — and if you meant a rollback, it is not one (§ An upgrade, step by step).
 
+**Watch the log line, not `GET /api/instance/store-provisioning`.** That endpoint answers the Server Owner only.
+A restore target has no Server Owner, and it must not get one: setup writes rows, and the emptiness gate then
+refuses the target.
+
 *Empty* means **holding no data**, not holding nothing. The target is a **normally installed instance**: bring
 the stack up and let the app start once, which migrates the schema and provisions the store. There is no
 shorter path and there is no manual `CREATE DATABASE` step — since ADR 0067 the app is the only thing that can
@@ -714,7 +718,9 @@ make the store usable, and the same start migrates the schema, so the two go tog
 # 1. A freshly installed instance: start the stack and let the app run once, then STOP the app.
 #    That one start migrates the schema AND provisions the store (layout, bucket, key, grant, CORS).
 docker compose -f infra/docker-compose.yml --profile s3 up -d
-#    …start the application, wait for GET /api/instance/store-provisioning to report PROVISIONED, stop it.
+#    …start the application, wait until it logs `Object store provisioned`, stop it.
+#    On the production recipe: `docker compose -f infra/docker-compose.prod.yml up -d`, the same log line
+#    (`docker compose -f infra/docker-compose.prod.yml logs app`), then `… stop app`.
 
 # 2. Load all three legs — leg (c) from wherever you kept it.
 python3 scripts/instance_backup.py restore infra/backups/<stamp> \
@@ -750,8 +756,14 @@ sudo stat -c '%u:%g %a' "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-
 
 `-E` keeps the `VEYQ_BACKUP_DB_PASSWORD` / `VEYQ_BLOB_STORE_*` variables the tool reads (a `sudoers` that resets
 the environment needs them passed explicitly). Run without root against that path, the tool refuses and says
-why. **This production command is derived, not rehearsed** — no production stack has been restored onto yet;
-the tool's owner rule is held by `scripts/instance_backup_selftest.py`, without Docker or root.
+why. **This was rehearsed once, in containers rather than with `sudo` on a Linux host**
+(cr-restore-places-the-key-as-the-runtime-user, 2026-10-15). The stack was this recipe on Docker Desktop's
+Linux VM. The tool ran as root inside a container that mounted the docker socket and the `veyq-config-secret`
+volume, and `--config-secret-file` pointed into that mount. A capture taken the same way was restored onto a
+fresh install with no key yet. The key came out `10001:10001 600`, and the instance read `configSecretState: OK`.
+The tool from before the fix, run the same way, gave `0:0 600` and `ABSENT`. The `sudo -E` form above has the same
+owner on the same directory, so the tool takes the same branch, but that exact invocation is still derived. The
+tool's owner rule is held by `scripts/instance_backup_selftest.py`, without Docker or root.
 
 The store's **configuration** is not restored because it was never state: bucket, access key and single-node
 layout are recreated idempotently by the app itself, on every start. This has no "fresh node only" limit — the
@@ -850,7 +862,9 @@ fields and claims are compared on rendered manifests by `scripts/chart_upgrade_c
    variables, as in § Restore. What a root capture writes is root's, owner-only: the capture directory and the
    key file. So `verify` runs as root too, and so does the encryption in § Capture — or hand both to yourself
    first: `sudo chown -R "$(id -u):$(id -g)" infra/backups/<stamp> /media/usb-stick/veyq-<stamp>.key`.
-   **Derived, not rehearsed** — the e2e rehearsal captures a key file it owns, not the production volume.
+   **Derived, not rehearsed in this form.** The e2e rehearsal captures a key file it owns, not the production
+   volume. A root capture from that volume ran once, for the restore rehearsal in § Restore, as root in a
+   container that mounted the volume, not with `sudo` on a host.
 
    Do not skip `verify`. A capture that silently missed objects and one that is complete look identical until
    the day you need it, which is the day you find out. Encrypt it before it leaves this host (§ Capture).
