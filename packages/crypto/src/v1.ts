@@ -108,11 +108,11 @@ export function shareWriteToken(kShare: Uint8Array, shareId: string): Uint8Array
 }
 
 /**
- * Media dedup token (AD-09): a per-scope, keyed token of the plaintext so the blind server can deduplicate
- * identical media among members WITHOUT a confirmation-of-file attack (it can't compute tokens — the key is
- * client-held). dedupKey = HKDF(contentKey, "veyq/v1/media-dedup"); token = HMAC-SHA256(dedupKey, SHA256(content)).
- * Same plaintext in a scope → same token → the server stores one ciphertext (ref-counted), all members decrypt
- * it via the shared content key. An ex-member who kept the key can test existence but cannot decrypt.
+ * Media dedup token (AD-09) — pinned, NOT USED. Content dedup is declined (ADR 0013 §5): every blob has a random
+ * K_blob, and no client calls this. The derivation stays fixed for a deliberate later dedup slice (ADR 0024):
+ * dedupKey = HKDF(contentKey, "veyq/v1/media-dedup"); token = HMAC-SHA256(dedupKey, SHA256(content)).
+ * Keyed so the blind server cannot compute tokens itself (no confirmation-of-file attack) — but storing one
+ * ciphertext for equal tokens would still show the operator which blobs are equal, the leak ADR 0013 declined.
  */
 export function dedupToken(contentKey: Uint8Array, content: Uint8Array): Uint8Array {
   const dedupKey = hkdf(sha256, contentKey, new Uint8Array(0), utf8('veyq/v1/media-dedup'), 32)

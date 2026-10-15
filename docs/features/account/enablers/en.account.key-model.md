@@ -40,7 +40,7 @@ title: One Master Key, one wrap per unlock method
 ---
 flowchart TB
   pw["Password + Secret Key<br>(mandatory floor)"]
-  pk["Passkey (PRF)"]
+  pk["Passkey (PRF)<br>(not built)"]
   rec["Recovery<br>(Secret Key alone)"]
   dev["Trusted device"]
   muk["Master Key<br>(32-byte account root)"]
@@ -48,7 +48,7 @@ flowchart TB
   grants["Scope grants<br>(opened downstream — see scopes model)"]
 
   pw -->|"wraps (one blob)"| muk
-  pk -->|"wraps (one blob)"| muk
+  pk -.->|"would wrap (not built)"| muk
   rec -->|"wraps (one blob)"| muk
   dev -->|"wraps (one blob)"| muk
   muk -->|"unlocks"| idk
@@ -64,8 +64,8 @@ always ciphertext the server stores but cannot open.
 |---|---|---|---|
 | Account password | Human secret, **never sent to the server** | — (never leaves the device) | Locally derives two domain-separated things: the **auth keypair** (login) and the **unlock KEK** (with the Secret Key, to open a Master Key wrap). |
 | Auth keypair (`authPublicKey` / `authPrivateKey`) | Ed25519 signing keypair derived from the password (`seed = Argon2id(password, authSalt)`) | Only the **public** key is stored; the private key is derived on demand, never stored or sent | Login by **challenge-response**: the client signs a server nonce with `authPrivateKey`; the server verifies with `authPublicKey`. Separate from the identity keypair and from content; Ed25519 now, PQ/hybrid later. |
-| Secret Key | High-entropy user-held secret (Emergency Kit / enrolled devices) | **Never** stored server-side | Combined with the password for two-secret key derivation (2SKD); protects content unlock after a DB breach. See [Security Model → Secret Key (2SKD)](../../../crosscutting/security-model.md). |
-| Master Key | 32-byte symmetric account root | Only as `MasterKeyWrap.wrappedKey`: one `PASSWORD` and one `RECOVERY` wrap, plus one per enrolled device or authenticator (`DEVICE`, `DEVICE_KEY`, `PASSKEY`) | Opens `wrappedIdentityPrivateKey`. Stable across a password change and a reset (only a rotation replaces it); a credential change rewrites the two cold wraps and deletes every other one (below). |
+| Secret Key | High-entropy user-held secret (Emergency Kit / enrolled devices) | **Never** stored server-side | Combined with the password for two-secret key derivation (2SKD); protects content unlock after a DB breach. The derivation is [Unlock methods & KEK derivation](#unlock-methods--kek-derivation) below; the threat it answers is [Security Model → Threat model](../../../crosscutting/security-model.md#threat-model--trust-boundaries). |
+| Master Key | 32-byte symmetric account root | Only as `MasterKeyWrap.wrappedKey`: one `PASSWORD` and one `RECOVERY` wrap, plus one per enrolled device (`DEVICE`, `DEVICE_KEY`); the contract also names `PASSKEY`, which no client writes yet | Opens `wrappedIdentityPrivateKey`. Stable across a password change and a reset (only a rotation replaces it); a credential change rewrites the two cold wraps and deletes every other one (below). |
 | Unlock KEK | Derived in-memory wrapping key | **Never** stored server-side | Opens exactly one Master Key wrap. Derived on the client, then discarded. |
 | Identity public key (`identityPublicKey`) | Hybrid KEM public bundle + signing public key | Published in the key directory | Grant address ("mailbox slot"); fingerprint/safety-number input; verifies the grants this user signs ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). |
 | Identity private key (`wrappedIdentityPrivateKey`) | Hybrid KEM private bundle + signing private key | Only wrapped under the Master Key | Opens scope grants wrapped to this user; signs every grant this user issues. |
@@ -86,22 +86,27 @@ These are deliberately distinct (this is the crux of operator-blind sign-in):
   keypair is Ed25519 now and moves to a PQ/hybrid signature later (no harvest-now-decrypt-later for
   authentication — see [Security Model](../../../crosscutting/security-model.md) and [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)).
 - **Unlock (client-side):** a **Unlock KEK** derived on the device opens one Master Key wrap. The KEK's
-  source (password+Secret Key, passkey PRF, the Secret Key alone, device key) is never sent to the server.
+  source (password+Secret Key, the Secret Key alone, device key — and, once built, a passkey's PRF) is never sent
+  to the server.
 
 Don't confuse the public keys: the **identity public key** grants you *access to content* (others wrap
 scope keys to it), while the **auth public key** only *proves your login* (verifies your signed
-challenge). Separate keys for separate jobs. (A passkey is an alternative login+unlock method — its
-signature authenticates and its **PRF** secret derives an unlock KEK.)
+challenge). Separate keys for separate jobs. (A passkey — **not built** — would be an alternative login+unlock method:
+its signature would authenticate and its **PRF** secret would derive an unlock KEK.)
 
 ## Unlock methods & KEK derivation
 
 | Method | Unlock KEK source | Notes |
 |---|---|---|
-| **Password + Secret Key** | `Argon2id(password ‖ secretKey, salt)` | The **mandatory floor** — always present, cannot be removed. The Secret Key (never sent) is what stops a cracked password from opening content. |
-| **Passkey (PRF)** | the authenticator's PRF output | Passwordless; one credential covers auth (signature) and unlock (PRF). |
-| **Recovery (`RECOVERY`)** | `Argon2id(secretKey, recoverySalt)` | Bypasses the **password**, never the Secret Key. Released only against address control + proof of the Secret Key ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)). |
-| **Trusted device (`DEVICE`)** | `Argon2id(password ‖ HMAC(deviceKey, "veyq/v1/device-bind"), salt)` | Two factors — the password **+** a device-bound key — swapping the *cold* Secret Key for a device-local one; this device unlocks with the **password alone** (no Secret Key). Still password-gated: a stolen device alone opens nothing. |
+| **Password + Secret Key** (`PASSWORD`) | `Argon2id(lp(secretKey) ‖ lp(password), salt)` — `kekPasswordSecret` | The **mandatory floor** — always present, cannot be removed. The Secret Key (never sent) is what stops a cracked password from opening content. |
+| **Passkey (`PASSKEY`) — not built** | the authenticator's PRF output | **Not built:** the contract and the backend's `WrapMethod` name the method, but no client writes or opens such a wrap. The target: passwordless, one credential covering auth (signature) and unlock (PRF). |
+| **Recovery (`RECOVERY`)** | `Argon2id(secretKey, recoverySalt)` — `kekRecovery` | Bypasses the **password**, never the Secret Key. Released only against address control + proof of the Secret Key ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)). |
+| **Trusted device (`DEVICE`)** | `Argon2id(lp(HMAC(deviceKey, "veyq/v1/device-bind")) ‖ lp(password), salt)` — `kekDevicePassword` | Two factors — the password **+** a device-bound key — swapping the *cold* Secret Key for a device-local one; this device unlocks with the **password alone** (no Secret Key). Still password-gated: a stolen device alone opens nothing. |
 | **Passwordless device (`DEVICE_KEY`)** | a device-held **random** key `K` (`wrap = symWrap(K, masterKey)`) | **No password** — the device holds `K` ungated, so a stolen *unlocked* device opens content. Explicit opt-in, never a default: [remember-this-device](../use-cases/uc.account.remember-this-device.md). |
+
+The factor comes first and every input is length-prefixed: `lp(x) = u32be(len(x)) ‖ x`, the password as its NFC
+UTF-8 bytes. The functions are in [`v1.ts`](../../../../packages/crypto/src/v1.ts), pinned by the `kek` vectors in
+[`v1.json`](../../../../contracts/crypto/vectors/v1.json).
 
 Each KEK is derived **fresh on the device** with a stored salt (so it reproduces identically), used to
 open its wrap, then **discarded**. None is ever stored or sent — which is exactly why the server stays

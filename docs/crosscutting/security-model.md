@@ -27,7 +27,7 @@ never sees. Confidentiality is therefore cryptographic, not a server-side access
 |---|---|
 | Stolen disk / DB dump / subpoena of data at rest | All content E2E-encrypted; the server holds no content keys |
 | Passive operator reading the database | Cannot recover content — every blob and sensitive metadata field is encrypted |
-| Offline brute-force of a weak password → **content** | **Secret Key (2SKD)**: the content key derivation folds in a high-entropy Secret Key the server never stores, so a cracked password alone unlocks nothing |
+| Offline brute-force of a weak password → **content** | **Secret Key (2SKD)**: the unlock KEK derivation folds in a high-entropy Secret Key the server never stores ([account key model](../features/account/enablers/en.account.key-model.md#unlock-methods--kek-derivation)), so a cracked password alone unlocks nothing |
 | Offline brute-force of a weak password → **server login** | The server stores only an Ed25519 **auth public key** (not a credential); the raw password never reaches the server. Forging a login means brute-forcing the password through Argon2id — yielding a session + operational metadata, **never content** (see [ADR 0003](../decisions/0003-operator-blind-password-auth.md)). Holding because nothing a session can do leads to a key: admitting a member needs an admission tag only a key-holder computes ([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6), and every request that replaces the identity or mints a cold credential needs a signature only the Secret Key derives ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 2) |
 | The server swapping or replaying ciphertexts between objects | Every seal binds its purpose **and** the object it is stored as, so a ciphertext served for another object fails to open ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)). **Freshness is not covered:** the server still chooses which authentic version of an object, and which epoch's grant, a client receives |
 | **Online** brute-force / credential-stuffing / DoS on the public auth surface | **Per-IP rate limiting** of the public auth endpoints (`@RateLimit(key = IP)` → token-bucket `429`) — defense-in-depth, **honestly limited** (per-instance, resets on restart). Mechanism + verification: [cc.security.rate-limit](cc.security.rate-limit.md) |
@@ -272,16 +272,27 @@ vectors that pin a suite's bytes are all
 
 ## Names & blinded tokens
 
-Names (folders, memories, chapters) are encrypted, yet navigation uses human-readable permalinks. Two
-server-blind tokens make this work without the server ever seeing content:
+Names (folders, memories, chapters, files) are encrypted, yet navigation uses human-readable permalinks. One
+server-blind token makes this work without the server ever seeing a name:
 
-- **Slug token** — `HMAC(scopeKey, parentId ‖ slugify(name))`. The server enforces uniqueness per
-  parent (`UNIQUE(parentId, slugToken)`) without seeing names. A keyed MAC (not a plain hash), so the
-  operator — lacking the scope key — cannot reverse low-entropy slugs. It is a **consistency aid, not an
-  authenticity control**: the client computes it; the server cannot recompute it.
-- **Dedup token** — a per-scope blinded token over content, so identical bytes within a scope dedup on
-  the server without it seeing content or being able to compute tokens itself (no confirmation-of-file
-  attack).
+- **Slug token** — `HMAC-SHA256(slugKey, NFC(fold(name)))`, with
+  `slugKey = HKDF(parentKey, "veyq/v1/slug-token:" + parentSlot)`. It is keyed by the **parent node's content
+  key** (`K_SC` at the root) and the parent slot (the parent's node id, or the scope id at the root), so the same
+  name under two parents yields unrelated tokens
+  ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 2;
+  `slugToken` in [`v1.ts`](../../packages/crypto/src/v1.ts), vectors `slug_token` and `directory_entry`).
+  `fold` is the node kind's slug function — `slugify` for containers, `fileNameSlug` for files — and is frozen into
+  every stored token. The server enforces uniqueness per parent (`UNIQUE(parent_id, slug_token)`) without seeing
+  names. A keyed MAC (not a plain hash), so the operator — lacking the parent's key — cannot reverse low-entropy
+  slugs; whoever holds that key (a member, or a guest of the Memory it belongs to) can. It is a **consistency aid,
+  not an authenticity control**: the client computes it; the server cannot recompute it.
+- **No content dedup.** Content dedup is **declined**
+  ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)): every blob has a
+  random `K_blob`, so identical bytes are two ciphertexts and two stored objects, and the server learns no content
+  equality inside a scope. Any dedup that saves storage must let one stored object serve several references, which
+  shows the operator that two blobs are the same — the leak that was declined. The suite still pins a keyed
+  `dedupToken` (vector `dedup_token`), but no client calls it; [ADR 0024](../decisions/0024-scope-key-rotation.md)
+  says how a future dedup slice would key it across epochs.
 
 ## Sharing & share-boundary Trust & Safety
 
