@@ -93,11 +93,20 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
         "409":
-          description: The domain is already mapped to a tenant.
+          description: >
+            The tenant cannot be created. `domain_taken` = the domain is already mapped to a tenant.
+            `store_not_ready` = no object store has passed its check yet
+            ([ADR 0089](../../docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
+            decision 6): a tenant is the first thing that stores blobs, so it waits for a store that is configured
+            and checked (`PUT /api/instance/store`, then `POST /api/instance/store/check`). Nothing is created.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: domain_taken }
+              examples:
+                domainTaken:
+                  value: { code: domain_taken }
+                storeNotReady:
+                  value: { code: store_not_ready }
     get:
       tags: [tenants]
       operationId: listTenants

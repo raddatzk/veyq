@@ -59,7 +59,7 @@ store credentials from the operator.
 
 ## Phases
 
-- [ ] 1 contracts — on the admin channel: read and write the store setting (type; endpoint, public endpoint,
+- [x] 1 contracts — on the admin channel: read and write the store setting (type; endpoint, public endpoint,
       bucket, region, access key; secret key and Garage admin token write-only, `x-veyq-visibility: token`; the
       bundled choice), run its check and read the check's result per step, and read whether a bundled hint exists;
       tenant creation's refusal while no store has passed its check. Each new operation in `OperatorBlindProbeTest`.
