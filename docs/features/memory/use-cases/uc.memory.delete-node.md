@@ -140,7 +140,7 @@ nur, dass etwas gelöscht wurde, und entfernt später verschlüsselte Dateien, d
 
 ## Related
 
-- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
+- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the node lifecycle this defines),
   [en.memory.media](../enablers/en.memory.media.md) (what the purge reclaims)

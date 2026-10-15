@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Who uploaded an opened file's current content, as a MEMBER sees it (ADR 0083 Decision 8, uc.files.view-file step 0):
+// Who uploaded an opened file's current content, as a MEMBER sees it (ADR 0083 Decision 8, uc.depot.view-file step 0):
 // `FileDetail` mounted as the host does, with the real catalog and a real router (the name is a real link, clicked).
 // Stubbed by path: Depot's client (`listFiles`, typed by the contract - it carries the `uploaderKey`), core's people
 // directory (`loadScopePeople`: the scope's CURRENT members), the download's chunk reader and core's tree store. A guest

@@ -172,7 +172,7 @@ over the count. The plaintext is JSON, so a later optional field is additive.
 **10. The pin is core's, and covers every node (2026-10-12, inbox #409).** The pin is a private preference about a
 *node*, and a node is core's: a folder, a file, a Memory and a drop box are all nodes, and the data already fitted any
 of them — a bare id array, sealed under the Master Key, knows no kind. Keeping it in Memories meant the one application
-that happened to draw a heart owned a function every kind needs, and a Files user could not favorite a file. So the pin
+that happened to draw a heart owned a function every kind needs, and a Depot user could not favorite a file. So the pin
 object moved **out of the Memories module into the platform's**:
 
 - **Contract and storage.** `contracts/api/favorites.openapi.yaml` (core's; Memories keeps

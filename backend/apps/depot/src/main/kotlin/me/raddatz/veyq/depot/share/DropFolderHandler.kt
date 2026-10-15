@@ -26,7 +26,7 @@ sealed interface DropFolderOutcome {
 }
 
 /**
- * A drop-box guest's own folder (`ensureShareDropFolder`, ADR 0080 decision 11, docs/apps/files.md § The drop box): past
+ * A drop-box guest's own folder (`ensureShareDropFolder`, ADR 0080 decision 11, docs/apps/depot.md § The drop box): past
  * core's guest gate, a `WRITE_ONLY` link whose root is Depot's `DEPOT_DROPBOX` gets its identity's folder from core's
  * [IdentityFolders] — the mechanism is core's, the decision that THIS kind takes identity folders is Depot's. A
  * Memories `WRITE_ONLY` link (a `MEMORY` root) is refused here: its guests' uploads are media, not nodes.

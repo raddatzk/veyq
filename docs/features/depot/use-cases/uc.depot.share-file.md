@@ -1,16 +1,16 @@
 # UC: Share one file — a guest sees, downloads and (as a contributor) replaces that file
 
-- **ID:** uc.files.share-file
+- **ID:** uc.depot.share-file
 - **Primary actor:** A **guest** holding the public link of one file — `READ` or `READ_WRITE` — with no account.
 - **Secondary actor:** The **member** who shared the file.
 - **Goal:** Hand someone exactly one file through a link, with nothing of the folder it lives in; with a contributor
   link, let them put a newer version in place.
-- **Preconditions:** A member opened a `FILE` and made a link on it (Files' share dialog, `READ` or `READ_WRITE`); the
+- **Preconditions:** A member opened a `FILE` and made a link on it (Depot's share dialog, `READ` or `READ_WRITE`); the
   guest opened the link and passed its password and terms if any.
 - **Postconditions (success):** the guest sees the member's own file view — the file's name, size, type and date, opened
   under the key the link carries — and downloads it byte for byte; a contributor's replace is a new blob in the file's
   slot with its own sealed metadata, counted against the link's storage limit. The role matrix is
-  [docs/apps/files.md](../../../apps/files.md) § Guests.
+  [docs/apps/depot.md](../../../apps/depot.md) § Guests.
 
 ## Main flow
 
@@ -62,9 +62,9 @@ verschlüsselt, und über diesen Link kann niemand den Rest deines Ordners sehen
 ## Related
 
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
-- **Feature:** [files](../_index.md); the application's description [docs/apps/files.md](../../../apps/files.md).
-- **Use-cases:** [uc.files.share-folder-files](uc.files.share-folder-files.md) (a folder link carries its files),
-  [uc.files.member-files](uc.files.member-files.md),
+- **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
+- **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md) (a folder link carries its files),
+  [uc.depot.member-files](uc.depot.member-files.md),
   [uc.sharing.share-link-storage-limit](../../sharing/use-cases/uc.sharing.share-link-storage-limit.md).
 - **Decisions:** [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   decisions 1 and 6, [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md).

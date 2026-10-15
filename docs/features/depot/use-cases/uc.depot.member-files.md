@@ -1,6 +1,6 @@
 # UC: Member files — upload, download, replace, rename and delete a file
 
-- **ID:** uc.files.member-files
+- **ID:** uc.depot.member-files
 - **Primary actor:** A **member** of a scope with write access, signed in, the scope open (so its client holds the
   keys of the folder on screen).
 - **Goal:** Keep files in the scope's folder tree beside Memories — upload them, get them back byte for byte, put a
@@ -9,11 +9,11 @@
 - **Postconditions (success):** each picked file is a `FILE` node under that folder holding one sealed blob in its
   `FILE_CONTENT` attachment slot, with its sealed metadata (MIME type, plaintext size, modified time); a download
   returns the original bytes. The mechanism — node, blob, contract — is
-  [docs/apps/files.md](../../../apps/files.md) § How a file is stored and § The contract.
+  [docs/apps/depot.md](../../../apps/depot.md) § How a file is stored and § The contract.
 
 ## Main flow
 
-1. The member picks one or more files (the section's upload button, or a drop onto Files' section of the level view).
+1. The member picks one or more files (the section's upload button, or a drop onto Depot's section of the level view).
    Each file becomes one job of core's upload queue; the status menu in the top bar shows its progress.
 2. Per file the client creates a `FILE` node under the folder (its name and slug sealed under the folder's key, the
    slug folded as a file name: `Foto.JPG` and `foto.jpg` are the same name), plans its blob under the file node's own
@@ -48,12 +48,12 @@
 ## Quality notes
 
 - **Operator-blind.** The server sees ids, the opaque sizes, the `K_blob` wrap and the sealed name, slug and
-  metadata — never a file name, a MIME type or a key ([docs/apps/files.md](../../../apps/files.md) § Operator-visible).
+  metadata — never a file name, a MIME type or a key ([docs/apps/depot.md](../../../apps/depot.md) § Operator-visible).
 - **A replace carries what it read** ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)): a
   compare-and-set on the blob id, never a blind overwrite.
 - **A file is no container:** nothing is placed under a `FILE`. It is shared through a folder above it
-  ([uc.files.share-folder-files](uc.files.share-folder-files.md)) or on its own
-  ([uc.files.share-file](uc.files.share-file.md)).
+  ([uc.depot.share-folder-files](uc.depot.share-folder-files.md)) or on its own
+  ([uc.depot.share-file](uc.depot.share-file.md)).
 - **The download streams** into a picked file or the Service Worker's download route, and only falls back to an
   in-memory `Blob` up to 512 MiB; a multi-gigabyte download in a real browser is unverified (inbox #371).
 
@@ -73,10 +73,10 @@ dieselbe Datei kurz vor dir ersetzt, sagt dir veyq das, statt seine Fassung stil
 
 ## Related
 
-- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
-- **Feature:** [files](../_index.md); the application's description [docs/apps/files.md](../../../apps/files.md).
-- **Use-cases:** [uc.files.share-folder-files](uc.files.share-folder-files.md) (the same files through a folder
-  link), [uc.files.drop-box](uc.files.drop-box.md).
+- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
+- **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
+- **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md) (the same files through a folder
+  link), [uc.depot.drop-box](uc.depot.drop-box.md).
 - **Decisions:** [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md),
   [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) (the node key
   and the file-name folding), [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md),

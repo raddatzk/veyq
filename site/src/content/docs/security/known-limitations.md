@@ -323,7 +323,7 @@ I Been Pwned, and the browser's `Origin` header names the veyq instance to that 
 
 A seal binds an entry to its object, not to the entries beside it. For an append-only application (a ledger), the
 server can therefore **drop or reorder** entries unless a sequence number or hash chain is bound into each entry's
-associated data. This is the same limit as freshness. No built application is append-only today (Memories and Files
+associated data. This is the same limit as freshness. No built application is append-only today (Memories and Depot
 are built; an append-only ledger application exists only as a concept), and each such application states the limit
 in its concept doc.
 

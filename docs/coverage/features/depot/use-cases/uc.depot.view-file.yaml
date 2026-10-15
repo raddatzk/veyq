@@ -1,5 +1,5 @@
-useCase: uc.files.view-file
-feature: files
+useCase: uc.depot.view-file
+feature: depot
 title: View a file — open it and see it (image, text, PDF, video, audio), or get the download
 # Built for inbox #412 (web only: no contract or backend change - the viewer reads the chunks a download reads); the
 # uploader line for inbox #415 (cr-file-uploader: contract, backend and web) and a guest uploader's name for inbox #431
@@ -35,7 +35,7 @@ acceptanceCriteria:
       web: { unit: [src/features/depot/components/FileViewer.test.ts, src/sw/mediaSw.test.ts, src/features/depot/view.test.ts] }
     gaps:
       - surface: web
-        reason: The service worker is stubbed in unit tests (it cannot be registered in the test environment); no real browser has played a Files video or audio through it yet, nor on a phone's Safari.
+        reason: The service worker is stubbed in unit tests (it cannot be registered in the test environment); no real browser has played a Depot video or audio through it yet, nor on a phone's Safari.
   - id: memory-is-bounded-per-kind
     text: An image over 64 MiB is not decrypted (the message names the limit and offers the download), a text is cut at 1 MiB, and a file of another kind is read no further than its first chunk; a PDF over 64 MiB is not decrypted past its first chunk (message plus the download) and one over 1000 pages is not drawn.
     coverage:
@@ -47,7 +47,7 @@ acceptanceCriteria:
         unit: [src/features/depot/components/FileViewer.pdf.test.ts, src/features/depot/pdf/pdfEngine.real.test.ts, src/features/depot/view.test.ts, src/core/blob/sniff.test.ts, src/features/depot/components/FileDetail.test.ts]
     gaps:
       - surface: web
-        reason: The unit tests mock the engine (happy-dom draws no canvas, has no layout and no IntersectionObserver) or run the real library in node without a canvas; the built chunk and worker were run once in a real browser under the real header (docs/apps/files.md § The viewer), but the Vue viewer's scrolling, observer margin, zoom and full screen have not been on a real file page, nor on a phone.
+        reason: The unit tests mock the engine (happy-dom draws no canvas, has no layout and no IntersectionObserver) or run the real library in node without a canvas; the built chunk and worker were run once in a real browser under the real header (docs/apps/depot.md § The viewer), but the Vue viewer's scrolling, observer margin, zoom and full screen have not been on a real file page, nor on a phone.
   - id: the-text-of-a-pdf-can-be-selected-and-copied
     text: A transparent text layer of selectable spans sits over each drawn PDF page - one per drawn page, built with the page's drawing, rebuilt at a new zoom, emptied when the page is freed and cancelled with the drawing, sized as the raw page and turned into place for a rotated page; a page whose text cannot be read is drawn with an empty layer; the layer is spans only, so a link in a PDF is selectable text and never clickable (there is no annotation layer); and no rule makes the text unselectable.
     coverage:

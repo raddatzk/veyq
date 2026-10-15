@@ -22,9 +22,9 @@ in what they hold. ADR 0087 decision 1 (the Use bullet) holds the decisions.
 
 - [ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md) decision 1:
   task-first, the UI's words per language, German with *du*, only what is built, a closing privacy note that links
-  the Security area, Depot named already with a one-line note while the UI says *Files*, screenshot placeholders.
+  the Security area, Depot named as the UI names it, screenshot placeholders.
 - [ADR 0086](../docs/decisions/0086-one-word-per-meaning.md): the word rules, and *Depot* as the second
-  application's name (the rename in code is not built; the UI says "Files" / "Dateien").
+  application's name (built by `cr-files-becomes-depot`: the UI says *Depot* in both languages).
 - [ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md): platform vs.
   application — Getting started, Your account, Spaces and Sharing are platform; Memories and Depot are applications.
 - [`cc.inclusive-language.md`](../docs/crosscutting/cc.inclusive-language.md): German neutral-first. The UI says
@@ -75,8 +75,7 @@ phase closes only after the owner has read its pages in conversation. Done when,
       copy, select several, trash, views); download and import.
 - [ ] 5 Memories — create a Memory and chapters; add photos; gallery; date and location (with the map consent);
       who was there; cover; marked photos; contributions; the photo trash.
-- [ ] 6 Depot — upload files and folders, view, replace, rename, delete; drop boxes. Each page carries the
-      one-line note that the web client still labels it *Files* / *Dateien*.
+- [ ] 6 Depot — upload files and folders, view, replace, rename, delete; drop boxes.
 - [ ] 7 Sharing and For space owners — share with people who have no account (roles, note, password, expiry,
       renew, revoke); turn off every link in a space; what a guest sees. For owners: invite and manage members,
       remove a member, terms, email settings, storage and the upload-link limit.

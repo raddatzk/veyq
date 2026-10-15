@@ -109,7 +109,7 @@ What the cells rest on:
 - **No guest route exists** for a medium's meta (`updateMediaMeta`), a node's `wrappedMeta` or cover, or a node
   delete: `share-media.openapi.yaml` holds list, complete and delete-own; `sharing.openapi.yaml`'s guest node schemas
   carry no `wrappedMeta`.
-- A `WRITE_ONLY` link on a `FOLDER` cannot be created (`ShareRoots`: a drop box is Files' own node, ADR 0080
+- A `WRITE_ONLY` link on a `FOLDER` cannot be created (`ShareRoots`: a drop box is Depot's own node, ADR 0080
   decision 11), and a role change never reaches or leaves `WRITE_ONLY` (`invalid_role_change`); `READ` ↔
   `READ_WRITE` flips in place on all three kinds.
 

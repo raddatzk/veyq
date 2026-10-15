@@ -2,7 +2,7 @@
 // The REAL pdf.js through our engine, in node (inbox #412): the other PDF suites mock `pdfEngine`, so they prove the
 // viewer's wiring and nothing about the library. This one opens a tiny hand-built PDF with the real `pdfjs-dist` legacy build
 // and OUR options (`pdfOptions.ts`) and asserts the page count, a page's size, and the failure classes - proving the library
-// and the option set work together. node has no canvas, so nothing is drawn here; drawing is a browser's (docs/apps/files.md).
+// and the option set work together. node has no canvas, so nothing is drawn here; drawing is a browser's (docs/apps/depot.md).
 import { createHash } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'

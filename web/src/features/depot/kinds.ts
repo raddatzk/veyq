@@ -1,4 +1,4 @@
-// The node kind the Depot application brings (ADR 0079; docs/apps/files.md). The contract's `NodeKind` is an open token,
+// The node kind the Depot application brings (ADR 0079; docs/apps/depot.md). The contract's `NodeKind` is an open token,
 // so this is the one definition of the value in the web: `register.ts` registers it, and every Depot file that tests a
 // node's kind compares against it. Core never imports it (`validate_web_core_imports_no_applications.py`), nor does
 // another application; the backend's counterpart is `DepotNodeKinds`.

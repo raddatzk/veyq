@@ -40,7 +40,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/depot/uploadFolder.test.ts, src/features/depot/levelRows.test.ts, src/features/depot/levelRows.guest.test.ts, src/features/depot/capabilities.test.ts, src/core/node/LevelView.test.ts]
   - id: drop-box-as-plain-folders
-    text: A drop box downloads as a directory with each guest's folder under the name the drop box shows it by (a repeated name numbered, equal names listed in that order), its content only what it was (files.drop-box), and imports as plain FOLDERs with its guests' folders and their files - no drop box, no drop key, no share - by the kind's own importsAsFolder; a drop box content carrying more is refused before anything is written. Download is offered on it to a member and a READ or READ_WRITE guest of a link above it, never to its WRITE_ONLY guest.
+    text: A drop box downloads as a directory with each guest's folder under the name the drop box shows it by (a repeated name numbered, equal names listed in that order), its content only what it was (depot.drop-box), and imports as plain FOLDERs with its guests' folders and their files - no drop box, no drop key, no share - by the kind's own importsAsFolder; a drop box content carrying more is refused before anything is written. Download is offered on it to a member and a READ or READ_WRITE guest of a link above it, never to its WRITE_ONLY guest.
     coverage:
       web:
         unit: [src/features/depot/dropBoxDownload.test.ts, src/core/export/subtree.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/depot/components/DropBoxDetail.guest.test.ts, src/features/depot/register.test.ts]

@@ -1,4 +1,4 @@
-// A member's file upload (cr-files-application F1b; docs/apps/files.md): one picked `File` becomes one job of core's
+// A member's file upload (cr-files-application F1b; docs/apps/depot.md): one picked `File` becomes one job of core's
 // upload queue (`core/blob/queue.ts`), which runs it, shows it in the top bar's status menu and retries a transient
 // failure once. What the job does, in this order — three steps, and nothing about the file written beside them:
 //

@@ -110,7 +110,7 @@ here because the code's `reason` strings point at this section rather than each 
 
 - **The five anonymous guest reads** — core's `resolveShare`, `resolveShareBlob`, `getShareTerms`, the
   Memories application's `listShareMedia` (the media a share lists, `ShareMediaResource`; it was part of
-  `resolveShare`'s body until cr-platform-contract-split slice 6.3 and keeps that posture), and the Files
+  `resolveShare`'s body until cr-platform-contract-split slice 6.3 and keeps that posture), and the Depot
   application's `listShareFiles` (the file blobs a share lists, `ShareFilesResource`, the same read for files). Both keys are
   wrong here: `key = SHARE` caps a share's whole audience *collectively* (a Memory sent to 200 guests is the
   normal case, not the abuse case), and `key = IP` shares the single per-IP bucket with login, so one gallery

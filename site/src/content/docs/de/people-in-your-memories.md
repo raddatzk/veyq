@@ -72,5 +72,5 @@ Für Namen gilt überall dieselbe Regel: der **echte Name**, wenn die Person ihn
   erfährt nur, dass du ein Bild hast und wie oft du es geändert hast. Ein Bild gehört zu einem Bereich – ein anderer
   Bereich, in dem du bist, zeigt sein eigenes (oder den Buchstaben). Wirst du aus einem Bereich entfernt, wird dein Bild
   dort gelöscht.
-- Noch nicht gebaut: die Anzeige, wer eine **Datei** in Dateien hinzugefügt hat. Diese Seite wurde noch nicht in einem
+- Noch nicht gebaut: die Anzeige, wer eine **Datei** im Depot hinzugefügt hat. Diese Seite wurde noch nicht in einem
   echten Browser geprüft.

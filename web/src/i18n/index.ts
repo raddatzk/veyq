@@ -1769,7 +1769,7 @@ const en = {
     nameResealFailed: 'Renamed. Some links to it could not be updated and still show the old name to their guests.',
     // core's folder share dialog (cr-node-key-hierarchy 5b.3) and folder page (5b.4b): only where a Memory sentence
     // would be wrong for a folder. READ_WRITE on a folder = add folders, rename and move inside it, add photos to the
-    // Memories below it (5a.5, docs/apps/memories.md) and upload or replace files (docs/apps/files.md). Core serves every
+    // Memories below it (5a.5, docs/apps/memories.md) and upload or replace files (docs/apps/depot.md). Core serves every
     // application's nodes, so these strings name none of them; a replaced file is gone (no versioning, inbox #383).
     folder: {
       title: 'Share this folder',

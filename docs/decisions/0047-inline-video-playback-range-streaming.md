@@ -175,7 +175,7 @@ failure, a stream that ends short of or runs past the registered size, and an en
 the browser marks the download failed and never keeps a truncated file as if it were whole; a cancelled download
 reaches the page as an abort.
 
-Both applications save through it: Files' download, and Memories' "download original" in the lightbox. A Memories
+Both applications save through it: Depot's download, and Memories' "download original" in the lightbox. A Memories
 original is saved under its own file name, the one sealed in its original's blob meta at upload and served on the
 listing (inbox #397); a media whose original carries no name has its name derived on device — the Memory name and its
 gallery position — its extension from the blob meta's type, else `.bin`. Both applications name a file by core's one
@@ -183,12 +183,12 @@ rule (`core/blob/meta.ts` `downloadName`). The name is known synchronously, so n
 opens: the picker is always the click's first await, which a name that waited on a lazily fetched tier (or on a sniff
 of chunk 0) would break.
 
-### Audio, and Files (inbox #412)
+### Audio, and Depot (inbox #412)
 
 The media route also serves **audio**: a playback may be registered under one well-formed `audio/<subtype>` essence as
 well as a `video/<subtype>` one (the same one-essence rule, `isStreamableMediaType`). The SW protocol is versioned
 (`PROTOCOL_VERSION`, now 4), so a still-controlling worker that predates a change fails the handshake and the page falls
-back as before. Files' file page is a second caller: it registers the sniffed container of a file (never the claimed
+back as before. Depot's file page is a second caller: it registers the sniffed container of a file (never the claimed
 type) with the same page-side chunk provider the download uses. The worker still holds no key and no plaintext at rest.
 
 ## Consequences

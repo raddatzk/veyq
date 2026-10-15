@@ -9,7 +9,7 @@ Vorwissen nötig.
 ## Für dich
 
 - [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/)
-- [Dateien — und wie du dich zurechtfindest](/veyq/de/files/)
+- [Depot — und wie du dich zurechtfindest](/veyq/de/depot/)
 - [Teilen mit Menschen ohne Konto](/veyq/de/sharing/)
 - [Personen in deinen Erinnerungen](/veyq/de/people-in-your-memories/)
 - [Herunterladen und Importieren](/veyq/de/download-and-import/)

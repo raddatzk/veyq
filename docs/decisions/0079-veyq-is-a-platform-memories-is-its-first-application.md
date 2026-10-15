@@ -77,17 +77,17 @@ exists stays readable and shareable.
 A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new
 variant plus its vector is backward-compatible). Core has added one such purpose, `blob-meta`: a blob's type, upload
 name and modification time, sealed under the blob's own `K_blob`, declared with the upload and stored write-once on
-the blob row. It is the platform's, carried by every application's blobs alike (Files' name of what was uploaded,
+the blob row. It is the platform's, carried by every application's blobs alike (Depot's name of what was uploaded,
 Memories' original file name and the media type its gallery badges a video by), so it is no exception to the rule below that an application needs no purpose of its
 own. For a **new** application, its keys are derived from the scope
 key by HKDF with the application id as context (`veyq/v1/<application id>:…`, the form the existing derivations
 use in `packages/crypto/src/v1.ts`), so two applications never share a key by accident; the seals' associated
 data binds the application id or kind, the object id and the version, by the ADR 0072 mechanism. **Measured with
-Files (cr-files-application P3-S1/P5), a new kind meets both rules with no new seal purpose and no HKDF context:**
+Depot (cr-files-application P3-S1/P5), a new kind meets both rules with no new seal purpose and no HKDF context:**
 its node key is random and wrapped under its parent's key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
 so it shares no key with another application's node by construction, which is what the HKDF context was for; and
 its blob's `blob-key` seal binds `ownerId` (the owning node's id) and `role` — an open token the application
-defines, Files' `FILE_CONTENT` — which names the application's object and kind. **Memories'
+defines, Depot's `FILE_CONTENT` — which names the application's object and kind. **Memories'
 existing keys are the documented exemption**: they derive as they always have, and are not re-derived under a
 Memories context — that would be a suite `v2` and a re-encryption for no gain, since there is no earlier
 application to be separated from.
@@ -112,7 +112,7 @@ on their own.
   claimed, whatever the role — for a `FOLDER`, core's own body, which embeds the body claimed for each child's kind.
 - **A node's URL carries its application's slug** (decided 2026-10-11, inbox #328; the grammar is
   [ADR 0015](0015-operator-blind-readable-urls.md)'s amendment). The path stays in the `#fragment`: a folder ends
-  in a slash, a node of an application is `…/<route slug>/<name>` (a Memory: `#foo/memories/memory`), and Files —
+  in a slash, a node of an application is `…/<route slug>/<name>` (a Memory: `#foo/memories/memory`), and Depot —
   the one application that **declares** it has no segment — is its plain name (`#foo/memory`). Each application
   claims its slug once in the registry (`claimRouteSlug`, a second claim throws, platform words are refused) or
   declares `claimNoRouteSegment`; a claimed slug is reserved among folder and file names, which are numbered
@@ -133,11 +133,11 @@ on their own.
   structure, attachments and guests, and the user interface. `READ`/`READ_WRITE`/`WRITE_ONLY` are the wire values
   (`ShareRole`, renamed from `VIEWER`/`CONTRIBUTOR`/`UPLOADER` on 2026-10-06).
   Attachments are core's since cr-files-application P3 (`veyq_node_attachment`, written only by
-  `AttachmentStore`), and Files is the first application on them (a `FILE` holds one blob in its slot), the node
+  `AttachmentStore`), and Depot is the first application on them (a `FILE` holds one blob in its slot), the node
   cover the second (its `COVER` slot, inbox #341 - core's own feature since inbox #411: any node of a kind that opts in
   carries one, see below); what a verified upload becomes is still each application's
-  (`UploadCompletion`), and Memories' media and gallery counters keep their own tables. Files, the second application, needed them and
-  nothing else of a blob's; whether every application does, the next one shows. Files is an application on core's
+  (`UploadCompletion`), and Memories' media and gallery counters keep their own tables. Depot, the second application, needed them and
+  nothing else of a blob's; whether every application does, the next one shows. Depot is an application on core's
   attachments, never a dependency of another application (Decision 4: an application depends on core only).
 - **Contracts by owner** (decided 2026-10-06, cr-platform-contract-split). A core spec describes what core does.
   Where a value's meaning belongs to an application — a node's sealed payload, a blob role, a kind — its
@@ -222,19 +222,19 @@ on their own.
   `GuestNodeRules` (which tree operations a `READ_WRITE` guest may do inside a container of the kind; core answers for
   `FOLDER`, Memories declares none, so a guest creates, moves and renames nothing inside a Memory or a chapter — ADR 0080),
   `WriteOnlyGuestKinds` (which kinds a `WRITE_ONLY` guest may create inside its own identity folder, asked of the link's
-  root kind; Files answers `FILE` for its drop box, core and Memories declare none), `GuestCreatableKinds` (which of an
-  application's kinds a `READ_WRITE` guest may create inside a `FOLDER`, besides the folder core always allows; Files
+  root kind; Depot answers `FILE` for its drop box, core and Memories declare none), `GuestCreatableKinds` (which of an
+  application's kinds a `READ_WRITE` guest may create inside a `FOLDER`, besides the folder core always allows; Depot
   declares `FILE`, Memories none — a union whose kinds must be disjoint: a kind two applications declare is created by
   nobody and fails startup, ADR 0080 decision 6), `UploadCompletion` (what a verified upload
-  becomes on a node of the kind: Memories' media, Files' one attachment of a `FILE`; the seam stays core's, and its item is generic — an
+  becomes on a node of the kind: Memories' media, Depot's one attachment of a `FILE`; the seam stays core's, and its item is generic — an
   `ownerId`, role-tagged derivatives and the application's sealed payloads as opaque values, which core carries to
   the one implementation that accepts the kind and never reads (2026-10-06, cr-platform-contract-split;
   `UploadCompletionGenericItemCoreSliceTest`); Memories maps its request items onto it and
-  `ownerId` back to its `mediaId`, Files carries the blob a replace expects as a payload and calls core's
+  `ownerId` back to its `mediaId`, Depot carries the blob a replace expects as a payload and calls core's
   `AttachmentStore.attach`), `UploadAdmission` (what a share link's guests contributed to the application's own rows, for its
   per-link limit; their open sessions and node attachments core sums itself, and a kind whose guest uploads are all
   attachments still needs one, reporting 0), `MemberBlobRoles` (which blob roles a member's upload start may carry: Memories
-  its four, Files `FILE_CONTENT`; a union, not a partition, since a member's start names no node to dispatch by —
+  its four, Depot `FILE_CONTENT`; a union, not a partition, since a member's start names no node to dispatch by —
   inbox #366) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
   for `MEMORY` and `CHAPTER`) — and `ShareRoots`, `GuestNodeRules`, `WriteOnlyGuestKinds`, `GuestCreatableKinds`,
   `UploadCompletion`, `UploadAdmission`, `MemberBlobRoles` and `NodeKindRules` fail closed: a role no application declares opens no member upload (`400 invalid_request`, before
@@ -263,8 +263,8 @@ on their own.
   `veyq.blob.upload.*`; Memories' trash keys keep `veyq.media.trash.*` under its own `@ConfigMapping`
   (`MemoriesMediaConfig`), whose `@WithDefault`s are their only defaults — SmallRye refuses a `veyq.*` key no
   mapping claims, so a line in core's base config would fail core's boot without Memories. The drop key
-  (`veyq_node.sealed_drop_private_key`) stays core's: Files' drop box and Memories' uploader links both seal to it.
-  Core's attachments, built with Files (cr-files-application P3): `veyq_node_attachment` (one blob per node slot, the slot
+  (`veyq_node.sealed_drop_private_key`) stays core's: Depot's drop box and Memories' uploader links both seal to it.
+  Core's attachments, built with Depot (cr-files-application P3): `veyq_node_attachment` (one blob per node slot, the slot
   being the application's role token; foreign keys to scope, node, blob and guest identity, none cascading, so a
   row goes only through core's erasers and `deleteBlobRow`), written only by `AttachmentStore` (`attach`, and
   `detach` for an owner's own remove — core's `NodeCoverStore` since #411, Memories' `deleteCoverBlob` before it) and counted as
@@ -275,7 +275,7 @@ on their own.
   as it reads its kinds), and Memories holds its own (`MemoryBlobRoles`, `MemoryBlobRole`) and refuses a guest's
   `COVER` through `ShareGuestWrites.admitsGuestRole`.
   **A cover is a node feature, core's** (inbox #411, 2026-10-12): any node whose kind opts in (`NodeKindRules.takesCover`:
-  core's `FOLDER`, Files' drop box, Memories' two kinds; not a `FILE`) carries one image its owner uploads as the node's own
+  core's `FOLDER`, Depot's drop box, Memories' two kinds; not a `FILE`) carries one image its owner uploads as the node's own
   blob in the `COVER` slot, written by core's `setNodeCover` / `removeNodeCover` - the blob step (`AttachmentStore` attach
   with a compare on the blob replaced, or detach) and the node's re-sealed `wrappedMeta` (the `cover` field, ADR 0077
   version-checked) in ONE transaction, so the slot and the meta that names it never part. `COVER` is a role core declares
@@ -298,7 +298,7 @@ on their own.
   create and every node's rename are core's own dialog, FOLDER's share dialog is core's), while the top-bar tray and
   the sidebar pins are ordered list slots each application adds its own item to (the upload status in the top bar is
   core's own, listing every application's uploads, so no application adds it); the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both
-  sides, so that core never names an application's kind (`MEMORY`, `CHAPTER`, `FILE`, `FILES_DROPBOX`) is guarded
+  sides, so that core never names an application's kind (`MEMORY`, `CHAPTER`, `FILE`, `DEPOT_DROPBOX`) is guarded
   (both kind rules read literals, from lists a new application must extend by hand: a kind missing there is guarded by
   nothing, and nothing turns red), not typed, and no compiler lists the kinds: the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness
   did.
@@ -336,7 +336,7 @@ on their own.
   root included — with what only a guest's page adds (the breadcrumb up to the root, the curator's note, the role
   badge); a `WRITE_ONLY` link gets the drop page its root kind's application claimed (`claimShareBody`, which no longer
   takes an option, and refuses `FOLDER`). Each application reads and writes through its data source, the member's or the
-  guest's, fixed at mount: Files' `features/files/source.ts` (its row factory and `DropBoxDetail` serve guests;
+  guest's, fixed at mount: Depot's `features/depot/source.ts` (its row factory and `DropBoxDetail` serve guests;
   `ShareFilesSection` and `DropBoxSharedView` are deleted) and Memories' `features/memory/source.ts` (`MemoryDetail`,
   its composables, the lightbox and the organizer touch no API but through it; `MemoryDetailHost` picks the source by
   `access.mode` and reads nothing of the member's world for a guest). A view shows a right where the matrix grants it
@@ -347,7 +347,7 @@ on their own.
   server creates the guest's own bucket there). A guest's Memory view shows the date and place the members sealed but
   never reconciles them (that writes the node's meta). `shareSection`, `embedBelowFolder`, `embeddedShareBody` and a share
   body's `subtreeRoot` are gone. A move (inbox #358) follows the same rule: one right per matrix
-  (`folderCapabilities.move`, `filesCapabilities.moveFile`/`moveNode`, `memoryCapabilities.move` — a guest's only
+  (`folderCapabilities.move`, `depotCapabilities.moveFile`/`moveNode`, `memoryCapabilities.move` — a guest's only
   `READ_WRITE`, only of a node a `FOLDER` of its subtree holds, never in an identity folder), one core dialog
   (`core/node/MoveNodeDialog.vue`) mounted by both hosts, and one door per session (`core/node/move.ts` `nodeMover`:
   the member's `moveNode`, a `READ_WRITE` guest's `placeShareNodeAsGuest`, none for any other role); its destinations
@@ -358,11 +358,11 @@ on their own.
   `validate_web_share_bodies_are_drop_pages.py` keeps the name `ShareBody` meaning a claimed drop page.
 - **Guards move with the code, and the build is one of them.** On the backend, core → application is the
   compiler's (no edge, so no import) and every other direction is `validate_backend_module_graph.py`'s — including
-  application → application, held between Memories and Files and bitten with a forged third application; inside core,
+  application → application, held between Memories and Depot and bitten with a forged third application; inside core,
   `validate_kernel_imports_no_slices.py` keeps the kernel → slice rule (a declared kernel list) and the node-kind
   rule, which no import check can see. On the web there is no module boundary, so the direction is a text guard:
   `validate_web_core_imports_no_applications.py` (core may not import an application's directory —
-  `features/memory`, `features/files` — or a client generated from its specs — derived from `generate:api`, so each
+  `features/memory`, `features/depot` — or a client generated from its specs — derived from `generate:api`, so each
   application's factories live in its own `api.ts` — discover code by glob, name an application's node kinds, or read
   an application's i18n namespace (a kind's own wording reaches core through its registry descriptor); no
   allowlist; and no application imports another or its clients). The test trees stay out of the import checks, for the reasons the kernel guard's docstring gives.

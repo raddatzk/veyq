@@ -30,7 +30,7 @@
    pins, [uc.memory.place](uc.memory.place.md)) — one **app-wide, persisted** preference. In grid/list the
    child **folders** and **Memories** render with a *create* card each; in map the subtree's located nodes
    render as clickable pins (folders are navigated from grid/list). Where the level shows two or more
-   application sections (Memories, Files, drop boxes), a **tab bar** `All | Memories | Files | …` sits under the
+   application sections (Memories, Depot, drop boxes), a **tab bar** `All | Memories | Depot | …` sits under the
    folder's card ([Application tabs](#application-tabs-a-facet-of-browsing)).
 4. **Navigate:** clicking a folder drills into it (new level + breadcrumb); clicking a Memory opens it (its
    detail view, [uc.memory.gallery](uc.memory.gallery.md)). The breadcrumb walks back up the local tree.
@@ -49,7 +49,7 @@
    Select is offered only where some node of the level allows an action (a `READ` guest has none), and the map
    presentation has no rows and offers no Select. Seen in a real browser on 2026-10-14 (the dev instance, a member and
    a `READ_WRITE` folder link): the checkboxes, the count "3 ausgewählt, davon 1 in diesem Tab nicht sichtbar" after a
-   switch to the Files tab, the guest's bar with Move and no Delete and its hint "1 von 4 kann nicht verschoben werden"
+   switch to the Depot tab, the guest's bar with Move and no Delete and its hint "1 von 4 kann nicht verschoben werden"
    for a drop box among the selected. Moving several: [uc.memory.move-node](uc.memory.move-node.md) §
    Several at once; deleting several: [uc.memory.delete-node](uc.memory.delete-node.md) step 1. Drag and drop of a
    selection is a later, separate step (inbox #421).
@@ -105,7 +105,7 @@
   an idle level is a `304` — nothing parsed, decrypted or compared. A guest's tag is a digest of what its link serves,
   not that revision, so it never tells a guest when something outside the link changed. A `200` replaces the page's
   tree only when the ciphertext rows' fingerprint differs. A refresh never overwrites a write of this tab (a read that
-  began before the write's own re-read is dropped) and pauses while a dialog is open. When the scope moved, Files'
+  began before the write's own re-read is dropped) and pauses while a dialog is open. When the scope moved, Depot's
   section re-reads its blob listing (an upload completes after its node is listed); a `304` re-reads nothing. A guest
   whose link was revoked, expired or deleted meets the same non-enumerable `404` as ever and the page shows its
   unavailable state. A Memory's own gallery has its own poll ([uc.memory.live-updates](uc.memory.live-updates.md)).
@@ -133,7 +133,7 @@ späteren Schritt; vorerst ist dies das Zuhause, das deinen verschlüsselten Ber
 
 ## Related
 
-- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
+- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the encrypted node tree this browses),
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (`K_SC`, auto-birth),

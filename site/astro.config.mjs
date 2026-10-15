@@ -27,7 +27,7 @@ export default defineConfig({
           items: [
             { slug: 'index', label: 'Start', translations: { de: 'Start' } },
             'is-my-data-safe',
-            'files',
+            'depot',
             'sharing',
             'people-in-your-memories',
             'download-and-import',

@@ -1,9 +1,9 @@
 ---
-title: "Dateien — und wie du dich zurechtfindest"
+title: "Depot — und wie du dich zurechtfindest"
 sources:
   - docs/features/platform/use-cases/uc.platform.node-cover.md
-  - docs/features/files/use-cases/uc.files.member-files.md
-  - docs/features/files/use-cases/uc.files.view-file.md
+  - docs/features/depot/use-cases/uc.depot.member-files.md
+  - docs/features/depot/use-cases/uc.depot.view-file.md
   - docs/features/memory/use-cases/uc.memory.move-node.md
   - docs/features/memory/use-cases/uc.memory.delete-node.md
   - docs/features/memory/use-cases/uc.memory.browse.md
@@ -12,7 +12,7 @@ sources:
 
 Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/). veyq ist eine Plattform
 für verschlüsselte, teilbare Dinge und wächst durch **Anwendungen**. **Erinnerungen** ist die Anwendung für Fotos,
-Videos und Tagebuch. **Dateien** ist die für alles andere: Dokumente, PDFs, jede Datei, die du aufbewahren willst.
+Videos und Tagebuch. **Depot** ist die für alles andere: Dokumente, PDFs, jede Datei, die du aufbewahren willst.
 Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
 
 ## Was du mit einer Datei tun kannst
@@ -120,7 +120,7 @@ der Server können sie sehen. Was du nicht darfst, hat schlicht keine Schaltflä
 Herz).
 
 Liegt in einem Ordner mehr als eine Art von Dingen, zeigen dir Tabs über der Liste — **Alle**, **Erinnerungen**,
-**Dateien**, **Briefkästen** — nur eine Art. Unterordner bleiben in jedem Tab sichtbar, damit du weiter navigieren kannst.
+**Depot**, **Briefkästen** — nur eine Art. Unterordner bleiben in jedem Tab sichtbar, damit du weiter navigieren kannst.
 
 ## Einem Ordner ein Cover geben
 

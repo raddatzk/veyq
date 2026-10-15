@@ -1,6 +1,6 @@
 # UC: View a file — open it and see it (image, text, PDF, video, audio), or get the download
 
-- **ID:** uc.files.view-file
+- **ID:** uc.depot.view-file
 - **Primary actor:** Whoever can open a file's page: a **member** of the scope, or a **share guest** of a link that
   reaches the file (`READ` or `READ_WRITE`, a single-file link or a file inside a folder link — the member's view with
   functions removed, [inbox #401](../../../inbox.md)).
@@ -9,7 +9,7 @@
 - **Preconditions:** A file that holds content (an empty file says so), the page open, and the file's key in the client
   (the member's tree, or the key a link carries).
 - **Postconditions (success):** the file is shown on its page above its size, type and date, or full screen; nothing is
-  stored beside it (**Files makes no thumbnail and no preview blob**), and everything the page created in the browser —
+  stored beside it (**Depot makes no thumbnail and no preview blob**), and everything the page created in the browser —
   its object URL, its playback handle, its read in flight — is gone when the page closes.
 
 ## Main flow
@@ -45,7 +45,7 @@
    width. Only the pages near the viewport are drawn; the others cost nothing. Over each drawn page sits a transparent **text
    layer**, so the text can be selected with the mouse or keyboard and copied (Ctrl/Cmd+C); a page without extractable
    text (a scan) has none. A link inside the PDF is not clickable: there is no annotation layer and the text layer holds
-   spans only ([docs/apps/files.md](../../../apps/files.md) § The viewer).
+   spans only ([docs/apps/depot.md](../../../apps/depot.md) § The viewer).
 6. **Full screen:** a button enlarges the viewer (the browser's Fullscreen API, Escape leaves; a fixed overlay where
    the API is missing, e.g. an iPhone's Safari).
 
@@ -96,10 +96,10 @@ anzeigen kann, bekommst du stattdessen einen klaren Hinweis und den Download.
 
 ## Related
 
-- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
-- **Feature:** [files](../_index.md); the application's description [docs/apps/files.md](../../../apps/files.md).
-- **Use-cases:** [uc.files.member-files](uc.files.member-files.md) (the page's download and replace),
-  [uc.files.share-file](uc.files.share-file.md), [uc.files.share-folder-files](uc.files.share-folder-files.md).
+- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
+- **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
+- **Use-cases:** [uc.depot.member-files](uc.depot.member-files.md) (the page's download and replace),
+  [uc.depot.share-file](uc.depot.share-file.md), [uc.depot.share-folder-files](uc.depot.share-folder-files.md).
 - **Decisions:** [ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md) (the media route),
   [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md) (the blob key bound to node and role),
   [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md).

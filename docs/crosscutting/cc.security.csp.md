@@ -62,8 +62,8 @@ Why each non-obvious source is there:
 - **`frame-ancestors 'none'`.** This is the anti-clickjacking rule: no page on any origin may frame the app. It
   only works in a header, which is one reason the policy is not a `<meta>`.
 - **`object-src 'none'` / `frame-src 'none'`.** The app embeds nothing, and a decrypted file is never given a frame: the
-  browser's own PDF viewer needs a frame on a `blob:` URL, so Files draws a PDF itself with pdf.js onto canvases instead
-  (§ *A dependency that parses untrusted bytes*; [Files § The viewer](../apps/files.md#the-viewer-filedetail--fileviewer-inbox-412)).
+  browser's own PDF viewer needs a frame on a `blob:` URL, so Depot draws a PDF itself with pdf.js onto canvases instead
+  (§ *A dependency that parses untrusted bytes*; [Depot § The viewer](../apps/depot.md#the-viewer-filedetail--fileviewer-inbox-412)).
   Widening either is a decision, not a tweak.
 - **`img-src data: blob:` / `media-src blob:`.** These cover the favicon SVG and QR `data:` URLs, and the object
   URLs of decrypted media.

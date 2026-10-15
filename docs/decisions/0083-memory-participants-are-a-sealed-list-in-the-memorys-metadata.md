@@ -90,9 +90,9 @@ the uploader of a member-uploaded photo stays **unresolved** — nothing is show
 photo's `share:` key resolves for members only, as a non-clickable name. The bucket tab keeps usernames until it is aligned
 with the display-name rule.
 
-**8. A file's page names its uploader.** Files got its uploader as a slice of its own, with its own contract and backend
+**8. A file's page names its uploader.** Depot got its uploader as a slice of its own, with its own contract and backend
 field (decided by the coordinator on the owner's behalf, 2026-10-14, confirmed by the owner 2026-10-15, inbox #415;
-[uc.files.view-file](../features/files/use-cases/uc.files.view-file.md) step 0).
+[uc.depot.view-file](../features/depot/use-cases/uc.depot.view-file.md) step 0).
 
 - **The uploader is whoever uploaded the file's current content.** A replace moves it, as a guest's attribution already
   moves with the attachment (`veyq_node_attachment.share_identity_id`). Who created the node is not recorded.

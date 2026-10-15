@@ -34,8 +34,7 @@ copy (the drift `validate_wiki_sources.py` was built after, inbox #120), and it 
      terms, email, storage); what lives in `wiki/` today moves here. Its pages are **task-first**: numbered steps
      in the UI's own words, per language (German with *du*, as the UI), each closing with a short note on why
      it stays private that links the Security area. They describe only what is built. The second application
-     is called **Depot** here already ([ADR 0086](0086-one-word-per-meaning.md)); while the web client still
-     labels it *Files* / *Dateien*, the Depot pages say so in one line, and the rename removes that line. Where a
+     is called **Depot** ([ADR 0086](0086-one-word-per-meaning.md)), as the web client labels it. Where a
      picture helps, a page places a **screenshot placeholder** that names what the shot must show; the owner
      supplies the images, one per language, and a missing image renders as its placeholder, never as a broken
      build.

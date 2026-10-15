@@ -1,4 +1,4 @@
-// A guest's file upload on a READ_WRITE folder link (cr-files-application F2; docs/apps/files.md § Guests): the member's
+// A guest's file upload on a READ_WRITE folder link (cr-files-application F2; docs/apps/depot.md § Guests): the member's
 // job (`uploadFile.ts`) with the guest's doors. One picked `File` becomes one job of core's upload queue:
 //
 //  1. the NODE: core's guest tree operation `createShareNodeAsGuest` births the `FILE` under the folder on screen — a

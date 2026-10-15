@@ -87,13 +87,14 @@ the tags `files` / `share-files`, the paths `/files`, the generated `FilesApi` /
       download whose manifest says `depot.file`; bite: an import of a manifest with `files.file` skips those nodes. (Ticked 2026-10-15: `run_web_e2e.py` 26/26 incl. the
       `upgrade` pair from this tree; the two-build `--upgrade` proof is reported in the close-out, not here. Reds outside
       this CR: `platform/capabilities.test.ts`, from `cr-capability-register-recut` phase 1's catalog ids.)
-- [ ] 3 docs + site — `docs/apps/files.md` → `depot.md`, `docs/features/files/` → `docs/features/depot/`,
+- [x] 3 docs + site — `docs/apps/files.md` → `depot.md`, `docs/features/files/` → `docs/features/depot/`,
       `docs/coverage/features/files/` → `…/depot/`, `uc.files.*` → `uc.depot.*` with every citation (locator), the
       ADRs' and CLAUDE.mds' live mentions of the application, `security-model.md`; the site's `files.md` / `de/files.md`
       → `depot.md` with the sidebar, the links to it and its `sources:`, and the application named Depot in the
       site's prose; ADR 0087's "while the web client still labels it Files" clause and `cr-use-area-content`
       phase 6's note go; inbox #437 keeps only Rights and Revision. · Done when: trust-chain green, `npm run check`
-      in `site/` green, and the docs locator's remaining hits are each the word *file* or a historical CR id.
+      in `site/` green, and the docs locator's remaining hits are each the word *file* or a historical CR id. (Ticked 2026-10-15; the inbox's DONE rows keep
+      *Files* as the record of what was built then, ADR 0086 keeps it where it records the rename.)
 
 ## Definition of done
 

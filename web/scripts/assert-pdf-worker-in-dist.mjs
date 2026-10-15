@@ -18,7 +18,7 @@
 //        `useWasm: false` (pdfOptions.ts) is what keeps pdf.js from asking.
 //
 // What it does NOT prove: that a browser starts the worker or that the deployed policy admits it at run time - only a real
-// page with the real header shows that (docs/apps/files.md names the proof).
+// page with the real header shows that (docs/apps/depot.md names the proof).
 //
 // Bite (snapshot-and-restore, never `git checkout`): in pdfEngine.ts replace the dynamic import with a static
 // `import { getDocument } from './pdfjsRuntime'`, build, and (iii) goes RED; restore and it is green.

@@ -8,8 +8,8 @@
 [ADR 0012](0012-content-key-hierarchy.md) gives every content node a random `K_mem` wrapped under its parent's key,
 and says "folders carry no key". Names and slug tokens of every node sit under `K_SC` (`web/src/core/node/tree.ts`
 `sealName`), so a holder of one Memory's key reads none of the names below it: `ShareNode` serves no name
-(`contracts/api/sharing.openapi.yaml` ~:1312). A core `FOLDER` therefore cannot be a share root, and Files
-([docs/apps/files.md](../apps/files.md)) needs a directory kind of its own only to get a key. A second
+(`contracts/api/sharing.openapi.yaml` ~:1312). A core `FOLDER` therefore cannot be a share root, and Depot
+([docs/apps/depot.md](../apps/depot.md)) needs a directory kind of its own only to get a key. A second
 application should not rebuild what Memories already proves. A move carries no re-wrapped key today
 (`UpdateNodeRequest`), so re-parenting a keyed node under a different keyed parent breaks its chain; the web
 has no move caller yet.
@@ -54,7 +54,7 @@ Memory, an expense and a file side by side).
    structure only: inside the share's subtree, placement by `NodeKindRules`, wraps under keys the guest holds.
    **Whoever owns the container decides what may be created in it:** under a `FOLDER`, core — and core lets a
    `READ_WRITE` guest create **only a `FOLDER`, or a kind whose own application declares it guest-creatable** (today
-   Files' `FILE`, which is how a contributor's upload lands); **never a Memory, a drop box or any other application's
+   Depot's `FILE`, which is how a contributor's upload lands); **never a Memory, a drop box or any other application's
    node** (owner decision 2026-10-14; it used to be "any kind `NodeKindRules` admits there"). The declaration is the
    kind's application's, fail closed like every seam here, so a new application never hands guests a create by
    accident. Moving and renaming what is already there are unchanged. Inside an application's container (a Memory),
@@ -114,7 +114,7 @@ Memory, an expense and a file side by side).
     the normal index applies, so every other folder stays unique; a ZIP export (not built) names the identity
     folders it writes by the URL-segment rule above, so it stays unambiguous inside a drop box too. Revoking the link
     keeps the drop box and its content. Memories keeps its uploader share on an existing Memory (its media are not
-    nodes); this rule is for nodes guests create, built with the first application that needs it (Files).
+    nodes); this rule is for nodes guests create, built with the first application that needs it (Depot).
 12. **The share's recovery copy is mandatory.** `sealedShareKey`/`sealedShareKeyEpoch` ([ADR 0036](0036-editable-share-note-recoverable-share-key.md))
     become required in `CreateShareRequest`, so every member can always re-show and edit a link. The columns and
     `ShareSummary` stay nullable: a tombstoned share clears them (`SharingStore.tombstone`), so the baseline does not
@@ -151,7 +151,7 @@ Memories' `ShareMediaBatchRequest`), and the `node-name` and `content-key` seals
 their vectors in `contracts/crypto/vectors/v1.json`.
 
 **Superseded or edited.** ADR 0012's "folders carry no key" and its `K_SC` naming rule; ADR 0079's "folders
-organize only" wording; `docs/apps/files.md` (a `FOLDER` can be a share root; Files may keep its own kind for
+organize only" wording; `docs/apps/depot.md` (a `FOLDER` can be a share root; Depot may keep its own kind for
 its own reasons).
 
 ## Consequences
@@ -159,7 +159,7 @@ its own reasons).
 - **A Memory guest newly reads chapter titles.** Today a guest sees the root's title and a flat media list.
   Serving descendant names is a product change; the owner decides it, and the share view must render or drop
   them.
-- **A core `FOLDER` can be shared** with the `READ` and `READ_WRITE` roles (`ShareRoots`); the drop-box role belongs to Files' own drop-box node (decision 11), not to a plain folder.
+- **A core `FOLDER` can be shared** with the `READ` and `READ_WRITE` roles (`ShareRoots`); the drop-box role belongs to Depot's own drop-box node (decision 11), not to a plain folder.
 - **Rename and move cost a version compare**, and a client may retry on `409 stale_placement`; both re-wrap the key.
 - **Reading is limited by position in the tree, never by kind.** Whoever holds a folder's key opens everything
   below it. A filter by kind exists only for writes (a drop-style share, or an application's policy), so a
@@ -176,7 +176,7 @@ its own reasons).
 - **Per-node epoch chains with folder rotation.** Forward secrecy per folder, at the price of an epoch chain on
   every node and an `O(subtree)` rotation; Memories has never needed it, and parity is the goal.
 - **A directory kind per application.** Every application would rebuild keyed directories.
-- **A `ROOT` node per scope, or one root node per application** (`MemoriesFolder`, a Files drive) under the group.
+- **A `ROOT` node per scope, or one root node per application** (`MemoriesFolder`, a Depot drive) under the group.
   It would give each application a clean subtree but forbids mixing kinds by topic and needs a migration of every
   root entry; `FOLDER` as the universal container with each kind admitted by `NodeKindRules` does both without one.
 
@@ -189,7 +189,7 @@ live in one folder per identity. The recovery copy is mandatory. Tree operations
 authorship). **A guest's create states the epoch it sealed with**, checked as a member's placement off the root —
 this replaced a server-chosen current epoch, which left a name unopenable whenever it differed. **A role is
 inherited down the subtree as the share allows:** a `READ_WRITE` folder link contributes in every Memory or chapter
-below it, a `WRITE_ONLY` link writes into its root only. **A `CHAPTER` is a share root with every role.** **A Files `FILE` is a share root with `READ` and `READ_WRITE`** (inbox #378): the file's own key goes under `K_share` (decision 1), its guest reaches that file alone and a contributor replaces its content; `WRITE_ONLY` on a file is `illegal_scope` — no key to hand out, no folder to send into ([docs/apps/files.md](../apps/files.md) § A single file as a share root). **The
+below it, a `WRITE_ONLY` link writes into its root only. **A `CHAPTER` is a share root with every role.** **A Depot `FILE` is a share root with `READ` and `READ_WRITE`** (inbox #378): the file's own key goes under `K_share` (decision 1), its guest reaches that file alone and a contributor replaces its content; `WRITE_ONLY` on a file is `illegal_scope` — no key to hand out, no folder to send into ([docs/apps/depot.md](../apps/depot.md) § A single file as a share root). **The
 share root's name is re-sealed by its own operation** (`setShareSealedName`), callable by any member with write
 access, not by the owner-gated `updateShare`. A folder is shared through core's own dialog, not the Memories one,
 and a guest's move is core's one move dialog, the member's too (inbox #358: offered only for a node a folder of the
@@ -219,8 +219,8 @@ stored-format change (ADR 0072).
 
 ## Open questions
 
-None open from this decision set. **The drop box node** (decision 11) is built with Files (`FILES_DROPBOX`,
-[docs/apps/files.md](../apps/files.md) § The drop box): the identity folder is a core `FOLDER` naming its identity
+None open from this decision set. **The drop box node** (decision 11) is built with Depot (`DEPOT_DROPBOX`,
+[docs/apps/depot.md](../apps/depot.md) § The drop box): the identity folder is a core `FOLDER` naming its identity
 (`veyq_node.share_identity_id`, unique per parent), created only by core's `IdentityFolders` behind the application's
 own operation; its entry is under the guest's `K_up`, which the reader opens through the parent's drop key. A
 `WRITE_ONLY` link on a plain `FOLDER` stays refused (`ShareRoots`). Where the build differed from decision 11 the owner

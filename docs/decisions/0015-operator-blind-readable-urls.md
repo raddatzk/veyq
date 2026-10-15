@@ -69,11 +69,11 @@ routes stay history-mode.**
   ones' segments — deterministic, by design; and a future folder export names its directories by the same rule. Group slugs are **not** server-enforced (no group slug token) — same-named groups resolve
   first-match, client-side ([ADR 0014](0014-group-scopes-and-governance.md)).
 - **Amended 2026-10-11 (inbox #328): the grammar of a node's path — a folder ends in a slash, an application
-  puts its slug before its nodes, Files has none.** The path stays in the fragment, readable and resolved
+  puts its slug before its nodes, Depot has none.** The path stays in the fragment, readable and resolved
   client-side exactly as above; the scope token is unchanged (token-less tenant, `~username`, `@group`). What
   follows the token is now:
   - **A folder** is its slug path with a **trailing slash**: folder `memory` in `foo` is `#foo/memory/`.
-  - **A Files node** (a file, a drop box) is its plain slug, no segment and no slash: `#foo/memory`. Files is an
+  - **A Depot node** (a file, a drop box) is its plain slug, no segment and no slash: `#foo/memory`. Depot is an
     explicit, documented exception — it **declares** that it has no segment (`claimNoRouteSegment`), so that
     absence is a choice the registry knows and only one application may make.
   - **Every other application's node** carries the application's **route slug** before its name, claimed once in
@@ -86,7 +86,7 @@ routes stay history-mode.**
     the existing rule — a folder `Memories` is `memories-2`, the next `memories-3`. Platform words
     (`RESERVED_ROUTE_SEGMENTS`: the history-mode routes) cannot be claimed as a slug.
   - **Numbering spaces are separate.** Equal names are numbered (`anna`, `anna-2`, by `compareByCreation`) within a
-    **class** only — the folders; one application's nodes; the nodes with no segment (Files and any kind nobody
+    **class** only — the folders; one application's nodes; the nodes with no segment (Depot and any kind nobody
     claimed). File `a.b` and folder `a-b` are both `a-b` and need no `-2` between them; the trailing slash tells
     them apart.
   - **The trailing slash is part of the address, and fragile by design.** A path without it means the **file** if

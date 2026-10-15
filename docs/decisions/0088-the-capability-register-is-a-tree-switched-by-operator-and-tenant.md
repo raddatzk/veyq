@@ -110,7 +110,7 @@ core/
   *+  public-shares / contribute / drop-box   → inherit core.public-shares
     *+  download-originals         → blob role ORIGINAL (only Memories has derivatives)
 *+ depot/                          → node kind FILE, blob role FILE_CONTENT
-  *+  public-shares / contribute / drop-box   → inherit; drop-box also gates creating a FILES_DROPBOX
+  *+  public-shares / contribute / drop-box   → inherit; drop-box also gates creating a DEPOT_DROPBOX
 *+ expenses/   [concept]           → its node kind;  *+ public-shares/… inherit
 *+ inventory/  [concept]           → its node kinds; *+ public-shares/… inherit; *+ reminders-push inherits core.push
 ```
@@ -154,7 +154,7 @@ both off a place still works, named by hand. The user's own consent to the two
 - **Enforcement gaps in what is built**, tracked in the inbox:
   - The server gates `spaces.groups` only at group creation (`grep -c isActive ScopesHandler.kt` → 1), although
     the catalog names five use-cases.
-  - Depot lets a member create a drop box while uploader links are off (`web/src/features/files/capabilities.ts`
+  - Depot lets a member create a drop box while uploader links are off (`web/src/features/depot/capabilities.ts`
     `createDropBox: place`), and the drop box's Share button checks `publicLinks`, so the box can never be shared.
 - **`download-originals` waits for a measurement** (owner, 2026-10-15). If guests stream video from the
   `ORIGINAL` ([ADR 0047](0047-inline-video-playback-range-streaming.md)), switching it off also stops video

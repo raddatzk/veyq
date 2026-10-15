@@ -14,7 +14,7 @@ acceptanceCriteria:
       backend:
         integration: [NodeCoverCoreSliceTest.setThenReplaceThenRemoveLeavesNoRowNoBlobNoSessionAndTheQuotaWhereItStarted]
   - id: kinds-opt-in-core-names-none
-    text: Which kinds take a cover is each kind's own rule (FOLDER core's, a drop box Files', a Memory and a Chapter Memories'; a file and an unknown kind take none), asked of the one rule that handles the kind; core names no application kind.
+    text: Which kinds take a cover is each kind's own rule (FOLDER core's, a drop box Depot's, a Memory and a Chapter Memories'; a file and an unknown kind take none), asked of the one rule that handles the kind; core names no application kind.
     coverage:
       backend:
         integration: [CoreAloneSliceTest.onlyAFolderTakesACoverWithCoreAlone, ModuleCompositionTest.everyKindThatTakesACoverIsOptedInByItsOwnRule, NodeCoverCoreSliceTest.aKindNoRuleOptedInTakesNoCover, NodeCoverDepotSliceTest.aFileTakesNoCoverAndAnUploadThatDoesNotFitTheDeclarationIsRefused]

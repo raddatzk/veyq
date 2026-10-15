@@ -1,9 +1,9 @@
 ---
 title: "Teilen mit Menschen ohne Konto"
 sources:
-  - docs/features/files/use-cases/uc.files.share-folder-files.md
-  - docs/features/files/use-cases/uc.files.share-file.md
-  - docs/features/files/use-cases/uc.files.drop-box.md
+  - docs/features/depot/use-cases/uc.depot.share-folder-files.md
+  - docs/features/depot/use-cases/uc.depot.share-file.md
+  - docs/features/depot/use-cases/uc.depot.drop-box.md
   - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
   - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
   - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
@@ -11,7 +11,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-note.md
 ---
 
-Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/) und [Dateien](/veyq/de/files/). Du
+Eine verständliche Ergänzung zu [Sind meine Daten sicher?](/veyq/de/is-my-data-safe/) und [Depot](/veyq/de/depot/). Du
 kannst etwas an irgendwen weitergeben — Oma, eine Freundin, einen Gruppenchat — als **Link**. Die Person öffnet ihn im
 Browser: ohne Konto, ohne Installation.
 
@@ -63,7 +63,7 @@ erkennen, ob ein Link eine Zustimmung verlangt.
 
 ## Ein Briefkasten für Dateien
 
-Ein **Briefkasten** (in Dateien) ist ein eigener Ort, der Dateien von Personen ohne Konto einsammelt. Lege ihn mit
+Ein **Briefkasten** (im Depot) ist ein eigener Ort, der Dateien von Personen ohne Konto einsammelt. Lege ihn mit
 **Neu** → **Neuer Briefkasten** an und erstelle dann einen Link. Wer den Link nutzt, bekommt darin **einen eigenen Ordner** —
 niemand sieht also, was andere gesendet haben —, und du und die anderen Mitglieder deines Bereichs seht alles an
 einem Ort. Schaltest du den Link ab, bleibt alles erhalten, was schon angekommen ist. Willst du den Ordner einer

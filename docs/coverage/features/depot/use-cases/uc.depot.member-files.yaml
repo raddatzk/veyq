@@ -1,9 +1,9 @@
-useCase: uc.files.member-files
-feature: files
+useCase: uc.depot.member-files
+feature: depot
 title: Member files — upload, download, replace, rename and delete a file
 # Built by cr-files-application (P1 the file-name folding, P3 core's attachments, F0 the kind, F1a the backend, F1b the
-# web). Backend: :apps:depot slice tests (core + Files, no Memories) and the root's composition test; web: the wire
-# tests record every request a Files job sends at `fetch`, the rows test mounts the real catalog; depot.e2e.test.ts
+# web). Backend: :apps:depot slice tests (core + Depot, no Memories) and the root's composition test; web: the wire
+# tests record every request a Depot job sends at `fetch`, the rows test mounts the real catalog; depot.e2e.test.ts
 # runs in the web-e2e job against a live backend, MariaDB and the S3 store, with its own fetch wrapper asserting that
 # no file name or MIME type crosses the wire.
 acceptanceCriteria:

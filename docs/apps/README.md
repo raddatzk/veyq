@@ -16,15 +16,15 @@ the rejected alternatives). German: *Anwendung*. Never "plugin", and never "app"
   ([ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md),
   format [`contracts/export/veyq-subtree.schema.json`](../../contracts/export/veyq-subtree.schema.json)). Core owns the
   tree, names (`archiveName`) and the archive; a kind supplies and consumes its content through `KindDescriptor`, beside
-  `createEntry`: `exportContent` / `importContent` (Files the file bytes, Memories the media originals, each read through
+  `createEntry`: `exportContent` / `importContent` (Depot the file bytes, Memories the media originals, each read through
   the downloading session's own source), `contentSchema` (its application id and content version, so an import lists what
   it cannot read), `validateContent` (its fields against the contract, before anything is written) and `downloadsAsFile`
-  (a kind that IS one file - Files' - downloads as itself and is one file in a ZIP) - so no application imports another;
+  (a kind that IS one file - Depot's - downloads as itself and is one file in a ZIP) - so no application imports another;
 - **in the background**: tasks, rate limits, the admin channel and operator-blindness.
 
 An application supplies the **meaning**: which node kinds exist, what the plaintext means, which rules apply to
 structure, attachments and guests, and the user interface. Attachments are core's (`veyq_node_attachment`); what a
-verified upload becomes is still each application's (`UploadCompletion`) — Files' is one attachment, Memories' its
+verified upload becomes is still each application's (`UploadCompletion`) — Depot's is one attachment, Memories' its
 media tables. What is built and what is open: the ADR's Consequences.
 
 **Rules** (each is argued in the ADR, not here):
@@ -35,7 +35,7 @@ media tables. What is built and what is open: the ADR's Consequences.
 - **Claims its URL route slug once.** A node of an application is addressed `#<path>/<slug>/<name>` in the URL
   fragment ([ADR 0015](../decisions/0015-operator-blind-readable-urls.md), amended 2026-10-11): the application
   claims its slug in the web registry (a second claim throws; a platform word is refused), or declares explicitly
-  that it has none — Files is the one that does. The slug is reserved among folder names.
+  that it has none — Depot is the one that does. The slug is reserved among folder names.
 - **Own tables keyed by `node_id`.** The server side is as thin as possible; domain logic lives in the client.
 - **Payloads carry a schema version.** Old versions stay readable; migration happens on write.
 - **No activation step, but a switch to turn it off.** Created on demand inside a scope. The operator, and a tenant
@@ -44,7 +44,7 @@ media tables. What is built and what is open: the ADR's Consequences.
   nodes of it, what exists stays.
 - **Crypto unchanged.** No application shares a key with another by accident: a node's key is random and wrapped
   under its parent's ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
-  and a blob's key is sealed bound to its node and its application's role token — so Files needed no new seal purpose
+  and a blob's key is sealed bound to its node and its application's role token — so Depot needed no new seal purpose
   and no HKDF context (ADR 0079 Decision 9). Memories' existing keys are the exemption.
 - **Every concept doc lists the metadata its kinds make operator-visible** (the platform adds only the node
   `kind`, [security-model](../crosscutting/security-model.md)).
@@ -54,7 +54,7 @@ media tables. What is built and what is open: the ADR's Consequences.
 | [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`web/src/features/memory`, a build-time registry the shell asks, per-kind row factories and dialogs) but not by directory name. What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
 | [Expenses](expenses.md) | Concept only. |
-| [Files](files.md) | Built. Backend `:apps:files` (`me.raddatz.veyq.files`, depending on `:core` only), contract `contracts/api/files/`, web `web/src/features/files`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/files](../features/files/_index.md). |
+| [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), contract `contracts/api/depot/`, web `web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |
 
 ## How an application publishes a revisioned list
 
@@ -92,11 +92,11 @@ The scope's *node list* is not this: it has its own revision ([ADR 0081](../deci
 Core draws every row (a list item) and tile of a folder level, and of the profile page's Memories list, from the
 `LevelRow` its application's `list.rows` factory answers per node (`web/src/core/node/levelRow.ts`; ADR 0079 Decision 5,
 inbox #407). Under the title sits **one meta line**: the kind's noun (`meta`: "Memory", "File") followed by the node's
-**details** (`details`, inbox #418) - the facts only the application can read: Memories' **date and place**, Files'
+**details** (`details`, inbox #418) - the facts only the application can read: Memories' **date and place**, Depot's
 **size and modified time**, a drop box's people count. The hook:
 
 1. **Answer `details` in the row**: an ordered list of `{ id, text }`, already translated and formatted for the reader's
-   locale. The application owns what the facts are, where they are read (the node's unsealed meta, Files' blob listing)
+   locale. The application owns what the facts are, where they are read (the node's unsealed meta, Depot's blob listing)
    and how they read; core owns the line - the " · " between them, the wrapping (two lines, then an ellipsis), the
    colour tokens and the reading order (it is plain text inside the item's button, no icon-only content).
 2. **Leave out what the node does not have.** A Memory without a place has no `place` entry; a file whose blob carries no

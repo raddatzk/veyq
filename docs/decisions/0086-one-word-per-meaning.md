@@ -69,9 +69,9 @@ across apps, how a link's key reaches an app safely) belong to the native client
 
 - **The word rules bind now**, and this change updates where they are written: the root `CLAUDE.md` and
   [`docs/apps/README.md`](../apps/README.md).
+- **Built:** Files → Depot, as the Depot paragraph above sorts it (`changes/cr-files-becomes-depot.md`, 2026-10-15).
 - **Not built**, open work tracked in the inbox. Pre-V1 there is no released client to stay compatible with, so
   the wire renames cost no major.
-  - Files → Depot, as the Depot paragraph above sorts it — `changes/cr-files-becomes-depot.md`.
   - `…Capabilities` → `…Rights` (web only).
   - `metaVersion` → `metaRevision` (contract → backend → web, a wire rename).
 - **The cost:** one more word for a reader to learn ("rights" next to "permission"). It pays for itself where
@@ -80,8 +80,8 @@ across apps, how a link's key reaches an app safely) belong to the native client
 ## Alternatives considered
 
 - **Keep "Files".** Rejected for the collision above.
-- **"Drive".** Rejected: it promises sync, and Files is built with no sync client on purpose
-  ([`docs/apps/files.md`](../apps/files.md)).
+- **"Drive".** Rejected: it promises sync, and Depot is built with no sync client on purpose
+  ([`docs/apps/depot.md`](../apps/depot.md)).
 - **"Vault" / "Tresor".** Rejected: it reads as a password manager.
 - **Rename the instance capability instead of the per-view one.** Rejected: ADR 0032 defined the word, the id is a
   durable wire contract in an append-only catalog, and the per-view functions are web-internal and cheap to rename.

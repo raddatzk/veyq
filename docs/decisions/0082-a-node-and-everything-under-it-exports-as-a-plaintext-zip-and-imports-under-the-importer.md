@@ -6,14 +6,14 @@
 ## Context
 
 A member wants their data **out** in a form that outlives veyq and that they can hand to someone, and wants such a file
-back **in** — a folder tree, a Files folder, a Memory with its chapters. Inbox #379 asked it for a Memory alone ("a
-Memory's export is a file; dropping it into a Files folder imports it"). The owner widened it on 2026-10-13: any node
+back **in** — a folder tree, a Depot folder, a Memory with its chapters. Inbox #379 asked it for a Memory alone ("a
+Memory's export is a file; dropping it into a Depot folder imports it"). The owner widened it on 2026-10-13: any node
 and everything under it, as a **core** feature, because the tree, names, covers and metadata are core's and only the
 *content* differs per kind.
 
 Three constraints shape it. **Operator-blind:** the server holds only ciphertext, so a readable export can only be
 produced where the keys are — the web client, on decrypted data. **Applications stay apart** ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)):
-a Files folder may contain a Memory, but Files must not import `features/memory`; core reaches each kind through the
+a Depot folder may contain a Memory, but Depot must not import `features/memory`; core reaches each kind through the
 registry (`KindDescriptor`, as `createEntry` already does). **No dependency, no memory wall:** a subtree can be gigabytes;
 the client already streams downloads through `saveStream` (`web/src/core/blob/stream.ts`) and reads big files by
 `Blob.slice`, and the project takes no dependency it can avoid.
@@ -26,16 +26,16 @@ covers the instance backup) and is left to its own inbox row (#413).
 
 Decided by the owner, 2026-10-13.
 
-**1. Scope.** Export and import apply to **any node and everything under it** — folder tree, Files, drop boxes, Memories
+**1. Scope.** Export and import apply to **any node and everything under it** — folder tree, Depot, drop boxes, Memories
 with chapters. It is a **core** feature. **Core carries the tree, the names and the payload bytes; a kind's content
 carries everything else.** Each kind supplies and consumes its **content** through a hook on `KindDescriptor` (beside
 `createEntry`): `exportContent` yields a content object plus its payload streams, `importContent` creates the kind's
-content under a freshly created node. Files supplies the file bytes; Memories the media originals with EXIF, GPS, place
+content under a freshly created node. Depot supplies the file bytes; Memories the media originals with EXIF, GPS, place
 and `capturedAt`. Core's walker neither reads nor writes a node's `cover` or `metadata` (the manifest fields stay in
 the schema), so a Memory's date, place, cover and participants travel inside its `content` (`memories.memory`), and **a
 chapter's media sit in the chapter's own content** (`memories.chapter`), not in the Memory's list: the chapter is a
 node of its own with its own key, and the Memory's hook returns before the chapter exists. A Memory export (#379) is simply a
-subtree rooted at a `MEMORY` node. Files reaches Memories only through the registry; a kind the importing build lacks is
+subtree rooted at a `MEMORY` node. Depot reaches Memories only through the registry; a kind the importing build lacks is
 skipped with its subtree and reported, never guessed.
 
 **2. Produced in the client, on decrypted data.** The server never sees plaintext and gets no export endpoint: the client
@@ -49,7 +49,7 @@ names are listed in that order, so an import numbers each as its directory is na
 every file system before they become paths: no `/` or `\`, no `.`/`..`, no control characters, none of Windows'
 reserved names (`CON`, `NUL`, …) or trailing dots and spaces, a bounded length, and a numeric suffix where two names of
 one directory fold to the same name ignoring case (`Name (2)`, before the extension). A node that holds others (a folder,
-a Memory, a chapter) is a directory; a node of a kind that IS one file (a Files file) is that file. The manifest maps every
+a Memory, a chapter) is a directory; a node of a kind that IS one file (a Depot file) is that file. The manifest maps every
 node to its path; the path is a label, never an identity. The manifest — `format: "veyq-subtree"`, `version`,
 `exportedAt`, `appVersion`, the `applications` it carries (decision 9), and the tree (each node: archive-local `id`,
 `kind`, `name`, `path`, `cover`, `metadata`, the kind's `content` reference, `children`) — is specified by
@@ -93,7 +93,7 @@ seal a coordinate the file lacks. Participants are exported as display names and
 `.veyq/manifest.json` whose `format` matches — never by file name. **A picked directory** that holds `.veyq/manifest.json`
 (the archive, unpacked) is recognised the same way and imported from its files; one without it is an ordinary folder
 upload (inbox #424). A directory is picked through the level's **New → Upload folder…**, or dropped; there is no separate
-"Import…" entry, because upload recognises an archive itself (owner decision 2026-10-14). Recognised, a member is offered **Import** or **Upload as a file**. A dropped archive in a Files folder offers **Import** to
+"Import…" entry, because upload recognises an archive itself (owner decision 2026-10-14). Recognised, a member is offered **Import** or **Upload as a file**. A dropped archive in a Depot folder offers **Import** to
 members only: never on a guest view (any role), so for a guest — a `WRITE_ONLY` one included — it stays an ordinary upload.
 
 **8. Failure and atomicity.** The server offers no multi-node atomicity. An import is a sequence of ordinary writes; one
@@ -164,7 +164,7 @@ shows it:
       {
         "id": "n2", "kind": "FILE", "name": "itinerary.pdf", "path": "Trip 2025/itinerary.pdf",
         "content": {
-          "type": "files.file", "schema": 1,
+          "type": "depot.file", "schema": 1,
           "file": { "path": "Trip 2025/itinerary.pdf", "size": 48213, "mediaType": "application/pdf",
                     "sha256": "9f2c0c4e1b7a5d3e8a6f4b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e" }
         }
@@ -202,7 +202,7 @@ shows it:
 ## Consequences
 
 - **A new core surface in the web**: the zip writer/reader, the walk, the dialogs (download, which asks nothing for a
-  single file; import with the dry-run; copy), the `KindDescriptor` hook, and the drop detection in the Files level.
+  single file; import with the dry-run; copy), the `KindDescriptor` hook, and the drop detection in the Depot level.
   Nothing in the backend or `contracts/api/` — the client uses the existing node, blob and quota endpoints. The schema
   under `contracts/export/` is the one new contract artefact.
 - **The format is a public promise.** `version` bumps only for a change an old reader would misread; kinds version their
@@ -216,7 +216,7 @@ shows it:
   and blobs that does not exist.
 - **Contributors flatten to text, and media land in the importer's bucket**, so a restored shared Memory loses who owns
   which medium for quota and deletion purposes. Accepted for simplicity; revisit if members ask.
-- **Rejected:** a per-kind export (Memories only) — duplicates the tree, naming and clash logic and leaves a Files folder
+- **Rejected:** a per-kind export (Memories only) — duplicates the tree, naming and clash logic and leaves a Depot folder
   with a Memory in it unexportable; a server-side export — breaks operator-blindness; a compressed ZIP or a library such
   as a zip package — a dependency for no gain on already-compressed media; carrying ids and keys — turns an import into
   a restore that must fight the live tree.

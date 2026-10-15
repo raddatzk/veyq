@@ -1,9 +1,9 @@
 ---
-title: "Files — and finding your way around"
+title: "Depot — and finding your way around"
 sources:
   - docs/features/platform/use-cases/uc.platform.node-cover.md
-  - docs/features/files/use-cases/uc.files.member-files.md
-  - docs/features/files/use-cases/uc.files.view-file.md
+  - docs/features/depot/use-cases/uc.depot.member-files.md
+  - docs/features/depot/use-cases/uc.depot.view-file.md
   - docs/features/memory/use-cases/uc.memory.move-node.md
   - docs/features/memory/use-cases/uc.memory.delete-node.md
   - docs/features/memory/use-cases/uc.memory.browse.md
@@ -11,7 +11,7 @@ sources:
 ---
 
 A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/). veyq is a platform for sealed, shareable
-things, and it grows by **applications**. **Memories** is the one for photos, videos and journals. **Files** is
+things, and it grows by **applications**. **Memories** is the one for photos, videos and journals. **Depot** is
 the one for everything else: documents, PDFs, any file you want to keep. Both live in the same folders of your
 space, side by side.
 
@@ -109,7 +109,7 @@ Every entry — folder, Memory, file or drop box — also has a **heart**: it ad
 left-hand navigation. Your favorites are yours alone; other members of the space cannot see them, and neither can the
 server. Where you may not do something, its button is simply not there (people you share a link with get no heart).
 
-When a folder holds more than one kind of thing, tabs above the list — **All**, **Memories**, **Files**, **Drop
+When a folder holds more than one kind of thing, tabs above the list — **All**, **Memories**, **Depot**, **Drop
 boxes** — let you show just one kind. Sub-folders stay visible in every tab so you can keep navigating.
 
 ## Give a folder a cover

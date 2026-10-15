@@ -123,7 +123,7 @@ here; the server is blind.
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
 - **Core and application ([ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
   The applications are `src/features/memory/` (Memories) and `src/features/depot/` (Depot: the `FILE` and `DEPOT_DROPBOX` kinds, their rows in
-  the level list, upload, download, the drop box — [docs/apps/files.md](../docs/apps/files.md)) — the guard's `APPLICATIONS`, keyed by owner;
+  the level list, upload, download, the drop box — [docs/apps/depot.md](../docs/apps/depot.md)) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop
@@ -400,7 +400,7 @@ here; the server is blind.
   a *foreign* QR code, jsQR gets a CVE, or `BarcodeDetector` reaches Firefox and desktop Chrome.
 
 - **A file page shows the file when it is opened** (inbox #412, `features/depot/components/FileViewer.vue` +
-  `useFileViewer.ts` + `view.ts`; the rules and caps are `docs/apps/files.md` § The viewer). Depot makes **no thumbnail or
+  `useFileViewer.ts` + `view.ts`; the rules and caps are `docs/apps/depot.md` § The viewer). Depot makes **no thumbnail or
   preview blob**. Four rules bind a change here: (1) **the decrypted bytes decide the kind** (`core/blob/sniff.ts`), the
   sealed type and the name only narrow - a test per claim-vs-bytes case; (2) **never render a peer's bytes as markup or code**:
   text is `textContent`, an image an `<img>` on an object URL owned by `useObjectUrl` and typed with the SNIFFED type (SVG
@@ -409,7 +409,7 @@ here; the server is blind.
   (4) **everything the viewer made is undone** on a new file, on navigation and on unmount (object URL, playback handle,
   the `AbortSignal` into the stream pump). A PDF is drawn by **pdf.js** (`pdfjs-dist`, legacy build) onto canvases in the page, never by the browser's
   viewer: `frame-src`/`object-src` stay `'none'` and **the CSP is unchanged** (widening it is the owner's decision). The rules
-  (`features/depot/pdf/`, `docs/apps/files.md` § The viewer): `pdfEngine.ts` is the only seam and reaches pdf.js through a
+  (`features/depot/pdf/`, `docs/apps/depot.md` § The viewer): `pdfEngine.ts` is the only seam and reaches pdf.js through a
   **dynamic** `import('./pdfjsRuntime')` - the one file that imports it, never imported statically (a source test and
   `npm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
   Function` in the emitted files, no `.wasm`); `pdfOptions.ts` is the option set - the document is `{data}` (never a URL),

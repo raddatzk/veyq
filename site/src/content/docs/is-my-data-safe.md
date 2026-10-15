@@ -29,7 +29,7 @@ database:
 
 - your **photos and videos** (and the smaller preview versions),
 - your **journal text**,
-- your **files** — documents, PDFs, anything you keep in [Files](/veyq/files/) — and their **names**,
+- your **files** — documents, PDFs, anything you keep in [Depot](/veyq/depot/) — and their **names**,
 - the **sensitive details**: titles, captions, descriptions, places, the people in them, tags,
 - **where** a photo was taken (GPS) and **when** it was captured,
 - the **file's own name**, and everything the camera wrote into the picture: the camera and lens, how it was

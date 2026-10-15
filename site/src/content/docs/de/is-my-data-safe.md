@@ -31,7 +31,7 @@ stehlen — nur unverständlicher Datenmüll:
 
 - deine **Fotos und Videos** (und die kleineren Vorschaubilder),
 - deine **Tagebuchtexte**,
-- deine **Dateien** — Dokumente, PDFs, alles, was du in [Dateien](/veyq/de/files/) ablegst — und ihre **Namen**,
+- deine **Dateien** — Dokumente, PDFs, alles, was du in [Depot](/veyq/de/depot/) ablegst — und ihre **Namen**,
 - die **sensiblen Details**: Titel, Bildunterschriften, Beschreibungen, Orte, die abgebildeten
   Personen, Schlagwörter,
 - **wo** ein Foto aufgenommen wurde (GPS) und **wann** es entstand,

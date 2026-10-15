@@ -113,14 +113,14 @@ genannt, der Rest wird verschoben. Ein Verschieben lässt sich sofort rückgäng
 
 ## Related
 
-- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
+- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the placement write)
 - Use-cases: [uc.memory.browse](uc.memory.browse.md) (the tree a move acts on, its rename the same write),
   [uc.memory.delete-node](uc.memory.delete-node.md) (the other way a node leaves its place),
-  [uc.files.drop-box](../../files/use-cases/uc.files.drop-box.md) (a guest's folder moved out),
+  [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) (a guest's folder moved out),
   [uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md) (a guest's tree operations)
-- Applications: [docs/apps/memories.md](../../../apps/memories.md), [docs/apps/files.md](../../../apps/files.md) (the
+- Applications: [docs/apps/memories.md](../../../apps/memories.md), [docs/apps/depot.md](../../../apps/depot.md) (the
   capability matrices)
 - Decisions: [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   (decisions 1, 3, 4, 6, 10, 11), [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)

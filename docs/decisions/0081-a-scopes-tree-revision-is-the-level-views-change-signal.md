@@ -31,7 +31,7 @@ one Memory's media), and the other reader is an **anonymous guest**, who must no
    | write | site |
    | --- | --- |
    | node create (member; a guest's `createShareNode`, `READ_WRITE` or inside an identity folder) | `NodesStore.create` |
-   | a guest's identity folder (Files' drop box) | `NodesStore.createIdentityFolder` |
+   | a guest's identity folder (Depot's drop box) | `NodesStore.createIdentityFolder` |
    | rename, move, re-seal (`wrappedMeta`), reorder; the same by a `READ_WRITE` guest | `NodesStore.applyUpdate`, when it wrote |
    | trash — a node, a **file** (a deleted file is its trashed node), a subtree | `NodesStore.deleteSubtree`, when it stamped |
    | restore | `NodesStore.restoreSubtree` |
@@ -67,7 +67,7 @@ one Memory's media), and the other reader is an **anonymous guest**, who must no
 5. **Clients.** The poller echoes the tag of what it shows. `304` is no work: nothing parsed, opened or compared, and the
    sections are told nothing. A `200` replaces the tree only if the fingerprint of its rows differs (the fingerprint stays
    as the fallback for a server that names no tag, and absorbs a change in another folder, which moves the scope's revision
-   and not this level's rows) and tells the sections the scope **moved** — Files re-reads its blob listing then, which is
+   and not this level's rows) and tells the sections the scope **moved** — Depot re-reads its blob listing then, which is
    how an upload completing, a change in no row, reaches an open level. A guest's first poll after a load is a full read
    (the load's response keeps no tag), after which it is conditional; so is the first after the guest's own write.
 
@@ -79,7 +79,7 @@ one Memory's media), and the other reader is an **anonymous guest**, who must no
   hot row serializes bumps only for the duration of writes that were serialized on the scope lock already.
 - **A new writer of node or attachment rows must bump**, and the source guard says so on the day it is added. What it
   cannot see is *where* the bump sits: that is the per-path tests' (`TreeRevisionCoreSliceTest`,
-  `FilesTreeRevisionSliceTest`) and the race test's (`TreeRevisionRaceCoreSliceTest`, on MariaDB) job.
+  `DepotTreeRevisionSliceTest`) and the race test's (`TreeRevisionRaceCoreSliceTest`, on MariaDB) job.
 - **Operator-blind:** the server stores a number per scope and a quoted number or a digest crosses the wire; the operator
   already sees every write's timing.
 - **Not covered, deliberately:** a Memory's gallery media (its own revision), the trash listing and the members and

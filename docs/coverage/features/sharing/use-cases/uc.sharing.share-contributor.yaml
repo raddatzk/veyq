@@ -56,7 +56,7 @@ acceptanceCriteria:
       forgets the session on the device only — the next visitor names itself afresh, nothing on the server changes.
       One core component names every guest: the shell's dialog at a READ_WRITE guest's first write on any link (its
       one naming flow, under the share root's key — a Memory link's as a folder link's), and the two drop pages of a
-      WRITE_ONLY link (Memories', Files').
+      WRITE_ONLY link (Memories', Depot's).
     coverage:
       web:
         unit: [src/views/ShareView.naming.test.ts, src/views/ShareView.memory.test.ts, src/views/ShareView.test.ts, src/features/depot/components/DropBoxShareBody.test.ts, src/features/memory/source.test.ts]
@@ -167,7 +167,7 @@ acceptanceCriteria:
         e2e: [src/features/memory/folderShareUpload.e2e.test.ts]
   - id: folder-guest-tree-operations
     text: >-
-      A READ_WRITE folder link's guest creates folders (and, through Files, files) inside the shared subtree and moves or renames
+      A READ_WRITE folder link's guest creates folders (and, through Depot, files) inside the shared subtree and moves or renames
       a node between folders of it, as one placement write re-wrapped under the destination's key and stated against
       the node's placementVersion (409 stale_placement, nothing written). A create states the epoch the guest sealed
       with: above the scope's current one is 409 stale_epoch, at or below it is stored as sent. Never the share root,
@@ -193,7 +193,7 @@ acceptanceCriteria:
       inside a Memory, a chapter moved out of or into a Memory, and a chapter renamed are 422 illegal_scope, while
       the guest still reads all of it; a Memory- or chapter-rooted link gains no tree operation. Under a folder a
       guest creates a FOLDER or a kind its own application declares guest-creatable (core's GuestCreatableKinds:
-      Files' FILE) and nothing else - a Memory, a chapter, a drop box or an unknown kind is 422 illegal_scope, before
+      Depot's FILE) and nothing else - a Memory, a chapter, a drop box or an unknown kind is 422 illegal_scope, before
       the placement rule (owner decision 2026-10-14); a declared kind NodeKindRules does not place there is still
       422 illegal_structure; a kind two applications declare is created by nobody and fails startup. The web offers
       no guest a "New Memory" or "New drop box" entry (hidden, not greyed). A READ or WRITE_ONLY link does none

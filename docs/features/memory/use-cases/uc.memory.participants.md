@@ -13,7 +13,7 @@
   nothing else ([ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)).
 
 **Status: built (web only, no backend or contract change).** The avatar is the member's profile picture when they have one, else the letter ([uc.spaces.set-profile-picture](../../spaces/use-cases/uc.spaces.set-profile-picture.md), [inbox #414](../../../inbox.md)). The uploader on
-**Files** is built too ([inbox #415](../../../inbox.md), cr-file-uploader). Not built: a per-share opt-in for guests. The profile's cover tiles load for the
+**Depot** is built too ([inbox #415](../../../inbox.md), cr-file-uploader). Not built: a per-share opt-in for guests. The profile's cover tiles load for the
 Memories of the scopes read in that visit only (no cover cache across scope switches); the index is bounded at
 500 Memories per scope and says so when it is partial.
 
@@ -94,7 +94,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
   member's name. "Contribution", where the name does not open, stays as it is.
 - The uploader is independent of the participant list: a non-participant uploader is still shown. The bucket tab keeps
   usernames until it is aligned with the display-name rule.
-- **Files are not in the first version:** `files.openapi.yaml` has no uploader field (inbox follow-up).
+- **Depot is not in the first version:** `files.openapi.yaml` has no uploader field (inbox follow-up).
 
 ## Quality notes
 

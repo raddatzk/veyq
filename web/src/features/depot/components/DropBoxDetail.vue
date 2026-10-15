@@ -15,7 +15,7 @@
 // inbox #380: it was given that tree): core's folder page renders it as the drop box's `detail`, handed the guest's
 // `access` and `tree`, whose walk opened the guests' folders through the drop key (`childEntryKey`). The guest's tree
 // serves no creation time (`createdAt` 0), so `compareByCreation` falls to its node-id tie-break: a guest numbers equal
-// names in node-id order, which can differ from the member's creation order (documented in docs/apps/files.md). A
+// names in node-id order, which can differ from the member's creation order (documented in docs/apps/depot.md). A
 // guest's Depot source carries no delete, and the matrix grants a guest no share and no delete either: it opens a
 // folder (core's folder page, read-only inside an identity folder) and downloads there — no send form (that is the
 // WRITE_ONLY guest's own page, `DropBoxGuestForm`), nothing deleted or moved; the server refuses each to every guest.

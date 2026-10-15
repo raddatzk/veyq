@@ -1,4 +1,4 @@
-// Depot's capability matrix (`capabilities.ts`, inbox #401; the table in `docs/apps/files.md` § Guests). Every row names
+// Depot's capability matrix (`capabilities.ts`, inbox #401; the table in `docs/apps/depot.md` § Guests). Every row names
 // the rights it grants; every other right must be false — a default flipped to true, a role or a kind falling through,
 // a guest deleting or renaming: each is red here.
 import { describe, it, expect } from 'vitest'

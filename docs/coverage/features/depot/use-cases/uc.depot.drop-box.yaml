@@ -1,8 +1,8 @@
-useCase: uc.files.drop-box
-feature: files
+useCase: uc.depot.drop-box
+feature: depot
 title: Drop box — guests send files, each into a folder of its own
 # Built by cr-files-application F3 (ADR 0080 decision 11). Backend: DropBoxSliceTest and DropFolderRaceSliceTest (core +
-# Files); web: the guest's wire recorded at fetch with real crypto, the member's tree opening identity folders, the drop
+# Depot); web: the guest's wire recorded at fetch with real crypto, the member's tree opening identity folders, the drop
 # box's detail and the read-only level; depotDropBox.e2e.test.ts runs in the web-e2e job.
 acceptanceCriteria:
   - id: one-folder-per-guest-identity

@@ -1,9 +1,9 @@
 ---
 title: "Sharing with people who have no account"
 sources:
-  - docs/features/files/use-cases/uc.files.share-folder-files.md
-  - docs/features/files/use-cases/uc.files.share-file.md
-  - docs/features/files/use-cases/uc.files.drop-box.md
+  - docs/features/depot/use-cases/uc.depot.share-folder-files.md
+  - docs/features/depot/use-cases/uc.depot.share-file.md
+  - docs/features/depot/use-cases/uc.depot.drop-box.md
   - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
   - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
   - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
@@ -11,7 +11,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-note.md
 ---
 
-A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/) and [Files](/veyq/files/). You can hand
+A plain-language companion to [Is my data safe?](/veyq/is-my-data-safe/) and [Depot](/veyq/depot/). You can hand
 something to anyone — a grandparent, a friend, a group chat — as a **link**. They open it in a browser: no
 account, nothing to install.
 
@@ -62,7 +62,7 @@ whether a link asks for acceptance.
 
 ## A drop box for files
 
-A **drop box** (in Files) is a place of its own that collects files from people without an account. Create it with
+A **drop box** (in Depot) is a place of its own that collects files from people without an account. Create it with
 **New** → **New drop box**, then make a link. Everyone who uses the link gets **a folder of their own** in it, so nobody
 sees what others sent — and you and the other members of your space see all of it in one place. Switching the link
 off keeps everything that already arrived. If you want to keep a guest's folder, you can move it out as an ordinary

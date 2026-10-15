@@ -1,7 +1,7 @@
-useCase: uc.files.share-file
-feature: files
+useCase: uc.depot.share-file
+feature: depot
 title: Share one file — a guest sees, downloads and (as a contributor) replaces that file
-# Built for inbox #378 (a single FILE as a share root). Backend: FileShareSliceTest (core + Files) and the share-root
+# Built for inbox #378 (a single FILE as a share root). Backend: FileShareSliceTest (core + Depot) and the share-root
 # assertions of DepotNodeSliceTest / DepotNodeKindRulesTest; web: the member's file view (`FileDetail`) mounted by core's
 # page of a public link for a guest (real router and registry, guarded clients), the member's own mount, the link dialog
 # worded for a file, the mint on the wire; fileSingleShare.e2e.test.ts runs in the web-e2e job (unverified when written).

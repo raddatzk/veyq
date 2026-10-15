@@ -162,7 +162,7 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   channel's unknown-route refusal both stop working. The body carries the code alone: never the refused value (often ciphertext or an opaque id),
   the field's name or path, the rule, an enum's accepted values or a class name — the contract already says what
   is accepted. A violation that names no method parameter (an entity, a return value) is the server's own defect:
-  `500 internal_error`, no report. `MalformedRequestSliceTest` holds the shape, `FilesContentSliceTest` an
+  `500 internal_error`, no report. `MalformedRequestSliceTest` holds the shape, `DepotContentSliceTest` an
   application's resource (inbox #339, #355).
 - **Frontend:** build errors through a shared helper with a stable `"<label> failed: <status>"` message;
   append the response body **only in dev builds**. Don't couple UI text to whatever the server echoes.

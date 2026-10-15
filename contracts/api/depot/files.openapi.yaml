@@ -3,7 +3,7 @@ info:
   title: veyq Files API
   version: 0.1.0
   description: >
-    The **Depot** application's own operations ([docs/apps/files.md](../../../docs/apps/files.md), ADR 0079): a file
+    The **Depot** application's own operations ([docs/apps/depot.md](../../../docs/apps/depot.md), ADR 0079): a file
     is a node of kind `FILE` that holds **one** sealed blob in its attachment slot `FILE_CONTENT` (core's
     `veyq_node_attachment`). Everything else a file needs is core's and is not repeated here: the node itself (its
     sealed name and its content key), its trash and purge (`deleteNode`, the trash operations), and the blob transfer
@@ -19,7 +19,7 @@ info:
     key, bound to the blob id, the node id and the role — ADR 0072, ADR 0080 Decision 13) and opaque sizes; never
     a plaintext byte, a key, a file name or a MIME type.
 
-    **Guest operations** (tag `share-files`, cr-files-application F2): on a public share link ([docs/apps/files.md](../../../docs/apps/files.md),
+    **Guest operations** (tag `share-files`, cr-files-application F2): on a public share link ([docs/apps/depot.md](../../../docs/apps/depot.md),
     [ADR 0080](../../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
     Decision 6): a guest of a `READ` or `READ_WRITE` link lists the blob references of the files in the shared subtree —
     a folder's files, or the one file of a **single-file link** (a `FILE` is a share root with `READ` or `READ_WRITE`,
@@ -289,7 +289,7 @@ paths:
       summary: A drop-box guest's own folder — created on its first call, the same one on every later call (unauthenticated).
       description: >
         **No auth.** A `WRITE_ONLY` guest of a drop-box link (a `DEPOT_DROPBOX` root, [ADR 0080](../../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
-        decision 11, [docs/apps/files.md](../../../docs/apps/files.md) § The drop box) holds no key of the drop box,
+        decision 11, [docs/apps/depot.md](../../../docs/apps/depot.md) § The drop box) holds no key of the drop box,
         so it cannot place a node there with core's `createShareNode`. This operation gives its identity ONE folder in
         the drop box, unique by (drop box, identity): the first call creates a core `FOLDER` from the request — a
         node id, a content key, a name and a slug token the guest minted and sealed under its own identity key

@@ -1,4 +1,4 @@
-// The drop box (cr-files-application F3, ADR 0080 decision 11, docs/apps/files.md § The drop box): a `DEPOT_DROPBOX`
+// The drop box (cr-files-application F3, ADR 0080 decision 11, docs/apps/depot.md § The drop box): a `DEPOT_DROPBOX`
 // node a member shares WRITE_ONLY. Its guests hold no key of it — each names itself once with an identity key `K_up`
 // of its own (handed over wrapped to the drop box's drop public key, `core/sharing/dropKey.ts`), gets ONE identity
 // folder in the drop box (`ensureShareDropFolder`, sealed under `K_up`), and uploads its files there with the same

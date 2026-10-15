@@ -1,21 +1,21 @@
-# Application: Files
+# Application: Depot
 
 > **Built.** The platform's second application: a file tree on the platform's node tree
 > ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)) — the Gradle module
-> `:apps:files` (`me.raddatz.veyq.files`, depending on `:core` only), its contract `contracts/api/files/`, and
-> `web/src/features/files`. What a person does with it, and the tests that hold it, are its use-cases:
-> [uc.files.member-files](../features/files/use-cases/uc.files.member-files.md),
-> [uc.files.share-folder-files](../features/files/use-cases/uc.files.share-folder-files.md),
-> [uc.files.share-file](../features/files/use-cases/uc.files.share-file.md),
-> [uc.files.drop-box](../features/files/use-cases/uc.files.drop-box.md). This page is how it works.
+> `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), its contract `contracts/api/depot/`, and
+> `web/src/features/depot`. What a person does with it, and the tests that hold it, are its use-cases:
+> [uc.depot.member-files](../features/depot/use-cases/uc.depot.member-files.md),
+> [uc.depot.share-folder-files](../features/depot/use-cases/uc.depot.share-folder-files.md),
+> [uc.depot.share-file](../features/depot/use-cases/uc.depot.share-file.md),
+> [uc.depot.drop-box](../features/depot/use-cases/uc.depot.drop-box.md). This page is how it works.
 
 ## What it is
 
 - A **file** is a node kind that holds **one blob**, with its name and metadata sealed. Directories are the platform's
   `FOLDER`: every node carries a key and a `FOLDER` can be a share root with `READ` or `READ_WRITE`
-  ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md), built), so Files needs
+  ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md), built), so Depot needs
   no directory kind of its own, and a directory can be shared whole. A file node carries its own key like every node,
-  and Files declares it a share root with `READ` or `READ_WRITE` (never `WRITE_ONLY`): a file is shared through its
+  and Depot declares it a share root with `READ` or `READ_WRITE` (never `WRITE_ONLY`): a file is shared through its
   folder above it, or **on its own** (§ A single file as a share root). Files live in the scope's one folder tree, beside
   Memories.
 - **Web only.** No sync client, no versioning: replacing a file replaces its blob.
@@ -28,13 +28,13 @@
 ## How a file is stored
 
 - **The node** is core's: a `FILE` node with its sealed name and slug (`fileNameSlug`, case-folded) and its random key
-  wrapped under its parent's. Its NAME is the file's name — a rename changes it, a replace keeps it. Files writes
-  nothing into the node's generic `wrappedMeta` (inbox #397; it used to hold the file's type, size and date). Files
+  wrapped under its parent's. Its NAME is the file's name — a rename changes it, a replace keeps it. Depot writes
+  nothing into the node's generic `wrappedMeta` (inbox #397; it used to hold the file's type, size and date). Depot
   adds no column and no table.
 - **The blob** is a core attachment: the slot `FILE_CONTENT` of `veyq_node_attachment` (one blob per slot), its
   role the same token. Its `K_blob` is wrapped under the file node's key and sealed bound to the blob id, the node id
   (`ownerId`) and the role ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md), ADR 0080 Decision 13), so no
-  new seal purpose exists for Files. The attachment records **who uploaded the current blob** (core's columns:
+  new seal purpose exists for Depot. The attachment records **who uploaded the current blob** (core's columns:
   `uploader_user_id` for a member, `share_identity_id` for a guest - exactly one; a replace moves it to the replacer;
   [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Decision 8).
 - **The metadata is the blob's** (inbox #397): the picked file's type, its name and its modified time
@@ -50,13 +50,13 @@
 - **Trash and purge** are core's: deleting the node trashes it with its attachment (the quota still counts it, ADR
   0073 §2); the purge frees the attachment row and the blob through core's eraser.
 - **The quota:** a member's upload counts against the tenant quota through core's start, unchanged. That start takes
-  only a role some application declares to core's `MemberBlobRoles` (Files: `FILE_CONTENT`, `FilesMemberBlobRoles`) and
+  only a role some application declares to core's `MemberBlobRoles` (Depot: `FILE_CONTENT`, `DepotMemberBlobRoles`) and
   refuses any other whole, `400 invalid_request`, before it reserves anything (inbox #366); a `FILE_CONTENT` start
   names no node, so one for an object that is no `FILE` still opens and ages out unattached. A link's usage
-  for a `FILE` is core's attachment term; Files' `UploadAdmission` reports 0 for it (core never admits a link by its
+  for a `FILE` is core's attachment term; Depot's `UploadAdmission` reports 0 for it (core never admits a link by its
   own terms alone).
 
-## The contract (member, `contracts/api/files/files.openapi.yaml`, tag `files`)
+## The contract (member, `contracts/api/depot/files.openapi.yaml`, tag `files`)
 
 - `completeFile` — `POST /api/scopes/{scopeId}/files/{nodeId}/content`, body `{uploadId, expectedBlobId?}`. The upload
   was started with core's `startBlobUploads` (`role: FILE_CONTENT`, `ownerId` = the node). Without `expectedBlobId`
@@ -72,30 +72,30 @@
   and keys come from core's node listing; the client joins by `nodeId`. `404 node_not_found` for a parent that is no live node of the scope.
 - **A download** is core's `presignBlobDownloads` with the blob id (scope READ). **Delete** is core's node delete
   (trash). **Replace** is another `completeFile` with the blob the client read.
-- **Live.** An open Files level learns of a peer's file without a reload from core's conditional node listing
-  ([ADR 0081](../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)). Files writes no revision of
+- **Live.** An open Depot level learns of a peer's file without a reload from core's conditional node listing
+  ([ADR 0081](../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)). Depot writes no revision of
   its own: a `FILE` created or deleted (trashed) is a node change, and `completeFile` — member or guest, first upload or
   replace — is `AttachmentStore.attach`, which bumps the scope's tree revision in the transaction that fills the slot.
   An upload completing changes no node row, so the level's row factory answers a *moved* poll (`liveTick`) by re-reading
   `listFiles`, and answers nothing to a `304`. A guest's `resolveShare` tag covers the attachments of the served nodes
   for the same reason.
 
-Backend: `me.raddatz.veyq.files.content` — `FilesResource`/`FilesHandler` (the scope-access gate first), core's
-dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the item's `expectedBlobId` payload onto
-`AttachmentStore.attach` — the whole write, nothing beside it), `FilesUploadAdmission`, `FilesStore` (the listing's
+Backend: `me.raddatz.veyq.depot.content` — `FilesResource`/`FilesHandler` (the scope-access gate first), core's
+dispatcher to `DepotUploadCompletion` (`UploadCompletion` for `FILE`, maps the item's `expectedBlobId` payload onto
+`AttachmentStore.attach` — the whole write, nothing beside it), `DepotUploadAdmission`, `FilesStore` (the listing's
 reads).
 
-## The web (`web/src/features/files`)
+## The web (`web/src/features/depot`)
 
-- **Files' rows** in core's ONE level list (`levelRows.ts`, the row factory both kinds name as `list.rows`; inbox #407 —
-  there is no Files section any more, core draws the list): a FILE is a row or a tile with the leading file icon, the
+- **Depot's rows** in core's ONE level list (`levelRows.ts`, the row factory both kinds name as `list.rows`; inbox #407 —
+  there is no Depot section any more, core draws the list): a FILE is a row or a tile with the leading file icon, the
   node name and the meta line "File" plus the details (`details`, [apps/README](README.md#how-an-application-shows-facts-in-a-levels-rows-and-tiles)) the plaintext size the blob's sealed size gives and the modified time from the blob's
-  sealed meta (`download.ts` `fileFacts`; the only modified time Files has is that sealed one - `FileBlobRef` carries no server-observed `updatedAt`; a blob without meta, or one whose meta does not open under this node's key,
+  sealed meta (`download.ts` `fileFacts`; the only modified time Depot has is that sealed one - `FileBlobRef` carries no server-observed `updatedAt`; a blob without meta, or one whose meta does not open under this node's key,
   shows its size alone; a file listed without a blob says "not uploaded yet" — none of it reads the node's own payload).
   Its **primary click opens** the file's own page (`FileDetail`); **download is its one first-class action** (a button on
   the row, beside core's own favorite heart, which every kind's row has - `core/favorites`, ADR 0068 §10), and **rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**
   (into core's trash, restored from core's trash dialog — or at once from the "moved to the trash" toast's Undo, core's
-  `trashUndo.ts`, inbox #385 (c)) sit in the row's one "more" menu, each `shown` by `filesCapabilities` narrowed to the
+  `trashUndo.ts`, inbox #385 (c)) sit in the row's one "more" menu, each `shown` by `depotCapabilities` narrowed to the
   doors the session's source carries (fail closed: a guest gets the same row with fewer actions). **A row has no
   replace action** (owner decision 2026-10-14): in a folder, a file's content is replaced by uploading a file of the
   same name, which asks first (below), for a member and a contributor guest alike; an upload of that name also fills a
@@ -103,16 +103,16 @@ reads).
   writes, which has no folder to upload into — as an action of its header beside the download (core's `NodeHeader`;
   owner decision 2026-10-14: both used to be buttons below the header), with no standing sentence about what a replace
   does: the replace asks when it happens. Files, Memories and
-  drop boxes are listed together, folders first and then everything by name (core's order); the tab "Files" filters the
-  list to FILE nodes, the folders stay. **Upload** is a level action (`files.upload`, the "New" menu's "Upload files"),
+  drop boxes are listed together, folders first and then everything by name (core's order); the tab "Depot" filters the
+  list to FILE nodes, the folders stay. **Upload** is a level action (`depot.upload`, the "New" menu's "Upload files"),
   registered with the level by the factory for the level's whole life — so it is available under every tab — and core
   hands it the files dropped onto the level, only while the action is allowed and enabled. Hidden in map mode like every
   row (the map is Memories' presentation, drawn where a shown tab offers it; a guest's identity folder without Memories
-  lists its files in the grid, inbox #404). An empty Files tab says so in Files' words (`files.empty` where an upload is
-  possible, `files.emptyReadOnly`, `files.guest.empty`). Read-only during a pending deletion: download only. The same
+  lists its files in the grid, inbox #404). An empty Depot tab says so in Depot's words (`depot.empty` where an upload is
+  possible, `depot.emptyReadOnly`, `depot.guest.empty`). Read-only during a pending deletion: download only. The same
   rows are a share guest's (§ Guests).
-- **Upload folder** (owner decision 2026-10-14, inbox #424): a second level action (`files.uploadFolder`, the "New" menu's
-  "Upload folder…"), shown by `canUploadFolder` - Files' `upload` AND core's `createFolder` at the level, so a member and a
+- **Upload folder** (owner decision 2026-10-14, inbox #424): a second level action (`depot.uploadFolder`, the "New" menu's
+  "Upload folder…"), shown by `canUploadFolder` - Depot's `upload` AND core's `createFolder` at the level, so a member and a
   `READ_WRITE` guest alike, never in an identity folder. Its picker picks a directory (`webkitdirectory`), and its handler
   takes a dropped one (`dropDirectory`). Core looks first (`host.screenDirectory`; a drop is read by core): a directory with
   `.veyq/manifest.json` at its root is an unpacked download and goes to core's import, for a member only and one per pick
@@ -127,7 +127,7 @@ reads).
   lists only files, so an empty directory is not created. Core's "New → Import…" is gone: upload recognises an archive
   itself.
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
-  FILE sibling already holds by `fileNameSlug`, replace that file after the uploader confirmed (`files.replaceConfirm`,
+  FILE sibling already holds by `fileNameSlug`, replace that file after the uploader confirmed (`depot.replaceConfirm`,
   for a member and a contributor guest alike — the one way a row's file is replaced, owner decision 2026-10-14); the
   opened file's replace asks too, naming the file and the picked one, and both questions say the old content cannot be
   restored, there being no version history (owner decision 2026-10-08, inbox #383); a file that holds no content is
@@ -146,7 +146,7 @@ reads).
   `listFiles` shows it still holds no content — best effort; a node it cannot trash stays and its retry fills it. A file
   that holds no content anyway (an upload cut off, e.g. a closed tab; a guest's, which a guest cannot delete) is filled
   by a picked file of its name without the replace question (its opened page offers an upload into it); in core's
-  trash such a file (core's `attached` false on the trash row, Files' `emptyInTrash`) says it holds no content — its
+  trash such a file (core's `attached` false on the trash row, Depot's `emptyInTrash`) says it holds no content — its
   restore stays offered (inbox #391). A failure the same file has since been uploaded over is no longer shown. A
   replace keeps the file's name (the opened file's action says so in its tooltip); a rename selects the name without its extension (`register.ts`
   `renameSelectionEnd`).
@@ -173,7 +173,7 @@ reads).
 
 ## The viewer (`FileDetail` → `FileViewer`, inbox #412)
 
-**Files makes no thumbnail and no preview blob** (a Memory keeps its derived tiers; a cover for a file is a different
+**Depot makes no thumbnail and no preview blob** (a Memory keeps its derived tiers; a cover for a file is a different
 idea, inbox #411). The file's own page reads the file when it is opened — never for a list row — and shows it above its
 facts, in the page or full screen. It is the same component for a member and for a share guest of either role (a
 share looks like the member view, inbox #401); it reads through the source's `chunks()` (the member's scope READ gate,
@@ -235,7 +235,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     the viewport (an `IntersectionObserver` with a one-viewport margin; each page is drawn at the container's width times
     `devicePixelRatio`, at most 3), and its canvas is given back (resized to 0 x 0) when far away, so a long PDF holds a
     handful of bitmaps. "Page n of N", and zoom out / zoom in / fit width (50 % to 400 % of the fitted width) are labelled
-    buttons (`files.viewer.pdf.*`, DE + EN); the scroll area takes focus, so the arrow and page keys scroll. The same
+    buttons (`depot.viewer.pdf.*`, DE + EN); the scroll area takes focus, so the arrow and page keys scroll. The same
     component serves the member and both guest roles. Full screen is the viewer's, unchanged.
   - **Text layer (select and copy).** Over each drawn canvas `PdfPages` has a host `<div class="pdf-text-layer">`; the
     engine's `render(page, canvas, cssWidth, pixelRatio, textHost)` fills it with pdf.js 6's `TextLayer`
@@ -267,7 +267,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     engine destroys the task and throws `PdfOpenError('password')`, which is the earlier statement and the download. **The
     password is a function argument and a resolved promise value and nothing else**: it is not in the viewer's state (only
     `{ wrong, busy }` is), not logged, not stored, not sent; the field is cleared the moment it is submitted, when the
-    prompt closes and on unmount; a prompt raised by a superseded or unmounted open is declined at once. `files.viewer.pdf.password*`
+    prompt closes and on unmount; a prompt raised by a superseded or unmounted open is declined at once. `depot.viewer.pdf.password*`
     (DE + EN).
   - **Limits and follow-ups** (inbox #412): there is no search across pages that are not drawn (browser find sees the
     drawn ones); no annotation layer (live links, form filling - both need an owner decision: a link is a navigation and
@@ -310,11 +310,11 @@ root). The role matrix (ADR 0080 decision 6):
 | A guest of a … link | may |
 |---|---|
 | `READ` | list the files of the shared subtree, download them |
-| `READ_WRITE` | the above; create a `FILE` under a folder of the subtree (core's `createShareNode`: core's `FolderGuestNodeRules` lets a guest create a `FOLDER` and the kinds their application declares guest-creatable, and Files declares `FILE`, `FilesGuestCreatableKinds`); upload into a file below the root, first or replacing its blob (any file below the root, a member's too); rename or move it (core's `updateShareNode`) |
-| any | **not** delete a file (nodes store no authorship), **not** upload into a `FOLDER`, **not** create a drop box (owner decision 2026-10-14: Files declares only `FILE`, so a `FILES_DROPBOX` is `422 illegal_scope`, `ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox`) |
+| `READ_WRITE` | the above; create a `FILE` under a folder of the subtree (core's `createShareNode`: core's `FolderGuestNodeRules` lets a guest create a `FOLDER` and the kinds their application declares guest-creatable, and Depot declares `FILE`, `DepotGuestCreatableKinds`); upload into a file below the root, first or replacing its blob (any file below the root, a member's too); rename or move it (core's `updateShareNode`) |
+| any | **not** delete a file (nodes store no authorship), **not** upload into a `FOLDER`, **not** create a drop box (owner decision 2026-10-14: Depot declares only `FILE`, so a `DEPOT_DROPBOX` is `422 illegal_scope`, `ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox`) |
 
 **What the web offers.** One view per kind serves a member and a guest (ADR 0079 Consequences, inbox #401): what it
-shows is `filesCapabilities(access, target)` (`web/src/features/files/capabilities.ts`, pinned row by row in
+shows is `depotCapabilities(access, target)` (`web/src/features/depot/capabilities.ts`, pinned row by row in
 `capabilities.test.ts`) — pure, every right false unless a row grants it, an unknown role or kind grants nothing:
 
 | Right | member | member, pending deletion | member, guest's identity folder | `READ` | `READ_WRITE` | `WRITE_ONLY` |
@@ -332,11 +332,11 @@ shows is `filesCapabilities(access, target)` (`web/src/features/files/capabiliti
 | a drop box's links, delete it | links with the instance's public links; delete ✓ | links only | — | ✗ | ✗ | ✗ |
 
 These are the matrix half; a right shows only where the session's data source also implements it
-(`web/src/features/files/source.ts`, `sourceCapabilities`: the guest's source has no delete and no rename, and no upload
+(`web/src/features/depot/source.ts`, `sourceCapabilities`: the guest's source has no delete and no rename, and no upload
 or move unless the link is `READ_WRITE`), so the guest's columns are the most a guest page can ever offer. A move is
 core's (`core/node/MoveNodeDialog.vue`, the host's): the row's "Move to…" asks the host through the row factory's
 (or the detail's) `move` event, and the dialog's folder browser (`MoveBrowser.vue`, one place at a time with "Move
-here") lists only places that take what `FilesNodeKindRules` takes — a file or a drop box at the root or in a folder
+here") lists only places that take what `DepotNodeKindRules` takes — a file or a drop box at the root or in a folder
 (the kinds' `placement`), never into a drop box or a guest's folder. A level's selection (core's Select mode, inbox #421)
 reads the same answers per node (`LevelRow.selection`): a file moves with it where `moveFile` says yes and is deleted with
 it where `deleteFile` does - through the source's own delete (`deleteFile(id, { reload: false })`: the selection re-reads
@@ -358,18 +358,18 @@ allowed where the nodes are; a file copies through `exportFile` / `importFile`, 
 - **The meta goes with the bytes.** A guest's file metadata is its blob's, as a member's (§ How a file is stored):
   sealed under `K_blob` and declared at `startShareBlobUploads`, so it lands only when the swap happens, and the guest
   writes no node payload at all (it has no door to one: core's guest create takes none, `updateNode` is a member's).
-  `completeShareFile` used to carry a node meta that a Files-side write put in the attach's transaction; both are gone.
+  `completeShareFile` used to carry a node meta that a Depot-side write put in the attach's transaction; both are gone.
 - **The write is decided again under the lock** (`ShareGuestGate.admittedInto`): a file trashed or moved out of the
   subtree, or a link revoked, between the guest's start and its completion refuses it (`upload_not_found`).
 - **Trash:** a file in the trash — or under a trashed folder — is not listed, its blob is `404` at `resolveShareBlob`
   (core's attachment contributor authorizes live nodes only), an upload into it `404 node_not_found`.
-- **Quota:** a guest's attachment names its identity, so the link's usage counts it (core's attachment term; Files'
+- **Quota:** a guest's attachment names its identity, so the link's usage counts it (core's attachment term; Depot's
   `UploadAdmission` reports 0) against the tenant's per-link limit; core's `AttachmentGuestIdentityUsage` keeps the
-  guest's identity while a file names it (Files stores no row of its own naming a guest, so it ships no usage).
+  guest's identity while a file names it (Depot stores no row of its own naming a guest, so it ships no usage).
 - **The web:** one view per kind for a member and a guest (inbox #401 S3). Core's page of a public share
   (`core/sharing/ShareTreePage.vue`) is core's member `LevelView` handed the guest's access and tree, so the files and the drop boxes are
   the member's rows (`levelRows.ts`); a drop box below the link opens
-  the member's `DropBoxDetail.vue` (§ The drop box). Every read and write of those views goes through Files' data source
+  the member's `DropBoxDetail.vue` (§ The drop box). Every read and write of those views goes through Depot's data source
   (`source.ts`): the guest's lists through `listShareFiles`, downloads through the link's presign (`shareChunkUrls`)
   and, for a contributor, uploads one core-queue job per file (`shareUpload.ts`: guest create → guest transport with
   the blob meta → `completeShareFile`) and re-resolves the link afterwards (`access.reload`). So a guest sees the
@@ -381,7 +381,7 @@ allowed where the nodes are; a file copies through `exportFile` / `importFile`, 
   guest's replace door (an entry with `replace`, `shareUpload.ts`). **Every replace asks first** (owner decision
   2026-10-08, inbox #383) — after the file is picked and before the guest is named, as the member's does (§ The web);
   on an opened file the contributor's question says it changes for everyone who has the link, the owner too
-  (`files.guest.replaceFileConfirm`); a file that holds no content asks nothing; after a
+  (`depot.guest.replaceFileConfirm`); a file that holds no content asks nothing; after a
   peer's replace (`stale_file`) the page offers "replace anyway" on the current blob, as a member's does. The guest names
   itself once per link through the page's one naming flow (`requestGuest`, the shell's dialog, core's `GuestNaming`).
   No rename and no delete on the guest page (nodes store no authorship); a contributor's move of a file is core's move
@@ -392,13 +392,13 @@ allowed where the nodes are; a file copies through `exportFile` / `importFile`, 
 
 ## A single file as a share root
 
-A `FILE` is a share root with **`READ` and `READ_WRITE`** (`FilesShareRoots`; inbox #378, owner principle #401: a share is
+A `FILE` is a share root with **`READ` and `READ_WRITE`** (`DepotShareRoots`; inbox #378, owner principle #401: a share is
 the member view with functions removed). Decided with it, small questions answered here:
 
 - **`WRITE_ONLY` on a file is refused** — `422 illegal_scope` on create, `invalid_role_change` on a change, nothing
   stored, and the web never offers it. A write-only guest holds no key and reads nothing back, and a file has no
   identity folder to send into; sending a file *to* someone is the drop box. (Fail closed: core's `ShareRoots` answers a
-  role Files does not list with `illegal_scope`.)
+  role Depot does not list with `illegal_scope`.)
 - **The link's guest reaches that file and nothing else.** The resolve serves the file alone (`parentId` null, no folder
   above, no sibling); `listShareFiles` lists it alone; `resolveShareBlob` authorizes its blob only. The file's key
   is the share's `wrap` under `K_share` (ADR 0080 decision 1), its name the link's own `sealedName`; every seal is bound
@@ -419,33 +419,33 @@ the member view with functions removed). Decided with it, small questions answer
   file writes: there is no folder above it to upload a file of the same name into. A member opens it from
   a click on its row in the folder's list (the row's primary opens it through the host); core's page of a public link
   (`ShareTreePage`) mounts it for the link's root — and for a file *inside* a folder link, which therefore also gets a
-  page of its own. Its data source is the same `FilesSource` (`beginReplace` is its one addition: a replace names the
+  page of its own. Its data source is the same `DepotSource` (`beginReplace` is its one addition: a replace names the
   file, so no folder is asked for). The download name is `downloadName` (the node name, else the blob's sealed name,
   plus the sealed type's extension).
 - **The link dialog is core's** (`FolderShareDialog`) with the sentences about what is shared swapped for the file's
-  (`ShareDialogCopy`, `files.share.*`; `FileShareDialog.vue` is a three-line wrapper). It offers `READ` and
+  (`ShareDialogCopy`, `depot.share.*`; `FileShareDialog.vue` is a three-line wrapper). It offers `READ` and
   `READ_WRITE` only, as it does for a folder.
 - **Delete** from the page is core's delete dialog (`deleteTitle`/`deleteCopy` of the kind) into the trash, with the
   undo toast; **rename** is core's name dialog (selecting the stem); **move** is core's move dialog.
 
 ## The drop box
 
-A **`FILES_DROPBOX`** is a Files node at the root or in a `FOLDER` (no placement rule admits anything under it), shared
-**`WRITE_ONLY` only** (`FilesShareRoots`). Its guests hold no key of it; what they send lands in **identity folders**,
+A **`DEPOT_DROPBOX`** is a Depot node at the root or in a `FOLDER` (no placement rule admits anything under it), shared
+**`WRITE_ONLY` only** (`DepotShareRoots`). Its guests hold no key of it; what they send lands in **identity folders**,
 one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_identity_id` (ADR 0080 decision 11).
 
 **A drop box downloads as a ZIP** like any other container (owner decision 2026-10-14;
 [ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
 decision 4): core's Download in its row's menu and its header (`DropBoxDetail`), for a member and a `READ` / `READ_WRITE`
 guest of a folder link above it, never its own `WRITE_ONLY` guest (core's `canDownload`). Its content is only what it was
-(`exportDropBox`, `files.drop-box`, no payload); the ZIP holds it as a directory with each guest's folder under the name the
+(`exportDropBox`, `depot.drop-box`, no payload); the ZIP holds it as a directory with each guest's folder under the name the
 detail shows it by (`Dr. Anna (2)`: core's walker takes every segment from the session's `nameOf` and lists equal names in
 that order). It **imports as a plain folder** with plain folders inside (`importsAsFolder` on its descriptor; core names no
-Files kind) - no drop key, no links, no identities, because nothing can rebuild a guest's folder or identity
+Depot kind) - no drop key, no links, no identities, because nothing can rebuild a guest's folder or identity
 ([uc.platform.export-import](../features/platform/use-cases/uc.platform.export-import.md) E5).
 
 **A drop box carries a cover** (inbox #411, core's feature - [uc.platform.node-cover](../features/platform/use-cases/uc.platform.node-cover.md)):
-Files opts it in (`FilesNodeKindRules.takesCover`, `register.ts` `cover: {}`), nothing else - the action, the dialog (choose, crop, remove), the upload, the
+Depot opts it in (`DepotNodeKindRules.takesCover`, `register.ts` `cover: {}`), nothing else - the action, the dialog (choose, crop, remove), the upload, the
 write and the display are core's, the image is the box's own blob in the `COVER` slot (not a file in it), and a **`FILE` takes none**
 (its one blob is its content; a file's own thumbnail is a different idea, deferred). The header's leading slot shows it
 (`DropBoxDetail.vue`), the row/tile and the sidebar's Favorites too; a guest of a link above sees it and sets none.
@@ -459,7 +459,7 @@ write and the display are core's, the image is the box's own blob in the `COVER`
   guest of a link above the drop box) opens drop box key → drop private key → `K_up` → `K_F` (core's tree,
   `childEntryKey`); no new seal purpose, no vector change. A guest-sealed entry that does not open leaves that folder
   out of the member's tree instead of failing it.
-- **The guest** (`components/DropBoxGuestForm.vue`, what Files' share body `DropBoxShareBody.vue` renders on the link
+- **The guest** (`components/DropBoxGuestForm.vue`, what Depot's share body `DropBoxShareBody.vue` renders on the link
   rooted at the drop box; `dropBox.ts`): names itself once — the name stays in the page until the **first file**, which
   creates the identity (`nameDropGuest`, once even for a second pick in flight) and then the folder, so a visitor who
   names itself and leaves leaves nothing on the server (inbox #385 (a)); a reload before that asks for the name again
@@ -467,10 +467,10 @@ write and the display are core's, the image is the box's own blob in the `COVER`
   the page says "You are here as …" with a "Not you?" that asks — only once a session exists — then forgets the
   session there and asks for a name again — a new identity, the old one's folder untouched; after a gone link the same
   action reads the link again first — a revoked or deleted one turns the page to "not available", inbox #393), then, with its **first file**, **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
-  Files' operation over core's `IdentityFolders`: the first call creates the folder from the guest's ciphertext, every
+  Depot's operation over core's `IdentityFolders`: the first call creates the folder from the guest's ciphertext, every
   later call (a reload, a second tab, a concurrent first upload) answers the same folder with its stored wrap. Then per
   file core's guest create **inside its own folder** (`createShareNode`: a `WRITE_ONLY` link creates only there, and
-  **only `FILE`s** — a sub-folder or any other kind is `422 illegal_scope`; Files declares it through core's
+  **only `FILE`s** — a sub-folder or any other kind is `422 illegal_scope`; Depot declares it through core's
   `WriteOnlyGuestKinds`, keyed on the link's root kind, owner decision 2026-10-08), core's
   guest transport and `completeShareFile` (core's `ShareGuestGate.target`: a `WRITE_ONLY` link names nothing else below
   its root). It sees nothing of the drop box or of others (no node served, `listShareFiles` empty) — only its files of
@@ -507,11 +507,11 @@ write and the display are core's, the image is the box's own blob in the `COVER`
   inbox #380: the guest was given that tree): the backend serves the drop box's subtree with its drop key to a guest of
   a link above (ADR 0080 decision 11), so core's walk opens the identity folders' names (`childEntryKey`) and their
   files. Core's folder page renders the drop box's `detail` — the member's `DropBoxDetail.vue`, handed the guest's
-  access and tree (inbox #401 S3) — never the `WRITE_ONLY` guest's form (Files' claimed share body, which the shell
+  access and tree (inbox #401 S3) — never the `WRITE_ONLY` guest's form (Depot's claimed share body, which the shell
   mounts for the drop box's own `WRITE_ONLY` link only): the guests' folders with their file counts, a repeated name numbered in node-id order (the
   guest's tree serves no `createdAt`, so `compareByCreation` falls to its id tie-break and the numbers can differ from the
-  member's creation order), in the guest's words (`files.dropBox.sharedHint`: only the owner deletes or moves); a folder
-  opens on core's folder page, which inside an identity folder offers no guest a write (no "New" menu, Files' rows
+  member's creation order), in the guest's words (`depot.dropBox.sharedHint`: only the owner deletes or moves); a folder
+  opens on core's folder page, which inside an identity folder offers no guest a write (no "New" menu, Depot's rows
   only download), so it lists the files with their download only. No send form, no upload, no replace, no share, no
   delete, no move — the guest's source carries no delete and the matrix grants a guest neither share nor delete; the
   server refuses each anyway (a create inside an identity folder `illegal_structure` for anyone but its identity, a
@@ -537,12 +537,12 @@ folder and its files, and when.
 
 ## Open questions
 
-- A thumbnail or cover for a file: out of scope for the viewer (inbox #412 decided Files makes no preview blobs); a cover
+- A thumbnail or cover for a file: out of scope for the viewer (inbox #412 decided Depot makes no preview blobs); a cover
   for a file is inbox #411.
 - A PDF's live links and form fields (an annotation layer: a link is a navigation and phishing vector, so it needs the
   owner's decision on a policy for where a click may go) and the WASM image decoders (a policy decision,
   `'wasm-unsafe-eval'`): § The viewer, inbox #412. (Text selection/copy, the password prompt and a plain text's Copy and
   wrap toggle are built.)
 - An operator-configurable per-file size cap (the quota only, at first).
-- The other reversible choices made while building Files wait for the owner's review: inbox #378. (Where the drop box
+- The other reversible choices made while building Depot wait for the owner's review: inbox #378. (Where the drop box
   differed from ADR 0080 decision 11, inbox #377, the owner ruled 2026-10-08 — § The drop box.)

@@ -8,7 +8,7 @@ A plain-language guide to what veyq does and why your memories stay private. No 
 ## For you
 
 - [Is my data safe?](/veyq/is-my-data-safe/)
-- [Files — and finding your way around](/veyq/files/)
+- [Depot — and finding your way around](/veyq/depot/)
 - [Sharing with people who have no account](/veyq/sharing/)
 - [People in your Memories](/veyq/people-in-your-memories/)
 - [Download and import](/veyq/download-and-import/)

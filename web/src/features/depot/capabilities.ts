@@ -1,7 +1,7 @@
 // What a Depot view may offer to whoever looks (inbox #401): one pure, FAIL-CLOSED function over core's `Access` and the
 // node on screen, so Depot's rows (`levelRows.ts`) and `DropBoxDetail` show a control only where this says yes — a
 // member and a share guest see the same view with functions removed. The matrix is written down once, in
-// `docs/apps/files.md` § Guests (ADR 0080 decision 6); this is its code. Every field defaults to false: an unknown mode,
+// `docs/apps/depot.md` § Guests (ADR 0080 decision 6); this is its code. Every field defaults to false: an unknown mode,
 // role or kind grants nothing.
 import { FOLDER_KIND } from '../../core/node/kind'
 import { folderCapabilities, type Access, type CapabilityTarget } from '../../core/access'
@@ -44,7 +44,7 @@ export const NO_DEPOT_CAPABILITIES: Readonly<DepotCapabilities> = Object.freeze(
   moveNode: false,
 })
 
-/** The Depot matrix (see the header; the table is `docs/apps/files.md`). `at` is the node on screen: a folder level whose
+/** The Depot matrix (see the header; the table is `docs/apps/depot.md`). `at` is the node on screen: a folder level whose
  *  files and drop boxes the sections show (`FOLDER`; null at a member's scope root), an opened drop box, or an opened
  *  file (`FileDetail`: the page of one file, the root of a single-file link included). On an opened file `replace`,
  *  `rename`, `share`, `deleteNode` and `moveNode` are about THAT file. */

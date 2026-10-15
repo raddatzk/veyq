@@ -137,7 +137,7 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
   bucket/uploader **names stay sealed** under `K_mem` — a WRITE_ONLY guest's under its own key, [ADR 0034](../decisions/0034-media-uploader-buckets.md),
-  [ADR 0031](../decisions/0031-uploader-public-share.md) point 7); a Files file's **uploader attribution** (the member
+  [ADR 0031](../decisions/0031-uploader-public-share.md) point 7); a Depot file's **uploader attribution** (the member
   or guest identity that uploaded its current content, on its attachment - served to members only, as `uploaderKey`
   `user:{id}` / `share:{id}`; [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Decision 8);
   per-parent blinded tokens; to a **public share's guest**, the shared node's **scope id** — every `K_mem` seal the
@@ -165,7 +165,7 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   ([ADR 0049](../decisions/0049-email-delivery-boundary.md)).
 
 **Applications widen what is visible by one fact: the node `kind`.** The kind of every node is a server-visible
-column already (`FOLDER`, `MEMORY`, `CHAPTER`, `FILE`, `FILES_DROPBOX` today). Once an application adds kinds, it also shows the operator
+column already (`FOLDER`, `MEMORY`, `CHAPTER`, `FILE`, `DEPOT_DROPBOX` today). Once an application adds kinds, it also shows the operator
 **which applications a scope uses**, and the rows, timestamps and sizes each kind produces
 ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)). Each application's concept
 doc lists the further metadata its own kinds expose ([docs/apps](../apps/README.md)).

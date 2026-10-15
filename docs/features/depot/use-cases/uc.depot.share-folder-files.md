@@ -1,6 +1,6 @@
 # UC: Files on a shared folder — guests download, contributors add and replace
 
-- **ID:** uc.files.share-folder-files
+- **ID:** uc.depot.share-folder-files
 - **Primary actor:** A **guest** holding a folder's public link — `READ` or `READ_WRITE` — with no account.
 - **Secondary actor:** The **member** who shared the folder and sees what contributors added.
 - **Goal:** Hand someone a folder's files through one link; with a contributor link, let them add files and put new
@@ -10,11 +10,11 @@
 - **Postconditions (success):** the guest sees every live file of the shared subtree with name, size and date, and
   downloads it byte for byte; a contributor's new or replaced file is a `FILE` in the subtree, its blob and its sealed
   metadata written together, counted against the link's storage limit. The role matrix and the contract are
-  [docs/apps/files.md](../../../apps/files.md) § Guests.
+  [docs/apps/depot.md](../../../apps/depot.md) § Guests.
 
 ## Main flow
 
-1. The guest opens the link; core's folder page renders Files' section at every folder of the subtree — the member's
+1. The guest opens the link; core's folder page renders Depot's section at every folder of the subtree — the member's
    own section, with what the guest's role does not allow removed (inbox #401): its files with name, size and date,
    opened under the keys the link's chain gives.
 2. **Download:** the client presigns through the link (`resolveShareBlob`, the share's subtree gate) and decrypts in
@@ -47,11 +47,11 @@
 
 ## Quality notes
 
-- A file can also be shared **on its own** ([uc.files.share-file](uc.files.share-file.md)); a file *inside* a folder link
+- A file can also be shared **on its own** ([uc.depot.share-file](uc.depot.share-file.md)); a file *inside* a folder link
   opens to the same file view (a row's info button).
 - A guest **deletes nothing** (nodes store no authorship) and the page offers no rename; a contributor moves a file
   between the subtree's folders through core's move dialog ([uc.memory.move-node](../../memory/use-cases/uc.memory.move-node.md)).
-- The metadata is the blob's, declared with the upload and written in the attach transaction, for a guest as for a member (docs/apps/files.md § How a file is stored).
+- The metadata is the blob's, declared with the upload and written in the attach transaction, for a guest as for a member (docs/apps/depot.md § How a file is stored).
 
 ## What this means for you / Was das für dich bedeutet
 
@@ -70,8 +70,8 @@ du den Link abschaltest.
 ## Related
 
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
-- **Feature:** [files](../_index.md); the application's description [docs/apps/files.md](../../../apps/files.md).
-- **Use-cases:** [uc.files.member-files](uc.files.member-files.md),
+- **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
+- **Use-cases:** [uc.depot.member-files](uc.depot.member-files.md),
   [uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md) (core's link, gate and guest
   identity), [uc.sharing.share-link-storage-limit](../../sharing/use-cases/uc.sharing.share-link-storage-limit.md).
 - **Decisions:** [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)

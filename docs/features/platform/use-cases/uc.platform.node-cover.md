@@ -7,7 +7,7 @@
   the default. Core's feature (inbox #411): the action, **the dialog (choose, crop, remove)**, the derive, the upload, the write and
   the display belong to the platform; a kind only **opts in** (`NodeKindRules.takesCover` on the server, `cover` on the web descriptor).
 - **Preconditions:** The scope is unlocked (the epoch keys are loaded), not pending deletion, the member may write it, and the
-  node's kind opted in (FOLDER — core's own, `FILES_DROPBOX`, `MEMORY`, `CHAPTER`; **not** `FILE`: a file's own thumbnail is a
+  node's kind opted in (FOLDER — core's own, `DEPOT_DROPBOX`, `MEMORY`, `CHAPTER`; **not** `FILE`: a file's own thumbnail is a
   different idea, it needs the client to understand many formats). The node is not a guest's identity folder.
 - **Postconditions (success):** The image is the node's own blob in core's `COVER` attachment slot — not a child, not a file in
   the folder — and the node's sealed `wrappedMeta` names it; both landed in ONE write. The node goes to the trash with its
@@ -100,9 +100,9 @@ schon geladen haben, lassen sich nicht zurückholen. Wer nur einen Link bekommt,
 ## Related
 
 - Feature: [Platform](../_index.md)
-- End-user view (docs site): [Files — and finding your way around](../../../../site/src/content/docs/files.md)
+- End-user view (docs site): [Depot — and finding your way around](../../../../site/src/content/docs/depot.md)
 - Use-cases: [uc.memory.cover](../../memory/use-cases/uc.memory.cover.md) (a Memory's own second source and its gallery flow),
-  [uc.files.drop-box](../../files/use-cases/uc.files.drop-box.md) (a drop box carries one),
+  [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) (a drop box carries one),
   [uc.memory.delete-node](../../memory/use-cases/uc.memory.delete-node.md) (the trash keeps a cover for a restore, the purge frees it)
 - Enabler: [en.memory.node-meta](../../memory/enablers/en.memory.node-meta.md) (the sealed `wrappedMeta` envelope the cover field lives in)
 - Decisions: [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) (core's attachments),

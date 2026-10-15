@@ -1,16 +1,16 @@
 # UC: Drop box — guests send files, each into a folder of its own
 
-- **ID:** uc.files.drop-box
+- **ID:** uc.depot.drop-box
 - **Primary actor:** A **guest** holding a drop box's `WRITE_ONLY` link, with no account.
 - **Secondary actor:** The **members** of the scope, who create the drop box, hand out its links and open what
   arrived.
 - **Goal:** Collect files from people outside the space — each sender sees only what it sent, the members see
   everything, nobody approves anything.
-- **Preconditions:** A member created a drop box (a `FILES_DROPBOX` node at the scope root or in a folder) and minted
+- **Preconditions:** A member created a drop box (a `DEPOT_DROPBOX` node at the scope root or in a folder) and minted
   a `WRITE_ONLY` link on it.
 - **Postconditions (success):** every guest identity that sent something has exactly one identity folder in the
   drop box, holding its files; the members open it; revoking the link keeps all of it. The keys and the server's part
-  are [docs/apps/files.md](../../../apps/files.md) § The drop box and
+  are [docs/apps/depot.md](../../../apps/depot.md) § The drop box and
   [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 11.
 
 ## Main flow
@@ -22,7 +22,7 @@
    ciphertext (name and key sealed under the guest's identity key), every later call — a reload, a second tab, a
    concurrent first upload — answers the same folder.
 3. Per file the client creates a `FILE` inside that folder, uploads its blob and completes it, as a contributor does
-   ([uc.files.share-folder-files](uc.files.share-folder-files.md) steps 3–4).
+   ([uc.depot.share-folder-files](uc.depot.share-folder-files.md) steps 3–4).
 4. The guest sees the files it sent in this session — nothing of the drop box or of other guests.
 5. A member opens the drop box: one folder per guest (a repeated guest name numbered at display time), each opened
    through the drop box's key → its drop key → the guest's identity key; inside, the files are read-only (download).
@@ -52,7 +52,7 @@
 ## Quality notes
 
 - **What the server learns** beyond a file share: how many identities sent something, which folder is whose, and when
-  (docs/apps/files.md § Operator-visible).
+  (docs/apps/depot.md § Operator-visible).
 - **No approval step:** whoever holds the drop box's key reads everything in it.
 - **A guest who loses its device data** cannot reach its folder again and starts a new one.
 - Where the build differs from ADR 0080 decision 11 is inbox #377, for the owner to review.
@@ -74,8 +74,8 @@ den Link ab, bleibt alles erhalten, was schon angekommen ist.
 ## Related
 
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
-- **Feature:** [files](../_index.md); the application's description [docs/apps/files.md](../../../apps/files.md).
-- **Use-cases:** [uc.files.share-folder-files](uc.files.share-folder-files.md),
+- **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
+- **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md),
   [uc.sharing.share-uploader](../../sharing/use-cases/uc.sharing.share-uploader.md) (Memories' write-only link, whose
   drop key this reuses).
 - **Decisions:** [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)

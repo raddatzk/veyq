@@ -1,8 +1,8 @@
-useCase: uc.files.share-folder-files
-feature: files
+useCase: uc.depot.share-folder-files
+feature: depot
 title: Files on a shared folder — guests download, contributors add and replace
-# Built by cr-files-application F2. Backend: ShareFilesSliceTest (core + Files) and the race class holding the
-# completion against a trash, a move out and a revoke held uncommitted; web: the member's Files rows mounted for a
+# Built by cr-files-application F2. Backend: ShareFilesSliceTest (core + Depot) and the race class holding the
+# completion against a trash, a move out and a revoke held uncommitted; web: the member's Depot rows mounted for a
 # guest (inbox #401 S3) with the real catalog and the guarded clients, the guest's wire recorded at fetch, core's folder
 # page rendering the level rows for a guest; depotShare.e2e.test.ts runs in the web-e2e job.
 acceptanceCriteria:
@@ -21,7 +21,7 @@ acceptanceCriteria:
         unit: [src/features/depot/levelRows.guest.test.ts]
         e2e: [src/features/depot/depotShare.e2e.test.ts]
   - id: a-contributor-adds-and-replaces-files
-    text: A READ_WRITE guest creates a FILE under a folder of the subtree (Files declares FILE guest-creatable, core's GuestCreatableKinds; a drop box is 422 illegal_scope, owner decision 2026-10-14), uploads into it and replaces any file of the subtree (a member's too) with the blob it saw; its metadata is the uploaded blob's own (sealed under its K_blob, declared at the guest start), so it lands with the bytes and only with them; completeShareFile writes no node payload; a stale replace is 409 stale_file and the slot keeps its blob and that blob's metadata.
+    text: A READ_WRITE guest creates a FILE under a folder of the subtree (Depot declares FILE guest-creatable, core's GuestCreatableKinds; a drop box is 422 illegal_scope, owner decision 2026-10-14), uploads into it and replaces any file of the subtree (a member's too) with the blob it saw; its metadata is the uploaded blob's own (sealed under its K_blob, declared at the guest start), so it lands with the bytes and only with them; completeShareFile writes no node payload; a stale replace is 409 stale_file and the slot keeps its blob and that blob's metadata.
     coverage:
       backend:
         integration: [ShareFilesSliceTest.aContributorCreatesAFileUploadsReplacesAndRenamesIt, ShareFilesSliceTest.aGuestsAndAMembersBlobMetaAreServedToTheGuestUnchanged, ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox]

@@ -13,14 +13,14 @@ import jakarta.enterprise.context.ApplicationScoped
 object DepotNodeKinds {
     /**
      * A file: a node holding ONE sealed blob (replaced, never versioned), with its name sealed under its parent's key like
-     * every node (docs/apps/files.md). It has no children — no rule admits a `FILE` as a parent — and its directories
+     * every node (docs/apps/depot.md). It has no children — no rule admits a `FILE` as a parent — and its directories
      * are core's `FOLDER`s. A share root with `READ` or `READ_WRITE` ([DepotShareRoots]); it is also shared through
      * any folder above it.
      */
     const val FILE = "FILE"
 
     /**
-     * A drop box (ADR 0080 decision 11, docs/apps/files.md § The drop box): a node of its own, at the root or in a
+     * A drop box (ADR 0080 decision 11, docs/apps/depot.md § The drop box): a node of its own, at the root or in a
      * `FOLDER`, shared only `WRITE_ONLY` ([DepotShareRoots]). Its children are its guests' **identity folders** — core
      * `FOLDER`s, one per guest identity, which only core's `IdentityFolders` places (Depot's `ensureShareDropFolder`): no
      * placement rule admits anything under a drop box, so a member creates, moves and renames nothing into it, and only
