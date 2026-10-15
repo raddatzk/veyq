@@ -86,58 +86,13 @@ The rest of what is specific to this target is on [Kubernetes](/veyq/run/kuberne
 Bring the stack up, then create the Server Owner over the tunnel or port-forward, connect the object store, and
 only then worry about DNS and TLS: [First-run setup and the admin console](/veyq/run/first-run/).
 
-## On Docker Compose
+## Worth knowing
 
 The admin surface's two exposure modes and the `veyq-admin` CLI are on
 [First-run setup and the admin console](/veyq/run/first-run/).
 
-**TLS is a precondition, not a preference.** `veyq.session.cookie.secure=true` is the shipped default, so over
-plain HTTP the refresh cookie is set and never sent back and **Stay signed in on this device** breaks silently; and every invitation
-link is built as `https://<domain>/tenant/accept#<token>`, so an HTTP-only instance mails links pointing at a
-scheme it does not answer. Traefik obtains a Let's Encrypt certificate over the HTTP-01 challenge, which needs
-port 80 reachable from the internet and `VEYQ_DOMAIN` resolving to this host. While you are still testing a
-deployment, point `VEYQ_ACME_CASERVER` at Let's Encrypt's staging directory. In production 5 failed validations
-lock a hostname out for an hour, and the weekly limit is on **issued** certificates — 50 per registered domain,
-which a burst of test tenants reaches ([rate limits](https://letsencrypt.org/docs/rate-limits/)). Staging
-certificates are not browser-trusted, so switch back before anyone uses the instance.
-
-**HSTS is on by default, and one switch turns it off — on both targets.** The app sends
-`Strict-Transport-Security: max-age=15552000` (180 days, no `includeSubDomains`, no `preload`) itself, alongside
-its CSP and the other security headers ([ADR 0069](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0069-backend-serves-the-web-app-shell.md)),
-and the admin container's nginx sends the same value on the admin origin
-([cc.security.csp § admin-web](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md#admin-web)), so neither Traefik nor an
-Ingress carries anything for it. The switch is `VEYQ_HSTS_ENABLED=false` in `infra/.env` under compose and
-`hsts.enabled: false` in the Helm values; it belongs to the deployment rather than to one container, so both
-origins answer to the same value. The admin container accepts exactly `true` or `false` and refuses to start on
-anything else, naming the variable. Turn it off for one of
-two reasons only: a hostname of this instance is **also** served over plain HTTP somewhere, or a proxy of your
-own in front of it already sets the header. Know the cost of having had it on: a browser that saw the header
-keeps it for the whole 180 days, switched off or not.
-
-**The config-secret volume is the point of the production compose file.** `veyq-config-secret` is mounted at `/var/lib/veyq` and
-`VEYQ_SECURITY_CONFIG_SECRET_FILE` points into it. Without it, every `up -d --force-recreate app` regenerates the
-KEK, the instance's config-secret state reads `MISMATCH` (admin console **Server → Config-secret key**, or
-`veyq-admin config-secret`), and member invites and password resets refuse with
-`503 mail_unavailable` — an instance that boots, serves every page, and cannot admit anybody.
-`scripts/validate_config_secret_persistence.py` holds the three files that have to agree about that path
-(`Dockerfile`, `VeyqConfig.kt`, `infra/docker-compose.prod.yml`) to each other on every push.
-
-**A domain routes because the app writes the routing, not because you edit the compose file.**
-`veyq-traefik-dynamic` is mounted at `/etc/traefik/dynamic` — read-write on `app`, read-only on `traefik`, which
-file-watches it — and holds exactly one generated file, which is **all** of this stack's routing: the router
-pair for `VEYQ_DOMAIN`, one per non-suspended tenant, the admin router when `ADMIN_DOMAIN` is set, and the
-services and store middleware they reference. Traefik runs no other provider, so no container mounts the Docker
-socket — a `:ro` mount of it restricts nothing about the Docker API, and the proxy faces the internet. The one
-cost: if the app cannot write the file, `VEYQ_DOMAIN` is unrouted too, and it logs that loudly; the admin
-surface's localhost port bypasses Traefik, so you keep a way in. **Never hand-edit it.** It is not configuration you maintain, it is a projection of
-the `tenant` table ([ADR 0063](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0063-database-driven-tenant-ingress.md)): the app rewrites the
-whole file on every tenant create, domain change, suspend, reactivate and at startup, so an edit survives until
-the next one of those and no longer. Nothing else is in there — no secret, no content — and it is deliberately
-**not** part of a backup: wiping the volume costs nothing, because the next start regenerates it. Adding a
-tenant does mean a new Let's Encrypt certificate order per domain, which is the one place where the ACME
-rate-limit advice above stops being about your own testing.
-
-Worth knowing rather than discovering:
+Routing, certificates and HSTS are on [Networking and TLS](/veyq/run/networking/); the config-secret volume
+and why it must persist are on [Storage and email](/veyq/run/storage-and-email/#the-config-secret-key).
 
 - **Upgrading is a procedure, not a flag change.** It has its own section — [Upgrade](/veyq/run/upgrade/) — and
   the reason it is not one line is that the schema migrates at boot with no gate and no downgrade path.

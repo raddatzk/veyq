@@ -165,3 +165,4 @@ startup regenerate.
   lockout, of which routing withdrawal is only a secondary effect).
 - [scopes-and-tenancy.md](../crosscutting/scopes-and-tenancy.md) (tenant carries a domain).
 - Run area of the docs site: [Plan your instance](../../site/src/content/docs/run/plan.md)
+- Run area of the docs site: [Networking and TLS](../../site/src/content/docs/run/networking.md)

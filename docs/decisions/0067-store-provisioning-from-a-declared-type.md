@@ -239,3 +239,4 @@ customer's infrastructure, never their data.
 - [ADR 0065](0065-admin-ui-cli-separate-service.md) (the CLI whose premise rules it out as the bootstrap's
   home).
 - [inbox #41](../inbox.md) (the SaaS model that owns the per-tenant store question and its trust decision).
+- Run area of the docs site: [Storage and email](../../site/src/content/docs/run/storage-and-email.md)

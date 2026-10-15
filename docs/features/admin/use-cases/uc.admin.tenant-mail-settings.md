@@ -99,3 +99,4 @@ bei der Einladung.
   [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) (the invite link is an admission token,
   not a key).
 - Operator view (docs site): [Running your own instance](../../../../site/src/content/docs/run/index.md)
+- Run area of the docs site: [Storage and email](../../../../site/src/content/docs/run/storage-and-email.md), [Troubleshooting](../../../../site/src/content/docs/run/troubleshooting.md)

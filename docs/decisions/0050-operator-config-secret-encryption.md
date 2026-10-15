@@ -102,3 +102,5 @@ Key-Encryption-Key the server manages as a file.** Concretely:
   runtime) and does not scale to many tenants; the whole point of per-tenant settings is runtime configuration.
 
 For Server Owners, on the docs site: [Hardening](../../site/src/content/docs/run/hardening.md).
+
+For Server Owners, on the docs site: [Storage and email](../../site/src/content/docs/run/storage-and-email.md).

@@ -80,3 +80,4 @@ nicht erst an einem Foto von dir, das nie ankommt.
   [ADR 0050](../../../decisions/0050-operator-config-secret-encryption.md),
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md).
 - Run area of the docs site: [First-run setup and the admin console](../../../../site/src/content/docs/run/first-run.mdx)
+- Run area of the docs site: [Troubleshooting](../../../../site/src/content/docs/run/troubleshooting.md)

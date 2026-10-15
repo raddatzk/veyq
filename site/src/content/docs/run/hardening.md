@@ -59,15 +59,18 @@ enough to survive a controller restart trusts every pod beside it.
 
 ## Keep the config-secret key apart
 
-The application seals each tenant's SMTP password under a key file it generates on first start, on the
+The application seals each tenant's SMTP password, and the secrets of a store of your own, under a key file it
+generates on first start, on the
 `veyq-config-secret` volume (Compose) or claim (Kubernetes; the chart keeps the claim on uninstall)
 ([ADR 0050](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0050-operator-config-secret-encryption.md)).
 It defends a leaked database backup, not a compromised host. So:
 
 - Back it up, apart from the database and the store, on a medium of its own, and encrypt the rest of the backup
   ([Backup and restore](/veyq/run/backup-and-restore/#capture)).
-- Never put it beside the database dump: the two together open every tenant's SMTP password.
-- Without it the instance boots, serves every page, and refuses member invitations and password resets.
+- Never put it beside the database dump: the two together open every secret it seals.
+- Without it the instance boots and serves every page; a tenant whose relay needs a password refuses member
+  invitations and password resets, and a store of your own is unreachable until you re-enter its credentials
+  ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key)).
 
 ## TLS, HSTS and CSP
 

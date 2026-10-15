@@ -80,3 +80,5 @@ Garage, so using one means editing the compose file, and under Helm it is not po
 For Server Owners, on the docs site: [First-run setup and the admin console](../../site/src/content/docs/run/first-run.mdx).
 
 For Server Owners, on the docs site: [Configuration reference](../../site/src/content/docs/run/configuration.md).
+
+For Server Owners, on the docs site: [Storage and email](../../site/src/content/docs/run/storage-and-email.md).

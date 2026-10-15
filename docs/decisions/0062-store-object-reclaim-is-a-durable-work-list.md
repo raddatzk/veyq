@@ -179,3 +179,5 @@ messaging pattern this codebase does not have.
   with a stated answer (the reconcile bullet above carries it), **not** the reason this arm is rejected: against
   a leak that this ADR prevents at the source and an existing stock of zero, it buys nothing, and a delete path
   that buys nothing is one more thing that can be wrong about user content.
+
+For Server Owners, on the docs site: [Operations](../../site/src/content/docs/run/operations.md).
