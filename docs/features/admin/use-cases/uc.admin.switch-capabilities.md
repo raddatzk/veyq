@@ -76,5 +76,6 @@ Sobald wieder eingeschaltet ist, öffnet es wie zuvor.
   [ADR 0089](../../../decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md),
   [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md),
   [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md).
-- **On the docs site:** [Moderation](../../../../site/src/content/docs/run/moderation.md) (the panel and the CLI
-  commands, for the Server Owner).
+- **On the docs site:** [Capabilities](../../../../site/src/content/docs/run/capabilities.mdx) (the panel, the CLI
+  commands and every entry's words, for the Server Owner) and
+  [Moderation](../../../../site/src/content/docs/run/moderation.md) (switching as one of the operator's levers).

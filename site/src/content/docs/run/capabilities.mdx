@@ -1,0 +1,179 @@
+---
+title: Capabilities
+description: The switches over what an instance offers at all — what they are, how to switch them, what each built one does, and what is designed but not built.
+sources:
+  - docs/features/admin/use-cases/uc.admin.switch-capabilities.md
+  - docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md
+  - docs/decisions/0032-capability-discovery-version-gating.md
+  - contracts/platform/capabilities.json
+---
+
+import catalog from '../../../../../contracts/platform/capabilities.json';
+
+export const entries = Object.entries(catalog.capabilities).map(([id, entry]) => ({
+  id,
+  depth: id.split('.').length - 2,
+  ...entry,
+}));
+
+A capability is a switch over what this instance offers at all: public links, groups, devices that unlock without the
+Secret Key. You decide it once, for every tenant and every member
+([ADR 0088](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)).
+
+## What a capability is
+
+**It is not a permission.** Who may do what in a space is decided inside the space, by its owner and its members'
+roles, not by you. A capability decides whether the thing is offered to anyone. When one is off, the instance leaves
+its id out of the list it publishes before sign-in (`GET /api/setup`), so the web client hides the feature, and the
+server refuses the action with `422 capability_disabled`, so a client that ignores the list is refused all the same.
+
+**The entries form a tree.** An id is a dotted path under a root: `core` for the platform, and later an
+application's own name. An entry is active only when it and every entry above it are on: the server ANDs along the
+path, and no client works it out itself. Switching a parent off therefore switches its children off. A child keeps
+its own switch while that happens: a child you switched off yourself stays off when its parent comes back on, and a
+child you left on comes back with it.
+
+**There are two levels.** You switch for the whole instance; that is built. A tenant owner is meant to switch for
+their own tenant as well, in the tenant settings of the web client, and can then only narrow what you allow, never
+widen it. That level is designed and not built (inbox #439).
+
+**Switching off never deletes stored data.** What a switch does to what already exists is
+[below](#what-acts-at-once-and-what-only-on-new-data).
+
+## Switch an entry
+
+In the admin console, **Server → Capabilities** shows the entries as a tree. Each entry shows its title, what it is
+for, and its state: **On**, **Off**, or **Off through** the parent that is off. **Switch off** first shows what
+that does to new and to existing data, in the entry's own words, and asks you to confirm. **Switch on** asks nothing.
+
+The CLI does the same
+([how to run it and sign in](/veyq/run/first-run/#the-veyq-admin-cli)):
+
+```sh
+docker compose -f infra/docker-compose.prod.yml exec \
+  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
+  admin veyq-admin capabilities list
+```
+
+| Command | What it does |
+|---|---|
+| `capabilities list` | Print the tree: each id indented by its depth, its state (`on`, `off`, or `off through <id>` naming the nearest ancestor that is off), its title, and what it is for |
+| `capabilities off <id>` | Switch the entry off, then print what that does to new and to existing data |
+| `capabilities on <id>` | Switch the entry back on. Under a parent that is still off, it stays off until the parent is on |
+
+All three print text, not JSON. `--lang en` or `--lang de` picks the language of the entries' text. Without it the
+CLI reads `LC_ALL`, then `LANG`, inside the container: German when the value starts with `de`, English otherwise.
+An id the instance does not know is refused (`capability_not_found`, exit `1`), and nothing is stored.
+
+A switch is stored in the database, so a database backup carries it. It acts on the next request, without a restart:
+the application reads the switches through an in-process cache that each write clears, which holds for the single
+replica both recipes run.
+
+## The built entries
+
+This table is generated from the catalog every client reads its words from
+([`contracts/platform/capabilities.json`](https://github.com/raddatzk/veyq/blob/main/contracts/platform/capabilities.json)),
+so it says what the console and the CLI say. Children are indented under their parent.
+
+<table>
+  <thead>
+    <tr>
+      <th>Entry</th>
+      <th>What it is for, and what switching it off does</th>
+    </tr>
+  </thead>
+  <tbody>
+    {entries.map((e) => (
+      <tr>
+        <td>
+          <div style={{ paddingInlineStart: `${e.depth * 1.5}rem` }}>
+            <strong>{e.title.en}</strong>
+            <br />
+            <code>{e.id}</code>
+          </div>
+        </td>
+        <td>
+          <p>{e.purpose.en}</p>
+          <p><strong>Off:</strong> {e.whenOff.en}</p>
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+## What acts at once, and what only on new data
+
+The rule ([ADR 0088](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+decision 5) is that a switch whose purpose an existing thing would defeat acts on that thing too, and any other
+switch refuses only what is new.
+
+- **Device switches act at once.** With `core.remember-device` off the server leaves every remembered device's key
+  out of what it hands a member at sign-in; with `core.remember-device.passwordless` off, every password-less
+  device's. It deletes neither. A member on such a device then needs the password **and** the Secret Key from the
+  Emergency Kit, and the sign-in screen says why. The password with the Secret Key always works, so nobody is locked
+  out, and switching back on lets every device unlock as before. Tell your members before you switch one off.
+  `core.device-linking` off also stops an addition that is under way; devices added before are not affected.
+- **Share switches refuse only new links, for now.** They are meant to stop existing links too, but that is not
+  built (inbox #442): today a switch refuses making, renewing and switching back on a link of its kind, and every
+  link that already exists keeps working. To stop those links now, take the tenant offline
+  ([Moderation](/veyq/run/moderation/#take-a-tenant-offline)).
+- **Feature switches refuse only what is new.** With `core.group-space` off no group can be created, and every
+  existing group stays fully usable.
+
+The off states are covered by tests; they have not yet been checked in a real browser
+against a switched instance.
+
+## Designed, not built
+
+None of the following exists yet. It is the design in ADR 0088, not a promise of what comes next or when. Each entry
+names what the server would see in order to refuse it: a switch exists only where it can.
+
+**Core entries the catalog does not hold yet.**
+
+| Entry | What the server would see |
+|---|---|
+| `core.personal-space` | the personal scope; off means no new content in it, while the scope itself (keys, favorites) stays |
+| `core.member-invites` | the member-invite endpoint |
+| `core.self-registration` (idea) | a new sign-up endpoint, off by default |
+| `core.breached-password` | the call to the breached-password service, through the CSP the server sends |
+| `core.push` (native apps) | the push services' wake-up, which carries no content |
+
+**Memories.**
+
+| Entry | What the server would see |
+|---|---|
+| `memories` | the Memory and Chapter node kinds |
+| `memories.chapters` | the Chapter node kind |
+| `memories.journal` (planned) | a node kind or blob role the server would then see |
+| `memories.gpx` (planned) | a blob role for tracks: the server would learn *that* a Memory has a track, never where |
+| `memories.faces` (idea) | a role for the face index, which is biometric data |
+| `memories.places` | the reverse geocoder, through the CSP; a place still works with a name typed by hand |
+| `memories.map` | the map tiles, through the CSP; independent of `places` |
+| `memories.public-shares`, `.contribute`, `.drop-box` | inherit from `core.public-shares`, so core switches every application's links off at once |
+| `memories.public-shares.download-originals` | the original file's blob role. Waits on a measurement: if guests stream video from the original, this switch would also stop their video playback |
+
+**Depot.** `depot` would gate its file node kind and the file content's blob role. Its own `public-shares`,
+`.contribute` and `.drop-box` would inherit from core, and its drop box would also gate creating a drop box, which
+`core.public-shares.drop-box` does for the whole instance today.
+
+An external service that is switched off would be left out of the Content Security Policy the server sends, so the
+browser blocks it. Its address would become your configuration instead of a build setting.
+
+**Beyond the entries.**
+
+- **The tenant level** (inbox #439): a tenant owner switches within what you allow, and a member's client receives
+  the effective set for their tenant after sign-in.
+- **Requirements**, values on an entry where the strictest wins: a link needs a password, a link expires within N
+  days, joining a group needs the member's consent, a remembered device asks for the password again after N days.
+- **Configuration as code** (inbox #444): declaring switches in the compose file or the Helm values instead of
+  switching them in the console.
+
+## Not switches
+
+- **Export and import** cannot be switched off, because no switch could be enforced: whoever can read something
+  holds it in plain text on their own device.
+- **Mail, the object store and ACME** are preconditions of an instance, not features of it.
+- **Quotas and limits** (a tenant's storage quota, the per-link storage limit, a file-size cap, retention periods)
+  are parameters, set where they are described, not switched.
+- **Never switchable:** derivatives, recovery (without it a forgotten password and a lost Emergency Kit lose the
+  data), the trash and the other basics of a space.

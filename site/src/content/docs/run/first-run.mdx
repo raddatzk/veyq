@@ -149,6 +149,8 @@ app.
 
   After a restore or an update, this is the reading that says the key came along
   ([Backup and restore](/veyq/run/backup-and-restore/)).
+- **Capabilities** — what the instance offers at all, as a tree of switches
+  ([Capabilities](/veyq/run/capabilities/)).
 
 ## The veyq-admin CLI
 
@@ -183,6 +185,7 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `store set --bundled` | Use the bundled store |
 | `store set --endpoint <url> --bucket <bucket> --region <region> --access-key <id> [--type S3\|GARAGE] [--public-endpoint <url>] [--garage-admin-endpoint <url>]` | Set a store of your own; the secret key comes from `VEYQ_STORE_SECRET_KEY` and the Garage token from `VEYQ_STORE_GARAGE_ADMIN_TOKEN`, never from a flag |
 | `store check` | Run the store's check and print every step; exits `1` if it failed |
+| `capabilities list` / `capabilities off <id>` / `capabilities on <id>` | Print the switches as a tree, switch one off or on; prints text, not JSON ([Capabilities](/veyq/run/capabilities/#switch-an-entry)) |
 
 Output is JSON on standard output. A failure prints one line, `veyq-admin: <reason>`, to standard error and exits
 `1`. `veyq-admin --help` prints the usage. Setup is deliberately not a command: it creates key material and an

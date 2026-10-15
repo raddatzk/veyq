@@ -136,6 +136,7 @@ export default defineConfig({
             'run/first-run',
             'run/kubernetes',
             'run/configuration',
+            'run/capabilities',
             'run/networking',
             'run/storage-and-email',
             'run/upgrade',

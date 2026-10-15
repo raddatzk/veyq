@@ -196,4 +196,6 @@ Two rules follow, so the catalog stays honest instead of being invented in paral
 
 ## Related
 
-- On the docs site: [Moderation](../../site/src/content/docs/run/moderation.md) (what the built register does) and the [Security roadmap](../../site/src/content/docs/security/roadmap.md) (the designed switches).
+- On the docs site: [Capabilities](../../site/src/content/docs/run/capabilities.mdx) (the register for the Server Owner),
+  [Moderation](../../site/src/content/docs/run/moderation.md) (switching as one of the operator's levers) and the
+  [Security roadmap](../../site/src/content/docs/security/roadmap.md) (the designed switches).
