@@ -249,9 +249,9 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
 - `./gradlew check` green in `backend/`, and `npm run generate:api && npm run check` green in `web/` and `admin-web/`.
   These were **not measured at refine**, so the implementer runs each once on `HEAD` before the first edit and records
   the exit codes as the baseline.
-- The trust-chain glob is green over the committed tree: `for f in scripts/validate_*.py; do python3 "$f"; done`. Its
-  baseline at refine is in the shared notes of the session that refined this CR; re-run it on a detached worktree of
-  `HEAD` before the first edit.
+- The trust-chain glob is green over the committed tree: `for f in scripts/validate_*.py; do python3 "$f"; done`. At refine
+  it ran on a detached worktree of `4928118d` (this CR's own commit): 57 guards, every one `rc=0`. Re-run it the same
+  way on `HEAD` before the first edit. Use `ls scripts/validate_*.py | wc -l` for the count, not this number.
 - Both inventory angles return no file outside `changes/`.
 - The structural rule this CR establishes (the catalog is a tree under `core`, and a child needs its parent) is
   promoted to a permanent guard, D10. Its bites are recorded in phase 1.
