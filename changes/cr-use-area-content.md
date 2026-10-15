@@ -70,10 +70,10 @@ phase closes only after the owner has read its pages in conversation. Done when,
       (`validate_guard_gaps.py` forges the first at that path — re-anchor it then). A section with no page yet is
       not in the sidebar. The shot list is `scripts/site_shots.py`; it also reports a German page that places other
       ids than its English page. No redirects from the old URLs: nothing was published (no remote).
-- [ ] 2 Getting started — what veyq is (spaces, Memories, Depot); accepting an invitation and creating the account
+- [x] 2 Getting started — what veyq is (spaces, Memories, Depot); accepting an invitation and creating the account
       (there is no self-sign-up: `/tenant/accept`); the Emergency Kit and Secret Key, and why losing both loses
       the data; signing in on a new device (Secret Key by paste, kit upload or QR scan).
-      *Built and checked live, waiting for the owner's read:* `getting-started/` (What veyq is, Accept an invitation,
+      *Built and checked live, read by the owner (2026-10-15):* `getting-started/` (What veyq is, Accept an invitation,
       Your Emergency Kit, Sign in), walked in the web client (German UI) on a fresh dev instance: invite by mail,
       accept, kit, sign-in by kit upload, Awaiting access, both "Stay signed in" paths, a wrong password. Not walked:
       the terms gate (phase 7 walks it) and the camera scan (no camera in the pane). Found: with "Stay signed in" on, a
