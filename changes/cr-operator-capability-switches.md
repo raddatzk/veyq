@@ -106,7 +106,28 @@ deleting them. Inbox #443 asked for this, and **it must land before V1**.
 
 ## Phases
 
-- [ ] **1 contracts: catalog texts, the API, the key-material text.**
+- [x] **1 contracts: catalog texts, the API, the key-material text.** Done in 3f5f0496 (guard + texts) and
+  dc6572a0 (the API, the key-material text, the probe bucket).
+  - **Bite:** `validate_capabilities.py` against the catalog without texts was red 21 times (`<id>: title must be
+    an object with en and de`, three fields on each of seven entries); a blank `de` and a missing `en` were each
+    red by injection; green after: `capability catalog OK: 7 capabilit(ies) serving 12 built use-case(s)`.
+  - **Guard glob:** 58 guards green. `./gradlew check` is red only at `:core:compileKotlin`: `Class
+    'InstanceResource' is not abstract and does not implement abstract members: fun listInstanceCapabilities():
+    Response!, fun setInstanceCapability(capabilityId: String!, instanceCapabilityUpdate:
+    InstanceCapabilityUpdate!): Response!`.
+  - **Names for phase 2 and 3:** operations `listInstanceCapabilities`, `setInstanceCapability`; schemas
+    `InstanceCapability`, `InstanceCapabilityText` (`{ en, de }`), `InstanceCapabilityUpdate`; 404 code
+    `capability_not_found`; 400 `invalid_request` for a missing `off`.
+  - **Deviations.** The path parameter is `{capabilityId}`, not `{id}`: `validate_id_contract_format.py` holds every
+    id-named input to `format: uuid`, so it records `capabilityId` in `NOT_A_ROW_ID` (bitten: red without it).
+    `off` is quoted in the YAML, because PyYAML reads a bare `off` as the boolean false (measured: the property came
+    out as `"false"`). The key-material description did not yet say that `RECOVERY` is withheld (only
+    `RotatedWrap` did), so it now says both. And the passwordless `whenOff` says such a device needs the
+    password **and the Secret Key**, not the password alone as D6 has it: a device holds exactly one convenience
+    wrap (`uc.account.remember-this-device` § Postconditions; `LoginView.enrolConvenienceWrap` drops the `DEVICE`
+    wrap when it enrols `DEVICE_KEY`), so without its `DEVICE_KEY` only the `PASSWORD` floor is left. Phase 4
+    measures this before it builds D6's fallback; if it changes the client so a passwordless device keeps a
+    `DEVICE` wrap, the text changes with it.
   - Order: `validate_capabilities.py` first, seen red on the catalog without texts, then the texts for all seven
     entries (D1).
   - The two operations in `instance.openapi.yaml` (D4).
