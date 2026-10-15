@@ -91,7 +91,7 @@ photo's `share:` key resolves for members only, as a non-clickable name. The buc
 with the display-name rule.
 
 **8. A file's page names its uploader.** Files got its uploader as a slice of its own, with its own contract and backend
-field (decided by the coordinator on the owner's behalf, 2026-10-14, inbox #415;
+field (decided by the coordinator on the owner's behalf, 2026-10-14, confirmed by the owner 2026-10-15, inbox #415;
 [uc.files.view-file](../features/files/use-cases/uc.files.view-file.md) step 0).
 
 - **The uploader is whoever uploaded the file's current content.** A replace moves it, as a guest's attribution already
@@ -109,7 +109,7 @@ field (decided by the coordinator on the owner's behalf, 2026-10-14, inbox #415;
   already serves, so no new plaintext and no new relation — opened under the file's key or the nearest ancestor key the
   member holds (core's reader, which Memories' buckets use too). A drop-box guest is named by its identity folder; a
   guest of a deleted link stays named; "a guest" shows only where the name does not open. Wherever a member reads a guest's
-  name - here, Memories' lightbox and buckets - it is marked as a guest's, "Ben (guest)" (inbox #433, core's
+  name - here, Memories' lightbox and buckets - it is marked as a guest's, "Ben (guest)" (inbox #433, confirmed by the owner 2026-10-15; core's
   `guestDisplayName`), because a guest names itself freely and could otherwise pass for a member.
 - **A share guest's listing carries no uploader field** ([inbox #190](../inbox.md)): the contract keeps it off the
   share's file listing, which has an item schema of its own (`ShareFileListItem`), so the member's
