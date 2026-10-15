@@ -70,8 +70,6 @@ existing data, and how to switch it, is on [Capabilities](/veyq/run/capabilities
 - **Report intake.** There is no form or address that collects abuse reports; a report reaches you however your
   members reach you.
 - **An operator action on a single share.**
-- **A share switch reaching existing links.** Switching a kind of link off stops new links of it; the links that
-  already exist keep working.
 
 These are on the security model's target; see the [Security roadmap](/veyq/security/roadmap/).
 

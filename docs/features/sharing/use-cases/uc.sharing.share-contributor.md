@@ -102,14 +102,18 @@ sequenceDiagram
 - **A2 — revoked / expired:** `enabled = false` or a passed `expiresAt` → the resolve **and** the upload
   endpoints `404`/`403`. An upload in flight stops at its next window or at its complete, whichever comes first
   (every window is authorized again, [ADR 0013 §2](../../../decisions/0013-blob-storage-presigned-direct-to-store.md));
-  already-uploaded photos remain (no retraction — see Quality notes).
+  already-uploaded photos remain (no retraction — see Quality notes). While `core.public-shares.contribute` (or
+  its parent) is switched off on the instance, an existing READ_WRITE link answers every guest endpoint as an unknown
+  link does, a `404`, and an upload in flight stops the same way; once it is back on the link serves again unchanged
+  ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md) A3, ADR 0088 decision 5).
 - **A3 — change the grant in place (cr-0119):** the curator edits an existing **READ** share and switches it to
   **READ_WRITE** (or back) from the share-management dialog — the **same link keeps working**, no new `K_share`,
   no re-wrap. `role` is plaintext authorization the server enforces per request, so the new grant bites on the next
   resolve/upload (a promote enables contributions at once; a demote 403s new uploads at once, already-contributed
   photos stay). Restricted to **READ ↔ READ_WRITE** — a **WRITE_ONLY** drop-box is its own separate action and its
   write-only promise is never flipped in place (a `422 invalid_role_change` rejects setting WRITE_ONLY or editing a
-  WRITE_ONLY share's role). Owner-gated via `updateShare` ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
+  WRITE_ONLY share's role). A promote while `core.public-shares.contribute` is switched off on the instance is a
+  `422 capability_disabled`, as creating a READ_WRITE link is (ADR 0088). Owner-gated via `updateShare` ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 - **A4 — someone else uses the same device ("Not you?", inbox #401 S2):** once named, the page says whose session
   this device holds ("You are here as Anna") with a "Not you?" that asks first, then forgets the session on the device;
   the next visitor names itself afresh, a new identity. Nothing on the server changes — what the first one added stays,

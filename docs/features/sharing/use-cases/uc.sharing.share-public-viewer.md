@@ -80,6 +80,9 @@ sequenceDiagram
 - **A1 — expiry:** a share past its `expiresAt` resolves `404` (same shape as an unknown id — non-enumerable).
 - **A2 — revoked:** `enabled = false` → the resolve **and** the gated blob endpoint `404`; a visitor who already
   downloaded ciphertext can still replay *that*, but gets nothing new (no key rotation — see Quality notes).
+- **A3 — public links switched off on the instance:** while `core.public-shares` is off, every link of every role
+  answers the resolve, the blob endpoint and every other guest endpoint exactly as an unknown id — a `404`, before any
+  password is asked — and serves again, unchanged, once it is back on ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md) A3, ADR 0088 decision 5).
 - **E1 — link without the fragment key:** the `shareId` alone is **inert** — the server returns the wrapped key,
   but without `K_share` the client cannot unwrap `K_node`, so nothing decrypts. Both halves are required.
 - **E2 — wrong / guessed id:** unknown `shareId` → `404`. The 256-bit id is unguessable; there is no enumeration.
