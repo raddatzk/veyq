@@ -138,7 +138,8 @@ changes nothing in the image.
       the deprecated gate, or render the diagrams to SVG at build time — whichever passes the gate. · Done when:
       trust-chain green, `npm run check` in `site/` green, the gate green with whatever renders the diagrams, the
       combiner rationale in ADR 0017, and the pages read with the owner in conversation before the phase closes.
-- [ ] 5 `docs/` for development — each use-case's `## What this means for you / Was das für dich bedeutet`
+- [ ] 5 `docs/` for development — **entry condition:** `cr-use-area-content` is done, so the Use pages have taken
+      in what these sections hold. Each use-case's `## What this means for you / Was das für dich bedeutet`
       becomes `## User impact` with one English line on why the feature exists for the user; a section whose
       content a Use page does not yet carry is checked against that page first (the German text is dropped, ADR
       0087 § Consequences). `validate_feature_format.py` checks `## User impact`; `docs/features/README.md`,

@@ -30,7 +30,15 @@ copy (the drift `validate_wiki_sources.py` was built after, inbox #120), and it 
 
 1. **One static documentation site, built from this repository and published to GitHub Pages**, with three
    areas, each with one source:
-   - **Use** (EN+DE) — for users; what lives in `wiki/` today moves here.
+   - **Use** (EN+DE) — for users **and space owners** (who manage their space inside the web client: members,
+     terms, email, storage); what lives in `wiki/` today moves here. Its pages are **task-first**: numbered steps
+     in the UI's own words, per language (German with *du*, as the UI), each closing with a short note on why
+     it stays private that links the Security area. They describe only what is built. The second application
+     is called **Depot** here already ([ADR 0086](0086-one-word-per-meaning.md)); while the web client still
+     labels it *Files* / *Dateien*, the Depot pages say so in one line, and the rename removes that line. Where a
+     picture helps, a page places a **screenshot placeholder** that names what the shot must show; the owner
+     supplies the images, one per language, and a missing image renders as its placeholder, never as a broken
+     build.
    - **Run** (EN only) — for administrators; the production half of `infra/README.md` moves here, and
      `infra/README.md` keeps the dev stack and cutting a release.
    - **Security** (EN only) — for researchers; a guided reading path that explains the model and links the
