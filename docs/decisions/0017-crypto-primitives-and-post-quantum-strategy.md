@@ -1,6 +1,6 @@
 # ADR 0017 — Cryptographic primitives & post-quantum strategy
 
-- Status: Accepted; X-Wing (decision 2) is not built yet — `changes/cr-hybrid-kem-is-x-wing.md`
+- Status: Accepted
 - Date: 2026-07-01
 
 ## Context
@@ -17,23 +17,11 @@ strategy; they do not choose it.
 ## Decision
 
 1. **Standard, well-reviewed primitives only — no home-grown crypto.** Symmetric content encryption is an
-   AES-256-GCM-class AEAD (already quantum-resistant at 256-bit). Wrapping to a public key is a KEM-DEM
-   composition per recipient: the KEM's shared secret goes through HKDF-SHA256 with the seal's context into an
-   AES-256-GCM key. That is HPKE-like in shape and **not** RFC 9180 HPKE, and the docs say so.
+   AES-256-GCM-class AEAD (already quantum-resistant at 256-bit); key wrapping is per-recipient, HPKE-style
+   multi-recipient.
 2. **Post-quantum from the start, by intent** — because decade-lived memories make **harvest-now-decrypt-later
-   (HNDL)** a real threat. Key wrapping uses a **hybrid KEM (X25519 + ML-KEM-768)** — secure if *either*
-   component holds — and that KEM is **X-Wing** as specified in
-   [draft-connolly-cfrg-xwing-kem-11](https://datatracker.ietf.org/doc/html/draft-connolly-cfrg-xwing-kem-11),
-   whole: its combiner `SHA3-256(ss_M ‖ ss_X ‖ ct_X ‖ pk_X ‖ label)`, its key generation from one 32-byte seed
-   (the decapsulation key), and its encodings (encapsulation key `pk_M ‖ pk_X`, 1216 bytes; ciphertext
-   `ct_M ‖ ct_X`, 1120 bytes; shared secret 32 bytes). Why X-Wing: it is the specified and formally analysed
-   hybrid for exactly this pair, with independent implementations (CryptoKit, BoringSSL, CIRCL, RustCrypto,
-   and `@noble/post-quantum`, which this suite already uses), and its omission of the ML-KEM ciphertext from
-   the combiner rests on a proven property of ML-KEM, not on an argument of ours. Its status is honest to state:
-   an **individual Internet-Draft** (Independent Submission, Informational), not an RFC and not CFRG-adopted;
-   CFRG's own generic `draft-irtf-cfrg-hybrid-kems` describes the same combiner shape and cites X-Wing for its
-   analysis. A draft can still move, so the suite pins the draft's own Appendix C vectors (decision 4) and a
-   change to the draft cannot silently change ours. **Signatures** (login auth, key-directory, derivative-signing) are **not** HNDL-urgent —
+   (HNDL)** a real threat. Key wrapping targets a **hybrid KEM (X25519 + ML-KEM-768)** — secure if *either*
+   component holds. **Signatures** (login auth, key-directory, derivative-signing) are **not** HNDL-urgent —
    there is no harvest-now-decrypt-later for a one-time verification — so PQ urgency is deliberately asymmetric:
    **high for encryption (now)**, **low for signatures (Ed25519 now → hybrid ML-DSA later)**.
 3. **Crypto-agility is non-negotiable.** A suite is named by a **versioned suite id**, and its seals are bound to
@@ -58,8 +46,7 @@ strategy; they do not choose it.
    this file. The statements it asserts too are the **Secret-Key proof** over a cold-credential request
    ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2) and the change-email **auth attestation**
    (`auth_attestation`, ADR 0074 Decision 8): both stacks build their signed bytes, so a vector pins them. Pinning a new primitive still means **adding a vector first, then making the
-   implementation green** — never the reverse. One group is a **cross-implementation** anchor rather than a
-   regression pin: the hybrid KEM is held to X-Wing's published vectors, which other implementations produced.
+   implementation green** — never the reverse.
 5. **The server never chooses a cost parameter.** A key-derivation profile travels with each wrap so that a
    later profile stays readable (rule 3), but a client derives only with a profile it would itself write — today
    exactly one Argon2id profile, the one the vectors pin — and refuses any other before deriving. A new profile
@@ -86,20 +73,7 @@ strategy; they do not choose it.
   stacks that must agree on those bytes; since the native drop the backend asserts against it only for the
   Secret-Key proof statements and the change-email attestation (rule 4), so for everything else that cross-stack-parity role is dormant until a
   second independent implementation exists.
-- **Rejected — home-grown crypto:** unreviewed constructions are a foot-gun; rejected outright. The suite's
-  first hybrid KEM broke this rule without saying so: its own combiner,
-  `HKDF-SHA256(ikm = lp(ss_M) ‖ lp(ss_X), salt = SHA-256(lp(ct_M) ‖ lp(ct_X) ‖ lp(pk_M) ‖ lp(pk_X)), "veyq/v1/kem")`,
-  over separately generated X25519 and ML-KEM keys. Nothing found it unsound, and it bound more than X-Wing
-  does, but no doc recorded a reason for it or an analysis of it, and the first question of anyone reviewing the
-  suite is why it is not the specified construction. It was replaced **before V1**, while every database is
-  still recreated and suite `v1` could change in place; after V1 the same move costs a second suite and the
-  per-artifact suite label of decision 3.
-- **Rejected — only X-Wing's combiner over our own keys:** keeping the two separately generated keys and
-  swapping only the combiner is not X-Wing — its key generation, encodings and published vectors would not
-  apply, and the cross-implementation anchor of decision 4 is lost.
-- **Rejected for now — HPKE with a post-quantum KEM (`draft-ietf-hpke-pq`):** it would standardise the wrap
-  layer as well, but it is a working-group draft still moving, and the wrap layer above X-Wing is the common
-  KEM-DEM composition (HKDF, then AES-256-GCM). Worth re-asking when that draft is an RFC.
+- **Rejected — home-grown crypto:** unreviewed constructions are a foot-gun; rejected outright.
 - **Rejected — classical-only / defer PQ entirely:** rejected for *encryption*, because decade-lived memories
   make HNDL a real present threat; accepted (for now) only for *signatures*, per the asymmetry above.
 - **Applied by [ADR 0012](0012-content-key-hierarchy.md)** (the key hierarchy this crypto protects); the
