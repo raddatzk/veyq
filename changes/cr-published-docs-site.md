@@ -96,7 +96,7 @@ changes nothing in the image.
       release* and links the Run area. · Done when: trust-chain green, `python3 scripts/chart_meta_check.py`
       green, `npm run check` in `site/` green; bite: removing the image's `cosign verify` line from the Run page
       turns `validate_release_identity.py` red, and it names the new file.
-- [ ] 4 Security area — a reading path for researchers, at the depth ADR 0087 decision 1 sets (explain and point
+- [x] 4 Security area — a reading path for researchers, at the depth ADR 0087 decision 1 sets (explain and point
       exactly; byte formats only linked). Each page declares its `sources:` in `docs/`, links the normative docs on
       GitHub, describes only what is built, and claims nothing beyond § What holds today:
       - **Start here** — what operator-blind means and what it does not cover; the client trust tiers
