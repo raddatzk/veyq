@@ -100,3 +100,4 @@ bei der Einladung.
   not a key).
 - Operator view (docs site): [Running your own instance](../../../../site/src/content/docs/run/index.md)
 - Run area of the docs site: [Storage and email](../../../../site/src/content/docs/run/storage-and-email.md), [Troubleshooting](../../../../site/src/content/docs/run/troubleshooting.md)
+- End-user view (docs site): [Email for your space](../../../../site/src/content/docs/space-owners/email.mdx)

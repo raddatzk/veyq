@@ -73,7 +73,7 @@ den Link ab, bleibt alles erhalten, was schon angekommen ist.
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - End-user view (docs site): [Collect files with a drop box](../../../../site/src/content/docs/depot/drop-boxes.mdx)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md),
@@ -83,3 +83,4 @@ den Link ab, bleibt alles erhalten, was schon angekommen ist.
   decision 11, [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) § the drop
   key.
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md).
+- End-user view (docs site): [Ask people to add photos](../../../../site/src/content/docs/sharing/request-uploads.mdx)

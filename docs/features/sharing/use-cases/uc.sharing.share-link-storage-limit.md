@@ -80,3 +80,4 @@ Papierkorb geleert ist.
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) §3 (the per-file ceiling beside it),
   [ADR 0030](../../../decisions/0030-contributor-public-share.md) §6,
   [ADR 0031](../../../decisions/0031-uploader-public-share.md) (the abuse controls it joins).
+- End-user view (docs site): [Storage and upload links](../../../../site/src/content/docs/space-owners/storage.mdx)

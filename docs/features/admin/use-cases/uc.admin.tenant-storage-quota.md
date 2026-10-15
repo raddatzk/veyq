@@ -77,3 +77,4 @@ werden nur Größen, die der Server ohnehin sieht — nie, was auf deinen Fotos 
   [ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md) (the Server-Owner surface),
   [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) (one store connection today).
 - Run area of the docs site: [Plan your instance](../../../../site/src/content/docs/run/plan.md)
+- End-user view (docs site): [Storage and upload links](../../../../site/src/content/docs/space-owners/storage.mdx)

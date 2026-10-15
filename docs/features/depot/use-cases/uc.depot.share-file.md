@@ -61,7 +61,7 @@ verschlüsselt, und über diesen Link kann niemand den Rest deines Ordners sehen
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md) (a folder link carries its files),
   [uc.depot.member-files](uc.depot.member-files.md),

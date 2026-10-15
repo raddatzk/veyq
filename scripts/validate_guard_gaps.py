@@ -1238,8 +1238,12 @@ def forge_wiki_pair_declares_fewer(root: pathlib.Path) -> str:
 def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
     # Every markdown link from the first declared docs/ source back to its English page is unlinked (kept as
     # text): one link left standing would keep the guard green, which is a bite that never landed.
-    for page in sorted((root / SITE_PAGES).glob("*.md")):
-        if page.name == "index.md":
+    # Every English page, in any section folder and of either suffix: the Use area keeps its pages in folders
+    # (cr-use-area-content), so a root-only glob ran out of pages once the last one moved into its section.
+    pages = (root / SITE_PAGES)
+    english = (p for p in pages.rglob("*") if p.suffix in {".md", ".mdx"} and not p.relative_to(pages).parts[0] == "de")
+    for page in sorted(english):
+        if page.relative_to(pages).as_posix() == "index.md":
             continue  # the landing page declares nothing
         for s in _site_sources(page):
             doc = root / s
@@ -1254,9 +1258,9 @@ def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
             text = doc.read_text()
             stripped = link.sub(unlink, text)
             if stripped == text:
-                raise ForgeError(f"{s} carries no link to {SITE_PAGES}/{page.name} to remove")
+                raise ForgeError(f"{s} carries no link to {page.relative_to(root)} to remove")
             doc.write_text(stripped)
-            return f"{s} no longer links back to {SITE_PAGES}/{page.name}"
+            return f"{s} no longer links back to {page.relative_to(root)}"
     raise ForgeError(f"no English page under {SITE_PAGES} declares a docs/ source — re-anchor this forgery")
 
 

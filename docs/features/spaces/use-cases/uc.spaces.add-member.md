@@ -172,6 +172,6 @@ kann.
   invite this member invite extends)
 - Concept: [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md), [Security Model → key-directory
   trust](../../../crosscutting/security-model.md)
-- End-user view (docs site): [Who gets into your space](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.md)
+- End-user view (docs site): [Who gets into your space](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
 - End-user view (docs site): [Accept an invitation](../../../../site/src/content/docs/getting-started/accept-an-invitation.mdx)

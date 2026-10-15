@@ -126,3 +126,4 @@ werden sie gelöscht. Du bekommst nie Zugriff auf die private Gruppe von jemande
 - Sibling use-cases: [uc.spaces.delete-group](uc.spaces.delete-group.md) (the lifecycle reused),
   [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) (group removal + rotation),
   [uc.spaces.add-member](uc.spaces.add-member.md) (the tenant roster's other half)
+- End-user view (docs site): [Invite and manage members](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)

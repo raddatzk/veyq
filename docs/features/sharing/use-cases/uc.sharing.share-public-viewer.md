@@ -123,7 +123,7 @@ im Footer erklärt die Details.
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - Feature: [Sharing](../_index.md)
 - Decisions: [ADR 0029](../../../decisions/0029-public-viewer-share.md) (this share's resource + anonymous access
   path), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (the `K_node` second-wrap keying),
@@ -134,3 +134,5 @@ im Footer erklärt die Details.
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md)
 - Related: [Memory](../../memory/_index.md) (what a Memory is — the thing being shared)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
+- End-user view (docs site): [Create a link](../../../../site/src/content/docs/sharing/create-a-link.mdx)
+- End-user view (docs site): [Change, switch off, renew and delete links](../../../../site/src/content/docs/sharing/manage-links.mdx)

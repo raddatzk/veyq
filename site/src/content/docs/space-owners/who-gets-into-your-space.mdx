@@ -1,0 +1,57 @@
+---
+title: "Invite and manage members"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.add-member.md
+  - docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md
+  - docs/features/spaces/use-cases/uc.spaces.remove-tenant-member.md
+  - docs/features/spaces/use-cases/uc.spaces.set-space-icon.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+If you own a shared space, you decide who is in it. Everything here is under **Settings → Members**: the menu at the
+bottom of the sidebar, then **Settings**, then **Members** under **Shared space**. Members see the list too; only you
+see the buttons.
+
+## Invite someone
+
+Your space must be able to send email first ([Email](/veyq/space-owners/email/)).
+
+1. Choose **Invite member**.
+2. Enter their **Email address** and choose **Send invite**.
+
+<Screenshot id="owners-invite" shows="The Invite member dialog with the Email address field and the Send invite button" />
+
+The invitation goes to them by email, and only there. There is no link on your screen to copy or forward: an
+invitation is an admission ticket, and a ticket that travels through whoever looks at your screen can end up with the
+wrong person. They create their account from the mail:
+[Accept an invitation](/veyq/getting-started/accept-an-invitation/).
+
+Under **Pending invites** you see who has not joined yet. **Send again** mails the invitation once more; **Cancel
+invite** makes its link stop working.
+
+## After they join
+
+A new member shows **Awaiting access** until the key to the space reaches them. That happens by itself: any member's
+device, yours or another one's, locks a copy of the key to the newcomer the next time it is online. Then they show
+**Active**. The server only passes the locked copy along; it can never let anyone in behind your back.
+
+## Remove a member
+
+1. Choose **Remove member** on their row.
+2. If they might have copied links to things in the space, tick **Also turn off every link in this space**.
+3. Confirm.
+
+They lose access to the space and its groups. What they already saw, they may have kept. A group they owned alone
+passes on or is closed.
+
+You cannot make another member an owner of the shared space here; that is possible only for a
+[group](/veyq/spaces/group-members/).
+
+## Give the space an icon
+
+Choose **Add icon** next to the space's name, pick an image, move it into the square and choose **Save icon**. Every
+member sees it in the sidebar. **Remove icon** brings back the initial.
+
+The key to your space never reaches the server: members' devices hand it to each other, locked to each one:
+[Is my data safe?](/veyq/privacy/is-my-data-safe/)

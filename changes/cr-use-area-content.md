@@ -138,6 +138,16 @@ phase closes only after the owner has read its pages in conversation. Done when,
 - [ ] 7 Sharing and For space owners — share with people who have no account (roles, note, password, expiry,
       renew, revoke); turn off every link in a space; what a guest sees. For owners: invite and manage members,
       remove a member, terms, email settings, storage and the upload-link limit.
+      *Built and checked live, waiting for the owner's read:* `sharing/` — the old `sharing.md` became its landing
+      (same URL) with Create a link, Ask people to add photos, Change/switch off/renew/delete links, What a guest sees;
+      `space-owners/` — Who gets into your space became the task page Invite and manage members (same URL, the space
+      icon on it), plus Terms of use, Email for your space, Storage and upload links. Walked: a Memory link with note,
+      must-accept and password, opened as a guest through both gates; revoke and re-activate; Request upload; invite,
+      pending, cancel; terms from the template, saved, the member gate (the owner too); the email and storage panels and
+      the upload-link limit saved. Not walked: renew and delete of a link, a folder link with contribute as a guest,
+      removing a member, the guest terms gate (the guest tab was signed out with the member). Corrected against the
+      code: the role picker has two choices (upload-only is its own Request upload button); the per-link storage limit
+      is the owner's, space-wide; members cannot be made space owners.
 - [ ] 8 Privacy and Help — the two Privacy pages re-read against the new sections and linked into the Security
       area; Help: lost Emergency Kit, lost device, a changed-key notice, "Start a list over", the offline page,
       forgotten password (pointing to its page). At the end, `npm run shots` is handed to the owner as the list
