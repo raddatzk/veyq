@@ -192,7 +192,7 @@ def utc_now() -> str:
 # emptiness gate must not read as data. Each is excluded for its own reason — see [Database.populated_tables] — and the
 # list is short and named rather than pattern-matched, because "which tables are not data" is a judgement about
 # this schema and not something a regex can decide.
-NOT_DATA = ("flyway_schema_history", "veyq_instance", "veyq_store_setting")
+NOT_DATA = ("flyway_schema_history", "veyq_instance", "veyq_store_setting", "veyq_capability_switch")
 NOT_DATA_SQL = ", ".join(f"'{t}'" for t in NOT_DATA)
 
 
@@ -305,7 +305,7 @@ class Database:
         and refusing it was always the wrong reading of A5.
 
         **A5's purpose is untouched: nothing here accepts a POPULATED instance.** The predicate is every table
-        holding zero rows, with exactly two exclusions, each for a stated reason:
+        holding zero rows, with these exclusions, each for a stated reason:
 
           - `flyway_schema_history` is the SCHEMA's own record, not data. A migrated instance necessarily has
             rows here and an unmigrated one cannot be a target at all.
@@ -317,6 +317,10 @@ class Database:
             before restoring (which is the order the restore runbook gives, so the bundled bucket exists) must not
             find the restore refused for it. The dump replaces it wholesale too: the restored setting wins, its
             secrets sealed under the restored config-secret key.
+          - `veyq_capability_switch` is the capability switches (ADR 0088 decision 12): one row per register entry
+            the Server Owner switched off in the console, instance configuration and no member's data. A switch set
+            on the new install before the restore must not refuse it either; the dump replaces the table, so the
+            restored instance's switches win.
 
         The table set is read out of `information_schema` rather than listed here, so a table a future migration
         adds is covered without anyone remembering to add it (changes/README.md § a guard derives its anchor set

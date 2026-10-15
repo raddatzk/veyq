@@ -176,7 +176,7 @@ The tool from before the fix, run the same way, gave `0:0 600` and `ABSENT`. The
 owner on the same directory, so the tool takes the same branch, but that exact invocation is still derived. The
 tool's owner rule is held by `scripts/instance_backup_selftest.py`, without Docker or root.
 
-The store's **setting** now travels with the database: it is a row (`veyq_store_setting`, the one table the
+The store's **setting** now travels with the database: it is a row (`veyq_store_setting`, a table the
 emptiness gate ignores), its secrets sealed under the config-secret key, so with leg (c) restored they open again.
 A **bundled** setting is a reference to the hint of the install it runs on, so it works on the new install
 whatever that install's Garage secrets are. The bundled store's own bucket, access key and single-node layout are

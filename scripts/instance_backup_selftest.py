@@ -264,7 +264,9 @@ def not_data_cases() -> None:
     check("every table the gate excludes is one a migration creates (flyway's own record aside)",
           all(t in created for t in ib.NOT_DATA if t != "flyway_schema_history"),
           str(sorted(t for t in ib.NOT_DATA if t != "flyway_schema_history" and t not in created)))
-    check("the exclusion list is the three named tables, no pattern", len(ib.NOT_DATA) == 3, str(ib.NOT_DATA))
+    check("the gate excludes the capability switches, which a Server Owner may set before a restore",
+          "veyq_capability_switch" in ib.NOT_DATA)
+    check("the exclusion list is the four named tables, no pattern", len(ib.NOT_DATA) == 4, str(ib.NOT_DATA))
 
 
 # The vector `backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.
