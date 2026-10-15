@@ -149,11 +149,12 @@ function acceptNote() {
  *  visitor got past its gate, so they have read it. */
 const bodyHead = computed(() => (head.value?.noteAcceptance ? { ...head.value, noteByLocale: {} } : head.value))
 
-// The security-doc footer link (ADR 0026 trust-tier honesty) — the published wiki, locale-aware.
+// The security-doc footer link (ADR 0026 trust-tier honesty) — the published docs site (ADR 0087), locale-aware: the
+// German page sits under /de/ at the English page's path.
 const securityDocUrl = computed(() =>
   locale.value === 'de'
-    ? 'https://github.com/raddatzk/veyq/wiki/sind-meine-daten-sicher'
-    : 'https://github.com/raddatzk/veyq/wiki/is-my-data-safe',
+    ? 'https://raddatzk.github.io/veyq/de/is-my-data-safe/'
+    : 'https://raddatzk.github.io/veyq/is-my-data-safe/',
 )
 
 /** What renders this share behind the gates, or null (the explicit unavailable state): a `WRITE_ONLY` link's drop page
