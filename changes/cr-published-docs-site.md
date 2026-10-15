@@ -142,9 +142,11 @@ changes nothing in the image.
       in what these sections hold. Each use-case's `## What this means for you / Was das für dich bedeutet`
       becomes `## User impact` with one English line on why the feature exists for the user; a section whose
       content a Use page does not yet carry is checked against that page first (the German text is dropped, ADR
-      0087 § Consequences). `validate_feature_format.py` checks `## User impact`; `docs/features/README.md`,
-      `docs/ai/README.md` (§ Two documentation audiences, § State vs. flow) and the root `CLAUDE.md` repository
-      shape describe `site/` instead of `wiki/`. · Done when: trust-chain green, the bilingual locator returns
+      0087 § Consequences). `validate_feature_format.py` checks `## User impact`, and `docs/features/README.md` and
+      `docs/ai/README.md` § Two documentation audiences describe `## User impact` instead of the bilingual section.
+      (That `docs/features/README.md`, `docs/ai/README.md` and the root `CLAUDE.md` name `site/` rather than the
+      deleted `wiki/` was pulled forward on 2026-10-15, because the old wording was false the day `wiki/` went.)
+      · Done when: trust-chain green, the bilingual locator returns
       nothing, `grep -rln "Was das für dich bedeutet" docs` returns nothing; bite: a use-case without
       `## User impact` turns `validate_feature_format.py` red.
 

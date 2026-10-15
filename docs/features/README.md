@@ -1,7 +1,7 @@
 # Features
 
 Product capabilities. Each feature is a folder with an overview (`_index.md`), its **use-cases**, and its
-**enablers**. A use-case is the unit of the trust chain *and* carries the plain-language account a wiki page
+**enablers**. A use-case is the unit of the trust chain *and* carries the plain-language account a site page
 draws on; an enabler is shared foundation that several use-cases build on.
 
 > **What belongs in which kind of doc** (use-case vs enabler vs crosscutting vs ADR vs architecture) is
@@ -23,7 +23,7 @@ Four different kinds of record — keep them distinct:
 | Answers | *What can a user **do**?* | *What foundation makes use-cases possible?* | *Why did we **decide** it this way?* | *How/when do we **build** it?* |
 | Nature | end-user-visible goal (perceived value) | structural/infra; value only **through** the use-cases it serves | a settled choice + its rejected alternatives | a phased **work order** + acceptance |
 | Durable state? | yes (durable truth) | yes (durable truth) | yes (durable truth) | **a record** of work, not state — links to the truth, never copies it |
-| Wiki source? | **yes** (the bilingual section) | **no** end-user section | no | no |
+| Site source? | **yes** (the bilingual section) | **no** end-user section | no | no |
 | Test/trust-chain unit? | yes | yes (still verified) | no (a rationale, not a flow) | no — it *produces* the tested `uc.`/`en.` |
 | Example | log in, set device security, share a Memory | `en.spaces.personal-scope`, `en.memory.tree` | unlock methods (ADR 0005), content-key hierarchy (ADR 0012) | cr-0026 (builds `en.spaces.personal-scope`), cr-0027 (builds `en.memory.tree`) |
 
@@ -61,8 +61,8 @@ required sections, numbered flow steps, and the EN+DE pair. What it cannot check
 
 ## What this means for you / Was das für dich bedeutet
 **EN —** plain language.  **DE —** dieselbe Aussage.
-The plain-language source a wiki page draws on. The page itself is written by hand and names this doc
-in its `speaks-for` header; this doc links the page back under ## Related.
+The plain-language source a site page draws on. The page itself is written by hand and names this doc
+in its `sources:` frontmatter; this doc links the page back under ## Related.
 
 ## Related
 Actors, cross-cutting concepts, decisions (ADRs), related use-cases.
@@ -74,11 +74,12 @@ the next implementer guessing at the sequence. If a paragraph explains a rule ra
 `## Quality notes`; if it explains a structure, it belongs in the enabler. (`uc.memory.place` was four bold
 paragraphs and no steps for months — correct, rich, and unusable as a build order.)
 
-The bilingual section is the plain-language material behind `wiki/`, **not** the wiki itself. The wiki is a
-small set of hand-written topic pages, each spanning several docs, and nothing generates it. What keeps a page
-from drifting silently away from its docs is an address, not a derivation: line 1 of every page declares the
-docs it speaks for and its other-language pair, and each declared doc under `docs/` links the page back, so a
-change to the doc shows which published page to re-read (`scripts/validate_wiki_sources.py`).
+The bilingual section is the plain-language material behind the site's Use pages, **not** those pages. They are
+hand-written, one per task or topic, each spanning several docs, and nothing generates them. What keeps a page
+from drifting silently away from its docs is an address, not a derivation: every page declares the docs it speaks
+for in its `sources:` frontmatter, its German translation sits at the same path under `de/`, and each declared doc
+under `docs/` links the page back, so a change to the doc shows which published page to re-read
+(`scripts/validate_wiki_sources.py`).
 
 ## Enabler format
 

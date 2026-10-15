@@ -51,7 +51,8 @@ Five rules follow:
   - `docs/architecture/`, `docs/crosscutting/`, `docs/features/<feature>/use-cases/`, `docs/decisions/`
     (internal engineering docs, **English**),
   - `contracts/` (OpenAPI + crypto vectors),
-  - `wiki/` (the **published** end-user GitHub Wiki — plain language, **EN+DE**).
+  - `site/` (the **published** documentation site — Use in plain language **EN+DE**, Run and Security in English;
+    [ADR 0087](../decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)).
   - State is only updated — never a dumping ground for raw ideas.
 - **Flow** = what we're *changing*: `docs/inbox.md` (raw topics) → `changes/` (change-requests).
 
@@ -298,10 +299,11 @@ A refined CR nails **decisions, not keystrokes**:
 ## Two documentation audiences
 
 - **Internal** (`docs/`): precise, English, for devs + agents. The technical security model lives here.
-- **Published** (`wiki/`): plain language, **EN+DE**, for the **non-technical end user** who wants to
-  know *what they can do* and *why their data is safe*.
+- **Published** (`site/`): the Use area in plain language, **EN+DE**, for the **non-technical end user** and the
+  space owner who want to know *what they can do* and *why their data is safe*; the Run area (English) for Server
+  Owners; the Security area (English) for researchers.
 - **Hand-written pages that name their source.** Each use-case carries a short plain-language
-  "What this means for you / Was das für dich bedeutet" section (EN+DE), the material a wiki page draws on.
+  "What this means for you / Was das für dich bedeutet" section (EN+DE), the material a Use page draws on.
   The pages are written by hand, one per topic, and each declares the docs it speaks for, which link it back
   ([`../features/README.md`](../features/README.md) § use-case format).
 
@@ -387,7 +389,7 @@ this section only points at it (rule 2) — assembling this picture by hand each
   right (e.g. the media derivatives before the gallery). Correctness + clean structure first; speed-to-demo
   is not a goal.
 - **Language.** Converse with the user in the language they use; **document and implement in English**
-  (docs, code, identifiers, commits). The published `wiki/` is the intentional bilingual EN+DE exception. German
+  (docs, code, identifiers, commits). The published site's Use area is the intentional bilingual EN+DE exception. German
   user-facing text follows [neutral-first inclusive language](../crosscutting/cc.inclusive-language.md).
 - **Diagrams as inline Mermaid.** Where a diagram genuinely clarifies, embed it as a ` ```mermaid `
   fenced block directly in the markdown. Diagrams-as-code only — no binary image files. Skip diagrams that

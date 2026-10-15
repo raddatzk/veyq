@@ -48,8 +48,10 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   else is shared: no UI, no router, no state. `npm ci` runs from the repo root; each package still proves
   itself with its own `npm run check`.
 - `docs/` — internal engineering state (English) + working flow (`ai/`, `inbox.md`).
-- `wiki/` — **published** end-user GitHub Wiki: plain language, **EN+DE**, focused on what you can do
-  and "your data is safe, here's why".
+- `site/` — the **published** documentation site (Astro Starlight, GitHub Pages; its own package outside the npm
+  workspace, [ADR 0087](docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)):
+  **Use** (plain language, **EN+DE**, for users and space owners), **Run** (EN, for Server Owners) and
+  **Security** (EN, for researchers). Each page names the `docs/` it speaks for in `sources:`.
 - `changes/` — the **live** work order + any open review backlog; a CR is deleted once done.
 
 ## How we work
