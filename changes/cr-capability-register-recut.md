@@ -284,7 +284,7 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   "Über QR-Code anmelden" and "Auf diesem Gerät angemeldet bleiben"; `/settings/pairing` opens "Gerät hinzufügen" and its
   nav entry is there. `npm run check`: the full run timed out on 13 files under load ~190, those files passed on their own
   (612 tests), build and all `verify:*` green. A file's share dialog was not driven (no file uploaded).
-- [ ] **4 docs + coverage.** Edit the docs rows of the inventory in place (current state, no addendum). In the
+- [x] **4 docs + coverage.** Edit the docs rows of the inventory in place (current state, no addendum). In the
   coverage file:
   - `operator-disable-enforced` cites phase 2's slice tests, one per gate, for "a switched-off id is omitted and
     refused". Its *operator* half (a Server Owner switches it) is gapped with the reason: not switchable in a built
