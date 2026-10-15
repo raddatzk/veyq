@@ -35,9 +35,12 @@ endpoint via the **vendor-neutral AWS SDK for Java v2** (not any single vendor's
 R2, Backblaze B2, Wasabi, Garage, … — or the **bundled Garage** an operator runs alongside the stack
 (`docker compose --profile s3`; **Garage** is S3-compatible, AGPL, and built for self-hosting — it replaced
 MinIO when the latter's OSS server was archived in 2026 and its successor AIStor went commercial, cr-0029).
-A configured S3 store is a **hard requirement of any real instance**: in `%dev` and `%prod` a missing/blank
-`veyq.blob-store.endpoint` is a **fail-loud startup error** (media is not an optional feature — an instance
-without a byte path is misconfigured, not gracefully degraded). The `InMemoryBlobStore` survives **only in the
+A configured S3 store is a **hard requirement of any real instance**: outside `%test` an instance with no
+store set refuses every upload with `store_unavailable` and cannot create a tenant until a store has passed its check
+(media is not an optional feature — an instance without a byte path is misconfigured, not gracefully degraded).
+*(Edited when [ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md) was built: the
+store is a Server-Owner setting now, so the boot no longer fails on a blank endpoint, and the `veyq.blob-store.*`
+keys named below are the setting's fields.)* The `InMemoryBlobStore` survives **only in the
 `%test` profile** for the hermetic slice suite (metadata + wraps + the declare/verify control plane, no byte
 transport) — it is **never** a dev/prod fallback. Store credentials come from operator env, are never persisted
 to the DB, never logged, masked in any config dump, and never returned by any endpoint.

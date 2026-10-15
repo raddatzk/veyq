@@ -26,7 +26,11 @@
    matters — with the app down the database gains no rows, so no row can appear whose object the later store
    capture missed (ADR 0056 §2).
 3. The operator **mirrors the bucket** — the object namespace as the store serves it over S3, not the store's
-   on-disk directories (ADR 0056 §3).
+   on-disk directories (ADR 0056 §3). The capture is cold, so no app is running to sign for the tool: the
+   operator **supplies the store's credentials for this run** ([ADR 0089](../../../decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
+   decision 7). For the bundled store the recipe's environment already holds them (the tool derives the S3 key pair
+   from the bundled admin token); for a store of their own they are the ones entered in the admin console, which
+   never shows them again.
 4. The operator **copies the config-secret key file** to a destination of its own, **never into the capture
    beside the dump**: together the two open every tenant's SMTP password (ADR 0056 §1). This is the leg that is
    forgotten, and the only one whose absence lets a restore succeed and still be broken. Everything the capture
@@ -36,13 +40,15 @@
 **Restore — onto an instance that holds no data.**
 
 6. The operator brings up a **freshly installed** instance on the target and stops its application again: that
-   one start migrated the schema and **recreated the store's configuration** — bucket, access key, layout —
-   which is not restored because it was never state (ADR 0056 §4 of Context; the app provisions it,
-   [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md)). It holds no data (A5).
+   one start migrated the schema and, for the bundled store, **recreated its configuration** — bucket, access
+   key, layout — which is not restored because it was never state (ADR 0056 §4 of Context; the app provisions it
+   from the bundled hint, [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md)). It holds
+   no data (A5). The **store setting** is data, not configuration: it is a database row, so step 7 brings it back.
 7. The operator **loads the database dump**. It replaces the fresh schema wholesale, migration history included,
    so the instance is at the version it was captured at. The target may run the backup's release or a newer one
    (A9); a backup newer than the target is refused before anything is written (A10).
-8. The operator **pushes the mirrored objects back** into that bucket.
+8. The operator **pushes the mirrored objects back** into that bucket, with the credentials supplied as for the
+   capture.
 9. The operator **puts the config-secret key file**, from wherever it was kept, where the application expects
    it, on storage that survives a container being recreated, **readable by the application's runtime user** — a
    key the application cannot read reports `ABSENT` and refuses invites and resets exactly as a missing one does.
@@ -53,7 +59,9 @@
 11. The operator reads the instance's **config-secret state** as the Server Owner, on the admin channel (the
     admin console's Server section or `veyq-admin`) — not through a tenant's mail settings, which only that
     tenant's owner may read. A match is what says leg three arrived; a
-    mismatch is the fingerprint doing its job (A2). Then a person signs in and **opens a Memory that contains
+    mismatch is the fingerprint doing its job (A2). The operator also **checks the store** (Server → Store, or
+    `veyq-admin store check`): the restored setting must reach its store, its credentials sealed under the restored
+    key ([uc.admin.configure-object-store](uc.admin.configure-object-store.md)). Then a person signs in and **opens a Memory that contains
     media** — the only assertion that exercises all three legs at once, because the row, the object and the key
     that seals the SMTP settings are three different failures with the same symptom of "it looked fine".
 
@@ -65,7 +73,9 @@
   a valid URL and a `404` — no server-side error, nothing in a log, a broken thumbnail as the only sign
   (ADR 0056 § Context 2). Redo the capture; a partially captured backup cannot be repaired after the fact.
 - **A2 — The config-secret key was not captured.** The instance starts, serves content, and reports
-  `configSecretState: MISMATCH`. Member invites and password resets refuse with `503 mail_unavailable`
+  `configSecretState: MISMATCH`. The store's own credentials are sealed under the same key, so media are
+  unreachable until the Server Owner enters them again in the console (configure-object-store A4); a bundled store
+  is unaffected, because its setting refers to the hint. Member invites and password resets refuse with `503 mail_unavailable`
   ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)). Content is unaffected — the
   key seals operator config, never content. Two ways out: restore the key file, or have each tenant owner
   re-enter their SMTP password, which re-seals it under the new key. A restore reaches this state only
@@ -89,9 +99,15 @@
   has no way to produce a target that is initialised in one respect and untouched in the other. What is refused
   is an instance that has been **used**: any row of real data, including the rows a half-finished restore just
   wrote.
-- **A6 — The target store is not the one the source used.** Supported by construction: the capture is the S3
-  namespace, so any S3-compatible store accepts it, and the backend signs vendor-neutrally. Only the endpoint,
-  credentials, bucket and region change, and all four are configuration.
+- **A6 — The target store is not the one the source used.** The capture is the S3 namespace, so any
+  S3-compatible store accepts the objects, and the backend signs vendor-neutrally. What differs is where the
+  *setting* comes from. A **bundled** setting is a reference to the hint of the install it runs on, so a new bundled
+  store, even under another bucket name the new recipe's hint carries, works as it stands. A store of the
+  operator's own comes back as the setting the source held — its endpoint and bucket are in the restored database,
+  and they are fixed once blobs exist ([configure-object-store](uc.admin.configure-object-store.md) A3) — so the
+  objects go back into that same endpoint and bucket; only its credentials can be re-entered. Moving a restored
+  instance onto a *different* own store is not supported here: it is the blob-moving case that ADR 0089 decision 6
+  leaves out of scope.
 - **A7 — The restore is a rollback after a failed upgrade.** This is the *reason* the backup exists as a
   precondition of upgrading (ADR 0056 §6): the schema migrates at boot with no gate and the migration set has no
   downgrade path, so the previous image cannot simply be started again. Restore the backup taken before the

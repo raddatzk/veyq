@@ -47,8 +47,9 @@ Forces:
 
 1. **A `type` on the store connection.** Two values to begin with: `garage`, which veyq can bring from
    *running* to *usable* end to end, and `s3`, which covers every other S3-compatible store. `s3` is the
-   **default**, and under it veyq provisions **nothing at all**; the bundled deployments set `garage`
-   themselves, which is exactly the case where veyq owns both sides.
+   **default**, and under it veyq provisions **nothing at all**; the bundled deployments pass the
+   app a hint ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md) decision 3)
+   and the Server Owner chooses the bundled store, which is `garage` — exactly the case where veyq owns both sides.
 
    **Nothing at all, and not "only the generic steps" — the distinction is the whole safety of the default.**
    Two of the six steps do generalise (`bucket create`, and `PutBucketCors`), so "run just those under `s3`" is
@@ -78,15 +79,23 @@ Forces:
    pins `StoreReclaimSweep` as the single caller of `blobStore.delete` precisely so object deletion has exactly
    one arm. Provisioning must not become a second one.
 
-3. **Configuration is checked at boot; the network work is not.** The endpoint check
-   (`BlobStoreStartupCheck`) stays as it is — a blank endpoint outside `%test` still fails startup, because it
-   is a local, instant, config-only fact and [ADR 0013 §1](0013-blob-storage-presigned-direct-to-store.md)
-   makes a byte path a hard requirement. Provisioning is the opposite kind of act: it reaches another
-   container over the network, and a `StartupEvent` observer that can fail on an unreachable dependency is how
+3. **The store configuration never gates the boot, and neither does the network work.** *(Edited when
+   [ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md) was built; this
+   decision first said a blank endpoint outside `%test` fails startup.)* The store is a Server-Owner setting in
+   the database, so at boot there may be none: the instance starts, answers `/api/setup` and refuses uploads with
+   `store_unavailable` until a store is set and has passed its check ([ADR 0013 §1](0013-blob-storage-presigned-direct-to-store.md)'s
+   byte path is required of a *working* instance, and a tenant cannot be created without one). What the boot
+   still refuses are the local, instant facts about the environment's own part — the bundled hint's bucket
+   name, and an upload retention that outlasts the presign TTL (`BlobStoreStartupCheck`). Provisioning is the
+   opposite kind of act: it reaches another container over the network, and a `StartupEvent` observer that can
+   fail on an unreachable dependency is how
    [ADR 0063](0063-database-driven-tenant-ingress.md) restart-looped a production stack into serving nothing at
    all. So provisioning **runs in the background, retries with a bound, and never gates the boot** — an
    instance whose store is not yet provisioned still answers `/api/setup` — and its outcome is **readable on
-   the Server-Owner instance surface**, not only in a log. A log line reaches whoever is already looking at
+   the Server-Owner instance surface**, not only in a log. It runs from the stored setting of type *Garage*, or
+   from the bundled hint, and again when that setting changes; what the Server Owner *checks* afterwards
+   (bucket, probe object, CORS preflight) is [ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
+   decision 2, and writes nothing but its probe object into a store of type *S3-compatible*. A log line reaches whoever is already looking at
    logs; the failure it describes reaches the operator as a photo that will not upload, which is the
    experience this decision exists to remove. The nearest precedent for such a field is `configSecretState`,
    and it is the right one: server self-description, no user data.
@@ -143,10 +152,11 @@ customer's infrastructure, never their data.
   correct — a shared path that "mostly" branches is the version of this that stops being bounded. A second
   bundled store would add a third value rather than change the shape. What it does **not** do is make the *data* path vendor-specific —
   `S3BlobStore` stays the vendor-neutral AWS SDK client CLAUDE.md's dependency rule requires.
-- **The app holds one more operator secret**, the Garage admin token, alongside the store credentials it
-  already holds. It stays in the environment; nothing here puts a credential in the database, so
-  `application.properties`' standing claim that store credentials are *"never persisted, logged, or returned"*
-  remains true.
+- **The Garage admin token has two homes, by who owns the store.** The bundled stack's token stays in the
+  environment (the bundled hint: Garage's own container needs it at its start, and the bundled S3 key pair is
+  *derived* from it, so nothing is sealed for the bundled case). A Garage store the Server Owner enters has its
+  admin token sealed in the database under the config-secret key like the S3 secret
+  ([ADR 0050](0050-operator-config-secret-encryption.md)) — write-only on every surface, never returned or logged.
 - **A per-tenant store later has one trap, and it is not where anyone would look.**
   `veyq_store_reclaim` carries `storage_key` and `chunk_count` and nothing else, and `StoreReclaimStore.record`
   is `@Transactional(MANDATORY)` — the tombstone is written *in the same transaction that deletes the row*, so
@@ -178,16 +188,18 @@ customer's infrastructure, never their data.
   a sidecar in front of it. Redefining the gate fixes both targets with one change, where a compose-shaped
   remedy would have fixed neither.
 - **The bucket's default name is fixed once an instance is installed.** Neither recipe sets
-  `veyq.blob-store.bucket`, so every install runs on the default, and `GarageStoreProvisioner.ensureBucket`
+  `veyq.bundled-store.bucket`, so every bundled install runs on the default, and `GarageStoreProvisioner.ensureBucket`
   creates whatever the setting names when no bucket answers to it. A changed default would therefore hand every
   upgraded install a new, empty bucket: its media stays in the old one, every presigned read fails, and the
   reclaim sweep deletes against a bucket that never held the objects — S3 answers a delete of a missing key with
   success, so the old bytes are never reclaimed either. An install that must change the name pins the old one in
   its configuration instead, which every route follows ([ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)).
   The default in `application.properties` carries the same warning, where the next person to change it looks.
-- **Runtime-editable store settings stay out of reach for a specific reason.** `S3BlobStore` caches presigners
-  in a `ConcurrentHashMap` keyed by resolved endpoint and never invalidates it — correct while the connection
-  is fixed at boot, and the first thing that must change if it ever is not.
+- **The store is runtime-editable, so nothing caches its connection.** `SwitchingBlobStore` reads the current
+  resolution on every call and rebuilds its delegate — the signing client and `S3BlobStore`'s presigner cache —
+  only when the resolution is a different object, so a changed setting replaces both together. Once the first blob
+  exists, type, endpoint and bucket are fixed ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
+  decision 6): the presigner cache is correct because the store a stored blob lives in cannot change under it.
 - **Rejected — publish `veyq-garage-init` as a third image.** It works, and it makes a permanent release
   artifact out of a container whose only contribution is owning a shell. Every release would sign and version
   it; every operator would pull it once and never think about it again.

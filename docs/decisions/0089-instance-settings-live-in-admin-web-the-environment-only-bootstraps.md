@@ -1,6 +1,6 @@
 # ADR 0089 — Instance settings live in admin-web; the environment only bootstraps
 
-- Status: Accepted; nothing of it is built (`changes/cr-store-connection-in-admin-web.md`)
+- Status: Accepted; built for the object store (`cr-store-connection-in-admin-web`)
 - Date: 2026-10-15
 
 ## Context
@@ -67,7 +67,7 @@ Garage, so using one means editing the compose file, and under Helm it is not po
 - Configuration-as-code ([inbox #444](../inbox.md)) is a later, optional layer over these settings — a declared
   value that wins and shows as fixed in admin-web — not a second place to keep them.
 - ADR 0050's single global fingerprint becomes a per-value one, so re-entering one secret cannot hide that another
-  is still sealed under a lost key; ADR 0050 and ADR 0067 decision 3 are edited when this is built.
+  is still sealed under a lost key; ADR 0050 and ADR 0067 decision 3 were edited when this was built.
 - The backup tool's store credentials and the restore procedure change: a restored instance carries its store
   setting in the database, sealed under the restored key; a bundled one reads the new install's hint.
 - **Rejected:** keeping the store in environment variables (shell access to change, a restart to apply, a log to

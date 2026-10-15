@@ -40,7 +40,7 @@
 5. When that client asks for media, the server signs the presigned URL for **the resolved tenant's own
    registered domain**, read from the `tenant` table rather than echoed back from the request's header. The
    client fetches the bytes from the origin it is already on, so no CORS policy has to exist for it to work.
-   This is the signing mode's **default** and one of three (`veyq.blob-store.signing-mode`,
+   This is the signing mode's **default** and one of three (the bundled hint's `veyq.bundled-store.signing-mode`; a store the Server Owner enters signs its public endpoint verbatim, or its own endpoint when it has none,
    [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) Decision 5): it is the right
    one exactly while the store is served on the tenant's own domain by this deployment's proxy, which is what
    step 3 arranges. A5 carries the two shapes where it is not, and which mode is in force is **deployment
