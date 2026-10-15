@@ -96,13 +96,25 @@ store credentials from the operator.
       from `VEYQ_STORE_SECRET_KEY` / `VEYQ_STORE_GARAGE_ADMIN_TOKEN`, never flags; `store check` prints every step
       and exits 1 on a failed check. Browser pass (own scratch DB + jar of c0c73a6a, e2e profile): bundled store
       chosen, checked, a tenant created, then a wrong bucket failed at `BUCKET` with the server's detail.
-- [ ] 4 recipes + tooling — compose, `.env.example`, Helm values, schema and templates keep only the bundled hint
+- [x] 4 recipes + tooling — compose, `.env.example`, Helm values, schema and templates keep only the bundled hint
       (Garage still gets its own secrets); `.run/Run Backend.run.xml`, the dev and e2e profiles and
       `scripts/run_web_e2e.py` set the store through the hint or the API; `instance_backup.py` takes the store
       credentials from the operator for the run (the bundled case from the recipe's environment); the guards follow.
       · Done when: `python3 scripts/chart_meta_check.py` and the compose guards green; the web e2e suites green
       including the backup rehearsal and the upgrade proof (run named); a fresh compose instance uploads after
       choosing the bundled store and nothing else.
+      *Built (what phase 5 starts from):* compose and the chart pass `VEYQ_BUNDLED_STORE_{ENDPOINT, PUBLIC_ENDPOINT,
+      ADMIN_ENDPOINT, ADMIN_TOKEN}` (the chart adds `SIGNING_MODE=store-origin`) and nothing else; compose's
+      `VEYQ_S3_ACCESS_KEY/SECRET_KEY` and the chart's `secrets.s3AccessKey/s3SecretKey` are gone (Garage keeps
+      `GARAGE_ADMIN_TOKEN`, `GARAGE_RPC_SECRET`); `chart_meta_check.py` (xix) holds the app container to the hint.
+      `instance_backup.py` reads `VEYQ_BUNDLED_STORE_ENDPOINT` + `VEYQ_BUNDLED_STORE_ADMIN_TOKEN` (the pair derived by
+      `derive_bundled_credentials`, one vector pinned in the self-test and `BundledStoreCredentialsTest`) or an own
+      store's `VEYQ_BACKUP_STORE_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET/REGION`; the `VEYQ_BLOB_STORE_*` names are gone.
+      The e2e harness derives the same pair, sets the group bucket as `VEYQ_BUNDLED_STORE_BUCKET`, and
+      `e2eBootstrap.birthInstance` chooses and checks the bundled store before its tenant. **Phase 5 still owes:**
+      `site/.../run/backup-and-restore.md` (lines naming `VEYQ_BLOB_STORE_*`), `run/kubernetes.md` (the `s3AccessKey`
+      sentence), and `infra/.env.example`'s `VEYQ_S3_*` lines (inert now, still listed; the file was not editable in the phase-4 session). Not run: the production compose stack end to end (needs published images and a real domain) — its app environment is `docker compose config`-checked and the same hint drives the e2e stack that uploads.
+
 - [ ] 5 docs — ADR 0067 decision 3 and ADR 0050 edited to what is built; `uc.admin.configure-object-store`'s
       coverage refs; the restore use-case's store and credential steps; the Run pages' store and backup sections
       (unless `cr-run-area-content` is past them, then that CR's pages). · Done when: trust-chain green and
