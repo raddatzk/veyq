@@ -1542,6 +1542,17 @@ carries the same marker (*"until `cr-…` lands"*). `cr-queued-rotation-owners-o
 dependence on the granter lock over an inventory, a caveat, an owner answer and a planned exception; the sibling
 removed the lock one commit before implementation began, and only the brief's warning found all four.
 
+
+### Two CRs that write the same page name each other, and split it by section
+
+`cr-run-area-content` and `cr-store-connection-in-admin-web` both rewrote `site/src/content/docs/run/` the same day:
+one fixed the pages' backup, upgrade and install procedures, the other moved their store and config-secret steps onto
+the new model. Neither CR named the other's sections, so the two sessions edited the same three files uncommitted at
+once, one of them was emptied mid-edit (§ *In a shared working tree, a file is read whole…*), and every commit after
+that had to be built from `HEAD` plus one session's hunks. When a refine finds that another live CR edits a file this
+one edits, both CRs say so in their Context, with who owns which section, and the second to implement starts from the
+first's commit rather than beside its working copy.
+
 ### "Which one is mine?" is a flag, not an id — and dropping the id is the stronger answer
 
 **When a read hands back a collection of per-party blobs and the client only needs to find its own, the field
