@@ -59,11 +59,11 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
   return {
     default: defineComponent({
       name: 'MemoryDetailStub',
-      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'caps'],
+      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'rights'],
       emits: ['toggleFavorite', 'rename', 'delete', 'openChapter', 'createChapter', 'share', 'shareUpload', 'metaUpdated'],
       setup: (p) => () => h('div', {
-        class: 'detail-stub', 'data-shareable': String(p.caps.share), 'data-share-upload': String(p.caps.shareUpload),
-        'data-upload': String(p.caps.upload), 'data-key': String(p.memoryKey?.[0]),
+        class: 'detail-stub', 'data-shareable': String(p.rights.share), 'data-share-upload': String(p.rights.shareUpload),
+        'data-upload': String(p.rights.upload), 'data-key': String(p.memoryKey?.[0]),
       },
         `${p.node.name}|${(p.chapters ?? []).map((c: { name: string }) => c.name).join(',')}`),
     }),
@@ -318,7 +318,7 @@ describe('MemoryHomeView over the real registry', () => {
     expect(dialogs.map((s) => s.attributes('data-key')), "the chapter's own key, not its Memory's (9)").toEqual(['7', '7'])
     // the node's kind travels with it, so the application's dialog can say "chapter" (5b.5)
     expect(dialogs.map((s) => s.attributes('data-kind'))).toEqual(['CHAPTER', 'CHAPTER'])
-    // the offer the detail's capability function made reaches the dialog as a prop (the host never reads it again)
+    // the offer the detail's rights function made reaches the dialog as a prop (the host never reads it again)
     expect(dialogs[0].attributes('data-contribute')).toBe('true')
   })
 
@@ -420,7 +420,7 @@ describe('MemoryHomeView over the real registry', () => {
 })
 
 // cr-node-key-hierarchy 5b.3: a FOLDER is shareable (core's descriptor), so its level view offers the share button
-// exactly as a Memory's detail does — descriptor AND capability — and the share opens FOLDER's share dialog (core's,
+// exactly as a Memory's detail does — descriptor AND right — and the share opens FOLDER's share dialog (core's,
 // pre-registered by the registry, P4c) with the folder's own key from the chain, never Memories' dialog.
 describe('MemoryHomeView sharing a folder', () => {
   const shareButton = (w: Mounted) => w.find(`.veyq-node-header button[aria-label="${t('share.share')}"]`)

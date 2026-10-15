@@ -95,7 +95,7 @@ reads).
   Its **primary click opens** the file's own page (`FileDetail`); **download is its one first-class action** (a button on
   the row, beside core's own favorite heart, which every kind's row has - `core/favorites`, ADR 0068 §10), and **rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**
   (into core's trash, restored from core's trash dialog — or at once from the "moved to the trash" toast's Undo, core's
-  `trashUndo.ts`, inbox #385 (c)) sit in the row's one "more" menu, each `shown` by `depotCapabilities` narrowed to the
+  `trashUndo.ts`, inbox #385 (c)) sit in the row's one "more" menu, each `shown` by `depotRights` narrowed to the
   doors the session's source carries (fail closed: a guest gets the same row with fewer actions). **A row has no
   replace action** (owner decision 2026-10-14): in a folder, a file's content is replaced by uploading a file of the
   same name, which asks first (below), for a member and a contributor guest alike; an upload of that name also fills a
@@ -314,8 +314,8 @@ root). The role matrix (ADR 0080 decision 6):
 | any | **not** delete a file (nodes store no authorship), **not** upload into a `FOLDER`, **not** create a drop box (owner decision 2026-10-14: Depot declares only `FILE`, so a `DEPOT_DROPBOX` is `422 illegal_scope`, `ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox`) |
 
 **What the web offers.** One view per kind serves a member and a guest (ADR 0079 Consequences, inbox #401): what it
-shows is `depotCapabilities(access, target)` (`web/src/features/depot/capabilities.ts`, pinned row by row in
-`capabilities.test.ts`) — pure, every right false unless a row grants it, an unknown role or kind grants nothing:
+shows is `depotRights(access, target)` (`web/src/features/depot/rights.ts`, pinned row by row in
+`rights.test.ts`) — pure, every right false unless a row grants it, an unknown role or kind grants nothing:
 
 | Right | member | member, pending deletion | member, guest's identity folder | `READ` | `READ_WRITE` | `WRITE_ONLY` |
 |---|---|---|---|---|---|---|
@@ -332,7 +332,7 @@ shows is `depotCapabilities(access, target)` (`web/src/features/depot/capabiliti
 | a drop box's links, delete it | links with the instance's `core.public-shares.drop-box` (not the READ leaf); delete ✓ | links only | — | ✗ | ✗ | ✗ |
 
 These are the matrix half; a right shows only where the session's data source also implements it
-(`web/src/features/depot/source.ts`, `sourceCapabilities`: the guest's source has no delete and no rename, and no upload
+(`web/src/features/depot/source.ts`, `sourceRights`: the guest's source has no delete and no rename, and no upload
 or move unless the link is `READ_WRITE`), so the guest's columns are the most a guest page can ever offer. A move is
 core's (`core/node/MoveNodeDialog.vue`, the host's): the row's "Move to…" asks the host through the row factory's
 (or the detail's) `move` event, and the dialog's folder browser (`MoveBrowser.vue`, one place at a time with "Move
@@ -386,7 +386,7 @@ allowed where the nodes are; a file copies through `exportFile` / `importFile`, 
   itself once per link through the page's one naming flow (`requestGuest`, the shell's dialog, core's `GuestNaming`).
   No rename and no delete on the guest page (nodes store no authorship); a contributor's move of a file is core's move
   dialog (inbox #358). Inside a guest's identity folder
-  (§ The drop box) no guest is offered a write (the capabilities). A guest-mode mount of each view proves it calls no
+  (§ The drop box) no guest is offered a write (the rights). A guest-mode mount of each view proves it calls no
   authenticated client and reads nothing of the member's world (`levelRows.guest.test.ts`,
   `DropBoxDetail.guest.test.ts`).
 

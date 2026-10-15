@@ -50,7 +50,7 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
   return {
     default: defineComponent({
       name: 'MemoryDetailStub',
-      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'caps', 'source'],
+      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'rights', 'source'],
       emits: ['rename'],
       setup: (p, { emit }) => () =>
         h('div', { class: 'detail-stub' }, [h('h1', p.node.name), h('button', { class: 'detail-rename', onClick: () => emit('rename') }, 'rename')]),

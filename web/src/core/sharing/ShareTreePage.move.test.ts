@@ -3,7 +3,7 @@
 // guest's door (`placeShareNodeAsGuest` after the page's naming flow) — real crypto for the subtree, the real router and
 // PrimeVue, the clients guarded (`test/guestMode.ts`: an authenticated one throws and is recorded), every step a DOM
 // click. The registry is a fresh one (FOLDER is core's) with one kind "an application" registers, its row factory exposing
-// a move action per node where its capability says (as Depot's rows do; inbox #407: a folder's own move is its NodeHeader
+// a move action per node where its right says (as Depot's rows do; inbox #407: a folder's own move is its NodeHeader
 // action once it is open, not an action on its list item). Pinned: a READ_WRITE guest moves within its subtree only, through its link, the
 // request carrying the re-wrapped key and the version it was built on; a READ guest, and the link's root, offer none.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -78,7 +78,7 @@ function head(role: ShareRole): PublicShareHead {
   }
 }
 
-/** An application's row factory: a move action per node, shown where its capability says (here: a READ_WRITE guest), and
+/** An application's row factory: a move action per node, shown where its right says (here: a READ_WRITE guest), and
  *  the same answer for a selection of the level (inbox #421) - no delete, as no guest deletes a node. */
 const moveRows: LevelRowsFactory = (ctx, host) => {
   const contributes = () => ctx.value.access.mode === 'guest' && ctx.value.access.role === ShareRole.ReadWrite

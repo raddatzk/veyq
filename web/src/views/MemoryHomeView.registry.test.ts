@@ -67,8 +67,8 @@ import type { LevelRowsFactory } from '../core/node/levelRow'
 import { titlesOf } from '../test/levelRows'
 
 // A detail renders whether a share is POSSIBLE for it, from what the host handed it: the instance's public links (the
-// access) AND its kind's descriptor (the capability target core builds from the registry) — every application's
-// capability function needs both for a share.
+// access) AND its kind's descriptor (the rights target core builds from the registry) — every application's
+// rights function needs both for a share.
 const Detail = defineComponent({
   props: ['node', 'access', 'tree'],
   setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${(p.access as Access).mode === 'member' && (p.access as Access & { mode: 'member' }).publicShares && targetOf(p.tree as TreeSource, p.node).shareable}`),
@@ -164,7 +164,7 @@ describe('MemoryHomeView fail-closed rules', () => {
     expect(unsupported[0].find('.pi-images').exists(), 'a registered kind keeps its icon').toBe(true)
   })
 
-  it('shareable comes from the descriptor AND the capability: a descriptor that says no wins over the capability', async () => {
+  it('shareable comes from the descriptor AND the right: a descriptor that says no wins over the right', async () => {
     const r = createRegistry()
     r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: false, shareDialog: Share })
     holder.reg = r

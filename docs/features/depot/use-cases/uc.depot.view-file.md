@@ -77,7 +77,7 @@
   layer of plain text spans over it (no frame, no link, no script, no eval, no WebAssembly, no network but the app's origin); no `<iframe>`, `<object>` or inline
   SVG; the blob URL's type is the sniffed one; the media route sets `Content-Type` from the sniffed container.
 - **Memory is bounded per kind** (image 64 MiB, PDF 64 MiB and 1000 pages, text 1 MiB, media streamed); a larger file is never pulled whole.
-- **A share looks like the member view:** the same component and the same capability rules for every role.
+- **A share looks like the member view:** the same component and the same rights rules for every role.
 
 ## What this means for you / Was das für dich bedeutet
 

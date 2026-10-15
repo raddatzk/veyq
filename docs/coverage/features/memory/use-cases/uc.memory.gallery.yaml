@@ -98,7 +98,7 @@ acceptanceCriteria:
           - src/core/favorites/favoritesPrivacy.test.ts
           - src/core/favorites/favorites.test.ts
           - src/core/favorites/favorites.wire.test.ts
-          - src/core/favorites/capabilities.test.ts
+          - src/core/favorites/rights.test.ts
           - src/core/favorites/favoriteActions.test.ts
           - src/core/favorites/heart.test.ts
           - src/features/memory/components/MemoryDetailHost.heart.test.ts

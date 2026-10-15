@@ -15,7 +15,7 @@
 ## Main flow
 
 1. On a node it may move — a folder's card, an opened Memory's or chapter's header, a file's row, a drop box's card, a
-   guest's folder in a drop box — the user chooses **Move to…**. What is offered is the application's capability function for whoever looks (a member: any node,
+   guest's folder in a drop box — the user chooses **Move to…**. What is offered is the application's rights function for whoever looks (a member: any node,
    out of a drop box too; a `READ_WRITE` guest: a node a folder of its subtree holds — never the link's root, never in
    or of a guest's folder; a `READ` or `WRITE_ONLY` guest: nothing).
 2. Core's move dialog is a **folder browser**, not a list of every destination (owner decision 2026-10-14, replacing
@@ -120,10 +120,10 @@ genannt, der Rest wird verschoben. Ein Verschieben lässt sich sofort rückgäng
   [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) (a guest's folder moved out),
   [uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md) (a guest's tree operations)
 - Applications: [docs/apps/memories.md](../../../apps/memories.md), [docs/apps/depot.md](../../../apps/depot.md) (the
-  capability matrices)
+  rights matrices)
 - Decisions: [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   (decisions 1, 3, 4, 6, 10, 11), [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
-  (one view per kind, capabilities)
+  (one view per kind, rights)
 - End-user view (docs site): [Move things](../../../../site/src/content/docs/spaces/move-things.mdx)
 - End-user view (docs site): [Select several things at once](../../../../site/src/content/docs/spaces/select-several.mdx)
 

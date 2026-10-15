@@ -24,22 +24,22 @@ acceptanceCriteria:
         unit:
           - src/features/memory/memoryParticipants.test.ts
   - id: guest-sees-no-participants
-    text: The interface shows a guest no participants in any share view - the `participants` capability is false for every share role, so there is no section, avatar, header action or profile link, and the header reads and requests nothing for it - while the sealed meta a share serves still lists the opaque ids (the accepted residual, pinned by a test); no name snapshot is ever stored.
+    text: The interface shows a guest no participants in any share view - the `participants` right is false for every share role, so there is no section, avatar, header action or profile link, and the header reads and requests nothing for it - while the sealed meta a share serves still lists the opaque ids (the accepted residual, pinned by a test); no name snapshot is ever stored.
     coverage:
       web:
         unit:
-          - src/features/memory/capabilities.test.ts
+          - src/features/memory/rights.test.ts
           - src/features/memory/components/MemoryDetail.guest.test.ts
           - src/views/ShareView.memory.test.ts
           - src/features/memory/components/MemoryParticipants.test.ts
-          - src/features/memory/components/MemoryDetail.caps.test.ts
+          - src/features/memory/components/MemoryDetail.rights.test.ts
   - id: header-chips-and-picker
     text: A member sees the participants as overlapping letter avatars (up to three; past three the third slot is a "+N") and, in a popover opened by hover, focus or tap, every participant by name (real name, else username, read from the tenant's member list) linking to the profile - a former member greyed without a link - and - where the meta may be written, never during a pending scope deletion, in a personal scope or on a chapter - a "Participants" action (`pi-user-plus`) in the header's action bar that opens a picker (checkboxes with a name search) over the scope's current members; with no participant the line under the title renders nothing (no text, no link).
     coverage:
       web:
         unit:
           - src/features/memory/components/MemoryParticipants.test.ts
-          - src/features/memory/components/MemoryDetail.caps.test.ts
+          - src/features/memory/components/MemoryDetail.rights.test.ts
           - src/core/people/directory.test.ts
   - id: participants-at-creation
     text: In a tenant or group scope a member's create dialog of a Memory offers "I was there", ticked by default and not remembered between creations; ticked, the Memory's first `wrappedMeta` - in the one create call, no second write - carries `participants` with the creator's own user id only; unticked it carries no `participants` key (absent, not an empty list). It is never offered in a personal scope, on a chapter, without the member's own id, or on a share guest's create (core's name dialog, which sends no meta).

@@ -71,9 +71,14 @@ across apps, how a link's key reaches an app safely) belong to the native client
 - **The word rules bind now**, and this change updates where they are written: the root `CLAUDE.md` and
   [`docs/apps/README.md`](../apps/README.md).
 - **Built (2026-10-15):** Files → Depot, as the Depot paragraph above sorts it.
+- **Built (2026-10-15, inbox #437):** `…Capabilities` → `…Rights`, web only: `folderRights`, `memoryRights`,
+  `depotRights`, `favoriteRights`, `coverRights`, `sourceRights`, their types, the `RightsTarget` they are asked
+  about, and the files that hold them (`rights.ts`). The instance switch keeps its name everywhere (`hasCapability`,
+  `useCapabilities`, the `CORE_*` ids, the catalog). Two other senses of the word stay too, because neither is a
+  per-viewer function: a **capability token** (a bearer secret such as a contributor's, `cc.security.wire-assertion`)
+  and the worker's capability tags above.
 - **Not built**, open work tracked in the inbox. Pre-V1 there is no released client to stay compatible with, so
   the wire renames cost no major.
-  - `…Capabilities` → `…Rights` (web only).
   - `metaVersion` → `metaRevision` (contract → backend → web, a wire rename).
 - **The cost:** one more word for a reader to learn ("rights" next to "permission"). It pays for itself where
   ADR 0032 §3 needs it most: in a review, "capability" now always means the operator's switch.

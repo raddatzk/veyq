@@ -183,7 +183,7 @@ acceptanceCriteria:
       - surface: web
         reason: >-
           The guest page offers "New folder" and "Upload files" in the level toolbar's "New" menu (each entry only where
-          its capability function grants it, inbox #401 S2, #406; no "New Memory" or "New drop box" for any guest,
+          its rights function grants it, inbox #401 S2, #406; no "New Memory" or "New drop box" for any guest,
           LevelNewMenu.entries.test.ts), and core's move dialog (inbox #358, uc.memory.move-node, ShareTreePage.move.test.ts); no rename
           control exists, so a guest's rename is proven through placeShareNodeAsGuest by the wire test and the e2e, not
           through a screen.
@@ -203,5 +203,5 @@ acceptanceCriteria:
         integration: [ShareNodesSliceTest.insideAMemoryAGuestWritesNothingAndReadsEverything, ShareNodesSliceTest.aGuestCannotMoveAChapterOutOfAMemory, ShareNodesSliceTest.aMemoryRootedLinkGainsNoTreeOperation, ShareNodesSliceTest.aGuestCreatesNoMemoryInAFolder, ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox, ChapterShareSliceTest.aChapterGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused, CoreAloneSliceTest.aFolderGuestCreatesFoldersOnly, ModuleCompositionTest.aFolderGuestCreatesFoldersAndTheDeclaredKindsOnly, ShareNodesCoreSliceTest.aWriteOnlyOrAReadGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.theGateRefusesAsTheOtherGuestWritesDo]
         unit: [GuestNodeRulesPartitionTest.inAFolderAGuestCreatesAFolderOrADeclaredKindAndMovesAnyKind, GuestCreatableKindsTest.twoDeclarationsOfOneKindFailStartupNamingTheKindAndBoth, DepotNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
       web:
-        unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memory/capabilities.test.ts]
+        unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memory/rights.test.ts]
         e2e: [src/features/memory/folderShareGuest.e2e.test.ts]

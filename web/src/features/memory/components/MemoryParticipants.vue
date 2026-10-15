@@ -4,7 +4,7 @@
 // `#people/<userId>`) is in a popover that opens on hover, on keyboard focus and on click / tap (touch has no hover). A
 // former member is greyed with no link. With NO participant the row renders nothing - no "nobody yet", no link: the way in
 // is the header's "Participants" action (owner decision 2026-10-14), which the host wires to `openPicker` (exposed) and
-// shows only where `canEdit` holds. The interface shows a guest NOTHING of this (the `participants` capability is a
+// shows only where `canEdit` holds. The interface shows a guest NOTHING of this (the `participants` right is a
 // member's alone): the host passes `show` false and this renders no element at all.
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -24,7 +24,7 @@ const props = defineProps<{
   scopeId: string
   node: TreeNode
   memoryKey: Uint8Array | null
-  /** The `participants` capability, and not a personal scope. */
+  /** The `participants` right, and not a personal scope. */
   show: boolean
   /** The node-meta door when the meta may be written, else null. */
   write: NodeMetaDoor | null

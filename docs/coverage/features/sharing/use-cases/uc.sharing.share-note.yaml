@@ -12,7 +12,7 @@ title: Share note — a curator attaches an editable message to a share
 # cr-0116 extends this: the note becomes PER-LOCALE (a {de,en} JSON map under K_share, no contract change — the
 # viewer picks their locale), a share gains an optional private NAME (sealed_share_name under K_share, management-
 # only — never on the viewer resolve), and the dialog is redesigned (list-only + a separate create dialog, the
-# uploader as its own capability-gated action, copy-only links). The anonymous acceptance gate + password
+# uploader as its own rights-gated action, copy-only links). The anonymous acceptance gate + password
 # protection are later CRs (cr-0117 / cr-0118).
 # cr-share-note-acceptance-gate adds the note's acceptance switch (ADR 0036 point 2), web only: the switch rides
 # inside the sealed note, so the wire and the backend are unchanged and there is no backend behaviour to cover. The

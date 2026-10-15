@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The level's Select mode (inbox #421) against a STUBBED registry (as `LevelView.test.ts`): kinds are made-up tokens, each
-// row's part in a selection is the stub's `selection` answer (an application's capability answer), a sub-folder's is core's
-// `folderCapabilities`. Every control is clicked for real: the toolbar's Select, each row's checkbox, the bar's All / None,
+// row's part in a selection is the stub's `selection` answer (an application's rights answer), a sub-folder's is core's
+// `folderRights`. Every control is clicked for real: the toolbar's Select, each row's checkbox, the bar's All / None,
 // the tabs, Move to… and Delete. What the level hands the host is the emitted part of the selection; the writes are the
 // hosts' (`MoveNodesDialog`, `DeleteNodesDialog`).
 import { describe, it, expect, vi, beforeEach } from 'vitest'

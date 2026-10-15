@@ -1,7 +1,7 @@
 // The share guest's two inputs of every view (inbox #401 S2; `core/access.ts` says what they are): its `GuestAccess` and
 // its `TreeSource` over the opened subtree — the guest's counterparts of `memberAccess` / `memberTreeSource`, built by the
 // share page (`views/ShareView.vue` the access, `ShareTreePage.vue` the tree) after its gates, so a level or a detail
-// renders for a guest exactly as for a member, with what the capability functions take away.
+// renders for a guest exactly as for a member, with what the rights functions take away.
 //
 // **The tree is what the walk opened, and nothing above it.** Every node, key and name comes from `openGuestTreeParts`
 // (the share's `wrap` under `K_share`, then the chain, `shareTree.walkSubtree`): a node whose key or name did not open is

@@ -122,11 +122,11 @@ upload, delete-own, rename, create and move cells are tested (`SubtreeUploadSlic
 `ShareNodesSliceTest.aGuestCreatesNoMemoryInAFolder`. **UNVERIFIED by a test** (read from the code only): a `READ` ↔
 `READ_WRITE` flip on a folder link.
 
-### What the web offers — the capability matrix
+### What the web offers — the rights matrix
 
 One view per kind serves a member and a guest ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
-Consequences, inbox #401); what it shows is `memoryCapabilities(access, target)` (`web/src/features/memory/capabilities.ts`,
-pinned row by row in `capabilities.test.ts`): pure, every right false unless a row grants it, an unknown role or kind
+Consequences, inbox #401); what it shows is `memoryRights(access, target)` (`web/src/features/memory/rights.ts`,
+pinned row by row in `rights.test.ts`): pure, every right false unless a row grants it, an unknown role or kind
 grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 
 | Right | member | member, scope pending deletion | `READ` | `READ_WRITE` | `WRITE_ONLY` |

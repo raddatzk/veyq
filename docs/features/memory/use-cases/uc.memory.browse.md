@@ -44,7 +44,7 @@
    the mode or the level clears it. The selection belongs to the level, not to a tab: switching tabs keeps it, "All"
    and "None" act on what the tab on screen shows, and the count says when part of the selection is hidden by the tab
    on screen; a node that leaves the level (moved, deleted) drops out of it. Every row is selectable; each action works
-   on the part of the selection the session may act on (the applications' capability functions per node) and says
+   on the part of the selection the session may act on (the applications' rights functions per node) and says
    "n of m cannot be moved / deleted" for the rest - a `READ_WRITE` guest selects and moves, and is offered no delete.
    Select is offered only where some node of the level allows an action (a `READ` guest has none), and the map
    presentation has no rows and offers no Select. Seen in a real browser on 2026-10-14 (the dev instance, a member and

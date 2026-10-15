@@ -8,10 +8,10 @@
 // node's sealed meta (date, place, cover), the media trash and the contributions organizer (`MemoryBuckets`, member
 // globals) — no guest role grants them, whatever a source implements.
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { Access, CapabilityTarget, MemberAccess } from '../../core/access'
+import type { Access, RightsTarget, MemberAccess } from '../../core/access'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
 
-export interface MemoryCapabilities {
+export interface MemoryRights {
   /** Open what lies below: a Memory from a level, a chapter from a Memory (the Chapters tab). */
   navigate: boolean
   /** Open a medium and download its original. */
@@ -55,7 +55,7 @@ export interface MemoryCapabilities {
   buckets: boolean
 }
 
-export const NO_MEMORY_CAPABILITIES: Readonly<MemoryCapabilities> = Object.freeze({
+export const NO_MEMORY_RIGHTS: Readonly<MemoryRights> = Object.freeze({
   navigate: false,
   download: false,
   upload: false,
@@ -82,21 +82,21 @@ const isLevel = (kind: string | null) => kind === null || kind === FOLDER_KIND
 /** The Memories matrix (see the header; the table is `docs/apps/memories.md`). `at` is the node on screen: a `MEMORY` or
  *  `CHAPTER` opened (the detail), or the folder level whose Memories the section shows (`FOLDER`; null at a member's
  *  scope root). */
-export function memoryCapabilities(access: Access, at: CapabilityTarget): MemoryCapabilities {
-  if (access.mode === 'member') return memberCapabilities(access, at)
-  if (access.mode === 'guest') return guestCapabilities(access.role, at)
-  return NO_MEMORY_CAPABILITIES
+export function memoryRights(access: Access, at: RightsTarget): MemoryRights {
+  if (access.mode === 'member') return memberRights(access, at)
+  if (access.mode === 'guest') return guestRights(access.role, at)
+  return NO_MEMORY_RIGHTS
 }
 
-function memberCapabilities(access: MemberAccess, at: CapabilityTarget): MemoryCapabilities {
+function memberRights(access: MemberAccess, at: RightsTarget): MemoryRights {
   const write = !access.readonly
   if (isLevel(at.kind)) {
     // A guest's identity folder (Depot's drop box) takes no Memory. (The favorite heart is core's: `core/favorites`.)
-    return { ...NO_MEMORY_CAPABILITIES, navigate: true, createMemory: write && !at.inIdentityFolder }
+    return { ...NO_MEMORY_RIGHTS, navigate: true, createMemory: write && !at.inIdentityFolder }
   }
-  if (!isMemoriesNode(at.kind)) return NO_MEMORY_CAPABILITIES
+  if (!isMemoriesNode(at.kind)) return NO_MEMORY_RIGHTS
   return {
-    ...NO_MEMORY_CAPABILITIES,
+    ...NO_MEMORY_RIGHTS,
     navigate: true,
     download: true,
     mark: true,
@@ -120,32 +120,32 @@ function memberCapabilities(access: MemberAccess, at: CapabilityTarget): MemoryC
   }
 }
 
-function guestCapabilities(role: string, at: CapabilityTarget): MemoryCapabilities {
+function guestRights(role: string, at: RightsTarget): MemoryRights {
   switch (role) {
     case 'READ':
-      if (isLevel(at.kind)) return at.kind === FOLDER_KIND ? { ...NO_MEMORY_CAPABILITIES, navigate: true } : NO_MEMORY_CAPABILITIES
-      return isMemoriesNode(at.kind) ? { ...NO_MEMORY_CAPABILITIES, navigate: true, download: true } : NO_MEMORY_CAPABILITIES
+      if (isLevel(at.kind)) return at.kind === FOLDER_KIND ? { ...NO_MEMORY_RIGHTS, navigate: true } : NO_MEMORY_RIGHTS
+      return isMemoriesNode(at.kind) ? { ...NO_MEMORY_RIGHTS, navigate: true, download: true } : NO_MEMORY_RIGHTS
     case 'READ_WRITE':
       // A folder link's contributor creates no Memory (owner decision 2026-10-14: Memories declares no kind guest-creatable,
       // core's `GuestCreatableKinds`, so the server refuses it) and moves one a folder holds between the subtree's folders;
       // a Memory or chapter link's, nothing of the tree (Memories declares no `GuestNodeRules`, so nothing moves out of or
       // into a Memory, and the link's root has no parent the guest reads).
       // Uploads go into the Memory or chapter on screen (`nodeId`), deletes reach its own media only.
-      if (isLevel(at.kind)) return at.kind === FOLDER_KIND ? { ...NO_MEMORY_CAPABILITIES, navigate: true } : NO_MEMORY_CAPABILITIES
+      if (isLevel(at.kind)) return at.kind === FOLDER_KIND ? { ...NO_MEMORY_RIGHTS, navigate: true } : NO_MEMORY_RIGHTS
       return isMemoriesNode(at.kind)
         ? {
-            ...NO_MEMORY_CAPABILITIES,
+            ...NO_MEMORY_RIGHTS,
             navigate: true,
             download: true,
             upload: true,
             deleteMedia: 'own',
             move: at.kind === MEMORY_KIND && at.parentKind === FOLDER_KIND && !at.inIdentityFolder,
           }
-        : NO_MEMORY_CAPABILITIES
+        : NO_MEMORY_RIGHTS
     case 'WRITE_ONLY':
       // The drop: no key below the root, so nothing to open or download; it sends into the root and removes its own.
-      return isMemoriesNode(at.kind) ? { ...NO_MEMORY_CAPABILITIES, upload: true, deleteMedia: 'own' } : NO_MEMORY_CAPABILITIES
+      return isMemoriesNode(at.kind) ? { ...NO_MEMORY_RIGHTS, upload: true, deleteMedia: 'own' } : NO_MEMORY_RIGHTS
     default:
-      return NO_MEMORY_CAPABILITIES
+      return NO_MEMORY_RIGHTS
   }
 }

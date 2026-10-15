@@ -20,7 +20,7 @@ import type { ShareRole } from '../api/generated/sharing'
 import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
 import type { GuestIdentity } from '../core/sharing/guestIdentity'
 import { guestAccess } from '../core/sharing/guestAccess'
-import { memoryCapabilities, type MemoryCapabilities } from '../features/memory/capabilities'
+import { memoryRights, type MemoryRights } from '../features/memory/rights'
 
 export const setupStatus = (o: Partial<SetupStatus> = {}): SetupStatus => ({
   setupRequired: false,
@@ -101,7 +101,7 @@ export const memberAccessOf = (o: Partial<Omit<MemberAccess, 'mode'>> = {}): Mem
   })
 
 /** A share guest's `Access` with `role` (an unknown token too, as a server could send one): the head is a stub — a
- *  capability reads the role alone. */
+ *  right reads the role alone. */
 export const guestAccessOf = (role: string, o: Partial<Omit<GuestAccess, 'mode' | 'role'>> = {}): GuestAccess => ({
   mode: 'guest',
   shareId: 's1',
@@ -131,9 +131,9 @@ export const memberTreeOf = (
 ): TreeSource<TreeNode> =>
   memberTreeSource({ nodes, scopeId: () => o.scopeId ?? 'scope-1', epochs: () => o.epochs ?? null, scope: () => o.scope ?? '~me' })
 
-/** A member's Memories capabilities on an opened node of `kind` (MEMORY by default) — what `MemoryDetailHost` computes. */
-export const memberMemoryCaps = (o: Partial<Omit<MemberAccess, 'mode'>> = {}, kind: NodeKind = MEMORY_KIND): MemoryCapabilities =>
-  memoryCapabilities(memberAccessOf(o), { kind, inIdentityFolder: false, shareable: true })
+/** A member's Memories rights on an opened node of `kind` (MEMORY by default) — what `MemoryDetailHost` computes. */
+export const memberMemoryRights = (o: Partial<Omit<MemberAccess, 'mode'>> = {}, kind: NodeKind = MEMORY_KIND): MemoryRights =>
+  memoryRights(memberAccessOf(o), { kind, inIdentityFolder: false, shareable: true })
 
 export const scopeMember = (o: Partial<ScopeMember> = {}): ScopeMember => ({
   userId: 'user-1',

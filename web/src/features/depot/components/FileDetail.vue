@@ -7,8 +7,8 @@
 // for a guest at the link's root — a single-file link — or at a file inside a folder link (inbox #401: a share is the
 // member's view with functions removed, never a page of its own).
 //
-// **What it offers is `depotCapabilities(access, targetOf(tree, file))` narrowed to what the data source carries**
-// (`../capabilities.ts`, `../source.ts`): a member everything its row offers plus share, rename, move and delete of the
+// **What it offers is `depotRights(access, targetOf(tree, file))` narrowed to what the data source carries**
+// (`../rights.ts`, `../source.ts`): a member everything its row offers plus share, rename, move and delete of the
 // file; a `READ` guest the download; a `READ_WRITE` guest the download and the replace — after the question that says it
 // changes the file for everyone who sees it, the owner too (inbox #383); no standing sentence says so beforehand — and,
 // for a file inside a folder link, the move
@@ -25,7 +25,7 @@
 // **The file is shown when its page opens** (inbox #412, `FileViewer`): an image, a text, a video or audio through the service
 // worker's media route, the download offered for anything else; Depot makes no thumbnail or preview blob. It reads the blob
 // through the source's `chunks` (a member's scope READ gate, a guest's link), so a guest of either role sees the member's
-// viewer; nothing about it is a capability of its own beyond the download it offers where the matrix grants one.
+// viewer; nothing about it is a right of its own beyond the download it offers where the matrix grants one.
 //
 // **Who uploaded the current content** (ADR 0083 Decision 8, `../uploader.ts`): a member's page names them in the header's meta
 // line - a member by core's display rule with a link to the profile, one who left as a greyed "former member", a guest
@@ -53,8 +53,8 @@ import { formatBytes } from '../../../shared/formatBytes'
 import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import type { FileBlobRef, FileUploaderName } from '../../../api/generated/depot'
 import { targetOf, type GuestAccess } from '../../../core/access'
-import { depotCapabilities } from '../capabilities'
-import { guestDepotSource, memberDepotSource, sourceCapabilities, type DepotSource } from '../source'
+import { depotRights } from '../rights'
+import { guestDepotSource, memberDepotSource, sourceRights, type DepotSource } from '../source'
 import { deliveredSince, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
 import { fileFacts } from '../download'
 import { extensionOf } from '../../../core/blob/sniff'
@@ -95,7 +95,7 @@ const source: DepotSource = guest
       rename: () => emit('rename'),
       move: (node) => emit('move', node),
     })
-const caps = computed(() => sourceCapabilities(depotCapabilities(props.access, targetOf(props.tree, props.node)), source))
+const rights = computed(() => sourceRights(depotRights(props.access, targetOf(props.tree, props.node)), source))
 const key = computed(() => props.contentKey ?? props.tree.keyOf(props.node.id))
 const writeReady = computed(() => source.upload?.ready() ?? false)
 
@@ -167,23 +167,23 @@ const facts = computed(() => {
 const empty = computed(() => blob.value === null)
 
 /** The header's actions (owner decision 2026-10-14): the download, the replace of the content (an upload into a file that
- *  holds none), then share, rename, move, delete — each only where the capability matrix grants it. The download is the
+ *  holds none), then share, rename, move, delete — each only where the rights matrix grants it. The download is the
  *  page's call to action; it runs inside the click (the save picker needs its activation). */
 const headerActions = computed<NodeHeaderAction[]>(() => [
   {
     id: 'download', label: t('depot.download', { name: props.node.name }), icon: 'pi pi-download', severity: 'primary',
-    class: 'file-detail-download', shown: caps.value.download, disabled: !blob.value || !key.value || downloading.value,
+    class: 'file-detail-download', shown: rights.value.download, disabled: !blob.value || !key.value || downloading.value,
     onClick: () => void download(),
   },
   {
     id: 'replace', label: t(empty.value ? 'depot.uploadInto' : 'depot.replace', { name: props.node.name }),
-    icon: empty.value ? 'pi pi-upload' : 'pi pi-sync', class: 'file-detail-replace', shown: caps.value.replace,
+    icon: empty.value ? 'pi pi-upload' : 'pi pi-sync', class: 'file-detail-replace', shown: rights.value.replace,
     disabled: !writeReady.value, onClick: () => picker.value?.click(),
   },
   ...standardNodeActions(
     t,
-    { share: caps.value.share, rename: caps.value.rename, move: caps.value.moveNode, remove: caps.value.deleteNode },
-    { share: () => emit('share', { contribute: caps.value.shareContribute }), rename: () => emit('rename'), move: () => source.move?.(props.node), remove: () => emit('delete') },
+    { share: rights.value.share, rename: rights.value.rename, move: rights.value.moveNode, remove: rights.value.deleteNode },
+    { share: () => emit('share', { contribute: rights.value.shareContribute }), rename: () => emit('rename'), move: () => source.move?.(props.node), remove: () => emit('delete') },
   ),
 ])
 
@@ -236,7 +236,7 @@ function refresh(): void {
 async function startReplace(file: File, confirmed = false): Promise<void> {
   const upload = source.upload
   const nodeKey = key.value
-  if (!upload || !upload.ready() || !caps.value.replace || !nodeKey) return
+  if (!upload || !upload.ready() || !rights.value.replace || !nodeKey) return
   const batch = upload.beginReplace()
   if (!batch) return
   if (!confirmed && !empty.value) {
@@ -320,7 +320,7 @@ async function replaceAnyway(n: Notice) {
           <span>{{ n.text }}</span>
           <span class="veyq-action-group">
             <Button
-              v-if="n.replaceAnyway && caps.replace"
+              v-if="n.replaceAnyway && rights.replace"
               type="button"
               :label="t('depot.replaceAnyway')"
               size="small"
@@ -334,7 +334,7 @@ async function replaceAnyway(n: Notice) {
       </Message>
 
       <!-- The file itself, above its facts (inbox #412). -->
-      <FileViewer v-if="!empty" :target="viewTarget" :name="node.name" :can-download="caps.download" @download="download" />
+      <FileViewer v-if="!empty" :target="viewTarget" :name="node.name" :can-download="rights.download" @download="download" />
       <p v-if="empty" class="veyq-empty veyq-empty-inline">{{ t('depot.notUploaded') }}</p>
       <dl v-else-if="facts" class="file-detail-facts">
         <dt>{{ t('depot.detail.size') }}</dt>
@@ -348,7 +348,7 @@ async function replaceAnyway(n: Notice) {
       </dl>
 
       <!-- The replace's picker (the header's replace opens it); the replace asks when a file is picked (inbox #383). -->
-      <input v-if="caps.replace" ref="picker" class="files-picker" type="file" hidden @change="onPicked" />
+      <input v-if="rights.replace" ref="picker" class="files-picker" type="file" hidden @change="onPicked" />
     </section>
   </div>
 </template>

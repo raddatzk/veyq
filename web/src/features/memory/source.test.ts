@@ -2,7 +2,7 @@
 // Memories' data source (inbox #401 S4, `./source.ts`): the guest's door by door against a faked share transport (the
 // link's public clients stubbed, every authenticated one THROWING — `test/guestMode.ts`; the share helpers that fetch
 // bytes stubbed to record what they are asked), the member's door by door against its `media.ts`-and-friends calls, and
-// the invariant every view rests on: a door the source does not carry is a capability the view does not show.
+// the invariant every view rests on: a door the source does not carry is a right the view does not show.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
@@ -39,10 +39,10 @@ vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 import {
   guestMemorySource,
   memberMemorySource,
-  sourceCapabilities,
+  sourceRights,
   type MemorySource,
 } from './source'
-import { NO_MEMORY_CAPABILITIES, type MemoryCapabilities } from './capabilities'
+import { NO_MEMORY_RIGHTS, type MemoryRights } from './rights'
 import * as share from './share'
 import * as media from './media'
 import { setMemoryDate, reconcileMemoryDate } from './memoryDate'
@@ -295,39 +295,39 @@ describe("the member's source is today's calls, with its scope", () => {
   })
 })
 
-describe('no door, no capability (the invariant every view rests on)', () => {
-  const ALL: MemoryCapabilities = {
-    ...NO_MEMORY_CAPABILITIES, navigate: true, download: true, upload: true, deleteMedia: 'any', createMemory: true, createChapter: true,
+describe('no door, no right (the invariant every view rests on)', () => {
+  const ALL: MemoryRights = {
+    ...NO_MEMORY_RIGHTS, navigate: true, download: true, upload: true, deleteMedia: 'any', createMemory: true, createChapter: true,
     editMeta: true, setCover: true, mark: true, share: true, shareUpload: true, rename: true, deleteNode: true,
     mediaTrash: true, buckets: true,
   }
   const member = memberMemorySource({ scopeId: () => SCOPE })
-  // [the capability, the door it rests on]
-  const rests: [keyof MemoryCapabilities, keyof MemorySource][] = [
+  // [the right, the door it rests on]
+  const rests: [keyof MemoryRights, keyof MemorySource][] = [
     ['upload', 'upload'], ['deleteMedia', 'deleteMedia'], ['editMeta', 'nodeMeta'], ['mark', 'marks'],
     ['mediaTrash', 'trash'], ['buckets', 'buckets'],
   ]
-  for (const [cap, door] of rests) {
-    it(`${cap} needs the source's ${door}`, () => {
-      expect(sourceCapabilities(ALL, member)[cap], 'granted and carried').toBe(cap === 'deleteMedia' ? 'any' : true)
+  for (const [right, door] of rests) {
+    it(`${right} needs the source's ${door}`, () => {
+      expect(sourceRights(ALL, member)[right], 'granted and carried').toBe(right === 'deleteMedia' ? 'any' : true)
       const without = { ...member, [door]: undefined } as MemorySource
-      expect(sourceCapabilities(ALL, without)[cap], 'granted, not carried').toBe(cap === 'deleteMedia' ? 'none' : false)
-      expect(sourceCapabilities({ ...ALL, [cap]: cap === 'deleteMedia' ? 'none' : false }, member)[cap], 'carried, not granted')
-        .toBe(cap === 'deleteMedia' ? 'none' : false)
+      expect(sourceRights(ALL, without)[right], 'granted, not carried').toBe(right === 'deleteMedia' ? 'none' : false)
+      expect(sourceRights({ ...ALL, [right]: right === 'deleteMedia' ? 'none' : false }, member)[right], 'carried, not granted')
+        .toBe(right === 'deleteMedia' ? 'none' : false)
     })
   }
 
   it("a delete keeps its reach only through a door of that reach: no 'any' through a guest's purge, no 'own' through a trash", () => {
     const g = guest(ShareRole.ReadWrite).source
-    expect(sourceCapabilities({ ...ALL, deleteMedia: 'any' }, g).deleteMedia).toBe('none')
-    expect(sourceCapabilities({ ...ALL, deleteMedia: 'own' }, g).deleteMedia).toBe('own')
-    expect(sourceCapabilities({ ...ALL, deleteMedia: 'own' }, member).deleteMedia).toBe('none')
+    expect(sourceRights({ ...ALL, deleteMedia: 'any' }, g).deleteMedia).toBe('none')
+    expect(sourceRights({ ...ALL, deleteMedia: 'own' }, g).deleteMedia).toBe('own')
+    expect(sourceRights({ ...ALL, deleteMedia: 'own' }, member).deleteMedia).toBe('none')
   })
 
   it('the rights no source door carries pass through unchanged (they are the host\'s dialogs and the tree\'s links)', () => {
-    const narrowed = sourceCapabilities(ALL, guest(ShareRole.Read).source)
-    // `setCover` rests on no source door since inbox #411: the write is core's (member-only by `coverCapabilities`), and the guest's
-    // column of the matrix is false (`capabilities.test.ts`).
+    const narrowed = sourceRights(ALL, guest(ShareRole.Read).source)
+    // `setCover` rests on no source door since inbox #411: the write is core's (member-only by `coverRights`), and the guest's
+    // column of the matrix is false (`rights.test.ts`).
     for (const k of ['navigate', 'download', 'createMemory', 'createChapter', 'share', 'shareUpload', 'rename', 'deleteNode', 'setCover'] as const) {
       expect(narrowed[k], k).toBe(true)
     }

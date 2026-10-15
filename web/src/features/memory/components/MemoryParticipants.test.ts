@@ -2,9 +2,9 @@
 // The Memory header's participants row (ADR 0083, uc.memory.participants): overlapping avatars (three at most, past three
 // the third slot is "+N"), a popover with every name that links a member to their profile, a greyed "Former member"
 // without a link, nothing at all with no participant, the picker (checkboxes, search) over the scope's CURRENT members -
-// opened through the exposed `openPicker` the header's "Participants" action calls (`MemoryDetail.caps.test.ts` clicks
+// opened through the exposed `openPicker` the header's "Participants" action calls (`MemoryDetail.rights.test.ts` clicks
 // that action) - and - the member / guest difference - nothing at all (not even a request for the members) where the
-// capability is off.
+// right is off.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -298,7 +298,7 @@ describe('MemoryParticipants: the picker', () => {
   })
 })
 
-describe('MemoryParticipants: no capability (a share guest)', () => {
+describe('MemoryParticipants: no right (a share guest)', () => {
   it('renders nothing and reads nothing, even though the sealed meta carries participants', async () => {
     const w = await mountRow({ ids: [A, B], show: false })
     expect(w.element.parentElement?.textContent ?? '').toBe('')

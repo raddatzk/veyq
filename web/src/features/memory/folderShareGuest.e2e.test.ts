@@ -135,7 +135,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     // --- (c) refusals, by code -------------------------------------------------------------------------------------
     const ctx = await contextNow()
     // A guest creates no Memory, not in a folder either (owner decision 2026-10-14: Memories declares no kind
-    // guest-creatable, core's `GuestCreatableKinds`), and the level offers none (`memoryCapabilities`).
+    // guest-creatable, core's `GuestCreatableKinds`), and the level offers none (`memoryRights`).
     const guestMemory = await failure(createShareNodeAsGuest(ctx, { parentId: createdId, kind: MEMORY_KIND, name: GUEST_MEMORY_NAME }))
     expect(guestMemory instanceof GuestTreeError && guestMemory.code, 'a Memory created in a folder').toBe('illegal_scope')
     expect((await listTree(scopeId, epochs)).some((n) => n.parentId === createdId && n.kind === MEMORY_KIND), 'nothing stored').toBe(false)

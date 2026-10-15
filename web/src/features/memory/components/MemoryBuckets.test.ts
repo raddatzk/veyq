@@ -53,7 +53,7 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n } from '../../../test/i18n'
-import { mediaItem, treeNode, memberMemoryCaps } from '../../../test/models'
+import { mediaItem, treeNode, memberMemoryRights } from '../../../test/models'
 import { computed } from 'vue'
 import { MEMORY_VIEW, memberMemorySource } from '../source'
 
@@ -78,7 +78,7 @@ const bucket = (bucketId: string, ownerKey: string, mediaCount: number, sealedNa
 
 /** The member's Memory view the organizer reads its doors from (`useMemoryView`), as `MemoryDetail` provides it. */
 const memberView = (scopeId: string) => ({
-  [MEMORY_VIEW as symbol]: { source: memberMemorySource({ scopeId: () => scopeId }), caps: computed(() => memberMemoryCaps()) },
+  [MEMORY_VIEW as symbol]: { source: memberMemorySource({ scopeId: () => scopeId }), rights: computed(() => memberMemoryRights()) },
 })
 
 function mountBuckets(mediaItems: MediaItem[]) {

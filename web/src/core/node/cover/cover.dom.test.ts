@@ -3,7 +3,7 @@
 // `main.ts` fills it (Memories' and Depot's real row factories), a folder, a Memory, a file and a drop box in one level.
 //
 // Pinned here: the ONE action - `Set cover` / `Change cover`, core's, in the row's menu and in the header; removal lives in the
-// dialog it opens - is offered exactly where the capability function says (a writer, on the kinds that opted in; never a file,
+// dialog it opens - is offered exactly where the rights function says (a writer, on the kinds that opted in; never a file,
 // never a guest, never a pending deletion, never while the keys are locked), and a click opens core's dialog, whose Save runs
 // core's flow (the derive and upload, ONE write with the meta, the crop it was framed with); the cover is the leading visual
 // of the row, the tile and the header, the kind's icon the fallback when it is missing or fails to open; and a share guest sees
@@ -52,7 +52,7 @@ import { actionIdsOf, actionLabel, clickAction, rowOf } from '../../../test/leve
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const KEY = v1.randomBytes(32)
-const EPOCHS = {} as EpochKeys // only its presence matters: the capability asks "are the keys loaded", the tree source supplies the key
+const EPOCHS = {} as EpochKeys // only its presence matters: the right asks "are the keys loaded", the tree source supplies the key
 
 const id = (n: number) => `d0000000-0000-4000-8000-00000000000${n}`
 const sealCover = (nodeId: string, blobId: string) =>
@@ -123,7 +123,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
-describe('who is offered the cover action, and on which kinds (capability matrix, fail closed)', () => {
+describe('who is offered the cover action, and on which kinds (rights matrix, fail closed)', () => {
   it('a writer gets it on a folder, a Memory and a drop box - in the row menu - and never on a file', async () => {
     const w = mountLevel(TRIPS)
     await flushPromises()

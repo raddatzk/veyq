@@ -266,7 +266,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     w.unmount()
   })
 
-  // S5: the lightbox's one `readonly` split per capability — a contributor deletes its OWN photo there too (asked first,
+  // S5: the lightbox's one `readonly` split per right — a contributor deletes its OWN photo there too (asked first,
   // purged), never another's, and is offered no "set as cover".
   it('READ_WRITE: in the lightbox, its own photo carries the delete — asked first, then purged — and no other does', async () => {
     saveGuestSession(SHARE, GUEST)

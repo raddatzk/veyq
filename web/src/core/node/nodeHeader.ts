@@ -3,8 +3,8 @@
 // is in it (a leading icon or image, a title, a subtitle, a meta row, its actions) and core decides the look, the
 // spacing, the wrap, the keyboard and the dark mode (owner design 2026-10-12, inbox #406).
 //
-// **An action is already a capability answer.** The caller builds the list from its fail-closed capability function
-// (`core/access.ts`, `../capabilities.ts`): an action it was not granted is `shown: false` or simply left out, and the
+// **An action is already a rights answer.** The caller builds the list from its fail-closed rights function
+// (`core/access.ts`, `../rights.ts`): an action it was not granted is `shown: false` or simply left out, and the
 // header decides nothing of its own. A share guest gets the same header as a member with fewer actions (inbox #401) —
 // there is no guest-only header.
 
@@ -21,7 +21,7 @@ export interface NodeHeaderAction {
   severity?: 'primary' | 'secondary' | 'danger'
   /** Rendered but not clickable (e.g. keys still loading). */
   disabled?: boolean
-  /** Not rendered at all (the capability answer was no). Default: shown. */
+  /** Not rendered at all (the rights answer was no). Default: shown. */
   shown?: boolean
   /** A toggle's state (a heart): sets `aria-pressed` and `is-pressed`. Omitted: not a toggle. */
   pressed?: boolean
@@ -30,7 +30,7 @@ export interface NodeHeaderAction {
 }
 
 /** A core-owned action (e.g. a future favorite heart that every node gets, whatever its application): contributed by
- *  core next to the application's own, gated by a core capability function, never supplied by the application. */
+ *  core next to the application's own, gated by a core rights function, never supplied by the application. */
 /** Where a core action goes among the application's: before them, after them, or right after the application's action of
  *  that id (core's "Copy to…" beside "Move to…") - after them all where the application offers no such action. */
 export type CoreActionPlacement = 'before' | 'after' | { after: string }
@@ -73,7 +73,7 @@ export interface StandardActionHandlers {
   remove?: () => void
 }
 
-/** The share / rename / move / delete actions of a node header from the caller's capability answers: only the granted
+/** The share / rename / move / delete actions of a node header from the caller's rights answers: only the granted
  *  ones, in that order. `t` is the caller's translate function (core's neutral words for the labels). */
 export function standardNodeActions(
   t: (key: string) => string,

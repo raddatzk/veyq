@@ -3,7 +3,7 @@
 // Memory's or a chapter's share links (a folder's are core's `FolderShareDialog`) + a "New" button that opens the
 // separate create dialog. Shared by BOTH share flows via the `uploader` flag so they stay identical by construction:
 // the NORMAL variant lists READ/READ_WRITE shares and creates them with a role switcher; the WRITE_ONLY (drop-box) variant lists uploader shares and creates them with no
-// switcher (a separate memory action, capability-gated at that action). Each row shows the share's private name (or
+// switcher (a separate memory action, rights-gated at that action). Each row shows the share's private name (or
 // the role), badges (note present / disabled / by another member), and per-row actions: **copy link** (copy-only —
 // reconstructed via the member-recoverable K_share), edit name+note, switch off / re-activate, and **renew** (re-issue,
 // ADR 0075): a new link with a fresh key, the old one deleted. A share whose link a departed member may hold is marked
@@ -38,7 +38,7 @@ import { CHAPTER_KIND } from '../kinds'
 // props: the scope (every share's recovery copy of `K_share` is bound to it, ADR 0072, and opens under `K_SC` at its
 // epoch), the node and its `K_node` (`nodeKey`), its name, its kind (a chapter link says "chapter", not "Memory", 5b.5)
 // and `uploader` — the drop-box variant: list only uploader shares, create with no role switcher. Identical otherwise.
-// `contribute` (the capability function's answer, handed on by the host) lets the create form offer READ_WRITE.
+// `contribute` (the rights function's answer, handed on by the host) lets the create form offer READ_WRITE.
 const props = defineProps<NodeShareDialogProps>()
 const emit = defineEmits<{ close: [] }>()
 

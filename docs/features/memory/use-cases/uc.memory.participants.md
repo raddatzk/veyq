@@ -21,7 +21,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 1. With a Memory open, a member chooses **Participants**, an action button in the header's action bar beside share,
    rename, move and delete (core's `NodeHeader`, a `NodeHeaderAction` with `pi-users`; owner decision 2026-10-14 —
-   it used to be a link in the line under the title). Its capability is `memoryCapabilities` `participants`, true for a
+   it used to be a link in the line under the title). Its right is `memoryRights` `participants`, true for a
    member only and fail-closed, so a guest gets the same header without it.
 2. The dialog lists the members of the Memory's scope — tenant members for a tenant Memory, group members for a group
    Memory — from `listScopeMembers`, each by display name (real name when it opens, else username).
@@ -40,7 +40,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
    default (owner decision 2026-10-14). Ticked, the Memory's first `wrappedMeta` already carries
    `participants: { userIds: [<own id>] }`: no second write, no version bump. Unticked, it carries no participants.
 2. It is offered only where the participants are: not in a personal scope (no participants there), never to a share
-   guest (no user id to record, and the capability is false for every share role). It means "who was there", like
+   guest (no user id to record, and the right is false for every share role). It means "who was there", like
    every participant — not "who created it" — which is why it is a choice and not automatic.
 3. Existing Memories are left as they are.
 
@@ -73,7 +73,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
   conflict of date and place ([uc.memory.concurrent-curation](uc.memory.concurrent-curation.md)).
 - **A3 — the meta does not open:** the participants are not shown and the blob is never rebuilt from empty.
 - **A4 — an id the directory does not know:** treated as a former member.
-- **E1 — a guest:** the interface shows a guest **no participants**: the capability is false for every share role, so
+- **E1 — a guest:** the interface shows a guest **no participants**: the right is false for every share role, so
   there is no section, no control and no profile link, and a guest never reaches `#/people/<userId>`. This is an
   interface boundary, **not a cryptographic one**: a share serves the node's `wrappedMeta` unchanged and the guest holds
   `K_node`, so a link holder with developer tools could read the **count and the opaque ids** — but no names (the list
@@ -123,7 +123,7 @@ welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
 ## Where it is built (web)
 
 - Model and write: `web/src/features/memory/memoryParticipants.ts` (`participants: { userIds }`, cap 100, the merging edit);
-  `editParticipantsOf` in `core/node/nodeMeta.ts`; the capability `participants` in `capabilities.ts`; the door
+  `editParticipantsOf` in `core/node/nodeMeta.ts`; the right `participants` in `features/memory/rights.ts`; the door
   `NodeMetaDoor.setParticipants` in `source.ts`.
 - At creation: "I was there" in Memories' create dialog `components/MemoryNodeDialog.vue`, sealed at birth by `createMemory`'s
   `participants` (`memoryNodes.ts`).
@@ -143,7 +143,7 @@ welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
 - Enablers: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta`)
 - Use-cases: [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md) (the versioned meta write),
   [uc.memory.buckets](uc.memory.buckets.md) (the uploader axis), [uc.memory.gallery](uc.memory.gallery.md) (the lightbox)
-- Applications: [docs/apps/memories.md](../../../apps/memories.md) (the capability matrix)
+- Applications: [docs/apps/memories.md](../../../apps/memories.md) (the rights matrix)
 - Decisions: [ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md),
   [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) (the versioned write),
   [ADR 0081](../../../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md) (revalidated tree reads)

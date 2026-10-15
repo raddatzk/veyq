@@ -45,7 +45,7 @@ page lists Memories as level-view rows with cover, date and place and so needs t
 client-side migration.
 
 **4. Guests do not see participants — in the interface, not cryptographically.** The header component is the same for
-a guest and a member; whether it shows the participants is a capability flag in `memoryCapabilities` (`participants`),
+a guest and a member; whether it shows the participants is a right in `memoryRights` (`participants`),
 **fail closed** like every other right there, so no share view for any role (`READ`, `READ_WRITE`, `WRITE_ONLY`, folder
 or Memory link) renders the section, its controls or a profile link. This is an exception the owner chose to the
 "share = member view" principle: rights only remove functions, but a participant list is a statement about *other

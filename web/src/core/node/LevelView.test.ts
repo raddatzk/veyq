@@ -275,7 +275,7 @@ describe('LevelView: the folders', () => {
 })
 
 // cr-node-key-hierarchy 5b.3 (moved from `MemoryBrowse.test.ts`): the folder header carries the share button core's folder
-// capabilities allow (the instance's public links, a folder, not a guest's identity folder).
+// rights allow (the instance's public links, a folder, not a guest's identity folder).
 describe('LevelView: the folder header', () => {
   const shareButton = (w: Level) => w.find(`button[aria-label="${t('share.share')}"]`)
 
@@ -470,7 +470,7 @@ describe('LevelView: a guest\'s identity folder', () => {
 // inbox #407: ONE plain text for an empty level, composed from what the viewer may create; no create tile.
 describe('LevelView: the empty level', () => {
   const Dialog = defineComponent({ name: 'StubDialog', setup: () => () => h('div') })
-  // the application's capability function: no write during a pending deletion, none for a READ guest
+  // the application's rights function: no write during a pending deletion, none for a READ guest
   const allowAll = (ctx: { access: { mode: string; readonly?: boolean; role?: string } }) =>
     ctx.access.mode === 'member' ? !ctx.access.readonly : ctx.access.role !== ShareRole.Read
   beforeEach(() => {
@@ -498,7 +498,7 @@ describe('LevelView: the empty level', () => {
 })
 
 // inbox #406: the creation actions are ONE menu in the toolbar, derived from the registry, each entry only where its own
-// capability function says yes. Real clicks on the button and on the entries.
+// rights function says yes. Real clicks on the button and on the entries.
 describe('LevelView: the "New" menu', () => {
   const Dialog = defineComponent({ name: 'StubDialog', setup: () => () => h('div') })
   const grant = { value: true }
@@ -552,7 +552,7 @@ describe('LevelView: the "New" menu', () => {
     expect(items.every((i) => i.getAttribute('role') === 'menuitem')).toBe(true)
   })
 
-  it('fails closed: an entry whose capability function says no is not drawn; none left, no button', async () => {
+  it('fails closed: an entry whose rights function says no is not drawn; none left, no button', async () => {
     grant.value = false
     const w = mountLevel([TRIPS], { folder: TRIPS })
     expect(await newMenuLabels(w)).toEqual([t('node.folderCreate')])
@@ -569,7 +569,7 @@ describe('LevelView: the "New" menu', () => {
     expect(isDisabled(items.find((i) => i.textContent?.trim() === t('node.anItem'))!)).toBe(false)
   })
 
-  it('a READ guest gets no menu; a READ_WRITE guest gets the entries its capabilities grant', () => {
+  it('a READ guest gets no menu; a READ_WRITE guest gets the entries its rights grant', () => {
     expect(hasNewMenu(mountGuest(ShareRole.Read))).toBe(false)
     expect(hasNewMenu(mountGuest(ShareRole.ReadWrite))).toBe(true)
   })
@@ -593,7 +593,7 @@ describe('LevelView: the "New" menu', () => {
       expect(dropped).toEqual([])
     })
 
-    it('are ignored where the capability function says no (a READ guest, a read-only level)', async () => {
+    it('are ignored where the rights function says no (a READ guest, a read-only level)', async () => {
       await drop(mountGuest(ShareRole.Read), 'a.txt')
       grant.value = false
       await drop(mountLevel([TRIPS], { folder: TRIPS }), 'a.txt')

@@ -1,5 +1,5 @@
 // The selection of a level (inbox #421, owner decisions 2026-10-14): a set of node ids the level holds while its Select mode
-// is on. Core's, like the level itself: it names no kind, and what a selected node may do is its application's capability
+// is on. Core's, like the level itself: it names no kind, and what a selected node may do is its application's rights
 // answer (`LevelRow.selection`), read where an action is offered - never here.
 //
 // The set belongs to the LEVEL, not to a tab (`LevelView.vue`): switching tabs keeps it, "All" adds what the tab on screen

@@ -2,10 +2,10 @@
 // The header of every node page and level (owner design 2026-10-12, inbox #406): ONE core component, so a folder, a file,
 // a drop box and a Memory open the same way. Left a LEADING VISUAL (the `leading` slot — an application's cover image —
 // or, by default, the kind's `icon`), then the NAME (`title`, optionally a `subtitle` and a `meta` slot below it), and
-// the ACTIONS on the right (`NodeHeaderAction`, `../nodeHeader.ts`). The application feeds data and its capability
+// the ACTIONS on the right (`NodeHeaderAction`, `../nodeHeader.ts`). The application feeds data and its rights
 // answers; core owns the look, the spacing, the wrap on a narrow screen, the keyboard (every action is a real, labelled
 // `<button>`) and the dark mode (`styles/ui.css` tokens). It decides nothing about what is offered: an action not
-// `shown` is not rendered (fail closed is the caller's capability function), and a guest sees this very header with
+// `shown` is not rendered (fail closed is the caller's rights function), and a guest sees this very header with
 // fewer actions (inbox #401).
 //
 // `level` is the heading level of the title: a node's own page is the page's `h1`, a folder's header inside the level view `h2`.
@@ -20,7 +20,7 @@ const props = withDefaults(
     icon?: string
     subtitle?: string
     actions?: readonly NodeHeaderAction[]
-    /** Core's own actions next to the application's (a future favorite heart), each gated by a core capability function. */
+    /** Core's own actions next to the application's (a future favorite heart), each gated by a core rights function. */
     coreActions?: readonly CoreHeaderAction[]
     level?: 1 | 2
   }>(),
