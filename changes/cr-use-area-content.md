@@ -53,7 +53,7 @@ its back-links; every step is checked in the web client (dev backend with S3) be
 phase closes only after the owner has read its pages in conversation. Done when, per phase: `npm run check` in
 `site/`, the sources guard and the trust-chain green, and the owner's read.
 
-- [ ] 1 frame — the sidebar groups of the nine sections; a `Screenshot` component for MDX pages that takes an id
+- [x] 1 frame — the sidebar groups of the nine sections; a `Screenshot` component for MDX pages that takes an id
       and a description of what the shot must show, renders `site/src/assets/screenshots/<id>.<en|de>.png` when it
       exists and a visible placeholder (id + description) when it does not, and never fails the build for a
       missing image; a shot list (`npm run shots` in `site/`) that prints every placeholder — id, page, description,
@@ -64,7 +64,7 @@ phase closes only after the owner has read its pages in conversation. Done when,
       or absorbed in phases 2–7) without breaking a link (the in-app link in `web/src/views/ShareView.vue` and
       the docs' back-links follow). Bites: a placeholder with no image renders its box and the build stays green;
       an image dropped in renders instead; the shot list names both.
-      *Built, waiting for the owner's read:* a section is a folder (`getting-started/`, `account/`, `spaces/`,
+      *Built, read by the owner (2026-10-15):* a section is a folder (`getting-started/`, `account/`, `spaces/`,
       `memories/`, `depot/`, `sharing/`, `space-owners/`, `privacy/`, `help/`), so its pages' URLs say the section;
       `account-keys-and-recovery`, `depot` and `sharing` stay at the root until the phase that splits them
       (`validate_guard_gaps.py` forges the first at that path — re-anchor it then). A section with no page yet is
@@ -95,10 +95,10 @@ phase closes only after the owner has read its pages in conversation. Done when,
       device pairing (needs two separate browsers) — written from the code. Found: your own safety number is reached
       only through your own name on a Memory, file or photo; the member lists show `@username`, not the real name;
       the German rotation copy says *Räume* where the UI elsewhere says *Bereiche*.
-- [ ] 4 Spaces — personal, group and shared space, and who sees what; groups (create, invite by username, accept
+- [x] 4 Spaces — personal, group and shared space, and who sees what; groups (create, invite by username, accept
       an invitation, co-owner, remove, rename, delete and restore, icon); organising (folders, favorites, move,
       copy, select several, trash, views); download and import.
-      *Built and checked live, waiting for the owner's read:* `spaces/` — Your spaces (landing), Folders, The trash,
+      *Built and checked live, read by the owner (2026-10-15):* `spaces/` — Your spaces (landing), Folders, The trash,
       Create a group, People in a group, Accept a group invitation, Rename/decorate/delete a group, plus the five
       organising pages phase 6 had put under `depot/` (move, copy, select several, views and favorites, folder covers),
       moved here because they are the platform's, not Depot's (owner, 2026-10-15), and corrected against the code (a
