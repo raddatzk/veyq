@@ -11,7 +11,6 @@ import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestGate.PwCheck
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
 import me.raddatz.veyq.core.admin.tenant.TenantTermsHandler
-import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.blobstore.BlobStore
@@ -162,6 +161,8 @@ sealed interface UpdateShareOutcome {
     /** An illegal role change (cr-0119) — `role = WRITE_ONLY`, a change on a WRITE_ONLY share, or a role the shared
      *  node's kind may not be the root of ([ShareRoots]) → 422. */
     object InvalidRole : UpdateShareOutcome, HttpFailure by httpFailure("invalid_role_change", UNPROCESSABLE)
+    /** A change into a role whose instance capability is not active (ADR 0088) — the 422 `create` answers. */
+    object CapabilityDisabled : UpdateShareOutcome, HttpFailure by Failures.capabilityDisabled
 }
 
 sealed interface SetShareSealedNameOutcome {
@@ -260,7 +261,7 @@ class SharingHandler(
     ): CreateShareOutcome {
         // Instance policy first (ADR 0032): the capability this role needs must be active, else 422 — checked
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
-        if (!capabilities.isActive(capabilityFor(role))) return CreateShareOutcome.CapabilityDisabled
+        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(role))) return CreateShareOutcome.CapabilityDisabled
         val keys = shareKeys(role, wrap, sealedDropPublicKey, sealedDropPrivateKey) ?: return CreateShareOutcome.InvalidRequest
         // A node in the trash is shared by nobody: a link on it would serve nothing, and a restore is not a new share.
         val node = store.findNode(nodeId)?.takeIf { it.deletedAt == null } ?: return CreateShareOutcome.NoNode
@@ -400,6 +401,13 @@ class SharingHandler(
         if (role != null && !ShareRoots.allows(roots, store.findNode(share.nodeId)?.kind.orEmpty(), role)) {
             return UpdateShareOutcome.InvalidRole
         }
+        // A change INTO a role publishes a link of that role, so it asks what `create` asks (ADR 0088): a READ link
+        // turned READ_WRITE while `.contribute` is off would mint a contribute link past the switch, and since the
+        // guest gate refuses that role (ADR 0088 decision 5) it would serve no guest at all. Only an actual change:
+        // a request naming the current role, or narrowing to READ while READ is on, passes.
+        if (role != null && role != share.role && !capabilities.isActive(ShareAccessPolicy.capabilityFor(role))) {
+            return UpdateShareOutcome.CapabilityDisabled
+        }
         return when (store.updateShare(userId, shareId, sealedNote, sealedShareName, role, expiresAt, passwordRequired, pwSalt, pwVerifier, sealedPassword)) {
             SharingStore.UpdateResult.DONE -> UpdateShareOutcome.Done
             SharingStore.UpdateResult.NOT_FOUND -> UpdateShareOutcome.NotFound
@@ -447,7 +455,7 @@ class SharingHandler(
         access.check(userId, share.scopeId, WRITE)
             .refusal(ReactivateShareOutcome.NotFound, ReactivateShareOutcome.Suspended, ReactivateShareOutcome.Deleting)
             ?.let { return it }
-        if (!capabilities.isActive(capabilityFor(share.role))) return ReactivateShareOutcome.CapabilityDisabled
+        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(share.role))) return ReactivateShareOutcome.CapabilityDisabled
         // ADR 0075: the same link comes back on, so a link a departed member may hold is re-issued instead.
         val scope = scopes.find(share.scopeId) ?: return ReactivateShareOutcome.NotFound
         if (reissueRequired(share, scope)) return ReactivateShareOutcome.ReissueRequired
@@ -498,7 +506,7 @@ class SharingHandler(
     ): ReissueShareOutcome {
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
-        if (!capabilities.isActive(capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
+        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
         // No drop private key: the old WRITE_ONLY share proves the node already holds one (it is set once and
         // never cleared), and every upload so far is sealed to it (ADR 0031 point 7).
         val keys = shareKeys(old.role, wrap, sealedDropPublicKey, null) ?: return ReissueShareOutcome.InvalidRequest
@@ -704,15 +712,6 @@ class SharingHandler(
         val blob = store.authorizedBlob(share.scopeId, share.nodeId, blobId) ?: return ShareBlobOutcome.NotFound
         val gets = blobStore.presignGets(blob.storageKey, blob.chunkCount, domain) ?: return ShareBlobOutcome.StoreUnavailable
         return ShareBlobOutcome.Found(gets)
-    }
-
-    /** The instance capability a role's public share needs (ADR 0032, ADR 0088): one leaf per role. READ_WRITE and
-     *  WRITE_ONLY are children of [CapabilityIds.PUBLIC_SHARES], so through the registry's AND along the path they
-     *  also need it. READ, the one role left, needs the parent alone. */
-    private fun capabilityFor(role: String): String = when (role) {
-        ShareEntity.READ_WRITE -> CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
-        ShareEntity.WRITE_ONLY -> CapabilityIds.PUBLIC_SHARES_DROP_BOX
-        else -> CapabilityIds.PUBLIC_SHARES
     }
 
     /**
