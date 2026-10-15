@@ -199,7 +199,7 @@ Spot-check before trusting the table: D5 leans hardest on "only `createGroup` is
 
 ## Phases
 
-- [ ] **1 contracts — the catalog, its guard, the OpenAPI prose.** Order: the guard first, red on the live defect,
+- [x] **1 contracts — the catalog, its guard, the OpenAPI prose.** Order: the guard first, red on the live defect,
   then the catalog, green.
   1. On a detached worktree of `HEAD` (`git worktree add --detach <dir> HEAD`), write D10's two checks. Run them
      against the **untouched** catalog. They must go red, once per old id, on the root rule (the live defect, no
@@ -291,3 +291,15 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
 ## Retrospective
 
 (filled at implement close)
+
+- **Phase 1, execution: staging by explicit path does not make a commit yours.** `git commit` takes the whole index,
+  and a parallel session had staged its Files → Depot renames. The pre-commit `git status --short` showed them, but
+  the commit was chained with `;`, so it ran anyway and swept 25 of the neighbour's renames into this CR's commit.
+  It was rewritten at once (`git reset --soft <own first commit>`, then `git commit --only -- <six paths>`), and the
+  neighbour's staged set was confirmed back in the index. Next time: commit with `git commit --only -- <paths>`, or
+  gate the commit on `git diff --cached --name-only` equalling the paths you staged, joined by `&&`.
+- **Phase 1, planning: a second sibling was in flight and § Context names only one.** `cr-files-becomes-depot`
+  (ADR 0086) renames `:apps:files`, `FilesNodeKindRules.kt` (D8's locator) and the stored kind `FILES_DROPBOX` →
+  `DEPOT_DROPBOX`. Within minutes of phase 1's commit it had already rewritten the drop-box entry's text in the
+  working tree. Phase 2 re-derives D8's locators after that CR lands. Next time: at implement start, `ls changes/`
+  and grep each live sibling CR for the files this CR's locators name.
