@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.setup
 
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.platform.capabilities.PlatformMajor
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.instance.InstanceStore
 import me.raddatz.veyq.core.persistence.createOrConflict
@@ -44,9 +45,9 @@ class SetupHandler(
     private val capabilities: CapabilityRegistry,
     config: VeyqConfig,
 ) {
-    // Build-set version (ADR 0032). `major` is the ONLY hard gate — bump it exclusively when a capability is
-    // removed; everything additive bumps `build`. Defaulted so a fresh instance/config still advertises 1.1.
-    private val versionMajor: Int = config.version().major()
+    // The advertised version (ADR 0032). `major` is the ONLY hard gate and the platform's one major, generated from
+    // the repository's VERSION (ADR 0085 decision 1) — never configured; `build` is a hand-kept diagnostic.
+    private val versionMajor: Int = PlatformMajor.MAJOR
     private val versionBuild: Int = config.version().build()
     private val supportedSuites = listOf("v1")
 

@@ -8,9 +8,10 @@ import jakarta.enterprise.context.ApplicationScoped
  * `application.properties` binds to the image's `VEYQ_VERSION`, stamped by the publish with the version it
  * derived from the tree (the major in the `VERSION` file, the minor a commit count).
  *
- * It answers the **operator's** question, *"which bits are running, and what do I roll back to?"*, and is
- * deliberately never merged with the pre-auth `version: { major, build }` on `GET /api/setup`, which answers
- * the **client's** question, *"can these two sides talk to each other?"* (ADR 0057 §4).
+ * It answers the **operator's** question, *"which bits are running, and what do I roll back to?"*. The pre-auth
+ * `version: { major, build }` on `GET /api/setup` answers the **client's**, *"can these two sides talk to each
+ * other?"*. Both carry the same major, the platform's one (ADR 0085 decision 1); only the minor here is precise
+ * enough to name the CVEs an instance still carries, so it never goes pre-auth (ADR 0057 §4).
  *
  * **Absence is a first-class answer.** A build the release pipeline never stamped — a local `docker build`, a
  * `quarkusDev` run, the test profile — leaves `VEYQ_VERSION` unset, which the property expression resolves to
