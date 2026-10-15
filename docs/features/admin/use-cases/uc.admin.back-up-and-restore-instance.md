@@ -50,7 +50,9 @@
 
 **Verify — the step that separates a restore from a hope.**
 
-11. The operator reads the instance's **config-secret state**. A match is what says leg three arrived; a
+11. The operator reads the instance's **config-secret state** as the Server Owner, on the admin channel (the
+    admin console's Server section or `veyq-admin`) — not through a tenant's mail settings, which only that
+    tenant's owner may read. A match is what says leg three arrived; a
     mismatch is the fingerprint doing its job (A2). Then a person signs in and **opens a Memory that contains
     media** — the only assertion that exercises all three legs at once, because the row, the object and the key
     that seals the SMTP settings are three different failures with the same symptom of "it looked fine".

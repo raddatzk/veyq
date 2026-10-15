@@ -1,0 +1,37 @@
+useCase: uc.admin.configure-object-store
+feature: admin
+title: Connect and check the instance's object store
+status: planned
+# Refined 2026-10-15 (ADR 0089); cr-store-connection-in-admin-web builds it. Every criterion waits under `gaps`
+# until that CR adds its tests.
+acceptanceCriteria:
+  - id: server-owner-sets-and-checks-the-store
+    text: >-
+      A signed-in Server Owner saves an S3-compatible or Garage store setting and checks it; a passing check marks
+      the setting checked and the backend signs against it without a restart.
+  - id: a-failing-check-names-its-step-and-changes-no-store-configuration
+    text: >-
+      A check that fails names the failing step and the store's answer, keeps tenant creation closed, and leaves
+      the store's configuration untouched (no bucket created, no CORS policy written).
+  - id: no-tenant-without-a-checked-store
+    text: >-
+      Creating a tenant is refused with a reason until the current store setting has passed its check.
+  - id: the-store-secrets-are-sealed-and-write-only
+    text: >-
+      The access key secret and the Garage admin token are sealed under the config-secret key with that key's
+      fingerprint and returned on no surface, the Server Owner's included.
+  - id: a-lost-key-asks-for-the-store-credentials-again
+    text: >-
+      With the config-secret key absent or not the one that sealed them, the store's credentials are reported as
+      unreadable and can be re-entered; the bundled store, which seals nothing, keeps working.
+  - id: no-store-refuses-uploads-with-a-reason
+    text: >-
+      With no store set the instance runs and refuses uploads with a reason; the in-memory store is never used
+      outside tests.
+gaps:
+  backend: >-
+    Not built: the store setting is read from environment variables at boot today (VeyqConfig, BlobStoreProducer);
+    cr-store-connection-in-admin-web moves it to the database behind the admin channel.
+  web: >-
+    The web client has no part in configuring the store; it only uploads to whatever store the backend signs for.
+    Its upload refusal (no-store-refuses-uploads-with-a-reason) is reached through the backend's response.

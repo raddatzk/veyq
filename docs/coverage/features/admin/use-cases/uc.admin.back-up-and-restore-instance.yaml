@@ -172,6 +172,13 @@ acceptanceCriteria:
       keys are comparable against the blob rows that reference them. A capture missing an object is detected
       against the database it was taken with, before anyone restores it — the check a volume copy cannot offer,
       and the reason this form was chosen.
+  - id: the-server-owner-reads-the-config-secret-state
+    # Not built: today the state is readable only through GET /api/tenants/{id}/mail-settings, which is owner-gated
+    # to that tenant, so a Server Owner who owns no tenant cannot run step 11. cr-config-secret-state-on-admin-channel
+    # adds the admin-channel read and its backend test.
+    text: >-
+      A signed-in Server Owner reads the instance's config-secret state (OK, ABSENT or MISMATCH) on the admin
+      channel, without owning any tenant, and reading it changes nothing — in particular it adopts no fingerprint.
   - id: the-store-leg-restores-onto-a-different-store
     # No coverage: no harness stands up a second store. The rehearsal restores into a different BUCKET that the
     # target's own first start provisioned (`restore_hook`: `veyq-e2e-dst-<n>`), which is the "recreated rather

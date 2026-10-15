@@ -15,6 +15,9 @@ handling of reported shares.
 
 - ★ [First-run server setup](use-cases/uc.admin.setup-server.md) — **built (backend + admin-web)**
 - ★ [Administer only through the admin container](use-cases/uc.admin.admin-channel.md) — **built**
+- ★ [Connect and check the instance's object store](use-cases/uc.admin.configure-object-store.md) — **planned**
+  (ADR 0089): the store set and checked in the admin console instead of environment variables; a checked store
+  gates tenant creation.
   ([ADR 0065](../../decisions/0065-admin-ui-cli-separate-service.md); the backend answers every Server-Owner
   operation, first-run setup included, only on an internal listener the admin container reaches — classified by
   the socket, never by a header — and 404s it on the public origin)
