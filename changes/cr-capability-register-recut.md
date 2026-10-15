@@ -215,7 +215,11 @@ Spot-check before trusting the table: D5 leans hardest on "only `createGroup` is
 that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and `validate_capabilities.py`.
   Backend and web are red only at the conformance tests that still hold old ids. Those fail because they compare the
   code against the new catalog; name the failing tests.
-- [ ] **2 backend — ids, registry, gates.** Covers D2, D3, D4, D5's test, D6, D7, D8. Every negative carries a positive
+- [ ] **2 backend — ids, registry, gates.** Covers D2, D3, D4, D5's test, D6, D7. **D8 moved to phase 2b**
+  (coordinator, 2026-10-15). While this phase ran, `cr-files-becomes-depot` was mid-rename, with uncommitted edits in
+  `backend/apps/depot/**`, D8's site. Two writers never share files, and everything else in this phase is core. Before
+  each commit, check `git status --short` on the exact paths staged; never stage one that carries a neighbour's edit.
+  Every negative carries a positive
   control on the same predicate and anchors on `422` with `code == capability_disabled`, never on "it failed":
   - **Path AND.** `core.public-shares` off: all three share ids are absent from `/api/setup`, `createShare(WRITE_ONLY)`
     → 422, and `core.group-space` is still present (control).
@@ -225,8 +229,6 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   - **Group.** `core.group-space` off: `createGroup` → 422, and rename of an existing group → 2xx (control, which also
     pins D5's feature-switch rule).
   - **Pairing.** `core.device-linking` off: each pairing endpoint → 422, and `/api/setup` → 200 (control).
-  - **Drop box.** `.drop-box` off: `createNode(FILES_DROPBOX)` → 422, and `createNode(FOLDER)` at the same parent →
-    created (control).
   - **D3.** The registry, handed switches that name a parent (`core.public-shares`), refuses its children. This is the
     unit half of the path-AND bite; its control is a sibling that stays active. Also the leak bite from D3, recorded
     with its red output.
@@ -239,8 +241,21 @@ that listed `validate_contracts_common.py`, `validate_id_contract_format.py` and
   The conformance test (`CapabilityRegistryTest`) stays one-directional (code ⊆ catalog), because a catalog id may be
   reserved ahead of code (ADR 0032 §6). · **Done when:** `./gradlew check` green, and the backend half of the two
   inventory angles returns nothing.
+- [ ] **2b backend — D8, the drop-box creation gate.** It starts once `git status --short backend/apps/depot
+  backend/core/src/main/kotlin/me/raddatz/veyq/core/node backend/core/src/main/kotlin/me/raddatz/veyq/core/content`
+  is clean, i.e. once `cr-files-becomes-depot` has committed its backend. D8's locators are re-derived against that
+  result. Measured after its `f92bc78c`: the rule is `backend/apps/depot/…/DepotNodeKindRules.kt` and the kind is
+  `DEPOT_DROPBOX` (`:29`). The `FilesNodeKindRules.kt:29` and `FILES_DROPBOX` that D8 names were true at refine.
+  Core's hook, `createInScope`'s check and Depot's answer land together, so the hook's bite lands with its one use:
+  - `.drop-box` off: `createNode(DEPOT_DROPBOX)` → 422 `capability_disabled`;
+  - `createNode(FOLDER)` at the same parent → created (control);
+  - bitten by removing Depot's answer: the 422 test goes red.
+
+  `createNode`'s 422 text already names `DEPOT_DROPBOX` (fixed at the phase split). · **Done when:**
+  `./gradlew check` green.
 - [ ] **3 web — leaves, matrices, gates (D9).** Start only when the sibling's pairing files are committed
-  (§ Context). The matrix tests gain the rows this CR adds: drop box on/off on `createDropBox` and on the drop box's
+  (§ Context) **and** `cr-files-becomes-depot` has committed its web rename of `web/src/features/files`, which D9
+  edits. Re-derive D9's Files/Depot paths against that result. The matrix tests gain the rows this CR adds: drop box on/off on `createDropBox` and on the drop box's
   `share`, and contribute on/off on the offered roles. Each `hasCapability` mock that only ever answers one way gets
   its other answer: the hidden "stay signed in" branch in `JoinDeviceCard`/`SignInWithCodeCard`, the hidden pairing
   entry points, and the toggle-off DEVICE-wrap path in `LoginView`. These unit and mount tests are the only proof

@@ -87,7 +87,7 @@ paths:
             Unprocessable. Two codes: `illegal_structure` — the kind's placement rule refuses the parent, the kind is
             one no application claims, an unknown/foreign parent, or a cycle; `capability_disabled` — creating this
             kind needs a capability that is not active instance-wide. The kind's application names that capability
-            (`NodeKindRules`, default none): Files' drop box needs `core.public-shares.drop-box`, and so, by the AND
+            (`NodeKindRules`, default none): Depot's drop box (`DEPOT_DROPBOX`) needs `core.public-shares.drop-box`, and so, by the AND
             along the path, `core.public-shares` (ADR 0032, ADR 0088). Only creation is refused: an existing node of
             the kind stays (a feature switch refuses only what is new, ADR 0088 decision 5).
           content:
