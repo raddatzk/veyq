@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4); the rest is not (§ Consequences)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4) and its parallel cases (decision 1); the rest is not (§ Consequences)
 - Date: 2026-10-16
 
 ## Context
@@ -30,7 +30,7 @@ sessions, so high rather than low):
 Three structural costs sit on top of those numbers:
 
 - **`validate_guard_gaps.py` is 90 % of the trust-chain.** It tests the guards, not the product: 79 forgeries
-  against 21 guards, each a fresh copy of the tree and a subprocess, one after the other.
+  against 22 guards, each a fresh copy of the tree and a subprocess, one after the other.
 - **The backend and both frontends are checked twice per push.** `ci.yml` runs them, and `container.yml`'s `test`
   runs them again — and `build` waits for that second run before it starts.
 - **A release builds again.** It publishes bytes no test saw; ADR 0090 gates them by testing `build-<sha>` inside the
@@ -133,6 +133,11 @@ Three structural costs sit on top of those numbers:
 - **The local skip of `validate_guard_gaps.py`** is the first piece built (2026-10-16): a green full run stamps the
   hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does. The CI half of
   decision 4 — the path filter and the nightly run — comes with the pipeline CR.
+- **The guard-gap cases run in parallel** (2026-10-16, `cr-one-pipeline-per-commit` phase 1): a pool of
+  `min(cpu_count, 6)` workers, `VEYQ_GUARD_GAPS_WORKERS=1` the sequential run. Measured on the same Mac with a
+  neighbour's Docker-heavy session running: the full run **167 s at 6 workers** (load average 13 → 30) against
+  334 s at 1 (24 → 13) — inside its 10-minute budget; about 2×, not 6×, because the tree copies are bound by the
+  file system and its watchers, not by the CPU. The 901 s of § Context was the sequential run under a load of 20–55.
 - **The remote comes when the owner judges veyq ready to publish, and it will be public** (owner, 2026-10-16). Until
   then every stage's only run is local, so the pipeline must run locally from the workflow file itself, by one command
   (`changes/cr-one-pipeline-per-commit.md` phase 5); the first public push is also the first CI run.

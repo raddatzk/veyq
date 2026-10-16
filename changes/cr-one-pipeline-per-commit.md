@@ -67,12 +67,27 @@ Done when, per phase: its local proof green and its log read; `for f in scripts/
 green with `validate_guard_gaps.py --force` once at the end of the phase; the bites below made red once each and
 restored by snapshot-and-restore.
 
-- [ ] 1 **Guard gaps in parallel.** The 79 cases run on a bounded pool (default `min(cpu_count, 6)`,
+- [x] 1 **Guard gaps in parallel.** The 79 cases run on a bounded pool (default `min(cpu_count, 6)`,
       `VEYQ_GUARD_GAPS_WORKERS` overrides; 1 is today's behaviour), each case on its own copy of the one snapshot; the
       un-forged verdict per guard is computed once, before the cases, in the same pool; the report lists failures in
       case order regardless of finishing order. Bites: a forgery whose documented verdict is flipped in `CASES` →
       red in parallel exactly as with one worker; the same full run with 1 and with N workers yields the same verdict
       set. Measured: the full `--force` run's wall time at 1 and at N workers, under a named load.
+      **Built 2026-10-16:** a `ThreadPoolExecutor` (threads: the work is file copies and child processes, both
+      outside the GIL, and one process keeps Ctrl-C in the main thread); the snapshot and every case copy live
+      under one run directory, removed in `main`'s `finally` after the pool is shut down with `cancel_futures`.
+      The un-forged verdicts are one pool pass over the 22 distinct target guards before any case is submitted.
+      **Bites** (snapshot-and-restore of the guard file, restore confirmed by `cmp` against the snapshot and an
+      unchanged `git status --porcelain`): case 35's verdict flipped to `True` and case 14's anchor
+      (`TENANT_REPROJECT_CALL`) renamed, run together through a harness that calls `main()` and records every guard
+      exit — at 1 and at 6 workers both exit 1 with byte-identical output naming exactly case 14 ("could not apply
+      forgery") and case 35 ("should still pass … but it was rejected"), and the 100 recorded guard exits (22
+      un-forged, 78 cases; case 14 never reached its guard) are identical. A worker that raises propagates and
+      leaves no run directory; a SIGINT to the process group mid-run (6 copies live) leaves none either.
+      **Measured** (14-core Mac, a neighbour's Docker-heavy `cr-stack-e2e` session running): the full `--force`
+      run 334 s at 1 worker (load average 24 → 13) and 167 s at 6 (13 → 30); bitten, 350 s and 147 s. About 2×,
+      not 6×: the copies are bound by the file system and its watchers. Both well inside the 10-min budget here;
+      the 809–1073 s of the morning were sequential under a heavier load.
 - [ ] 2 **One workflow.** `ci.yml` (or the name confirmed above) holds every stage of ADR 0091 decision 1 that exists
       today: the guards; the surface checks — backend, crypto, web, **admin-web** and the **chart** check, which only
       `container.yml`'s `test` ran; the races; the API end-to-end run; the image build matrix, needing only the version
