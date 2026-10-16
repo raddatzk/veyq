@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import * as base64 from '@veyq/crypto/base64'
-import { editField, nodeMetaState, openNodeMetaForWrite, sealNodeMeta, unsealNodeMeta } from './nodeMeta'
+import { editField, editParticipantsOf, nodeMetaState, openNodeMetaForWrite, sealNodeMeta, unsealNodeMeta } from './nodeMeta'
 import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
 import { treeNode } from '../../test/models'
 
@@ -143,5 +143,55 @@ describe('editField — an editor re-applies only its own field, and refuses whe
 
   it('surface = false re-applies even over its own moved field (the cover after a blob operation, D9)', () => {
     expect(editField('cover', 'mine', 'opened', false)({ v: 1, cover: 'peer' }, again)).toEqual({ v: 1, cover: 'mine' })
+  })
+})
+
+describe('editParticipantsOf — the participants editor merges instead of surfacing a conflict (ADR 0083, ADR 0077)', () => {
+  const ctx = { retry: true, state: { wrappedMeta: 'c3RhdGU=', metaRevision: 4 } }
+
+  it('hands merge only the stored ids that are non-empty strings, deduplicated, in stored order', () => {
+    const merge = vi.fn((stored: string[]) => [...stored, 'c'])
+    const out = editParticipantsOf(merge)({ v: 1, participants: { userIds: ['a', '', 7, null, 'a', 'b'] } }, ctx)
+    expect(merge).toHaveBeenCalledWith(['a', 'b'])
+    expect(out).toEqual({ v: 1, participants: { userIds: ['a', 'b', 'c'] } })
+  })
+
+  it('writes nothing (null) when merge returns the stored list unchanged', () => {
+    expect(editParticipantsOf((stored) => stored)({ v: 1, participants: { userIds: ['a', 'b'] } }, ctx)).toBeNull()
+  })
+
+  it('an empty result drops the sub-object KEY, keeping every sibling', () => {
+    const out = editParticipantsOf(() => [])({ v: 1, date: 'D', participants: { userIds: ['a'] } }, ctx)
+    expect(out && Object.keys(out)).toEqual(['v', 'date'])
+  })
+
+  it('keeps an unknown field inside the sub-object and replaces only userIds', () => {
+    expect(editParticipantsOf(() => ['b'])({ v: 1, participants: { userIds: ['a'], future: 'kept' } }, ctx))
+      .toEqual({ v: 1, participants: { userIds: ['b'], future: 'kept' } })
+  })
+
+  it.each([
+    ['absent', undefined],
+    ['null', null],
+    ['a string', 'xy'],
+    ['a number', 5],
+    ['an object without userIds', {}],
+    ['userIds not an array', { userIds: 'a' }],
+  ])('participants %s reads as no ids, and a write starts a clean sub-object', (_label, participants) => {
+    const merge = vi.fn(() => ['u'])
+    const meta = participants === undefined ? { v: 1 } : { v: 1, participants }
+    // A string's characters must not be spread into the sub-object as `0`/`1` keys.
+    const expected = participants !== null && typeof participants === 'object' ? { ...participants, userIds: ['u'] } : { userIds: ['u'] }
+    expect(editParticipantsOf(merge)(meta, ctx)).toEqual({ v: 1, participants: expected })
+    expect(merge).toHaveBeenCalledWith([])
+  })
+
+  it('participants as an array (a foreign client\'s JSON) reads as no ids, and a write starts a clean sub-object', () => {
+    // An array is a non-null object: its elements must not be spread into the sub-object as `0`/`1` keys (inbox #473).
+    const merge = vi.fn(() => ['u'])
+    const out = editParticipantsOf(merge)({ v: 1, participants: ['x', 'y'] }, ctx)
+    expect(merge).toHaveBeenCalledWith([])
+    expect(out).toEqual({ v: 1, participants: { userIds: ['u'] } })
+    expect(out && Object.keys(out.participants as object)).toEqual(['userIds'])
   })
 })

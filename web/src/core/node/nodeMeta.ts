@@ -107,12 +107,16 @@ export function editField(
 export function editParticipantsOf(merge: (stored: string[]) => string[]): (meta: RawNodeMeta, ctx: MetaEditContext) => RawNodeMeta | null {
   return (meta) => {
     const raw = meta.participants
-    const rawIds = raw && typeof raw === 'object' && Array.isArray((raw as { userIds?: unknown }).userIds) ? ((raw as { userIds: unknown[] }).userIds) : []
+    // No `typeof raw === 'object'` guard here: the blob is parsed JSON, and no JSON primitive has a `userIds`, so
+    // that conjunct changed nothing — Stryker measured it as an equivalent mutant (2026-10-17).
+    const rawIds = Array.isArray((raw as { userIds?: unknown } | null | undefined)?.userIds) ? ((raw as { userIds: unknown[] }).userIds) : []
     const stored = rawIds.filter((id): id is string => typeof id === 'string' && id !== '')
     const next = merge([...new Set(stored)])
     if (stableJson(next) === stableJson(stored)) return null
     if (next.length === 0) delete meta.participants
-    else meta.participants = { ...(raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}), userIds: next }
+    // An array is a non-null object too, but no sub-object: spreading it would write its elements as keys `0`, `1`, …
+    // (inbox #473) — it is treated like a missing sub-object.
+    else meta.participants = { ...(raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}), userIds: next }
     return meta
   }
 }
