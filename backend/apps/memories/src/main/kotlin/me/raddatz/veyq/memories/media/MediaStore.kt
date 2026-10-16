@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.UploadSessionEntity
@@ -346,16 +347,16 @@ class MediaStore(
     /** The owner_key for a NEW upload: a contributor `share:{id}`, else a member `user:{id}`. */
     private fun ownerKeyFor(uploaderUserId: String?, shareIdentityId: String?): String =
         when {
-            shareIdentityId != null -> OwnerKey.Share(shareIdentityId)
-            uploaderUserId != null -> OwnerKey.User(uploaderUserId)
-            else -> OwnerKey.User("unknown")
+            shareIdentityId != null -> PrincipalKey.Share(shareIdentityId)
+            uploaderUserId != null -> PrincipalKey.User(uploaderUserId)
+            else -> PrincipalKey.User("unknown")
         }.format()
 
     /** The share identity a contributor primary belongs to — null for any other bucket. */
     private fun contributorIdentityOf(b: BucketEntity): ShareIdentityEntity? {
         if (!b.isPrimary) return null
-        val owner = OwnerKey.parse(b.ownerKey) as? OwnerKey.Share ?: return null
-        return ShareIdentityEntity.findById(owner.shareIdentityId)
+        val owner = PrincipalKey.parse(b.ownerKey) as? PrincipalKey.Share ?: return null
+        return ShareIdentityEntity.findById(owner.identityId)
     }
 
     /**
@@ -364,7 +365,7 @@ class MediaStore(
      * yields (ADR 0031 point 7). A READ_WRITE identity has none: its rows are under `K_node`.
      */
     fun uploaderKeys(rows: List<MediaRow>): Map<String, String> =
-        uploaderKeysOf(rows.mapNotNull { r -> r.ownerKey?.let { (OwnerKey.parse(it) as? OwnerKey.Share)?.shareIdentityId } }.toSet())
+        uploaderKeysOf(rows.mapNotNull { r -> r.ownerKey?.let { (PrincipalKey.parse(it) as? PrincipalKey.Share)?.identityId } }.toSet())
 
     /**
      * The same, by guest identity id: every identity of [identityIds] — of ANY link of the Memory — that holds a
@@ -394,9 +395,9 @@ class MediaStore(
 
     /** A primary's sealed name: for a contributor (`share:{id}`) copy the identity's sealed name; else null (member → username). */
     private fun primarySealedNameFor(ownerKey: String): String? =
-        when (val owner = OwnerKey.parse(ownerKey)) {
-            is OwnerKey.Share -> ShareIdentityEntity.findById(owner.shareIdentityId)?.sealedDisplayName
-            is OwnerKey.User -> null
+        when (val owner = PrincipalKey.parse(ownerKey)) {
+            is PrincipalKey.Share -> ShareIdentityEntity.findById(owner.identityId)?.sealedDisplayName
+            is PrincipalKey.User -> null
         }
 
     /**

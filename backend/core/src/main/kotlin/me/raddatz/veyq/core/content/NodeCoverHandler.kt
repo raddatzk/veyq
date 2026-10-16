@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.content
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobUploadHandler
 import me.raddatz.veyq.core.blob.BlobUploadHandler.BlobVerify
 import me.raddatz.veyq.core.blob.BlobUploadStore
@@ -79,7 +80,7 @@ class NodeCoverHandler(
                 return NodeCoverOutcome.Budget
             }
         }
-        return store.set(scopeId, node.id, node.kind, session, manifest, expectedBlobId, wrappedMeta, metaRevision)
+        return store.set(scopeId, node.id, node.kind, session, manifest, expectedBlobId, wrappedMeta, metaRevision, PrincipalKey.User(userId))
     }
 
     /** Empty [nodeId]'s cover slot (only while it holds [blobId]) and write the node's [wrappedMeta] without the cover. */
@@ -87,6 +88,6 @@ class NodeCoverHandler(
         access.check(userId, scopeId, WRITE)
             .refusal(NodeCoverOutcome.NotFound, NodeCoverOutcome.Suspended, NodeCoverOutcome.ScopeDeleting)?.let { return it }
         if (nodes.findInScope(scopeId, nodeId) == null) return NodeCoverOutcome.NotFound
-        return store.remove(scopeId, nodeId, blobId, wrappedMeta, metaRevision)
+        return store.remove(scopeId, nodeId, blobId, wrappedMeta, metaRevision, PrincipalKey.User(userId))
     }
 }

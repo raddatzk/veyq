@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
 import me.raddatz.veyq.core.content.NodeSubtreePurge
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.ShareEntity
@@ -299,6 +300,25 @@ class DropBoxSliceTest {
         ).toInstant()
         assertEquals(tx { NodeEntity.findById(folder)!!.createdAt }, listed)
         assertTrue(!listed.isBefore(before) && !listed.isAfter(after), "$listed is not within [$before, $after]")
+    }
+
+    /** The identity folder's name is sealed by its guest, so its identity is the name's last editor (ADR 0093 § 8,
+     *  en.platform.field-editor) — and so of the files it creates inside. Control, the other kind: a member's move out
+     *  re-seals the name and takes it over. */
+    @Test
+    fun anIdentityFolderAndItsFilesNameTheirGuestAsTheNamesEditorUntilAMemberMovesItOut() {
+        val t = tree()
+        val guest = dropLink(t)
+        val folder = ensure(guest).statusCode(200).body("created", equalTo(true)).extract().path<String>("nodeId")
+        val file = UUID.randomUUID().toString()
+        GuestTreeShare.create(guest, folder, DepotNodeKinds.FILE, nodeId = file).statusCode(201)
+        val identity = PrincipalKey.Share(identityOf(guest))
+        assertEquals(identity, tx { NodeEntity.findById(folder)!!.nameEditor })
+        assertEquals(identity, tx { NodeEntity.findById(file)!!.nameEditor })
+
+        memberPlace(t, folder, to = t.other, version = 0).statusCode(204)
+        assertEquals(PrincipalKey.User(t.userId), tx { NodeEntity.findById(folder)!!.nameEditor })
+        assertEquals(identity, tx { NodeEntity.findById(file)!!.nameEditor }, "the file inside was not renamed")
     }
 
     // --- the wire ------------------------------------------------------------------------------------------------

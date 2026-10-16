@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.content
 
+import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -86,8 +87,9 @@ class NodesCoreSliceTest {
             val keyColumn = if (withKey) ", wrapped_content_key" else ""
             val keyValue = if (withKey) ", 'a21lbQ=='" else ""
             Arc.container().instance(EntityManager::class.java).get().createNativeQuery(
-                "INSERT INTO veyq_node (id, scope_id, parent_id, kind, encrypted_name, slug_token, order_index, created_at$keyColumn) " +
-                    "VALUES ('$id', '$scopeId', '$scopeId', 'FOLDER', 'bg==', '$id', 0, CURRENT_TIMESTAMP$keyValue)",
+                "INSERT INTO veyq_node (id, scope_id, parent_id, kind, encrypted_name, slug_token, order_index, created_at, " +
+                    "name_editor_user_id$keyColumn) " +
+                    "VALUES ('$id', '$scopeId', '$scopeId', 'FOLDER', 'bg==', '$id', 0, CURRENT_TIMESTAMP, '${FIXTURE_EDITOR.userId}'$keyValue)",
             ).executeUpdate()
         }
         assertThrows(Exception::class.java) { insert(withKey = false) }

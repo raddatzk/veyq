@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
@@ -63,7 +64,10 @@ class IdentityFolders(private val nodes: NodesStore) {
             val current = nodes.currentEpoch(scopeId)
             if (current == null || epoch > current) return@createOrConflict IdentityFolderOutcome.StaleEpoch
             if (nodes.idTaken(nodeId)) return@createOrConflict IdentityFolderOutcome.IdTaken
-            nodes.createIdentityFolder(nodeId, scopeId, root, gated.identityId, encryptedName, slugToken, epoch, wrappedContentKey)
+            nodes.createIdentityFolder(
+                nodeId, scopeId, root, gated.identityId, encryptedName, slugToken, epoch, wrappedContentKey,
+                editor = PrincipalKey.Share(gated.identityId),
+            )
             NodeEntity.flush() // the unique index decides here, inside the retry's reach, not at commit
             IdentityFolderOutcome.Folder(nodeId, epoch, 0, wrappedContentKey, created = true)
         }
@@ -79,11 +83,16 @@ class IdentityFolders(private val nodes: NodesStore) {
 }
 
 /**
- * A guest identity is still in use while an identity folder names it (`veyq_node.share_identity_id`, live or trashed —
- * a trashed folder can be restored, and the identity's wrapped `K_up` is the only way into its entry), ADR 0080
- * decision 11. `fk_node_share_identity` would refuse its delete otherwise. A folder a member moved out names none.
+ * A guest identity is still in use while a node names it, live or trashed:
+ *  - as an identity folder's owner (`veyq_node.share_identity_id` — a trashed folder can be restored, and the identity's
+ *    wrapped `K_up` is the only way into its entry), ADR 0080 decision 11. A folder a member moved out names none;
+ *  - as the last editor of a node's name or meta (ADR 0093 § 8, en.platform.field-editor): who wrote a field is kept as
+ *    long as the field, so a moderator still learns it after the identity's last upload went.
+ * The foreign keys (`fk_node_share_identity`, `fk_node_name_editor_identity`, `fk_node_meta_editor_identity`) would
+ * refuse its delete otherwise.
  */
 @ApplicationScoped
 class NodeGuestIdentityUsage : GuestIdentityUsage {
-    override fun stillReferenced(identityId: String): Boolean = NodeEntity.count("shareIdentityId", identityId) > 0
+    override fun stillReferenced(identityId: String): Boolean =
+        NodeEntity.count("shareIdentityId = ?1 or nameEditorIdentityId = ?1 or metaEditorIdentityId = ?1", identityId) > 0
 }

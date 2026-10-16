@@ -220,7 +220,11 @@ CREATE UNIQUE INDEX ux_membership_user_scope ON veyq_membership (user_id, scope_
 -- engine pair has a filtered index. No column here is an application's (inbox #341): a Memory's cover is an
 -- attachment (veyq_node_attachment, slot COVER) and its item-list counters are core's own table (veyq_node_items_revision). Of this table's
 -- times only created_at keeps the millisecond (TIMESTAMP(3)): clients order equal-named siblings by it, then by id
--- (ADR 0015).
+-- (ADR 0015). Who last wrote each sealed field group (ADR 0093 § 8, en.platform.field-editor): name_editor_* for
+-- encrypted_name, meta_editor_* for wrapped_meta - a member's id (no foreign key, as the attachment's uploader: a member
+-- who left stays named) or a guest identity's (fk_node_*_editor_identity, below), exactly one; the name always has one,
+-- the meta one exactly while it is set (ck_node_name_editor, ck_node_meta_editor). Not share_identity_id: that column
+-- names an identity folder's owner and a move clears it.
 CREATE TABLE veyq_node (
     id                      UUID NOT NULL PRIMARY KEY,
     scope_id                UUID NOT NULL,
@@ -238,7 +242,16 @@ CREATE TABLE veyq_node (
     meta_revision           BIGINT NOT NULL DEFAULT 0,
     placement_revision      BIGINT NOT NULL DEFAULT 0,
     share_identity_id       UUID NULL,
-    CONSTRAINT fk_node_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
+    name_editor_user_id     UUID NULL,
+    name_editor_identity_id UUID NULL,
+    meta_editor_user_id     UUID NULL,
+    meta_editor_identity_id UUID NULL,
+    CONSTRAINT fk_node_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id),
+    CONSTRAINT ck_node_name_editor CHECK ((name_editor_user_id IS NULL AND name_editor_identity_id IS NOT NULL)
+        OR (name_editor_user_id IS NOT NULL AND name_editor_identity_id IS NULL)),
+    CONSTRAINT ck_node_meta_editor CHECK ((wrapped_meta IS NULL AND meta_editor_user_id IS NULL AND meta_editor_identity_id IS NULL)
+        OR (wrapped_meta IS NOT NULL AND meta_editor_user_id IS NULL AND meta_editor_identity_id IS NOT NULL)
+        OR (wrapped_meta IS NOT NULL AND meta_editor_user_id IS NOT NULL AND meta_editor_identity_id IS NULL))
 );
 CREATE UNIQUE INDEX ux_node_parent_slug ON veyq_node (parent_id, slug_token);
 CREATE INDEX ix_node_scope ON veyq_node (scope_id);
@@ -433,6 +446,10 @@ CREATE INDEX ix_share_identity_lookup ON veyq_share_identity (share_id, token_ha
 -- kept by NodeGuestIdentityUsage; the scope erase deletes the nodes (phase 700) before the identities (phase 800).
 ALTER TABLE veyq_node ADD CONSTRAINT fk_node_share_identity FOREIGN KEY (share_identity_id) REFERENCES veyq_share_identity (id);
 CREATE UNIQUE INDEX ux_node_parent_identity ON veyq_node (parent_id, share_identity_id);
+-- A node's field editors that are guests (see veyq_node). Not cascading either: an identity that last wrote a name or a
+-- meta is kept by NodeGuestIdentityUsage while a row names it, and the scope erase deletes the nodes first.
+ALTER TABLE veyq_node ADD CONSTRAINT fk_node_name_editor_identity FOREIGN KEY (name_editor_identity_id) REFERENCES veyq_share_identity (id);
+ALTER TABLE veyq_node ADD CONSTRAINT fk_node_meta_editor_identity FOREIGN KEY (meta_editor_identity_id) REFERENCES veyq_share_identity (id);
 
 -- A sealed file on a node (ADR 0079 Consequences, cr-files-application P3): one blob per (node, slot). slot is a
 -- token the owning application names (Depot's FILE_CONTENT, Memories' COVER — each equal to the blob role its wrap is

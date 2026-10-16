@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.content.NodeCover
 import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.GuestTreeShare.Link
 import me.raddatz.veyq.core.sharing.GuestTreeShare.abandon
@@ -126,7 +127,9 @@ class ShareNodeAbandonCoreSliceTest {
         seedAttachment(t.scopeId, covered, NodeCover.SLOT, uploaderUserId = t.userId)
         abandon(link, covered).statusCode(409).body("code", equalTo("not_a_placeholder"))
         val described = seedNode(t.scopeId, NodeEntity.FOLDER, parentId = t.a, wrappedContentKey = CONTENT_KEY)
-        QuarkusTransaction.requiringNew().run { NodeEntity.findById(described)!!.wrappedMeta = "bWV0YQ==" }
+        QuarkusTransaction.requiringNew().run {
+            NodeEntity.findById(described)!!.apply { wrappedMeta = "bWV0YQ=="; metaWrittenBy(PrincipalKey.User(t.userId)) }
+        }
         abandon(link, described).statusCode(409).body("code", equalTo("not_a_placeholder"))
         for (id in listOf(covered, described)) assertNotNull(node(id), "a refusal writes nothing")
 

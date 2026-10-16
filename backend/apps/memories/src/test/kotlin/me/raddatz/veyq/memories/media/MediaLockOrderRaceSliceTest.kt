@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.testing.OVERLAP_HOLD_MS
@@ -130,7 +131,7 @@ class MediaLockOrderRaceSliceTest {
     private fun fixture(): Fixture {
         val (userId, scopeId) = seedMemberScope()
         val nodeId = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
-        val ownerKey = OwnerKey.User(userId).format()
+        val ownerKey = PrincipalKey.User(userId).format()
         val primary = UUID.randomUUID().toString()
         val sub = UUID.randomUUID().toString()
         val mediaId = UUID.randomUUID().toString()

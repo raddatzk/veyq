@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.content
 
+import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
@@ -44,7 +45,7 @@ class NodeTreeRaceCoreSliceTest {
             val (_, scopeId) = seedMemberScope()
             val (memory, chapter) = expiredSubtree(scopeId)
             whileUncommitted(
-                change = { assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, memory, slug(), null), "round $round") },
+                change = { assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, memory, slug(), null, FIXTURE_EDITOR), "round $round") },
                 overlapping = { purge.run() },
             )
             tx {
@@ -68,7 +69,7 @@ class NodeTreeRaceCoreSliceTest {
             val (memory, _) = expiredSubtree(scopeId)
             val restored = whileUncommitted(
                 change = { purge.eraseExpiredIn(scopeId, cutoff()) },
-                overlapping = { runCatching { store.restoreSubtree(scopeId, memory, slug(), null) } },
+                overlapping = { runCatching { store.restoreSubtree(scopeId, memory, slug(), null, FIXTURE_EDITOR) } },
             )
             assertEquals(Result.success(NodesStore.RestoreResult.NOT_FOUND), restored, "round $round")
             assertNull(tx { NodeEntity.findById(memory) }, "round $round")
@@ -90,7 +91,7 @@ class NodeTreeRaceCoreSliceTest {
             store.deleteSubtree(scopeId, child)
             val restored = whileUncommitted(
                 change = { store.deleteSubtree(scopeId, folder) },
-                overlapping = { store.restoreSubtree(scopeId, child, slug(), null) },
+                overlapping = { store.restoreSubtree(scopeId, child, slug(), null, FIXTURE_EDITOR) },
             )
             assertEquals(NodesStore.RestoreResult.NOT_FOUND, restored, "round $round: a child restored under a trashed parent")
             tx {
@@ -104,7 +105,7 @@ class NodeTreeRaceCoreSliceTest {
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val child = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
         store.deleteSubtree(scopeId, child)
-        assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, child, slug(), null), "control")
+        assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, child, slug(), null, FIXTURE_EDITOR), "control")
     }
 
     /**
@@ -124,11 +125,11 @@ class NodeTreeRaceCoreSliceTest {
                         if (how == "create") {
                             // the create's own transaction body, as `NodesHandler.create` runs it in `createOrConflict`
                             store.lockScope(scopeId)
-                            assertTrue(store.create(child, scopeId, folder, NodeEntity.FOLDER, "bmV3", slug(), 0, 0, CONTENT_KEY, null))
+                            assertTrue(store.create(child, scopeId, folder, NodeEntity.FOLDER, "bmV3", slug(), 0, 0, CONTENT_KEY, null, FIXTURE_EDITOR))
                         } else {
                             assertEquals(
                                 NodesStore.ApplyResult.Applied,
-                                store.applyUpdate(scopeId, child, NodesStore.Placement(folder, "bmV3", slug(), CONTENT_KEY, null, 0), null, null, null),
+                                store.applyUpdate(scopeId, child, NodesStore.Placement(folder, "bmV3", slug(), CONTENT_KEY, null, 0), null, null, null, FIXTURE_EDITOR),
                             )
                         }
                     },
@@ -163,7 +164,7 @@ class NodeTreeRaceCoreSliceTest {
                 change = {
                     assertEquals(
                         NodesStore.ApplyResult.Applied,
-                        store.applyUpdate(scopeId, first, NodesStore.Placement(folder, "bmV3", name, CONTENT_KEY, null, 0), null, null, null),
+                        store.applyUpdate(scopeId, first, NodesStore.Placement(folder, "bmV3", name, CONTENT_KEY, null, 0), null, null, null, FIXTURE_EDITOR),
                     )
                 },
                 overlapping = { runCatching { handler.update(userId, scopeId, second, placementTo(folder, slugToken = name), null, null, null) } },

@@ -1,7 +1,7 @@
 ---
 id: cr-sealed-fields-record-their-last-editor
 title: Every sealed field records its last editor, and a guest takes back only a placeholder it named
-status: planned
+status: in-progress
 satisfies: ["en.platform.field-editor", "uc.depot.share-folder-files", "uc.depot.drop-box"]
 adrs: ["0093", "0080", "0034", "0083", "0092", "0094"]
 invariants:

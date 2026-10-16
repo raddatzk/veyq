@@ -14,6 +14,7 @@ import me.raddatz.veyq.core.http.FailureStatus.UNPROCESSABLE
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.persistence.createOrConflict
 import io.quarkus.arc.All
@@ -173,7 +174,7 @@ class ShareNodesHandler(
             fromNodes(
                 nodes.createInScope(
                     scopeId, nodeId, parentId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey,
-                    wrappedMeta = null, boundary = SubtreeBoundary(root),
+                    wrappedMeta = null, editor = PrincipalKey.Share(gated.identityId), boundary = SubtreeBoundary(root),
                     identityWriter = if (writeOnly) gated.identityId else null,
                 ),
             )
@@ -229,7 +230,7 @@ class ShareNodesHandler(
                 parentId = parentId, encryptedName = encryptedName, slugToken = slugToken,
                 wrappedContentKey = wrappedContentKey, epoch = null, placementRevision = placementRevision,
             )
-            when (nodes.updateInScope(scopeId, nodeId, placement, null, null, null, SubtreeBoundary(root))) {
+            when (nodes.updateInScope(scopeId, nodeId, placement, null, null, null, PrincipalKey.Share(gated.identityId), SubtreeBoundary(root))) {
                 UpdateNodeOutcome.Updated -> UpdateShareNodeOutcome.Updated
                 UpdateNodeOutcome.NotFound -> UpdateShareNodeOutcome.NodeNotFound
                 UpdateNodeOutcome.IllegalStructure -> UpdateShareNodeOutcome.IllegalStructure

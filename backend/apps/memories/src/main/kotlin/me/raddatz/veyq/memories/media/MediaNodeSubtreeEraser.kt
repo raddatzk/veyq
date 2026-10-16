@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
@@ -31,7 +32,7 @@ class MediaNodeSubtreeEraser(
         val buckets = BucketEntity.find("nodeId in ?1", nodeIds).list()
         val guests = (
             media.mapNotNull { it.shareIdentityId } +
-                buckets.mapNotNull { (OwnerKey.parse(it.ownerKey) as? OwnerKey.Share)?.shareIdentityId }
+                buckets.mapNotNull { (PrincipalKey.parse(it.ownerKey) as? PrincipalKey.Share)?.identityId }
             ).toSet()
         media.forEach { mediaStore.purgeMediaRows(it) }
         BucketEntity.delete("nodeId in ?1", nodeIds)

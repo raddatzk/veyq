@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.node
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import jakarta.persistence.Column
@@ -85,6 +86,44 @@ class NodeEntity : PanacheEntityBase {
      *  still need the identity's key to open the entry, and `NodeGuestIdentityUsage` keeps the identity alive. */
     @Column(name = "share_identity_id", columnDefinition = "uuid")
     var shareIdentityId: String? = null
+
+    /** Who last wrote [encryptedName] (ADR 0093 § 8, en.platform.field-editor) — a member ([nameEditorUserId], no
+     *  foreign key: a member who left stays named) or a guest identity ([nameEditorIdentityId]), exactly one
+     *  (`ck_node_name_editor`). Written only by `NodesStore`, from the authenticated caller of every write of the name: a
+     *  create, a placement (a move re-seals the name, so it counts) and a restore that re-seals it. Served to no client;
+     *  read by a guest's take-back (`ShareNodesHandler.abandon`). Not [shareIdentityId], which a move clears. */
+    @Column(name = "name_editor_user_id", columnDefinition = "uuid")
+    var nameEditorUserId: String? = null
+
+    @Column(name = "name_editor_identity_id", columnDefinition = "uuid")
+    var nameEditorIdentityId: String? = null
+
+    /** Who last wrote [wrappedMeta], as for the name; both null exactly while there is no meta (`ck_node_meta_editor`). */
+    @Column(name = "meta_editor_user_id", columnDefinition = "uuid")
+    var metaEditorUserId: String? = null
+
+    @Column(name = "meta_editor_identity_id", columnDefinition = "uuid")
+    var metaEditorIdentityId: String? = null
+
+    /** [nameEditorUserId] / [nameEditorIdentityId] as one ref — never null on a stored row. */
+    val nameEditor: PrincipalKey
+        get() = checkNotNull(PrincipalKey.of(nameEditorUserId, nameEditorIdentityId)) { "ck_node_name_editor: a node's name always has an editor" }
+
+    /** [metaEditorUserId] / [metaEditorIdentityId] as one ref, null while there is no meta. */
+    val metaEditor: PrincipalKey?
+        get() = PrincipalKey.of(metaEditorUserId, metaEditorIdentityId)
+
+    /** Record [editor] as the last writer of the name. */
+    fun nameWrittenBy(editor: PrincipalKey) {
+        nameEditorUserId = editor.userId
+        nameEditorIdentityId = editor.identityId
+    }
+
+    /** Record [editor] as the last writer of the meta (null: the meta is gone, and its editor with it). */
+    fun metaWrittenBy(editor: PrincipalKey?) {
+        metaEditorUserId = editor?.userId
+        metaEditorIdentityId = editor?.identityId
+    }
 
     /** When this node was soft-deleted (uc.memory.delete-node, ADR 0061), or null while it is live. Set on the
      *  node **and every descendant** in one transaction; cleared by a restore. Every user- and guest-facing read

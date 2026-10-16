@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -8,5 +9,5 @@ import jakarta.enterprise.context.ApplicationScoped
 class MediaGuestIdentityUsage : GuestIdentityUsage {
     override fun stillReferenced(identityId: String): Boolean =
         MediaEntity.count("shareIdentityId", identityId) > 0 ||
-            BucketEntity.count("ownerKey", OwnerKey.Share(identityId).format()) > 0
+            BucketEntity.count("ownerKey", PrincipalKey.Share(identityId).format()) > 0
 }

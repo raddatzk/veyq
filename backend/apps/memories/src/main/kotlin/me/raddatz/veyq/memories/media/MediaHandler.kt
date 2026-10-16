@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobUploadHandler
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.CompleteItem
@@ -283,7 +284,7 @@ class MediaHandler(
             if (!parent.isPrimary) return CreateBucketOutcome.Forbidden // nest one level, under a primary only
             parent.ownerKey
         } else {
-            OwnerKey.User(userId).format()
+            PrincipalKey.User(userId).format()
         }
         // The client-minted id (ADR 0072): the sealed name is bound to it.
         return createOrConflict(conflict = { if (store.bucketIdTaken(bucketId)) CreateBucketOutcome.IdTaken else null }) {
