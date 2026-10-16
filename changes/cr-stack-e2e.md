@@ -105,11 +105,59 @@ trust-chain green. Each phase names its bites — the case that must make the ne
         capabilities — measured — with its management port on an ephemeral loopback port.
       - `PEBBLE_VA_ALWAYS_VALID` means Traefik's HTTP-01 router on :80 is not exercised; the overlay and the
         orchestrator's limits say so.
-- [ ] 2 **First run in a browser.** `e2e/` joins the npm workspace (its own `npm run check`), Playwright pinned;
+- [x] 2 **First run in a browser.** `e2e/` joins the npm workspace (its own `npm run check`), Playwright pinned;
       `first-run.setup.ts` through to a created tenant and its invite link; `confineToInstance` on every context;
       the Secret Key read back from the kit. Bites: a renamed admin-web label → red naming the locator; a page
       request to another origin (injected `fetch('https://example.org')`) → red listing it; the HIBP stub removed →
       red, the run has no route out. Browser pass: this phase IS one — the trace of a green run is attached.
+      **Done 2026-10-16**, against `veyq:e2e-p2` and `veyq-admin:e2e-p2` built from this tree after the lockfile
+      gained `e2e/` (admin 30 s, app 4:34 min, warm cache; both Dockerfiles' `npm ci` skip the workspace they cannot
+      see, as admin-web's already skipped `web/`). Green, log read (Pebble issued for `veyq.test` and, at run time,
+      `family.veyq.test`; the app picked up its truststore; nothing red in any container's log): **31.9–33.9 s end to
+      end** over three green runs under a load average of 22–39 (another session's guards) — pebble 1.0–1.5, **up to
+      `--wait` 16.2–16.7**, certificate 0.0–2.1, **browser 12.4–13.0** (five tests in 11.3 s: the domain says it is not
+      set up 0.3, owner + kit + sign-in 4.6–5.2, store check 1.2, tenant + invite link 0.9, the invite link over the
+      tenant's own certificate 2.5–2.7), teardown 1.3–1.6. Far inside ADR 0091's 15-minute lane. What was built:
+      - `e2e/` from the draft, reshaped: no tiers; one `setup` project, five tests in a serial file, each tagged with
+        its criterion (`@uc.admin.setup-server:status-required-when-fresh`, `…:create-owner-and-complete`,
+        `@uc.admin.configure-object-store:server-owner-sets-and-checks-the-store`,
+        `@uc.admin.create-tenant:create-pending-tenant` + `…:invite-link-handoff`,
+        `@uc.admin.tenant-reachability:domain-actually-routes`); the draft's scenario placeholders and `canaries.ts`
+        left for phases 3 and 5. `@playwright/test` **1.64.1** exactly (current on 2026-10-16), `npm run check` =
+        lint + typecheck + `playwright test --list`. The kit's Secret Key is read with `@veyq/crypto/emergencyKit`'s
+        `parseKit` from the PDF bytes. `instance.json` hands owner, Secret Key, tenant domain and invite link on.
+      - **The browser runs in the Playwright image** (`mcr.microsoft.com/playwright:v1.64.1-noble`, index digest),
+        the overlay's `browser` service behind a profile, `compose run --rm` on the run's `edge` + `admin` networks,
+        as the host's uid, read-only root, no capabilities. The domain resolves to `traefik` on `edge`
+        (`--host-resolver-rules`, every other name `~NOTFOUND`); the admin console is reached through an in-container
+        loopback tunnel to `admin:8080` at `http://localhost:18081` — a secure context, which admin-web needs.
+        Rejected and why, in ADR 0090 decision 3. Preflight refuses a library/image version mismatch.
+      - **The trust store without `certutil`** (not in the image): `infra/e2e/nss_trust_root.py` writes Chromium's
+        NSS db through `ctypes` against the image's `libnss3`. A Chrome `CACertificates` policy was tried first —
+        Playwright's Chromium does not read it.
+      What it changed against the plan:
+      - **The instance needs what the internet gives it** — found by the first run: the store check uploads through
+        the public origin `https://veyq.test` from inside the app container (`ConnectException`), so no tenant could
+        be created. The overlay now gives Traefik the alias `veyq.test` on `edge` and the app a truststore holding
+        Pebble's root and nothing else (written by the candidate image's own `keytool`, read via
+        `JAVA_TOOL_OPTIONS`); Pebble therefore starts as a stage of its own before `up`. ADR 0090 decision 1 says so.
+        The overlay's posture claim moved with it: it adds two services and the DNS name and CA trust, nothing else.
+      - **CSP violations count as foreign requests.** Bite 2 as written stayed **green** on the first try: admin-web's
+        CSP refuses `fetch('https://example.org/')` in the renderer, so no route ever sees it. `confineToInstance`
+        now records every `securitypolicyviolation` a page reports beside the aborted requests.
+      - **The browser opens the domain itself** (the not-set-up page, then the invite link on the tenant's domain), so
+        a certificate not from Pebble is a red navigation and not only phase 1's red certificate stage.
+      Bites, each red once and restored by snapshot-and-restore: (1) admin-web's `store.check` renamed to "Run the
+      store check" in an admin image built from that tree → **red in 15.7 s**, `waiting for getByRole('button',
+      { name: 'Check store' })` (`actionTimeout` 15 s, so a renamed label is red in seconds); (2) an injected
+      `fetch('https://example.org/')` on the setup page → **red**, listing `refused by http://localhost:18081's CSP:
+      connect-src https://example.org/`; (3) the HIBP branch of the route removed → **red**, "the breach check asked
+      once" received 0, and the listing `GET https://api.pwnedpasswords.com/range/5ED45`; (3b) every route set aside
+      → the range query fails with `net::ERR_NAME_NOT_RESOLVED` (the trace's network log): no route out even past the
+      routes; (4) an app image whose recipe mounts `veyq-acme:/acme:ro`, the certificate stage set aside → **red at the
+      first navigation**, `page.goto: net::ERR_CERT_AUTHORITY_INVALID at https://veyq.test/`, Traefik's log naming the
+      ACME failure. The trace of a green run: `.e2e-stack-out/<stamp>/playwright/*/trace.zip`, one per test
+      (`npx playwright show-trace`), and the HTML report under `report/`.
 - [ ] 3 **The Memory round trip, swept.** The sweeps move into `scripts/e2e_sweeps.py`, parameterised by compose
       project, imported by both orchestrators; `run_web_e2e.py`'s own run is unchanged (its CI job's steps, run locally,
       green). `memory-roundtrip.spec.ts` with real web/ locators; every typed value through `recordTyped`; the run

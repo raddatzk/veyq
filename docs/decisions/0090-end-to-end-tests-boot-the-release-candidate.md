@@ -1,6 +1,6 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
-- Status: Accepted 2026-10-16; built so far: the bare boot (`scripts/run_stack_e2e.py`, phase 1 of `changes/cr-stack-e2e.md`, run locally) — no browser, no sweeps, no CI run
+- Status: Accepted 2026-10-16; built so far: the boot and first run in a browser (`scripts/run_stack_e2e.py` and `e2e/`, phases 1–2 of `changes/cr-stack-e2e.md`, run locally) — no Memory round trip, no sweeps, no CI run
 - Date: 2026-10-16
 
 ## Context
@@ -28,7 +28,10 @@ What a green run proves today stops short of what a Server Owner runs:
 1. **The unit under test is the release candidate, not the repository.** The run boots the two candidate images
    and the compose recipe **extracted from the app image** (`/opt/veyq/deploy/`), with a `.env` generated from the
    image's own `.env.example`. The only file laid over the recipe is `infra/e2e/docker-compose.e2e.yml`, which adds
-   an ACME test server and changes nothing an operator's instance has.
+   an ACME test server and the browser, and gives the instance only what the public internet gives an operator's:
+   DNS for its own domain (an alias of Traefik on `edge`, so the app reaches its public origin) and a CA it trusts
+   (the run's Pebble root, in the app's truststore and Traefik's ACME client). Measured in phase 2: the store check
+   uploads through the public origin from inside the app container, so without them no tenant can be created.
 
 2. **It gates the snapshot, on the exact bytes it publishes.** On a push to `main` or `release/<major>.x` the lanes
    pull `build-<sha>-<arch>` by digest, and the snapshot is published on those digests only when every lane is green;
@@ -40,12 +43,36 @@ What a green run proves today stops short of what a Server Owner runs:
 3. **TLS is real.** Traefik obtains its certificate from **Pebble** (Let's Encrypt's test ACME server) through the
    recipe's existing `VEYQ_ACME_CASERVER`; Pebble's per-run root is put into the browser's trust store and
    `ignoreHTTPSErrors` stays off. A Traefik that cannot write `/acme` fails a navigation instead of serving its
-   default certificate (ADR 0071's silent failure). Domains are `*.veyq.test`, resolved to the runner by Chromium's
+   default certificate (ADR 0071's silent failure). Domains are `*.veyq.test`, resolved by Chromium's
    `--host-resolver-rules`, so the same run works on a laptop with no `/etc/hosts` edit.
+
+   **The browser runs in a container, never on the host** (decided at phase 2's go, 2026-10-16): macOS has no
+   `certutil`, and Chromium on macOS reads no NSS db, so a host browser would need a second trust path for laptops
+   that CI never runs. It runs in the official Playwright image, pinned by digest, as the overlay's `browser` service
+   (behind a profile, started by `docker compose run`), on the run's own `edge` and `admin` networks — locally
+   exactly as in CI. How it reaches the instance without the run publishing anything the recipe does not:
+   - **the domain through Traefik**: on `edge`, `veyq.test` and every `*.veyq.test` resolve to the `traefik`
+     service, as public DNS resolves an operator's domain to the host, and every other name resolves to nothing;
+   - **the admin console through a tunnel**: on `admin`, a loopback listener inside the container forwards the admin
+     port to `admin:8080` — the in-container `ssh -L` of the Run area — so the console opens at
+     `http://localhost:<ADMIN_PORT>`, the secure context admin-web needs (`crypto.subtle`, the clipboard, Secure
+     cookies over HTTP), which `http://admin:8080` is not.
+
+   Rejected: the admin port the recipe publishes on the host's loopback — a container reaches the host's 127.0.0.1
+   on Docker Desktop and not on a Linux runner, so a laptop would run another path than CI. **The trust store
+   without `certutil`**: the image carries `libnss3` (Chromium links it) and Python, not `libnss3-tools`, and
+   installing it would need the network at run time; `infra/e2e/nss_trust_root.py` calls the NSS functions
+   `certutil -A` calls, through `ctypes` — measured: Chromium loads a page whose leaf the root issued, and refuses it
+   (`ERR_CERT_AUTHORITY_INVALID`) without. A Chrome `CACertificates` policy file was tried first and is not read by
+   Playwright's Chromium.
 
 4. **The driver is Playwright, in a workspace package `e2e/`.** TypeScript like both surfaces, Apache-2.0, actively
    maintained, its own `npm run check`. It sees web/ and admin-web/ only as a browser does and imports neither; it
-   may import `@veyq/crypto` (the reason it joins the npm workspace, as ADR 0065 allows for that one package).
+   may import `@veyq/crypto` (the reason it joins the npm workspace, as ADR 0065 allows for that one package — it
+   reads the Secret Key back out of the Emergency Kit with the shared `veyqkit:` codec). `@playwright/test` is pinned
+   **exactly** to the Playwright image's version, since the browser is baked into the image and a library one patch
+   apart fails at launch; the orchestrator refuses a mismatch. The container installs nothing: it mounts the
+   checkout, and the root install that went through the deprecation gate, read-only.
 
 5. **The orchestrator is Python** (`scripts/run_stack_e2e.py`), like `run_web_e2e.py`: boot, trust root, Playwright,
    sweeps, evidence, teardown. The ADR 0053 sweeps move into a module both orchestrators import, parameterised by
@@ -53,6 +80,10 @@ What a green run proves today stops short of what a Server Owner runs:
 
 6. **The browser may reach the instance and nothing else.** Every request to another origin is aborted and fails the
    test, except the HIBP range query, answered locally with no match. Self-hostable by default, checked per page.
+   What a page **tried** counts too: a page's own CSP refuses most foreign requests inside the renderer, where no
+   route sees them (measured in phase 2 — an injected `fetch` on admin-web stayed green until CSP violations were
+   recorded beside the aborted requests). And the browser's resolver knows the instance's names only, so a request
+   no route decided finds no address.
 
 7. **One suite, run whole, as the lanes of ADR 0091 decision 3.** This ADR's harness is lane L1 (the candidate,
    fresh): first run in admin-web, a tenant, a Memory written on one device and read on another, a READ link opened

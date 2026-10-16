@@ -1,6 +1,8 @@
-# The ONLY difference between an end-to-end run and a Server Owner's instance: the ACME server (ADR 0090 § Decision 1).
-# It is laid OVER the production recipe extracted from the candidate image (never over this checkout's copy) by
-# scripts/run_stack_e2e.py, which also writes the `.env` both files are interpolated from:
+# The ONLY differences between an end-to-end run and a Server Owner's instance: the ACME server standing in for Let's
+# Encrypt, the DNS name and CA trust the public internet would give the instance, and the browser that drives it
+# (ADR 0090 § Decisions 1 and 3). It is laid OVER the production recipe extracted from the candidate image
+# (never over this checkout's copy) by scripts/run_stack_e2e.py, which also writes the `.env` both files are
+# interpolated from:
 #
 #     docker compose -p veyq-e2e-<stamp> -f <run>/recipe/docker-compose.prod.yml -f infra/e2e/docker-compose.e2e.yml \
 #         --env-file <run>/recipe/.env up -d --wait
@@ -9,15 +11,26 @@
 # and the /acme volume it must be able to write (ADR 0071's silent failure: an unwritable /acme keeps Traefik up and
 # serving its default certificate). VEYQ_ACME_CASERVER already exists in the recipe for staging; nothing in the
 # production file is edited for this. Every other service, network, posture and secret is the operator's: this file
-# adds a service and gives Traefik's ACME client one CA to trust, and must never weaken what the recipe sets.
+# adds two services and gives Traefik's ACME client one CA to trust, and must never weaken what the recipe sets. The
+# browser is a CLIENT of the instance — it publishes nothing and changes no operator service — and sits behind a
+# profile, so `up` never starts it.
+#
+# What the internet gives a real instance and a run has to give itself (found in cr-stack-e2e phase 2): the store
+# check uploads a test object through the PUBLIC origin the backend signs for (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`,
+# `https://<domain>`), from inside the app container — so the app must resolve its own domain to Traefik (public DNS
+# and the host's hairpin, on a real host) and trust the certificate Traefik serves there (a public CA's, on a real
+# host). Here: `<domain>` is an alias of Traefik on `edge`, and the app's JVM trusts the run's Pebble root and nothing
+# else (a truststore the orchestrator writes with the candidate image's own keytool, read through JAVA_TOOL_OPTIONS,
+# which neither the image nor the recipe sets). Without them no tenant can be created, since a tenant needs a store
+# that passed its check.
 #
 # PEBBLE_VA_ALWAYS_VALID: tenant domains are created at run time (`family.veyq.test`), and Pebble would have to
 # resolve each one to Traefik — on its own HTTP-01 port, 5002 by default, not 80 — to validate it. What is under test
 # is OUR wiring, not Let's Encrypt's validator; the price is that Traefik's challenge router on :80 is not exercised.
 #
 # The posture is held BY HAND here: scripts/validate_compose_posture.py reads the production file only (cr-stack-e2e
-# phase 1 decided to keep it so — this file never runs on an operator's host). Pebble gets the recipe's x-hardened
-# triple and a non-root uid, measured to run that way.
+# phase 1 decided to keep it so — this file never runs on an operator's host). Pebble and the browser get the
+# recipe's x-hardened triple and a non-root uid, measured to run that way.
 services:
   pebble:
     image: ghcr.io/letsencrypt/pebble:2.10.1@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
@@ -49,3 +62,63 @@ services:
       LEGO_CA_CERTIFICATES: /pebble/minica.pem
     volumes:
       - ${VEYQ_E2E_PEBBLE_MINICA:?set by scripts/run_stack_e2e.py}:/pebble/minica.pem:ro
+    networks:
+      # Public DNS for the bootstrap domain, as seen from the app on `edge` (the header says why).
+      edge:
+        aliases: ["${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}"]
+
+  app:
+    environment:
+      # The public CA's trust, for the certificates the run's Pebble issued (the header says why). The password guards
+      # nothing: the store holds one public certificate, and Java asks for one.
+      JAVA_TOOL_OPTIONS: >-
+        -Djavax.net.ssl.trustStore=/pebble/truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12
+        -Djavax.net.ssl.trustStorePassword=veyq-e2e
+    volumes:
+      - ${VEYQ_E2E_APP_TRUSTSTORE:?set by scripts/run_stack_e2e.py}:/pebble/truststore.p12:ro
+
+  # Lane L1's browser (ADR 0090 decision 3, cr-stack-e2e phase 2): Playwright in its official image, on the run's
+  # networks, so a laptop runs exactly what CI runs — the browser never runs on the host (macOS has no certutil, and its
+  # Chromium reads no NSS db). The orchestrator starts it with `compose run --rm browser` after `up`; the profile keeps
+  # `up` from starting it. The image's Playwright version is e2e/package.json's exact pin (the orchestrator refuses a
+  # mismatch); bump both together.
+  #
+  # How it reaches the instance, decided in phase 2 — the way an operator does, without publishing anything:
+  #   - the domain through Traefik: on `edge`, Chromium resolves `veyq.test` and every `*.veyq.test` to the `traefik`
+  #     service (`--host-resolver-rules`, e2e/playwright.config.ts), as public DNS resolves an operator's domain to
+  #     the host; TLS is Traefik's, with the certificate Pebble issued;
+  #   - the admin console through a tunnel: on `admin`, a loopback listener on the admin port forwards to `admin:8080`
+  #     (e2e/src/tunnel.ts), the in-container `ssh -L` of run/first-run.mdx, so the console opens at
+  #     `http://localhost:<ADMIN_PORT>` — a secure context, as an operator's tunnel gives one. Rejected: the host's
+  #     published loopback port — a container reaches the host's 127.0.0.1 on Docker Desktop and not on a Linux
+  #     runner, so the run would differ between a laptop and CI.
+  browser:
+    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+    profiles: [browser]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    # The host user's uid, so what the run writes into its run directory stays the host's to read and delete.
+    user: "${VEYQ_E2E_UID:?set by scripts/run_stack_e2e.py}:${VEYQ_E2E_GID:?set by scripts/run_stack_e2e.py}"
+    init: true
+    # Chromium's shared memory; Docker's 64 MB default crashes renderers on a busy page.
+    shm_size: 1gb
+    tmpfs: [/tmp]
+    networks: [edge, admin]
+    working_dir: /repo/e2e
+    environment:
+      HOME: /tmp/home
+      VEYQ_STACK_FILE: /out/stack.json
+    volumes:
+      # The checkout read-only: e2e/, packages/crypto/ and the root node_modules the host installed through
+      # scripts/npm_ci_no_deprecated.py — nothing is installed in here. Pure-JS packages only on this path
+      # (@playwright/test, @veyq/crypto, @noble/*), so a macOS install runs in this Linux image unchanged.
+      - ${VEYQ_E2E_REPO:?set by scripts/run_stack_e2e.py}:/repo:ro
+      # The run directory: Pebble's root in, the report, traces, junit.xml and instance.json out.
+      - ${VEYQ_E2E_RUN_DIR:?set by scripts/run_stack_e2e.py}:/out
+    # Trust the run's Pebble root (and nothing more) in the NSS db Chromium reads, then run the whole suite.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - python3 /repo/infra/e2e/nss_trust_root.py /out/pebble-root.pem "$$HOME/.pki/nssdb" && exec node /repo/node_modules/@playwright/test/cli.js test "$$@"
+      - browser
