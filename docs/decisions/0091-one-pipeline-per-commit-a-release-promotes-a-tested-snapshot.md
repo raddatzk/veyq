@@ -133,6 +133,9 @@ Three structural costs sit on top of those numbers:
 - **The local skip of `validate_guard_gaps.py`** is the first piece built (2026-10-16): a green full run stamps the
   hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does. The CI half of
   decision 4 — the path filter and the nightly run — comes with the pipeline CR.
+- **The remote comes when the owner judges veyq ready to publish, and it will be public** (owner, 2026-10-16). Until
+  then every stage's only run is local, so the pipeline must run locally from the workflow file itself, by one command
+  (`changes/cr-one-pipeline-per-commit.md` phase 5); the first public push is also the first CI run.
 - **Registry growth** is bounded by the retention rule; a snapshot per `main` commit is otherwise one image pair per
   commit.
 
