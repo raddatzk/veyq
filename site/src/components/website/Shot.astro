@@ -1,0 +1,89 @@
+---
+// A screenshot of the web client in a browser frame, for the project website. The image is
+// `site/src/assets/website/<id>.<lang>.png` (the docs' convention, site/src/assets/screenshots/README.md), falling
+// back to the English one; until either exists the frame shows what the shot must show.
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+import type { Lang } from './strings';
+
+interface Props {
+  id: string;
+  lang: Lang;
+  shows: string;
+  placeholder: string;
+  eager?: boolean;
+}
+
+const { id, lang, shows, placeholder, eager = false } = Astro.props;
+const files = import.meta.glob<{ default: ImageMetadata }>('../../assets/website/*.png', { eager: true });
+const file = files[`../../assets/website/${id}.${lang}.png`] ?? files[`../../assets/website/${id}.en.png`];
+---
+
+<figure class="shot">
+  <div class="shot-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+  {
+    file ? (
+      <Image
+        src={file.default}
+        alt={shows}
+        widths={[640, 1024, 1600, file.default.width]}
+        sizes="(min-width: 1120px) 1072px, 100vw"
+        loading={eager ? 'eager' : 'lazy'}
+      />
+    ) : (
+      <div class="shot-placeholder">
+        <strong>{placeholder}</strong>
+        <span>{shows}</span>
+      </div>
+    )
+  }
+</figure>
+
+<style>
+  .shot {
+    margin: 0;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+  }
+  .shot-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-muted);
+  }
+  .shot-bar span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--line-strong);
+  }
+  .shot :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .shot-placeholder {
+    display: grid;
+    place-content: center;
+    gap: 0.4rem;
+    aspect-ratio: 16 / 10;
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--muted);
+    background:
+      repeating-linear-gradient(135deg, transparent 0 14px, var(--soft) 14px 15px),
+      var(--surface);
+  }
+  .shot-placeholder strong {
+    color: var(--ink);
+    font-size: 0.95rem;
+  }
+  .shot-placeholder span {
+    max-width: 34ch;
+    font-size: 0.85rem;
+  }
+</style>

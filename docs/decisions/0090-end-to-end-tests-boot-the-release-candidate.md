@@ -1,6 +1,6 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
-- Status: Accepted 2026-10-16; nothing of it is built (`changes/cr-stack-e2e.md`)
+- Status: Accepted 2026-10-16; built so far: the bare boot (`scripts/run_stack_e2e.py`, phase 1 of `changes/cr-stack-e2e.md`, run locally) — no browser, no sweeps, no CI run
 - Date: 2026-10-16
 
 ## Context

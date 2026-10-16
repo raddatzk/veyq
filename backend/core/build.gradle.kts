@@ -35,8 +35,7 @@ dependencies {
     api("io.quarkus:quarkus-security") // central auth: SecurityIdentity + @RolesAllowed (cr-0012)
     api("io.quarkus:quarkus-hibernate-orm-panache-kotlin")
     api("io.quarkus:quarkus-scheduler") // @Scheduled cleanup jobs (first use: tenant-invite purge)
-    api("io.quarkus:quarkus-jdbc-h2") // dev/test store (the default)
-    api("io.quarkus:quarkus-jdbc-mariadb") // production store
+    api("io.quarkus:quarkus-jdbc-mariadb") // the store of every profile but `%test` (prod, dev, e2e)
     api("io.quarkus:quarkus-flyway")
     api("org.flywaydb:flyway-mysql") // Flyway 12 keeps MariaDB/MySQL support out of flyway-core
     api("software.amazon.awssdk:s3:2.31.78") // S3 blob store: vendor-neutral S3 client + presigner (ADR 0013)
@@ -50,6 +49,10 @@ dependencies {
     // `givenAdminChannel` a RestAssured spec). `:core`'s main classes need no line: the plugin gives the fixtures them.
     testFixturesApi("io.quarkus:quarkus-junit")
     testFixturesApi("io.rest-assured:rest-assured")
+    // The `%test` store (each project's application-test.properties: in-memory H2, `MODE=MariaDB`) and nothing else's,
+    // so it rides the fixtures every project's tests consume rather than `api`, which put the driver in the shipped
+    // fast-jar. The db-kind is build-time, so no profile of the prod-built jar could have used it.
+    testFixturesApi("io.quarkus:quarkus-jdbc-h2")
     testImplementation("io.quarkus:quarkus-junit")
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))
