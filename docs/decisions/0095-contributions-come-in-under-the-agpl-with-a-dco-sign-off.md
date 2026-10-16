@@ -1,6 +1,6 @@
 # ADR 0095 — Contributions come in under the AGPL with a DCO sign-off, never a CLA
 
-- Status: Accepted
+- Status: Accepted; built — [`CONTRIBUTING.md`](../../CONTRIBUTING.md) asks for the sign-off and `NOTICE` keeps the name out of the grant; a CI check stays deferred (decision 3)
 - Date: 2026-10-16
 
 ## Context

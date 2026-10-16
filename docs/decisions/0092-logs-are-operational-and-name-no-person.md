@@ -131,7 +131,7 @@ only through the database, which the operator holds under its own retention.
 | Traefik access log | stays off | — | turning it on records every reader and is outside veyq's guarantees |
 | Gateway implementation | — | nothing in the chart | the same as Traefik's access log, and the place to keep it short or off |
 | Rate limiter | evicts a bucket once it is full again, regardless of the key count | same | — |
-| Backups | — | — | a database backup holds the guest-write record and the moderation tables for as long as the operator keeps it |
+| Backups | — | — | the instance backup's dump leaves out the guest-write record's rows; it holds the hold and moderation tables, past their ends, for as long as the operator keeps it; a backup made otherwise holds the record too, for at most B days on the deletion concept of ADR 0093 § 10 |
 
 The admin nginx keeps `$remote_addr` and the User-Agent. The admin surface is loopback-only by default, its
 reader is the Server Owner, and who reached it is the security log of the most privileged surface.
@@ -184,7 +184,8 @@ the moderation ADR's; this ADR only guarantees that no log is needed for it.
 - The failed-mail and copy-link lines lose the address. An operator looks the account up by id.
 - The Garage request log goes quiet in production. A store problem is diagnosed by raising the level, which
   the troubleshooting page says.
-- Backups are outside every retention veyq sets. The Run docs say so per table.
+- Backups are outside every retention veyq sets, except that the instance backup leaves the guest-write record's
+  rows out (ADR 0093 § 10). The Run docs say so per table.
 
 ## Inventory for the CR (moves into the joint CR when written; not built)
 
