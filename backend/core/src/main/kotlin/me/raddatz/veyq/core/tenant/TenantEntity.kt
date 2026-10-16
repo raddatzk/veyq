@@ -40,7 +40,7 @@ class TenantEntity : PanacheEntityBase {
     @Column(name = "status", nullable = false, length = 16)
     lateinit var status: String
 
-    /** cr-0114 (ADR 0035): the operator's per-locale terms markdown, serialized as a locale→markdown JSON map
+    /** cr-0114 (ADR 0035): the space owner's per-locale terms markdown, serialized as a locale→markdown JSON map
      *  (opaque TEXT). Null until the owner first publishes. Public operational content, never a key. */
     @Column(name = "terms_markdown_by_locale")
     var termsMarkdownByLocale: String? = null

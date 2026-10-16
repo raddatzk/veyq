@@ -20,7 +20,7 @@
 
 ## The mechanism here
 
-The terms are the **operator's public policy** — the same per-locale markdown, at the same revision, a *member*
+The terms are the **space's public policy** — the same per-locale markdown, at the same revision, a *member*
 accepts ([uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md), [ADR 0035](../../../decisions/0035-server-terms-of-service.md)),
 including the CSAM / illegal-content and review-and-removal clauses that govern a reported public share (the T&S
 "decryptable-on-report" corollary in the [security model](../../../crosscutting/security-model.md)). They are
@@ -41,8 +41,8 @@ a dedicated **guest** endpoint keyed on the (already non-enumerable) `shareId`:
 
 **Acceptance is client-only.** On accept, the client writes the accepted `termsRevision` to **localStorage keyed by
 `tenantId`** — so accepting on one share of a tenant clears the gate on **every** share of that tenant (you accept
-the *operator's* terms, not the link). The returned `tenantId` is the localStorage key; the endpoint's `shareId`
-keying is what removes the oracle. When the operator bumps `termsRevision`, the stored value is now below current →
+the *space's* terms, not the link). The returned `tenantId` is the localStorage key; the endpoint's `shareId`
+keying is what removes the oracle. When the space owner bumps `termsRevision`, the stored value is now below current →
 the gate re-fires (re-accept).
 
 **Honest about its limits — this is an operational gate, not enforcement.** A client-side localStorage gate is
@@ -60,7 +60,7 @@ blip is worse than none, and it is not enforcement anyway) — mirroring the mem
 
 1. A visitor opens `/s/{shareId}#k=…`. The share resolves (past the password shell, if any).
 2. The client fetches `GET /api/shares/{shareId}/terms`. If `termsRevision > 0` **and** the locally-stored accepted
-   revision for that `tenantId` is lower, the **terms gate** shows: the operator's terms (viewer's locale, rendered
+   revision for that `tenantId` is lower, the **terms gate** shows: the space's terms (viewer's locale, rendered
    with the safe markdown renderer reused from member terms + share notes) and an **Accept** button.
 3. The visitor accepts → the client writes `termsRevision` to `localStorage[tenant]` → the gate clears.
 4. The visitor proceeds: straight to the content (READ, READ_WRITE — a contributor names itself at its first
@@ -94,7 +94,7 @@ anonymity.
   [uc.sharing.share-contributor](uc.sharing.share-contributor.md),
   [uc.sharing.share-uploader](uc.sharing.share-uploader.md) (the roles the gate precedes),
   [uc.sharing.share-password](uc.sharing.share-password.md) (the shell that precedes this gate),
-  [uc.admin.tenant-terms](../../admin/use-cases/uc.admin.tenant-terms.md) (where the operator sets the terms).
+  [uc.admin.tenant-terms](../../admin/use-cases/uc.admin.tenant-terms.md) (where the space owner sets the terms).
 - **Decisions:** [ADR 0035](../../../decisions/0035-server-terms-of-service.md) §3 (the anonymous, client-side
   acceptance tier), [ADR 0029](../../../decisions/0029-public-viewer-share.md) (the share model + the anonymous
   access path), [ADR 0038](../../../decisions/0038-contracts-shared-components-bundling.md) (`LocalizedMarkdown`

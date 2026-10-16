@@ -16,7 +16,7 @@ acceptanceCriteria:
   - id: terms-shown-and-gated
     text: >
       An accountless visitor of a resolvable share whose tenant has published terms (termsRevision > 0) sees the
-      operator's terms (viewer's locale, safe markdown renderer) and cannot view or contribute until accepting. A
+      space's terms (viewer's locale, safe markdown renderer) and cannot view or contribute until accepting. A
       tenant with no terms (revision 0) never gates. The terms come from GET /api/shares/{shareId}/terms.
     coverage:
       backend:
@@ -36,7 +36,7 @@ acceptanceCriteria:
         unit: [src/views/ShareView.test.ts]
   - id: re-accept-on-revision-bump
     text: >
-      When the operator bumps the tenant's termsRevision, the stored acceptance is now below current, so the gate
+      When the space owner bumps the tenant's termsRevision, the stored acceptance is now below current, so the gate
       re-fires; the visitor re-reads and re-accepts the current revision before proceeding.
     coverage:
       web:
