@@ -114,6 +114,12 @@ removal, and two counters for one event drift. What stays apart is the precision
   removed: the moment a native client exists, a pre-auth build number is what answers *"which server build is
   this app talking to?"*, and removing it now would mean re-adding it later at the cost of two `major` bumps
   instead of none.
+- **The built client is pre-auth too.** The web bundle is served to anyone who asks, before any login, so a value
+  compiled into it is on the pre-auth surface as surely as one in `GET /api/setup`. The release stamp therefore enters
+  an image only in the stage a publish ships (`runtime-*`, as `ENV`), never in a stage that compiles a client, and what
+  a client writes about itself — an export manifest's `appVersion` (ADR 0082) — is the **major**. The bundle's content
+  hashes still fingerprint a build for whoever catalogues the public images; that takes a catalogue, where a compiled
+  number would take a `grep`. `scripts/validate_release_identity.py` holds the Dockerfiles to it.
 
 **5. A field that cannot be true is not shipped.** The backup manifest's `app.version` is sourced from the
 instance being captured, or it is removed. A field that is structurally always `null` is a claim with nothing
