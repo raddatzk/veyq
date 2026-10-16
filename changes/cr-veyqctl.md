@@ -131,7 +131,7 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
   - **Done when:** the live upgrade and the three bites read; selftest extended (decision order, `VEYQ_RELEASE` per
     line) and green; committed.
 
-- [ ] **4 The recipe leaves the image; the stack lane boots through `veyqctl`.** Re-read `scripts/run_stack_e2e.py` on
+- [x] **4 The recipe leaves the image; the stack lane boots through `veyqctl`.** Re-read `scripts/run_stack_e2e.py` on
   `main` first (cr-stack-e2e moves it). Delete the two `COPY … /opt/veyq/deploy/` lines and their comment block from
   the `Dockerfile`; `extract()` and `write_env()` give way to `release_assets.py` into the run directory plus
   `veyqctl install --unsigned-local` with the overlay as the override file and the run's values through `--set`; the
@@ -268,3 +268,51 @@ listing it (the positive control). The guard's docstring states the shared deriv
   harness error), and defaulted the restore's domain wrongly (a product bug, fixed above); the whole run was repeated
   at the fixed head. **Next time:** a live proof that mixes two releases' tools names, per step, which release's tool
   runs it — the CR's "install the first … `upgrade` to the second" leaves that to the harness.
+
+**Phase 4.** Decided in the build, each in `run_stack_e2e.py`'s docstring:
+- *Pebble before `install`, without teaching `veyqctl` about it.* The lane's stages are now `assets` →
+  `pebble` → `install` → (cr-stack-e2e's) `certificate` …: `pebble` brings Pebble up under the run's project from
+  the release's own recipe (`src/<tag>/`) and the repository's overlay, with a `pebble.env` holding the run's values
+  and a placeholder for each secret and image line `install` writes later (Compose interpolates the whole model to
+  start one service); `install`'s `up` then finds Pebble `Running`, and the stage is red unless Pebble's container
+  id is the one `pebble` left — a recreated Pebble issues under a root the app does not trust.
+- *The pebble stage reads the overlay from the tree, `install` reads the home's copy* — which is what makes the
+  CR's bite land on `certificate` and not on `pebble`.
+- *The lane takes local `name:tag` builds only*: `--unsigned-local` refuses a registry reference, so a CI lane
+  that pulls `build-<sha>` by digest re-tags it first (hand-off below). `install` runs with stdin closed, so a key
+  the template gains is refused by name, not asked for; the run's template values (`VEYQ_DOMAIN`,
+  `VEYQ_ACME_EMAIL`) are held to the release's `.env.example` at `assets`, as `write_env` held them.
+- *Made false by this phase and fixed here, beyond the CR's list:* ADR 0064 (three sentences), the Security area's
+  *Verify it yourself* (its release paragraph), inbox #466, the overlay's and `.gitignore`'s headers, ADR 0096's
+  status line, `veyqctl`'s "what proves it". Carried over from phases 2–3: `veyqctl_selftest.py` runs in `ci.yml`
+  beside the backup self-test (0.5 s, the job's 15 minutes unchanged, `validate_pipeline_shape.py` green);
+  `ReleaseFeed`'s manifest comment names `assets`.
+- *Live*, measured (logs in the implementing session, run directories under `.e2e-stack-out/`, not committed):
+  images built from the tree (`veyq:ctl-p4`, `veyq-admin:ctl-p4`, no `/opt/veyq` in the app image), then
+  `run_stack_e2e.py` GREEN, twice — at the edit and at the committed head (`v0.542`, 44.6 s of stages: `install`
+  16.7 s, `browser` 23.0 s with 10 tests executed, the sweeps green on database, store, container logs and statement
+  log, the host's 5 containers and 4 volumes unchanged); the summary names release, home and the five assets.
+- *Bite*: the overlay dropped from the override file (the copy line replaced, snapshot-and-restore, `cmp`-identical
+  after) → `install` green, then RED at `certificate` after 121 s, `:443 serves CN=TRAEFIK DEFAULT CERT`; window,
+  browser and sweep skipped; teardown and host clean. Its positive control is the green run on the same code.
+- *What went wrong*: the CR contradicts itself — phase 4's done-when wants `git grep "opt/veyq/deploy"` down to ADR
+  0096, while phase 6 owns the two Run pages that still carry it (`run/verify-a-release.md`'s `docker cp`,
+  `run/new-instance.mdx`'s in-image bullet) and inbox #26; left to phase 6, so the grep also lists those three and
+  `changes/` (this CR, and cr-one-pipeline-per-commit's phase text, a sibling's). Until phase 6 lands,
+  `verify-a-release.md` tells an operator to copy a directory no image built from `main` has — nothing is published,
+  so nobody can follow it. The final run started at a load of 16.8, above the brief's limit of 14 (not checked
+  before starting); it ran green. **Next time:** a phase that removes a thing greps the *published* pages for it at
+  refine and assigns each hit to a phase, so no done-when and phase list disagree.
+
+**Hand-off to cr-stack-e2e** (its owner session; this CR does not edit its file): `run_stack_e2e.py` no longer
+extracts anything. `extract()`, `write_env()`, `up()`, `compose_cmd()` and the `extract`/`env`/`up` stages are gone;
+the stages before `certificate` are `assets` (`release_assets.py` into `<run>/src`), `pebble` (now takes the
+release and the run's values, copies the minica root itself) and `install` (`veyqctl install --unsigned-local`,
+`<run>/home`). Everything after reads `Installed.compose` — `docker compose -p <project> -f
+home/releases/<release>/docker-compose.prod.yml -f home/compose.override.yml --env-file home/.env` — and the sweeps
+read `home/.env`. `--app`/`--admin` must be local `name:tag` builds: a CI lane re-tags the pulled digest first.
+`VEYQ_STACK_WAIT_SECS` now reaches `veyqctl` as `VEYQ_WAIT_SECS`. Now false in `changes/cr-stack-e2e.md`: the Goal's
+parenthesis "until `cr-veyqctl` phase 4 lands, the recipe is extracted from the app image as phase 1 built it"; the
+Context bullet's "Everything after `up` — Pebble, …" (there is no `up` stage; Pebble runs before `install` and is
+handed the release); and phase 1's ticked text where it describes extraction, `garage.toml` from the checkout and
+the `.env` the script writes (history of a done phase, its owner's to keep or cut).
