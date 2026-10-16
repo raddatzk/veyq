@@ -9,6 +9,7 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
 import { login } from '../features/account/login/login'
+import { leaveLiveSession, liveSessionAddress, sameAccountAddress } from '../features/account/login/liveSession'
 import { signOut, takeSignOutNotice, type SignOutNotice } from '../features/account/login/signOut'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
@@ -62,10 +63,19 @@ const needsSecretKey = ref(true)
 // from the key material without deleting it (ADR 0088 decision 5), so the device needs the Secret Key, and the hint
 // under that field says why instead of calling it a first sign-in.
 const heldBack = ref(false)
-// Login already succeeded for the current inputs → a Secret-Key retry must re-unlock, not re-login. Seeded from a
-// session boot restored without unlocking — e.g. the document a sign-out that never reached the server loads
-// (uc.account.sign-out E4): the refresh cookie is still live, and this card's sign-out is then the retry.
-const sessionReady = ref(session.accessToken !== null)
+// The session this tab holds while the screen is up: one a boot restored without opening the vault (a wrap withheld or
+// gone, a session vault lost with its tab, the document a sign-out that never reached the server loads —
+// uc.account.sign-out E4, where this card's sign-out is the retry), or the one this screen's own login made.
+const liveSession = ref(session.accessToken !== null)
+// The account `liveSession` belongs to, once known: the typed address after this screen's own login, the server's
+// copy for a restored one (read at the first submit that needs it). Typing never drops the session (inbox #454): the
+// submit compares, see `useOrLeaveLiveSession`.
+let liveAddress: string | null = null
+// The lifetime this screen's own login asked for; null for a restored session, whose cookie the client cannot read.
+let liveScope: LoginVerifyRequestSessionScopeEnum | null = null
+// The current submit stands on a session of the typed account → a failure from here on is the unlock's, which is what
+// the error copy says. (A Secret-Key retry re-unlocks rather than re-logs in through `liveSession`.)
+const sessionReady = ref(false)
 // The single per-device choice. Drives the login cookie (on → persistent) AND which convenience wrap is
 // auto-enrolled. Only offered where IndexedDB + WebCrypto exist (a wrap can't otherwise be persisted).
 const remember = ref(false)
@@ -138,16 +148,49 @@ async function deviceEmail(): Promise<string | null> {
   return emails.size === 1 ? [...emails][0] : null
 }
 
-// The address this screen filled in itself. It is not a different account, so it keeps a session a boot restored
-// (see the watcher below); only an address the member types or a kit brings drops it.
-let prefilled: string | null = null
-
-/** Prefill the email from the device's record, unless the member has typed one in the meantime. */
+/** Prefill the email from the device's record, unless the member has typed one in the meantime. A prefill is a claim
+ *  like a typed address: whether it keeps a restored session is the submit's comparison, not the record's word. */
 async function prefillEmail() {
   const known = await deviceEmail()
   if (!known || email.value) return
-  prefilled = known
   email.value = known
+}
+
+/**
+ * Whether the session this tab holds serves this submit as it is (inbox #454). A live session of the typed account
+ * does: the unlock runs inside it, with no second login and no second family. Otherwise it is ended at the server
+ * first (`leaveLiveSession`), so the login that follows replaces it instead of leaving it listed in Devices and
+ * sessions until it expires — first, because a logout clears the browser's refresh cookies, the new one included.
+ *
+ * The account is the server's answer, never the record's or the field's: the cookie may have revived another
+ * account's session than the device record names. A submit that turned "remember me" on is not served by a session
+ * whose cookie may be a session cookie — a refresh never raises a lifetime (ADR 0004) and the client cannot read it —
+ * so it is replaced by a persistent login; with the toggle off (or on §E3's entry, which forces `SESSION`) nothing new
+ * was chosen, and the session keeps the lifetime its own login picked.
+ */
+async function useOrLeaveLiveSession(staySignedIn: boolean): Promise<boolean> {
+  if (!liveSession.value) return false
+  liveAddress ??= await liveSessionAddress()
+  const sameAccount = sameAccountAddress(liveAddress, email.value)
+  if (sameAccount && !(staySignedIn && liveScope !== LoginVerifyRequestSessionScopeEnum.Persistent)) return true
+  await leaveLiveSession()
+  liveSession.value = false
+  liveAddress = null
+  liveScope = null
+  return false
+}
+
+/** Log in with what is on the form, unless the live session serves it; then the submit stands on a session.
+ *  `staySignedIn` is whether this submit chose "remember me" (`useOrLeaveLiveSession`). */
+async function signInUnlessLive(staySignedIn: boolean, scope: () => Promise<LoginVerifyRequestSessionScopeEnum>) {
+  if (!(await useOrLeaveLiveSession(staySignedIn))) {
+    const chosen = await scope()
+    await login(email.value, password.value, chosen)
+    liveSession.value = true
+    liveAddress = email.value
+    liveScope = chosen
+  }
+  sessionReady.value = true
 }
 
 /** Write moment 2 of the device register (en.account.device-register): record the device↔wrap join at the ONE
@@ -199,8 +242,9 @@ async function finishAndRoute() {
 const { run: runSubmit, pending: busy } = useAsyncAction(
   async () => {
     // The password both authenticates and derives the unlock KEK, so a first submit logs in; a Secret-Key
-    // retry (session already up) skips straight to unlock.
-    if (!sessionReady.value) {
+    // retry, or a live session of the typed account, skips straight to unlock.
+    sessionReady.value = false
+    await signInUnlessLive(remember.value, async () =>
       // Web is cookie-based: the toggle picks the refresh-cookie lifetime — persistent ("remember me") vs a
       // session cookie (survives reloads, gone on browser close, §22).
       //
@@ -214,12 +258,10 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
       // wrap, which the server keeps withholding, so the persistent session opens no vault: after a restart the
       // device still lands here and needs the password and the Secret Key until the switch is on again. A device
       // without such a record never chose "stay signed in", so it still gets the session scope.
-      const scope = remember.value || (await rememberedWhileOff())
+      remember.value || (await rememberedWhileOff())
         ? LoginVerifyRequestSessionScopeEnum.Persistent
-        : LoginVerifyRequestSessionScopeEnum.Session
-      await login(email.value, password.value, scope)
-      sessionReady.value = true
-    }
+        : LoginVerifyRequestSessionScopeEnum.Session,
+    )
     if (!needsSecretKey.value) {
       // Returning trusted device — unlock with only the password (the DEVICE wrap).
       if (await unlockWithDevice(email.value, password.value).catch(() => false)) {
@@ -277,11 +319,9 @@ async function submit() {
 const { run: runLockedEntry, pending: enteringLocked } = useAsyncAction(
   async () => {
     // Re-entrant on purpose: the way back leaves the session up, so bailing out to the locked state a second
-    // time must not try to log in again.
-    if (!sessionReady.value) {
-      await login(email.value, password.value, LoginVerifyRequestSessionScopeEnum.Session)
-      sessionReady.value = true
-    }
+    // time must not try to log in again — nor does a live session of the typed account, restored or not.
+    // The toggle is not this entry's choice (it forces SESSION), so it replaces no restored session either.
+    await signInUnlessLive(false, async () => LoginVerifyRequestSessionScopeEnum.Session)
     lockedEntry.value = true
   },
   { onError: () => { error.value = t('login.failed') } },
@@ -366,11 +406,10 @@ function onJoinCancel() {
   joinSecret.value = ''
 }
 
-// A different email is a different account. The watcher drops sessionReady on every keystroke (cheap — a
-// re-login is required the moment the email changes, even before blur). The expensive IndexedDB trust lookup
-// that decides whether to show the Secret-Key field is debounced so it runs shortly after the user pauses
-// typing (the field appears without waiting for a blur) while still not flickering on every keystroke; blur
-// (@change) resolves it immediately.
+// The address decides which account the submit is for, and the submit decides what that means for a live session
+// (`useOrLeaveLiveSession`); typing drops nothing. The IndexedDB trust lookup that decides whether to show the
+// Secret-Key field is debounced so it runs shortly after the user pauses typing (the field appears without waiting
+// for a blur) while still not flickering on every keystroke; blur (@change) resolves it immediately.
 let resolveTimer: ReturnType<typeof setTimeout> | undefined
 function scheduleResolve() {
   clearTimeout(resolveTimer)
@@ -381,10 +420,7 @@ function onEmailChange() {
   void resolveDeviceState()
 }
 
-watch(email, (now) => {
-  if (now !== prefilled) sessionReady.value = false
-  scheduleResolve()
-})
+watch(email, scheduleResolve)
 
 onBeforeUnmount(() => clearTimeout(resolveTimer))
 
@@ -505,7 +541,7 @@ onMounted(async () => {
              DISPLAYS a code; the camera it needs is on the other one. Gating it here would withhold the entry
              from exactly the hardware it exists for (ADR 0059 §1). -->
         <Button
-          v-if="!sessionReady && linkingSupported"
+          v-if="!liveSession && linkingSupported"
           type="button"
           :label="t('pairing.signInEntry')"
           icon="pi pi-qrcode"
@@ -516,7 +552,7 @@ onMounted(async () => {
         <!-- Recovery needs no session, so it is reachable from here even when sign-in keeps failing — which is
              exactly when someone needs it. -->
         <Button
-          v-if="!sessionReady"
+          v-if="!liveSession"
           type="button"
           :label="t('recovery.forgot')"
           severity="secondary"
@@ -524,7 +560,7 @@ onMounted(async () => {
           @click="router.push({ name: 'recover' })"
         />
         <Button
-          v-if="sessionReady"
+          v-if="liveSession"
           type="button"
           :label="t('login.signOut')"
           icon="pi pi-sign-out"
