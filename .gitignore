@@ -277,6 +277,10 @@ gradle-app.setting
 # holds real instance state and a canary file holds the plaintext a suite sealed, so neither is committable.
 .e2e-out/
 
+# Retained artifacts of a `scripts/run_stack_e2e.py` run: the recipe extracted from the image, the run's generated
+# `.env` (every secret of that instance), Pebble's root and every container's log. Local evidence, never committable.
+.e2e-stack-out/
+
 # `scripts/validate_guard_gaps.py`'s stamp: the hash of the guards at this checkout's last green full run, which lets
 # a local run skip while no guard changed. Per checkout by design — committed, it would vouch for trees it never saw.
 .trust-chain-cache/
