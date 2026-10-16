@@ -186,11 +186,12 @@ paths:
       tags: [instance]
       operationId: getInstanceStore
       x-veyq-channel: admin
-      summary: Read the object-store setting, its last check, and whether a bundled store is offered.
+      summary: Read the object-store setting in use, a pending change and its check, and whether a bundled store is offered.
       description: >
         The object store is a Server-Owner setting held in the database, not in the environment
         ([ADR 0089](../../docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
-        This returns the current setting (or its absence), the result of the last check of **that** setting,
+        This returns the setting in use (or its absence) with the result of the last check of **that** setting,
+        a changed setting that is saved but not yet in use (`pending`, decision 5) with its own last check,
         whether a bundled store is offered by the deployment, and whether blobs already exist — after which the
         store's type, endpoint and bucket are fixed. Server-Owner only.
 
@@ -209,7 +210,7 @@ paths:
               examples:
                 unset:
                   summary: A fresh install of the bundled recipe — nothing chosen yet, the bundled store offered
-                  value: { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null }
+                  value: { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null }
                 bundledChecked:
                   summary: The bundled store chosen and checked
                   value:
@@ -237,6 +238,7 @@ paths:
                         - { step: PROBE_PUT, outcome: PASSED, detail: null }
                         - { step: PROBE_GET, outcome: PASSED, detail: null }
                         - { step: CORS, outcome: SKIPPED, detail: "The store is served on each tenant's own domain, so no browser request to it is cross-origin." }
+                    pending: null
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -258,20 +260,25 @@ paths:
           One writer: the Server Owner; the form shows the whole setting it sends, and secrets it leaves out are
           kept rather than overwritten.
       x-veyq-channel: admin
-      summary: Set the object store — the bundled one, or an S3-compatible or Garage store.
+      summary: Save a store setting — the bundled one, or an S3-compatible or Garage store — to be checked before it is used.
       description: >
-        Stores the object-store setting and applies it at once, without a restart (ADR 0089 decision 5): the
-        store the backend signs against, the store origin in the app shell's CSP and the store route in the
-        tenant ingress follow it. A changed setting has not been checked, so `lastCheck` is cleared and tenant
-        creation waits for a passed check again. Server-Owner only.
+        Saves the setting as `pending` and changes nothing the instance does (ADR 0089 decision 5): the store
+        the backend signs against, the store origin in the app shell's CSP and the store route in the tenant
+        ingress keep following the setting in use until the pending one passes its own check
+        (`POST /api/instance/store/check`), which then replaces it at once, without a restart. A typo therefore
+        never reaches a running instance's media. On a fresh instance there is no setting in use, so uploads and
+        tenant creation wait for the first passed check. A later write replaces the pending setting; a write
+        equal to the setting in use discards it. Server-Owner only.
 
         `bundled: true` chooses the store the deployment brings and stores a **reference** to it, not a copy of
         its secrets (decision 3); every other field must then be absent. Otherwise `type` and the connection
         fields are required; `secretKey` (and, for Garage, `garageAdminToken`) are write-only and sealed under
-        the config-secret key with the fingerprint of that key (decision 4) — omit one to keep the stored value.
+        the config-secret key with the fingerprint of that key (decision 4) — omit one to keep the stored value
+        (the pending setting's, else the one in use).
 
-        Once blobs exist, changing the type, endpoint or bucket is refused: moving an instance's blobs to
-        another store is not something this does (decision 6). Credentials and the public endpoint may change.
+        Once blobs exist, changing the type, endpoint or bucket away from the setting in use is refused: moving an
+        instance's blobs to another store is not something this does (decision 6). Credentials and the public
+        endpoint may change.
       security:
         - bearerAuth: []
       requestBody:
@@ -296,26 +303,29 @@ paths:
                   secretKey: example-secret-key
       responses:
         "200":
-          description: The setting was stored and applied; the store as it now stands is returned.
+          description: The setting was saved as pending (or, equal to the one in use, discarded the pending one); the store as it now stands is returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/InstanceStore" }
               example:
                 bundledAvailable: false
                 blobsStored: false
-                setting:
-                  bundled: false
-                  type: S3
-                  endpoint: https://s3.eu-central-1.example.com
-                  publicEndpoint: null
-                  bucket: veyq-blobs
-                  region: eu-central-1
-                  accessKey: AKIAEXAMPLE
-                  garageAdminEndpoint: null
-                  secretKeySet: true
-                  garageAdminTokenSet: false
-                  unreadable: []
+                setting: null
                 lastCheck: null
+                pending:
+                  setting:
+                    bundled: false
+                    type: S3
+                    endpoint: https://s3.eu-central-1.example.com
+                    publicEndpoint: null
+                    bucket: veyq-blobs
+                    region: eu-central-1
+                    accessKey: AKIAEXAMPLE
+                    garageAdminEndpoint: null
+                    secretKeySet: true
+                    garageAdminTokenSet: false
+                    unreadable: []
+                  lastCheck: null
         "400":
           description: >
             The request was malformed, or its fields do not form a setting: `bundled: true` with any other field,
@@ -340,7 +350,8 @@ paths:
         "409":
           description: >
             `no_bundled_store` = `bundled: true`, but this deployment offers no bundled store. `store_in_use` =
-            blobs already exist and the request changes the store's type, endpoint or bucket. Nothing is stored.
+            blobs already exist and the request changes the type, endpoint or bucket of the store in use. Nothing
+            is stored.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -358,15 +369,50 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: store_secret_unavailable }
 
+  /api/instance/store/pending:
+    delete:
+      tags: [instance]
+      operationId: discardPendingInstanceStore
+      x-veyq-channel: admin
+      summary: Discard the pending store setting; the one in use stays.
+      description: >
+        Drops the changed setting that is saved but not in use (ADR 0089 decision 5), with its check. The
+        setting in use, and everything that follows it, is untouched. Idempotent: with nothing pending it changes
+        nothing. Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Nothing is pending any more; the store as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceStore" }
+              example: { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
   /api/instance/store/check:
     post:
       tags: [instance]
       operationId: checkInstanceStore
       x-veyq-channel: admin
-      summary: Check the current store setting, step by step.
+      summary: Check the pending store setting, or with none pending the one in use, step by step.
       description: >
-        Runs the check of ADR 0089 decision 2 against the current setting and stores its result, which
-        `GET /api/instance/store` returns until the setting changes. Server-Owner only.
+        Runs the check of ADR 0089 decision 2 against the pending setting when there is one, else against the
+        setting in use, and stores its result, which `GET /api/instance/store` returns beside that setting. A
+        pending setting that **passes** replaces the one in use at once, without a restart (decision 5): the
+        store the backend signs against, the app shell's CSP and the tenant ingress follow it from then on. One
+        that fails stays pending, and the setting in use is untouched. Server-Owner only.
 
         The steps run in order and stop at the first failure; every later step reports `SKIPPED`.
         `CREDENTIALS` = the sealed secrets can be opened under the current config-secret key. `PROVISION` (Garage
@@ -415,7 +461,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
         "409":
-          description: No store is set, so there is nothing to check.
+          description: No store is set or pending, so there is nothing to check.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -614,8 +660,9 @@ components:
             `IN_PROGRESS` = a bring-up is running or waiting to retry. Uploads may fail until it finishes;
             wait, and read again. `PROVISIONED` = the store is usable — layout, bucket, key, grant and CORS
             policy are all in place. `FAILED` = the bounded retries are exhausted and veyq has given up
-            (ADR 0067 Decision 3). Blob transfer stays broken until the store is repaired and the server restarted; the
-            log carries which call failed.
+            (ADR 0067 Decision 3). Blob transfer stays broken until the store is repaired and then either checked
+            (`POST /api/instance/store/check` provisions a Garage store again; a pass moves this to `PROVISIONED`)
+            or the server restarted; the log carries which call failed.
           enum: [NOT_ATTEMPTED, IN_PROGRESS, PROVISIONED, FAILED]
           example: PROVISIONED
 
@@ -646,7 +693,7 @@ components:
       description: >
         The object-store setting as it stands (ADR 0089). Operator configuration and server self-description:
         it describes the operator's own infrastructure, never anything in it, and never carries a secret.
-      required: [bundledAvailable, blobsStored, setting, lastCheck]
+      required: [bundledAvailable, blobsStored, setting, lastCheck, pending]
       properties:
         bundledAvailable:
           x-veyq-visibility: flag
@@ -663,12 +710,36 @@ components:
             decision 6).
           example: false
         setting:
-          description: The current setting, or null when no store has been set yet.
+          description: >
+            The setting in use — the one the backend signs against — or null when no setting has passed its check
+            yet.
           oneOf:
             - $ref: "#/components/schemas/InstanceStoreSetting"
             - type: "null"
         lastCheck:
-          description: The last check of the current setting, or null when it has not been checked since it was set.
+          description: The last check of the setting in use, or null when there is none.
+          oneOf:
+            - $ref: "#/components/schemas/InstanceStoreCheck"
+            - type: "null"
+        pending:
+          description: >
+            A changed setting saved but not yet in use, with its own last check; null when nothing is pending.
+            It replaces `setting` once it passes its check (ADR 0089 decision 5).
+          oneOf:
+            - $ref: "#/components/schemas/InstanceStorePending"
+            - type: "null"
+
+    InstanceStorePending:
+      type: object
+      description: >
+        A store setting saved but not in use until it passes its own check (ADR 0089 decision 5). Operator
+        configuration, never a secret.
+      required: [setting, lastCheck]
+      properties:
+        setting:
+          $ref: "#/components/schemas/InstanceStoreSetting"
+        lastCheck:
+          description: The last check of the pending setting, or null when it has not been checked since it was saved.
           oneOf:
             - $ref: "#/components/schemas/InstanceStoreCheck"
             - type: "null"
