@@ -25,13 +25,18 @@ What a green run proves today stops short of what a Server Owner runs:
 
 ## Decision
 
-1. **The unit under test is the release candidate, not the repository.** The run boots the two candidate images
-   and the compose recipe **extracted from the app image** (`/opt/veyq/deploy/`), with a `.env` generated from the
-   image's own `.env.example`. The only file laid over the recipe is `infra/e2e/docker-compose.e2e.yml`, which adds
-   an ACME test server and the browser, and gives the instance only what the public internet gives an operator's:
-   DNS for its own domain (an alias of Traefik on `edge`, so the app reaches its public origin) and a CA it trusts
-   (the run's Pebble root, in the app's truststore and Traefik's ACME client). Measured in phase 2: the store check
-   uploads through the public origin from inside the app container, so without them no tenant can be created.
+1. **The unit under test is the release candidate, installed the way a Server Owner installs it.** The run boots the
+   two candidate images from the candidate's **release assets** — the recipe set, `veyqctl` and the manifest naming
+   both images by digest, the very files a promotion publishes as the immutable GitHub Release ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §3) — through
+   `veyqctl install` with `--source` pointed at a local directory in the mirror layout (§7) and `--unsigned-local`
+   for images that are not yet signed. So the operator's path is the tested path, and no harness re-implements it.
+   Until `cr-veyqctl` lands its install (its phase 4 owns the switch), `scripts/run_stack_e2e.py` extracts the recipe
+   from the app image instead (ADR 0057 §3 as it still stands) and copies `garage.toml` from the checkout, saying so
+   on every run. The only file laid over the recipe is `infra/e2e/docker-compose.e2e.yml`, which adds an ACME test
+   server and the browser, and gives the instance only what the public internet gives an operator's: DNS for its own
+   domain (an alias of Traefik on `edge`, so the app reaches its public origin) and a CA it trusts (the run's Pebble
+   root, in the app's truststore and Traefik's ACME client). Measured in phase 2: the store check uploads through the
+   public origin from inside the app container, so without them no tenant can be created.
 
 2. **It gates the snapshot, on the exact bytes it publishes.** On a push to `main` or `release/<major>.x` the lanes
    pull `build-<sha>-<arch>` by digest, and the snapshot is published on those digests only when every lane is green;
@@ -115,6 +120,9 @@ What a green run proves today stops short of what a Server Owner runs:
   `scripts/run_stack_e2e.py` against locally built images, and — ADR 0040 — no coverage ref may point at `e2e/`
   until a CI run's log shows the test executed.
 - **The coverage model gains a surface, `stack`** (answer 2), unadmitted until a CI run executed it.
+- **The harness follows the operator's tool.** With [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md), L1 is `veyqctl install` and ADR 0091's L2 and L3 are
+  `veyqctl upgrade` and `veyqctl restore`; a defect in the tool an operator runs is then a red lane, not a gap
+  between the tool and a test that booted the stack its own way.
 - **Port 80/443 belong to the run.** The recipe publishes Traefik on them, so a local run needs them free; the admin
   port is the run's own (`ADMIN_PORT`), never the developer's 8081.
 - **A push gets slower** by a stack boot plus the suite, per architecture in parallel; ADR 0091 budgets the lane at 15

@@ -63,11 +63,14 @@ Three structural costs sit on top of those numbers:
 3. **Three stack lanes, one scenario suite.** The scenarios are split into a **write half** (put content into an
    instance) and a **read half** (open every item and assert it), with one record between them — the shape the
    upgrade proof already has (`web/src/test/upgradeRecord.ts`):
-   - **L1 feature** — the candidate, fresh: write, then read; plus the feature scenarios that need no predecessor.
-   - **L2 upgrade in place** — the previous release's images and recipe: write; switch `VEYQ_IMAGE` /
-     `VEYQ_ADMIN_IMAGE` to the candidate and `up -d` on the same volumes (the Run area's Upgrade steps 4–6); read.
-   - **L3 backup import** — every archived backup of the current major (decision 6), each restored into a fresh
-     candidate (ADR 0056 §7); read. One runner per backup.
+   Every lane drives the operator's own tool, `veyqctl` ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)), against the candidate's release assets served as a
+   local source — so what is tested is what a Server Owner runs:
+   - **L1 feature** — `veyqctl install` of the candidate, fresh: write, then read; plus the feature scenarios that
+     need no predecessor.
+   - **L2 upgrade in place** — `veyqctl install` of the previous release, write; `veyqctl upgrade` to the candidate
+     on the same instance (its backup, template check and health wait, ADR 0096 §5); read.
+   - **L3 backup import** — every archived backup of the current major (decision 6), each `veyqctl restore`d into a
+     fresh `veyqctl install` of the candidate (ADR 0056 §7); read. One runner per backup.
 
    Feature scenarios are Playwright tests tagged with the acceptance criterion they cover
    (`@uc.admin.setup-server:<criterion-id>`); a guard holds both directions — every tag names a criterion, every
@@ -85,9 +88,18 @@ Three structural costs sit on top of those numbers:
 5. **Build once, promote.** A green push publishes its images as a **snapshot** — `<major>.<minor>-SNAPSHOT` and
    `sha-<commit>` on the exact digests the lanes tested — signed, with each lane's result attached as a signed
    attestation (lane, architecture, outcome, and its **inputs**: the predecessor digest for L2, the list of backups
-   for L3). A snapshot is written once per commit and never replaced. **A release is a promotion**: a dispatch names
-   a commit (default: the tip), its snapshot's attestations are verified, and the same digests get `<major>.<minor>`,
-   `<major>`, `latest` (from `main`), a release signature and the git ref `v<major>.<minor>`. Nothing is rebuilt.
+   for L3, and the hash of the release-asset set it installed). A snapshot is written once per commit and never
+   replaced. **A release is a promotion**: a dispatch names a commit (default: the tip), its snapshot's attestations
+   are verified, and the same digests get `<major>.<minor>`, `<major>`, `latest` (from `main`), a release signature
+   and the git ref `v<major>.<minor>`; then the **immutable GitHub Release** is created from the asset set
+   ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §3). Nothing is rebuilt.
+   - **The asset set is the candidate's, too.** The pipeline produces it from the commit and the tested digests
+     (`scripts/release_assets.py`, `cr-veyqctl`) before the lanes run, and the lanes install exactly it. A snapshot
+     gets no GitHub Release (ADR 0096 §3); the promotion produces the set again from the same commit and digests, and
+     refuses when its hash differs from the one the attestations name — so the published files are the ones tested.
+   - **In CI the candidate is pulled by digest and given a local name** before `veyqctl install --unsigned-local`, the
+     flag `veyqctl` refuses for a registry reference; the signature check itself is exercised where it can be: by L2's
+     install of the previous, signed release.
    - **The image carries `<major>.<minor>`, never `-SNAPSHOT`.** The minor is a function of the commit (ADR 0057 §1),
      so `0.12` can only ever name this tree, and a snapshot and its release are the same bytes. Whether a digest *is*
      a release is the registry's and the signature's fact, not the image's: `cosign verify` with the release identity

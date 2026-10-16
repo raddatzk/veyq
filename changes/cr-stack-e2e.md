@@ -13,7 +13,9 @@ invariants:
 ## Goal
 
 Lane L1 of [ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md): a job
-that boots the two candidate images with the compose recipe taken **out of the app image**, gets a real ACME
+that installs the two candidate images the way a Server Owner does — `veyqctl install` from the candidate's
+release assets ([ADR 0096](../docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md); until
+`cr-veyqctl` phase 4 lands, the recipe is extracted from the app image as phase 1 built it) — gets a real ACME
 certificate from a Pebble, drives admin-web and web in Chromium through first run, a Memory round trip and the
 feature scenarios, sweeps the stack for every typed value, and gates the snapshot on the exact `build-<sha>-<arch>`
 bytes it is published on.
@@ -24,6 +26,12 @@ rejected alternatives and the four refine answers; this CR orders the work. Inbo
 
 ## Context & constraints
 
+- **ADR 0096 (accepted 2026-10-16) moves the recipe out of the image** into the release's assets and puts
+  `veyqctl` in front of every lane (ADR 0090 decision 1, ADR 0091 decision 3). `cr-veyqctl` owns the switch: its
+  phase 4 replaces `run_stack_e2e.py`'s recipe-and-`.env` half (`extract()`, `write_env()`) with `veyqctl install
+  --source <dir> --unsigned-local`, and hands the change to this CR's owner. Everything after `up` — Pebble, the
+  certificate, the browser, the sweeps — stays this CR's, so no phase here changes for it; a phase that edits
+  `run_stack_e2e.py` re-reads it on `main` first.
 - **ADR 0091 (accepted 2026-10-16) sets the frame:** one pipeline per commit, every stage budgeted, the gate on every
   push, a release that promotes. This CR builds lane L1 only. **It needs the pipeline CR first** (ADR 0091
   § Consequences, the work order: one workflow, the build not waiting for the tests), because phase 4 wires L1 into
