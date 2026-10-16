@@ -37,6 +37,8 @@ fun interface PomResolver {
  * parent POM that declares one. [KNOWN] maps every license NAME a POM may give to its SPDX id, and is the decision: a
  * name it does not hold fails the build, so a new license family is read by a person before it ships beside an
  * AGPL-3.0-only server — add it there, and its text under `backend/licenses/`, only once it is known to be compatible.
+ * An MIT/BSD jar that carries no license file of its own needs the project's under `backend/licenses/notices/`, since
+ * the SPDX template has no copyright holder; the task fails without one, and on one no shipped jar needs any more.
  */
 abstract class ThirdPartyLicenses : DefaultTask() {
     @get:InputDirectory
@@ -75,6 +77,10 @@ abstract class ThirdPartyLicenses : DefaultTask() {
         }
         if (jars.isEmpty()) throw GradleException("No jars under $lib: run quarkusBuild first.")
 
+        val texts = licenseTexts.get().asFile
+        val supplied = texts.resolve(NOTICES).listFiles { f -> f.name.endsWith(".txt") }.orEmpty().associateBy { it.name }
+        val suppliedUsed = mutableSetOf<String>()
+
         val problems = mutableListOf<String>()
         val components = mutableListOf<Component>()
         for ((sub, jar) in jars) {
@@ -91,15 +97,34 @@ abstract class ThirdPartyLicenses : DefaultTask() {
                     "?"
                 }
             }.distinct()
-            components += Component(id, "lib/$sub/${jar.name}", spdx, embeddedNotices(jar))
+            var notices = embeddedNotices(jar)
+            // An MIT or BSD text is a template until it carries its holder's copyright line, which only the project's own
+            // file has. A jar that ships none needs that file under licenses/notices/, named `<group>.<module>.txt`.
+            if (notices.isEmpty() && spdx.any { it in NEEDS_HOLDER }) {
+                val name = "${id.group}.${id.module}.txt"
+                val file = supplied[name]
+                if (file == null) {
+                    problems += "${id.displayName}: ships no license file of its own; add the project's as backend/licenses/$NOTICES/$name"
+                } else {
+                    suppliedUsed += name
+                    notices = listOf("backend/licenses/$NOTICES/$name" to file.readText().trim())
+                }
+            }
+            components += Component(id, "lib/$sub/${jar.name}", spdx, notices)
         }
+        // A file no shipped jar needs is either a dependency that left or one that now carries its own: both stale.
+        for (name in supplied.keys - suppliedUsed) problems += "backend/licenses/$NOTICES/$name: no shipped jar needs it"
 
-        val texts = licenseTexts.get().asFile
         val used = components.flatMap { it.spdx }.filter { it != "?" }.flatMap { it.split(" WITH ") }.toSortedSet()
         for (spdx in used) if (!texts.resolve("$spdx.txt").isFile) problems += "license text backend/licenses/$spdx.txt is missing"
+        // A text no shipped jar is under any more: its dependency left (MPL-2.0 went with H2), and so does its admission.
+        val held = texts.listFiles { f -> f.name.endsWith(".txt") }.orEmpty().map { it.name.removeSuffix(".txt") }
+        for (spdx in held - used) problems += "license text backend/licenses/$spdx.txt: no shipped jar is under it"
         if (problems.isNotEmpty()) throw GradleException("Third-party licenses:\n  " + problems.joinToString("\n  "))
 
-        report.get().asFile.apply { parentFile.mkdirs() }.writeText(render(components, used, texts))
+        val rendered = render(components, used, texts)
+        if ('\u0000' in rendered) throw GradleException("Third-party licenses: the report would carry binary bytes")
+        report.get().asFile.apply { parentFile.mkdirs() }.writeText(rendered)
     }
 
     private data class Component(
@@ -121,7 +146,7 @@ abstract class ThirdPartyLicenses : DefaultTask() {
     }
 
     private fun embeddedNotices(jar: File): List<Pair<String, String>> = ZipFile(jar).use { zip ->
-        zip.entries().asSequence().filter { !it.isDirectory && NOTICE_FILE.containsMatchIn(it.name) }.sortedBy { it.name }
+        zip.entries().asSequence().filter { !it.isDirectory && NOTICE_FILE.matches(it.name) }.sortedBy { it.name }
             .map { it.name to zip.getInputStream(it).readBytes().toString(Charsets.UTF_8).trim() }.toList()
     }
 
@@ -164,7 +189,14 @@ abstract class ThirdPartyLicenses : DefaultTask() {
     }
 
     companion object {
-        private val NOTICE_FILE = Regex("""(^|/)(LICEN[CS]E|NOTICE|COPYING)[^/]*$""", RegexOption.IGNORE_CASE)
+        private const val NOTICES = "notices"
+
+        /** The licenses whose text names a copyright holder (SPDX templates hold a placeholder); MIT-0 asks for none. */
+        private val NEEDS_HOLDER = setOf("MIT", "BSD-2-Clause", "BSD-3-Clause")
+
+        // Exactly the names a jar's own notices take (measured 2026-10-16: all 194 in META-INF/, bare, .txt or .md). Not
+        // a looser `LICENSE*` anywhere: that matched classes such as Flyway's LicenseGuard.class and wrote their bytes in.
+        private val NOTICE_FILE = Regex("""^(META-INF/)?(LICEN[CS]E|NOTICE|COPYING)(\.txt|\.md)?$""", RegexOption.IGNORE_CASE)
 
         /**
          * Every license name a shipped module's POM gives, as its SPDX id — matched exactly (after trimming and
@@ -180,7 +212,6 @@ abstract class ThirdPartyLicenses : DefaultTask() {
             "apache 2.0" to "Apache-2.0",
             "apache-2.0" to "Apache-2.0",
             "eclipse public license - v 1.0" to "EPL-1.0",
-            "epl 1.0" to "EPL-1.0",
             "eclipse public license - v 2.0" to "EPL-2.0",
             "eclipse public license v. 2.0" to "EPL-2.0",
             "eclipse public license 2.0" to "EPL-2.0",
@@ -198,7 +229,6 @@ abstract class ThirdPartyLicenses : DefaultTask() {
             "lgpl-2.1-or-later" to "LGPL-2.1-or-later",
             "mit" to "MIT",
             "mit-0" to "MIT-0",
-            "mpl 2.0" to "MPL-2.0",
         )
 
         /** "Public Domain" alone names no license; only the CC0 dedication it points at does. */
