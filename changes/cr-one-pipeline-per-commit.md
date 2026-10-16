@@ -215,9 +215,29 @@ restored by snapshot-and-restore.
       load 13 → 35) had the races **red, over their 10-minute budget** beside the backend's Gradle run, and green in 7.0
       alone: locally the races share the machine with `./gradlew check`, in CI they get a runner of their own, so 9.5
       of 10 here says more about local parallelism than about the budget. No CI run exists.
-- [ ] 6 **The page says what runs where.** [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md)
+- [x] 6 **The page says what runs where.** [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md)
       (ADR 0091 decision 8): the stages now run in one pipeline and locally by one command; guard gaps' CI trigger;
       measured wall times where they exist, estimates marked; still nothing has run in CI.
+      **Built 2026-10-16:** the stage table keeps *what it proves / cannot see* and says only built or designed (the
+      image build gains its row, the surface checks name the chart check); a new section *Where and when each stage
+      runs* gives per stage the `workflow › job` and its trigger, the budget and the local wall time — every CI cell
+      read from `.github/workflows/*.yml` at `a9afc0d4` (the locator: the *Jobs and their needs* line above, over all
+      six files, with `on:`, `if:` and `timeout-minutes`), every local number taken from this CR's phase records, ADR
+      0091 § Context and § Consequences and lane L1's 75–90 s, the estimates marked (mutation's and the upgrade proof's
+      budgets, the 20–25 min critical path). *One command runs the pipeline locally* says what `run_pipeline.py` does,
+      what its one recorded full run (`04c9f6d1`) did not run and why, and that it cannot run `stack` on any one host
+      (the job waits for the build's other-architecture leg; `run_pipeline.py`'s docstring). *How a release will be
+      gated* now describes the dispatch as built — staging tags, L1 on those digests, the publish on every job's
+      success, signing, and for a release the tag and the immutable GitHub Release (cr-veyqctl phase 5) — as a file
+      that has never run. *Re-run it* names `run_pipeline.py` and `validate_guard_gaps.py --force`. The L1 row's
+      status facts moved into the new table unchanged (its pipeline job, 75–90 s, no CI run). `npm run check` in
+      `site/` green; the glob green.
+      **What remains for the close** (the CR stays open): the Definition of done's local run of every stage the host
+      can run, of which only **`web-e2e`** has never run under `run_pipeline.py` — it drives the developer's compose
+      stack, so it is run from the main checkout, not a worktree (`python3 scripts/run_pipeline.py --job web-e2e`, or
+      the full run on a quiet machine), its wall time recorded here and in ADR 0091 § Consequences and the page's
+      *Local run* cell for the API end-to-end row updated (it says "not yet run by the local pipeline"); then the
+      retrospective, the harvest, and the CR deleted.
 
 ## Definition of done
 
