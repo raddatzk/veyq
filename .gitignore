@@ -281,6 +281,9 @@ gradle-app.setting
 # `.env` (every secret of that instance), Pebble's root and every container's log. Local evidence, never committable.
 .e2e-stack-out/
 
+# A `scripts/run_pipeline.py` run: each job's log and the run's summary.json. Local evidence of one run.
+.pipeline-out/
+
 # `scripts/validate_guard_gaps.py`'s stamp: the hash of the guards at this checkout's last green full run, which lets
 # a local run skip while no guard changed. Per checkout by design — committed, it would vouch for trees it never saw.
 .trust-chain-cache/

@@ -540,14 +540,18 @@ list of things that can break; each entry owes either a phase or one sentence sa
 *Every* deterministic check in `scripts/` gates a CR — all of them, not
 a remembered subset: `for f in scripts/validate_*.py; do python3 "$f"; done`. The glob is the point: it cannot
 go stale. CI runs that same glob, unfiltered, in
-[`../.github/workflows/trust-chain.yml`](../.github/workflows/trust-chain.yml). **`scripts/` is the list**, and
+[`../.github/workflows/trust-chain.yml`](../.github/workflows/trust-chain.yml) — all of it but
+`validate_guard_gaps.py`, which runs beside it as its own job (below). **`scripts/` is the list**, and
 no file restates it, because a restated list drifts out of step with the one that runs. This file's own
 *"point at a canonical source, don't restate it"*, applied to itself. A red guard means the CR isn't done.
 (The glob sees files, not commits: CI runs it over the **committed** tree, so an *untracked* guard — or an
 untracked file a guard would have rejected — is green locally and unchecked in CI. Commit before believing a
-local green.) One guard runs less locally than in CI: `validate_guard_gaps.py` prints `SKIPPED` while nothing under
-`scripts/` or the trust-chain skill changed since the checkout's last green full run, and never skips in CI — its
-docstring says what a skip does not see.
+local green.) One guard runs on its own trigger: `validate_guard_gaps.py` tests the guards, not the commit, so
+locally it prints `SKIPPED` while nothing under `scripts/` or the trust-chain skill changed since the checkout's last
+green full run, and in CI it runs in full as `trust-chain.yml`'s `guard-gaps` job when a push or pull request
+changes those same inputs, and nightly on `main` ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+decision 4). Neither sees a forgery's anchor moved outside them — its docstring says so; that is why a change that
+renames what a guard anchors on runs it with `--force`.
 
 **In a wave of parallel CRs the glob gates the MERGED tree, once — not each branch.** A branch is not the tree
 that lands, so its green says nothing about the merge, and the price of running it anyway is real: on 2026-09-24
@@ -606,7 +610,8 @@ during cr-e2e-orchestrator:
   and `admin-web` are not among them, is ADR 0040's note on what a row is.) No branch filter and no dispatch
   trick changes that; only publishing the repository does, which is the owner's
   call and tracked as inbox **#26** item (1). Until then, a local run over the **committed** tree is the
-  strongest available proof, and a done-when must say exactly that rather than "green in CI". The two gates
+  strongest available proof — `python3 scripts/run_pipeline.py` runs `ci.yml`'s jobs on a commit and names every
+  job and step it did not run — and a done-when must say exactly that rather than "green in CI". The two gates
   above stay because they are what bites *after* the remote exists.
 
 Then **read the job's log, not its tick**: a job that ran nothing and a job whose suites all passed render

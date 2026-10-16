@@ -256,7 +256,8 @@ from `backend/`.
 The doc-to-code validation layer is a set of buildless Python guards. The glob `scripts/validate_*.py` *is* the
 registry: CI loops over it, so a new guard runs the moment it lands, and each guard's module docstring is its
 documentation. CI runs them in `trust-chain.yml`, deliberately unfiltered so that a docs-only change is validated
-too. The guards need `pyyaml`, which CI installs into a virtual environment. To run the chain locally, exactly as
+too; the one exception is `validate_guard_gaps.py`, which tests the guards themselves and runs there when one of them
+changes, and every night. The guards need `pyyaml`, which CI installs into a virtual environment. To run the chain locally, exactly as
 CI does:
 
 ```sh
