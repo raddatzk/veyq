@@ -26,6 +26,15 @@ version. We **adopt that model** (the refine's ruling, like the buckets adoption
 space and who its members and guests are, so the space owner writes the terms; the operator, who runs the server
 for every space on it, does not author them, and the Server-Owner surface (admin-web) has no terms editor.
 
+**The operator's duties are not the space's.** veyq assumes an instance is hosted by clubs and companies too, not
+only for a family ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+§ Context). Then the Server Owner is the provider and the controller, and the law asks *them* to state the notice
+path, the measures and how to object (DSA Art. 14, 16, 17), the policy on terrorist content (TCO Art. 7(1)), a
+point of contact for users and authorities (DSA Art. 11–12, TCO Art. 15), the information on the guest-write
+record (GDPR Art. 13 and 21(4)) and who they are (§ 5 DDG, § 18 MStV). A space owner can delete any clause of
+their terms, so their terms cannot carry a duty that is not theirs (research, not legal advice, 2026-10-16;
+ADR 0093 § Legal basis).
+
 **No tension with operator-blindness.** The terms are the space's **public policy** (served to everyone,
 including pre-auth on the login page), and acceptance is **operational metadata** (who accepted which
 revision, and when — to the second) — never user content. It is in fact the one honest surface where a space
@@ -100,6 +109,34 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    only the **pre-auth login-page** terms surface (a Host-served public read — see §Consequences), a distinct
    mechanism from the share-keyed guest read above.
 
+6. **A fixed operator section, instance-wide, beside every space's terms.** veyq ships its text (DE+EN); nobody
+   edits it, and admin-web and the CLI set only the values it renders: the instance contact (ADR 0093 § 11), the
+   provider identification (7), the competent data-protection supervisory authority, the guest-write record's N
+   and, where it applies, the backup period B (ADR 0093 § 10). It states:
+   - **the notice path**: who can report and how, what a report must hold, that a contact is optional and a report
+     of child sexual abuse material needs no name, that a human reviews and nothing is blocked by a report;
+   - **what is kept**: the hold and its ends (ADR 0093 § 4), and that backups may hold it longer;
+   - **the measures**, in steps and reversible, the **statement of reasons**, its deferral only on an authority's
+     request, and the **objection** (ADR 0093 §§ 6–7);
+   - **authorities**: Art. 18 reports, orders complied with, terrorist content prohibited and blocked once known,
+     and the instance contact as the point of contact for users and authorities and the TCO contact point, with
+     its languages;
+   - **the guest-write record's GDPR Art. 13 information**, with the **right to object (Art. 21) as a notice of its
+     own**, separate from the rest; the first-layer sentence on every guest write page links here (ADR 0093 § 10).
+
+   It is shown wherever a space's terms are — the member gate, the share gate, and the login page once that surface
+   exists — and served with them by the same endpoints, after the space's own text. Its revision moves only with
+   its text, that is with a veyq release; a bump reopens the gate like a space's revision, and a value changed in
+   admin-web renders at once without reopening it. A space with no terms (revision 0) shows the operator section
+   without a gate. The clauses' DE and EN wording is written in the CR that builds this, from the drafts of the
+   2026-10-16 research; the template's clause 9 then points to this section instead of regulating review itself.
+
+7. **A provider identification, set in admin-web.** Name, an address for service, an email address, and for a
+   legal person who represents it (a club's board). Required by § 5 DDG of a commercial operator and by § 18 MStV
+   of every operator not serving exclusively personal or family purposes; optional for a household, and admin-web
+   warns while it is empty. It appears in the operator section and on the login and share pages. It is public
+   operational data, like the terms.
+
 ## Consequences
 
 - **New operator-visible surface, all public/operational:** the tenant `terms_markdown_by_locale` + `terms_revision`
@@ -116,9 +153,13 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 - **Ties into the T&S "decryptable-on-report" corollary** — that a reported **public** share is
   decryptable-on-report is a property of every public share on every server (the report carries the link's
   secret, [security model](../crosscutting/security-model.md)), not something a space chooses. The terms are
-  where the space tells its members and guests so, and the template's review-and-removal clause is the
-  illegal-content policy that governs it. Neither the report intake nor an operator action on a single share is
-  built yet (security model § Sharing).
+  where the space tells its members and guests so; how a report is handled is the operator section's (6), which
+  every space carries. Neither the report intake nor an operator action on a single share is built yet (security
+  model § Sharing).
+- **The operator section and the provider identification are new public surface** (6, 7): instance settings in
+  admin-web and the CLI ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)),
+  rendered into the terms endpoints. A family Server Owner who leaves the identification empty sees a warning, not
+  a refusal. None of it is built.
 
 ## Alternatives considered
 
@@ -133,3 +174,10 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
   operator among many.
 - **One ToS per server, written by its operator.** Rejected — a server hosts many spaces, each answering for its
   own content and people; the space owner is who can state that space's policy, so every space writes its own.
+  The operator section (6) is not this: it states only the operator's own duties, in fixed text the operator
+  fills with values but does not write.
+- **The operator's duties as clauses of the space's template.** Rejected — a space owner can delete any clause,
+  and on a server with many spaces the space owner is not the one the duty falls on.
+- **An operator-editable section** in admin-web. Rejected — the duties' content is fixed by law and the same on
+  every instance; free text invites dropping the parts a supervisor checks, and admin-web stays without a terms
+  editor.

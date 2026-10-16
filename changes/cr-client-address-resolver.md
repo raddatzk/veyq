@@ -140,9 +140,12 @@ contracts phase and no web phase.
   startup refusal is the one validation of its entries. A schema pattern would be a second parser of the same
   grammar.
 
-## Open for the owner
+## Decided with the owner, and what is still open
 
-ADR 0094 leaves these open, and the CR needs an answer to each before implementation.
+Owner 2026-10-16 ("Bei den drei offenen Punkten gehe ich überall mit"): **O1 (a)** and **O2 (a)** as recommended.
+**O3 is reopened**: the owner also decided "Carrier-Grade-NAT sollten wir beachten" — behind CGNAT an address names no
+one without its source port, so (a)'s dropping of a proxy-written `ip:port` loses exactly the part that attributes.
+O3 is settled by the source-port research (orchestrator, in flight) before phase 1 starts; until then phase 1 waits.
 
 - **O1 — Should a guard hold decision 1 ("one resolver, both consumers")?**
   - (a) Extend `scripts/validate_lookup_single_home.py` with a rule D: a string literal naming `X-Forwarded-For`
@@ -332,7 +335,7 @@ ADR 0094 leaves these open, and the CR needs an answer to each before implementa
 - **No CI run exists in this repository** (no remote). "Green" means the local run over the committed tree:
   `python3 scripts/run_pipeline.py`, or the per-phase commands above.
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-16); phase 1 waits for O3 only.
 
 ## Retrospective
 

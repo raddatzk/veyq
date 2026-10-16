@@ -190,7 +190,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `scripts/validate_migration_versions.py` holds the name shape, unique versions, the pins, their order and the
   module direction. A new time column (an entity's `Instant`) names its reader in the root's
   `EveryStoredTimeHasAReaderTest`, or that test is red — the one sweep a new table meets that no contract guard
-  predicts (cr-release-notices' list of sweeps missed it). **An applied migration is never edited — not even a comment in it.** Flyway validates the
+  predicts (cr-release-notices' list of sweeps missed it). A migration that **seeds rows** (`INSERT … VALUES`) puts
+  them into every fresh install, which the restore's emptiness gate then reads as data: run
+  `python3 scripts/instance_backup_selftest.py`, which fails until the table is in `instance_backup.py`'s `NOT_DATA`
+  with its reason — it runs in CI's `web-e2e` job only, so no backend check sees it (two seeding migrations of
+  2026-10-16 refused every restore before it). **An applied migration is never edited — not even a comment in it.** Flyway validates the
   checksum of every applied migration at `migrate-at-start`, so a one-word fix to a `--` comment fails startup on
   every instance that already ran it; `%dev` hides this behind `repair-at-start=true`, so it is green exactly where
   you would test it and red only on somebody else's server. A migration's comment is a historical artifact:
