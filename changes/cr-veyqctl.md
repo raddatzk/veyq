@@ -131,7 +131,7 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
   - **Done when:** the live upgrade and the three bites read; selftest extended (decision order, `VEYQ_RELEASE` per
     line) and green; committed.
 
-- [ ] **3b A major is entered from its predecessor's last release** (owner 2026-10-16, ADR 0096 decision 5 step 1,
+- [x] **3b A major is entered from its predecessor's last release** (owner 2026-10-16, ADR 0096 decision 5 step 1,
   decided after phase 3 landed). `upgrade`'s resolution: if the selected release lies in a later major than the
   running one and the running release is not the newest of its major, the target becomes that newest release, and
   the run ends by saying the next `upgrade` enters the next major; a run never crosses more than one major (from the
@@ -280,6 +280,22 @@ listing it (the positive control). The guard's docstring states the shared deriv
   harness error), and defaulted the restore's domain wrongly (a product bug, fixed above); the whole run was repeated
   at the fixed head. **Next time:** a live proof that mixes two releases' tools names, per step, which release's tool
   runs it — the CR's "install the first … `upgrade` to the second" leaves that to the harness.
+
+**Phase 3b.** Decided in the build, each in `veyqctl.py`'s docstring:
+- *The rule sits on top of `select`, not in it* (`upgrade_target`): `select` stays what `VEYQ_RELEASE` selects, and
+  `install` (no running release) and `verify` keep using it alone; `upgrade` and `check` apply the rule, so `check`
+  names the release the next `upgrade` really takes and says, as `upgrade` ends, which major the one after enters.
+- *A next major with no release is refused*, naming it: the ADR's "no run crosses more than one major" read
+  literally — a mirror lacking major N+1, or one whose N+1 is only a prerelease, would otherwise be crossed in one run.
+  The use-case names no such flow; with releases cut from one `VERSION` it should not arise.
+- *Bites*, as phase 3's: mutants of a copy of `veyqctl.py`, the copy's self-test run against each (script in the
+  implementing session, not committed). The rule removed → red, 8 checks (`latest` from 1.3 with 2.5 listed and 1.9
+  the newest of major 1 resolves 2.5, plus the pin, `2`, the end-to-end `upgrade` and `check`); the one-major cap
+  removed → red, 3 (from 1.9 with 3.1 listed resolves 3.1; the empty-major refusal); further `upgrade` or `check`
+  ignoring the rule, and a prerelease counted as a major's newest → each red on its own checks. The control (1.3 → 1.9
+  within major 1) green in every mutant, and the unmutated copy green.
+- *What went wrong*: nothing in the build. Phase 3's self-test pinned the superseded reading (`latest` and `2` from 1.3
+  straight to 2.1); both went red at the first run after the rule, as they should, and now pin 1.12.
 
 **Phase 4.** Decided in the build, each in `run_stack_e2e.py`'s docstring:
 - *Pebble before `install`, without teaching `veyqctl` about it.* The lane's stages are now `assets` →
