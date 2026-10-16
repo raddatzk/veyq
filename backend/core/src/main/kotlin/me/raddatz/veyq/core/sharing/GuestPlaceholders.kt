@@ -4,8 +4,9 @@ package me.raddatz.veyq.core.sharing
  * Which nodes are an **empty upload placeholder** a guest may take back (`abandonShareNode`, ADR 0080 decision 6): the
  * node a guest created for an upload that was then refused or given up — an upload into a full link, a cancel — and
  * that holds nothing. **The owner of the node's kind decides** what "holds nothing" means (Depot: a `FILE` whose slot
- * never held a blob); core checks the rest — the guest's reach, no child, no upload of anybody else open into it — and
- * erases. Core names no application kind (ADR 0079): the declaration is the application's, and core only reads it.
+ * never held a blob; core, for its own `FOLDER`: [FolderGuestPlaceholders]); core checks the rest — the guest's reach, no child, no upload of anybody else open into it — and
+ * erases. Core names no application kind (ADR 0079): an application's declaration is the application's, and core only
+ * reads it.
  *
  * Nodes store no authorship, so the server cannot tell whose placeholder it is: whatever an implementation declares,
  * any guest within reach may erase it. So it declares only a node nobody could lose anything with — never one that
@@ -13,7 +14,8 @@ package me.raddatz.veyq.core.sharing
  *
  * **Exactly one implementation per kind, and none is the default** — the partition of [GuestNodeRules]. A kind no
  * implementation handles, or one two implementations claim, is never a placeholder (`not_a_placeholder`); so core
- * alone, and an application that declares nothing (Memories), let a guest erase nothing.
+ * alone lets a guest erase an empty folder and nothing else, and an application that declares nothing (Memories) adds
+ * nothing to it.
  */
 interface GuestPlaceholders {
     /** Whether this implementation answers for nodes of [kind]. */

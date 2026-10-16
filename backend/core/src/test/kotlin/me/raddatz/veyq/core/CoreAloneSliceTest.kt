@@ -31,6 +31,7 @@ import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.CoreTestGuestCreatableKinds
 import me.raddatz.veyq.core.sharing.CoreTestGuestPlaceholders
+import me.raddatz.veyq.core.sharing.FolderGuestPlaceholders
 import me.raddatz.veyq.core.sharing.GuestCreatableKinds
 import me.raddatz.veyq.core.sharing.GuestPlaceholders
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
@@ -87,10 +88,10 @@ import org.junit.jupiter.api.Test
  * link, places a kind, completes an upload — instead of refusing. So:
  *
  * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's four (attachments, pins, nodes, shares),
- *    `NodeKindRules` and `ShareRoots` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
+ *    `NodeKindRules`, `ShareRoots` and `GuestPlaceholders` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
  *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), and every other seam —
  *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds`,
- *    `GuestCreatableKinds`, `GuestPlaceholders`, `MemberBlobRoles` — none. The composed application's
+ *    `GuestCreatableKinds`, `MemberBlobRoles` — none. The composed application's
  *    sets are the root's `ModuleCompositionTest`. (`GuestIdentityUsage` is therefore never empty: its fail-closed
  *    branch for no usage at all is `GuestIdentityUsageTest`'s, boot-free, and no longer reachable here.)
  * 2. **Every seam fails closed with nobody behind it**: a `FOLDER` is created and a `MEMORY` is `illegal_structure`;
@@ -166,11 +167,11 @@ class CoreAloneSliceTest {
             "SharedSubtreeContributor: core's attachments only")
         assertEquals(setOf(FolderNodeRules::class.java), classes(kindRules), "NodeKindRules: core's FOLDER rule only")
         assertEquals(setOf(FolderShareRoots::class.java), classes(shareRoots), "ShareRoots: core's FOLDER answer only")
+        assertEquals(setOf(FolderGuestPlaceholders::class.java), classes(guestPlaceholders), "GuestPlaceholders: core's FOLDER answer only")
         for ((seam, beans) in mapOf(
             "MembershipEraser" to membershipErasers,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
             "WriteOnlyGuestKinds" to writeOnlyGuestKinds, "GuestCreatableKinds" to guestCreatableKinds,
-            "GuestPlaceholders" to guestPlaceholders,
         )) {
             assertEquals(emptySet<Class<*>>(), classes(beans), "$seam: core implements none, and no application is here")
         }

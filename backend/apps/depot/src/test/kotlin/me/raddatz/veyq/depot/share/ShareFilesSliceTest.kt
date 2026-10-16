@@ -322,6 +322,36 @@ class ShareFilesSliceTest {
         assertEquals(0L, linkUsage(link) ?: 0L, "and nothing counts against the link")
     }
 
+    /**
+     * The same promise for a folder-tree upload (web `uploadFolder.ts`): the guest's folders were created before any file
+     * of it was sent, so once the full link refused every file, the guest takes back the files and then the folders,
+     * deepest first — core's own empty `FOLDER` is a placeholder (`FolderGuestPlaceholders`). A folder that still holds
+     * something is not.
+     */
+    @Test
+    fun aFolderTreeWhoseEveryFileTheFullLinkRefusedIsTakenBackDeepestFirst() {
+        val t = tree()
+        val link = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
+        setLimit(t.tenantId, 1)
+        val top = UUID.randomUUID().toString()
+        val sub = UUID.randomUUID().toString()
+        val file = UUID.randomUUID().toString()
+        GuestTreeShare.create(link, t.folder, NodeEntity.FOLDER, nodeId = top).statusCode(201)
+        GuestTreeShare.create(link, top, NodeEntity.FOLDER, nodeId = sub).statusCode(201)
+        GuestTreeShare.create(link, sub, DepotNodeKinds.FILE, nodeId = file).statusCode(201)
+        guestStart(link, file).statusCode(200).body("results[0].error", equalTo("quota_exceeded"))
+
+        // A folder above what is still there holds it: the order is the client's, deepest first.
+        GuestTreeShare.abandon(link, sub).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        GuestTreeShare.abandon(link, file).statusCode(204)
+        GuestTreeShare.abandon(link, top).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        GuestTreeShare.abandon(link, sub).statusCode(204)
+        GuestTreeShare.abandon(link, top).statusCode(204)
+
+        for (id in listOf(top, sub, file)) assertNull(tx { NodeEntity.findById(id) }, "no node is left behind, not even in the trash")
+        assertEquals(0L, linkUsage(link) ?: 0L, "and nothing counts against the link")
+    }
+
     /** Only a `FILE` whose slot never held a blob, and that nobody else is uploading into, is a placeholder (Depot's
      *  `DepotGuestPlaceholders`); nodes store no authorship, so an empty file a member made is one too. */
     @Test
