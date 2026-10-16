@@ -31,10 +31,10 @@ Not here: the snapshot on every green push and the release as a promotion (inbox
   `cosign verify` to `.github/workflows/container.yml@refs/heads/(main|release/…)`, and
   `validate_release_identity.py` holds those commands to the publishing workflow. No image has ever been published,
   so renaming costs documentation only — today, and never again cheaply after the first publish.
-- **Decision at refine (owner to confirm): the one workflow is `ci.yml`**, the name a reader looks for, and it is the
+- **Decided at refine (owner, 2026-10-16): the one workflow is `ci.yml`**, the name a reader looks for, and it is the
   signer: `container.yml`'s jobs move into it, `container.yml` is deleted, and every `container.yml` reference in a
   guard, a Run page, an ADR and the inbox moves with it. The alternative — keep the file name `container.yml` for
-  everything — saves the rename and leaves the pipeline under a name that says "image". Choose before phase 2.
+  everything — would have saved the rename and left the pipeline under a name that says "image".
 - **20 scripts read a workflow** (locator below), among them `validate_coverage.py` (which Gradle runs execute
   which backend refs, named `<file> › <job>`), `validate_release_identity.py` (registry writes only on dispatch,
   the publish's needs, the cosign identity), `validate_npm_installs_gated.py`, `validate_mutation_trigger_paths.py`
