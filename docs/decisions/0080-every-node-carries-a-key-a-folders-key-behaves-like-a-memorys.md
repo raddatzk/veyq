@@ -85,9 +85,9 @@ Memory, an expense and a file side by side).
    created before every file of it was refused, owner decision 2026-10-16; a kind nobody declares never is). Since
    authorship is not stored, any guest in reach may take back any such placeholder, a member's empty file or folder too —
    the only thing it can remove is a name with nothing behind it, which a `READ_WRITE` guest could already rename away.
-   This narrows once a node stores who last wrote its name (the attribution the moderation design plans for reported
-   names and metadata; no ADR yet): then a guest takes back only a placeholder its own identity named, and a member's
-   empty node — or one a member renamed — is no longer one. A guest's create states the epoch it sealed with, and
+   Until a node stores who last wrote its name, that rule stands. Such an attribution is planned in the moderation
+   design (for reported names and metadata) but neither decided in an ADR nor built; once it exists, a guest takes back
+   only a placeholder its own identity named, and a member's empty node — or one a member renamed — is no longer one. A guest's create states the epoch it sealed with, and
    the server checks it as a member's placement off the scope root (a guest never targets the scope root): above the
    scope's current epoch it is `409 stale_epoch`, at or below it the epoch is stored as sent — the `node-name` and
    `content-key` seals bind it, so the reader opens at the stored number (owner, 2026-10-07; it replaced a server-chosen
