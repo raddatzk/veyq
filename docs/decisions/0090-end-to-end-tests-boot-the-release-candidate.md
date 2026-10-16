@@ -1,6 +1,6 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
-- Status: Accepted 2026-10-16; built so far: the boot and first run in a browser (`scripts/run_stack_e2e.py` and `e2e/`, phases 1–2 of `changes/cr-stack-e2e.md`, run locally) — no Memory round trip, no sweeps, no CI run
+- Status: Accepted 2026-10-16; built so far: the boot, first run and the Memory round trip in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `e2e/`, phases 1–3 of `changes/cr-stack-e2e.md`, run locally) — no feature scenario, no CI run
 - Date: 2026-10-16
 
 ## Context
