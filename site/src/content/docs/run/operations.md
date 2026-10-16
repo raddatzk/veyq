@@ -40,8 +40,8 @@ Every run of the end-to-end orchestrator searches every server and container log
 sealed and for every token it handled, and fails if one appears
 ([cc.security.wire-assertion](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.wire-assertion.md)).
 Traefik's access log is not enabled by either recipe; the admin surface's access log keeps the method, the path
-without its query, the status, the size, the user agent and the forwarded address. A cluster ingress controller
-keeps its own access log, which is yours to configure.
+without its query, the status, the size, the user agent and the forwarded address. A cluster's gateway
+implementation keeps its own access log, which is yours to configure.
 
 ## No metrics
 

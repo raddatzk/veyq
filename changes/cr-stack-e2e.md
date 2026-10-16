@@ -70,7 +70,7 @@ rejected alternatives and the four refine answers; this CR orders the work. Inbo
 | admin-web strings the setup project clicks | `grep -n '"title"\|"submit"\|"kitProceed"\|"sourceBundled"\|"check"\|"create"' admin-web/src/i18n/index.ts` |
 | The sweeps to move | `grep -n "^def sweep\|^def token_needles\|^def db_token_findings" scripts/run_web_e2e.py` |
 | Who imports from `run_web_e2e.py` | `grep -rln "run_web_e2e" scripts .github` |
-| Every gate `publish` waits on | `grep -n "needs\.\|needs:" .github/workflows/container.yml` |
+| Every gate `publish` waits on | `grep -n "needs\.\|needs:" .github/workflows/ci.yml` |
 | Coverage files that would name `stack` | `grep -rln "off-state-in-a-browser\|setup-server\|configure-object-store" docs/coverage` |
 
 ## Phases

@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4) and its parallel cases (decision 1); the rest is not (§ Consequences)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1) and the one workflow (decision 2, `ci.yml`); the rest is not (§ Consequences)
 - Date: 2026-10-16
 
 ## Context
@@ -150,6 +150,19 @@ Three structural costs sit on top of those numbers:
   neighbour's Docker-heavy session running: the full run **167 s at 6 workers** (load average 13 → 30) against
   334 s at 1 (24 → 13) — inside its 10-minute budget; about 2×, not 6×, because the tree copies are bound by the
   file system and its watchers, not by the CPU. The 901 s of § Context was the sequential run under a load of 20–55.
+- **The one workflow is `ci.yml`** (2026-10-16, `cr-one-pipeline-per-commit` phase 2; the owner chose the name a
+  reader looks for over keeping `container.yml`'s). `container.yml` is folded in and deleted: its version job, image
+  build matrix, disabled upgrade proof and dispatch publish live in `ci.yml` beside the guards, the surface checks
+  (admin-web's check in `frontend`, the chart check its own `chart` job), the races and the API end-to-end run; its
+  triggers' `paths-ignore` and its two concurrency groups carried over. `build` needs only `version`; `publish` needs
+  every other job of the file with `success` (the disabled upgrade proof's `skipped` tolerated, as before), and
+  `validate_release_identity.py` holds that list to the file. Two consequences of the build no longer waiting: on a
+  dispatch the per-arch `build-<sha>-<arch>` staging tags are pushed before the tests finish — unsigned, carrying no
+  release name, named only by `publish` — and the npm deprecation gate (`validate_npm_installs_gated.py`) now covers
+  the images' `npm ci` by the publish needing the gate, not the build. The signer's identity moved with the file:
+  [Verify a release](../../site/src/content/docs/run/verify-a-release.md) pins `.github/workflows/ci.yml`; no image
+  had ever been published under the old one. The pipeline's `guards` job runs the glob minus `validate_guard_gaps.py`,
+  which stays in `trust-chain.yml` until decision 4's filtered job.
 - **The remote comes when the owner judges veyq ready to publish, and it will be public** (owner, 2026-10-16). Until
   then every stage's only run is local, so the pipeline must run locally from the workflow file itself, by one command
   (`changes/cr-one-pipeline-per-commit.md` phase 5); the first public push is also the first CI run.

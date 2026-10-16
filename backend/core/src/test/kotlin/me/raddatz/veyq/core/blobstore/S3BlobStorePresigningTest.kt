@@ -96,7 +96,7 @@ class S3BlobStorePresigningTest {
     @Test
     fun inStoreOriginModeTwoTenantsSignAgainstTheSameStoreHost() {
         // The mirror of [twoTenantsSigningTheSameKeyGetTwoDifferentHosts], and the defect this CR closes: a
-        // store on an origin of its own (ADR 0064's Ingress host, a tenant's own bucket) has one host for
+        // store on an origin of its own (ADR 0064's store host on the chart's Gateway, a tenant's own bucket) has one host for
         // everybody, so a per-tenant swap signs for an origin that does not serve the bucket. Asserted on the
         // host of each URL, not on "the two are equal" — two URLs signed for the same *wrong* host are equal too.
         val store = storeOriginStore()
@@ -124,7 +124,7 @@ class S3BlobStorePresigningTest {
 
     @Test
     fun inStoreOriginModeTheSchemeAndPortOfTheStoreOriginAreKept() {
-        // `public-endpoint` verbatim means verbatim: a store Ingress on a non-default port is signed for that
+        // `public-endpoint` verbatim means verbatim: a store host on a non-default port is signed for that
         // port. The sibling of [theSchemeAndPortOfTheConfiguredEndpointSurviveTheDomainSwap], which pins the
         // same property for the mode that *does* rewrite the URL.
         val store = S3BlobStore(
@@ -224,7 +224,7 @@ class S3BlobStorePresigningTest {
         }
 
     /** A store reached at an origin of its own, which is **not** the endpoint the backend uses — ADR 0064's
-     *  Kubernetes shape, where the browser gets an Ingress host and the backend a cluster-internal Service. */
+     *  Kubernetes shape, where the browser gets a Gateway host and the backend a cluster-internal Service. */
     private fun storeOriginStore() = S3BlobStore(
         s3 = NoS3Client, bucket = BUCKET, presignTtlSeconds = 300,
         internalEndpoint = "http://garage.veyq.svc.cluster.local:3900",

@@ -26,8 +26,8 @@ This asserts, with no daemon and no root:
      message naming the release it came from (and saying so when the manifest records none), that the same and
      an older one are accepted, that a target with no applied migration is refused, and the closing log an older
      backup gets — that it will be migrated up, and that a rollback needs the backup's own release;
-  6. the emptiness gate's exclusions (`NOT_DATA`): the object-store setting is among them, and every one still names
-     a table a migration creates;
+  6. the emptiness gate's exclusions (`NOT_DATA`): the object-store setting is among them, every one still names
+     a table a migration creates, and every table a migration seeds with literal rows is among them;
   7. the store's credentials for a run (ADR 0089): the bundled store's key pair derived from its admin token — one
      pinned vector, the one `BundledStoreCredentialsTest` pins on the backend's side — an operator's own pair winning
      over a token, half a pair refused, and a run that names no store refused naming both ways.
@@ -256,9 +256,13 @@ def not_data_cases() -> None:
     name a table that no longer exists, which would be a gate with a hole nobody sees. Both halves are read from the
     migrations, not recalled (ADR 0089: the object-store setting is one row once a Server Owner has chosen a store)."""
     root = pathlib.Path(__file__).resolve().parent.parent
-    created = set()
+    created, seeded = set(), set()
     for sql in root.glob("backend/**/src/main/resources/db/migration/*.sql"):
-        created.update(re.findall(r"CREATE TABLE (\w+)", sql.read_text()))
+        text = sql.read_text()
+        created.update(re.findall(r"CREATE TABLE (\w+)", text))
+        # A literal seed (`INSERT INTO t (…) VALUES`) puts rows into every fresh install; an `INSERT … SELECT`
+        # backfill copies rows that a fresh install does not have, so only the VALUES form makes a table non-empty.
+        seeded.update(re.findall(r"INSERT\s+(?:IGNORE\s+)?INTO\s+(\w+)\s*(?:\([^)]*\))?\s*VALUES", text, re.I))
     check("the gate excludes the object-store setting, which a Server Owner fills before a restore",
           "veyq_store_setting" in ib.NOT_DATA)
     check("every table the gate excludes is one a migration creates (flyway's own record aside)",
@@ -266,7 +270,10 @@ def not_data_cases() -> None:
           str(sorted(t for t in ib.NOT_DATA if t != "flyway_schema_history" and t not in created)))
     check("the gate excludes the capability switches, which a Server Owner may set before a restore",
           "veyq_capability_switch" in ib.NOT_DATA)
-    check("the exclusion list is the four named tables, no pattern", len(ib.NOT_DATA) == 4, str(ib.NOT_DATA))
+    check("every table a migration seeds is excluded — a fresh install holds those rows, so a restore onto it "
+          "would be refused (veyq_external_service did exactly that, 2026-10-16)",
+          seeded <= set(ib.NOT_DATA), str(sorted(seeded - set(ib.NOT_DATA))))
+    check("the exclusion list is the five named tables, no pattern", len(ib.NOT_DATA) == 5, str(ib.NOT_DATA))
 
 
 # The vector `backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.

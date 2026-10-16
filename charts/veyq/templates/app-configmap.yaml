@@ -1,5 +1,5 @@
 # The settings that exist only on this target, as a Quarkus properties file rather than as environment: the
-# annotation map's keys carry dots and slashes (`cert-manager.io/cluster-issuer`), which the properties grammar
+# annotation map's keys carry dots and slashes (`cert-manager.io/issuer`), which the properties grammar
 # quotes and an environment-variable name cannot spell. Everything that has a compose counterpart stays an
 # environment variable on the Deployment, so the two recipes read side by side. Measured on the built
 # fast-jar, not assumed: with this block supplied ONLY through QUARKUS_CONFIG_LOCATIONS the producer logged
@@ -18,13 +18,11 @@ metadata:
 data:
   application.properties: |
     veyq.tenant.ingress.sink=kubernetes
-    {{- with .Values.ingress.className }}
-    veyq.tenant.ingress.kubernetes.ingress-class-name={{ . }}
-    {{- end }}
-    veyq.tenant.ingress.kubernetes.tls.mode={{ .Values.ingress.tls.mode }}
-    {{- with .Values.ingress.tls.secretName }}
+    veyq.tenant.ingress.kubernetes.gateway-name=veyq
+    veyq.tenant.ingress.kubernetes.tls.mode={{ .Values.gateway.tls.mode }}
+    {{- with .Values.gateway.tls.secretName }}
     veyq.tenant.ingress.kubernetes.tls.secret-name={{ . }}
     {{- end }}
-    {{- range $key, $value := (include "veyq.ingressAnnotations" . | fromYaml) }}
+    {{- range $key, $value := (include "veyq.gatewayAnnotations" . | fromYaml) }}
     veyq.tenant.ingress.kubernetes.annotations."{{ $key }}"={{ $value }}
     {{- end }}

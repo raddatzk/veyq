@@ -1,32 +1,105 @@
 name: CI
 
+# The one pipeline per commit (ADR 0091 decision 2): the guards, the surface checks, the races, the API end-to-end
+# run and the image build start together, and the dispatch publish waits on every one of them. Until
+# cr-one-pipeline-per-commit phase 2 this was two workflows — this one, and `container.yml`, whose `test` ran the
+# surface checks a second time and whose `build` waited for that second copy. `container.yml` was folded in here.
+#
+# Nothing is published by a push (ADR 0057 §1). A push and a pull request (Dependabot's included) run every stage and
+# build both images as a dry run that writes to no registry; a publish is started by hand with `workflow_dispatch`,
+# from `main` or `release/<major>.x`, as a snapshot (the default) or — `release: true` — a release. The version step
+# refuses a dispatch on any other branch, so a dispatch is not a way to give a feature branch a run: a pull request is.
+#
+# This file is the signer. Keyless signing names the workflow that signed, so the identity an operator pins
+# (site/src/content/docs/run/verify-a-release.md) is `.github/workflows/ci.yml` on a release branch, and renaming this
+# file changes it — scripts/validate_release_identity.py holds that page to whatever file publishes.
+#
+# A tag is deliberately NOT a trigger. The publish CREATES `v<major>.<minor>` (ADR 0057 §2), so a tag push could
+# only ever ask for a version that is already published — which the `assert-release-unpublished` step below
+# refuses by design. Triggering on both would mean every release is followed by a red run.
+#
+# Docs are ignored *here* on purpose: a doc change cannot break a surface check or an image. The guards that do
+# validate docs run in trust-chain.yml, which is unfiltered (and in `guards` below, for every commit this file runs on).
 on:
   push:
     branches:
       - main
-    # Docs are ignored *here* on purpose: a doc change cannot break `./gradlew check` or `npm run check`.
-    # The guards that do validate docs live in trust-chain.yml, which is unfiltered.
+      - "release/**"
     paths-ignore:
       - "**/*.md"
       - "docs/**"
+      - "!docs/api/**"
       - "site/**"
       - ".github"
   pull_request:
     branches:
       - main
-    # Docs are ignored *here* on purpose: a doc change cannot break `./gradlew check` or `npm run check`.
-    # The guards that do validate docs live in trust-chain.yml, which is unfiltered.
+      - "release/**"
     paths-ignore:
       - "**/*.md"
       - "docs/**"
+      - "!docs/api/**"
       - "site/**"
       - ".github"
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a release (<major>.<minor>, refused if it exists, git ref v<major>.<minor>) instead of a snapshot (<major>.<minor>-SNAPSHOT, replaced on every publish of that commit)"
+        type: boolean
+        default: false
 
+# Two groups, so a push never queues behind a publish: every publish shares one (two publishes racing for the same
+# name is the thing the refusal below must see in order), every dry run is grouped by its own ref.
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && 'veyq-publish' || format('veyq-ci-{0}', github.ref) }}
+  cancel-in-progress: false
+
+# Helm for the `chart` job and the chart packaging in `publish`: the official release tarball, checked against this
+# SHA-256 before it runs — the shape ADR 0057 §6 uses for the OpenAPI generator JAR, and no setup action. Measured
+# 2026-10-14: get.helm.sh's helm-v4.0.1-linux-amd64.tar.gz.sha256sum, the tarball's own hash and the checksum in the
+# GitHub release notes of helm/helm v4.0.1 all agree. Bumping it is part of cutting a release.
+env:
+  HELM_VERSION: v4.0.1
+  HELM_SHA256: e0365548f01ed52a58a1181ad310b604a3244f59257425bb1739499372bdff60
+
+# Least-privilege default; each job widens only what it needs (see per-job permissions blocks).
 permissions:
   contents: read
 
 jobs:
+  guards:
+    name: Trust-chain guards (the product guards)
+    # The pipeline's own run of the guards, so `publish` can wait on them (ADR 0091 decision 2). trust-chain.yml runs
+    # the same glob unfiltered, because a docs-only commit is validated there and nowhere else; the overlap is these
+    # cheap guards, about a minute and a half. `validate_guard_gaps.py` is not run here: it tests the guards, not the
+    # commit, and is its own stage (ADR 0091 decisions 1 and 4) — trust-chain.yml runs it.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The glob is the mechanism, as in trust-chain.yml: a hand-written list is green on the day a new guard lands
+      # and silently never runs it. nullglob and the count make "validated nothing" a red build, not a green one.
+      - name: Validate the product guards
+        run: |
+          shopt -s nullglob
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet pyyaml
+          count=0
+          for f in scripts/validate_*.py; do
+            if [ "$f" = "scripts/validate_guard_gaps.py" ]; then
+              continue
+            fi
+            echo "--- $f"
+            .venv/bin/python "$f"
+            count=$((count + 1))
+          done
+          if [ "$count" -eq 0 ]; then
+            echo "::error::no scripts/validate_*.py found — the guards validated nothing"
+            exit 1
+          fi
+          echo "$count guards green"
+
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
@@ -73,7 +146,7 @@ jobs:
         run: python3 scripts/run_backend_races_on_mariadb.py
 
   frontend:
-    name: Frontend checks
+    name: Frontend checks (crypto, web, admin-web)
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -91,8 +164,11 @@ jobs:
       # one place a defect would be a defect in BOTH surfaces, so its own suite failing must not read as a
       # web failure.
       - name: Install dependencies
-        # The registry half (other platforms' bindings) is asked once per commit, by container.yml's `test`.
-        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+        # The ONE gated install that asks the registry about the locked packages this platform skipped (the arm64
+        # image's bindings among them); every other gated install of this lockfile passes --skip-registry-check
+        # (inbox #312). The images install the same lockfile, and `publish` needs this job, so nothing built from a
+        # lockfile this did not pass is published. validate_npm_installs_gated.py holds both.
+        run: python3 scripts/npm_ci_no_deprecated.py
 
       - name: Run shared crypto checks
         working-directory: packages/crypto
@@ -101,6 +177,51 @@ jobs:
       - name: Run frontend checks
         working-directory: web
         run: npm run check
+
+      # Gated for the same reason the app is: the image build compiles but runs no tests, so without this a broken
+      # admin surface could still be published beside a green app image (ADR 0065 — one release, two images).
+      - name: Run admin surface checks
+        working-directory: admin-web
+        run: npm run check
+
+  chart:
+    name: Chart checks
+    runs-on: ubuntu-latest
+    steps:
+      # The whole history: the chart upgrade check below reads its predecessor's chart out of git (HEAD^1, or the
+      # last release tag once there is one).
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # The pinned Helm (workflow-level env above): verified against the pin BEFORE it is extracted, so a
+      # tarball that does not match never runs. The same step installs it here and in `publish`.
+      - name: Install Helm (pinned tarball)
+        run: |
+          set -euo pipefail
+          tarball="helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLo "${RUNNER_TEMP}/${tarball}" "https://get.helm.sh/${tarball}"
+          echo "${HELM_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict -
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}" linux-amd64/helm
+          echo "${RUNNER_TEMP}/linux-amd64" >> "$GITHUB_PATH"
+
+      # The chart's rendered-manifest invariants (ADR 0064). It needs `helm`, which is why it sits outside the
+      # buildless `validate_*` glob of `guards` and trust-chain.yml and runs here, as its own surface check.
+      - name: Chart checks
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/chart-venv"
+          "${RUNNER_TEMP}/chart-venv/bin/pip" install --quiet pyyaml
+          "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_meta_check.py
+
+      # A `helm upgrade` from the upgrade proof's predecessor's chart to this one, checked on rendered manifests
+      # (ADR 0064 § Decision, the chart-upgrade check): immutable fields, claims that would go, values an operator
+      # already has. Information while scripts/applied_migrations.sha256 says `release: none`, red from the first
+      # release - the script's own verdict, so this step carries no switch of its own.
+      - name: Chart upgrade check
+        run: |
+          "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_upgrade_check_selftest.py
+          "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_upgrade_check.py
 
   web-e2e:
     name: Web E2E (live backend)
@@ -145,7 +266,7 @@ jobs:
         run: ./gradlew --no-daemon quarkusBuild
 
       - name: Install frontend dependencies
-        # The registry half (other platforms' bindings) is asked once per commit, by container.yml's `test`.
+        # The registry half (other platforms' bindings) is asked once per commit, by `frontend`.
         run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
 
       # Docker-free: who owns the config-secret key a restore places, and that an unplaceable one is refused
@@ -154,7 +275,7 @@ jobs:
         run: python3 scripts/instance_backup_selftest.py
 
       # Docker-free: the upgrade proof's pure parts (which predecessor, both builds' migrations, Flyway's refusal named,
-      # the record both builds share). The proof itself is container.yml's `upgrade-proof`, disabled until a release.
+      # the record both builds share). The proof itself is `upgrade-proof` below, disabled until a release.
       - name: Upgrade proof self-test
         run: python3 scripts/upgrade_proof_selftest.py
 
@@ -175,3 +296,436 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
+
+  version:
+    name: Read the veyq version from the tree
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # the version is a function of the checkout; this job reaches no network at all
+    outputs:
+      major: ${{ steps.veyq-version.outputs.major }}
+      version: ${{ steps.veyq-version.outputs.version }}
+      kind: ${{ steps.veyq-version.outputs.kind }}
+      publish_branch_tags: ${{ steps.veyq-version.outputs.publish_branch_tags }}
+      publish_latest: ${{ steps.veyq-version.outputs.publish_latest }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The minor is a commit count, and a shallow clone counts 1 — the step below refuses one rather than
+          # stamping it, so this is what makes the job pass at all.
+          fetch-depth: 0
+
+      # This script is EXECUTED, offline, by scripts/validate_release_identity.py — which is the whole reason
+      # the version comes from the tree. Keep every input in `env:` and use no `${{ }}` expression here, or the
+      # guard can no longer assert what a publish would stamp. It must also reach no network: a version the
+      # registry decides makes the released artifact the authority on its own name (ADR 0057 § Rejected).
+      - name: Read the veyq version from the tree
+        id: veyq-version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          # `true` only on a dispatch that asked for a release; empty on every other event.
+          RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+
+          major="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$major" =~ ^[0-9]+$ ]]; then
+            echo "VERSION must contain the major alone (the minor is counted from the history), got: $major" >&2
+            exit 1
+          fi
+
+          # The minor is the number of commits since the one that last changed VERSION (ADR 0057 §1), so it needs
+          # the whole history. A shallow clone would count 1 and stamp a wrong version that looks right — refuse.
+          if [[ "$(git rev-parse --is-shallow-repository)" != "false" ]]; then
+            echo "Shallow checkout: the minor counts commits since VERSION last changed and needs the full history (fetch-depth: 0)" >&2
+            exit 1
+          fi
+          base="$(git log -1 --format=%H -- VERSION)"
+          if [[ -z "$base" ]]; then
+            echo "No commit touches VERSION, so there is no point to count the minor from" >&2
+            exit 1
+          fi
+          minor="$(git rev-list --count "${base}..HEAD")"
+
+          kind=none
+          version="${major}.${minor}-SNAPSHOT"
+          publish_branch_tags=false
+          publish_latest=false
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            # Whatever publishes also signs, and site/src/content/docs/run/verify-a-release.md accepts exactly these two
+            # branch shapes — scripts/validate_release_identity.py holds the two to each other.
+            if [[ "$REF_NAME" != "main" && "$REF_NAME" != "release/${major}.x" ]]; then
+              echo "Unsupported publish branch: $REF_NAME (VERSION ${major} publishes from main or release/${major}.x)" >&2
+              exit 1
+            fi
+            if [[ "$RELEASE" == "true" ]]; then
+              kind=release
+              version="${major}.${minor}"
+              publish_branch_tags=true
+              if [[ "$REF_NAME" == "main" ]]; then
+                publish_latest=true
+              fi
+            else
+              kind=snapshot
+            fi
+          fi
+          # Otherwise a push or a pull request: a dry run that builds both images and publishes nothing. Its stamp
+          # carries -SNAPSHOT, so an image that was never released can never carry a release's name.
+
+          echo "major=${major}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "kind=${kind}" >> "$GITHUB_OUTPUT"
+          echo "publish_branch_tags=${publish_branch_tags}" >> "$GITHUB_OUTPUT"
+          echo "publish_latest=${publish_latest}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    # Only the version, not the tests (ADR 0091 decision 2): the build starts beside the surface checks instead of
+    # after them. The Docker build compiles but runs no tests (-x test), and that is safe only because nothing it
+    # builds becomes a published name until `publish`, which needs every stage green. On a dispatch it does push the
+    # per-arch `build-<sha>-<arch>` staging tags before the tests finish — unsigned, carrying no release name, and
+    # turned into one by `publish` alone.
+    needs:
+      - version
+    permissions:
+      contents: read
+      packages: write
+    # Two images, two architectures, one step. The admin surface ships as part of the SAME release as the app
+    # (ADR 0065) — same version, same signature, one `v<major>.<minor>` ref — so it is a dimension of this
+    # matrix rather than a second job pair that could drift out of step with it.
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [veyq, veyq-admin]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          - image: veyq
+            dockerfile: Dockerfile
+            target: runtime-jvm
+          - image: veyq-admin
+            dockerfile: admin-web/Dockerfile
+            target: runtime-nginx
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Only a publish writes to a registry (ADR 0057 §1): a push and a pull request build the same images as a
+      # dry run and keep them in the runner. scripts/validate_release_identity.py holds every registry write in
+      # this file to `workflow_dispatch`.
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name == 'workflow_dispatch' }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:build-${{ github.sha }}-${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VEYQ_VERSION=${{ needs.version.outputs.version }}
+            VEYQ_REVISION=sha-${{ github.sha }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+  # The upgrade proof (ADR 0057 Decision 7, site/src/content/docs/run/upgrade.mdx): the predecessor's own jar and e2e
+  # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
+  # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
+  # default of `scripts/run_web_e2e.py --upgrade`: the first parent of the commit until the first release, the newest
+  # `v<major>.<minor>` tag from then on — hence the full history and the tags.
+  #
+  # DISABLED UNTIL THE FIRST RELEASE (owner decision 2026-10-14). Before it a baseline may still change
+  # (backend/CLAUDE.md § Migrations), so a red proof informs and gates nothing. The change that sets the `release:` line
+  # of scripts/applied_migrations.sha256 enables it, in the same commit: it deletes `if: false` below AND the
+  # `"skipped"` that `publish` tolerates for this job. A disabled job claims no coverage (ADR 0040).
+  upgrade-proof:
+    name: Upgrade proof (the predecessor's backup, restored onto and read by this build)
+    runs-on: ubuntu-latest
+    if: false
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Validate the Gradle wrapper JAR
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Build the candidate's fast-jar
+        working-directory: backend
+        run: ./gradlew --no-daemon quarkusBuild
+      - name: Install the candidate's dependencies
+        # The registry half is asked once per commit, by this workflow's `frontend`.
+        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+      # The orchestrator builds the predecessor itself, in a worktree of its ref inside the run directory, and removes
+      # it afterwards; its summary ends with the proof's own lines (predecessor, both highest migrations, the outcome).
+      - name: Run the upgrade proof
+        run: python3 scripts/run_web_e2e.py --upgrade
+      - name: Keep the e2e run directory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: upgrade-proof-out
+          path: .e2e-out/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
+  publish:
+    name: Publish the release (both images and the chart)
+    runs-on: ubuntu-latest
+    # Every other job of this file is a stage, and a publish waits for each to be green (ADR 0091 decision 2) — it is
+    # the only thing that makes it safe for `build` to start beside the tests. validate_release_identity.py holds the
+    # list to the file: a job added and not needed here is red.
+    needs:
+      - guards
+      - backend
+      - backend-races
+      - frontend
+      - chart
+      - web-e2e
+      - version
+      - build
+      - upgrade-proof
+    # `always()` so that the upgrade proof being SKIPPED (disabled, above) does not skip the publish, as a skipped need
+    # otherwise would; every result then gates it explicitly. Its "skipped" goes with the job's `if: false`.
+    if: >-
+      always() && github.event_name == 'workflow_dispatch'
+      && needs.guards.result == 'success'
+      && needs.backend.result == 'success'
+      && needs.backend-races.result == 'success'
+      && needs.frontend.result == 'success'
+      && needs.chart.result == 'success'
+      && needs.web-e2e.result == 'success'
+      && needs.version.result == 'success'
+      && needs.build.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.upgrade-proof.result)
+    permissions:
+      contents: write # create the one `v<major>.<minor>` ref a release is named by (ADR 0057 §2)
+      packages: write
+      id-token: write # keyless cosign signing via GitHub OIDC
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The pinned Helm (workflow-level env above): verified against the pin BEFORE it is extracted, so a
+      # tarball that does not match never runs. The same step installs it in `chart` and in `publish`.
+      - name: Install Helm (pinned tarball)
+        run: |
+          set -euo pipefail
+          tarball="helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLo "${RUNNER_TEMP}/${tarball}" "https://get.helm.sh/${tarball}"
+          echo "${HELM_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict -
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}" linux-amd64/helm
+          echo "${RUNNER_TEMP}/linux-amd64" >> "$GITHUB_PATH"
+
+      # A release onto an existing one FAILS rather than replacing it (ADR 0057 §1). What this replaces: the old
+      # pipeline asked the registry for the highest published minor and incremented it, with `|| printf '[]'` as
+      # its error path — so a transient API error and "nothing published yet" were indistinguishable and both ended
+      # at `${major}.1`, republishing an already-delivered release under its own name. An operator who pinned that
+      # tag then receives different bits with no signal, which is precisely the assumption
+      # uc.admin.identify-instance-release rests on. A snapshot skips this: its name is the one that moves.
+      - name: Refuse to republish an existing release
+        id: assert-release-unpublished
+        if: needs.version.outputs.kind == 'release'
+        env:
+          # All three artifacts of the release. ANY of them already being published means this release has
+          # shipped — a partial republish is worse than a whole one, because the set would then disagree about
+          # which version the instance runs (ADR 0065: one release, two images; ADR 0064: the chart beside them).
+          ARTIFACTS: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin ghcr.io/${{ github.repository_owner }}/charts/veyq
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          for artifact in $ARTIFACTS; do
+            if docker buildx imagetools inspect --raw "${artifact}:${VERSION}" > /dev/null 2>&1; then
+              echo "${artifact}:${VERSION} is already published. A release is named by its commit — release a later one." >&2
+              exit 1
+            fi
+          done
+
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" > /dev/null 2>&1; then
+            echo "refs/tags/v${VERSION} already exists. One release, one name, one tree — release a later commit." >&2
+            exit 1
+          fi
+
+      # One metadata step per image: the two carry the SAME tag set (the publish names both), and metadata-action
+      # takes one image list but emits fully-qualified tags, so deriving the second image's tags by string-editing
+      # the first's would put a substitution between the release and its own names. A snapshot's version already
+      # ends in -SNAPSHOT and gets neither `<major>` nor `latest`; `sha-<sha>` names the LAST publish of that
+      # commit, never a rollback target.
+      - name: Extract image metadata (app)
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/veyq
+          tags: |
+            type=raw,value=${{ needs.version.outputs.version }}
+            type=raw,value=${{ needs.version.outputs.major }},enable=${{ needs.version.outputs.publish_branch_tags == 'true' }}
+            type=sha,prefix=sha-,format=long
+            type=raw,value=latest,enable=${{ needs.version.outputs.publish_latest == 'true' }}
+
+      - name: Extract image metadata (admin)
+        id: meta-admin
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/veyq-admin
+          tags: |
+            type=raw,value=${{ needs.version.outputs.version }}
+            type=raw,value=${{ needs.version.outputs.major }},enable=${{ needs.version.outputs.publish_branch_tags == 'true' }}
+            type=sha,prefix=sha-,format=long
+            type=raw,value=latest,enable=${{ needs.version.outputs.publish_latest == 'true' }}
+
+      - name: Create multi-arch manifest (app)
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/veyq
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          mapfile -t tags <<< "$TAGS"
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=("-t" "$tag")
+          done
+
+          docker buildx imagetools create \
+            "${tag_args[@]}" \
+            "$IMAGE:build-${GITHUB_SHA}-amd64" \
+            "$IMAGE:build-${GITHUB_SHA}-arm64"
+
+      - name: Create multi-arch manifest (admin)
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/veyq-admin
+          TAGS: ${{ steps.meta-admin.outputs.tags }}
+        run: |
+          mapfile -t tags <<< "$TAGS"
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=("-t" "$tag")
+          done
+
+          docker buildx imagetools create \
+            "${tag_args[@]}" \
+            "$IMAGE:build-${GITHUB_SHA}-amd64" \
+            "$IMAGE:build-${GITHUB_SHA}-arm64"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+
+      - name: Sign the published images (keyless)
+        env:
+          # Both images of the release. An unsigned admin image would be the weaker half of a pair an operator
+          # is told to pin together — and it is the higher-privilege half (ADR 0065).
+          IMAGES: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin
+        run: |
+          set -euo pipefail
+          # Resolve each manifest-list digest (the sha- tag is always produced) and sign THAT, so every channel
+          # tag pointing at it (latest/<major>/<version>) is covered. The identity this produces is this file on
+          # the branch that ran it — which is why the version step publishes from `main` and `release/<major>.x`
+          # only. How an operator verifies it is stated once, in site/src/content/docs/run/verify-a-release.md, and
+          # scripts/validate_release_identity.py holds that command to the branches this workflow publishes from.
+          for image in $IMAGES; do
+            digest="sha256:$(docker buildx imagetools inspect --raw "$image:sha-${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)"
+            echo "Signing $image@${digest}"
+            cosign sign --yes "$image@${digest}"
+          done
+
+      # The chart is the release's third artifact (ADR 0064): packaged with the publish's own version as both
+      # `version` and `appVersion` — never the in-tree placeholder — so its default image tag is this release's,
+      # pushed beside the images, and signed with the same identity. `helm push` appends the chart's NAME to the
+      # target, so it lands on ghcr.io/<owner>/charts/veyq and not on the app image's own repository.
+      - name: Package and push the chart
+        id: chart
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          CHART_REGISTRY: oci://ghcr.io/${{ github.repository_owner }}/charts
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | helm registry login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          helm package charts/veyq --version "$VERSION" --app-version "$VERSION" --destination "${RUNNER_TEMP}/chart"
+          helm push "${RUNNER_TEMP}/chart/veyq-${VERSION}.tgz" "$CHART_REGISTRY" 2>&1 | tee "${RUNNER_TEMP}/chart-push.log"
+          # Measured with Helm 4.0.1: a push prints `Pushed: <ref>` and `Digest: sha256:<64 hex>`, and that digest
+          # is the sha256 of the manifest `docker buildx imagetools inspect --raw` returns for the same tag.
+          digest="$(sed -n 's/^Digest: \(sha256:[0-9a-f]\{64\}\)$/\1/p' "${RUNNER_TEMP}/chart-push.log")"
+          if [[ -z "$digest" ]]; then
+            echo "helm push printed no digest, so there is nothing to sign" >&2
+            exit 1
+          fi
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign the published chart (keyless)
+        env:
+          CHART: ghcr.io/${{ github.repository_owner }}/charts/veyq
+          DIGEST: ${{ steps.chart.outputs.digest }}
+        run: |
+          set -euo pipefail
+          echo "Signing ${CHART}@${DIGEST}"
+          cosign sign --yes "${CHART}@${DIGEST}"
+
+      # One release, one name, one tree (ADR 0057 §2). The ref is created LAST, by the publish itself, so it
+      # exists only for a release that actually shipped — and it is the ref at which the deployment files
+      # belonging to this image can be found. A snapshot gets none: it names a build, not a release. The push is
+      # deliberately not forced: a tag that already exists is a second publish of one release, and it must fail
+      # here too and not only in the check above.
+      - name: Tag the released commit
+        id: release-tag
+        if: needs.version.outputs.kind == 'release'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git tag "v${VERSION}" "${GITHUB_SHA}"
+          git push origin "refs/tags/v${VERSION}"

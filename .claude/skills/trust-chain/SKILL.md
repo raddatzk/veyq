@@ -87,7 +87,7 @@ Four documented gaps sit **outside** that guard, on purpose:
 
 - **the release-identity guard's two ends**
   ([ADR 0057](../../../docs/decisions/0057-release-identity-and-deployment-recipe.md)).
-  `validate_release_identity.py` goes further than the rest of the glob — it *executes* `container.yml`'s
+  `validate_release_identity.py` goes further than the rest of the glob — it *executes* `ci.yml`'s
   version step offline and asserts what a publish would stamp — and still stops at two places no file-forging
   meta-guard can reach. It cannot inspect a **built image**, because the chain is buildless, so it proves the
   `Dockerfile` *declares* the deployment-recipe copy and never that the file is in the image (that is proven
@@ -146,7 +146,8 @@ each has a canonical home — point there, don't try to build past it:
 `measured`:
 
 - **Three CI runs, three triggers.** `trust-chain.yml` — unfiltered, buildless, runs the whole guard glob
-  (`:14-21`, no paths filter). `ci.yml` — `paths-ignore` includes `docs/**` (`:9-13`, `:19-23`), so a
+  (`:14-21`, no paths filter). `ci.yml` — the one pipeline per commit (ADR 0091); its `guards` job runs the
+  same glob minus `validate_guard_gaps.py`, and `paths-ignore` includes `docs/**` (`:28-33`, `:38-43`), so a
   docs-only change is validated *only* by trust-chain. `mutation.yml` / `mutation-backend.yml` — path-gated
   onto their scope files (`:16-43` / `:17-51`).
 - **The glob is the registry.** `trust-chain.yml:47-60` runs `for f in scripts/validate_*.py` with a

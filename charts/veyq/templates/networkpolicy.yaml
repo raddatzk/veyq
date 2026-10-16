@@ -25,8 +25,8 @@ spec:
       app.kubernetes.io/instance: {{ .Release.Name }}
   policyTypes: [Ingress, Egress]
 ---
-# The app: its public port from the ingress controller alone, and the admin listener's port from the admin pod
-# ALONE (ADR 0065) — a Service of its own keeps every Ingress off the admin port; this keeps every other pod off
+# The app: its public port from the gateway's data plane alone, and the admin listener's port from the admin pod
+# ALONE (ADR 0065) — a Service of its own keeps every route off the admin port; this keeps every other pod off
 # it. Egress stays open: the app sends SMTP to hosts the operator chooses and reaches an API server whose address
 # is cluster-specific.
 apiVersion: networking.k8s.io/v1
@@ -55,7 +55,7 @@ spec:
   egress:
     - {}
 ---
-# The store: S3 from the ingress controller (the store's own host) and the app; its admin API from the app alone;
+# The store: S3 from the gateway's data plane (the store's own host) and the app; its admin API from the app alone;
 # its RPC port from itself, which it dials at its own advertised address.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -123,7 +123,7 @@ spec:
     - {{- toYaml $dns | nindent 6 }}
 {{- end }}
 ---
-# The admin surface: reachable from the ingress controller only when admin.domain exposes it; by default from no
+# The admin surface: reachable from the gateway's data plane only when admin.domain exposes it; by default from no
 # pod at all, which is what port-forward-only means. It dials the app's admin listener and nothing else.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -155,7 +155,7 @@ spec:
       ports:
         - port: admin
 ---
-# cert-manager's HTTP-01 solver pods, which it starts in this namespace for each order: from the ingress controller.
+# cert-manager's HTTP-01 solver pods, which it starts in this namespace for each order: from the gateway's data plane.
 # Always rendered — it selects nothing until a solver exists — because under a namespace-wide default-deny of the
 # operator's own, a solver nobody admits fails every ACME challenge.
 apiVersion: networking.k8s.io/v1

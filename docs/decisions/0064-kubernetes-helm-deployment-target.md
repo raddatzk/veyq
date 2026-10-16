@@ -25,11 +25,11 @@ opposite assumption without anyone stating it — a sentence about *shape* reads
 
 Forces:
 
-- **Everything docker-compose already decided has to be re-derived for an operator-chosen ingress
-  controller**, not the one Traefik behavior the compose file assumes. In particular
+- **Everything docker-compose already decided has to be re-derived for an operator-chosen proxy** — on this
+  target a Gateway API implementation — not the one Traefik behavior the compose file assumes. In particular
   [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)'s same-origin, prefix-preserving blob route
-  is a property of *that specific* Traefik configuration — nginx-ingress, a cloud load balancer, or a
-  different Traefik Helm chart are not guaranteed to preserve it.
+  is a property of *that specific* Traefik configuration — another implementation, a cloud load balancer, or
+  a different Traefik Helm chart are not guaranteed to preserve it.
 - **The release-identity story ([ADR 0057](0057-release-identity-and-deployment-recipe.md)) is
   image-specific.** A Helm chart is a different artifact type and needs its own equivalent, not a
   reinterpretation of "travels inside the image."
@@ -38,7 +38,7 @@ Forces:
   is the operator's, and the `veyq_instance` fingerprint tripwire is the only detection."* A Kubernetes
   target inherits an already-known, already-documented gap, not a silent new one.
 - **A second component (the admin container, [ADR 0065](0065-admin-ui-cli-separate-service.md)) needs a
-  cluster identity too** if it is to manage its own Ingress state.
+  cluster identity too** if it is to manage its own routing state.
 
 ## Decision
 
@@ -46,11 +46,6 @@ Forces:
 a `mariadb.enabled: false` escape hatch onto an operator-managed database, which K8s deployments commonly
 already have), `garage`, an implementation-neutral **Gateway API** resource set (`Gateway`, `HTTPRoute`, `ListenerSet`), and the
 admin container ([ADR 0065](0065-admin-ui-cli-separate-service.md)).
-
-**Routing is decided as the Gateway API and not yet built.** The chart and the sink still render one `Ingress` per
-host, in the shape the bullets below replace (same names, same label, same three TLS modes, `ingress.*` values);
-the move is cr-helm-gateway-api's. Until it lands, this ADR's routing and TLS bullets are the target, and
-`charts/veyq/templates/` plus `KubernetesIngressSink` are what runs.
 
 **The store's bring-up is not this chart's to solve.** It once travelled with a `garage-init` sidecar whose
 image was built locally and never published — which a chart cannot pull, because Helm builds nothing.
@@ -68,7 +63,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   move deferred to when there are installs to move.
 
   **The chart owns its `Gateway`; the operator picks the implementation.** One `Gateway`, `veyq`, in the release
-  namespace, its `gatewayClassName` from `gateway.className` (what `ingress.className` was; Traefik is the docs'
+  namespace, its `gatewayClassName` from `gateway.className` (Traefik is the docs'
   example, never a requirement). Its listeners: plain HTTP on 80 with no hostname, an HTTPS listener per chart
   host (`domain`, `storeDomain`, `admin.domain` when set), and `allowedListeners` from the **same namespace only**,
   so the backend's `ListenerSet`s attach and nothing from another namespace does. A listener on the `Gateway` wins
@@ -132,12 +127,19 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   chart still generates nothing (below).
 
   **Preconditions the operator meets**, stated where the chart's notes and the Run area say them: the Gateway
-  API CRDs at **v1.5 or later, standard channel** (where `ListenerSet` is GA), and an implementation serving the
-  named `GatewayClass`. Under `per-domain` additionally an implementation that supports `ListenerSet`, and
-  cert-manager 1.20 or later with its Gateway API support and its `ListenerSets` feature gate on. **Residue taken
-  knowingly:** cert-manager's Gateway support is beta and its `ListenerSet` support **alpha** (1.20), so
-  per-domain certificates for runtime tenants rest on an alpha feature until it graduates. `shared`, `none` and
-  the chart's own hosts need no `ListenerSet` at all.
+  API CRDs at **v1.5 or later, standard channel** (where `ListenerSet` is GA), on Kubernetes **1.31 or later** (the
+  floor v1.5's CEL validation was tested on, and `Chart.yaml`'s `kubeVersion`), and an implementation serving the
+  named `GatewayClass`. Under `per-domain` additionally an implementation that supports `ListenerSet`, and — for
+  the ACME opt-in — cert-manager **1.21** or later with its Gateway API support and its `ListenerSet` support on
+  (the `ListenerSets` feature gate plus `gatewayAPI.enableListenerSet`). 1.21, not 1.20: the
+  `http01-parentreffallback` annotation first ships in 1.21.0 (measured at implement, 2026-10-16, against the
+  cert-manager source at v1.20.4 and v1.21.2; this ADR said 1.20 until then). **Residue taken knowingly:**
+  cert-manager's Gateway support is beta and its `ListenerSet` support **alpha** (since 1.20, still in 1.21), so
+  per-domain certificates for runtime tenants rest on an alpha feature until it graduates. And `ListenerSet`
+  support is not yet in every released implementation — the docs' own example, Traefik, merged it for 3.8 while
+  its latest release (3.7.15, measured 2026-10-16) ignores `allowedListeners` and serves no `ListenerSet`; under
+  `per-domain` on such an implementation the chart's own hosts work and no tenant domain does. `shared`, `none`
+  and the chart's own hosts need no `ListenerSet` at all.
 
   Three named modes under `veyq.tenant.ingress.kubernetes.tls.*`, never inferred: `none` (the default — TLS
   terminates upstream, and no existing deployment moves; the `Gateway` has its port-80 listener only, routes
@@ -154,7 +156,9 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   already kept legal at that cap — a `-tls` suffix on it is an object the API server rejects, which on this
   sink's failure boundary strands *every* tenant's routing. Under `per-domain` and `shared` the chart also renders
   one `HTTPRoute` on the port-80 listener that redirects to `https` (Gateway API's core `RequestRedirect`
-  filter), so the redirect is the chart's and not an implementation's default; cert-manager's challenge routes
+  filter — its `scheme` field is the *Extended* `HTTPRouteSchemeRedirect` feature, so an implementation without
+  it leaves that one route unaccepted and the HTTPS listeners serving), so the redirect is the chart's and not an
+  implementation's default; cert-manager's challenge routes
   name a host and an exact path, which Gateway API ranks above it. Stated residue: a withdrawn domain's issued
   `Secret` is not deleted by cert-manager unless it runs with `--enable-certificate-owner-ref` —
   operator-visible, not a routing or access leak, and not swept, because sweeping `Secret`s would need the RBAC
@@ -187,7 +191,8 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   GHCR registry, at `ghcr.io/<owner>/charts/veyq`, by the same publish as the images, with the same version, and
   **cosign-signed** the same way — extending [ADR 0057](0057-release-identity-and-deployment-recipe.md)'s
   release-identity story to a second artifact type rather than inventing a separate distribution channel
-  (Helm's native OCI support makes this a config addition to the existing `container.yml` workflow, not a new
+  (Helm's native OCI support makes this a config addition to the existing publish workflow — `container.yml` then,
+  `ci.yml` since [ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) — not a new
   tool). The path has a `charts/` segment because `helm push` appends the chart's **name** to the target: pushed
   to `oci://ghcr.io/<owner>` the chart `veyq` would land on `ghcr.io/<owner>/veyq`, the app image's own
   repository. The chart's `version` and `appVersion` are **both** the release version (`<major>.<minor>`, or
@@ -207,7 +212,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   default to the upstream's own (`ghcr.io/raddatzk/veyq`, `ghcr.io/raddatzk/veyq-admin`), written out for the
   same reason the verify identity is: a fork that deploys its own images overrides them, knowingly. A release
   refuses to republish the chart as it does the images; a release with two images and no chart is a partial
-  release. **Built, publish unobserved:** `container.yml`'s publish packages, pushes and signs the chart, and
+  release. **Built, publish unobserved:** `ci.yml`'s publish packages, pushes and signs the chart, and
   `scripts/validate_release_identity.py` holds it there — but its only proof is a workflow run, and no CI run has
   ever executed in this repository (no remote). The first proof is the staged run [infra/README](../../infra/README.md)
   § Cutting a release lists; until its refused repeat release has run, this stays *unobserved*, not *released*.
@@ -215,7 +220,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   no tree can hold, and `helm install ./charts/veyq` from a checkout sets the image tags itself. The image
   repositories' defaults are held to the names the Run area's
   [Verify a release](../../site/src/content/docs/run/verify-a-release.md) verifies by the same guard; `chart_meta_check.py`
-  runs in `container.yml`'s test job.
+  runs in `ci.yml`'s `chart` job.
 - **The chart generates nothing and every pod passes `restricted`**, to which
   [ADR 0071](0071-runtime-hardening-on-both-targets.md) adds a read-only root and a NetworkPolicy set whose
   gateway data-plane peer the operator must name. Every secret is the operator's to supply
@@ -240,7 +245,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   `chart_upgrade_check_selftest.py`) renders the predecessor's chart and the candidate's with the same values and
   compares those fields, and renders the candidate with the predecessor's `ci/` values
   ([Upgrade](../../site/src/content/docs/run/upgrade.mdx), Kubernetes). The predecessor is the upgrade proof's
-  (`default_predecessor`); the check runs in `container.yml`'s `test` job and is **information until the first
+  (`default_predecessor`); the check runs in `ci.yml`'s `chart` job and is **information until the first
   release and red from it** (the same switch as the upgrade proof), so from then on it gates `publish`.
 - **Backup/restore stays explicitly out of this ADR's scope.** [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
   gap statement is accurate and stays accurate; a Kubernetes-native backup story (a `CronJob` running

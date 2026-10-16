@@ -588,10 +588,11 @@ Confirm the commit path works **before** phase 1 — it is one throwaway commit,
 discovering it at the point where you have the most to lose.
 **Where a CR's done-when says "green in CI", know which jobs can even run.** Two independent gates, and both bit
 during cr-e2e-orchestrator:
-- **Branch filters.** [`ci.yml`](../.github/workflows/ci.yml) triggers only on `main` and on PRs *targeting*
-  `main`, so pushing a feature branch runs **nothing**. That CR's Phase 5 said "push the branch so the job runs";
-  the push produced zero runs. `ci.yml` carries `workflow_dispatch`, so `gh workflow run ci.yml --ref <branch>`
-  is how a branch gets a real run.
+- **Branch filters.** [`ci.yml`](../.github/workflows/ci.yml) triggers only on `main`, `release/**` and PRs
+  *targeting* them, so pushing a feature branch runs **nothing**. That CR's Phase 5 said "push the branch so the job
+  runs"; the push produced zero runs. A pull request is how a branch gets a real run: `ci.yml`'s `workflow_dispatch`
+  is the **publish** since it absorbed `container.yml` (ADR 0091), and its version step refuses a dispatch on any
+  branch but `main` and `release/<major>.x`.
 - **`workflow_dispatch` resolves against the DEFAULT branch.** A workflow file that exists only on the feature
   branch cannot be dispatched at all — `HTTP 404: not found on the default branch`. This once described
   `trust-chain.yml`, `mutation*.yml` and `wiki-sync.yml`, which lived on a feature branch and not on `main`; that
@@ -1418,6 +1419,12 @@ in its source, and the entrypoint hook's switch values were a one-shot run of th
 Where a refine leaves a tool's semantics "believed, not measured", it reads the tool's source then, and it splits
 the proof so the part that needs no daemon is done by whoever implements.
 
+**And a step only the owner can take is named as theirs in the done-when.** `cr-root-gradle-launcher` marked
+`infra:wipe` as the owner's, so it never stood as an agent's open item. It did not mark the two other steps only the
+owner could unblock — recreating the shared dev database its browser upload needed, and a start and stop from
+IntelliJ's Gradle tool window — and both surfaced only at close, as "not proven". A done-when says per live step who
+runs it, and an owner's step is asked for when its phase starts, not discovered when the CR closes.
+
 ### A live proof that names a screen names the instance state that screen needs
 
 cr-app-shell-served-by-backend's Definition of done said *"the app boots to sign-in with zero CSP violations"* and
@@ -1444,6 +1451,10 @@ dev data to get. A database of its own on the same compose stack leaves theirs a
 any more, so a boot that sets it signs for the store's own endpoint and the seeder's store check fails), then `npm run bootstrap:user` — which writes `.run/.env`
 back, so that file is snapshotted first and restored byte-equal after. A CR that changes a stored format names this
 instance in its browser pass.
+So does a migration baseline reset on `main` that the shared dev database has not followed yet:
+`cr-root-gradle-launcher`'s upload met `Unknown column 'meta_revision'` on a database a few hours behind `main`'s
+baseline, and the proof waited on the owner's wipe. A browser pass planned on the dev database first compares the head
+of its `flyway_schema_history` with `main`'s newest migration.
 Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused even a scratchpad snapshot on
 2026-10-15), the instance gets a principal of its own instead: the seeder's `ENV_FILE` is a constant, so a temporary
 copy of `web/scripts/bootstrap-user.mts` that reads an env file of generated test values outside the repo seeds it, the
@@ -1490,6 +1501,15 @@ present, MariaDB range-scanned only the refresh tokens; access tokens and challe
 purge, so most rows are expired when it runs and the optimizer full-scans regardless. Two of the three indexes
 would have cost every login a write for nothing. An index is a claim about selectivity, and selectivity is a
 property of the data at the moment the statement runs.
+
+**And an external precondition is versioned by the newest feature it combines, each measured on its own.**
+cr-helm-gateway-api's refine measured on the web that cert-manager 1.20 reads `ListenerSet`s and that a
+`http01-parentreffallback` annotation sends their challenge to the parent `Gateway` — both true — and ADR 0064 wrote
+"cert-manager 1.20 or later". The annotation first ships in 1.21.0; only reading each feature's own release (the
+source at v1.20.4 and v1.21.2) showed it. The same pass found the docs' example implementation ignoring
+`ListenerSet` in its latest release, and the redirect's `scheme` field to be *Extended*, not Core — so a
+precondition list is one claim per feature, and "version X supports the design" is the conjunction of them,
+re-measured at implement against the newest release of every project it names.
 
 ### A phase's entry condition is phrased against what the phase would CHANGE, not against the problem
 

@@ -10,7 +10,7 @@ What a green run proves today stops short of what a Server Owner runs:
 - **`web/`'s `VEYQ_E2E` suites** (`scripts/run_web_e2e.py`) are real and strong — real crypto, a real MariaDB and
   Garage, the ADR 0053 sweeps — but they run in Node against the **fast-jar** on the **dev** compose stack. No
   browser, no image, no production recipe, no Traefik in front, no admin container.
-- **admin-web has no suite above unit level**, and its `npm run check` runs only in `container.yml`'s `test`.
+- **admin-web has no suite above unit level**, and its `npm run check` ran only in `container.yml`'s `test` (in `ci.yml`'s `frontend` since ADR 0091).
 - **The production recipe has never been brought up by anything** (`site/src/content/docs/run/new-instance.mdx`:
   "No published release has been installed on either target yet"; `first-run.mdx`: "not exercised on a running
   instance"). `validate_compose_posture.py` reads the file and runs nothing; ADR 0071 says a change to it is proven
@@ -19,7 +19,7 @@ What a green run proves today stops short of what a Server Owner runs:
   was clicked": the `href="#"` that cleared a share key, the card actions hidden up to 1120 px) — and only from the
   image: Dockerfile layers (`capabilities.json` at `Dockerfile:73`), nginx's proxy to the admin listener, Traefik's
   dynamic tenant routes, the HSTS/cookie behaviour behind TLS, ACME issuance into a read-only, non-root `/acme`.
-- **`container.yml` already has the seam.** A publish dispatch pushes `build-<sha>-<arch>` per image and
+- **The publish workflow already has the seam** (`container.yml` then, `ci.yml` since ADR 0091). A publish dispatch pushes `build-<sha>-<arch>` per image and
   architecture, then `publish` assembles, tags (snapshot or release) and signs them. A snapshot is a published,
   signed `<major>.<minor>-SNAPSHOT`.
 

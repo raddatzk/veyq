@@ -45,10 +45,10 @@ internal addresses, the config-secret key path, the routing file). Leave those t
 ## Kubernetes: the chart's values
 
 Run `helm show values` for the chart and its comments. The chart generates no secret, and `values.schema.json`
-refuses an install that leaves a required value unset, naming it. Required: `domain`, `storeDomain`, every key under
-`secrets` (or `secrets.existingSecret`), `networkPolicy.ingressFrom` while network policy is on,
-`externalDatabase.jdbcUrl` when `mariadb.enabled` is `false`, `ingress.tls.secretName` in `shared` mode, and
-`ingress.tls.acme.email` when the ACME issuer is on.
+refuses an install that leaves a required value unset, naming it. Required: `domain`, `storeDomain`,
+`gateway.className`, every key under `secrets` (or `secrets.existingSecret`), `networkPolicy.ingressFrom` while
+network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `false`, `gateway.tls.secretName` in
+`shared` mode, and `gateway.tls.acme.email` when the ACME issuer is on.
 
 ### Domains, images, HSTS
 
@@ -90,19 +90,19 @@ refuses an install that leaves a required value unset, naming it. Required: `dom
 | `admin.resources.requests.cpu` | `50m` | |
 | `admin.resources.requests.memory` | `32Mi` | |
 
-### Network policy, ingress and TLS
+### Network policy, gateway and TLS
 
 | Value | Default | Meaning |
 |---|---|---|
 | `networkPolicy.enabled` | `true` | Default-deny plus the paths the stack uses. `false` removes every policy, the admin listener's included |
-| `networkPolicy.ingressFrom` | — | The NetworkPolicy peers that match your ingress controller's pods; required while policy is on |
-| `ingress.className` | — | The ingress class of every Ingress, the tenants' included |
-| `ingress.annotations` | — | Stamped on every Ingress, the tenants' included; how a certificate issuer of your own is wired |
-| `ingress.tls.mode` | `none` | `none` (TLS ends before the ingress), `per-domain` (one certificate per Ingress, cert-manager's shape) or `shared` (one wildcard certificate, no custom tenant domains) |
-| `ingress.tls.secretName` | — | The wildcard certificate's Secret in `shared` mode |
-| `ingress.tls.acme.enabled` | `false` | Let the chart create a cert-manager issuer (HTTP-01) and use it; needs `per-domain` |
-| `ingress.tls.acme.email` | — | The ACME account email |
-| `ingress.tls.acme.server` | Let's Encrypt production | The ACME directory |
+| `networkPolicy.ingressFrom` | — | The NetworkPolicy peers that match your gateway's data-plane pods ("ingress" is the policy direction); required while policy is on |
+| `gateway.className` | — | The `GatewayClass` of the chart's `Gateway` `veyq`, i.e. which Gateway API implementation serves it; required |
+| `gateway.annotations` | — | Stamped on the `Gateway` and on every tenant `ListenerSet`; how a certificate issuer of your own is wired |
+| `gateway.tls.mode` | `none` | `none` (plain HTTP only; TLS ends before the gateway), `per-domain` (an HTTPS listener and certificate per host, tenants' in `ListenerSet`s) or `shared` (one HTTPS listener with a wildcard certificate, no custom tenant domains) |
+| `gateway.tls.secretName` | — | The wildcard certificate's Secret in `shared` mode |
+| `gateway.tls.acme.enabled` | `false` | Let the chart create a cert-manager issuer (HTTP-01) and use it; needs `per-domain` and cert-manager 1.21 or later |
+| `gateway.tls.acme.email` | — | The ACME account email |
+| `gateway.tls.acme.server` | Let's Encrypt production | The ACME directory |
 
 ### Secrets
 

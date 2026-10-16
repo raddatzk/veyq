@@ -2,7 +2,9 @@
 
 - Status: Accepted; built as a hand-dispatched publish that builds again for a release. §1's snapshot per green push and
   its promotion to a release, and §7's stack lanes, are decided ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md))
-  and not built: `container.yml` still publishes on `workflow_dispatch` only.
+  and not built: the publish still runs on `workflow_dispatch` only. It lives in [`ci.yml`](../../.github/workflows/ci.yml)
+  since 2026-10-16, the one pipeline per commit of ADR 0091 decision 2 (`container.yml`, where it was built, is folded
+  into it), where it waits on every stage of that pipeline and signs as `ci.yml` (§3).
 - Date: 2026-08-10
 
 ## Context
@@ -15,7 +17,7 @@ set of claims already written down that nothing performs.
 
 Five facts, measured on this tree:
 
-1. **No release has ever been built.** [`container.yml`](../../.github/workflows/container.yml)'s first job
+1. **No release has ever been built.** `container.yml`'s first job (the publish workflow then; `ci.yml` since ADR 0091)
    runs `major="$(tr -d '[:space:]' < VERSION)"`, and there is no `VERSION` file — so the job dies at its first
    command. `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0` in [`infra/.env.example`](../../infra/.env.example)
    therefore names an artifact with no producer, in a three-part shape this pipeline never emits (it publishes
@@ -98,7 +100,8 @@ of that image** rather than fetching them from a URL. Two things follow that no 
 - **It inherits the image's signature.** The publish signs the manifest keylessly with cosign, so a recipe
   extracted from a verified image is verified material, with no second trust path for the files beside the
   image. **A verification is only as narrow as the identity it pins.** The operator's documented
-  `cosign verify` pins the certificate identity to `container.yml` in `raddatzk/veyq`, on `refs/heads/main`
+  `cosign verify` pins the certificate identity to `.github/workflows/ci.yml` — the workflow that publishes, and so
+  signs — in `raddatzk/veyq`, on `refs/heads/main`
   or `refs/heads/release/<major>.x`, with GitHub's OIDC issuer. A regex over the repository accepts a
   signature from any workflow on any ref. The upstream is written out literally, because a placeholder
   would verify a fork just as well. The publish accepts exactly those two branch shapes, so what signs and
@@ -154,7 +157,7 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
 
 **7. An upgrade is proven before it is published** (owner decision 2026-10-14, inbox #419). A release does not only
 claim that it upgrades an instance of its predecessor; a run shows it — `scripts/run_web_e2e.py --upgrade` locally and
-`container.yml`'s `upgrade-proof` job ([Upgrade](../../site/src/content/docs/run/upgrade.mdx), the Run area's procedure).
+`ci.yml`'s `upgrade-proof` job ([Upgrade](../../site/src/content/docs/run/upgrade.mdx), the Run area's procedure).
 **Its successor is decided:** ADR 0091's lanes L2 (the previous release's images upgraded in place) and L3 (every
 archived backup of the major restored into the candidate) prove the same data path on the images that ship, on every
 push; the jar-level proof below retires when they gate (ADR 0091 decision 7). Until then it stands as written.
@@ -182,7 +185,7 @@ push; the jar-level proof below retires when they gate (ADR 0091 decision 7). Un
 - **A release becomes a deliberate act.** Dispatching a promotion is the release; bumping `VERSION` is reserved for
   a new major. Nothing is released by pushing, and nothing is released twice.
 - **Minors have gaps, and say nothing about size.** `1.42` → `1.57` means fifteen commits, not fifteen
-  releases; a commit `container.yml` does not build (docs only) still counts. A `release/<major>.x` branch counts
+  releases; a commit `ci.yml` does not build (docs only) still counts. A `release/<major>.x` branch counts
   its own history and can reach a number `main` already released — that publish is refused, red rather than
   wrong. No such branch exists yet; the first one decides whether it needs a suffix.
 - **`VERSION` is touched only to change the major.** Any commit that touches it, even one that only reformats

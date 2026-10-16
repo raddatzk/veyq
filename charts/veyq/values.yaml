@@ -3,21 +3,26 @@
 # any render where `lookup` is blind (`helm template`, `--dry-run`), and rotating GARAGE_RPC_SECRET breaks the
 # store while losing the config-secret KEK is the quiet loss ADR 0056 is about. values.schema.json refuses an
 # install that leaves one unset, naming the path and the shape. ONE release per namespace: the backend projects
-# tenant Ingress objects into its own namespace and lists them by label, so two releases there would reconcile
-# each other's routing away.
+# tenant routes into its own namespace and lists them by label, so two releases there would reconcile each
+# other's routing away (and the Gateway `veyq` is one name per namespace).
 #
-# What is required and has no default:  domain · storeDomain ·
+# What the CLUSTER must have first (the chart installs no CRD and nothing cluster-scoped): the Gateway API CRDs at
+# v1.5 or later, standard channel, and a Gateway API implementation serving the GatewayClass you name in
+# gateway.className. Under gateway.tls.mode=per-domain also an implementation that supports ListenerSet, and for
+# gateway.tls.acme cert-manager 1.21 or later with its Gateway API AND ListenerSet support switched on.
+#
+# What is required and has no default:  domain · storeDomain · gateway.className ·
 # every key under secrets (or secrets.existingSecret) · externalDatabase.jdbcUrl when mariadb.enabled=false ·
-# ingress.tls.secretName when ingress.tls.mode=shared · ingress.tls.acme.email when ingress.tls.acme.enabled ·
+# gateway.tls.secretName when gateway.tls.mode=shared · gateway.tls.acme.email when gateway.tls.acme.enabled ·
 # networkPolicy.ingressFrom while networkPolicy.enabled (the default).
 
 # The instance's bootstrap domain — what VEYQ_DOMAIN is under compose. Written into every invitation and
-# recovery link the instance mails, routed statically by the chart's own Ingress (the backend never projects
+# recovery link the instance mails, routed statically by the chart's own HTTPRoute (the backend never projects
 # it a second time), and the domain a restore targets. Changing it later is not supported.
 domain: ""
 
-# The bundled store's OWN host — a second Ingress, not a path under `domain`. An operator-chosen ingress
-# controller is not guaranteed to preserve the prefix and Host header a SigV4 signature needs, so on this
+# The bundled store's OWN host — a second HTTPRoute, not a path under `domain`. An operator-chosen gateway
+# implementation is not guaranteed to preserve the prefix and Host header a SigV4 signature needs, so on this
 # target the store gets its own origin and every presigned URL is signed against it verbatim
 # (`veyq.bundled-store.signing-mode=store-origin`, ADR 0067 Decision 5; ADR 0013 §4's CORS branch). The bucket's
 # CORS policy is written by the backend at runtime and is `*` — the only policy the bundled store can express
@@ -27,7 +32,7 @@ storeDomain: ""
 # Strict-Transport-Security on this deployment's responses (ADR 0069; 180 days, no includeSubDomains, no
 # preload). A top-level value and not one under `app:`, because it is the deployment's switch rather than one
 # container's. Turn it off only if a host of this release is also served over plain HTTP somewhere, or the
-# ingress controller already sets the header; a browser that saw it keeps it for the full 180 days anyway.
+# gateway implementation already sets the header; a browser that saw it keeps it for the full 180 days anyway.
 hsts:
   enabled: true
 
@@ -49,8 +54,8 @@ image:
 app:
   # Which proxy addresses may set X-Forwarded-For (quarkus.http.proxy.trusted-proxies), comma-separated. Empty — the
   # default — renders nothing, and the NetworkPolicy's `ingressFrom` is what confines who can send the header. Set it
-  # only where the proxy has a STABLE address, such as a host-network controller or an external load balancer: a
-  # range wide enough to survive an ingress controller's pod restart trusts every pod beside it (ADR 0071 §4).
+  # only where the proxy has a STABLE address, such as a host-network data plane or an external load balancer: a
+  # range wide enough to survive a gateway data-plane pod's restart trusts every pod beside it (ADR 0071 §4).
   trustedProxies: ""
   # `Recreate`, and NOT Kubernetes' default RollingUpdate — the second half of "one app pod" is the one that
   # matters. quarkus.flyway.migrate-at-start=true runs the schema migration at boot with no gate, which is
@@ -108,11 +113,12 @@ admin:
     digest: ""
     pullPolicy: IfNotPresent
   # The Server-Owner administration surface's exposure (ADR 0065), translated as a PROPERTY and not as compose's
-  # mechanism. Compose binds 127.0.0.1:<port>; here the default is NO Ingress and a ClusterIP Service, reached
+  # mechanism. Compose binds 127.0.0.1:<port>; here the default is NO route and a ClusterIP Service, reached
   # with `kubectl -n <ns> port-forward svc/veyq-admin 8081:8080` — which is what keeps first-run setup
   # independent of DNS and TLS: the admin container proxies /api/* from its own origin, so
   # http://localhost:8081 bootstraps an instance whose `domain` does not resolve yet. Set a domain to expose it
-  # on its own hostname and certificate; choose one you publish nowhere.
+  # on its own hostname (an HTTPRoute, and under per-domain a listener and certificate of its own); choose one you
+  # publish nowhere.
   domain: ""
   resources:
     limits:
@@ -127,61 +133,79 @@ networkPolicy:
   # EVERY policy the chart renders, the one keeping all pods but the admin pod off the app's admin listener
   # included, and reachability is then yours to own.
   enabled: true
-  # REQUIRED while enabled, with no default: the NetworkPolicy peers your ingress controller's pods match. The chart
-  # cannot know its namespace or labels, and never guesses. They reach the app's public port, the store's S3 port,
-  # the admin surface when admin.domain is set, and cert-manager's HTTP-01 solvers. For ingress-nginx, e.g.:
+  # REQUIRED while enabled, with no default: the NetworkPolicy peers your Gateway's DATA-PLANE pods match — the
+  # pods that actually proxy the traffic, not the controller that configures them. ("ingress" here is the
+  # NetworkPolicy direction, not the Kubernetes kind.) The chart cannot know their namespace or labels, and never
+  # guesses: some implementations run one shared data plane in their own namespace, others start a proxy per
+  # Gateway in the Gateway's OWN namespace — this release's — in which case the peer is a bare podSelector. They
+  # reach the app's public port, the store's S3 port, the admin surface when admin.domain is set, and
+  # cert-manager's HTTP-01 solvers. For Traefik installed by its Helm chart into `traefik`, e.g.:
   #   - namespaceSelector:
   #       matchLabels:
-  #         kubernetes.io/metadata.name: ingress-nginx
+  #         kubernetes.io/metadata.name: traefik
   #     podSelector:
   #       matchLabels:
-  #         app.kubernetes.io/name: ingress-nginx
+  #         app.kubernetes.io/name: traefik
   ingressFrom: []
 
-ingress:
-  # Passed through to every Ingress this chart templates AND, via the backend, to every tenant Ingress it
-  # projects; absent leaves the cluster's default IngressClass to decide. Never interpreted.
+gateway:
+  # REQUIRED: the GatewayClass of your Gateway API implementation — what the chart's Gateway `veyq` is handed to.
+  # Never interpreted, and no implementation is required: Traefik is the docs' example (e.g. `traefik`, the name
+  # of the GatewayClass you or its Helm chart created — `kubectl get gatewayclass` lists them). The Gateway API CRDs (v1.5 or later, standard channel) and the implementation are yours to
+  # install first; without the CRDs `helm install` fails whole, before creating anything.
   className: ""
-  # Stamped VERBATIM on every Ingress — the chart's own and the projected ones alike. This is how a certificate
-  # issuer reaches objects the backend writes at runtime. TLS has two halves (ADR 0064): the backend only ever
-  # stamps a REFERENCE, and no RBAC beyond the Ingress verbs is needed because cert-manager watches the Ingress
-  # objects the backend already writes; the issuer the reference names is configured either by you — bring your
-  # own, e.g.
+  # Stamped VERBATIM on the chart's Gateway AND, via the backend, on every tenant ListenerSet it projects — the
+  # objects cert-manager reads for certificates. An HTTPRoute carries no certificate and gets none. TLS has two
+  # halves (ADR 0064): the backend only ever stamps a REFERENCE, and needs no RBAC beyond its route and ListenerSet
+  # verbs because cert-manager watches the objects the backend already writes; the issuer the reference names is
+  # configured either by you — bring your own, e.g.
   #   cert-manager.io/cluster-issuer: letsencrypt
-  # — or by the chart, through ingress.tls.acme below, which adds `cert-manager.io/issuer: veyq-acme` here for
+  # — or by the chart, through gateway.tls.acme below, which adds `cert-manager.io/issuer: veyq-acme` here for
   # you. Not both: the schema refuses an issuer annotation beside the opt-in.
   annotations: {}
   tls:
-    # none       — no spec.tls on any Ingress. For TLS terminated upstream (a cloud load balancer, a mesh).
-    #              The default, so no existing deployment moves — but read on before keeping it: TLS is a
-    #              PRECONDITION for this app, not a preference. The refresh cookie is `Secure` by default and
-    #              every mailed link is https, so an instance nothing terminates TLS for boots, serves every
-    #              page, silently breaks "remember me" and mails links to a scheme it does not answer.
-    # per-domain — one spec.tls entry per Ingress whose secretName is the object's OWN name (cert-manager's
-    #              ingress-shim shape). Every tenant domain — a custom domain included — gets its own
-    #              certificate through the annotations above: your own issuer's, or ingress.tls.acme's. Residue worth knowing: when a tenant is suspended
-    #              and its Ingress withdrawn, cert-manager does NOT delete the Secret it issued unless it runs
-    #              with --enable-certificate-owner-ref, so a withdrawn domain leaves an orphaned TLS Secret in
-    #              the namespace. Operator-visible, not a routing leak (the Ingress is gone) and not an access
-    #              leak (suspension's guarantee is the app's scope-access gate); not swept by the chart, because
+    # Where every route — the chart's own and every tenant's — is served, decided once for all of them:
+    # none       — every route attaches to the Gateway's plain-HTTP listener on :80, and no HTTPS listener exists.
+    #              For TLS terminated upstream (a cloud load balancer, a mesh). The default, so no existing
+    #              deployment moves — but read on before keeping it: TLS is a PRECONDITION for this app, not a
+    #              preference. The refresh cookie is `Secure` by default and every mailed link is https, so an
+    #              instance nothing terminates TLS for boots, serves every page, silently breaks "remember me" and
+    #              mails links to a scheme it does not answer.
+    # per-domain — an HTTPS listener per host whose certificateRefs names the host's route (`veyq-app`,
+    #              `veyq-garage`, `veyq-admin` on the Gateway; each tenant's own ListenerSet, written by the
+    #              backend, under that tenant's object name). Every tenant domain — a custom domain included — gets
+    #              its own certificate through the annotations above: your own issuer's, or gateway.tls.acme's.
+    #              Needs an implementation that supports ListenerSet (Gateway API v1.5 standard channel); NOT every
+    #              released implementation does — check yours. Residue worth knowing: when a tenant is suspended
+    #              and its ListenerSet withdrawn, cert-manager does NOT delete the Secret it issued unless it runs
+    #              with --enable-certificate-owner-ref, so a withdrawn domain leaves an orphaned TLS Secret in the
+    #              namespace. Operator-visible, not a routing leak (the listener is gone) and not an access leak
+    #              (suspension's guarantee is the app's scope-access gate); not swept by the chart, because
     #              sweeping Secrets would need RBAC this design exists to avoid.
-    # shared     — every Ingress points at ONE pre-provisioned TLS Secret (secretName below): a wildcard
-    #              certificate, kept as an operator's choice rather than as everyone's ceiling. An operator who
-    #              bought one *.example.com certificate and runs no ACME gets a working instance — and gives up
-    #              per-tenant custom domains knowingly, because a custom domain routes and the browser refuses.
+    # shared     — one hostname-less HTTPS listener referencing ONE pre-provisioned TLS Secret (secretName below),
+    #              which every route attaches to: a wildcard certificate, kept as an operator's choice rather than
+    #              as everyone's ceiling. An operator who bought one *.example.com certificate and runs no ACME
+    #              gets a working instance — and gives up per-tenant custom domains knowingly, because a custom
+    #              domain routes and the browser refuses.
+    # Under per-domain and shared the chart also redirects :80 to https (an HTTPRoute with the RequestRedirect
+    # filter, whose `scheme` field is Gateway API's Extended HTTPRouteSchemeRedirect feature).
     mode: none
     # Required by `shared`; ignored by the other modes. The backend refuses `shared` without it — loud and
     # disabled, never a failed boot — so an install that forgets it routes nothing rather than half.
     secretName: ""
     # The chart's ACME issuer — what VEYQ_ACME_EMAIL / VEYQ_ACME_CASERVER configure under compose. Enabled, the
-    # chart templates ONE namespaced cert-manager Issuer, `veyq-acme` (HTTP-01), and stamps
-    # `cert-manager.io/issuer: veyq-acme` on every Ingress, so a tenant created at runtime is a certificate order
-    # with no chart edit and no restart. Requires `mode: per-domain` (ACME is how per-domain certificates are
-    # obtained, not a fourth mode) and an e-mail; the schema refuses either missing rather than overriding you.
+    # chart templates ONE namespaced cert-manager Issuer, `veyq-acme` (HTTP-01 through the Gateway's :80
+    # listener), and stamps `cert-manager.io/issuer: veyq-acme` plus `acme.cert-manager.io/http01-parentreffallback`
+    # on the Gateway and every tenant ListenerSet, so a tenant created at runtime is a certificate order with no
+    # chart edit and no restart. Requires `mode: per-domain` (ACME is how per-domain certificates are obtained,
+    # not a fourth mode) and an e-mail; the schema refuses either missing rather than overriding you.
     #
-    # Preconditions you meet, not the chart: cert-manager installed in the cluster (without its CRDs the install
-    # fails whole, before creating anything); port 80 of every tenant host reachable through the ingress
-    # controller; and a tenant's DNS pointing here BEFORE the tenant is created — each creation is an order.
+    # Preconditions you meet, not the chart: cert-manager 1.21 or later in the cluster (the parent-ref fallback
+    # is 1.21's), with its Gateway API support AND its ListenerSet support on — ListenerSet support is ALPHA:
+    # `config.gatewayAPI.enabled=true`, `config.gatewayAPI.enableListenerSet=true` and
+    # `config.featureGates.ListenerSets=true` in cert-manager's Helm values (without its CRDs the install fails
+    # whole, before creating anything); port 80 of every tenant host reachable through the Gateway; and a
+    # tenant's DNS pointing here BEFORE the tenant is created — each creation is an order.
     acme:
       enabled: false
       # The ACME account contact — where the CA sends expiry and revocation notices. Required when enabled,

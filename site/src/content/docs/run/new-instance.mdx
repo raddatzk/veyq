@@ -45,23 +45,27 @@ the stack names one of them.
 
 `charts/veyq` is the second deployment target ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)):
 the same four workloads as the production compose file — the app, its administration surface, MariaDB and
-Garage — on an operator's own cluster, with the ingress controller in place of the compose file's Traefik, and
-the operator's choice. It deploys published
+Garage — on an operator's own cluster, with a Gateway API implementation of the operator's choice in place of the
+compose file's Traefik (the chart owns one `Gateway`; the implementation, its CRDs at v1.5 or later and, for the ACME
+opt-in, cert-manager are yours to install first). It deploys published
 images and builds nothing; it **generates nothing** either, so every secret is yours to supply and an install
 that leaves one unset is refused by name (`values.schema.json`). One release per namespace: the app projects
-tenant domains as `Ingress` objects into its own namespace and lists them by label, so two releases there
+tenant domains as `HTTPRoute`s (and `ListenerSet`s) into its own namespace and lists them by label, so two releases there
 would reconcile each other's routing away.
 
 ```sh
 # Verify a release first: it leaves ${version}, ${app_digest}, ${admin_digest} and ${chart_digest}
 chart="oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}"
 helm show values "$chart" > my-values.yaml        # fill in: domain, storeDomain, every key under secrets,
-                                                  # the ingress.tls block, and networkPolicy.ingressFrom —
-                                                  # your ingress controller's pods:
+                                                  # gateway.className, the gateway.tls block, and
+                                                  # networkPolicy.ingressFrom — your gateway's data-plane
+                                                  # pods; for Traefik in the `traefik` namespace, e.g.:
+#   gateway:
+#     className: traefik
 #   networkPolicy:
 #     ingressFrom:
-#       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
-#         podSelector: {matchLabels: {app.kubernetes.io/name: ingress-nginx}}
+#       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+#         podSelector: {matchLabels: {app.kubernetes.io/name: traefik}}
 helm install veyq "$chart" -n veyq --create-namespace -f my-values.yaml \
   --set image.digest="${app_digest}" --set admin.image.digest="${admin_digest}"
 ```

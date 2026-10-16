@@ -2,7 +2,7 @@
 """Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
-**What it asserts.** Seven things, in the order a release happens:
+**What it asserts.** Nine things, in the order a release happens:
 
   1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
      identity (ADR 0057 §1): the minor is the number of commits since `VERSION` last changed, so a checkout
@@ -29,6 +29,13 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      Dockerfile (nor before its first `FROM`). The stage that compiles the web client is served to anyone before any
      login, so a stamp it could read is a release on the pre-auth surface (ADR 0057 §4); a stamp the target does not
      declare is one Docker drops without a word. Both found by stage, from the build matrix, never listed.
+  9. **The publish waits on every stage** (ADR 0091 decision 2). The workflow is the one pipeline per commit, and
+     its image build starts beside the tests instead of after them — which is sound only while nothing it builds is
+     published before every stage is green. So every other job of the file is in the `publish` job's `needs:`, found
+     by reading the file's jobs, never listed; and when the publish's `if:` calls a status function (`always()`,
+     `failure()`, `cancelled()`) — which lets it run past a failed or skipped need — the condition requires
+     `needs.<job>.result == 'success'` of every need, the one exception a job that is literally `if: false`, whose
+     `skipped` it may accept alongside `success` (the disabled upgrade proof).
   8. **The chart is the release's third artifact** (ADR 0064). The refuse step names every published image (the
      build matrix) AND `charts/<name>` (`Chart.yaml`'s `name`), so a release with any of the three already out
      is refused; the step that runs `helm package` sets `--version` and `--app-version` from the tree-derived
@@ -45,7 +52,7 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      Run pages (`site/src/content/docs/run/`, where the operator procedures live) matches a tag the pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
      `infra/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
-     `.github/workflows/container.yml` actually publishes — the set is read out of that workflow's build
+     `.github/workflows/ci.yml` actually publishes — the set is read out of that workflow's build
      matrix, never listed here (§ *a guard derives its anchor set from the code*). A recipe that builds is a
      recipe only `docker compose` can deploy: Compose hides it by building on the operator's host, and
      [ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)'s Helm chart cannot, because a
@@ -67,7 +74,7 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      `home`, not the workflow's `github.repository_owner`, which is whoever runs it — a fork included.
 
 **The defect that bought it.** All of it was live when this guard was written (2026-08-11), and the first run
-was the discovery: there was no `VERSION` file at all, so `container.yml`'s first command
+was the discovery: there was no `VERSION` file at all, so the publish workflow's (then `container.yml`) first command
 (`tr -d '[:space:]' < VERSION`) died and **no image had ever been published** — while `infra/.env.example` told
 the operator to pin `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0`, a three-part shape this pipeline never emits, and
 `infra/docker-compose.prod.yml`'s `${VEYQ_IMAGE:?…}` message repeated the invented shape as `…/veyq:1.2.3`. The
@@ -101,6 +108,10 @@ Assertions 2 and 3 were reshaped by a defect of the pipeline's own design (cr-re
 version in `VERSION`, so every push after the first would have been a red run at the refusal until someone
 committed a bump, and there was no way to try the publish path before it named something for good. Publishing
 moved behind a dispatch, and the minor into the history; this guard holds both.
+
+Assertion 9 came with folding `container.yml` into `ci.yml` (cr-one-pipeline-per-commit, 2026-10-16), no incident:
+the build stopped needing the tests, and from then on the publish's `needs:` is the only thing between a red stage
+and a published image — a stage added to the file and forgotten there would be one a release never waited for.
 
 Assertion 8 came with the chart's OCI release (same CR): no incident, the chart had never been published. Each of
 its halves was bitten by injection before it counted, and the measurement that shaped it is in ADR 0064 — `helm
@@ -172,7 +183,7 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / "VERSION"
-WORKFLOW = ROOT / ".github/workflows/container.yml"
+WORKFLOW = ROOT / ".github/workflows/ci.yml"
 DOCKERFILE = ROOT / "Dockerfile"
 INFRA = ROOT / "infra"
 
@@ -262,7 +273,7 @@ version_match = MAJOR.match(version_value) if version_value else None
 if version_text is None:
     fail(
         "there is no VERSION file at the repository root. It IS the release identity (ADR 0057 §1): without it "
-        "the container workflow dies on its first command and nothing can ever be published, while "
+        "the publish workflow dies on its first command and nothing can ever be published, while "
         "infra/.env.example tells the operator to pin an image tag that has no producer."
     )
 elif not version_match:
@@ -700,6 +711,41 @@ if workflow_doc:
             f"{WORKFLOW.relative_to(ROOT)} has no registry write at all that this guard recognises — the gating "
             f"assertion would then hold NOTHING and report green"
         )
+
+    # ---- 9. the publish waits on every stage ------------------------------------------------------------------
+    # Every other job of the file is a stage (ADR 0091 decision 2), read from the file rather than listed, so a stage
+    # added later is held without anyone remembering this guard.
+    raw_needs = publish_job.get("needs") or []
+    publish_needs = [raw_needs] if isinstance(raw_needs, str) else [str(n) for n in raw_needs]
+    stage_jobs = sorted(str(j) for j, v in jobs.items() if j != PUBLISH_JOB and isinstance(v, dict))
+    if publish_job and not stage_jobs:
+        fail(f"{WORKFLOW.relative_to(ROOT)} has no job besides `{PUBLISH_JOB}` — assertion 9 checked NOTHING")
+    for stage in stage_jobs:
+        if stage not in publish_needs:
+            fail(
+                f"the `{PUBLISH_JOB}` job does not need `{stage}` — the build starts beside the tests, so the "
+                f"publish's `needs:` is the only thing that keeps an image of a commit whose `{stage}` is red from "
+                f"being published (ADR 0091 decision 2). Every other job of the file is a stage it waits on."
+            )
+    publish_if = str(publish_job.get("if") or "").strip()
+    if publish_if.startswith("${{") and publish_if.endswith("}}"):
+        publish_if = publish_if[3:-2].strip()
+    if re.search(r"\b(?:always|failure|cancelled)\s*\(\s*\)", publish_if):
+        # A status function lifts GitHub's implicit `success()`, so a failed or skipped need no longer stops the job
+        # by itself: the condition has to say, need by need, what it accepts.
+        terms = {" ".join(t.split()) for t in publish_if.split("&&")}
+        for need in publish_needs:
+            accepted = f"needs.{need}.result == 'success'" in terms
+            need_job = jobs.get(need) or {}
+            if not accepted and (need_job.get("if") is False or str(need_job.get("if")).strip() == "false"):
+                accepted = f"contains(fromJSON('[\"success\", \"skipped\"]'), needs.{need}.result)" in terms
+            if not accepted:
+                fail(
+                    f"the `{PUBLISH_JOB}` job's `if:` calls a status function, which lets it run past a failed "
+                    f"need, but it does not require `needs.{need}.result == 'success'` as one of its `&&` terms — a "
+                    f"publish would go ahead on a red `{need}` (ADR 0091 decision 2). Only a job that is literally "
+                    f"`if: false` may be accepted as `skipped` too."
+                )
 
 
 # ---- 4. the recipe travels in the image, and written-down tags name a shape the pipeline emits ---------------
@@ -1184,7 +1230,8 @@ print(
     f"release identity OK: VERSION {version_value} is the major, the minor is counted offline from the history "
     f"({len(publishing_branches)} publishing branch(es), a shallow checkout refused), every registry write waits for "
     f"a dispatch, the stamp is declared by the {stamped_targets} published target stage(s) and no other, a release "
-    f"refuses a republish and creates its v{version_value}.<minor> ref, the recipe is declared in "
+    f"refuses a republish and creates its v{version_value}.<minor> ref, the publish waits on every one of the "
+    f"{len([j for j in (workflow_doc.get('jobs') or {}) if j != PUBLISH_JOB])} other jobs as a green stage, the recipe is declared in "
     f"{len(runtime_stages(DOCKERFILE.read_text()))} runtime target(s), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"

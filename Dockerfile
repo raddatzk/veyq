@@ -33,7 +33,8 @@ COPY packages/crypto /src/packages/crypto
 # verifier and the generator read the pinned version from it (without it the verifier fails the install).
 COPY web/package.json web/openapitools.json ./
 # Not run through scripts/npm_ci_no_deprecated.py, and covered anyway: this installs the root lockfile that
-# container.yml's `test` job scanned through it on the same commit, and the image `build` job `needs: test`.
+# ci.yml's `frontend` job scans through it on the same commit, and every job that publishes the image needs that
+# job (ADR 0091 decision 2: the build itself no longer waits for the tests, so the premise is "before published").
 # scripts/validate_npm_installs_gated.py holds both premises — keep `npm ci` (never `npm install`) and the COPY.
 RUN npm ci
 COPY web/ ./
@@ -92,7 +93,7 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # chose it, it was never seen to build (it OOMs an 8 GB Docker VM), nothing tested it, and the release never
 # published it. A native image returns only as a decision with its own CI build and e2e run (inbox #243).
 
-# --- runtime (JVM) — the target container.yml builds --------------------------------------------------------
+# --- runtime (JVM) — the target ci.yml's `build` job builds -------------------------------------------------
 # The LAST stage on purpose: a bare `docker build .` builds the last stage, so it builds what the release
 # publishes. scripts/validate_images_run_unprivileged.py holds every published target to its file's last stage.
 FROM eclipse-temurin:21-jre-jammy@sha256:61d6c7b34d36aee3f45d043101259f97f3c6d428dc2a6f75513789983c5e254f AS runtime-jvm

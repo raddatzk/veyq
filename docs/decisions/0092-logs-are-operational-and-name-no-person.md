@@ -30,7 +30,7 @@ hold, how long it is kept, on what legal basis, or how it relates to evidence of
 | Admin nginx (both targets, one image) | stdout | `$remote_addr`, time, method, path without query, status, size, User-Agent, X-Forwarded-For (M8); nginx error log names the whole request line, query included, on an upstream failure (cc.security.wire-assertion) | runtime's |
 | Garage (both targets) | stdout, `RUST_LOG=garage=info` baked into the image (M9) | **every S3 and admin request**: peer address and port, method, URI with its query — presign signatures, object keys, admin key ids (M9); behind a proxy it may also print the forwarded client address (R4) | runtime's |
 | MariaDB (both targets) | stdout | startup and errors; no general, slow or binary log configured (M10); 0 lines in an e2e window (cc.security.wire-assertion) | runtime's |
-| Ingress controller (Helm) | outside the chart | every reader: client IP, path with `shareId` (and `?node=` on a reload), UA — the operator's to configure (M11) | the cluster's |
+| Gateway implementation (Helm) | outside the chart | every reader: client IP, path with `shareId` (and `?node=` on a reload), UA — the operator's to configure (M11) | the cluster's |
 | Container runtime (Compose) | no `logging:` block on any service (M12) | — | the daemon's default driver; on a stock Linux Docker that is `json-file` **without rotation** (R5); this Mac's daemon uses `local` (M9) |
 | Container runtime (Helm) | the kubelet | — | the kubelet's rotation, 10 MiB × 5 files per container by default (R6) |
 
@@ -47,7 +47,7 @@ path; `shareId` is a path segment and half the capability, the share key stays i
   is always purged when its retention period ends, and the copy lives as long as the hold.
 - A **moderation log** is append-only, with structured fields in the clear and sealed free text, and keeps its
   own retention.
-- An access log, Traefik's or an ingress controller's, is **not** the evidence: it records every reader, links to
+- An access log, Traefik's or a gateway implementation's, is **not** the evidence: it records every reader, links to
   no object, sits outside a hold's reach and keeps its own retention.
 
 When this ADR was drafted none of this was in the repo (`legal hold` had no hit, M15); ADR 0093 now decides it.
@@ -129,7 +129,7 @@ only through the database, which the operator holds under its own retention.
 | App, admin nginx, MariaDB, Traefik | `json-file`, `max-size: 10m`, `max-file: 3` per service | nothing; the kubelet rotates (R6) | rotation is by size, not time; a log shipper's retention is theirs |
 | Garage | `RUST_LOG=garage=warn`: no per-request log | the same env | raising it for troubleshooting logs every request with its address |
 | Traefik access log | stays off | — | turning it on records every reader and is outside veyq's guarantees |
-| Ingress controller | — | no annotation | the same as Traefik's access log, and the place to keep it short or off |
+| Gateway implementation | — | nothing in the chart | the same as Traefik's access log, and the place to keep it short or off |
 | Rate limiter | evicts a bucket once it is full again, regardless of the key count | same | — |
 | Backups | — | — | a database backup holds the guest-write record and the moderation tables for as long as the operator keeps it |
 
@@ -150,7 +150,7 @@ guest-write record's basis and disclosure are the moderation ADR's.
 | App log (ids only) | (1)(f): operating and securing the service | Run docs; terms clause 2 |
 | Admin nginx log | (1)(f): securing the administration surface | Run docs |
 | Rate-limit buckets | (1)(f): heap only, never stored | terms clause 2 |
-| Ingress or Traefik access log, a log shipper | the operator's own | Run docs: "yours, not veyq's" |
+| A gateway implementation's or Traefik's access log, a log shipper | the operator's own | Run docs: "yours, not veyq's" |
 
 A Server Owner running veyq only for their household may fall under the household exemption (Art. 2(2)(c)). That
 is their call.

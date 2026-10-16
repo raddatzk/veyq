@@ -8,7 +8,7 @@
 The release image carries the web client inside the backend. The `Dockerfile` copies `web/dist` into
 `META-INF/resources`, and Quarkus serves those files as plain static resources. Nothing else takes part: no
 route, no filter and no header of veyq's own. Every deployment target inherits that, because compose's Traefik,
-the Helm chart's Ingress and a self-hoster's own proxy all sit in front of the same image. Measured on 2026-09-23
+the Helm chart's Gateway and a self-hoster's own proxy all sit in front of the same image. Measured on 2026-09-23
 against a fast-jar built with `dist` in that layout:
 
 - **No SPA fallback.** `/` and `/index.html` answer 200. `/recover`, `/tenant/accept`, `/s/<id>` and `/login`,
@@ -76,8 +76,8 @@ inert lives in the signer for the same reason ([ADR 0013](0013-blob-storage-pres
 
 ## Consequences
 
-- **Rejected: headers at the proxy.** A Traefik middleware covers compose only. The Helm chart's Ingress
-  controller is the operator's choice, and header annotations are specific to each controller. Neither covers
+- **Rejected: headers at the proxy.** A Traefik middleware covers compose only. The Helm chart's gateway
+  implementation is the operator's choice, and header configuration is specific to each implementation. Neither covers
   a self-hoster's own proxy. That is three copies of one policy, and none of them can read the store origin the
   backend signs for.
 - **Rejected: a separate static web container**, as admin-web runs nginx. admin-web is separate for its own

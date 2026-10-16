@@ -70,6 +70,7 @@ else in your space.
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - End-user view (docs site): [Collect files with a drop box](../../../../site/src/content/docs/depot/drop-boxes.mdx)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
+- **Enabler:** [en.platform.field-editor](../../platform/enablers/en.platform.field-editor.md) (planned: the last editor of a name, which narrows the take-back to a guest's own placeholder, ADR 0080 decision 6).
 - **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md),
   [uc.sharing.share-uploader](../../sharing/use-cases/uc.sharing.share-uploader.md) (Memories' write-only link, whose
   drop key this reuses).
