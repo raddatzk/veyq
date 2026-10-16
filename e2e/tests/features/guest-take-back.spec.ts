@@ -177,7 +177,9 @@ test(
       const response = await fetch(`/api/shares/${shareId}/nodes/${nodeId}`, {
         method: 'DELETE', headers: { 'X-Contributor-Token': session.contributorToken },
       })
-      return { status: response.status, body: (await response.json()) as unknown }
+      // A 204 has no body: read it as text, so an erase is red on the status the server gave, not on a parse.
+      const text = await response.text()
+      return { status: response.status, body: (text ? JSON.parse(text) : null) as unknown }
     }, { shareId, nodeId: memberFolderId })
     expect(answer).toEqual({ status: 409, body: expect.objectContaining({ code: 'not_a_placeholder' }) })
 
