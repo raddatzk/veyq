@@ -1727,6 +1727,18 @@ takes a control away, its refine greps the matrix row, the share roots and the r
 (`grep -n <capability> docs/apps/<app>.md`, the `roleContributorHint`-style strings). It then writes down, for each
 role, what that role can still do.
 
+### A page that tells users what to click is walked in the client before it counts as written
+
+`cr-use-area-content` wrote two of its eight phases from `web/src/i18n/index.ts` and the components, and the later
+walk in the running web client still corrected each of them several times. Some controls exist only behind a
+switch: *Determine location automatically* appears only once maps are enabled. Some labels depend on state: a
+contributions group says *You* only until you have added something. A folder row's menu has no *Move to…* at all.
+A guest drop page starts over with *Not you?*, not with the string the drop-box namespace defines. None of that
+shows in a catalog. So a CR whose output is user-facing steps (a Use page, an onboarding text) walks every step in
+the running client with a test account and a fresh instance. It writes from the walk and corrects the page against
+it, and it names in its CR what it could not walk (a second device, a camera, a third-party map) instead of
+implying it. A page written from code alone is a draft.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong
