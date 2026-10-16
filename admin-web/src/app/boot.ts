@@ -14,6 +14,7 @@ export async function boot(): Promise<void> {
   try {
     const status = await setupApi().getSetupStatus()
     serverState.setupCompleted = !status.setupRequired
+    serverState.breachRangeUrl = status.capabilities.find((c) => c.id === 'core.breached-password')?.serviceUrl ?? null
   } catch {
     // Unreachable backend: say so, rather than rendering a console that cannot load anything.
     serverState.unreachable = true

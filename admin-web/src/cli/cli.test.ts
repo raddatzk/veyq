@@ -37,6 +37,9 @@ vi.mock('../features/instance/capabilities', async (importOriginal) => ({
   setInstanceCapabilityRequirement: vi.fn(),
   clearInstanceCapabilityRequirement: vi.fn(),
 }))
+vi.mock('../features/instance/externalServices', () => ({
+  listExternalServices: vi.fn(), setExternalService: vi.fn(), clearExternalService: vi.fn(),
+}))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
 import { run } from './cli'
@@ -402,6 +405,22 @@ describe('veyq-admin — the capability switches (uc.admin.switch-capabilities)'
     expect((await invoke(['capabilities', 'list'])).out).toContain('requirement linkMaxDays: 14 days  Links end EN')
   })
 
+  it('services list / set / unset print each service with its address or not configured', async () => {
+    const svc = (url: string | null, attribution: string | null = null) => ({
+      id: 'memories.map', title: { en: 'Maps', de: 'Karten' }, url, attribution, takesAttribution: true,
+    })
+    const { listExternalServices, setExternalService, clearExternalService } = await import('../features/instance/externalServices')
+    vi.mocked(listExternalServices).mockResolvedValueOnce([svc('https://t.example/{z}/{x}/{y}.png', '© T'), { ...svc(null), id: 'memories.places', takesAttribution: false }])
+    expect((await invoke(['services', 'list'])).out).toBe('memories.map  https://t.example/{z}/{x}/{y}.png  (© T)\nmemories.places  not configured')
+    vi.mocked(setExternalService).mockResolvedValueOnce(svc('https://u.example/{z}/{x}/{y}.png'))
+    const set = await invoke(['services', 'set', 'memories.map', '--url', 'https://u.example/{z}/{x}/{y}.png'])
+    expect(setExternalService).toHaveBeenCalledWith('memories.map', 'https://u.example/{z}/{x}/{y}.png', null)
+    expect(set.out).toBe('memories.map  https://u.example/{z}/{x}/{y}.png')
+    vi.mocked(clearExternalService).mockResolvedValueOnce(svc(null))
+    expect((await invoke(['services', 'unset', 'memories.map'])).out).toBe('memories.map  not configured')
+    expect(clearExternalService).toHaveBeenCalledWith('memories.map')
+  })
+
   it('list takes no id: a stray word is still an unknown command', async () => {
     const r = await invoke(['capabilities', 'list', 'core.x'])
     expect(r.code).toBe(1)
@@ -413,7 +432,7 @@ describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

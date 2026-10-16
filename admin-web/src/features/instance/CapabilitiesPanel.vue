@@ -53,9 +53,10 @@ const loadError = computed(() => loadErrorKind(loadErr.value))
 const tree = computed(() => capabilityTree(entries.value))
 const words = (text: InstanceCapabilityText) => inLocale(text, locale.value as CapabilityLocale)
 
-const STATE_TONE = { on: 'success', off: 'danger', offThrough: 'warning' } as const
+const STATE_TONE = { on: 'success', off: 'danger', offThrough: 'warning', notConfigured: 'warning' } as const
 function stateLabel(state: CapabilityState): string {
   if (state.kind === 'offThrough') return t('capabilities.offThrough', { parent: words(state.through.title) })
+  if (state.kind === 'notConfigured') return t('capabilities.notConfigured')
   return t(state.kind === 'on' ? 'capabilities.on' : 'capabilities.off')
 }
 

@@ -27,7 +27,7 @@ const props = defineProps<{ pins: LocatedPin[]; covers?: Map<string, LoadedCover
 const emit = defineEmits<{ open: [nodeId: string] }>()
 
 const { t, locale } = useI18n()
-const { mapsAvailable, tileUrl, tileAttribution, tileMaxZoom } = useMapConfig()
+const { mapsOffered, mapsAvailable, tileUrl, tileAttribution, tileMaxZoom } = useMapConfig()
 
 // The map only renders with consent AND at least one pin — otherwise it's the opt-in prompt or the empty state.
 const showMap = computed(() => mapsAvailable.value && props.pins.length > 0)
@@ -219,7 +219,7 @@ function fitPins() {
 function initMap() {
   if (map || !el.value) return
   map = L.map(el.value).setView([20, 0], 2)
-  L.tileLayer(tileUrl.value, { attribution: tileAttribution, maxZoom: tileMaxZoom }).addTo(map)
+  L.tileLayer(tileUrl.value, { attribution: tileAttribution.value, maxZoom: tileMaxZoom }).addTo(map)
   map.on('zoomend moveend', renderClusters) // re-cluster + collapse when the projection changes
   map.on('click', collapse) // a tap on empty map closes an open fan (touch + desktop)
   fitPins()
@@ -283,7 +283,12 @@ function enableMaps() {
 <template>
   <div class="space-map">
     <!-- consent off: the same coupled tiles+geocoding opt-in copy as the editor, not a broken map -->
-    <div v-if="!mapsAvailable" class="space-map-panel">
+    <!-- no map service on this server (memories.map): nothing to consent to, so nothing is offered -->
+    <div v-if="!mapsOffered" class="space-map-panel">
+      <span class="pi pi-map space-map-panel-icon" aria-hidden="true" />
+      <p>{{ t('memory.place.mapsNotOffered') }}</p>
+    </div>
+    <div v-else-if="!mapsAvailable" class="space-map-panel">
       <span class="pi pi-map space-map-panel-icon" aria-hidden="true" />
       <h3>{{ t('memory.place.consentTitle') }}</h3>
       <p>{{ t('memory.place.consentBody') }}</p>

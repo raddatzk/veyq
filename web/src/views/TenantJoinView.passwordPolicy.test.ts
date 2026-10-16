@@ -146,7 +146,7 @@ describe('TenantJoinView — where the password floor applies', () => {
     await field.trigger('blur')
     await flushPromises()
     expect(pwnedCount).toHaveBeenCalledOnce()
-    expect(pwnedCount).toHaveBeenCalledWith('a long enough password')
+    expect(pwnedCount).toHaveBeenCalledWith('a long enough password', 'https://api.pwnedpasswords.com/range/')
   })
 
   it('REGISTER: a hit blocks the submit until "Use it anyway" — pressing submit again is not the acceptance', async () => {

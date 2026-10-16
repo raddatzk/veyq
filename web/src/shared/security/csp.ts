@@ -19,10 +19,12 @@
 //   app shell sends as a header, and the dev server sends it as one too. See cc.security.csp.md.
 
 export interface CspOptions {
-  /** Basemap tile origin (Leaflet loads tiles as <img> → img-src), or null to allow no third-party tiles. */
+  /** Dev only: the basemap tile origin (Leaflet loads tiles as <img> → img-src), or null to allow none. */
   tileOrigin: string | null
-  /** Reverse-geocoder origin (fetched via XHR → connect-src), or null to allow none. */
+  /** Dev only: the reverse-geocoder origin (fetched via XHR → connect-src), or null to allow none. */
   geocoderOrigin: string | null
+  /** Dev only: the breached-password range API's origin (connect-src), or null to allow none. */
+  breachOrigin: string | null
   /** Dev only: also allow the Vite HMR websocket (`ws:`). Never set for a production build. */
   dev?: boolean
 }
@@ -31,17 +33,19 @@ export interface CspOptions {
  *  (`AppShell.POLICY_FILE`) and refuses to boot without it, which is what catches the two drifting apart. */
 export const CSP_POLICY_FILE = 'content-security-policy.txt'
 
-// The HaveIBeenPwned range API — a fixed, privacy-preserving third party the automatic breached-password check calls
-// client-direct, once on submit (only a 5-hex SHA-1 prefix leaves the device, k-anonymity). It must be in connect-src.
-const PWNED_ORIGIN = 'https://api.pwnedpasswords.com'
-
-/** Build the Content-Security-Policy header/meta value from the resolved provider origins. */
-export function buildCsp({ tileOrigin, geocoderOrigin, dev = false }: CspOptions): string {
+/**
+ * Build the Content-Security-Policy value. The built policy names no outside service: the map tiles, the geocoder and
+ * the breached-password check are the Server Owner's settings (uc.admin.configure-external-services), and the backend
+ * appends the origin of each one in use to `img-src` / `connect-src` on every response (ADR 0069, ADR 0088 decision 7).
+ * Only the dev server, which serves the app itself, passes their origins here (`vite.config.ts`).
+ */
+export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, dev = false }: CspOptions): string {
   const imgSrc = ["'self'", 'data:', 'blob:']
   if (tileOrigin) imgSrc.push(tileOrigin)
 
-  const connectSrc = ["'self'", PWNED_ORIGIN]
+  const connectSrc = ["'self'"]
   if (geocoderOrigin) connectSrc.push(geocoderOrigin)
+  if (breachOrigin) connectSrc.push(breachOrigin)
   if (dev) connectSrc.push('ws:') // Vite HMR socket — dev server only, never in a production build
 
   const directives: Record<string, string[]> = {
@@ -63,19 +67,4 @@ export function buildCsp({ tileOrigin, geocoderOrigin, dev = false }: CspOptions
   return Object.entries(directives)
     .map(([name, sources]) => `${name} ${sources.join(' ')}`)
     .join('; ')
-}
-
-/**
- * Extract an http(s) origin from a provider URL for use in a CSP source list. Returns null when the input is
- * absent or not an absolute http(s) URL (e.g. a relative override or malformed value), so the caller can fall
- * back to the built-in default and never inject a garbage source.
- */
-export function providerOrigin(url: string | undefined | null): string | null {
-  if (!url) return null
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.origin : null
-  } catch {
-    return null
-  }
 }

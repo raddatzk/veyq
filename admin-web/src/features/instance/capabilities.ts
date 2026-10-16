@@ -69,6 +69,7 @@ export type CapabilityState =
   | { kind: 'on' }
   | { kind: 'off' }
   | { kind: 'offThrough'; through: InstanceCapability }
+  | { kind: 'notConfigured' }
 
 /** An entry placed in the tree: how many of its ancestors are entries themselves, and its state. */
 export type CapabilityNode = { entry: InstanceCapability; depth: number; state: CapabilityState }
@@ -101,6 +102,8 @@ export function capabilityTree(entries: InstanceCapability[]): CapabilityNode[] 
 
 function stateOf(entry: InstanceCapability, ancestors: InstanceCapability[]): CapabilityState {
   if (entry.off) return { kind: 'off' }
+  // An external service with no address (ADR 0088 decision 7) is not served whatever its switch says.
+  if (entry.serviceConfigured === false) return { kind: 'notConfigured' }
   if (entry.effective) return { kind: 'on' }
   const through = ancestors.find((a) => a.off)
   return through ? { kind: 'offThrough', through } : { kind: 'off' }

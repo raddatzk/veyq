@@ -9,9 +9,11 @@
 // guarantee. Anti-framing comes from the container's nginx, which sends `X-Frame-Options: DENY` as a real header
 // (`admin-web/nginx.conf.template`). See docs/crosscutting/cc.security.csp.md.
 
-/** The pwned-password range API (k-anonymity: only a 5-hex SHA-1 prefix leaves the device) — the ONE outbound
- *  call this surface makes, and only when setup's breach-check box is ticked, once on submit. On a localhost-only
- *  or firewalled admin container it fails, and setup says the check could not run. */
+/** The pwned-password range API's default origin (k-anonymity: only a 5-hex SHA-1 prefix leaves the device) — the ONE
+ *  outbound call this surface makes, automatically over a finished password, and only while the instance's manifest
+ *  carries `core.breached-password` (ADR 0088 decision 7). This policy is a static `<meta>` served by nginx, outside
+ *  the backend, so it cannot follow the Server Owner's setting: a mirror at another origin is refused here and setup
+ *  says the check could not run (uc.admin.configure-external-services A3), as on a firewalled admin container. */
 export const PWNED_ORIGIN = 'https://api.pwnedpasswords.com'
 
 export const ADMIN_CSP = [

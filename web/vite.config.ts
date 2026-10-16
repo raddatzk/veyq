@@ -2,13 +2,13 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadEnv, type Plugin } from 'vite'
+import type { Plugin } from 'vite'
 // `vitest/config`'s defineConfig extends Vite's with the `test` block (setupFiles below) while staying a valid
 // Vite config for `npm run dev`/`build`.
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
-import { buildCsp, CSP_POLICY_FILE, providerOrigin } from './src/shared/security/csp'
-import { DEFAULT_GEOCODER_URL, DEFAULT_TILE_URL } from './src/shared/state/mapDefaults'
+import { buildCsp, CSP_POLICY_FILE } from './src/shared/security/csp'
+import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_TILE_ORIGIN } from './src/shared/state/mapDefaults'
 
 // Vite dev-server config. `npm run dev` works with the defaults below; the env vars only matter for special
 // setups (the IntelliJ run configs, the media live-smoke). In production the backend's app shell serves the built
@@ -33,12 +33,14 @@ const smokeHost = process.env.VEYQ_SMOKE_HOST
 // intersect with that header and block the store on its own origin again, so the build injects none — and the
 // backend refuses to boot a shell whose index.html carries one, or whose policy file is missing (the file name is
 // `AppShell.POLICY_FILE` there; `npm run verify:csp` checks both properties of dist before an image is built).
-// The allowed map-provider origins are derived from the SAME config the app fetches from (VITE_VEYQ_MAP_* or the
-// mapDefaults fallback), so a self-hosted tile/geocoder deployment stays covered automatically.
-function cspPlugin(env: Record<string, string>, dev: boolean): Plugin {
-  const tileOrigin = providerOrigin(env.VITE_VEYQ_MAP_TILE_URL || DEFAULT_TILE_URL)
-  const geocoderOrigin = providerOrigin(env.VITE_VEYQ_MAP_GEOCODER_URL || DEFAULT_GEOCODER_URL)
-  const csp = buildCsp({ tileOrigin, geocoderOrigin, dev })
+// The built policy names no outside service: the map tiles, the geocoder and the breached-password check are the
+// Server Owner's settings, and the backend appends the origins of those in use per response (ADR 0088 decision 7). The
+// dev server serves the app itself, so its header allows the reference providers a new instance is seeded with; a dev
+// instance pointed at other services edits the three DEV_* origins (mapDefaults.ts).
+function cspPlugin(dev: boolean): Plugin {
+  const csp = dev
+    ? buildCsp({ tileOrigin: DEV_TILE_ORIGIN, geocoderOrigin: DEV_GEOCODER_ORIGIN, breachOrigin: DEV_BREACH_ORIGIN, dev })
+    : buildCsp({ tileOrigin: null, geocoderOrigin: null, breachOrigin: null })
   return {
     name: 'veyq-csp',
     config: () => (dev ? { server: { headers: { 'Content-Security-Policy': csp } } } : {}),
@@ -165,10 +167,9 @@ function platformMajor(): number {
   return Number(text)
 }
 
-export default defineConfig(({ command, mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+export default defineConfig(({ command }) => {
   return {
-    plugins: [vue(), cspPlugin(env, command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin()],
+    plugins: [vue(), cspPlugin(command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin()],
     define: {
       __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
       // The platform's one major (ADR 0085 decision 1), read from the repository's VERSION as the backend's build reads

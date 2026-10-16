@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { nextTick, ref } from 'vue'
 import { useBreachCheck } from './passwordWarning'
+import { serverState } from '../../shared/state/serverState'
 
 // The oracle is computed outside the code under test:
 // SHA-1("correct horse battery staple") = ABF7AAD6438836DBE526AA231ABDE2D0EEF74D42.
@@ -20,6 +21,7 @@ const ok = (body: string) => new Response(body, { status: 200 })
 const answers = (body: string) => fetchMock.mockImplementation(async () => ok(body))
 
 beforeEach(() => {
+  serverState.breachRangeUrl = 'https://api.pwnedpasswords.com/range/'
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -200,5 +202,14 @@ describe('useBreachCheck', () => {
     answer(ok(CLEAN_BODY))
     expect(await verdict).toBe(false)
     expect(state.value).toEqual({ kind: 'idle' })
+  })
+
+  it('asks nothing while the instance runs no check, and stops no submit (ADR 0088 decision 7)', async () => {
+    serverState.breachRangeUrl = null
+    const password = ref('a long finished password')
+    const check = useBreachCheck(password)
+    await check.checkNow()
+    expect(await check.proceed()).toBe(true)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

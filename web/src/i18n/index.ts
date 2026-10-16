@@ -1286,6 +1286,7 @@ const en = {
       consentBody:
         'To place a Memory on a map, tiles load from a third-party map provider and the framed point is sent to a third-party geocoder for a name — both client-direct, never through the veyq server, which stays blind. You can turn this off anytime.',
       consentEnable: 'Enable maps',
+      mapsNotOffered: 'This server shows no maps.',
     },
     map: {
       empty: 'No places yet',
@@ -3031,6 +3032,7 @@ const de: typeof en = {
       consentBody:
         'Um eine Erinnerung auf einer Karte zu platzieren, werden Kacheln von einem Drittanbieter geladen und der eingerahmte Punkt wird für einen Namen an einen Drittanbieter-Geocoder gesendet – beides direkt vom Gerät, nie über den veyq-Server, der blind bleibt. Du kannst das jederzeit deaktivieren.',
       consentEnable: 'Karten aktivieren',
+      mapsNotOffered: 'Dieser Server zeigt keine Karten.',
     },
     map: {
       empty: 'Noch keine Orte',
