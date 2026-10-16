@@ -139,6 +139,30 @@ describe('runGrantDeliveryWorker', () => {
     expect(completeTask.mock.calls[0][0].completeRequest?.epoch).toBe(4)
   })
 
+  // The poll hands the worker the ACTIVE SPACE's write key, and leaving or re-entering the space zeroes that array in
+  // place while a run is still in flight (found live 2026-10-16: an accepted member's job declined admission_unverified,
+  // which excludes this key-holder from it for good). The run must not see that: it neither declines a genuine
+  // admission nor seals an all-zero key to the member.
+  it.each([
+    ['while the claim is in flight', 'claim'],
+    ['between the admission check and the seal', 'pin'],
+  ] as const)('keeps its own key when the caller zeroes the one it handed over %s', async (_when, at) => {
+    const K_SC = v1.randomBytes(32)
+    const held = K_SC.slice() // the active space's array — the one the caller zeroes
+    const { claimTask, completeTask, declineTask } = oneJob(job(admitted(K_SC, 0)))
+    if (at === 'claim') {
+      claimTask.mockReset()
+      claimTask.mockImplementationOnce(async () => (held.fill(0), job(admitted(K_SC, 0)))).mockResolvedValueOnce(null)
+    } else {
+      vi.mocked(checkAndPin).mockImplementationOnce(async () => (held.fill(0), 'firstUse'))
+    }
+
+    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: held, epoch: 0 })).toBe(1)
+    expect(declineTask).not.toHaveBeenCalled()
+    const sealedResult = completeTask.mock.calls[0][0].completeRequest?.sealedResult as string
+    expect(Array.from(openAsTarget(sealedResult, 0))).toEqual(Array.from(K_SC))
+  })
+
   it('declines a target that carries no admission at all', async () => {
     const { completeTask, declineTask } = oneJob(job())
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: v1.randomBytes(32), epoch: 0 })).toBe(0)
