@@ -10,7 +10,8 @@ reality), one level up — and it bought this guard.
 So each documented gap becomes an **executable** assertion instead of a sentence. The guard snapshots the
 source tree once, confirms each target validator is **green on an un-forged copy** of it (else an unrelated red
 would masquerade as "the gap holds"), and then for every case below: copies the snapshot into a throwaway dir,
-injects one forgery, runs the real validator as a subprocess, and asserts its exit code is the documented one.
+injects one forgery, runs the real validator as a subprocess, and asserts its exit code is the documented one
+(the cases run side by side, § How it runs).
 The *source tree* is what git lists — every tracked file plus every untracked one it does not ignore — so
 dependencies, build output, run artefacts and nested worktrees stay out by the repository's own `.gitignore`,
 not by a list kept here. A name list (`node_modules`, `build`, …) was what this used to copy by, and it let
@@ -19,8 +20,9 @@ through everything it did not name: in a main checkout carrying `.claude/worktre
 15–20 s (inbox #244). It also keeps a validator that walks the filesystem on the tree CI sees, not on a
 sibling worktree's sources. The real
 tree is never touched — every guard resolves `ROOT` as `__file__.parent.parent`, so running the *copied*
-`scripts/<guard>.py` binds it to the copy; restoration is "delete the tempdir" (an abort leaves only an
-orphaned tempdir, never a dirty tree — the automated evolution of `changes/README.md` § bite-proof).
+`scripts/<guard>.py` binds it to the copy; restoration is "delete the tempdir" (the snapshot and every copy live
+under one run directory, removed when a case raises or the run is interrupted; only a killed run leaves it
+orphaned, never a dirty tree — the automated evolution of `changes/README.md` § bite-proof).
 
 The coupling is the point: if someone tightens a validator to close a gap, the documented pass/fail flips and
 **this guard goes red** — forcing the closure to be recorded in `SKILL.md`, not landed silently. When that
@@ -322,9 +324,23 @@ A `validate_*.py`, so the trust-chain glob runs it on every push with no build. 
     python3 scripts/validate_guard_gaps.py            # skipped when no guard changed since the last green run
     python3 scripts/validate_guard_gaps.py --force    # the full run, whatever the stamp says
     python3 scripts/validate_guard_gaps.py --case 35  # only the named case(s), never skipped, writes no stamp
+    VEYQ_GUARD_GAPS_WORKERS=1 python3 scripts/validate_guard_gaps.py --force   # one case at a time
 
-**Skipped locally when no guard changed.** It is 90 % of the glob's time (998 s of it, 901 here, measured
-2026-10-16: 79 copies of the tree and a subprocess each), and what it proves is about the GUARDS. So a full green
+**How it runs.** The cases run on a bounded pool of threads, by default `min(cpu_count, 6)`;
+`VEYQ_GUARD_GAPS_WORKERS` sets the size, and 1 is the sequential run this guard was before (ADR 0091 decision 1).
+Each case works on its own copy of the one snapshot, so no case sees another's forgery. First, on the same pool,
+every target guard is run once on an un-forged copy; a case is checked only beside its guard's green there, and
+reported as untrustworthy otherwise. The report lists failures in `CASES` order whatever order they finish in, so
+1 and N workers print the same verdicts. The cap is the machine's, not the guard's: every copy is a burst of file
+events for `fseventsd` and the virus scanner, and an uncapped wave of them is what drove a neighbour's load average
+to ~190 (2026-10-15). Measured 2026-10-16 on the 14-core development Mac, the full `--force` run: 334 s with 1
+worker (load average 24 falling to 13) and 167 s with 6 (13 rising to 30); the same run with two cases bitten,
+350 s and 147 s. About twice as fast, not six times: the copies are bound by the file system and its watchers, not
+by the CPU.
+
+**Skipped locally when no guard changed.** It was 90 % of the glob's time while its cases ran one after the other
+(998 s of it, 901 here, measured 2026-10-16 under a load of 20–55: 79 copies of the tree and a subprocess each),
+in parallel it is still the glob's slowest guard by far, and what it proves is about the GUARDS. So a full green
 run writes the SHA-256 of every file under `scripts/` and `.claude/skills/trust-chain/` (the guards, their helpers
 and the gap map, as git lists them) to `.trust-chain-cache/guard_gaps.json` (gitignored, one per checkout), and a
 later run whose inputs hash the same prints `SKIPPED` and exits 0 without copying anything. A red run writes no
@@ -348,6 +364,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from concurrent.futures import ThreadPoolExecutor
 
 import backend_tree  # where the backend's test and fixture roots live — resolved by glob, never spelled here
 
@@ -357,6 +374,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # neither hashed nor copied into a forged tree.
 SKIP_INPUTS = ("scripts/", ".claude/skills/trust-chain/")
 STAMP = ROOT / ".trust-chain-cache" / "guard_gaps.json"
+
+# The default pool's cap (module docstring § How it runs; the reason is where the pool is built, in `main`).
+MAX_WORKERS = 6
 
 # Anchors the forgeries edit. If one drifts (a coverage file relocated, a test class renamed), the forgery
 # fails to apply and the case reports red with a "could not forge" message — deliberately loud, because a
@@ -1527,42 +1547,37 @@ def write_stamp(digest: str, cases: int) -> None:
     STAMP.write_text(json.dumps({"inputs": digest, "cases": cases}) + "\n", encoding="utf-8")
 
 
-def snapshot(files: list[str]) -> pathlib.Path:
+def snapshot(run_dir: pathlib.Path, files: list[str]) -> pathlib.Path:
     """Copy the source tree once; every case copies this, so all of them see the same tree."""
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="guardgap_snapshot_"))
+    snap = run_dir / "snapshot"
     made: set[pathlib.Path] = set()
     for rel in files:
-        dst = tmp / rel
+        dst = snap / rel
         if dst.parent not in made:
             dst.parent.mkdir(parents=True, exist_ok=True)
             made.add(dst.parent)
         shutil.copy2(ROOT / rel, dst, follow_symlinks=False)
-    return tmp
+    return snap
 
 
 def copy_tree(snap: pathlib.Path) -> pathlib.Path:
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="guardgap_"))
+    """A fresh copy of the snapshot beside it, inside the run directory, so removing that directory removes it too."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="case_", dir=snap.parent))
     shutil.copytree(snap, tmp / "repo", symlinks=True)
     return tmp
 
 
-def green_unforged(snap: pathlib.Path, script: str, verdicts: dict[str, bool]) -> bool:
+def green_unforged(snap: pathlib.Path, script: str) -> bool:
     """Is `script` green on an un-forged copy? Asked once per guard: every copy of one snapshot is the same tree."""
-    if script not in verdicts:
-        tmp = copy_tree(snap)
-        try:
-            verdicts[script] = run_guard(tmp / "repo", script) == 0
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-    return verdicts[script]
+    tmp = copy_tree(snap)
+    try:
+        return run_guard(tmp / "repo", script) == 0
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
-def check_case(snap: pathlib.Path, verdicts: dict[str, bool],
-               case_id: str, script: str, forge, expect_pass: bool) -> str | None:
+def check_case(snap: pathlib.Path, case_id: str, script: str, forge, expect_pass: bool) -> str | None:
     """Return an error string if the documented pass/fail no longer holds, else None."""
-    if not green_unforged(snap, script, verdicts):
-        return (f"case {case_id}: {script} is already RED on the un-forged copy — cannot trust the "
-                f"forgery result (fix the underlying red first)")
     tmp = copy_tree(snap)
     try:
         root = tmp / "repo"
@@ -1582,6 +1597,37 @@ def check_case(snap: pathlib.Path, verdicts: dict[str, bool],
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def worker_count() -> int:
+    """`VEYQ_GUARD_GAPS_WORKERS`, else min(cpu_count, MAX_WORKERS). 1 runs every copy and guard one after the other."""
+    raw = os.environ.get("VEYQ_GUARD_GAPS_WORKERS", "").strip()
+    if not raw:
+        return min(os.cpu_count() or 1, MAX_WORKERS)
+    if not raw.isdigit() or int(raw) < 1:
+        raise SystemExit(f"GUARD-GAP VALIDATION FAILED: VEYQ_GUARD_GAPS_WORKERS={raw!r} is not a whole number of at "
+                         "least 1, so no case was checked")
+    return int(raw)
+
+
+def run_cases(snap: pathlib.Path, cases: list, pool: ThreadPoolExecutor) -> list[str]:
+    """Every case's error, in `cases` order whatever order the pool finishes them in.
+
+    The un-forged verdicts come first, one per target guard and all on the pool, because each case's verdict is
+    trusted only beside its guard's green on the same tree. A case whose guard is red un-forged is reported as
+    such and never copied.
+    """
+    scripts = list(dict.fromkeys(c[1] for c in cases))
+    green = dict(zip(scripts, pool.map(lambda s: green_unforged(snap, s), scripts)))
+    futures = [pool.submit(check_case, snap, *c) if green[c[1]] else None for c in cases]
+    errors = []
+    for (case_id, script, _, _), future in zip(cases, futures):
+        if future is None:
+            errors.append(f"case {case_id}: {script} is already RED on the un-forged copy — cannot trust the "
+                          f"forgery result (fix the underlying red first)")
+        elif (e := future.result()):
+            errors.append(e)
+    return errors
+
+
 def main() -> int:
     # `--case ID` (repeatable) runs only the named cases: a narrow loop while writing a forgery. The full run, with
     # no argument, is what CI and the trust-chain loop do; locally it is skipped while the stamp matches, and
@@ -1594,6 +1640,7 @@ def main() -> int:
     cases = [c for c in CASES if wanted is None or c[0] in wanted]
     if wanted is not None and {c[0] for c in cases} != wanted:
         raise SystemExit(f"GUARD-GAP VALIDATION FAILED: unknown case id(s) {sorted(wanted - {c[0] for c in cases})}")
+    workers = worker_count()
     files = source_files()
     digest = inputs_digest(files)
     if wanted is None and not force and not os.environ.get("CI") and stamped_digest() == digest:
@@ -1601,12 +1648,19 @@ def main() -> int:
               f"full run, so its {len(cases)} case(s) were NOT re-checked. A renamed or moved anchor outside them is not "
               "seen by a skip: run `python3 scripts/validate_guard_gaps.py --force` after one.")
         return 0
-    snap = snapshot(files)
+    # Threads, not processes: a case's work is copying files and waiting on a child guard, both outside the GIL,
+    # and threads keep one process — the forgeries need no pickling, and a Ctrl-C reaches the main thread here,
+    # which cancels what has not started and waits for what has (each removes its own copy); the run directory
+    # goes last, whatever raised. Bounded, never cpu_count() alone: the docstring's § How it runs says why. The
+    # target guards only read their tree, so concurrent cases cannot see each other; one that wrote outside its
+    # copy would race.
+    run_dir = pathlib.Path(tempfile.mkdtemp(prefix="guardgap_run_"))
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="guardgap")
     try:
-        verdicts: dict[str, bool] = {}
-        errors = [e for c in cases if (e := check_case(snap, verdicts, *c))]
+        errors = run_cases(snapshot(run_dir, files), cases, pool)
     finally:
-        shutil.rmtree(snap, ignore_errors=True)
+        pool.shutdown(wait=True, cancel_futures=True)
+        shutil.rmtree(run_dir, ignore_errors=True)
     if errors:
         print("GUARD-GAP VALIDATION FAILED:")
         for e in errors:
@@ -1614,7 +1668,8 @@ def main() -> int:
         return 1
     if wanted is None:
         write_stamp(digest, len(cases))
-    print(f"guard gaps OK: {len(cases)} pinned case(s) hold (closed holes stay rejected, open gaps stay open)")
+    print(f"guard gaps OK: {len(cases)} pinned case(s) hold (closed holes stay rejected, open gaps stay open), "
+          f"{workers} worker(s)")
     return 0
 
 
