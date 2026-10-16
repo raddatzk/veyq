@@ -1,7 +1,7 @@
 ---
 id: cr-release-notices
 title: An instance looks for new releases and tells its Server Owner — console notices and instance mail
-status: planned
+status: in-progress
 satisfies: ["uc.admin.learn-of-new-releases"]
 adrs: ["0097", "0096", "0085", "0048", "0049", "0050", "0065", "0089"]
 invariants:
@@ -25,9 +25,13 @@ Implementation waits for the owner's go on this CR.
 
 - **Use-case:** [uc.admin.learn-of-new-releases](../docs/features/admin/use-cases/uc.admin.learn-of-new-releases.md)
   (coverage `planned`; this CR fills it).
-- **Entry condition: [`cr-veyqctl`](cr-veyqctl.md) phase 1 has landed** — the mirror layout (`releases.json`, per-tag
-  `manifest.json` with `unscheduled`) is what the check reads, and it is defined there. Until it lands, this CR cites it
-  as planned (§ *a sibling CR still in flight*).
+- **Entry condition: [`cr-veyqctl`](cr-veyqctl.md) phase 1 has landed — met (a6552cf6).** The mirror layout is what
+  `scripts/release_assets.py` writes, and its docstring is the definition: `<source>/releases.json` =
+  `{"releases": [{tag, date, prerelease, manifest: "<tag>/manifest.json"}]}` (tag `v<major>.<minor>`, date the UTC
+  day), `<source>/<tag>/manifest.json` = `{release, date, images, unscheduled}`, `unscheduled` refused on a release that
+  does not change the major. Still planned there (§ *a sibling CR still in flight*): the GitHub adapter (`veyqctl`'s
+  phase 2) and the publish uploading `manifest.json` as a release asset — the check's GitHub source reads the Releases
+  API and each candidate's `manifest.json` asset, which exists once that publish lands.
 - **The confirmation is a code, not a link** (owner 2026-10-16; ADR 0097 decision 5): the admin console is reachable
   on localhost only ([ADR 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)) and the instance has no
   address of its own (`uc.admin.setup-server`, "No instance name either"), so a link opened on a phone would reach
@@ -75,7 +79,7 @@ Implementation waits for the owner's go on this CR.
 
 ## Phases
 
-- [ ] **1 contracts.** In `instance.openapi.yaml`, all `x-veyq-channel: admin`, each field with `x-veyq-visibility`,
+- [x] **1 contracts.** In `instance.openapi.yaml`, all `x-veyq-channel: admin`, each field with `x-veyq-visibility`,
   each write with `x-veyq-concurrency`: `getInstanceReleaseNotices` (the check's state — enabled, source, last success
   — and the notices: kind `RELEASE | PLANNED_MAJOR | UNSCHEDULED_MAJOR | WINDOW_REMINDER`, release, date, found at);
   `setInstanceReleaseCheck` (enabled, source); `getInstanceMailSettings` / `updateInstanceMailSettings` (the tenant
