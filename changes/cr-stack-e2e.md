@@ -31,9 +31,12 @@ rejected alternatives and the four refine answers; this CR orders the work. Inbo
 - **There is no remote.** No phase can be proven in CI; each phase's proof is a **local** run of
   `scripts/run_stack_e2e.py` against locally built images (`docker build` of both Dockerfiles), and its log is read.
   The CI job is written in phase 4 and first proven by the first push — after which `stack` is admitted (ADR 0040).
-- **The draft is in the tree, uncommitted**, on the worktree branch `claude/e2e-tests-ci-integration-c53eb0`:
-  `e2e/`, `infra/e2e/docker-compose.e2e.yml`, `scripts/run_stack_e2e.py`, the `e2e` job in `container.yml`. It is
-  the shape, not the build: `TODO(implement)` marks every hole, and the web/ locators are placeholders.
+- **A draft lives on the branch `draft/stack-e2e-l1`** (one commit, never for `main`): `e2e/`,
+  `infra/e2e/docker-compose.e2e.yml`, `scripts/run_stack_e2e.py`, and an `e2e` job in `container.yml`. It is the
+  shape, not the build: `TODO(implement)` marks every hole and the web/ locators are placeholders. It predates ADR
+  0091, so its `container.yml` job (a dispatch-time gate) and its smoke/full tiers are overtaken — take the package,
+  the overlay and the orchestrator from it (`git checkout draft/stack-e2e-l1 -- e2e infra/e2e scripts/run_stack_e2e.py`),
+  not the workflow.
 - [`scripts/run_web_e2e.py`](../scripts/run_web_e2e.py) owns the ADR 0053 sweeps, bound to the dev stack's container
   names and root credential; phase 3 moves them, and `run_web_e2e.py` must stay byte-for-byte in behaviour (its own
   CI job, its `--upgrade` proof, `validate_e2e_discovery.py` / `validate_e2e_canaries.py` import from it).
