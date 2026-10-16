@@ -22,7 +22,7 @@ import { NO_NOTE, encodeShareNote, hasLocaleText, type ShareNote } from './share
 import { SHARE_KEY } from './shareTree'
 import { keyAt, writeKey, zeroEpochKeys, type EpochKeys } from '../../features/spaces/epochs'
 import { isStaleEpoch, openScopeById } from '../../features/spaces/scopes'
-import { ShareRole } from '../../api/generated/sharing'
+import { ShareRole, type ShareGuestStop } from '../../api/generated/sharing'
 
 // The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the
 // key is the binding. `share-key` (the second wrap, `./shareTree.ts`) and `share-memory-name` / `share-note`
@@ -420,6 +420,9 @@ export type ManagedShare = {
   /** True when the link holds no write verifier, whatever its role — so as a READ_WRITE it would refuse every new
    *  guest, and an edit cannot fix that (ADR 0076 point 2): the role edit warns and offers the renew (#303). */
   writeVerifierMissing: boolean
+  /** Why a guest is not served this link now — empty exactly when one is (inbox #457). The guest gate's own answer
+   *  (`ShareGuestGate.guestStops`), worded by `guestStops.ts` and drawn by `ShareGuestStops.vue` on every share row. */
+  guestStops: ShareGuestStop[]
 }
 
 /** List every share on one node visible to a scope member (cr-0104) — the manage-shares panel. Scoped by
@@ -446,6 +449,7 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
       deletable: r.deletable,
       newGuestsRefused: r.newGuestsRefused,
       writeVerifierMissing: r.writeVerifierMissing,
+      guestStops: r.guestStops,
     }))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }

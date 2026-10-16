@@ -60,7 +60,7 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
   shareId: 's', scopeId: SCOPE_ID, nodeId: FOLDER_ID, role: ShareRole.Read, enabled: true, mine: true,
   createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null, sealedNote: null, sealedShareName: null,
   sealedShareKey: 'k', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
-  reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false,
+  reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
   ...over,
 })
 
@@ -249,5 +249,39 @@ describe('FolderShareDialog — the folder\'s links', () => {
     expect(plain.text().split(t('share.roleViewer')).length - 1, 'the role said once').toBe(1)
     expect(named.find('.veyq-row-title').text()).toBe('For Grandma')
     expect(named.find('.folder-share-role').text()).toBe(t('share.roleViewer'))
+  })
+})
+
+// inbox #457: a link the server says serves no guest says why on its row; a fixable requirement opens this dialog's
+// own edit, and a link older than the lifetime its renew.
+describe('FolderShareDialog — a link that serves no guest says why (#457)', () => {
+  it('names the reasons on the row and offers the edit that sets an end date', async () => {
+    listSharesFor.mockResolvedValue([
+      row({ shareId: 'stopped', createdAt: new Date(), guestStops: [{ reason: 'instanceSwitch', capabilityId: 'core.public-shares.contribute' }, { reason: 'linkMaxDays', maxDays: 7 }] }),
+      row({ shareId: 'served' }),
+    ])
+    const w = mountDialog()
+    await flushPromises()
+
+    const rows = w.findAll('.folder-share-row')
+    expect(rows[0]!.findAll('.share-guest-stop').map((s) => s.text())).toEqual([
+      t('share.guestStops.instanceSwitch', { what: t('share.guestStops.entry.contribute') }),
+      t('share.guestStops.linkMaxDays', { days: 7 }),
+    ])
+    expect(rows[1]!.find('.share-guest-stops').exists()).toBe(false)
+
+    expect(rows[0]!.find('.share-guest-stops-edit').text()).toBe(t('share.guestStops.linkMaxDaysFix'))
+    // (that it opens the edit is FolderShareDialog.edit.test.ts's, which mounts the edit view)
+  })
+
+  it('a link older than the lifetime asks for its renew', async () => {
+    listSharesFor.mockResolvedValue([
+      row({ shareId: 'old', createdAt: new Date(Date.now() - 40 * 24 * 3600 * 1000), guestStops: [{ reason: 'linkMaxDays', maxDays: 30 }] }),
+    ])
+    const w = mountDialog()
+    await flushPromises()
+    await w.find('.share-guest-stops-renew').trigger('click')
+    expect(confirmRequest.value?.header).toBe(t('share.reissueTitle'))
+    settleConfirm(false)
   })
 })
