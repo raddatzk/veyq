@@ -1,7 +1,7 @@
 ---
 id: cr-client-address-resolver
 title: One core resolver for a client's address — the rightmost X-Forwarded-For hop no client can write
-status: planned
+status: done
 satisfies: ["cc.security.rate-limit"]
 adrs: ["0094", "0071", "0051", "0065", "0093", "0092", "0064"]
 invariants:
@@ -182,7 +182,7 @@ values) is inbox #472, a follow-up before the moderation CR.
 
 ## Phases
 
-- [ ] **1 backend — the resolver, its setting, the limiter on it.**
+- [x] **1 backend — the resolver, its setting, the limiter on it.**
   - **Order:** write B1 red first, then the fix, then the other tests. B1 is a live defect.
   - **Build:**
     - `ClientAddress` (above).
@@ -259,7 +259,7 @@ values) is inbox #472, a follow-up before the moderation CR.
     - Compose and the chart still turn Quarkus forwarding on at the end of this phase. That is harmless:
       the resolver reads `connection()`, and `remoteAddress()` has no reader left. The commit leaves both targets
       working.
-- [ ] **2 infra + chart — forwarding off on both targets, the setting on Helm.**
+- [x] **2 infra + chart — forwarding off on both targets, the setting on Helm.**
   - **Compose:**
     - Delete `QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING` and the comment above it from
       `infra/docker-compose.prod.yml`.
@@ -283,7 +283,7 @@ values) is inbox #472, a follow-up before the moderation CR.
       refine: a client dry-run prints NOTES on helm v4.0.1.
     - `docker compose -f infra/docker-compose.prod.yml config --no-interpolate | grep -c QUARKUS_HTTP_PROXY` → 0.
     - `validate_compose_posture.py` and `validate_run_config_reference.py` green.
-- [ ] **3 docs — state and the Run and Security pages, in the same CR.**
+- [x] **3 docs — state and the Run and Security pages, in the same CR.**
   - **Superseded prose:** each site in the inventory's prose rows, re-swept here (the CR wrote new prose in phase
     1). The edit shape per site:
     - `cc.security.rate-limit.md`:
@@ -347,4 +347,24 @@ Implementation has the owner's go (2026-10-16).
 
 ## Retrospective
 
-(filled at implementation)
+- **Planning — rule D's limit was reasoned, not run.** O1 said the alias gap of rule A applies to rule D as `const val
+  H = "X-Forwarded-For"`. Rule D matches the literal wherever it stands, so that constant is caught; the real gap is a
+  name assembled from two literals (now guard-gaps case 83). Root: the limit was carried over from rule A by analogy.
+  Fix: a refine that extends a guard runs the alias forgery it names, the same two seconds as any locator.
+- **Execution — the mutation gate was red on equivalent mutants, and the first fix was worse.** The first PIT run
+  scored 93 (15 survivors, all in `ClientAddress`): Kotlin's inline `any`/`none`/`mapIndexed` branches, platform-type
+  null checks and an `indexOf < 0` boundary no input reaches. `avoidCallsTo("kotlin.jvm.internal")` turned it green
+  by dropping every line that calls the package, a third of the scope's mutants and all of `MembershipPolicy`'s;
+  only `mutation_meta_check_backend.py` said so. Reverted; the code avoids the constructs. Harvested as a comment in
+  `backend/core/build.gradle.kts`.
+- **Execution — B5's predicate was false as written.** "Before any datasource line" met Hibernate's static
+  `Database info` banner, printed before config is read; the meant line is the control's connection attempt.
+  Harvested into `changes/README.md` § a bite test must tell "the guard held" apart from "nothing ran".
+- **Found on the way:** the old `AdminChannel.literal` handed hex-only text (`beef`) and out-of-range quads
+  (`999.1.1.1`) to `InetAddress.getByName`, which looks those up as names. The move to `ClientAddress.literal`
+  closed it (dotted quads built from bytes, IPv6 only in the JDK's numeric form).
+- **Two choices taken in the build and stated:** with no header the client is the peer with the socket's port
+  (ADR 0094 decision 3 says so); and NTP is not in the Run docs yet, because nothing stores a port before the
+  moderation CR, whose Run docs ADR 0093 § 10 binds to it.
+- **Next time:** write a class bound for the Kotlin mutation scope with plain loops and non-inline calls from its
+  first line, and run `:core:pitest` before the bites rather than after them.

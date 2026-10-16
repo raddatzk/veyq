@@ -1272,6 +1272,12 @@ it. Its sibling holds too: when a bite asserts that an injection reddens **one**
 against the *named* other case, never against "nothing else went red" — the injection legitimately reddens
 every test that depends on the same branch, and rejecting those turns a correct bite into a false alarm.
 
+**And an order of log lines names the line that proves a step RAN, not a word that step's lines carry.**
+cr-client-address-resolver's boot bite asked that a refused trust list be named "before any datasource line"; the
+refused boot's first lines were Hibernate's static banner `Database info: … JDBC URL [undefined/unknown]`, printed
+before any configuration is read, so the predicate as written was false on the run that proved the point. What it
+meant was "before a connection is attempted" — the control's Flyway `openConnection` line. Name that line.
+
 ### When the CR's gate is a bespoke measurement, bite the MEASUREMENT before trusting its green
 
 **§ *bite-proof a guard* applied one level up.** Every rule around it assumes the gate is `check` or a
