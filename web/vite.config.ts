@@ -180,6 +180,9 @@ export default defineConfig(({ command, mode }) => {
       setupFiles: ['./src/test/setup.ts'],
     },
     build: {
+      // The minifier drops the bundled dependencies' license comments, so their MIT/Apache/BSD notices would never
+      // reach the browser that receives their code. Vite writes them out instead, at a stable, unhashed path.
+      license: { fileName: 'third-party-licenses.txt' },
       rollupOptions: {
         // Two entries: the app (from index.html) and the media Service Worker (cr-inline-video-playback Slice 2).
         // The SW must land at a stable, UNHASHED `/sw.js` so a redeploy is detectable (`updateViaCache:'none'`);
