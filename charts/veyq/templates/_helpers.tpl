@@ -1,7 +1,8 @@
 {{/*
-Fixed object names, NOT release-prefixed. The backend's projected tenant Ingress objects route to a Service
-LITERALLY named `veyq-app` (veyq.tenant.ingress.kubernetes.service-name's default), so the name is part of the
-backend's contract and a release prefix here would have to be threaded back into that config. One release per
+Fixed object names, NOT release-prefixed. The backend's projected tenant HTTPRoutes route to a Service LITERALLY
+named `veyq-app` (veyq.tenant.ingress.kubernetes.service-name's default) and attach to a Gateway literally named
+`veyq` (…gateway-name's default), so both names are part of the backend's contract and a release prefix here
+would have to be threaded back into that config. One release per
 namespace is the shape anyway (values.yaml, top), so the prefix would buy nothing.
 */}}
 
@@ -48,40 +49,52 @@ seccompProfile:
 {{- end }}
 
 {{/*
-The one TLS rule for every Ingress this chart owns — the same three modes the backend applies to the objects
-it projects, so the operator decides once and the bootstrap domain, the store host and the tenant domains all
-carry the same shape. `per-domain` names the object's own name, exactly as the backend does.
-Usage: {{ include "veyq.ingressTls" (dict "root" . "host" <host> "name" <object name>) }}
+Where a chart-owned HTTPRoute attaches — the same rule the backend applies to the routes it projects
+(KubernetesGatewaySink.parentFor), so the operator decides once and the bootstrap domain, the store host and the
+tenant domains all follow one TLS mode: `none` the Gateway's plain-HTTP listener `http`, `shared` its one
+hostname-less HTTPS listener `https`, `per-domain` the HTTPS listener this host has on the Gateway (`listener`).
+The names `http` and `https` are the sink's constants; scripts/chart_meta_check.py reads them from there.
+Usage: {{ include "veyq.routeParent" (dict "root" . "listener" "https-app") }}
 */}}
-{{- define "veyq.ingressTls" -}}
-{{- $mode := .root.Values.ingress.tls.mode -}}
-{{- if ne $mode "none" }}
-  tls:
-    - hosts: [{{ .host | quote }}]
-      secretName: {{ if eq $mode "shared" }}{{ .root.Values.ingress.tls.secretName | quote }}{{ else }}{{ .name | quote }}{{ end }}
+{{- define "veyq.routeParent" -}}
+{{- $mode := .root.Values.gateway.tls.mode -}}
+parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: veyq
+    sectionName: {{ if eq $mode "none" }}http{{ else if eq $mode "shared" }}https{{ else }}{{ .listener }}{{ end }}
+{{- end }}
+
+{{/*
+The chart's own hosts, one per HTTPS listener under `per-domain`: [listener name, hostname, certificate (= the
+route's own object name, exactly as the backend names a tenant's)]. One list, read by gateway.yaml for the
+listeners and by every route for its parent, so a host cannot have a route without a listener or the reverse.
+*/}}
+{{- define "veyq.chartHosts" -}}
+- [https-app, {{ required "domain is required" .Values.domain | quote }}, veyq-app]
+- [https-store, {{ required "storeDomain is required" .Values.storeDomain | quote }}, veyq-garage]
+{{- with .Values.admin.domain }}
+- [https-admin, {{ . | quote }}, veyq-admin]
 {{- end }}
 {{- end }}
 
 {{/*
-The annotation map every Ingress receives — the operator's `ingress.annotations`, plus the ACME opt-in's
-`cert-manager.io/issuer` when it is on. It has TWO consumers and both must read it from here: the chart's own
-Ingress metadata below, and app-configmap.yaml, which hands the same map to the backend for every tenant
-Ingress it projects at runtime. A merge done at only one of them is a chart whose own hosts get certificates
-while every tenant domain silently gets none (scripts/chart_meta_check.py (ix) and (x) assert the two apart).
+The annotation map the chart's Gateway and every tenant ListenerSet receive — the operator's
+`gateway.annotations`, plus, when the ACME opt-in is on, `cert-manager.io/issuer: veyq-acme` and
+`acme.cert-manager.io/http01-parentreffallback: "true"` (the latter sends each ListenerSet's HTTP-01 challenge
+route to the Gateway's one port-80 listener; ADR 0064). It has TWO consumers and both must read it from here: the
+Gateway's metadata in gateway.yaml, and app-configmap.yaml, which hands the same map to the backend for every
+ListenerSet it projects at runtime. A merge done at only one of them is a chart whose own hosts get certificates
+while every tenant domain silently gets none (scripts/chart_meta_check.py (ix) and (x) assert the two apart). An
+HTTPRoute carries no certificate and gets none of it.
 Returned as YAML because `include` can only return a string; `{}` when empty, so a consumer's `with`/`range`
 over `fromYaml` sees an empty map. The merge copies — `set` on .Values itself would leak into every later read.
 */}}
-{{- define "veyq.ingressAnnotations" -}}
-{{- $annotations := deepCopy (.Values.ingress.annotations | default dict) -}}
-{{- if (.Values.ingress.tls.acme | default dict).enabled -}}
+{{- define "veyq.gatewayAnnotations" -}}
+{{- $annotations := deepCopy (.Values.gateway.annotations | default dict) -}}
+{{- if (.Values.gateway.tls.acme | default dict).enabled -}}
 {{- $_ := set $annotations "cert-manager.io/issuer" "veyq-acme" -}}
+{{- $_ := set $annotations "acme.cert-manager.io/http01-parentreffallback" "true" -}}
 {{- end -}}
 {{- toYaml $annotations -}}
-{{- end }}
-
-{{- define "veyq.ingressMetadata" -}}
-{{- with (include "veyq.ingressAnnotations" . | fromYaml) }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-{{- end }}
 {{- end }}

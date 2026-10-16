@@ -1,8 +1,9 @@
-# The ACME opt-in's render — `lint-values.yaml` plus `ingress.tls.acme`. scripts/chart_meta_check.py renders
+# The ACME opt-in's render — `lint-values.yaml` plus `gateway.tls.acme`. scripts/chart_meta_check.py renders
 # EVERY file in this directory and runs all of its assertions over each, so this second file exists for one
-# reason: the opt-in changes what the chart emits (an Issuer, an annotation on every Ingress and in the app's
-# properties file), and a shape no values file selects is a shape nothing renders. A value path a file here leaves
-# at its default is still unchecked; add a file rather than widen this one.
+# reason: the opt-in changes what the chart emits (an Issuer, per-host HTTPS listeners, the redirect route, the
+# annotations on the Gateway and in the app's properties file), and a shape no values file selects is a shape
+# nothing renders. A value path a file here leaves at its default is still unchecked; add a file rather than widen
+# this one.
 #
 # NOT a template for an installation — same throwaways as lint-values.yaml. The base is repeated rather than
 # layered (`-f lint-values.yaml -f acme-values.yaml`) because the guard renders each file ON ITS OWN: a file that
@@ -18,17 +19,17 @@ networkPolicy:
   ingressFrom:
     - namespaceSelector:
         matchLabels:
-          kubernetes.io/metadata.name: ingress-nginx
+          kubernetes.io/metadata.name: traefik
       podSelector:
         matchLabels:
-          app.kubernetes.io/name: ingress-nginx
+          app.kubernetes.io/name: traefik
 secrets:
   mariadbPassword: ci-only-not-a-password
   mariadbRootPassword: ci-only-not-a-password
   garageRpcSecret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   garageAdminToken: ci-only-not-a-token
-ingress:
-  className: nginx
+gateway:
+  className: traefik
   tls:
     mode: per-domain
     acme:

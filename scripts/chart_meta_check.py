@@ -7,9 +7,10 @@ operator, because the chart generates no secret and a bare render is refused by 
 render, asserts — deriving every anchor from the source rather than listing it:
 
   i.   **No rendered object carries the backend's ingress-ownership value.** The Kubernetes sink lists the
-       Ingress objects it owns BY `app.kubernetes.io/managed-by: <its value>` and deletes over that list, so a
-       chart object wearing that value is deleted by the first regenerate. Both the key and the value are read
-       out of `KubernetesIngressSink.kt`'s `OWNER_LABEL`/`OWNER_VALUE` constants and never spelled here — this
+       `HTTPRoute`s and `ListenerSet`s it owns BY `app.kubernetes.io/managed-by: <its value>` and deletes over
+       that list, so a chart object wearing that value is deleted by the first regenerate. Both the key and the
+       value are read out of `KubernetesGatewaySink.kt`'s `OWNER_LABEL`/`OWNER_VALUE` constants and never spelled
+       here — this
        file is text, and a guard that scans for a literal must not become a copy of what it forbids. Every
        label map is checked: object metadata, pod templates, selectors.
   ii.  **The app's config-secret path is on a PersistentVolumeClaim, and its pod sets `fsGroup` to the image's
@@ -31,32 +32,34 @@ render, asserts — deriving every anchor from the source rather than listing it
        default seccomp profile, and sets `readOnlyRootFilesystem` (ADR 0071 §1, the one field beyond
        `restricted`). The admin image was made unprivileged for exactly this (ADR 0065,
        `validate_images_run_unprivileged.py`); this is the chart-side half of that property.
-  vi.  **The admin surface is reachable by default through a ClusterIP Service and NO Ingress.** ADR 0065's
+  vi.  **The admin surface is reachable by default through a ClusterIP Service and NO route.** ADR 0065's
        localhost-only default, translated as a property: `kubectl port-forward` is this target's `127.0.0.1`
        bind, and it is what keeps first-run setup independent of DNS and TLS. The admin container is the one
-       whose image repository is `veyq-admin`; an Ingress routing to its Service in a render that leaves
+       whose image repository is `veyq-admin`; an `HTTPRoute` with a backend on its Service in a render that leaves
        `admin.domain` unset, or a Service type other than ClusterIP, is a red.
-  vii. **A render that does not opt into `ingress.tls.acme` carries no trace of it** — no `Issuer`, and no
-       `cert-manager.io/` key on any object's annotations or in the app's properties file. The opt-in is off by
-       default so that nothing moves (ADR 0064).
-  viii.**No render contains a cluster-scoped kind** (`ClusterIssuer`, `ClusterRole`, `ClusterRoleBinding`, and
-       the rest of `CLUSTER_SCOPED`), and **a render that opts in contains exactly one `Issuer`, named
+  vii. **A render that does not opt into `gateway.tls.acme` carries no trace of it** — no `Issuer`, and no
+       `cert-manager.io/` key (the issuer's or `acme.cert-manager.io/`'s) on any object's annotations or in the
+       app's properties file. The opt-in is off by default so that nothing moves (ADR 0064).
+  viii.**No render contains a cluster-scoped kind** (`ClusterIssuer`, `ClusterRole`, `ClusterRoleBinding`,
+       `GatewayClass`, and the rest of `CLUSTER_SCOPED`), and **a render that opts in contains exactly one `Issuer`, named
        `veyq-acme`**, solving HTTP-01 only. Nothing cluster-wide is the self-hostability bar ADR 0064 states;
        a `ClusterIssuer` is the easy wrong turn, which is why it is named.
-  ix.  **In an opted-in render every `Ingress` carries `cert-manager.io/issuer: veyq-acme`, no second issuer
-       annotation, and `spec.tls[0].secretName` equal to its own name** — the ingress-shim shape the backend
-       projects under `per-domain`, held on the chart's own objects.
-  x.   **In an opted-in render the app's properties file carries `tls.mode=per-domain` and the quoted issuer
-       annotation.** This is the half that reaches tenant `Ingress` objects the backend writes at runtime, and
-       it is asserted SEPARATELY from (ix): the annotation map has two consumers in the chart (the chart's own
-       `Ingress` metadata and this file), and a helper wired into one of them is a render where (ix) is green
-       and every tenant domain silently gets no certificate.
-  xii. **The admin listener has a Service of its own, no Ingress names it, and the admin surface points at it.**
+  ix.  **In an opted-in render the `Gateway` carries `cert-manager.io/issuer: veyq-acme`, the
+       `acme.cert-manager.io/http01-parentreffallback: "true"` annotation, and no second issuer annotation;
+       and no `HTTPRoute` carries any `cert-manager.io/` annotation** — cert-manager reads the `Gateway` and the
+       `ListenerSet`s, and a route carries no certificate (ADR 0064). The listeners' `certificateRefs` are
+       (xxi)'s, held in every `per-domain` render whether or not it opts in.
+  x.   **In an opted-in render the app's properties file carries `tls.mode=per-domain` and both quoted
+       annotations.** This is the half that reaches the tenant `ListenerSet`s the backend writes at runtime, and
+       it is asserted SEPARATELY from (ix): the annotation map has two consumers in the chart (the `Gateway`'s
+       metadata and this file), and a helper wired into one of them is a render where (ix) is green and every
+       tenant domain silently gets no certificate.
+  xii. **The admin listener has a Service of its own, no route names it, and the admin surface points at it.**
        The listener's port is the app container's `VEYQ_ADMIN_CHANNEL_PORT` if set, else `VeyqConfig.kt`'s
        `@WithDefault` on `AdminChannel.port()`; the app container must declare it. Every Service targeting that
        port selects the app pods and exposes that port ALONE — a second port on the public app Service would put
-       it behind every Ingress aimed at that Service, the chart's, a projected tenant one or an operator's
-       (ADR 0065). No Ingress in any render routes to such a Service, `admin.domain` set or not. The admin
+       it behind every route aimed at that Service, the chart's, a projected tenant one or an operator's
+       (ADR 0065). No `HTTPRoute` in any render has a backend on such a Service, `admin.domain` set or not. The admin
        container's `BACKEND_URL` names one of them at its Service port — the public port 404s every Server-Owner
        operation, so an admin surface pointed there works for nothing.
   xiii.**A NetworkPolicy admits the public port from `networkPolicy.ingressFrom` exactly, and the admin port from
@@ -68,7 +71,7 @@ render, asserts — deriving every anchor from the source rather than listing it
        `ingressFrom` (ADR 0071 §3: "anywhere" is how any pod forged the forwarded client address). Policies are a
        union, so one permissive rule anywhere opens the port; that is why every rule is read. The positive control
        on the same predicate: some rule admits the public port from `ingressFrom`, or the policy has cut the
-       ingress controller off from the app. Skipped in a render whose values turn policies off; (xvii) owns that.
+       gateway's data plane off from the app. Skipped in a render whose values turn policies off; (xvii) owns that.
   xv.  **A default-deny selects every rendered pod.** Some NetworkPolicy has both `Ingress` and `Egress` in
        `policyTypes`, no rule in either, and a `podSelector.matchLabels` that selects every workload's pod
        template — so every other policy is an allow-list rather than a widening of an open default.
@@ -79,15 +82,15 @@ render, asserts — deriving every anchor from the source rather than listing it
   xvii.**`networkPolicy.enabled=false` renders no NetworkPolicy at all,** the admin listener's included — the
        operator who turns it off owns reachability, and a policy left behind would be one they do not know they
        have. The positive control: the same file's default render carries some.
-  xviii.**The schema refuses an enabled policy set with no ingress controller named, naming `ingressFrom`** — both
-       an empty list and no key — while the same lint with it set passes. The chart never guesses the
-       controller's namespace or labels (ADR 0071 §3), so an install without the key must fail and say why.
+  xviii.**The schema refuses an enabled policy set with no gateway data plane named, naming `ingressFrom`** — both
+       an empty list and no key — while the same lint with it set passes. The chart never guesses the data
+       plane's namespace or labels (ADR 0071 §3), so an install without the key must fail and say why.
   xi.  **The schema refuses the three contradictions of the opt-in, naming the key** — `acme.enabled` with a
        mode other than `per-domain`, with an empty `email`, and beside an operator's own
        `cert-manager.io/cluster-issuer` annotation — each a `helm lint` that must exit non-zero AND whose output
        names the offending key; the same lint without the contradiction must pass (the positive control). An
        exit code alone cannot tell "the schema held" from any other failure. Measured on helm v4.0.1: lint
-       prints the schema violation on STDOUT (`[ERROR] values.yaml: - at '/ingress/…'`) and only a summary on
+       prints the schema violation on STDOUT (`[ERROR] values.yaml: - at '/gateway/…'`) and only a summary on
        stderr, so both streams are read.
   xiv. **A digest the values pin is the digest the pod runs.** Where a values file sets `image.digest` /
        `admin.image.digest`, every container running that image renders as `…@<that digest>`; where it sets none,
@@ -96,6 +99,25 @@ render, asserts — deriving every anchor from the source rather than listing it
   xix. **The app container's store variables are the bundled-store hint, and no credential of a store**
        (cr-store-connection-in-admin-web phase 4, ADR 0089): `VEYQ_BUNDLED_STORE_ENDPOINT`, `_ADMIN_ENDPOINT` and
        `_ADMIN_TOKEN` are present, and no `VEYQ_BLOB_STORE_*` variable is — the store setting lives in the database.
+  xx.  **No rendered object is a `networking.k8s.io` `Ingress`** (ADR 0064: routing is the Gateway API, and the
+       chart keeps nothing for `Ingress`). A render that brings one back is red whatever it routes.
+  xxi. **Every route hangs off the chart's one `Gateway`, on the listener the TLS mode names, and the `Gateway`
+       has the listeners the backend's sink attaches to.** Exactly one `Gateway`, named what the properties
+       file's `gateway-name` says; `allowedListeners` from `Same` namespace only, so the backend's `ListenerSet`s
+       attach and no other namespace's do; a plain-HTTP listener on port 80 with no hostname named the sink's
+       `HTTP_LISTENER`; under `shared` an HTTPS listener with no hostname named the sink's `SHARED_HTTPS_LISTENER`,
+       referencing the values' `secretName`. Both names are read out of `KubernetesGatewaySink.kt`, because a
+       renamed listener leaves every tenant route unattached with no error on either side. Every rendered
+       `HTTPRoute`'s every parent is that `Gateway` by a `sectionName` it has; under `none` every route's is the
+       HTTP listener; otherwise every route but the redirect sits on an HTTPS listener, and under `per-domain` that
+       listener's `hostname` is the route's one host and its `certificateRefs` the route's OWN name — the shape the
+       sink gives a tenant's `ListenerSet`, held on the chart's own hosts. And under `per-domain`/`shared` exactly
+       one route on the HTTP listener redirects to `https`, with no hostname, so cert-manager's host-and-exact-path
+       challenge routes outrank it.
+  xxii.**The backend's Role grants the two kinds the sink writes and nothing on `gateways` or `ingresses`.** Every
+       rule naming `gateway.networking.k8s.io` grants only `httproutes` and `listenersets` (no `gateways`, no `*`),
+       and some rule grants both — the positive control, or the sink could not reconcile at all (ADR 0064: the
+       backend can neither add nor change a listener on the chart's `Gateway`).
 
 The app container is recognised the way the compose guards recognise the app service: an image whose
 repository is `veyq` — never `veyq-admin` or any other veyq-namespaced sibling — with the datasource
@@ -104,7 +126,8 @@ so is an empty `ci/` directory.
 
 **The defect that bought it — none in the chart itself, which is new with this file; each assertion pins a
 defect that was live elsewhere.** (i) is the sink's own deletion semantics, held on the backend half by
-`KubernetesIngressSinkTest.anIngressThisSinkDoesNotOwnSurvivesARegenerate`; this is the chart half. (ii) is
+`KubernetesGatewaySinkTest.anHttpRouteThisSinkDoesNotOwnSurvivesARegenerate` and
+`KubernetesGatewayTlsPerDomainTest.aListenerSetThisSinkDoesNotOwnSurvivesARegenerate`; this is the chart half. (ii) is
 inbox #26 finding (g), found at refine by measuring that a PVC does not seed ownership — the same
 `AccessDeniedException` restart-loop the compose recipe already paid for once
 (`validate_app_volume_ownership.py`'s docstring). (iii) is inbox #121's undecided update mechanism, stated as
@@ -119,17 +142,21 @@ three halves was bitten by injection (template, schema pattern, the `ci/` file).
 narrowed public port in (xiii) and (xv)–(xviii) came with the NetworkPolicy set (ADR 0071, inbox #162): live when
 written — no container had a read-only root, and the one policy admitted the app's public port from any pod in the
 cluster, which could therefore forge the forwarded address the per-IP rate limiter keys on. Run against that chart,
-each of them was red; each was then bitten by a template or schema injection.
+each of them was red; each was then bitten by a template or schema injection. (xx)–(xxii) came with the move from
+`Ingress` to the Gateway API (cr-helm-gateway-api): the chart rendered three `Ingress` objects and a Role on
+`ingresses` when they were written, and each was bitten by a template injection.
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
 the manifests say and nothing about a cluster: not that a StorageClass exists for the claim, not that the
-ingress controller honours the annotations, not that cert-manager is installed or that an `Issuer` it accepts
+Gateway API CRDs are installed or that the rendered objects pass their schemas (no CRD schema is in this tree —
+a field the CRD rejects renders green here), not that the implementation behind `gateway.className` accepts a
+route, supports `ListenerSet` or the redirect's Extended `scheme`, not that cert-manager is installed or that an `Issuer` it accepts
 ever obtains a certificate (no cluster runs here — HTTP-01 reachability, the CA, the account key's lifecycle are
 all outside), not that the images exist to be pulled, not that a `restricted` namespace actually admits the pods
 (the standard has fields this does not enumerate — it checks the four the chart sets, and a future field the
 standard adds is out of reach). It renders only the values files in `ci/`, so a value path none of them sets is
-checked at its default alone — `admin.domain` set, `mariadb.enabled` false, `ingress.tls.mode: shared` and
-`per-domain` without the opt-in are rendered by nobody here. (xiii) proves the policy is written, not that a CNI
+checked at its default alone — `mariadb.enabled` false and `gateway.tls.mode: per-domain` without the opt-in are
+rendered by nobody here (`shared`, with `admin.domain` set, is `shared-values.yaml`'s). (xiii) proves the policy is written, not that a CNI
 enforces it — on a cluster whose CNI ignores NetworkPolicy, any pod reaches the admin port (ADR 0065 residual
 (ii)); the same holds for (xv)–(xvii), and the egress the policies narrow is rendered but asserted by nobody. (v)
 requires the read-only root, not that each container has an `emptyDir` for every path it writes: a missed scratch
@@ -172,7 +199,7 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CHART = ROOT / "charts" / "veyq"
 CI_DIR = CHART / "ci"
-SINK_KT = backend_tree.source_file("me.raddatz.veyq.core.tenant.KubernetesIngressSink")
+SINK_KT = backend_tree.source_file("me.raddatz.veyq.core.tenant.KubernetesGatewaySink")
 CONFIG_KT = backend_tree.source_file("me.raddatz.veyq.core.config.VeyqConfig")
 DOCKERFILE = ROOT / "Dockerfile"
 
@@ -182,10 +209,10 @@ STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECAS
 WORKDIR = re.compile(r"^\s*WORKDIR\s+(\S+)\s*$", re.IGNORECASE)
 USER = re.compile(r"^\s*USER\s+(\S+)\s*$", re.IGNORECASE)
 KT_DEFAULT = re.compile(r'@WithDefault\("([^"]*)"\)\s*\n\s*fun\s+configSecretFile\s*\(\s*\)')
-# `const val OWNER_LABEL = "…"` / `const val OWNER_VALUE = "…"` — the sink's own constants, read not retyped.
+# `const val OWNER_LABEL = "…"` / `OWNER_VALUE` / the two listener names — the sink's own constants, read not retyped.
 KT_ADMIN_PORT = re.compile(r'interface\s+AdminChannel\s*\{.*?@WithDefault\("(\d+)"\)\s*\n\s*fun\s+port\s*\(\s*\)', re.DOTALL)
 ADMIN_PORT_ENV = "VEYQ_ADMIN_CHANNEL_PORT"
-KT_CONST = re.compile(r'const\s+val\s+(OWNER_LABEL|OWNER_VALUE)\s*=\s*"([^"]+)"')
+KT_CONST = re.compile(r'const\s+val\s+(OWNER_LABEL|OWNER_VALUE|HTTP_LISTENER|SHARED_HTTPS_LISTENER)\s*=\s*"([^"]+)"')
 APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
 DB_IMAGE = re.compile(r"(?:^|/)mariadb(?::|$)")
 ADMIN_IMAGE = re.compile(r"(?:^|/)veyq-admin(?::|$)")
@@ -193,20 +220,24 @@ WORKLOADS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
 # Kinds that exist only cluster-wide. The chart installs into one namespace and holds nothing beyond it.
 CLUSTER_SCOPED = {
     "ClusterIssuer", "ClusterRole", "ClusterRoleBinding", "Namespace", "CustomResourceDefinition",
-    "PersistentVolume", "StorageClass", "IngressClass", "PriorityClass",
+    "PersistentVolume", "StorageClass", "IngressClass", "GatewayClass", "PriorityClass",
     "ValidatingWebhookConfiguration", "MutatingWebhookConfiguration",
 }
 # The opt-in's contract names — fixed, like every object name in the chart (`_helpers.tpl`), and named in ADR 0064.
 ISSUER_NAME = "veyq-acme"
 ISSUER_ANNOTATION = "cert-manager.io/issuer"
+# A ListenerSet's HTTP-01 challenge goes to the parent Gateway's port-80 listener (cert-manager 1.21; ADR 0064).
+FALLBACK_ANNOTATION = "acme.cert-manager.io/http01-parentreffallback"
+# Matched as a substring: the issuer keys and `acme.cert-manager.io/` alike are the opt-in's trace.
 CERT_MANAGER_PREFIX = "cert-manager.io/"
+GATEWAY_GROUP = "gateway.networking.k8s.io"
 APP_PROPERTIES = "application.properties"
 # (xi) the contradictions: the `--set` that makes an opted-in values file contradictory, and the key its refusal
 # must name. `mode=shared` carries a secretName so the refusal cannot be the `shared` rule's instead.
 CONTRADICTIONS = [
-    (["--set", "ingress.tls.mode=shared", "--set", "ingress.tls.secretName=x"], "/ingress/tls/mode"),
-    (["--set", "ingress.tls.acme.email="], "/ingress/tls/acme/email"),
-    (["--set", "ingress.annotations.cert-manager\\.io/cluster-issuer=x"], "cert-manager.io~1cluster-issuer"),
+    (["--set", "gateway.tls.mode=shared", "--set", "gateway.tls.secretName=x"], "/gateway/tls/mode"),
+    (["--set", "gateway.tls.acme.email="], "/gateway/tls/acme/email"),
+    (["--set", "gateway.annotations.cert-manager\\.io/cluster-issuer=x"], "cert-manager.io~1cluster-issuer"),
 ]
 
 errors: list[str] = []
@@ -262,6 +293,19 @@ def pod_spec(obj: dict) -> dict | None:
     if obj["kind"] == "CronJob":
         spec = ((spec.get("jobTemplate") or {}).get("spec") or {})
     return ((spec.get("template") or {}).get("spec")) or None
+
+
+def route_backends(obj: dict) -> list[str]:
+    """Every Service an `HTTPRoute` sends traffic to — the backend refs of every rule (a ref's kind defaults to
+    Service, and a ref of another kind is no Service of this chart)."""
+    if obj.get("kind") != "HTTPRoute":
+        return []
+    return [
+        ref.get("name")
+        for rule in (obj.get("spec") or {}).get("rules") or []
+        for ref in rule.get("backendRefs") or []
+        if ref.get("kind", "Service") == "Service"
+    ]
 
 
 def is_app_container(container: dict) -> bool:
@@ -348,7 +392,7 @@ def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
 
 
 def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list) -> None:
-    """(xii) and (xiii): the admin listener's Service, the Ingresses that must not name it, and the policy."""
+    """(xii) and (xiii): the admin listener's Service, the routes that must not name it, and the policy."""
     workloads = [(o, s) for o in rendered if (s := pod_spec(o))]
     pod_labels = {name_of(o): ((o.get("spec") or {}).get("template") or {}).get("metadata", {}).get("labels") or {} for o, _ in workloads}
     app = next(((o, c) for o, s in workloads for c in s.get("containers") or [] if is_app_container(c)), None)
@@ -379,21 +423,15 @@ def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, in
         listener_services[name] = hits[0].get("port")
         if len(hits) != len(ports):
             errors.append(
-                f"(xii) {tag}: {name_of(obj)} exposes the admin listener beside another port — every Ingress aimed at "
+                f"(xii) {tag}: {name_of(obj)} exposes the admin listener beside another port — every route aimed at "
                 f"that Service could then reach it. The listener gets a Service of its own (ADR 0065)."
             )
     if not listener_services:
         errors.append(f"(xii) {tag}: no Service selects the app pods on the admin listener's port {admin_port} — the admin surface has nothing to reach")
     for obj in rendered:
-        if obj.get("kind") != "Ingress":
-            continue
-        spec = obj.get("spec") or {}
-        backends = [((spec.get("defaultBackend") or {}).get("service") or {}).get("name")]
-        backends += [((p.get("backend") or {}).get("service") or {}).get("name")
-                     for r in spec.get("rules") or [] for p in ((r.get("http") or {}).get("paths") or [])]
-        for backend in backends:
+        for backend in route_backends(obj):
             if backend in listener_services:
-                errors.append(f"(xii) {tag}: {name_of(obj)} routes to {backend}, the admin listener's Service — no Ingress may, admin.domain set or not (ADR 0065)")
+                errors.append(f"(xii) {tag}: {name_of(obj)} routes to {backend}, the admin listener's Service — no route may, admin.domain set or not (ADR 0065)")
     backend_url = next((e.get("value") for e in admin[1].get("env") or [] if e.get("name") == "BACKEND_URL"), None)
     target = re.fullmatch(r"https?://([^:/]+):(\d+)/?", str(backend_url or ""))
     if target is None or listener_services.get(target.group(1)) != int(target.group(2)):
@@ -428,7 +466,7 @@ def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, in
                 f"matching the admin pod and no other pod may reach it (ADR 0065)"
             )
     if not public_from_ingress:
-        errors.append(f"(xiii) {tag}: no NetworkPolicy rule admits the app's public port from networkPolicy.ingressFrom — the ingress controller could not reach the app")
+        errors.append(f"(xiii) {tag}: no NetworkPolicy rule admits the app's public port from networkPolicy.ingressFrom — the gateway's data plane could not reach the app")
 
 
 def ingress_rules(rendered: list[dict], labels: dict) -> list[tuple[dict, dict]]:
@@ -496,12 +534,104 @@ def app_properties(rendered: list[dict]) -> str | None:
     return None
 
 
+def check_rbac(tag: str, rendered: list[dict]) -> None:
+    """(xx) no Ingress, and (xxii) the Role: the sink's two kinds, nothing on gateways or ingresses."""
+    for obj in rendered:
+        if obj.get("kind") == "Ingress" and str(obj.get("apiVersion", "")).startswith("networking.k8s.io/"):
+            errors.append(f"(xx) {tag}: {name_of(obj)} is a networking.k8s.io Ingress — routing is the Gateway API (ADR 0064), and the chart keeps nothing for Ingress")
+    granted: set[str] = set()
+    for obj in rendered:
+        if obj.get("kind") != "Role":
+            continue
+        for rule in obj.get("rules") or []:
+            resources = set(rule.get("resources") or [])
+            if "ingresses" in resources:
+                errors.append(f"(xxii) {tag}: {name_of(obj)} grants {rule.get('verbs')} on ingresses — the sink writes Gateway API objects only")
+            if GATEWAY_GROUP not in (rule.get("apiGroups") or []) and "*" not in (rule.get("apiGroups") or []):
+                continue
+            extra = sorted(resources - {"httproutes", "listenersets"})
+            if extra:
+                errors.append(
+                    f"(xxii) {tag}: {name_of(obj)} grants {rule.get('verbs')} on {extra} in {GATEWAY_GROUP} — the backend's Role "
+                    f"names httproutes and listenersets only; on `gateways` it could add a listener the chart's Gateway never admitted (ADR 0064)"
+                )
+            granted |= resources & {"httproutes", "listenersets"}
+    if rendered and granted != {"httproutes", "listenersets"}:
+        errors.append(f"(xxii) {tag}: no Role grants the sink both httproutes and listenersets (granted: {sorted(granted) or 'none'}) — it could not reconcile tenant routing")
+
+
+def check_gateway(tag: str, tls: dict, rendered: list[dict], properties: str) -> None:
+    """(xxi) one Gateway, the sink's listeners on it, and every route on the listener its TLS mode names."""
+    mode = tls.get("mode") or "none"  # the chart's default
+    gateways = [o for o in rendered if o.get("kind") == "Gateway"]
+    configured = next((line.split("=", 1)[1].strip() for line in properties.splitlines()
+                       if line.strip().startswith("veyq.tenant.ingress.kubernetes.gateway-name=")), None)
+    if len(gateways) != 1:
+        errors.append(f"(xxi) {tag}: the render holds {len(gateways)} Gateways ({[name_of(o) for o in gateways]}) — the chart owns exactly one")
+        return
+    gateway = gateways[0]
+    name = (gateway.get("metadata") or {}).get("name")
+    spec = gateway.get("spec") or {}
+    if configured != name:
+        errors.append(f"(xxi) {tag}: the app's properties file names gateway-name={configured!r}, but the chart's Gateway is {name!r} — every tenant ListenerSet and route would name a parent that does not exist")
+    allowed = ((spec.get("allowedListeners") or {}).get("namespaces") or {}).get("from")
+    if allowed != "Same":
+        errors.append(f"(xxi) {tag}: {name_of(gateway)} admits ListenerSets from {allowed!r}, not `Same` — the backend's ListenerSets attach from this namespace and no other namespace's may")
+    listeners = {l.get("name"): l for l in spec.get("listeners") or []}
+    if len(listeners) != len(spec.get("listeners") or []):
+        errors.append(f"(xxi) {tag}: {name_of(gateway)} repeats a listener name — a route's sectionName could not say which one it means")
+    http = listeners.get(http_listener)
+    if http_listener and (http is None or http.get("protocol") != "HTTP" or http.get("port") != 80 or http.get("hostname")):
+        errors.append(f"(xxi) {tag}: {name_of(gateway)} has no hostname-less HTTP listener on port 80 named `{http_listener}` (the sink's HTTP_LISTENER): {http!r}")
+    if mode == "shared" and shared_listener:
+        shared = listeners.get(shared_listener)
+        refs = [c.get("name") for c in (((shared or {}).get("tls") or {}).get("certificateRefs") or [])]
+        if shared is None or shared.get("protocol") != "HTTPS" or shared.get("hostname") or refs != [tls.get("secretName")]:
+            errors.append(
+                f"(xxi) {tag}: under `shared` {name_of(gateway)} needs a hostname-less HTTPS listener named `{shared_listener}` (the "
+                f"sink's SHARED_HTTPS_LISTENER) referencing {tls.get('secretName')!r} — found {shared!r}"
+            )
+    redirects = 0
+    for route in (o for o in rendered if o.get("kind") == "HTTPRoute"):
+        rspec = route.get("spec") or {}
+        is_redirect = any(f.get("type") == "RequestRedirect" for rule in rspec.get("rules") or [] for f in rule.get("filters") or [])
+        for parent in rspec.get("parentRefs") or []:
+            listener = listeners.get(parent.get("sectionName"))
+            if parent.get("kind", "Gateway") != "Gateway" or parent.get("group", GATEWAY_GROUP) != GATEWAY_GROUP or parent.get("name") != name or listener is None:
+                errors.append(f"(xxi) {tag}: {name_of(route)} has parent {parent!r} — every chart route hangs off a listener of the chart's Gateway `{name}`, named by sectionName")
+                continue
+            if is_redirect:
+                if listener is not http or rspec.get("hostnames") or (((rspec.get("rules") or [{}])[0].get("filters") or [{}])[0].get("requestRedirect") or {}).get("scheme") != "https":
+                    errors.append(f"(xxi) {tag}: {name_of(route)} redirects, but not host-less to https on the HTTP listener — cert-manager's challenge routes must outrank it, and only https is the point")
+                redirects += 1
+            elif mode == "none":
+                if listener is not http:
+                    errors.append(f"(xxi) {tag}: {name_of(route)} sits on listener `{parent.get('sectionName')}` under tls.mode none — every route attaches to the HTTP listener, as the sink's do")
+            elif listener.get("protocol") != "HTTPS":
+                errors.append(f"(xxi) {tag}: {name_of(route)} sits on the plain-HTTP listener under tls.mode {mode} — it must be served over HTTPS, as the sink's routes are")
+            elif mode == "per-domain":
+                refs = [c.get("name") for c in ((listener.get("tls") or {}).get("certificateRefs") or [])]
+                own = (route.get("metadata") or {}).get("name")
+                if [listener.get("hostname")] != list(rspec.get("hostnames") or []) or refs != [own]:
+                    errors.append(
+                        f"(xxi) {tag}: {name_of(route)} sits on listener `{parent.get('sectionName')}` (hostname {listener.get('hostname')!r}, "
+                        f"certificateRefs {refs}) — under per-domain a host's listener covers exactly its route's host and references "
+                        f"the route's OWN name {own!r}, the shape the sink gives every tenant ListenerSet"
+                    )
+    wanted = 0 if mode == "none" else 1
+    if redirects != wanted:
+        errors.append(f"(xxi) {tag}: {redirects} redirect route(s) under tls.mode {mode}, expected {wanted} — the chart, not an implementation's default, redirects :80 to https whenever HTTPS is served")
+
+
 # --- the anchors, read from the source ---
 
 consts = dict((m.group(1), m.group(2)) for m in KT_CONST.finditer(SINK_KT.read_text()))
 owner_label, owner_value = consts.get("OWNER_LABEL"), consts.get("OWNER_VALUE")
+http_listener, shared_listener = consts.get("HTTP_LISTENER"), consts.get("SHARED_HTTPS_LISTENER")
 if not owner_label or not owner_value:
     errors.append(f"{SINK_KT.relative_to(ROOT)}: OWNER_LABEL/OWNER_VALUE constants not found — the ownership anchor has moved")
+if not http_listener or not shared_listener:
+    errors.append(f"{SINK_KT.relative_to(ROOT)}: HTTP_LISTENER/SHARED_HTTPS_LISTENER constants not found — the listener-name anchor has moved")
 
 stages = runtime_stages()
 users = {name: last_match(USER, body) for name, body in stages.items()}
@@ -529,8 +659,9 @@ if default_admin_port is None:
 def check(values_file: pathlib.Path) -> list[dict]:
     tag = values_file.name
     values = yaml.safe_load(values_file.read_text()) or {}
-    ingress = values.get("ingress") or {}
-    acme = bool((((ingress.get("tls") or {}).get("acme")) or {}).get("enabled"))
+    gateway = values.get("gateway") or {}
+    tls = gateway.get("tls") or {}
+    acme = bool((tls.get("acme") or {}).get("enabled"))
     admin_domain = bool((values.get("admin") or {}).get("domain"))
 
     first = render(values_file)
@@ -647,7 +778,7 @@ def check(values_file: pathlib.Path) -> list[dict]:
     if first and app_containers == 0:
         errors.append(f"{tag}: no container in the render runs the app image — either the chart stopped deploying the app, or this guard no longer recognises it")
 
-    # (vi) the admin surface: a ClusterIP Service, and no Ingress unless admin.domain is set.
+    # (vi) the admin surface: a ClusterIP Service, and no route unless admin.domain is set.
     admin_selectors: list[dict] = []
     for obj in rendered:
         spec = pod_spec(obj)
@@ -668,17 +799,12 @@ def check(values_file: pathlib.Path) -> list[dict]:
         errors.append(f"(vi) {tag}: the admin pod has no Service selecting it — port-forward has nothing to reach")
     if not admin_domain:
         for obj in rendered:
-            if obj.get("kind") != "Ingress":
-                continue
-            for rule in (obj.get("spec") or {}).get("rules") or []:
-                for path in ((rule.get("http") or {}).get("paths") or []):
-                    backend = ((path.get("backend") or {}).get("service") or {}).get("name")
-                    if backend in admin_services:
-                        errors.append(
-                            f"(vi) {tag}: {name_of(obj)} routes {rule.get('host')} to the admin surface with admin.domain unset — "
-                            f"the admin surface is exposed by an Ingress only when the operator sets admin.domain; by "
-                            f"default it is reachable through port-forward alone."
-                        )
+            if any(backend in admin_services for backend in route_backends(obj)):
+                errors.append(
+                    f"(vi) {tag}: {name_of(obj)} routes {(obj.get('spec') or {}).get('hostnames')} to the admin surface with "
+                    f"admin.domain unset — the admin surface is exposed by a route only when the operator sets admin.domain; "
+                    f"by default it is reachable through port-forward alone."
+                )
 
     network_policy = values.get("networkPolicy") or {}
     policy_enabled = network_policy.get("enabled", True) is not False  # the chart's default is true
@@ -686,6 +812,7 @@ def check(values_file: pathlib.Path) -> list[dict]:
     if policy_enabled:
         check_network_policies(tag, rendered)
     check_image_digests(tag, values, rendered)
+    check_rbac(tag, rendered)
 
     if not first:
         return rendered
@@ -694,23 +821,25 @@ def check(values_file: pathlib.Path) -> list[dict]:
     if properties is None:
         errors.append(f"(vii/x) {tag}: no ConfigMap in the render carries `{APP_PROPERTIES}` — the app's Kubernetes-only settings have no home")
         properties = ""
+    check_gateway(tag, tls, rendered, properties)
 
     if not acme:
         # (vii) no trace of the opt-in when it is off.
         for obj in issuers:
-            errors.append(f"(vii) {tag}: {name_of(obj)} is rendered although ingress.tls.acme is not enabled — the opt-in is off by default so that nothing moves")
+            errors.append(f"(vii) {tag}: {name_of(obj)} is rendered although gateway.tls.acme is not enabled — the opt-in is off by default so that nothing moves")
+        named = yaml.safe_dump(gateway.get("annotations") or {})
         for obj in rendered:
             for key in ((obj.get("metadata") or {}).get("annotations") or {}):
-                if str(key).startswith(CERT_MANAGER_PREFIX):
-                    errors.append(f"(vii) {tag}: {name_of(obj)} carries annotation `{key}` although ingress.tls.acme is not enabled and the values name none")
-        if CERT_MANAGER_PREFIX in properties and CERT_MANAGER_PREFIX not in yaml.safe_dump(ingress.get("annotations") or {}):
-            errors.append(f"(vii) {tag}: the app's properties file mentions `{CERT_MANAGER_PREFIX}` although ingress.tls.acme is not enabled and the values name none")
+                if CERT_MANAGER_PREFIX in str(key) and str(key) not in named:
+                    errors.append(f"(vii) {tag}: {name_of(obj)} carries annotation `{key}` although gateway.tls.acme is not enabled and the values name none")
+        if CERT_MANAGER_PREFIX in properties and CERT_MANAGER_PREFIX not in named:
+            errors.append(f"(vii) {tag}: the app's properties file mentions `{CERT_MANAGER_PREFIX}` although gateway.tls.acme is not enabled and the values name none")
         return rendered
 
     # (viii) exactly one Issuer, named veyq-acme, HTTP-01 only.
     if len(issuers) != 1 or (issuers[0].get("metadata") or {}).get("name") != ISSUER_NAME:
         errors.append(
-            f"(viii) {tag}: ingress.tls.acme is enabled, so the render must contain exactly one Issuer named `{ISSUER_NAME}` — "
+            f"(viii) {tag}: gateway.tls.acme is enabled, so the render must contain exactly one Issuer named `{ISSUER_NAME}` — "
             f"found {[name_of(o) for o in issuers] or 'none'}"
         )
     for obj in issuers:
@@ -718,33 +847,36 @@ def check(values_file: pathlib.Path) -> list[dict]:
         if not solvers or any(set(s) - {"http01", "selector"} for s in solvers):
             errors.append(f"(viii) {tag}: {name_of(obj)} solvers are {solvers!r} — the opt-in solves HTTP-01 only, which needs no DNS-provider Secret the chart would have to reference")
 
-    # (ix) every Ingress: the issuer annotation, no second issuer, the ingress-shim secretName.
-    ingresses = [o for o in rendered if o.get("kind") == "Ingress"]
-    if not ingresses:
-        errors.append(f"(ix) {tag}: the render contains no Ingress — there is nothing for the issuer annotation to reach")
-    for obj in ingresses:
-        meta = obj.get("metadata") or {}
-        annotations = meta.get("annotations") or {}
+    # (ix) the Gateway: the issuer and the parent-ref fallback, no second issuer; no route annotated at all.
+    gateways = [o for o in rendered if o.get("kind") == "Gateway"]
+    if not gateways:
+        errors.append(f"(ix) {tag}: the render contains no Gateway — there is nothing for the issuer annotation to reach")
+    for obj in gateways:
+        annotations = (obj.get("metadata") or {}).get("annotations") or {}
         if annotations.get(ISSUER_ANNOTATION) != ISSUER_NAME:
             errors.append(f"(ix) {tag}: {name_of(obj)} carries {ISSUER_ANNOTATION}={annotations.get(ISSUER_ANNOTATION)!r}, not `{ISSUER_NAME}` — cert-manager orders no certificate for it")
+        if annotations.get(FALLBACK_ANNOTATION) != "true":
+            errors.append(f"(ix) {tag}: {name_of(obj)} carries {FALLBACK_ANNOTATION}={annotations.get(FALLBACK_ANNOTATION)!r}, not \"true\" — a tenant ListenerSet's challenge would need a port-80 listener of its own")
         others = sorted(k for k in annotations if str(k).startswith(CERT_MANAGER_PREFIX) and "issuer" in str(k) and k != ISSUER_ANNOTATION)
         if others:
             errors.append(f"(ix) {tag}: {name_of(obj)} carries a second issuer annotation {others} beside `{ISSUER_ANNOTATION}` — which one wins is cert-manager's choice, not the operator's")
-        tls = (obj.get("spec") or {}).get("tls") or []
-        secret = (tls[0] or {}).get("secretName") if tls else None
-        if secret != meta.get("name"):
-            errors.append(f"(ix) {tag}: {name_of(obj)} has spec.tls[0].secretName {secret!r} — under the opt-in (mode per-domain) it must be the object's own name, the ingress-shim shape")
+    for obj in rendered:
+        if obj.get("kind") == "HTTPRoute":
+            stamped = sorted(k for k in ((obj.get("metadata") or {}).get("annotations") or {}) if CERT_MANAGER_PREFIX in str(k))
+            if stamped:
+                errors.append(f"(ix) {tag}: {name_of(obj)} carries {stamped} — an HTTPRoute holds no certificate; the annotations belong on the Gateway and the ListenerSets (ADR 0064)")
 
-    # (x) the properties file: what reaches the tenant Ingress objects the backend writes at runtime.
+    # (x) the properties file: what reaches the tenant ListenerSets the backend writes at runtime.
     lines = {line.strip() for line in properties.splitlines()}
     for wanted in (
         "veyq.tenant.ingress.kubernetes.tls.mode=per-domain",
         f'veyq.tenant.ingress.kubernetes.annotations."{ISSUER_ANNOTATION}"={ISSUER_NAME}',
+        f'veyq.tenant.ingress.kubernetes.annotations."{FALLBACK_ANNOTATION}"=true',
     ):
         if wanted not in lines:
             errors.append(
-                f"(x) {tag}: the app's properties file lacks `{wanted}` — the chart's own Ingress objects may carry the "
-                f"issuer, but every tenant Ingress the backend projects would get no certificate"
+                f"(x) {tag}: the app's properties file lacks `{wanted}` — the chart's Gateway may carry the issuer, but "
+                f"every tenant ListenerSet the backend projects would get no certificate"
             )
 
     # (xi) the schema refuses each contradiction, naming the key — and accepts the file without one.
@@ -755,7 +887,7 @@ def check(values_file: pathlib.Path) -> list[dict]:
         for extra, key in CONTRADICTIONS:
             code, output = lint(values_file, extra)
             if code == 0:
-                errors.append(f"(xi) {tag}: `helm lint {' '.join(extra)}` passed — the schema must refuse that contradiction of ingress.tls.acme")
+                errors.append(f"(xi) {tag}: `helm lint {' '.join(extra)}` passed — the schema must refuse that contradiction of gateway.tls.acme")
             elif key not in output:
                 errors.append(f"(xi) {tag}: `helm lint {' '.join(extra)}` failed, but its output never names `{key}` — a failure for some other reason is not the schema holding:\n{output.strip()}")
     return rendered
@@ -793,7 +925,7 @@ if values_files:
         for extra in (["--set-json", "networkPolicy.ingressFrom=[]"], ["--set", "networkPolicy.ingressFrom=null"]):
             code, output = lint(base, extra)
             if code == 0:
-                errors.append(f"(xviii) `helm lint {' '.join(extra)}` passed — an enabled policy set with no ingress controller named must be refused")
+                errors.append(f"(xviii) `helm lint {' '.join(extra)}` passed — an enabled policy set with no gateway data plane named must be refused")
             elif "ingressFrom" not in output:
                 errors.append(f"(xviii) `helm lint {' '.join(extra)}` failed, but its output never names `ingressFrom`:\n{output.strip()}")
     for key in ("image.digest", "admin.image.digest"):
@@ -814,10 +946,12 @@ print(
     f"chart meta check OK ({summary}): no object carries the sink's ownership value or is cluster-scoped; the app's "
     f"config-secret path is on a claim with fsGroup={runtime_user}; strategy Recreate; every render byte-identical "
     f"twice; every container restricted-compliant with a read-only root; the admin surface on a ClusterIP Service and "
-    f"no Ingress; the admin listener on a Service of its own that no Ingress names and the admin surface points at, "
+    f"no route; the admin listener on a Service of its own that no route names and the admin surface points at, "
     f"admitted by policy from the admin pod alone; a default-deny over every pod, the public port admitted from "
     f"ingressFrom exactly and the database from the app alone, no policy when switched off, and no install without "
     f"ingressFrom; the ACME "
-    f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on every Ingress and in the properties file, "
-    f"its contradictions refused by the schema; a pinned image digest is the digest the pod runs"
+    f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on the Gateway and in the properties file, "
+    f"its contradictions refused by the schema; a pinned image digest is the digest the pod runs; no Ingress, every "
+    f"route on the one Gateway on the listener its TLS mode names, the sink's listeners present, and a Role on "
+    f"httproutes/listenersets with nothing on gateways"
 )

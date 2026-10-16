@@ -8,22 +8,28 @@ resolves anywhere (first-run setup needs no DNS and no certificate):
 
 Save the Emergency Kit on that screen: it is shown once, and the server holds no key material by construction.
 
-Then point DNS at your ingress controller for:
+Then point DNS at the address your Gateway API implementation gives the Gateway `veyq`
+(kubectl -n {{ .Release.Namespace }} get gateway veyq — ADDRESS, and PROGRAMMED True) for:
     {{ .Values.domain }}          the instance
     {{ .Values.storeDomain }}     the object store (its own origin on this target)
 {{- if .Values.admin.domain }}
     {{ .Values.admin.domain }}    the administration surface (you chose to expose it)
 {{- end }}
-{{- if (.Values.ingress.tls.acme | default dict).enabled }}
+{{- if (.Values.gateway.tls.acme | default dict).enabled }}
 
-TLS: this release templates the cert-manager Issuer `veyq-acme` (ACME HTTP-01, account {{ .Values.ingress.tls.acme.email }})
-against {{ .Values.ingress.tls.acme.server }}
-and stamps it on every Ingress — a tenant created later is a certificate order of its own. It works only if:
-    cert-manager runs in this cluster (without its CRDs this release could not have been created at all)
-    port 80 of every host above, and of every tenant domain, reaches your ingress controller
+TLS: this release templates the cert-manager Issuer `veyq-acme` (ACME HTTP-01, account {{ .Values.gateway.tls.acme.email }})
+against {{ .Values.gateway.tls.acme.server }}
+and stamps it on the Gateway and every tenant ListenerSet — a tenant created later is a certificate order of its own.
+It works only if:
+    cert-manager 1.21 or later runs in this cluster (without its CRDs this release could not have been created at all)
+    with its Gateway API support AND its ListenerSet support on — the latter is ALPHA: config.gatewayAPI.enabled,
+    config.gatewayAPI.enableListenerSet and config.featureGates.ListenerSets, all true
+    your Gateway API implementation supports ListenerSet — not every released one does yet; without it every
+    tenant domain stays without a listener, while the hosts above keep working
+    port 80 of every host above, and of every tenant domain, reaches the Gateway
     a tenant's DNS points here BEFORE the tenant is created — cert-manager self-checks reachability, then orders
-{{- if contains "staging" .Values.ingress.tls.acme.server }}
-This is a STAGING directory: its certificates are not browser-trusted. Switch ingress.tls.acme.server to the
+{{- if contains "staging" .Values.gateway.tls.acme.server }}
+This is a STAGING directory: its certificates are not browser-trusted. Switch gateway.tls.acme.server to the
 production directory once a test order succeeds — until then every browser refuses the instance.
 {{- else }}
 Production limits worth knowing before you test here (letsencrypt.org/docs/rate-limits): 5 failed validations per
@@ -32,12 +38,23 @@ hostname per hour, 50 new certificates per registered domain per week. The stagi
 Watch the orders:
     kubectl -n {{ .Release.Namespace }} get issuer veyq-acme
     kubectl -n {{ .Release.Namespace }} get certificate
-{{- else if eq .Values.ingress.tls.mode "none" }}
+    kubectl -n {{ .Release.Namespace }} get listenersets
+{{- else if eq .Values.gateway.tls.mode "none" }}
 
-TLS: ingress.tls.mode is `none`. Nothing in this release obtains a certificate. Unless something upstream
-terminates TLS for every host above, the refresh cookie (Secure) is never sent back and every mailed link
-points at https — an instance that boots and then silently breaks. See ingress.tls in values.yaml.
+TLS: gateway.tls.mode is `none`. Nothing in this release obtains a certificate, and the Gateway listens on plain
+HTTP only. Unless something upstream terminates TLS for every host above, the refresh cookie (Secure) is never sent
+back and every mailed link points at https — an instance that boots and then silently breaks. See gateway.tls in
+values.yaml.
+{{- else if eq .Values.gateway.tls.mode "per-domain" }}
+
+TLS: gateway.tls.mode is `per-domain` without the chart's ACME issuer — your own issuer must fill the Secrets the
+Gateway's listeners and every tenant ListenerSet reference (each named after its route). Every tenant domain needs
+a Gateway API implementation that supports ListenerSet; not every released one does yet.
 {{- end }}
+
+Every route of this release — the chart's `veyq-*` and the `veyq-tenant-*` ones the backend projects — and whether
+the Gateway accepted it:
+    kubectl -n {{ .Release.Namespace }} get httproutes,listenersets
 
 Before the first tenant, set the object store in the same console (over the port-forward above): open
 Server → Object store, choose "Use the bundled store" or a store of your own, save it, then "Check store".

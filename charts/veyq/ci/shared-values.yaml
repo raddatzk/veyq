@@ -1,0 +1,34 @@
+# The `shared` render — `lint-values.yaml` plus `gateway.tls.mode: shared` and `admin.domain`. Under `shared` the
+# chart's Gateway has a different listener set (one hostname-less HTTPS listener, `https`, which the backend's sink
+# attaches every tenant route to by name) and every route a different parent; without this file that listener is
+# rendered by nobody, and scripts/chart_meta_check.py could not hold the sink's listener name to it. `admin.domain`
+# rides along because it, too, is a shape no other file selects: the admin surface's own route.
+#
+# NOT a template for an installation — same throwaways as lint-values.yaml, repeated rather than layered because
+# the guard renders each file on its own.
+domain: veyq.example.org
+storeDomain: store.veyq.example.org
+image:
+  repository: ghcr.io/example/veyq
+admin:
+  image:
+    repository: ghcr.io/example/veyq-admin
+  domain: admin.veyq.example.org
+networkPolicy:
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: traefik
+secrets:
+  mariadbPassword: ci-only-not-a-password
+  mariadbRootPassword: ci-only-not-a-password
+  garageRpcSecret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  garageAdminToken: ci-only-not-a-token
+gateway:
+  className: traefik
+  tls:
+    mode: shared
+    secretName: wildcard-veyq-example-org

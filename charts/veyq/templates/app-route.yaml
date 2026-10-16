@@ -1,0 +1,23 @@
+# The bootstrap domain's route — what the compose recipe's ingress sink renders from configuration. Chart-owned
+# and Helm-labelled, which is what keeps it apart from the tenant routes the backend projects: the backend lists
+# by ITS ownership value and would delete a chart object wearing it on the first regenerate. The bootstrap domain
+# is excluded from that projection (VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN), so this is its one and only route.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  {{- include "veyq.routeParent" (dict "root" . "listener" "https-app") | nindent 2 }}
+  hostnames:
+    - {{ required "domain is required" .Values.domain | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: veyq-app
+          port: 8080

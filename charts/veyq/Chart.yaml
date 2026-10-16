@@ -3,9 +3,9 @@ name: veyq
 description: >-
   Self-hostable, end-to-end-encrypted memory sharing. The operator-blind server, its administration surface,
   MariaDB and the bundled Garage object store on an operator's own Kubernetes cluster (ADR 0064) — the same
-  four workloads infra/docker-compose.prod.yml runs beside its Traefik, whose job the operator's ingress
-  controller does here: tenant domains are projected as Ingress objects by the backend itself and certificates
-  obtained for them through that controller.
+  four workloads infra/docker-compose.prod.yml runs beside its Traefik, whose job a Gateway API implementation
+  of the operator's choice does here: the chart owns one Gateway, tenant domains are projected as HTTPRoutes (and,
+  under per-domain TLS, ListenerSets) by the backend itself, and certificates are obtained through cert-manager.
 type: application
 # A placeholder no publish uses. The publish packages the chart with its own release version as BOTH `version` and
 # `appVersion` (`<major>.<minor>`, or `<major>.<minor>-SNAPSHOT`; ADR 0057 §1, ADR 0064), and the minor is a commit
@@ -14,8 +14,10 @@ type: application
 # `admin.image.tag` (https://raddatzk.github.io/veyq/run/new-instance/, Kubernetes); an install from the registry needs neither.
 version: 0.0-dev
 appVersion: "0.0-dev"
-# `restricted` PodSecurity admission is GA from 1.25, and every pod here is written to pass it.
-kubeVersion: ">=1.25.0-0"
+# The floor is the Gateway API CRDs', not the chart's own: v1.5 (the first with ListenerSet in the standard channel)
+# validates with CEL and was tested on Kubernetes 1.31–1.35, and its TLSRoute validation requires 1.31 (its release
+# notes). `restricted` PodSecurity admission, which every pod here is written to pass, is GA from 1.25 — below it.
+kubeVersion: ">=1.31.0-0"
 keywords:
   - veyq
   - e2ee
