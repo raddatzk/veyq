@@ -16,7 +16,8 @@
 ## What a release is here
 
 A release is an immutable GitHub Release (or the operator's mirror of one): its assets are the recipe
-(`docker-compose.prod.yml`, `.env.example`, `garage.toml`), `veyqctl` itself, and a manifest naming both images by
+(`docker-compose.prod.yml`, the `.env` template as `env.example`, `garage.toml`), `veyqctl` itself with its
+signature bundle, and a manifest naming both images by
 `tag@digest`. Nothing in it can change once published (ADR 0096 decision 3), so "the recipe of release 1.4" is one
 set of bytes. Snapshots have no release and are never installed.
 

@@ -19,11 +19,18 @@ and every file the compose file reads relative to itself — the spellings Compo
 and the top-level `configs.*.file` / `secrets.*.file`. The derivation refuses what it cannot resolve without an
 operator's environment or another file: a `${…}` in such a path, a `../`, a top-level `include:`, a service's
 `extends`. And it refuses a path with a directory in it, because a GitHub Release asset is a flat name — the
-recipe reads only files beside it. Listing the set is how the in-image recipe lost `garage.toml` (ADR 0096):
+recipe reads only files beside it — and a name GitHub would not publish as given: it renames a leading or trailing
+period and other special characters, so `./.htpasswd` would be published as a file the recipe does not read. The
+`.env` template is the one asset named apart from its file, `env.example`, for that reason; nothing reads it by name
+but `veyqctl`. Listing the set is how the in-image recipe lost `garage.toml` (ADR 0096):
 the compose file read it, and the two `COPY` lines that carried the recipe did not know.
 
 `scripts/validate_release_identity.py` assertion 4 holds the producer to this derivation: it runs the carry
 step into a scratch directory and requires every derived file there, byte-identical to the tree.
+
+**The publish uploads `<out>/<tag>/` whole** (`ci.yml`'s `publish` job, one `gh release create` with every file),
+after it has added `veyqctl.bundle`, `veyqctl`'s `cosign sign-blob` bundle, which no manifest lists (it is made after
+the manifest, and it vouches for `veyqctl` where no manifest has been checked yet: the operator's first fetch).
 
 **The images are named by digest.** A reference with a registry path (`/`) must carry `@sha256:<64 hex>`; only a
 local build's bare `name:tag` may go without one, which is what `veyqctl --unsigned-local` accepts and nothing
@@ -55,11 +62,22 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the guards
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPOSE = ROOT / "infra/docker-compose.prod.yml"
 ENV_TEMPLATE = ROOT / "infra/.env.example"
+# The template's asset name. GitHub renames a release asset whose name starts or ends with a period (its REST docs,
+# "Upload a release asset"), so `.env.example` would be published under another name than the manifest lists and every
+# `veyqctl install` from GitHub would miss it. The compose file never reads the template, so its asset drops the dot.
+TEMPLATE_ASSET = "env.example"
 # The tools that operate a release, by asset name: `veyqctl` itself, and the backup tool its `backup`, `restore` and
 # `upgrade` import from the running release's directory (shipped beside it rather than folded in: cr-veyqctl).
 TOOLS = {"veyqctl": ROOT / "scripts/veyqctl.py", "instance_backup.py": ROOT / "scripts/instance_backup.py"}
 MANIFEST = "manifest.json"
 RELEASES = "releases.json"
+# `veyqctl`'s keyless signature, written by the publish (`cosign sign-blob --bundle`) beside the assets this file
+# produces and uploaded with them: the operator checks the `veyqctl` they fetched by hand against it before it runs
+# (ADR 0096 decision 3). It is not in the manifest — it is made after it, and it is what vouches for `veyqctl` where
+# no manifest has been checked yet. Named here so no recipe file can take its name.
+VEYQCTL_BUNDLE = "veyqctl.bundle"
+# A name GitHub publishes as given: no leading or trailing period, nothing but letters, digits, `.`, `_` and `-`.
+ASSET_NAME = re.compile(r"^[A-Za-z0-9_-](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?$")
 
 DIGEST_REF = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 LOCAL_REF = re.compile(r"^[a-z0-9][a-z0-9._-]*(?::[A-Za-z0-9._-]+)?$")
@@ -137,6 +155,13 @@ def recipe_reads(compose: pathlib.Path = COMPOSE) -> tuple[dict[str, list[str]],
             )
             return
         asset = rel[0]
+        if not ASSET_NAME.match(asset):
+            errors.append(
+                f"{name} {where} reads `{raw}`, a name a GitHub Release does not publish as given (it renames a "
+                f"leading or trailing period and any character but letters, digits, `.`, `_` and `-`), so the "
+                f"release would carry it under a name the recipe does not read — rename the file"
+            )
+            return
         if not (compose.parent / asset).is_file():
             errors.append(
                 f"{name} {where} reads `{raw}`, which is not a file beside it in the tree — the release would carry "
@@ -171,19 +196,20 @@ def recipe_reads(compose: pathlib.Path = COMPOSE) -> tuple[dict[str, list[str]],
             if isinstance(body, dict) and "file" in body:
                 path(body["file"], f"{section}.{key}.file")
 
-    fixed = {COMPOSE.name, ENV_TEMPLATE.name, MANIFEST, *TOOLS}
+    fixed = {COMPOSE.name, TEMPLATE_ASSET, MANIFEST, VEYQCTL_BUNDLE, *TOOLS}
     for asset in sorted(set(reads) & fixed):
-        if asset not in (COMPOSE.name, ENV_TEMPLATE.name):
+        if asset != COMPOSE.name:
             errors.append(f"{name} reads a file named `{asset}`, which is also the name of a release asset of its own")
     return reads, errors
 
 
 def recipe_set() -> dict[str, pathlib.Path]:
-    """The recipe, by asset name: the compose file, the `.env` template, and every file the compose file reads."""
+    """The recipe, by asset name: the compose file, the `.env` template (as `TEMPLATE_ASSET`), and every file the
+    compose file reads."""
     reads, errors = recipe_reads()
     if errors:
         raise ReleaseError("the recipe set cannot be derived:\n  - " + "\n  - ".join(errors))
-    files = {COMPOSE.name: COMPOSE, ENV_TEMPLATE.name: ENV_TEMPLATE}
+    files = {COMPOSE.name: COMPOSE, TEMPLATE_ASSET: ENV_TEMPLATE}
     for asset in sorted(reads):
         files[asset] = COMPOSE.parent / asset
     for asset, source in files.items():
@@ -199,6 +225,9 @@ def write_assets(dest: pathlib.Path) -> list[str]:
         if not source.is_file():
             raise ReleaseError(f"`{source.relative_to(ROOT)}` does not exist, so no release can carry `{asset}`")
         files[asset] = source
+    for asset in files:
+        if not ASSET_NAME.match(asset):
+            raise ReleaseError(f"`{asset}` is not a name a GitHub Release publishes as given, so no release can carry it")
     for asset, source in files.items():
         shutil.copyfile(source, dest / asset)
     return sorted(files)

@@ -156,7 +156,7 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
     the assets `veyqctl` installed; `git grep -n "opt/veyq/deploy"` returns only ADR 0096's history sentence; guards
     green; the hand-off to cr-stack-e2e written; committed.
 
-- [ ] **5 The publish creates the release.** In the `publish` job, release kind only, after the images and the chart
+- [x] **5 The publish creates the release.** In the `publish` job, release kind only, after the images and the chart
   are signed and the `v<major>.<minor>` ref exists: `release_assets.py` with the digests the job already resolved (it imports PyYAML, which the job installs as `guards`
   does),
   `cosign sign-blob` for `veyqctl` (the bundle is an asset), and `gh release create "v${VERSION}" --verify-tag` with
@@ -331,6 +331,40 @@ listing it (the positive control). The guard's docstring states the shared deriv
   so nobody can follow it. The final run started at a load of 16.8, above the brief's limit of 14 (not checked
   before starting); it ran green. **Next time:** a phase that removes a thing greps the *published* pages for it at
   refine and assigns each hit to a phase, so no done-when and phase list disagree.
+
+**Phase 5.** Decided in the build, each in `ci.yml`'s step comments and `validate_release_identity.py`'s docstring
+(assertion 11):
+- *The template is published as `env.example`* — a defect the build found, not the CR: GitHub renames a release asset
+  whose name starts with a period (measured: its REST docs, "Upload a release asset"), so a release carrying
+  `.env.example` would have broken every `veyqctl install` from GitHub. `release_assets.py` names it `env.example` and
+  refuses any recipe file GitHub would rename (`ASSET_NAME`); `veyqctl`'s `TEMPLATE_ASSET` follows, `run_stack_e2e.py`'s
+  template check too, and assertion 4 now holds every `*_ASSET` name `veyqctl` fetches to one the producer writes.
+- *The publish assembles from the digests the lane installed* (cr-stack-e2e's carry-over): it downloads the same
+  `digest-<image>-<arch>` artifacts `build` uploads and `stack` pulls by, and `imagetools create` takes
+  `<image>@<digest>`, never `build-<sha>-<arch>`; the signing step outputs each signed index digest, and the manifest
+  names `ghcr.io/<owner>/<image>:<version>@<that digest>`. The asset-set hash stays the promotion's (inbox #460).
+- *One step does the release, after the tag*: the producer into `$RUNNER_TEMP/release`, `cosign sign-blob --bundle
+  …/veyqctl.bundle`, and one `gh release create "v${VERSION}" --verify-tag … "${out}/v${VERSION}"/*` (`--latest` from
+  the version step's `publish_latest`). The bundle is an asset, not in the manifest: it is made after it, and it vouches
+  for the `veyqctl` an operator fetches by hand (phase 6's `cosign verify-blob`). `manifest.json` is among the uploaded
+  files (ReleaseFeed reads it).
+- *The producer runs a second time, before anything is published* (`release-assets-check`, with two local names): a
+  refusal at the end — `--unscheduled` on a release that is not the first of its major, above all — would leave images,
+  chart and ref with no GitHub Release. It also refuses `unscheduled_major` on a snapshot. The checkout is
+  `fetch-depth: 0` (the producer counts the history and reads the tags).
+- *Bites* (snapshot-and-restore of `ci.yml`, byte-identical after; script in the implementing session): the step's
+  `if:` dropped, `--verify-tag` dropped, a later `gh release upload` step, the step moved before the tag — each red on
+  its own message; further `--draft`, the precheck removed, the `sign-blob` removed, only `manifest.json` uploaded, the
+  input renamed, `veyqctl` fetching `.env.example` again, and a recipe file `./.htpasswd` — each red on its own; the
+  untouched tree green.
+- *Local run of the step*: its shell extracted from `ci.yml` and run with stand-ins for `cosign` (writes a placeholder
+  bundle) and `gh` (records argv) and fake digests: `v0.561`, seven files — the five manifest assets (each `cmp`-equal
+  to the tree), `manifest.json`, `veyqctl.bundle` — all in the one `gh release create`. The precheck's snapshot +
+  `unscheduled_major` refusal ran; its refusal of an unscheduled non-first release could not be shown on this repository,
+  which has no `v0.*` tag (phase 1's bite holds it).
+- *Not done — owner question*: `self-update` still checks the installed `veyqctl` against its manifest only (above).
+- **For phase 6**: `run/new-instance.mdx` and `run/upgrade.mdx` still copy `.env.example` from an extracted recipe
+  directory; under `veyqctl` the release's template is `env.example`, and a by-hand step names that.
 
 **Hand-off to cr-stack-e2e** (its owner session; this CR does not edit its file): `run_stack_e2e.py` no longer
 extracts anything. `extract()`, `write_env()`, `up()`, `compose_cmd()` and the `extract`/`env`/`up` stages are gone;

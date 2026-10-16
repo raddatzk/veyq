@@ -93,8 +93,8 @@ Four documented gaps sit **outside** that guard, on purpose:
   meta-guard can reach. It holds the release producer (`release_assets.py`) to **its own derivation** of the
   files the recipe reads, so a way of reading a file that derivation does not know is missed by both — the
   spellings it knows are listed in the guard's docstring. And it cannot prove a **publish ran**: this repository has no
-  remote and no workflow has ever executed, so the refusal-to-republish and the `v<major>.<minor>` ref stay
-  statements about a file — an explicitly stated ADR 0040 gap, in the same shape as the coverage flip that ADR
+  remote and no workflow has ever executed, so the refusal-to-republish, the `v<major>.<minor>` ref and the GitHub
+  Release stay statements about a file — an explicitly stated ADR 0040 gap, in the same shape as the coverage flip that ADR
   still leaves owed.
 
 - the mutation **total-vs-per-glob** asymmetry: `mutation_meta_check.py` (crypto) asserts a **total** mutant

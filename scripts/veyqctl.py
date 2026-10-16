@@ -19,7 +19,7 @@ lifecycle on the HOST and holds no Admin API credential — administration stays
 
 **An instance lives in `--home`** (default `/opt/veyq`, decision 6):
 
-    .env                   0600, the instance's values, written from the running release's `.env.example`
+    .env                   0600, the instance's values, written from the running release's `env.example`
     compose.override.yml   optional: the operator's own Compose overlay, laid over the recipe on every command
     state.json             the running release, the Compose project it runs as, the source, how it was verified
     releases/<release>/    that release's assets, each checked against the sha256 its manifest names
@@ -58,8 +58,9 @@ refused unless BOTH image references are a bare `name:tag` with no registry host
 that is not on this host (a bare name would otherwise be pulled from Docker Hub's `library/`), and every line the run
 prints says that nothing was verified.
 
-**`.env` from the template.** `install` copies the release's `.env.example` line by line: the four secrets it knows
-are generated, the two image lines come from the manifest, and every other value the template assigns is the
+**`.env` from the template.** `install` copies the release's `.env` template (`env.example`: the tree's
+`infra/.env.example`, published without the leading period a GitHub Release asset cannot keep) line by line: the four
+secrets it knows are generated, the two image lines come from the manifest, and every other value the template assigns is the
 operator's — given with `--set KEY=VALUE`, or asked for at a terminal, the template's value shown as the example;
 without a terminal a missing one is refused, named. A `--set` key the template does not assign is kept below it.
 Written `0600`, in a home created `0700`.
@@ -94,8 +95,10 @@ names). `--key-into` is required for `backup` and `upgrade`, and refused when it
 
 **`self-update`** replaces this file with the installed release's `veyqctl` after checking it against that release's
 manifest — a release whose images were verified at `install`/`upgrade`, or one installed `--unsigned-local`, which it
-says. It checks no signature of `veyqctl`'s own: ADR 0096 decision 3 has the publish sign it with `cosign sign-blob`,
-and checking that bundle here is not built yet.
+says. It checks no signature of `veyqctl`'s own: the publish signs it with `cosign sign-blob` (ADR 0096 decision 3),
+but its bundle, `veyqctl.bundle`, sits beside the release's assets and not in its manifest — it is for the copy an
+operator fetches by hand, before any manifest is checked — so `install` and `upgrade` do not fetch it, and like every
+other asset the `veyqctl` it installs is bound to the release by the manifest's sha256 and the source.
 
 **What proves it** — it is a host tool, not a coverage surface (ADR 0040; the use-case
 `uc.admin.install-and-upgrade-instance` stays `planned` for that reason): `scripts/veyqctl_selftest.py`, without
@@ -142,7 +145,7 @@ COSIGN_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 COSIGN_IDENTITY_REGEXP = r"^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$"
 
 COMPOSE_ASSET = "docker-compose.prod.yml"
-TEMPLATE_ASSET = ".env.example"
+TEMPLATE_ASSET = "env.example"  # validate_release_identity.py holds each `*_ASSET` to a name the producer writes
 BACKUP_ASSET = "instance_backup.py"
 SELF_ASSET = "veyqctl"
 MANIFEST_ASSET = "manifest.json"

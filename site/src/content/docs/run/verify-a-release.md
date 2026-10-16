@@ -72,5 +72,7 @@ Major `0` is pre-release and promises no upgrade path.
 run as written against another image that is keyless-signed from a GitHub workflow on `main`, with that image's own
 identity. The chart half has been run against a local OCI registry, with a key of its own instead of the keyless
 identity: `helm push` put the chart at `<registry>/charts/veyq`, the digest above resolved from its tag, `cosign`
-signed and verified the chart by that digest, and Helm installed it by digest and by exact version. The first
-publish is where any of it is first run for real.
+signed and verified the chart by that digest, and Helm installed it by digest and by exact version. The GitHub
+Release that carries a release's recipe, `veyqctl` and its signature bundle is created by the same publish, as its
+last step; `scripts/validate_release_identity.py` holds that step to the file, and its shell has run only locally,
+with stand-ins for `cosign` and `gh`. The first publish is where any of it is first run for real.

@@ -2,7 +2,7 @@
 """Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
-**What it asserts.** Ten things, in the order a release happens:
+**What it asserts.** Eleven things, in the order a release happens:
 
   1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
      identity (ADR 0057 §1): the minor is the number of commits since `VERSION` last changed, so a checkout
@@ -23,7 +23,7 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      `workflow_dispatch` takes a boolean `release` input defaulting to false. Every registry write in the file —
      found by what a step does (a login or build-push action, or a `run:` that pushes, logs in or signs), never
      listed — is gated on `workflow_dispatch` by its step, its job or its push input, and the `publish` job as a
-     whole is. The `publish` job carries a step that fails when an artifact's tag or `v<major>.<minor>` already
+     whole is. A `gh release` that writes counts: a GitHub Release is a write to the remote. The `publish` job carries a step that fails when an artifact's tag or `v<major>.<minor>` already
      exists, and a step that creates that ref — both run for `kind == release` only, neither with `--force`, and
      both keyed on the *tree-derived* version rather than on anything else. The `build` job stamps the same value
      into the image as `VEYQ_VERSION`, which is what the running instance later reports — and every build-arg it
@@ -42,6 +42,16 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      has, and cannot see one that is gone; so the job that runs `scripts/run_stack_e2e.py` — found by what it runs,
      never by its name — must exist, need `build`, run on every architecture the build matrix publishes, and be in
      the publish's `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms.
+ 11. **A release is one immutable GitHub Release, created last, in one call** (ADR 0096 decision 3). Exactly one
+     step of the file runs `gh release create`, in the `publish` job, for `kind == release` only, after the step that
+     creates the ref and after every `cosign sign` of an image or the chart; it carries `--verify-tag` and neither
+     `--draft` nor `--prerelease`; it runs `scripts/release_assets.py` into a directory and uploads that directory's
+     `v$VERSION/*` whole, after a `cosign sign-blob` of its `veyqctl` that writes the `--bundle` among those files; and
+     it hands the boolean dispatch input `unscheduled_major` (default false) to the producer as `--unscheduled`, which
+     an earlier step of the job also runs the producer with, before the job's first push, so its refusals come before
+     anything is published. No step anywhere uploads to, edits or deletes a GitHub Release (`gh release
+     upload|edit|delete`, `gh api …/releases`, `uploads.github.com`, an action whose name says `release`): an immutable
+     release takes no asset after it is published.
   8. **The chart is the release's third artifact** (ADR 0064). The refuse step names every published image (the
      build matrix) AND `charts/<name>` (`Chart.yaml`'s `name`), so a release with any of the three already out
      is refused; the step that runs `helm package` sets `--version` and `--app-version` from the tree-derived
@@ -54,9 +64,10 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      recipe set — the production compose file, `.env.example`, and every file the compose file reads relative to
      itself, in each spelling Compose has for that (`volumes` short and long-form `type: bind`, `env_file`,
      `label_file`, top-level `configs`/`secrets` `file:`) — and refuses what it cannot derive (`${…}` in such a
-     path, `../`, a directory in it, `include:`, `extends`). Here that derivation is run on the tree, its refusals
-     are this guard's reds, and the producer's carry step is run into a scratch directory, where every derived
-     file must be, byte-identical to the tree. The derived list is printed on the OK line. Plus: every veyq image
+     path, `../`, a directory in it, a name GitHub would rename, `include:`, `extends`). Here that derivation is run
+     on the tree, its refusals are this guard's reds, and the producer's carry step is run into a scratch directory,
+     where every derived file must be, byte-identical to the tree (the `.env` template under its asset name,
+     `env.example`). Every `*_ASSET` name `scripts/veyqctl.py` fetches must be one the producer writes. The derived list is printed on the OK line. Plus: every veyq image
      tag written down under `infra/` or on the Run pages (`site/src/content/docs/run/`, where the operator
      procedures live) matches a tag the pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
@@ -134,6 +145,12 @@ Assertion 10 came with lane L1's job (cr-stack-e2e phase 4), no incident: assert
 deleting the lane — or renaming its job and dropping it from the publish's `needs:` in the same edit — was green there.
 Its limit is assertion 9's: it reads the file, and proves no run ever waited.
 
+Assertion 11 came with the GitHub Release (cr-veyqctl phase 5), and building it found a defect before any publish:
+the template was carried as `.env.example`, and GitHub renames a release asset whose name starts with a period (its
+REST docs, "Upload a release asset"), so every `veyqctl install` from GitHub would have fetched a name the release does
+not have. The producer now names it `env.example` and refuses a recipe file GitHub would rename, and assertion 4 holds
+`veyqctl`'s asset names to what the producer writes.
+
 Assertion 8 came with the chart's OCI release (same CR): no incident, the chart had never been published. Each of
 its halves was bitten by injection before it counted, and the measurement that shaped it is in ADR 0064 — `helm
 push` appends the chart's name to the target, which is why the target ends in `/charts`.
@@ -158,6 +175,14 @@ it knows are the list above. **An absolute host path is the host's, unchecked**:
 file is neither carried nor refused. It runs the carry step, never the whole producer (the release number needs the
 full history, and this guard's checkout may be shallow), and never a published release: that a GitHub Release holds
 these assets is a publish's to prove.
+
+Assertion 11's limits. It reads the step's shell as lines, not as a program: the producer's output directory is the
+first positional argument after `scripts/release_assets.py`, and the upload must name `<that>/v$VERSION/*` literally
+(`${x}` and `$x` read alike) — an indirection through another variable is a false red, never a false green. That the
+glob expands to every file is the producer's to keep true: it refuses a name with a leading period, the one kind a
+`*` skips. A writer to a GitHub Release it does not recognise (another CLI, an action named otherwise) is not held.
+It cannot prove `gh release create` ran, that the repository's immutable-releases setting is on, or which name GitHub
+gave each asset — no remote exists, so the GitHub Release is a statement about a file like the rest of the publish.
 
 Assertion 3's gating is read as a conservative model of GitHub's expression language: an `if:` counts as gated
 only if it is a pure `&&` chain with the dispatch (or release) test as one term, so an equivalent condition
@@ -257,10 +282,21 @@ STEP_ENV = {
 # What a publish is gated on, and what a release-only step is gated on (ADR 0057 §1–2).
 DISPATCH = "github.event_name == 'workflow_dispatch'"
 RELEASE_KIND = "needs.version.outputs.kind == 'release'"
-# A `run:` that writes to a registry or to the remote. `uses:` writers are recognised by action below.
+# A `run:` that writes to a registry or to the remote — a GitHub Release included. `uses:` writers are recognised by
+# action below. `cosign sign` matches `cosign sign-blob` too: it writes to the transparency log.
 REGISTRY_WRITE_RUN = re.compile(
-    r"\b(?:helm\s+push|helm\s+registry\s+login|cosign\s+sign|imagetools\s+create|docker\s+push|docker\s+login|git\s+push|oras\s+push)\b"
+    r"\b(?:helm\s+push|helm\s+registry\s+login|cosign\s+sign|imagetools\s+create|docker\s+push|docker\s+login|git\s+push|oras\s+push"
+    r"|gh\s+release\s+(?:create|upload|edit|delete|delete-asset))\b"
 )
+# Assertion 11: the one GitHub Release, and anything else that would write to one.
+UNSCHEDULED_INPUT = "unscheduled_major"
+GH_RELEASE_CREATE = re.compile(r"\bgh\s+release\s+create\b")
+RELEASE_ASSET_WRITE = re.compile(
+    r"\bgh\s+release\s+(?:upload|edit|delete|delete-asset)\b|uploads\.github\.com|\bgh\s+api\b[^\n]*/releases"
+)
+RELEASE_ACTION = re.compile(r"release", re.IGNORECASE)  # an action's `owner/name`: softprops/action-gh-release, …
+IMAGE_SIGN = re.compile(r"\bcosign\s+sign\s")  # an image or the chart, not `sign-blob`
+FIRST_PUBLISH_WRITE = re.compile(r"\b(?:imagetools\s+create|cosign\s+sign|helm\s+push|git\s+push|gh\s+release)\b")
 
 
 def non_release_branches(major: str) -> list[str]:
@@ -813,16 +849,169 @@ if workflow_doc:
             fail(f"lane L1's job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes {sorted(build_archs)} "
                  f"— what is published for an architecture must have passed on it (ADR 0091 decision 4)")
 
+    # ---- 11. a release is one immutable GitHub Release, created last, in one call --------------------------------
+    # ADR 0096 decision 3: the recipe, `veyqctl` (signed) and the manifest are the assets of a GitHub Release on the
+    # ref. An immutable release takes no asset after it is published, so the one `gh release create` carries the
+    # producer's whole output; it runs for a release only, after every signature and the ref; and nothing uploads later.
+    unscheduled_input = ((triggers.get("workflow_dispatch") or {}).get("inputs") or {}).get(UNSCHEDULED_INPUT) or {}
+    if unscheduled_input.get("type") != "boolean" or unscheduled_input.get("default") is not False:
+        fail(
+            f"{WORKFLOW.relative_to(ROOT)}: `workflow_dispatch` must take a boolean input `{UNSCHEDULED_INPUT}` that "
+            f"defaults to false (found {unscheduled_input or 'none'}) — an unscheduled major is marked only when asked "
+            f"for, and the producer refuses it on a release that does not change the major"
+        )
+    release_steps = [
+        (job_name, index, step)
+        for job_name in sorted(jobs)
+        for index, step in enumerate(job_steps(workflow_doc, job_name))
+        if GH_RELEASE_CREATE.search(str(step.get("run") or ""))
+    ]
+    late_uploads = [
+        f"job `{job_name}`, step `{step.get('name') or step.get('id')}`"
+        for job_name in sorted(jobs)
+        for step in job_steps(workflow_doc, job_name)
+        if RELEASE_ASSET_WRITE.search(str(step.get("run") or ""))
+        or RELEASE_ACTION.search(str(step.get("uses") or "").split("@", 1)[0])
+    ]
+    for where in late_uploads:
+        fail(
+            f"{where} writes to a GitHub Release other than by the one `gh release create` — an immutable release "
+            f"takes no asset after it is published, so a later upload fails on GitHub, and before the setting is on it "
+            f"changes a release after its files were the ones published (ADR 0096 decision 3)"
+        )
+    if len(release_steps) != 1 or release_steps[0][0] != PUBLISH_JOB:
+        fail(
+            f"{WORKFLOW.relative_to(ROOT)} runs `gh release create` in {len(release_steps)} step(s) "
+            f"({', '.join(f'{j}' for j, _, _ in release_steps) or 'none'}) — a release is exactly one GitHub Release, "
+            f"created by the `{PUBLISH_JOB}` job (ADR 0096 decision 3)"
+        )
+    else:
+        _, release_index, release_step = release_steps[0]
+        publish_steps = job_steps(workflow_doc, PUBLISH_JOB)
+        body = str(release_step.get("run") or "")
+        lines = [line.strip() for line in body.replace("\\\n", " ").splitlines()]
+        named = f"the `{release_step.get('id') or release_step.get('name')}` step"
+        if not gated_on(release_step.get("if"), RELEASE_KIND):
+            fail(
+                f"{named} creates a GitHub Release when `{RELEASE_KIND}` is not true (if: `{release_step.get('if')}`) — "
+                f"a snapshot gets no GitHub Release (ADR 0096 decision 3), and `veyqctl` would install it as a release"
+            )
+        tag_index = next((i for i, s in enumerate(publish_steps) if s.get("id") == TAG_STEP), None)
+        signing = [i for i, s in enumerate(publish_steps)
+                   if i != release_index and IMAGE_SIGN.search(str(s.get("run") or ""))]
+        if tag_index is None or release_index < tag_index:
+            fail(
+                f"{named} does not follow the `{TAG_STEP}` step — `gh release create --verify-tag` needs the ref to "
+                f"exist, and a GitHub Release on a ref the publish has not created names a release that has no tree"
+            )
+        if not signing:
+            fail(f"the `{PUBLISH_JOB}` job has no `cosign sign` step, so {named}'s place after the signatures checked NOTHING")
+        elif release_index < max(signing):
+            fail(
+                f"{named} comes before a signing step of the `{PUBLISH_JOB}` job — a GitHub Release is published last, "
+                f"so a release whose files an operator can fetch is one whose images and chart are signed"
+            )
+
+        def argv_of(pattern: re.Pattern) -> list[str] | None:
+            for line in lines:
+                if pattern.search(line):
+                    try:
+                        return shlex.split(line.split(" #", 1)[0])
+                    except ValueError as e:
+                        fail(f"{named}: cannot parse `{line[:80]}`: {e}")
+                        return None
+            return None
+
+        def norm(token: str) -> str:
+            return re.sub(r"\$\{(\w+)\}", r"$\1", token)
+
+        create = argv_of(GH_RELEASE_CREATE) or []
+        producer = argv_of(re.compile(r"scripts/release_assets\.py\b")) or []
+        if "--verify-tag" not in create:
+            fail(
+                f"{named}'s `gh release create` does not carry `--verify-tag` — without it a missing ref is CREATED by "
+                f"GitHub from the default branch's tip, a GitHub Release on a tree no publish named (ADR 0057 §2)"
+            )
+        for flag in create:
+            if flag.split("=", 1)[0] in ("--draft", "-d", "--prerelease", "-p"):
+                fail(
+                    f"{named}'s `gh release create` passes `{flag}` — a draft is no release `veyqctl` lists and a "
+                    f"prerelease is one it never installs (ADR 0096 decision 4)"
+                )
+        out = None
+        if producer:
+            script_at = next(i for i, t in enumerate(producer) if t.endswith("scripts/release_assets.py"))
+            out = next((norm(t) for t in producer[script_at + 1:] if not t.startswith("-")), None)
+        if out is None:
+            fail(f"{named} does not run `scripts/release_assets.py` with an output directory — the release's files "
+                 f"are the producer's, never assembled by hand")
+        else:
+            whole = f"{out}/v$VERSION/*"
+            if whole not in [norm(t) for t in create]:
+                fail(
+                    f"{named}'s `gh release create` does not upload `{whole}`, the producer's whole output for the "
+                    f"release — every asset goes in the one call, because an immutable release takes none later"
+                )
+            sign_blob = argv_of(re.compile(r"\bcosign\s+sign-blob\b")) or []
+            bundle = [sign_blob[i + 1] for i, t in enumerate(sign_blob[:-1]) if t == "--bundle"]
+            if not sign_blob or not bundle or not norm(bundle[0]).startswith(f"{out}/v$VERSION/") \
+                    or not norm(sign_blob[-1]) == f"{out}/v$VERSION/veyqctl":
+                fail(
+                    f"{named} does not `cosign sign-blob` the release's `veyqctl` with its `--bundle` written among "
+                    f"the assets — `veyqctl` is signed with the images' identity, and the bundle is an asset (ADR 0096 "
+                    f"decision 3)"
+                )
+            elif lines.index(next(line for line in lines if "cosign sign-blob" in line)) > lines.index(
+                    next(line for line in lines if GH_RELEASE_CREATE.search(line))):
+                fail(f"{named} signs `veyqctl` after `gh release create` — the bundle would miss the one call")
+        unscheduled_env = str(release_step.get("env") or {})
+        if f"inputs.{UNSCHEDULED_INPUT}" not in unscheduled_env or "--unscheduled" not in body:
+            fail(f"{named} does not hand `inputs.{UNSCHEDULED_INPUT}` to the producer as `--unscheduled` — the manifest "
+                 f"would never mark an unscheduled major (ADR 0097)")
+        # The producer's refusals come before anything is published: a refusal at the GitHub Release step would leave
+        # images, a chart and a ref with no GitHub Release.
+        first_write = next((i for i, s in enumerate(publish_steps)
+                            if FIRST_PUBLISH_WRITE.search(str(s.get("run") or ""))), None)
+        prechecked = any(
+            "scripts/release_assets.py" in str(s.get("run") or "")
+            and f"inputs.{UNSCHEDULED_INPUT}" in str(s.get("env") or {})
+            for s in publish_steps[: first_write if first_write is not None else 0]
+        )
+        if not prechecked:
+            fail(
+                f"no step of the `{PUBLISH_JOB}` job runs `scripts/release_assets.py` with `inputs.{UNSCHEDULED_INPUT}` "
+                f"before its first push — a producer refusal (an unscheduled major that is none) would then come after "
+                f"the images, the chart and the ref are out, leaving a release with no GitHub Release"
+            )
+
 
 # ---- 4. the release carries every file its recipe reads; written-down tags name a shape the pipeline emits --
+
+def veyqctl_constants(pattern: str) -> dict[str, str]:
+    """`scripts/veyqctl.py`'s module-level string constants whose names match `pattern`, read without importing it."""
+    path = ROOT / "scripts/veyqctl.py"
+    if not path.is_file():
+        return {}
+    found = {}
+    for node in ast.parse(path.read_text()).body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and re.fullmatch(pattern, node.targets[0].id)
+                and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
+            found[node.targets[0].id] = node.value.value
+    return found
+
 
 recipe_assets: list[str] = []
 reads, refusals = release_assets.recipe_reads()
 for refusal in refusals:
     fail(f"the release recipe cannot be derived: {refusal}")
 if not refusals:
-    derived = {release_assets.COMPOSE.name: "the recipe itself", release_assets.ENV_TEMPLATE.name: "the .env template"}
-    derived.update({asset: ", ".join(wheres) for asset, wheres in reads.items()})
+    # asset -> (its file in the tree, why the release carries it)
+    derived = {
+        release_assets.COMPOSE.name: (release_assets.COMPOSE, "the recipe itself"),
+        release_assets.TEMPLATE_ASSET: (release_assets.ENV_TEMPLATE, "the .env template"),
+    }
+    derived.update({asset: (release_assets.COMPOSE.parent / asset, ", ".join(wheres)) for asset, wheres in reads.items()})
     with tempfile.TemporaryDirectory(prefix="release_assets_") as tmp:
         carried = pathlib.Path(tmp)
         try:
@@ -830,8 +1019,7 @@ if not refusals:
         except (release_assets.ReleaseError, OSError) as e:
             fail(f"the producer's carry step failed, so no release can be produced: {e}")
         else:
-            for asset, why in sorted(derived.items()):
-                source = release_assets.COMPOSE.parent / asset
+            for asset, (source, why) in sorted(derived.items()):
                 got = carried / asset
                 if not got.is_file():
                     fail(
@@ -842,6 +1030,18 @@ if not refusals:
                     fail(f"scripts/release_assets.py carries a `{asset}` that differs from {source.relative_to(ROOT)}")
                 else:
                     recipe_assets.append(asset)
+            # `veyqctl` fetches the assets it names, by name: each must be one the producer writes, or an install
+            # from a real release misses it (the template's name moved once, to `env.example`, for GitHub's sake).
+            produced = {p.name for p in carried.iterdir()} | {release_assets.MANIFEST}
+            veyqctl_assets = veyqctl_constants(r"[A-Z]+_ASSET")
+            if not veyqctl_assets:
+                fail("scripts/veyqctl.py names no `*_ASSET` constant, so the names it fetches checked NOTHING")
+            for constant, name in sorted(veyqctl_assets.items()):
+                if name not in produced:
+                    fail(
+                        f"scripts/veyqctl.py's `{constant}` is `{name}`, which scripts/release_assets.py does not write "
+                        f"(it writes {', '.join(sorted(produced))}) — `veyqctl install` would miss it in every release"
+                    )
 
 written_tags = 0
 # Tracked files only, as in assertion 9's flag scan. A gitignored `infra/.env` is one operator's local pin (a
@@ -1309,7 +1509,7 @@ print(
     f"release identity OK: VERSION {version_value} is the major, the minor is counted offline from the history "
     f"({len(publishing_branches)} publishing branch(es), a shallow checkout refused), every registry write waits for "
     f"a dispatch, the stamp is declared by the {stamped_targets} published target stage(s) and no other, a release "
-    f"refuses a republish and creates its v{version_value}.<minor> ref, the publish waits on every one of the "
+    f"refuses a republish, creates its v{version_value}.<minor> ref and last its one GitHub Release in one call, the publish waits on every one of the "
     f"{len([j for j in (workflow_doc.get('jobs') or {}) if j != PUBLISH_JOB])} other jobs as a green stage, the producer carries "
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
