@@ -125,8 +125,9 @@ paths:
         that node visible to a **member of its scope** — not only the caller's (cr-0104), so a member can
         see and adopt an orphaned (disabled) share on a node of a shared scope; a non-member or an unknown node gets `[]`,
         an accepted member of a suspended tenant `403 tenant_suspended`. Each row carries `mine` (owned by the
-        caller). A deleted link (`deleteShare`) is in neither listing. Operator-blind: the row carries no plaintext
-        name or content.
+        caller). A deleted link (`deleteShare`) is in neither listing. Each row also says whether a guest is served the
+        link now, and if not why (`guestStops`, inbox #457). Operator-blind: the row carries no plaintext name or
+        content.
       security:
         - bearerAuth: []
       parameters:
@@ -1436,7 +1437,7 @@ components:
 
     ShareSummary:
       type: object
-      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, deletable, newGuestsRefused, writeVerifierMissing, createdAt]
+      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, deletable, newGuestsRefused, writeVerifierMissing, guestStops, createdAt]
       properties:
         shareId:
           x-veyq-visibility: id
@@ -1554,6 +1555,16 @@ components:
             every new guest, and an edit never adds a verifier (ADR 0076 point 2), so the manage UI warns on that role
             change and offers `reissueShare` instead. Derived from what the share already stores.
           example: false
+        guestStops:
+          type: array
+          description: >
+            Why a guest is not served this link right now — **empty exactly when a guest is**, every reason when not
+            (inbox #457). The server computes it with the one predicate every guest path passes
+            (`ShareGuestGate.activeShare`), so the list cannot say "on" where a guest gets the unknown link's `404`, nor
+            the opposite. Delivered only here, to a member who may list the share: a guest still learns nothing of why
+            (ADR 0088 decision 5). Codes, never prose; the client words them.
+          maxItems: 16
+          items: { $ref: "#/components/schemas/ShareGuestStop" }
         expiresAt:
           x-veyq-visibility: time
           type: [string, "null"]
@@ -1565,6 +1576,39 @@ components:
           type: string
           format: date-time
           example: 2026-07-07T12:00:00Z
+
+    ShareGuestStop:
+      type: object
+      description: >
+        One reason a guest is not served a link (inbox #457). Several can hold at once; each names what would have
+        to change. Instance and tenant configuration and the link's own state, all of which the member can already
+        read: nothing here is content.
+      required: [reason]
+      properties:
+        reason:
+          x-veyq-visibility: enum
+          type: string
+          enum: [revoked, expired, spaceUnavailable, instanceSwitch, tenantSwitch, linkPassword, linkMaxDays]
+          description: >
+            `revoked` — the link is off (`enabled` false). `expired` — its end date has passed. `spaceUnavailable` —
+            its space is being deleted or its tenant is suspended. `instanceSwitch` / `tenantSwitch` — the register
+            entry `capabilityId` (the link's role's entry or an ancestor of it) is off at that level (ADR 0088
+            decision 2); one stop per entry and level that is off. `linkPassword` — every link must have a password and
+            this one has none. `linkMaxDays` — every link must end at most `maxDays` days after it was made, and this
+            one has no end date or a later one (ADR 0088 decision 8; only a renewed link starts a new count).
+          example: tenantSwitch
+        capabilityId:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: For `instanceSwitch` and `tenantSwitch`, the register entry that is off; null for every other reason.
+          maxLength: 64
+          example: core.public-shares
+        maxDays:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          description: For `linkMaxDays`, the lifetime in effect (the strictest of both levels); null for every other reason.
+          minimum: 1
+          example: 7
 
     PublicShare:
       type: object
