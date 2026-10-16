@@ -1,6 +1,7 @@
 # ADR 0093 — A report opens one window for the moderator, and a hold copies, never blocks
 
-- Status: Accepted 2026-10-16; nothing of it is built. It is on the V1 line (owner 2026-10-16,
+- Status: Accepted 2026-10-16; § 8 is built (the last editor per field group, and the take-back it tightens), the
+  rest is not. It is on the V1 line (owner 2026-10-16,
   [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
@@ -153,7 +154,9 @@ The last editor of each field group — name, meta, note, icon — is stored as 
 reason (a sealed attribution could name anyone). The server knows it; whether members see it is a product question
 outside this ADR. A hold freezes the reported revision with its editor. This also tightens
 [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 6: a guest may abandon
-an empty placeholder only if its name was last written by that guest's identity. The editor is the authenticated caller of the write, never a request field, and every write of the ciphertext counts — a re-seal by a move or a restore as much as a new text, since the server cannot tell them apart (owner 2026-10-16). Clearing a field clears its editor. A field only its own row's subject writes (a share identity's name, a member's profile) needs no column. The model is [en.platform.field-editor](../features/platform/enablers/en.platform.field-editor.md).
+an empty placeholder only if its name was last written by that guest's identity, and never one a live link is rooted
+on. The editor is the authenticated caller of the write, never a request field, and every write of the ciphertext counts — a re-seal by a move or a restore as much as a new text, since the server cannot tell them apart (owner 2026-10-16). Clearing a field clears its editor. A field only its own row's subject writes (a share identity's name, a member's profile) needs no column. The model, the columns and the tests that pin each writer are
+[en.platform.field-editor](../features/platform/enablers/en.platform.field-editor.md).
 
 ### 9. A text or icon field seals under a key of its own
 
@@ -213,7 +216,7 @@ range and its no-extension rule (§ 2 there).
 - The operator can act on one share, one item or one uploader instead of a whole tenant, and reads only what was
   reported. Unreported content stays unreadable; the T&S target in the security model becomes buildable as written.
 - Costs: a new share kind (medium-scoped and field-scoped), hold tables and the sweep's skip, a moderation mode in
-  the share viewer, admin-web's queue and the CLI's moderation commands, an editor column per field group, per-field
+  the share viewer, admin-web's queue and the CLI's moderation commands, an editor column per field group (built), per-field
   keys in the crypto suite with new vectors, the guest-write record, the moderation log. `EveryStoredTimeHasAReaderTest`
   needs a reader for each new time: the purge for records and holds, admin-web for the log.
 - **A single operator reviews their own measure** on objection, and the whole Server Owner vault is open while

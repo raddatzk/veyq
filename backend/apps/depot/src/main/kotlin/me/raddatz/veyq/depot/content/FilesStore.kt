@@ -3,6 +3,7 @@ package me.raddatz.veyq.depot.content
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.depot.DepotNodeKinds
@@ -70,7 +71,8 @@ class FilesStore(private val blobs: BlobUploadStore) {
     }
 
     /** The guest identity id a `share:{identityId}` uploader key names; null for a member's key or none. */
-    private fun guestIdentityOf(uploaderKey: String?): String? = uploaderKey?.takeIf { it.startsWith(SHARE_KEY) }?.removePrefix(SHARE_KEY)
+    private fun guestIdentityOf(uploaderKey: String?): String? =
+        uploaderKey?.let { (PrincipalKey.parse(it) as? PrincipalKey.Share)?.identityId }
 
     /**
      * Every live `FILE` among [liveNodeIds] — a share's live subtree, as core's guest gate read it — in [scopeId], with
@@ -111,9 +113,4 @@ class FilesStore(private val blobs: BlobUploadStore) {
     fun blob(scopeId: String, blobId: String): FileBlobData? = blobs.findBlob(scopeId, blobId)?.let(::toData)
 
     private fun toData(b: BlobEntity) = FileBlobData(b.id, b.chunkCount, b.byteSize, b.wrappedBlobKey, blobs.decodeManifest(b.manifest), b.wrappedBlobMeta)
-
-    private companion object {
-        /** A guest uploader's key prefix (`NodeAttachmentEntity.uploaderKey`). */
-        const val SHARE_KEY = "share:"
-    }
 }

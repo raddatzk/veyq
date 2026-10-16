@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.content.NodesStore
@@ -72,7 +73,7 @@ class ShareUploaderCoreSliceTest {
                     nodes.applyUpdate(
                         scopeId, memory,
                         NodesStore.Placement(scopeId, renamed, "cmVuYW1lLXNsdWc=", "cmUtd3JhcA==", epoch = null, expectedRevision = 0),
-                        null, null, null,
+                        null, null, null, FIXTURE_EDITOR,
                     )
                 },
             )

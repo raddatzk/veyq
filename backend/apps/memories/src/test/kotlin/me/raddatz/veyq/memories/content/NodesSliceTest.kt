@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.content
 
+import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
@@ -52,7 +53,7 @@ class NodesSliceTest {
             val renamed = "cmVuYW1lZA==" // "renamed"
             whileUncommitted(
                 change = { items.bump(scopeId, memory) },
-                overlapping = { nodes.applyUpdate(scopeId, memory, rootRename(scopeId, renamed), null, null, null) },
+                overlapping = { nodes.applyUpdate(scopeId, memory, rootRename(scopeId, renamed), null, null, null, FIXTURE_EDITOR) },
             )
             QuarkusTransaction.requiringNew().run {
                 val node = NodeEntity.findById(memory)!!

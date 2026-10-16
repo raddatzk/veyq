@@ -30,8 +30,9 @@ info:
     `createShareNode`, one already there, or the link's root file itself — replacing its blob. Everything else is core's and is not repeated here:
     the shared nodes with their keys, names and sealed metadata (`resolveShare`), a file's download
     (`resolveShareBlob` by `blobId`), a guest's create, rename and move (`createShareNode`, `updateShareNode`). A
-    guest deletes no file that holds content (nodes store no authorship, ADR 0080 Decision 6); one whose upload was
-    refused or given up it takes back with core's `abandonShareNode`, which asks Depot whether the file is still empty.
+    guest deletes no file that holds content (ADR 0080 Decision 6); one whose upload was refused or given up — a file
+    whose name it wrote last — it takes back with core's `abandonShareNode`, which asks Depot whether the file is still
+    empty.
     The link itself — its id, password, access mode and guest identities — is core's; these operations sit under its
     `/api/shares/{shareId}` path and pass core's guest gate first (`ShareGuestGate`: an active share — its role's instance capability on too, ADR 0088 decision 5 → the password →
     the mode → the guest's token → the per-share upload budget where the operation spends it), then do the
@@ -480,7 +481,8 @@ components:
           description: >
             Who uploaded the file's CURRENT content (ADR 0083 Decision 8): `user:{userId}` (a member) or
             `share:{shareIdentityId}` (a link's guest) — the opaque key shape Memories' `ownerKey` uses. A replace moves
-            it to the replacer; who created the node is not recorded. Operator-visible coarse metadata (ADR 0034's class:
+            it to the replacer. Who last wrote the node's name is recorded apart from this (ADR 0093 § 8) and served
+            to no client. Operator-visible coarse metadata (ADR 0034's class:
             who uploaded which blob), never a name. Null while the file holds no content. Members only: the guest's
             listing carries no such field.
           maxLength: 64

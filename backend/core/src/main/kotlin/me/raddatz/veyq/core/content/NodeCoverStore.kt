@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.content
 import me.raddatz.veyq.core.blob.AttachOutcome
 import me.raddatz.veyq.core.blob.AttachmentStore
 import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.identity.PrincipalKey
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -28,7 +29,7 @@ class NodeCoverStore(private val attachments: AttachmentStore, private val nodes
     @Transactional
     fun set(
         scopeId: String, nodeId: String, kind: String, session: UploadSessionEntity, manifest: List<Long>?,
-        expectedBlobId: String?, wrappedMeta: String, metaRevision: Long,
+        expectedBlobId: String?, wrappedMeta: String, metaRevision: Long, editor: PrincipalKey,
     ): NodeCoverOutcome {
         when (val o = attachments.attach(scopeId, nodeId, setOf(kind), NodeCover.SLOT, session, manifest, expectedBlobId)) {
             is AttachOutcome.Attached -> Unit
@@ -39,21 +40,22 @@ class NodeCoverStore(private val attachments: AttachmentStore, private val nodes
             AttachOutcome.UploadMismatch -> return NodeCoverOutcome.UploadMismatch
             AttachOutcome.NotAdmitted -> error("a member's cover passes no gate: $o")
         }
-        return writeMeta(scopeId, nodeId, wrappedMeta, metaRevision)
+        return writeMeta(scopeId, nodeId, wrappedMeta, metaRevision, editor)
     }
 
     @Transactional
-    fun remove(scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaRevision: Long): NodeCoverOutcome {
+    fun remove(scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaRevision: Long, editor: PrincipalKey): NodeCoverOutcome {
         when (attachments.detach(scopeId, nodeId, NodeCover.SLOT, blobId)) {
             // An empty slot (a replay, a meta that named a blob already gone) still writes the meta: the removal is idempotent.
             AttachmentStore.DetachOutcome.Detached, AttachmentStore.DetachOutcome.Empty -> Unit
             AttachmentStore.DetachOutcome.Replaced -> return NodeCoverOutcome.CoverStale(attachments.slotBlobId(nodeId, NodeCover.SLOT))
         }
-        return writeMeta(scopeId, nodeId, wrappedMeta, metaRevision)
+        return writeMeta(scopeId, nodeId, wrappedMeta, metaRevision, editor)
     }
 
-    private fun writeMeta(scopeId: String, nodeId: String, wrappedMeta: String, metaRevision: Long): NodeCoverOutcome =
-        when (val r = nodes.applyUpdate(scopeId, nodeId, null, null, wrappedMeta, metaRevision)) {
+    /** The node's re-sealed meta, with [editor] — the member who set or removed the cover — as its editor. */
+    private fun writeMeta(scopeId: String, nodeId: String, wrappedMeta: String, metaRevision: Long, editor: PrincipalKey): NodeCoverOutcome =
+        when (val r = nodes.applyUpdate(scopeId, nodeId, null, null, wrappedMeta, metaRevision, editor)) {
             NodesStore.ApplyResult.Applied -> NodeCoverOutcome.Done
             NodesStore.ApplyResult.Missing -> rolledBack(NodeCoverOutcome.NotFound)
             is NodesStore.ApplyResult.StaleMeta -> rolledBack(NodeCoverOutcome.StaleMeta(r.wrappedMeta, r.metaRevision))

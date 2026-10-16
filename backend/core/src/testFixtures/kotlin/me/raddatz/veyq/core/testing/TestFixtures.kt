@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
@@ -40,6 +41,10 @@ object TestFixtures {
 
     /** The opaque wrapped content key (`K_node`) a seeded Memory or Chapter carries. */
     const val CONTENT_KEY = "a21lbQ=="
+
+    /** The member a seeded row names as its sealed fields' last editor when the test does not say ([seedNode]): every
+     *  node's name has one (`ck_node_name_editor`). A fixed id no account holds — the column is no foreign key. */
+    val FIXTURE_EDITOR: PrincipalKey = PrincipalKey.User("00000000-0000-4000-8000-00000000ed17")
 
     /**
      * An account row, **not yet persisted** — for a test that writes it inside its own transaction beside the
@@ -154,7 +159,8 @@ object TestFixtures {
      * default `MEMORY` here would make core's fixtures name an application's kind (ADR 0079) — so each call site says
      * which kind it seeds. Every node carries a content key (ADR 0080 Decision 1, the column is `NOT NULL`), so
      * [wrappedContentKey] is never null; it has no default so a test that reads a wrap back says which one it seeded
-     * ([CONTENT_KEY] for most). Seeded, not created: no `NodeKindRules` is asked.
+     * ([CONTENT_KEY] for most). Seeded, not created: no `NodeKindRules` is asked. [nameEditor] is who last wrote the
+     * name ([FIXTURE_EDITOR], a member, unless a test of the field editor says otherwise).
      */
     fun seedNode(
         scopeId: String,
@@ -162,6 +168,7 @@ object TestFixtures {
         parentId: String = scopeId,
         wrappedContentKey: String,
         encryptedName: String = "bg==",
+        nameEditor: PrincipalKey = FIXTURE_EDITOR,
     ): String {
         val id = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
@@ -169,6 +176,7 @@ object TestFixtures {
                 this.id = id; this.scopeId = scopeId; this.parentId = parentId; this.kind = kind
                 this.encryptedName = encryptedName; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
                 this.wrappedContentKey = wrappedContentKey; createdAt = Instant.now()
+                nameWrittenBy(nameEditor)
             }.persist()
         }
         return id

@@ -35,10 +35,10 @@ what this instance can do, what version it speaks, and which optional features t
 
 ## Enablers
 
-- [en.platform.field-editor](enablers/en.platform.field-editor.md) — **planned** (ADR 0093 § 8: the server stores the
+- [en.platform.field-editor](enablers/en.platform.field-editor.md) — **built** (ADR 0093 § 8: the server stores the
   last editor of every sealed field group — name, meta, note, icon — as an opaque `user:{id}` / `share:{identityId}`,
-  from the authenticated caller, served to no client; a guest's take-back then erases only a placeholder its own identity
-  named, ADR 0080 decision 6.)
+  from the authenticated caller, served to no client; a guest's take-back erases only a placeholder its own identity
+  named and no link is rooted on, ADR 0080 decision 6.)
 
 ## Precedent already in the fresh state
 

@@ -50,7 +50,8 @@
   differently than for a member (the link serves no creation time).
 - **E9 — a file is refused or given up** (the link's storage limit is reached, the guest cancels): the empty file its
   create made in the guest's folder is taken back and erased (`abandonShareNode`), so nothing of it is kept; a guest
-  takes back nothing in another guest's folder, nor its folder itself, nor a file that holds content.
+  takes back nothing in another guest's folder, nor its folder itself, nor a file that holds content, nor one whose
+  name its identity did not write last (ADR 0093 § 8).
 
 ## Quality notes
 

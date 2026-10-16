@@ -170,7 +170,10 @@ CREATE INDEX ix_tenant_invite_tenant ON veyq_tenant_invite (tenant_id);
 
 -- A scope (TENANT / GROUP / PERSONAL). It holds no key. personal_owner is the owning account on a PERSONAL
 -- scope and null on every other kind, so ux_scope_personal_owner allows one personal scope per member and
--- tenant (both engines admit any number of nulls in a unique index).
+-- tenant (both engines admit any number of nulls in a unique index). name_editor_user_id / icon_editor_user_id: the
+-- member who last wrote encrypted_name / sealed_icon (ADR 0093 § 8, en.platform.field-editor) - no foreign key, a
+-- member who left stays named; only a member writes either, so there is no guest column. Null exactly while the field
+-- is (ScopesStore writes both together; the per-writer slice tests pin it).
 CREATE TABLE veyq_scope (
     id              UUID NOT NULL PRIMARY KEY,
     tenant_id       UUID NOT NULL,
@@ -183,6 +186,8 @@ CREATE TABLE veyq_scope (
     icon_epoch      INT NOT NULL DEFAULT 0,
     member_removals INT NOT NULL DEFAULT 0,
     personal_owner  UUID NULL,
+    name_editor_user_id UUID NULL,
+    icon_editor_user_id UUID NULL,
     CONSTRAINT fk_scope_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id)
 );
 CREATE INDEX ix_scope_tenant ON veyq_scope (tenant_id);
@@ -220,7 +225,11 @@ CREATE UNIQUE INDEX ux_membership_user_scope ON veyq_membership (user_id, scope_
 -- engine pair has a filtered index. No column here is an application's (inbox #341): a Memory's cover is an
 -- attachment (veyq_node_attachment, slot COVER) and its item-list counters are core's own table (veyq_node_items_revision). Of this table's
 -- times only created_at keeps the millisecond (TIMESTAMP(3)): clients order equal-named siblings by it, then by id
--- (ADR 0015).
+-- (ADR 0015). Who last wrote each sealed field group (ADR 0093 § 8, en.platform.field-editor): name_editor_* for
+-- encrypted_name, meta_editor_* for wrapped_meta - a member's id (no foreign key, as the attachment's uploader: a member
+-- who left stays named) or a guest identity's (fk_node_*_editor_identity, below), exactly one; the name always has one,
+-- the meta one exactly while it is set (ck_node_name_editor, ck_node_meta_editor). Not share_identity_id: that column
+-- names an identity folder's owner and a move clears it.
 CREATE TABLE veyq_node (
     id                      UUID NOT NULL PRIMARY KEY,
     scope_id                UUID NOT NULL,
@@ -238,7 +247,16 @@ CREATE TABLE veyq_node (
     meta_revision           BIGINT NOT NULL DEFAULT 0,
     placement_revision      BIGINT NOT NULL DEFAULT 0,
     share_identity_id       UUID NULL,
-    CONSTRAINT fk_node_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
+    name_editor_user_id     UUID NULL,
+    name_editor_identity_id UUID NULL,
+    meta_editor_user_id     UUID NULL,
+    meta_editor_identity_id UUID NULL,
+    CONSTRAINT fk_node_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id),
+    CONSTRAINT ck_node_name_editor CHECK ((name_editor_user_id IS NULL AND name_editor_identity_id IS NOT NULL)
+        OR (name_editor_user_id IS NOT NULL AND name_editor_identity_id IS NULL)),
+    CONSTRAINT ck_node_meta_editor CHECK ((wrapped_meta IS NULL AND meta_editor_user_id IS NULL AND meta_editor_identity_id IS NULL)
+        OR (wrapped_meta IS NOT NULL AND meta_editor_user_id IS NULL AND meta_editor_identity_id IS NOT NULL)
+        OR (wrapped_meta IS NOT NULL AND meta_editor_user_id IS NOT NULL AND meta_editor_identity_id IS NULL))
 );
 CREATE UNIQUE INDEX ux_node_parent_slug ON veyq_node (parent_id, slug_token);
 CREATE INDEX ix_node_scope ON veyq_node (scope_id);
@@ -387,6 +405,9 @@ CREATE UNIQUE INDEX ux_job_decline ON veyq_job_decline (job_id, worker_id);
 -- A public share (ADR 0029). A deleted link is a tombstone: the row keeps its ids and creation time, every
 -- ciphertext column goes and deleted marks it — a flag, not a time: nothing reads when a link was deleted (#398). wrap is null on a WRITE_ONLY share, which carries the drop public key
 -- instead (ADR 0031). write_verifier = SHA-256 of the link's write token (ADR 0076); null takes no new guest.
+-- name_editor_user_id, note_editor_user_id, share_name_editor_user_id: the member who last wrote sealed_name,
+-- sealed_note, sealed_share_name (ADR 0093 § 8) - no foreign key, members only, null exactly while the field is (the
+-- tombstone clears them with the seals; SharingStore writes each with its field).
 CREATE TABLE veyq_share (
     id                      VARCHAR(64)  NOT NULL PRIMARY KEY,
     owner_account           UUID  NOT NULL,
@@ -411,6 +432,9 @@ CREATE TABLE veyq_share (
     reissue_only            BOOLEAN NOT NULL DEFAULT FALSE,
     deleted                 BOOLEAN NOT NULL DEFAULT FALSE,
     write_verifier          TEXT NULL,
+    name_editor_user_id       UUID NULL,
+    note_editor_user_id       UUID NULL,
+    share_name_editor_user_id UUID NULL,
     CONSTRAINT fk_share_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );
 CREATE INDEX ix_share_owner ON veyq_share (owner_account);
@@ -433,6 +457,10 @@ CREATE INDEX ix_share_identity_lookup ON veyq_share_identity (share_id, token_ha
 -- kept by NodeGuestIdentityUsage; the scope erase deletes the nodes (phase 700) before the identities (phase 800).
 ALTER TABLE veyq_node ADD CONSTRAINT fk_node_share_identity FOREIGN KEY (share_identity_id) REFERENCES veyq_share_identity (id);
 CREATE UNIQUE INDEX ux_node_parent_identity ON veyq_node (parent_id, share_identity_id);
+-- A node's field editors that are guests (see veyq_node). Not cascading either: an identity that last wrote a name or a
+-- meta is kept by NodeGuestIdentityUsage while a row names it, and the scope erase deletes the nodes first.
+ALTER TABLE veyq_node ADD CONSTRAINT fk_node_name_editor_identity FOREIGN KEY (name_editor_identity_id) REFERENCES veyq_share_identity (id);
+ALTER TABLE veyq_node ADD CONSTRAINT fk_node_meta_editor_identity FOREIGN KEY (meta_editor_identity_id) REFERENCES veyq_share_identity (id);
 
 -- A sealed file on a node (ADR 0079 Consequences, cr-files-application P3): one blob per (node, slot). slot is a
 -- token the owning application names (Depot's FILE_CONTENT, Memories' COVER — each equal to the blob role its wrap is

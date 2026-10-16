@@ -11,8 +11,9 @@ import jakarta.enterprise.context.ApplicationScoped
  * what core itself could still lose: no attachment in any slot (a cover is one) and no sealed metadata; the child and
  * the open upload are `ShareNodesHandler.abandon`'s own checks, made before this one.
  *
- * Nodes store no authorship, so a member's empty folder is one too: all a guest can remove is a name with nothing
- * behind it, which a `READ_WRITE` guest could already rename away (ADR 0080 decision 6).
+ * A member's empty folder is not one — core asks first whose name it is (the calling identity must have written it
+ * last, ADR 0093 § 8) — unless a `READ_WRITE` guest moved it, which writes its name: then all the guest can remove is a
+ * name with nothing behind it, which it could already rename away (ADR 0080 decision 6).
  */
 @ApplicationScoped
 class FolderGuestPlaceholders : GuestPlaceholders {

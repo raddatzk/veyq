@@ -1,5 +1,7 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.content.NodesStore
@@ -85,7 +87,7 @@ class MediaRowLockRaceSliceTest {
                 change = {
                     assertEquals(
                         NodesStore.ApplyResult.Applied,
-                        tree.applyUpdate(g.upload.scopeId, g.upload.nodeId, NodesStore.Placement(g.outside, "bmV3", "c2x1Zy0$round", CONTENT_KEY, null, 0), null, null, null),
+                        tree.applyUpdate(g.upload.scopeId, g.upload.nodeId, NodesStore.Placement(g.outside, "bmV3", "c2x1Zy0$round", CONTENT_KEY, null, 0), null, null, null, FIXTURE_EDITOR),
                         "round $round: the move",
                     )
                 },
@@ -131,7 +133,7 @@ class MediaRowLockRaceSliceTest {
             }.persist()
             val bucket = BucketEntity().apply {
                 id = UUID.randomUUID().toString(); this.scopeId = scopeId; this.nodeId = nodeId
-                ownerKey = OwnerKey.Share(identityId).format(); isPrimary = true; createdAt = Instant.now()
+                ownerKey = PrincipalKey.Share(identityId).format(); isPrimary = true; createdAt = Instant.now()
             }.also { it.persist() }
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId

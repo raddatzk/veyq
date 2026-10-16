@@ -8,9 +8,10 @@ package me.raddatz.veyq.core.sharing
  * erases. Core names no application kind (ADR 0079): an application's declaration is the application's, and core only
  * reads it.
  *
- * Nodes store no authorship, so the server cannot tell whose placeholder it is: whatever an implementation declares,
- * any guest within reach may erase it. So it declares only a node nobody could lose anything with — never one that
- * holds, or ever held, content.
+ * Core also checks that the calling guest's identity last wrote the node's name (its name editor, ADR 0093 § 8) and
+ * that no link is rooted on it, so a member's empty node is never one. But a guest that MOVED a member's empty node
+ * wrote its name (a placement re-seals it, ADR 0080 decision 6), so an implementation still declares only a node
+ * nobody could lose anything with — never one that holds, or ever held, content.
  *
  * **Exactly one implementation per kind, and none is the default** — the partition of [GuestNodeRules]. A kind no
  * implementation handles, or one two implementations claim, is never a placeholder (`not_a_placeholder`); so core

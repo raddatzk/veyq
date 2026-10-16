@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.testing
 
+import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import io.quarkus.arc.Unremovable
 import jakarta.inject.Singleton
 import java.time.Instant
@@ -37,7 +38,7 @@ class MemoriesWorldContent : WorldContent {
             NodeEntity().apply {
                 id = nodeId; this.scopeId = scopeId; parentId = scopeId; kind = "MEMORY"
                 encryptedName = B64; slugToken = "c2x1Zw$nodeId".take(120); orderIndex = 0
-                wrappedContentKey = B64; createdAt = Instant.now()
+                wrappedContentKey = B64; createdAt = Instant.now(); nameWrittenBy(FIXTURE_EDITOR)
             }.persist()
         }
         val mediaId = TestIds.uuid()

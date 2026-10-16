@@ -128,15 +128,46 @@ restored by snapshot-and-restore.
       compose stack's services from a worktree unless pinned, and a parallel session runs Docker-heavy e2e on it);
       the amd64 image leg and Buildx's provenance/SBOM (no `docker/build-push-action` locally); `upgrade-proof`
       (disabled); `publish` (registry writes and keyless signing exist only in GitHub). No CI run exists.
-- [ ] 3 **Budgets.** Every job of every workflow declares `timeout-minutes`, the values ADR 0091's table gives; a new
+- [x] 3 **Budgets.** Every job of every workflow declares `timeout-minutes`, the values ADR 0091's table gives; a new
       guard holds the presence (every job, every workflow) and names the ADR as the values' home — it does not keep a
       second copy of the table. Bites: a job without `timeout-minutes` → red; a workflow added without any → red.
-- [ ] 4 **Guard gaps in CI.** `trust-chain.yml`'s loop runs every guard but `validate_guard_gaps.py`; a second job
+      **Built 2026-10-16:** `scripts/validate_pipeline_shape.py` (named for the shape ADR 0091 gives the pipeline, so
+      phase 4's assertion joins it): every job of every `.github/workflows/*.y(a)ml` in the directory — globbed, so an
+      untracked new file counts — declares a positive whole-number `timeout-minutes`; a reusable-workflow call is
+      exempt (GitHub refuses the key there). Run on the untouched tree first: red on all 17 jobs of the six workflows.
+      The table gave no value for the jobs that are no stage, and mutation's row said "as today" (that is, GitHub's
+      360-minute default), so ADR 0091 decision 1 now carries them, marked as estimates: mutation 30 per gate, the
+      version 5, the publish 15, the upgrade proof 15, a path filter 5, CodeQL's analysis 30, the site's check 10 and
+      deploy 5. `trust-chain.yml`'s one job carries 13 (guards 3 + guard gaps 10) until phase 4 splits it. **Bites**
+      (snapshot-and-restore of `ci.yml`, restore confirmed by byte comparison and an unchanged `git status
+      --porcelain`): `chart`'s `timeout-minutes` removed → red naming `ci.yml › chart`; a new `bite-new.yml` with two
+      jobs and no budget → red naming both. Glob green; `validate_guard_gaps.py --force` green (79 cases, 6 workers,
+      166 s, load 30 → 24). Re-proven at close on the tree merged with `main`: both bites red again, every one of the 19
+      jobs carries the table's value, glob green (57 guards), `--force` green (79 cases, 218 s, load 18 → 35).
+- [x] 4 **Guard gaps in CI.** `trust-chain.yml`'s loop runs every guard but `validate_guard_gaps.py`; a second job
       runs that one when `scripts/**` or `.claude/skills/trust-chain/**` change (`dorny/paths-filter`, pinned as
       `codeql.yml` pins it) and on a nightly `schedule` on `main`, always in full there. `changes/README.md`
       § The trust-chain guards stay green and `docs/ai/README.md` say what runs where. Bite: a path filter that misses
       `scripts/` (the forged filter) → the guard of phase 3, or a new assertion beside it, red.
-- [ ] 5 **The pipeline, locally.** `scripts/run_pipeline.py` reads `ci.yml`, resolves each job's `needs`, runs the
+      **Built 2026-10-16:** `trust-chain.yml` has three jobs — `trust-chain` (the glob minus `validate_guard_gaps.py`,
+      3 min), `guard-gap-inputs` (the pinned `dorny/paths-filter` on `scripts/**`, `.claude/skills/trust-chain/**` and
+      the workflow itself, only on a push or pull request, 5 min) and `guard-gaps` (`--force`, 10 min) when the filter
+      says `true`, on a dispatch and on the nightly `schedule` (`17 3 * * *`; a schedule runs on the default branch
+      only). `validate_pipeline_shape.py` assertion 2: a glob loop names `validate_guard_gaps.py` (its exclusion); some
+      job runs it alone; that job's workflow has a `schedule`; its `if:` admits the schedule and a
+      `needs.<job>.outputs.<filter> == 'true'`; that job's one paths-filter step exports the output and lists every
+      `SKIP_INPUTS` entry of `validate_guard_gaps.py` as `<input>/**` — read from that constant, so the local skip and
+      the CI filter watch one set. Docs moved: `changes/README.md`, `docs/ai/README.md`, `docs/README.md`, the
+      trust-chain skill's map (its line numbers re-measured), `validate_guard_gaps.py`'s docstring (the CI filter has
+      the skip's blind spot: an anchor outside the inputs shows at the next nightly run), ADR 0091 § Consequences, and
+      the Security page *Verify it yourself*. **Bites** (snapshot-and-restore of `trust-chain.yml`, restore confirmed by
+      byte comparison and an unchanged `git status --porcelain`): the pre-phase `trust-chain.yml` (live) → red twice
+      (the loop runs the guard gaps; no job runs them alone); the forged filter without `scripts/**` → red naming
+      `guard-gap-inputs`' filter; the `schedule` removed → red. Glob green; `validate_guard_gaps.py --force` green (79
+      cases, 6 workers, 431 s under a load of 66 → 99); `npm run check` in `site/` green. Re-proven at close: the three
+      bites red again (the pre-phase file red twice, the filter without `scripts/**`, the schedule removed), each
+      restored by bytes, `git status --porcelain` unchanged.
+- [x] 5 **The pipeline, locally.** `scripts/run_pipeline.py` reads `ci.yml`, resolves each job's `needs`, runs the
       `run:` steps of every job the host can run (its own Java, Node, Docker; the host architecture of a matrix),
       independent jobs in parallel, each under its `timeout-minutes`, and prints per job: ran / green / red / **not
       run, and why** (a `uses:`-only step it cannot reproduce, a registry write, keyless signing). It exits non-zero on
@@ -144,6 +175,46 @@ restored by snapshot-and-restore.
       list. `nektos/act` was considered and is not used: it would add a runtime that re-implements GitHub's runner,
       and its arm64, cache and registry gaps would surface as its failures rather than ours. Bites: a job that fails →
       red naming it; a job over its budget → red; a job made of `uses:` steps only → "not run", the summary not green.
+      **Built 2026-10-16:** `scripts/run_pipeline.py` reads the workflow from the commit it runs (`--rev`, default
+      `HEAD`; `--workflow <file>` reads a file from disk), expands matrices (GitHub's include/exclude rules) and keeps
+      the host's architecture, evaluates the GitHub expressions in `if:`, `env:`, `run:` and job outputs (three-valued:
+      a secret, or a need that did not run here, is unknown, never true), and runs each job in its own `git clone
+      --shared` of the commit — two jobs' `npm ci` or Gradle builds in one tree would trample each other — under its
+      `timeout-minutes`, up to `--max-parallel` (4) at once, `CI=true`, `GITHUB_OUTPUT`/`ENV`/`PATH` and `RUNNER_TEMP`
+      as on a runner. Verdicts per job: green / green, partial (the steps it could not run named) / red / skipped (the
+      workflow's own `if:`, as in CI) / not run, with the reason; exit 1 on red, 3 when nothing is red but something
+      did not run, 0 only when all ran green. `--dry-run`, `--job`, `--skip-job`, `--keep`; logs and `summary.json` in
+      `.pipeline-out/<run>/` (gitignored). Four `uses:` count as host-provided (checkout, setup-java — `java_home -v`
+      on macOS —, setup-node, setup-buildx) and two as inert (upload-artifact, cache); every other is not run, named.
+      Decisions taken here, beyond the CR's text: (1) `ci.yml` carries the host's **stand-ins** where a stage's work sits
+      in a `uses:` step, guarded by `runner.environment != 'github-hosted'` (GitHub's context; this runner reports
+      `local`): `build` runs `docker build` with the matrix's Dockerfile, target, platform and build arguments, and
+      `chart` checks the host's Helm is `HELM_VERSION` where the pinned Linux tarball cannot run — so the image build
+      is a stage the local run executes, and what it does is read in the workflow, not in the runner; (2) every job gets
+      `VEYQ_INFRA_DIR` = the main checkout's `infra/` (`run_web_e2e.py` from a clone would otherwise recreate the
+      developer's compose project onto the clone's mounts); (3) a step outrunning its budget is stopped SIGINT → SIGTERM
+      → SIGKILL, so its own `finally` runs — the first run sent SIGTERM first and left the races runner's MariaDB
+      container running (stopped by hand, by name). **Bites** (re-run by the session that closed the phase, forged
+      workflows in the scratchpad, `--workflow`): a job `exit 7` → `RED — fails`, exit 1, its green sibling still
+      green; a job with `timeout-minutes: 0.1` whose Python step sleeps 60 s → red "over its budget", exit 1 after 7 s,
+      no sleeper left, and the step's `finally` ran (its marker file written); a job of `checkout` +
+      `docker/build-push-action` only → "not run: no step it can run here", `NOT GREEN`, exit 3; control: one green
+      job → `GREEN`, exit 0. The kill order itself bitten (snapshot-and-restore of `run_pipeline.py`, restore confirmed
+      by bytes and an unchanged `git status --porcelain`): with SIGTERM first the same over-budget step is red and its
+      `finally` does **not** run. **The local run** (commit `04c9f6d1`, `--skip-job web-e2e`, 14-core arm64 Mac, four
+      jobs at once, load average 10 → 18, no Docker project running but the dev stack's own containers): guards green
+      1.5 min (57 guards); backend green, partial 8.1 (`BUILD SUCCESSFUL`, 64 tasks; the wrapper validation not run);
+      backend-races green, partial 9.5 of its 10 (56 filters in 3 projects on the pinned MariaDB, its container gone
+      afterwards); frontend green 5.0 (crypto 452, web 4055 + 32 skipped, admin-web 252 tests; host Node 23, the
+      workflow asks 22); chart green 0.4 (the host Helm check, both chart scripts); version green 0.1; build arm64
+      green, partial — app 0.3, admin 0.1, both from BuildKit's cache (the image inputs unchanged since an earlier run
+      built the app image in 4.6 min), the metadata and build-push actions not run. Verdict `NOT GREEN`, exit 3, as
+      designed: nothing red, but jobs not run whole or in part. **Not run:** `web-e2e` (left out: it drives the
+      developer's one compose stack, which this phase may not touch), both amd64 build legs (arm64 host);
+      `upgrade-proof` and `publish` skipped by their own `if:` on a push, as in CI. The earlier run (commit `22f3c731`,
+      load 13 → 35) had the races **red, over their 10-minute budget** beside the backend's Gradle run, and green in 7.0
+      alone: locally the races share the machine with `./gradlew check`, in CI they get a runner of their own, so 9.5
+      of 10 here says more about local parallelism than about the budget. No CI run exists.
 - [ ] 6 **The page says what runs where.** [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md)
       (ADR 0091 decision 8): the stages now run in one pipeline and locally by one command; guard gaps' CI trigger;
       measured wall times where they exist, estimates marked; still nothing has run in CI.

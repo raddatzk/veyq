@@ -116,12 +116,13 @@ class NodeSubtreePurge(
         sharing.tombstoneAllOn(nodeIds)
 
         // The node rows, before the identities: a guest's identity folder names its identity
-        //    (`veyq_node.share_identity_id`, ADR 0080 decision 11; `NodeGuestIdentityUsage` keeps it while a row does),
-        //    so the folder's row goes first and its identity joins the ones the step below may drop.
-        guests += erased.mapNotNull { it.shareIdentityId }
+        //    (`veyq_node.share_identity_id`, ADR 0080 decision 11), and a guest that last wrote a node's name or meta is
+        //    named as its editor (ADR 0093 § 8) — `NodeGuestIdentityUsage` keeps an identity while a row names it either
+        //    way, so the rows go first and every identity they named joins the ones the step below may drop.
+        guests += erased.flatMap { listOfNotNull(it.shareIdentityId, it.nameEditorIdentityId, it.metaEditorIdentityId) }
         erased.forEach { NodeEntity.deleteById(it.id) }
 
-        // The guests of ANY deleted link whose last attachment, identity folder or application row naming them went above — a link
+        // The guests of ANY deleted link whose last attachment, identity folder, field or application row naming them went above — a link
         //    deleted earlier loses its guests here, with the last node that held their uploads. After every eraser
         //    above, the tombstones and the node rows, which it reads (GuestIdentityUsage).
         sharing.dropDeadIdentities(guests)

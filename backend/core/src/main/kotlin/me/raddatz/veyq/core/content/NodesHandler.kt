@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.content
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.http.Failures
@@ -119,7 +120,10 @@ class NodesHandler(
             .refusal(CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting)?.let { return it }
         // The member's create opens its own transaction: the loser of a concurrent create answers as its replay does.
         return createOrConflict(conflict = createReplay(scopeId, parentSlotId, slugToken, nodeId)) {
-            createInScope(scopeId, nodeId, parentSlotId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
+            createInScope(
+                scopeId, nodeId, parentSlotId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta,
+                editor = PrincipalKey.User(userId),
+            )
         }
     }
 
@@ -154,11 +158,14 @@ class NodesHandler(
      * above the drop box, place nothing of their own there): a parent that is, or lies inside, a guest's identity folder
      * ([NodesStore.identityFolderOwner]) is `illegal_structure` unless [identityWriter] is that folder's identity — a
      * `WRITE_ONLY` guest creating in its own folder (`ShareNodesHandler`).
+     *
+     * [editor] is the caller the caller's gate authenticated (a member's principal, a guest's token identity): the new
+     * node's name editor, and its meta's when it has one ([NodesStore.create]).
      */
     internal fun createInScope(
         scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
-        boundary: SubtreeBoundary? = null, identityWriter: String? = null,
+        editor: PrincipalKey, boundary: SubtreeBoundary? = null, identityWriter: String? = null,
     ): CreateNodeOutcome {
         check(QuarkusTransaction.isActive()) { "createInScope joins its caller's transaction; open one with createOrConflict" }
         // Every decision under the tree's lock (NodesStore.lockScope), taken before ANY node is read. Not only because
@@ -192,7 +199,7 @@ class NodesHandler(
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
         // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is
         // stored verbatim or not at all.
-        val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
+        val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta, editor)
         return if (created) CreateNodeOutcome.Created(nodeId) else createReplay(scopeId, parentSlotId, slugToken, nodeId)() ?: CreateNodeOutcome.IdTaken
     }
 
@@ -249,7 +256,7 @@ class NodesHandler(
         malformed(placement, wrappedMeta, metaRevision)?.let { return it }
         access.check(userId, scopeId, WRITE)
             .refusal(UpdateNodeOutcome.NotFound, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting)?.let { return it }
-        return updateInScope(scopeId, nodeId, placement, orderIndex, wrappedMeta, metaRevision)
+        return updateInScope(scopeId, nodeId, placement, orderIndex, wrappedMeta, metaRevision, PrincipalKey.User(userId))
     }
 
     /** [epochOptional]: only a bounded placement may leave the epoch out ([updateInScope]). */
@@ -281,10 +288,13 @@ class NodesHandler(
      * and the decisions under the lock would be handed that stale copy (the boundary walk included). After the scope
      * lock it may take rows of its own (a share row, `ShareNodesHandler`); it must never lock one of its own rows or a
      * node row BEFORE the scope lock — every tree writer takes the scope first, so that order would invert theirs.
+     *
+     * [editor] is the authenticated caller, recorded as the editor of whatever sealed field the write replaces
+     * ([NodesStore.applyUpdate]).
      */
     internal fun updateInScope(
         scopeId: String, nodeId: String, placement: PlacementRequest, orderIndex: Int?,
-        wrappedMeta: String?, metaRevision: Long?, boundary: SubtreeBoundary? = null,
+        wrappedMeta: String?, metaRevision: Long?, editor: PrincipalKey, boundary: SubtreeBoundary? = null,
     ): UpdateNodeOutcome {
         malformed(placement, wrappedMeta, metaRevision, epochOptional = boundary != null)?.let { return it }
         // A trashed node is not found: it is neither movable nor renamable (its entry is restored, not placed).
@@ -342,7 +352,7 @@ class NodesHandler(
                 expectedRevision = placement.placementRevision!!,
             )
         }
-        return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaRevision, boundary)) {
+        return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaRevision, editor, boundary)) {
             NodesStore.ApplyResult.Applied -> UpdateNodeOutcome.Updated
             NodesStore.ApplyResult.Missing -> UpdateNodeOutcome.NotFound
             NodesStore.ApplyResult.IllegalMove -> UpdateNodeOutcome.IllegalStructure
@@ -386,7 +396,7 @@ class NodesHandler(
     ): RestoreNodeOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(RestoreNodeOutcome.NotFound, RestoreNodeOutcome.Suspended, RestoreNodeOutcome.ScopeDeleting)?.let { return it }
-        return when (store.restoreSubtree(scopeId, nodeId, slugToken, encryptedName)) {
+        return when (store.restoreSubtree(scopeId, nodeId, slugToken, encryptedName, PrincipalKey.User(userId))) {
             NodesStore.RestoreResult.DONE -> RestoreNodeOutcome.Restored
             NodesStore.RestoreResult.SLUG_TAKEN -> RestoreNodeOutcome.SlugTaken
             NodesStore.RestoreResult.NOT_FOUND -> RestoreNodeOutcome.NotFound

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.quota.StorageQuota
 import me.raddatz.veyq.core.quota.UploadAdmission
 import me.raddatz.veyq.core.blob.UploadDeclare
@@ -463,7 +464,7 @@ class SharingHandler(
         access.check(userId, share.scopeId, WRITE)
             .refusal(SetShareSealedNameOutcome.NotFound, SetShareSealedNameOutcome.Suspended, SetShareSealedNameOutcome.Deleting)
             ?.let { return it }
-        return if (store.setSealedName(shareId, sealedName)) SetShareSealedNameOutcome.Done else SetShareSealedNameOutcome.NotFound
+        return if (store.setSealedName(shareId, sealedName, PrincipalKey.User(userId))) SetShareSealedNameOutcome.Done else SetShareSealedNameOutcome.NotFound
     }
 
     /** Re-activate a soft-revoked share and adopt it (cr-0104): any current member of the share's scope may flip

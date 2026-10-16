@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1) and the one workflow (decision 2, `ci.yml`); the rest is not (§ Consequences)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4) and the local run of the pipeline; the rest is not (§ Consequences)
 - Date: 2026-10-16
 
 ## Context
@@ -51,7 +51,14 @@ Three structural costs sit on top of those numbers:
    | **API end-to-end** (`run_web_e2e.py`) | real crypto against a live backend, fresh per file; backup and restore groups; the wire sweeps | 15 min |
    | **Image build** | both images, both architectures, once per commit | 15 min |
    | **Stack lanes** (ADR 0090's harness, on the built image) | see 3 | 15 min each, in parallel |
-   | **Mutation** (ADR 0045) | assertion strength of the scoped files | as today, path-gated |
+   | **Mutation** (ADR 0045) | assertion strength of the scoped files | 30 min per gate, path-gated |
+
+   The jobs that are no stage carry a budget too, so that no job runs on GitHub's 360-minute default: reading the
+   version 5 min; the dispatch publish 15; the jar-level upgrade proof 15, the API end-to-end run's; a path-filter job
+   5; CodeQL's analysis 30; the site's check 10 and its deploy 5. Every value outside the measured stages above is an
+   estimate (mutation: ADR 0045 puts an incremental run at 1–3 min and a cold one at minutes), and the first CI run
+   replaces it. `scripts/validate_pipeline_shape.py` holds that every job of every workflow has a budget; this table
+   is where the values live.
 
 2. **One pipeline per commit, and nothing waits that need not.** `ci.yml` and `container.yml` become one workflow.
    The guards, the surface checks, the races, the API end-to-end run **and the image build start together**; the
@@ -143,8 +150,14 @@ Three structural costs sit on top of those numbers:
   `cr-stack-e2e` (L1), re-cut to this ADR; promotion and attestations (decision 5); L2 (inbox #453); the archive and
   L3 (decision 6). None is provable in CI before the repository has a remote.
 - **The local skip of `validate_guard_gaps.py`** is the first piece built (2026-10-16): a green full run stamps the
-  hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does. The CI half of
-  decision 4 — the path filter and the nightly run — comes with the pipeline CR.
+  hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does.
+- **The guard gaps run in CI on their own trigger** (2026-10-16, `cr-one-pipeline-per-commit` phase 4):
+  `trust-chain.yml`'s glob skips `validate_guard_gaps.py`, and its `guard-gaps` job runs it in full when a push or pull
+  request changes what the local skip hashes (a `dorny/paths-filter` job beside it), on a dispatch, and nightly on
+  `main`. `scripts/validate_pipeline_shape.py` holds the filter to `validate_guard_gaps.py`'s `SKIP_INPUTS`, the
+  schedule, and every glob's exclusion of it. The cost of the filter is the local skip's: a forgery's anchor renamed
+  outside those inputs shows at the next nightly run, not on the push that renamed it. Whether the filter fires on a
+  real push is a fact only the first CI run shows.
 - **The guard-gap cases run in parallel** (2026-10-16, `cr-one-pipeline-per-commit` phase 1): a pool of
   `min(cpu_count, 6)` workers, `VEYQ_GUARD_GAPS_WORKERS=1` the sequential run. Measured on the same Mac with a
   neighbour's Docker-heavy session running: the full run **167 s at 6 workers** (load average 13 → 30) against
@@ -162,10 +175,23 @@ Three structural costs sit on top of those numbers:
   the images' `npm ci` by the publish needing the gate, not the build. The signer's identity moved with the file:
   [Verify a release](../../site/src/content/docs/run/verify-a-release.md) pins `.github/workflows/ci.yml`; no image
   had ever been published under the old one. The pipeline's `guards` job runs the glob minus `validate_guard_gaps.py`,
-  which stays in `trust-chain.yml` until decision 4's filtered job.
+  which is `trust-chain.yml`'s `guard-gaps` job.
+- **Every job runs on its budget** (2026-10-16, `cr-one-pipeline-per-commit` phase 3): `timeout-minutes` on every
+  job of every workflow, the values of decision 1; `scripts/validate_pipeline_shape.py` reds a job, or a whole new
+  workflow, without one.
 - **The remote comes when the owner judges veyq ready to publish, and it will be public** (owner, 2026-10-16). Until
-  then every stage's only run is local, so the pipeline must run locally from the workflow file itself, by one command
-  (`changes/cr-one-pipeline-per-commit.md` phase 5); the first public push is also the first CI run.
+  then every stage's only run is local, so the pipeline runs locally from the workflow file itself, by one command:
+  `python3 scripts/run_pipeline.py` (2026-10-16, `cr-one-pipeline-per-commit` phase 5). It reads `ci.yml` from the
+  commit, runs each job the host can run in its own clone, in parallel and under its budget, and names every job and
+  step it did not run; where a stage's work sits in an action only GitHub runs, `ci.yml` carries the host's stand-in
+  behind `runner.environment != 'github-hosted'` (the image build with the host's `docker build`, the host's Helm held
+  to the pinned version). The first public push is also the first CI run.
+  Measured locally (14-core arm64 Mac, four jobs at once, load average 10 → 18): guards 1.5 min, surface checks —
+  backend 8.1, frontend 5.0, chart 0.4 — the version 0.1, the races 9.5, every one green; the image build 4.6 (app,
+  uncached, on an earlier run). Under a heavier load (13 → 35) the races outran their 10-minute budget beside the
+  backend's Gradle run and took 7.0 alone: locally they share the machine with `./gradlew check`, in CI they have a
+  runner of their own. The API end-to-end run was not run (it shares the developer's one compose stack), nor the amd64
+  legs. Local wall times say little about a CI runner's; the estimate above stays until a CI run replaces it.
 - **Registry growth** is bounded by the retention rule; a snapshot per `main` commit is otherwise one image pair per
   commit.
 

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.blob
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import jakarta.persistence.Column
@@ -50,9 +51,9 @@ class NodeAttachmentEntity : PanacheEntityBase {
     @Column(name = "uploader_user_id", columnDefinition = "uuid")
     var uploaderUserId: String? = null
 
-    /** The uploader as an opaque key — `user:{userId}` or `share:{shareIdentityId}`, Memories' `owner_key` shape — or null. */
+    /** The uploader as an opaque key ([PrincipalKey]: `user:{userId}` or `share:{shareIdentityId}`), or null. */
     val uploaderKey: String?
-        get() = uploaderUserId?.let { "user:$it" } ?: shareIdentityId?.let { "share:$it" }
+        get() = PrincipalKey.of(uploaderUserId, shareIdentityId)?.format()
 
     companion object : PanacheCompanionBase<NodeAttachmentEntity, String>
 }

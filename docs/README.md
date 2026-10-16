@@ -116,7 +116,8 @@ docs/
   must carry are defined once, in [`../changes/README.md`](../changes/README.md) § trust-chain guards), so
   **`scripts/` is the list** — this bullet points at it rather than restating it, because a list restated in
   prose drifts out of step with the one that actually runs. CI runs the glob, unfiltered on every push and PR,
-  in [`../.github/workflows/trust-chain.yml`](../.github/workflows/trust-chain.yml).
+  in [`../.github/workflows/trust-chain.yml`](../.github/workflows/trust-chain.yml) — all but
+  `validate_guard_gaps.py`, which tests the guards and runs there when one changes, and nightly.
 
 ## Formats (the per-kind templates)
 

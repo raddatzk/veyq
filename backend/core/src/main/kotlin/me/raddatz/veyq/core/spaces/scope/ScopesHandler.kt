@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.spaces.scope
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirements
@@ -316,7 +317,7 @@ class ScopesHandler(
         if (!store.isScopeOwner(callerId, scopeId)) return RenameGroupOutcome.NotOwner
         // The fast path; the store decides again in the write itself, where a concurrent rotation is seen.
         if (store.currentEpoch(scopeId) != nameEpoch) return RenameGroupOutcome.StaleEpoch
-        return if (store.renameGroup(scopeId, encryptedName, nameEpoch)) RenameGroupOutcome.Ok else RenameGroupOutcome.StaleEpoch
+        return if (store.renameGroup(scopeId, encryptedName, nameEpoch, PrincipalKey.User(callerId))) RenameGroupOutcome.Ok else RenameGroupOutcome.StaleEpoch
     }
 
     /**
@@ -339,7 +340,7 @@ class ScopesHandler(
         if (!store.isScopeOwner(callerId, scopeId)) return SetScopeIconOutcome.NotOwner
         // The fast path; the store decides again in the write itself, where a concurrent rotation is seen.
         if (store.currentEpoch(scopeId) != iconEpoch) return SetScopeIconOutcome.StaleEpoch
-        return if (store.setIcon(scopeId, sealedIcon, iconEpoch)) SetScopeIconOutcome.Ok else SetScopeIconOutcome.StaleEpoch
+        return if (store.setIcon(scopeId, sealedIcon, iconEpoch, PrincipalKey.User(callerId))) SetScopeIconOutcome.Ok else SetScopeIconOutcome.StaleEpoch
     }
 
     /**

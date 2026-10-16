@@ -69,6 +69,16 @@ class ScopeEntity : PanacheEntityBase {
     @Column(name = "icon_epoch", nullable = false)
     var iconEpoch: Int = 0
 
+    /** The member who last wrote [encryptedName] (ADR 0093 § 8, en.platform.field-editor): no foreign key, a member who
+     *  left stays named; null exactly while the name is. Only a member writes a scope's name or icon, so there is no
+     *  guest column. Written by `ScopesStore` with the field, from the authenticated caller; served to no client. */
+    @Column(name = "name_editor_user_id", columnDefinition = "uuid")
+    var nameEditorUserId: String? = null
+
+    /** The member who last wrote [sealedIcon], as [nameEditorUserId]; a cleared icon clears it. */
+    @Column(name = "icon_editor_user_id", columnDefinition = "uuid")
+    var iconEditorUserId: String? = null
+
     /** The scope's **current content-key epoch** (ADR 0024, cr-0088) — 0 until the first rotation. New content
      *  seals under this epoch; a removal bumps it. */
     @Column(name = "current_epoch", nullable = false)
