@@ -1430,6 +1430,10 @@ owner could unblock — recreating the shared dev database its browser upload ne
 IntelliJ's Gradle tool window — and both surfaced only at close, as "not proven". A done-when says per live step who
 runs it, and an owner's step is asked for when its phase starts, not discovered when the CR closes.
 
+**And a live proof across two releases names, per step, which release's tool runs it.** cr-veyqctl's phase 3 said
+"install the first … `upgrade` to the second"; its harness ran `self-update` with the first release's `veyqctl`, which
+predates the command, and the whole run was repeated.
+
 ### A live proof that names a screen names the instance state that screen needs
 
 cr-app-shell-served-by-backend's Definition of done said *"the app boots to sign-in with zero CSP violations"* and
