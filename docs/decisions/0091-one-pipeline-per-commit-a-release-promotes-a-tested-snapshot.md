@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1) and the guard gaps' CI trigger (decision 4); the rest is not (§ Consequences)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4) and the local run of the pipeline; the rest is not (§ Consequences)
 - Date: 2026-10-16
 
 ## Context
@@ -180,8 +180,18 @@ Three structural costs sit on top of those numbers:
   job of every workflow, the values of decision 1; `scripts/validate_pipeline_shape.py` reds a job, or a whole new
   workflow, without one.
 - **The remote comes when the owner judges veyq ready to publish, and it will be public** (owner, 2026-10-16). Until
-  then every stage's only run is local, so the pipeline must run locally from the workflow file itself, by one command
-  (`changes/cr-one-pipeline-per-commit.md` phase 5); the first public push is also the first CI run.
+  then every stage's only run is local, so the pipeline runs locally from the workflow file itself, by one command:
+  `python3 scripts/run_pipeline.py` (2026-10-16, `cr-one-pipeline-per-commit` phase 5). It reads `ci.yml` from the
+  commit, runs each job the host can run in its own clone, in parallel and under its budget, and names every job and
+  step it did not run; where a stage's work sits in an action only GitHub runs, `ci.yml` carries the host's stand-in
+  behind `runner.environment != 'github-hosted'` (the image build with the host's `docker build`, the host's Helm held
+  to the pinned version). The first public push is also the first CI run.
+  Measured locally (14-core arm64 Mac, four jobs at once, load average 10 → 18): guards 1.5 min, surface checks —
+  backend 8.1, frontend 5.0, chart 0.4 — the version 0.1, the races 9.5, every one green; the image build 4.6 (app,
+  uncached, on an earlier run). Under a heavier load (13 → 35) the races outran their 10-minute budget beside the
+  backend's Gradle run and took 7.0 alone: locally they share the machine with `./gradlew check`, in CI they have a
+  runner of their own. The API end-to-end run was not run (it shares the developer's one compose stack), nor the amd64
+  legs. Local wall times say little about a CI runner's; the estimate above stays until a CI run replaces it.
 - **Registry growth** is bounded by the retention rule; a snapshot per `main` commit is otherwise one image pair per
   commit.
 
