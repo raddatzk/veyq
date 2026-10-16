@@ -45,7 +45,7 @@ export const activeSpace = reactive({
   // With status 'error': the i18n key naming the trust-state refusal that stopped the scope opening (ADR 0028
   // Decision 7 — a shared grant's granter is checked against the pin store this device refused), else null.
   trustRefusal: null as string | null,
-  // The active tenant's terms of service (cr-0114, ADR 0035): the operator's current `termsRevision` and the
+  // The active tenant's terms of service (cr-0114, ADR 0035): the space owner's current `termsRevision` and the
   // caller's `acceptedRevision` — both 0 when no terms are set / none accepted. When accepted < revision the
   // member accept-gate fires (`termsStale()`, enforced by the router). Refreshed on every scope entry.
   termsRevision: 0,

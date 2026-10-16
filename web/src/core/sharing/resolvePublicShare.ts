@@ -184,7 +184,7 @@ export async function pollPublicShare(
 }
 
 // --- accountless terms gate (uc.sharing.share-accept, ADR 0035 §3) ----------
-// The accountless half of the two-tier terms gate. The terms are the operator's PUBLIC policy (never E2EE); a
+// The accountless half of the two-tier terms gate. The terms are the space owner's PUBLIC policy (never E2EE); a
 // visitor accepts them before viewing/contributing, and acceptance is stored **client-side only** (localStorage
 // keyed per tenant) so the server records NOTHING about the accountless visitor. This is an **operational gate,
 // not enforcement**: a localStorage flag is bypassable by an accountless visitor (devtools / a fresh profile /

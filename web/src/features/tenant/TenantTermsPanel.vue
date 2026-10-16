@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // uc.admin.tenant-terms (web, cr-0114, ADR 0035) — the "Terms" rubric of the tenant settings. The tenant OWNER
-// sets the server's terms as per-locale (DE+EN) markdown; a normalized change bumps the revision server-side,
+// sets the space's terms as per-locale (DE+EN) markdown; a normalized change bumps the revision server-side,
 // re-gating members (uc.account.accept-terms). Member-readable → non-owners see it read-only; the editor + Save
-// are owner-only (the backend 403s otherwise). Operator-blind: terms are the operator's PUBLIC policy, no key.
+// are owner-only (the backend 403s otherwise). Operator-blind: terms are the space's PUBLIC policy, no key.
 //
 // **The terms are a `LocaleMap`, not two `de`/`en` refs** (cr-terms-editor-lists-the-languages-that-have-terms).
 // The two flat refs this panel used to hold could not tell `''` from *absent*, so it rendered a textarea for a

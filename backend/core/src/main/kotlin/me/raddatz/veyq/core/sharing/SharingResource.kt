@@ -269,7 +269,7 @@ class SharingResource(
                 ShareTerms(
                     tenantId = UUID.fromString(o.tenantId),
                     termsRevision = o.termsRevision,
-                    // null when the operator has published no terms (termsRevision 0) — the client never gates.
+                    // null when the space owner has published no terms (termsRevision 0) — the client never gates.
                     terms = if (o.de == null && o.en == null) null else LocalizedMarkdown(de = o.de, en = o.en),
                 ),
             ).build()

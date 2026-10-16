@@ -217,7 +217,7 @@ sealed interface NodeSharesOutcome {
 }
 
 sealed interface ShareTermsOutcome {
-    /** The owning tenant's public terms — `termsRevision` 0 (with null `de`/`en`) when the operator published none. */
+    /** The owning tenant's public terms — `termsRevision` 0 (with null `de`/`en`) when the space owner published none. */
     data class Found(val tenantId: String, val termsRevision: Int, val de: String?, val en: String?) : ShareTermsOutcome
     /** Unknown/disabled/expired share — the same non-enumerable 404 as [ResolveShareOutcome.NotFound]. */
     object NotFound : ShareTermsOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)

@@ -529,7 +529,7 @@ paths:
         - $ref: "#/components/parameters/ShareId"
       responses:
         "200":
-          description: The owning tenant's current public terms (or revision 0 / null when the operator has published none).
+          description: The owning tenant's current public terms (or revision 0 / null when the space owner has published none).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareTerms" }
@@ -2105,7 +2105,7 @@ components:
           description: The tenant's current terms revision. 0 = no terms published (the client never gates).
           example: 3
         terms:
-          description: The current per-locale terms (null/absent until the operator publishes any).
+          description: The current per-locale terms (null/absent until the space owner publishes any).
           oneOf:
             - $ref: "#/components/schemas/LocalizedMarkdown"
             - type: "null"

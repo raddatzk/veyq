@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The accountless terms gate on the share page (uc.sharing.share-accept, ADR 0035 §3). Load-bearing behaviours:
 // a not-yet-accepted visitor sees the gate (not the content); accepting clears it and reveals the content and
-// persists per tenant (a reload does not re-prompt); an operator revision bump re-gates; a transient terms-fetch
+// persists per tenant (a reload does not re-prompt); an owner revision bump re-gates; a transient terms-fetch
 // error FAILS OPEN (content, never a lock-out). We drive the REAL terms helpers (localStorage per tenant, the
 // locale pick) + the REAL ShareView wiring (needsTerms/loadTerms/acceptTerms) — only the network resolve/terms
 // reads and the heavy media composables are stubbed, so what's exercised is the gate itself, not resolve crypto.
@@ -121,7 +121,7 @@ describe('ShareView — accountless terms gate', () => {
     expect(wrapper.find('.share-view-header').exists()).toBe(true)
   })
 
-  it('re-gates when the operator bumps the terms revision', async () => {
+  it('re-gates when the space owner bumps the terms revision', async () => {
     localStorage.setItem(ACCEPT_KEY, '1') // previously accepted v1
     vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsRevision: 2, terms: { en: '## Rules v2' } })
     const wrapper = mountShareView()

@@ -154,11 +154,11 @@ components:
 
     LocalizedMarkdown:
       # Shared by the tenants spec (member terms, cr-0114) and the sharing spec (the accountless share terms
-      # gate, cr-anonymous-accept-gate). Single-sourced here (ADR 0038) so the operator-terms shape cannot drift
+      # gate, cr-anonymous-accept-gate). Single-sourced here (ADR 0038) so the terms shape cannot drift
       # between the two acceptance tiers.
       type: object
       description: >
-        Per-locale terms markdown (the operator's public policy). Each locale is optional; an absent/blank
+        Per-locale terms markdown (the space owner's public policy). Each locale is optional; an absent/blank
         locale falls back to the other at display time (no empty terms shown). Trimmed + newline-normalized
         server-side before comparison.
       properties:

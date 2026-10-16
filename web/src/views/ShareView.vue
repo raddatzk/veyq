@@ -75,7 +75,7 @@ const pwBusy = ref(false) // deriving Argon2id + re-resolving
 const head = shallowRef<PublicShareHead | null>(null)
 
 // --- accountless terms gate (uc.sharing.share-accept, ADR 0035 §3) ----------
-// Before viewing/contributing, the visitor accepts the operator's tenant terms. Acceptance is stored CLIENT-SIDE
+// Before viewing/contributing, the visitor accepts the space's terms. Acceptance is stored CLIENT-SIDE
 // only (localStorage, keyed per tenant) — the server records nothing about the accountless visitor. This is an
 // OPERATIONAL GATE, NOT ENFORCEMENT: a localStorage flag is bypassable, so it records + surfaces consent, it does
 // not police access (the terms' content + the decryptable-on-report path are the operator's real remedy). It also
@@ -332,7 +332,7 @@ onMounted(() => {
       </form>
     </div>
 
-    <!-- The accountless terms gate (uc.sharing.share-accept, ADR 0035 §3): the operator's terms + an Accept button,
+    <!-- The accountless terms gate (uc.sharing.share-accept, ADR 0035 §3): the space's terms + an Accept button,
          BETWEEN the password shell and the display-name pre-screen (password → terms → name → content). Acceptance
          is client-only (localStorage) — an operational gate, not enforcement: it records + surfaces consent, it does
          not police access. renderMarkdown escapes first (safe subset), so v-html is safe. -->

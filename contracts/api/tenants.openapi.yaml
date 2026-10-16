@@ -954,7 +954,7 @@ paths:
       description: >
         The signed-in **member** accepts the tenant's terms at the revision they were shown. The server records
         `accepted_terms_revision = revision` for `(caller, tenant)` — **only if** `revision` equals the current
-        `terms_revision`, else `409 terms_revision_changed` (the operator bumped them meanwhile → the client
+        `terms_revision`, else `409 terms_revision_changed` (the space owner bumped them meanwhile → the client
         re-reads and re-presents). Acceptance — which revision, and when, to the second — is **operational
         metadata** (like membership), never
         content. `@Authenticated`; a non-member is `404` (uc.account.accept-terms, ADR 0035).
