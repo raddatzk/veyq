@@ -22,10 +22,13 @@ import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 
 /**
- * The object-store setting (ADR 0089): one row once the Server Owner has set a store, none before. [bundled] is a
- * reference to the deployment's [BundledStoreHint] — its values are never copied here, so every connection column
- * is null for it. The secrets are sealed under the config-secret KEK (ADR 0050), each with the fingerprint of the
- * key that sealed it (decision 4). `check*` is the last check of THIS setting, cleared whenever it changes.
+ * The object-store setting (ADR 0089): at most two rows, by [id] — [ACTIVE_ID], the setting in use (the backend signs
+ * against it; present once a setting has passed its check), and [PENDING_ID], a changed setting saved but not used
+ * until it passes its own check, which then replaces the active row (decision 5). [bundled] is a reference to the
+ * deployment's [BundledStoreHint] — its values are never copied here, so every connection column is null for it. The
+ * secrets are sealed under the config-secret KEK (ADR 0050), each with the fingerprint of the key that sealed it
+ * (decision 4). `check*` is the last check of THAT row's setting. (The baseline migration's comment still says "one
+ * row": an applied migration is never edited, so this KDoc is the live description.)
  */
 @Entity
 @Table(name = "veyq_store_setting")
@@ -33,7 +36,7 @@ import java.time.Instant
 class StoreSettingEntity : PanacheEntityBase {
     @Id
     @Column(name = "id")
-    var id: Int = SINGLETON_ID
+    var id: Int = ACTIVE_ID
 
     @Column(name = "bundled", nullable = false)
     var bundled: Boolean = false
@@ -88,7 +91,8 @@ class StoreSettingEntity : PanacheEntityBase {
     var checkSteps: String? = null
 
     companion object : PanacheCompanionBase<StoreSettingEntity, Int> {
-        const val SINGLETON_ID = 1
+        const val ACTIVE_ID = 1
+        const val PENDING_ID = 2
     }
 }
 
@@ -150,17 +154,47 @@ sealed interface StoreResolution {
     data class Ready(val connection: StoreConnection) : StoreResolution
 }
 
-/** The setting's persistence. Every write runs in the caller's transaction. */
+/**
+ * The setting's persistence: the setting in use ([find], [save], [recordCheck], [lastCheck]) and the pending one
+ * ([findPending], [savePending], [recordPendingCheck], [lastPendingCheck], [promotePending], [discardPending]).
+ * Every write runs in the caller's transaction.
+ */
 @ApplicationScoped
 class StoreSettingStore(
     private val em: EntityManager,
 ) : SealedValueFingerprints {
 
-    fun find(): StoreSettingRow? = StoreSettingEntity.findById(StoreSettingEntity.SINGLETON_ID)?.toRow()
+    /** The setting in use, or null when none has passed its check yet. */
+    fun find(): StoreSettingRow? = StoreSettingEntity.findById(StoreSettingEntity.ACTIVE_ID)?.toRow()
 
-    /** Replace the setting with [row] and clear its check — a changed setting has not been checked. */
-    fun save(row: StoreSettingRow) {
-        val e = StoreSettingEntity.findById(StoreSettingEntity.SINGLETON_ID) ?: StoreSettingEntity()
+    /** The setting saved but not yet in use, or null. */
+    fun findPending(): StoreSettingRow? = StoreSettingEntity.findById(StoreSettingEntity.PENDING_ID)?.toRow()
+
+    /** Replace the setting IN USE with [row] and clear its check. Only [promotePending] and the test fixtures write
+     *  the active row directly; the Server Owner's write goes through [savePending]. */
+    fun save(row: StoreSettingRow) = write(StoreSettingEntity.ACTIVE_ID, row)
+
+    /** Replace the pending setting with [row] and clear its check — a changed setting has not been checked. */
+    fun savePending(row: StoreSettingRow) = write(StoreSettingEntity.PENDING_ID, row)
+
+    /** Drop the pending setting and its check; the one in use is untouched. A no-op when nothing is pending. */
+    fun discardPending() {
+        StoreSettingEntity.deleteById(StoreSettingEntity.PENDING_ID)
+    }
+
+    /**
+     * The pending setting passed [result]: it becomes the setting in use, with that check, and nothing is pending any
+     * more. One transaction, so no reader sees two settings in use or none. A no-op when nothing is pending.
+     */
+    fun promotePending(result: StoreCheckResult) {
+        val pending = findPending() ?: return
+        write(StoreSettingEntity.ACTIVE_ID, pending)
+        record(StoreSettingEntity.ACTIVE_ID, result)
+        discardPending()
+    }
+
+    private fun write(id: Int, row: StoreSettingRow) {
+        val e = StoreSettingEntity.findById(id) ?: StoreSettingEntity().also { it.id = id }
         e.bundled = row.bundled
         e.storeType = row.type?.name
         e.endpoint = row.endpoint
@@ -181,24 +215,34 @@ class StoreSettingStore(
         e.persist()
     }
 
-    /** Record [result] as the current setting's check. A no-op when the setting is gone. */
-    fun recordCheck(result: StoreCheckResult) {
-        val e = StoreSettingEntity.findById(StoreSettingEntity.SINGLETON_ID) ?: return
+    /** Record [result] as the check of the setting in use. A no-op when there is none. */
+    fun recordCheck(result: StoreCheckResult) = record(StoreSettingEntity.ACTIVE_ID, result)
+
+    /** Record [result] as the check of the pending setting. A no-op when nothing is pending. */
+    fun recordPendingCheck(result: StoreCheckResult) = record(StoreSettingEntity.PENDING_ID, result)
+
+    /** The last check of the setting in use, or null. */
+    fun lastCheck(): StoreCheckResult? = lastCheckOf(StoreSettingEntity.ACTIVE_ID)
+
+    /** The last check of the pending setting, or null when it has not been checked since it was saved. */
+    fun lastPendingCheck(): StoreCheckResult? = lastCheckOf(StoreSettingEntity.PENDING_ID)
+
+    /** Whether a store is in use and its last check passed — the precondition for a tenant (ADR 0089 decision 6). */
+    fun checkPassed(): Boolean = StoreSettingEntity.findById(StoreSettingEntity.ACTIVE_ID)?.checkPassed == true
+
+    private fun record(id: Int, result: StoreCheckResult) {
+        val e = StoreSettingEntity.findById(id) ?: return
         e.checkPassed = result.passed
         e.checkedAt = result.checkedAt
         e.checkSteps = result.toJson()
     }
 
-    /** The current setting's last check, or null when it has not been checked since it was set. */
-    fun lastCheck(): StoreCheckResult? {
-        val e = StoreSettingEntity.findById(StoreSettingEntity.SINGLETON_ID) ?: return null
+    private fun lastCheckOf(id: Int): StoreCheckResult? {
+        val e = StoreSettingEntity.findById(id) ?: return null
         val at = e.checkedAt ?: return null
         val steps = e.checkSteps ?: return null
         return StoreCheckResult.fromJson(e.checkPassed == true, at, steps)
     }
-
-    /** Whether a store is set and its last check passed — the precondition for a tenant (ADR 0089 decision 6). */
-    fun checkPassed(): Boolean = StoreSettingEntity.findById(StoreSettingEntity.SINGLETON_ID)?.checkPassed == true
 
     /**
      * Whether any blob is in the store — a completed blob, or an upload session whose chunks may already be there.
@@ -210,14 +254,16 @@ class StoreSettingStore(
                 "THEN 1 ELSE 0 END",
         ).singleResult as Number).toInt() == 1
 
-    /** The store secrets' part of the instance-wide config-secret state (ADR 0089 decision 4). */
-    override fun sealedFingerprints(): List<String> {
-        val e = StoreSettingEntity.findById(StoreSettingEntity.SINGLETON_ID) ?: return emptyList()
-        return listOfNotNull(
-            e.secretKeyCiphertext?.let { e.secretKeyFingerprint ?: "" },
-            e.garageAdminTokenCiphertext?.let { e.garageAdminTokenFingerprint ?: "" },
-        )
-    }
+    /** The store secrets' part of the instance-wide config-secret state (ADR 0089 decision 4) — the pending setting's
+     *  included, since a restore carries it as well. */
+    override fun sealedFingerprints(): List<String> =
+        listOfNotNull(StoreSettingEntity.findById(StoreSettingEntity.ACTIVE_ID), StoreSettingEntity.findById(StoreSettingEntity.PENDING_ID))
+            .flatMap { e ->
+                listOfNotNull(
+                    e.secretKeyCiphertext?.let { e.secretKeyFingerprint ?: "" },
+                    e.garageAdminTokenCiphertext?.let { e.garageAdminTokenFingerprint ?: "" },
+                )
+            }
 
     private fun StoreSettingEntity.toRow() = StoreSettingRow(
         bundled = bundled,
@@ -328,10 +374,11 @@ class StoreSettings(
     /**
      * The precondition for creating a tenant (ADR 0089 decision 6): a store is set, usable, and its last check passed.
      * Under `%test` with no setting at all the in-memory stub stands in for a store ([SwitchingBlobStore]), so the
-     * hermetic suite's thousands of tenants need no check; a test that exercises the gate sets a store first.
+     * hermetic suite's thousands of tenants need no check; a test that exercises the gate sets a store first — saving
+     * a pending one counts, so the gate before the first passed check is testable too.
      */
     fun readyForTenants(): Boolean = when (current()) {
-        is StoreResolution.NotSet -> hermetic
+        is StoreResolution.NotSet -> hermetic && QuarkusTransaction.joiningExisting().call { store.findPending() } == null
         is StoreResolution.Unavailable -> false
         is StoreResolution.Ready -> QuarkusTransaction.joiningExisting().call { store.checkPassed() }
     }
@@ -350,6 +397,11 @@ class StoreSettings(
 
     private fun resolve(): StoreResolution {
         val row = QuarkusTransaction.joiningExisting().call { store.find() } ?: return StoreResolution.NotSet
+        return resolve(row)
+    }
+
+    /** What [row] would resolve to — the check of a pending setting reaches its store through this, uncached. */
+    fun resolve(row: StoreSettingRow): StoreResolution {
         if (row.bundled) return hint.connection?.let { StoreResolution.Ready(it) }
             ?: StoreResolution.Unavailable(emptyList(), hintMissing = true)
         val unreadable = unreadable(row)

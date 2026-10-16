@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.generated.model.InstanceRelease
 import me.raddatz.veyq.core.generated.model.InstanceStore
 import me.raddatz.veyq.core.generated.model.InstanceStoreCheck
 import me.raddatz.veyq.core.generated.model.InstanceStoreCheckStep
+import me.raddatz.veyq.core.generated.model.InstanceStorePending
 import me.raddatz.veyq.core.generated.model.InstanceStoreSecret
 import me.raddatz.veyq.core.generated.model.InstanceStoreSetting
 import me.raddatz.veyq.core.generated.model.InstanceStoreType
@@ -85,6 +86,8 @@ class InstanceResource(
             is HttpFailure -> httpError(outcome)
         }
 
+    override fun discardPendingInstanceStore(): Response = Response.ok(store.discardPending().toWire()).build()
+
     override fun checkInstanceStore(): Response =
         when (val outcome = store.check()) {
             is StoreCheckRun.Done -> Response.ok(outcome.result.toWire()).build()
@@ -109,17 +112,18 @@ class InstanceResource(
     private fun StoreView.toWire() = InstanceStore(
         bundledAvailable = bundledAvailable,
         blobsStored = blobsStored,
-        setting = setting?.let {
-            InstanceStoreSetting(
-                bundled = it.bundled,
-                type = InstanceStoreType.valueOf(it.type.name),
-                endpoint = it.endpoint, publicEndpoint = it.publicEndpoint, bucket = it.bucket, region = it.region,
-                accessKey = it.accessKey, garageAdminEndpoint = it.garageAdminEndpoint,
-                secretKeySet = it.secretKeySet, garageAdminTokenSet = it.garageAdminTokenSet,
-                unreadable = it.unreadable.map { secret -> InstanceStoreSecret.valueOf(secret.name) },
-            )
-        },
+        setting = setting?.toWire(),
         lastCheck = lastCheck?.toWire(),
+        pending = pending?.let { InstanceStorePending(setting = it.setting.toWire(), lastCheck = it.lastCheck?.toWire()) },
+    )
+
+    private fun StoreSettingView.toWire() = InstanceStoreSetting(
+        bundled = bundled,
+        type = InstanceStoreType.valueOf(type.name),
+        endpoint = endpoint, publicEndpoint = publicEndpoint, bucket = bucket, region = region,
+        accessKey = accessKey, garageAdminEndpoint = garageAdminEndpoint,
+        secretKeySet = secretKeySet, garageAdminTokenSet = garageAdminTokenSet,
+        unreadable = unreadable.map { secret -> InstanceStoreSecret.valueOf(secret.name) },
     )
 
     private fun CapabilityView.toWire() = InstanceCapability(

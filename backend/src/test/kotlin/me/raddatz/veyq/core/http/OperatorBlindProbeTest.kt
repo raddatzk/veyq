@@ -256,7 +256,7 @@ class OperatorBlindProbeTest {
             "getInstanceRelease",
             "getInstanceStoreProvisioning",
             "getInstanceConfigSecret",
-            "getInstanceStore", "setInstanceStore", "checkInstanceStore",
+            "getInstanceStore", "setInstanceStore", "discardPendingInstanceStore", "checkInstanceStore",
             "listInstanceCapabilities", "setInstanceCapability",
         )
         reason(

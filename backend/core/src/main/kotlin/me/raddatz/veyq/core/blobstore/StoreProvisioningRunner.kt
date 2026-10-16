@@ -144,8 +144,8 @@ class StoreProvisioningRunner(
                         log.errorf(
                             e,
                             "Object store could not be provisioned after %d attempts — media will not work until " +
-                                "the store is repaired and the app restarted " +
-                                "(GET /api/instance/store-provisioning reports FAILED)",
+                                "the store is repaired and then checked (admin console: Server → Object store, or " +
+                                "`veyq-admin store check`, which provisions it again) or the app restarted",
                             maxAttempts,
                         )
                         return StoreProvisioningState.FAILED

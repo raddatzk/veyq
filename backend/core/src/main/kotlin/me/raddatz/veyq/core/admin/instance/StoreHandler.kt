@@ -5,7 +5,9 @@ import me.raddatz.veyq.core.blobstore.BlobStoreStartupCheck
 import me.raddatz.veyq.core.blobstore.BundledStoreHint
 import me.raddatz.veyq.core.blobstore.SealedValue
 import me.raddatz.veyq.core.blobstore.StoreCheck
+import me.raddatz.veyq.core.blobstore.StoreCheckOutcome
 import me.raddatz.veyq.core.blobstore.StoreCheckResult
+import me.raddatz.veyq.core.blobstore.StoreCheckStep
 import me.raddatz.veyq.core.blobstore.StoreProvisionerFactory
 import me.raddatz.veyq.core.blobstore.StoreProvisioningRunner
 import me.raddatz.veyq.core.blobstore.StoreResolution
@@ -41,11 +43,15 @@ data class StoreSettingView(
     val unreadable: List<StoreSecret>,
 )
 
+/** A setting saved but not in use until it passes its own check (ADR 0089 decision 5), with that check. */
+data class StorePendingView(val setting: StoreSettingView, val lastCheck: StoreCheckResult?)
+
 data class StoreView(
     val bundledAvailable: Boolean,
     val blobsStored: Boolean,
     val setting: StoreSettingView?,
     val lastCheck: StoreCheckResult?,
+    val pending: StorePendingView?,
 )
 
 /** What the Server Owner asks to store; the wire's `InstanceStoreUpdate`, after the boundary's own validation. */
@@ -76,11 +82,15 @@ sealed interface StoreCheckRun {
 }
 
 /**
- * The Server Owner's object-store setting and its check (ADR 0089): what `GET`/`PUT /api/instance/store` and
- * `POST /api/instance/store/check` do. The persistence is [StoreSettingStore], the resolved current setting every
- * reader follows is [StoreSettings], the check itself is [StoreCheck] — this class decides what may be stored and
- * orders the effects: commit, then forget the cached resolution, then re-project the tenant ingress, so no reader
- * can see the new setting before it is committed or keep the old one after.
+ * The Server Owner's object-store setting and its check (ADR 0089): what `GET`/`PUT /api/instance/store`,
+ * `DELETE /api/instance/store/pending` and `POST /api/instance/store/check` do. The persistence is
+ * [StoreSettingStore], the resolved setting in use every reader follows is [StoreSettings], the check itself is
+ * [StoreCheck] — this class decides what may be stored and orders the effects.
+ *
+ * **A write never changes the store in use** (decision 5): it is saved as the pending setting, and only a check that
+ * passes promotes it. So a typo in a credential or an endpoint reaches the check, never a running instance's media.
+ * The one place the setting in use changes is [check]'s promotion: commit, then forget the cached resolution, then
+ * re-project the tenant ingress, so no reader can see the new setting before it is committed or keep the old one after.
  */
 @ApplicationScoped
 class StoreHandler(
@@ -94,48 +104,79 @@ class StoreHandler(
     private val projector: TenantIngressProjector,
     private val config: VeyqConfig,
 ) {
+    // Provisioning is recorded by [check], not here: a pending setting's provisioning says nothing about the store in
+    // use until the pending one is promoted.
     private val checker = StoreCheck(
         s3For = { BlobStoreProducer.s3Client(it) },
         signerFor = { BlobStoreProducer.connect(it, config.blobStore().presignTtlSeconds()) },
-        provision = { connection ->
-            val provisioner = provisioners.forConnection(connection) ?: return@StoreCheck
-            val ok = runCatching { provisioner.provision() }
-            provisioning.recordCheckProvisioning(ok.isSuccess)
-            ok.getOrThrow()
-        },
+        provision = { connection -> provisioners.forConnection(connection)?.provision() },
     )
 
-    fun read(): StoreView = QuarkusTransaction.requiringNew().call { view(store.find()) }
+    fun read(): StoreView = QuarkusTransaction.requiringNew().call { view() }
 
-    fun set(update: StoreUpdate): StoreSetOutcome {
-        val outcome = QuarkusTransaction.requiringNew().call<StoreSetOutcome> {
-            val current = store.find()
-            val row = when (val built = build(update, current)) {
-                is Built.Row -> built.row
-                is Built.Refused -> return@call built.outcome
-            }
-            if (blobsStoredUnderAnotherStore(current, row)) return@call StoreSetOutcome.StoreInUse
-            store.save(row)
-            StoreSetOutcome.Stored(view(row))
+    /** Save [update] as the pending setting — or, equal to the setting in use, discard the pending one. */
+    fun set(update: StoreUpdate): StoreSetOutcome = QuarkusTransaction.requiringNew().call<StoreSetOutcome> {
+        val active = store.find()
+        // The form edits what the owner last saved: an omitted secret is kept from the pending setting, else the active.
+        val row = when (val built = build(update, store.findPending() ?: active)) {
+            is Built.Row -> built.row
+            is Built.Refused -> return@call built.outcome
         }
-        if (outcome is StoreSetOutcome.Stored) {
-            settings.invalidate()
-            projector.regenerate()
-        }
-        return outcome
+        if (blobsStoredUnderAnotherStore(active, row)) return@call StoreSetOutcome.StoreInUse
+        if (row == active) store.discardPending() else store.savePending(row)
+        StoreSetOutcome.Stored(view())
     }
 
+    /** Drop the pending setting; the one in use, and everything that follows it, is untouched. */
+    fun discardPending(): StoreView = QuarkusTransaction.requiringNew().call {
+        store.discardPending()
+        view()
+    }
+
+    /**
+     * Check the pending setting, or with none pending the setting in use. A pending setting that passes replaces the
+     * one in use (decision 5); one that fails stays pending and changes nothing the instance does.
+     */
     fun check(): StoreCheckRun {
-        val row = QuarkusTransaction.requiringNew().call { store.find() } ?: return StoreCheckRun.NotConfigured
-        val (connection, unreadableDetail) = when (val resolution = settings.current()) {
+        val (active, pending) = QuarkusTransaction.requiringNew().call { store.find() to store.findPending() }
+        val target = pending ?: active ?: return StoreCheckRun.NotConfigured
+        val resolution = if (pending != null) settings.resolve(pending) else settings.current()
+        val (connection, unreadableDetail) = when (resolution) {
             is StoreResolution.Ready -> resolution.connection to null
             is StoreResolution.NotSet -> null to "No store is set."
             is StoreResolution.Unavailable -> null to unavailableDetail(resolution)
         }
         val result = checker.run(connection, unreadableDetail, publicOrigin())
-        QuarkusTransaction.requiringNew().run {
+        val promoted = QuarkusTransaction.requiringNew().call {
             // A setting changed while the check ran has not been checked: record only against the one that was.
-            if (store.find() == row) store.recordCheck(result)
+            when {
+                pending == null -> {
+                    if (store.find() == target) store.recordCheck(result)
+                    false
+                }
+                store.findPending() != target -> false
+                result.passed -> {
+                    store.promotePending(result)
+                    true
+                }
+                else -> {
+                    store.recordPendingCheck(result)
+                    false
+                }
+            }
+        }
+        if (promoted) {
+            settings.invalidate()
+            projector.regenerate()
+        }
+        // What the check's provisioning did is the store-in-use's state only when it checked that store, or promoted
+        // the one it checked (StoreProvisioningRunner.recordCheckProvisioning).
+        if (pending == null || promoted) {
+            when (result.steps.firstOrNull { it.step == StoreCheckStep.PROVISION }?.outcome) {
+                StoreCheckOutcome.PASSED -> provisioning.recordCheckProvisioning(true)
+                StoreCheckOutcome.FAILED -> provisioning.recordCheckProvisioning(false)
+                else -> Unit
+            }
         }
         return StoreCheckRun.Done(result)
     }
@@ -208,8 +249,7 @@ class StoreHandler(
 
     /**
      * Whether the change would move blobs to another store (decision 6): any blob exists and the type, endpoint or
-     * bucket differ from the store the current setting names. With no current setting there is no earlier store to
-     * differ from.
+     * bucket differ from the store the setting in use names. With none in use there is no earlier store to differ from.
      */
     private fun blobsStoredUnderAnotherStore(current: StoreSettingRow?, next: StoreSettingRow): Boolean {
         if (current == null || !store.blobsStored()) return false
@@ -221,12 +261,16 @@ class StoreHandler(
         return if (bundled != null) Triple(bundled.type, bundled.endpoint, bundled.bucket) else Triple(row.type, row.endpoint, row.bucket)
     }
 
-    private fun view(row: StoreSettingRow?): StoreView = StoreView(
-        bundledAvailable = hint.available,
-        blobsStored = store.blobsStored(),
-        setting = row?.let { settingView(it) },
-        lastCheck = if (row == null) null else store.lastCheck(),
-    )
+    private fun view(): StoreView {
+        val active = store.find()
+        return StoreView(
+            bundledAvailable = hint.available,
+            blobsStored = store.blobsStored(),
+            setting = active?.let { settingView(it) },
+            lastCheck = if (active == null) null else store.lastCheck(),
+            pending = store.findPending()?.let { StorePendingView(settingView(it), store.lastPendingCheck()) },
+        )
+    }
 
     private fun settingView(row: StoreSettingRow): StoreSettingView {
         if (row.bundled) {
