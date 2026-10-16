@@ -132,27 +132,10 @@ sequenceDiagram
   [uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md); a scope-key rotation
   ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)) carries the admission tag forward.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Your shared space starts as just yours; this is how you let others in. Invite someone by email — that's
-your one decision. They set up their own account and land in their private space at first; then the key to the
-shared space is handed over **automatically** — any member's device (yours or another's) seals a copy of the key
-to the newcomer as soon as it's online, and from then on they see everything in the space. The key is wrapped
-**on a member's device** straight to them: the server only passes along sealed data it can't read, and never
-holds the key itself. Because a person, not the server, must hand over the key, a new member waits briefly in
-their private space until *any* of you is next online — usually moments in an active space, and the price of the
-server never being able to let someone in behind your back.
-
-**DE —** Dein gemeinsamer Bereich gehört zuerst nur dir; so lässt du andere hinein. Lade jemanden per E-Mail ein
-— das ist deine eine Entscheidung. Die Person richtet ihr eigenes Konto ein und landet zunächst in ihrem
-privaten Bereich; dann wird der Schlüssel zum gemeinsamen Bereich **automatisch** übergeben — das Gerät
-irgendeines Mitglieds (deins oder ein anderes) versiegelt dem Neuling eine Kopie des Schlüssels, sobald es
-online ist, und ab dann sieht die Person alles im Bereich. Der Schlüssel wird **auf dem Gerät eines Mitglieds**
-direkt an sie versiegelt: der Server reicht nur versiegelte Daten weiter, die er nicht lesen kann, und hält den
-Schlüssel nie selbst. Weil ein Mensch — nicht der Server — den Schlüssel übergeben muss, wartet ein neues
-Mitglied kurz in seinem privaten Bereich, bis *irgendjemand* von euch das nächste Mal online ist — in einem
-aktiven Bereich meist nur Momente, und der Preis dafür, dass der Server niemand hinter deinem Rücken hereinlassen
-kann.
+You let someone into your shared space with one email invitation, and only a member's device ever hands them the key,
+so the server can never let anyone in behind your back.
 
 ## Related
 

@@ -1,6 +1,6 @@
 # ADR 0086 — One word per meaning: platform, application, app, capability, rights, revision, format
 
-- Status: Accepted; the word rules bind now, the renames in code are not built (§ Consequences)
+- Status: Accepted; the word rules bind, and the renames they called for are built (§ Consequences)
 - Date: 2026-10-15
 
 ## Context
@@ -36,7 +36,7 @@ One meaning per word, in docs, code and the wiki (EN+DE):
 | **capability** | an instance-wide, pre-auth switch (ADR 0032) | anything per viewer |
 | **rights** (*Rechte*) | what a view offers this viewer here, the client's projection of a permission: `memoryRights`, `folderRights`, `depotRights` | an instance switch |
 | **version** | compatibility only: the major (ADR 0085), a crypto suite | a concurrency counter |
-| **revision** | a concurrency or change counter: `metaRevision` (was `metaVersion`), `mediaRevision`, a tree revision | compatibility |
+| **revision** | a concurrency or change counter: `metaRevision` (was `metaVersion`), `mediaRevision`, a tree revision, the edition of a text that changes (the terms' `termsRevision`) | compatibility |
 | **format** | a sealed payload's schema, per node kind, readable forever (ADR 0079 decision 7) | the platform's major |
 | **history** (*Verlauf*) | reserved for a future earlier-contents-of-a-file feature | "versions" of a file |
 | **`K_node`** (identifier `kNode`) | the random content key every node carries — a Memory, a Chapter, a folder, a Depot file or drop box — wrapped under its parent's key (ADR 0012, ADR 0080) | `K_mem`, which named it when only a Memory had a key; the wire labels (seal purposes, derivation info strings) never carried the name and do not change |
@@ -84,9 +84,22 @@ across apps, how a link's key reaches an app safely) belong to the native client
   same row and in the same `updateNode` request, so it moved too. Pre-V1, so no major and no alias. No sealed byte
   changed: the `node-name` and `content-key` seals bind the placement revision by position, never by name, and the
   conformance vectors only renamed their key.
-- **Not built**, tracked as inbox #452: the rest of "version" that this table makes a revision — the conflict code
-  `stale_version`, the identity pins' and the device register's `version`, `avatarVersion` (ADR 0084) — and whether
-  the terms' `termsVersion` is a revision or an edition.
+- **Built (2026-10-16, inbox #452):** the rest of "version" that this table makes a revision. The conflict code
+  `stale_revision` (was `stale_version`, every revision-checked write, the pins, the register and a rotation); the
+  identity pins' and the device register's `revision` (was `version`: request, response, column, and the binding field
+  of the `identity-pins` / `device-register` seals); `avatarRevision` (was `avatarVersion`, ADR 0084, the avatar read's
+  ETag); and the terms, `termsRevision` / `acceptedRevision`, the accept's `revision` and `409 terms_revision_changed`
+  (were `termsVersion` / `acceptedVersion` / `version` / `terms_version_changed`, ADR 0035). The terms were the open
+  question, revision or edition: a revision, because the number has no compatibility meaning, moves on every change
+  of the text and guards the accept with a 409 exactly as `metaRevision` guards a meta write; "edition" would be a
+  second word for a meaning the table already names. A user reads it as *Fassung* in German copy. Pre-V1, so no major
+  and no alias; the columns moved in the core baseline with its pin line. No sealed byte changed: the two account
+  seals bind the revision by position, and their vectors only renamed the key (`context_bytes` unchanged). The vector's
+  sample plaintext `{"version":1,…}` stays: it is opaque test bytes, and changing it would move `blob`.
+  `validate_write_concurrency.py` now refuses a declared revision field named as a version.
+- **Stays "version", because it is compatibility:** `/api/setup`'s `version: { major, build }` (ADR 0032), the
+  release version (ADR 0057), an export's `appVersion` and its manifest's format `version`, the Emergency Kit's and a
+  sealed payload's format version (`v`), and every spec's `info.version`.
 - **The cost:** one more word for a reader to learn ("rights" next to "permission"). It pays for itself where
   ADR 0032 §3 needs it most: in a review, "capability" now always means the operator's switch.
 

@@ -11,11 +11,15 @@ their address. Until you set up email, neither can go out. Email is set up per s
 runs the server.
 
 1. Open the menu at the bottom of the sidebar, choose **Settings**, then **Email** under **Shared space**.
-2. Enter your mail server's **SMTP host** and **Port**, the **From address**, and the **Username** and **Password** for
-   it. Leave **Use STARTTLS** on unless your mail server says otherwise.
+2. Enter your mail server's **SMTP host** and **Port**, and the **Username** and **Password** for it. Leave **Use
+   STARTTLS** on unless your mail server says otherwise.
+   The **From address** is optional: left empty, mail goes out from `noreply@` followed by your space's domain.
+   If your mail server is a relay that accepts mail without a login, leave **Username** and **Password** empty.
 3. Turn on **Send invitations by email**.
 4. If you like, write your own **Subject** and **Body** for the invitation under **Invitation email**. You can use
    `{{link}}`, `{{domain}}` and `{{expiry}}`; leave both empty for the standard text.
+   Whatever you write there goes to everyone you invite exactly as written, and it is stored on the server unlocked,
+   so keep it about the invitation.
 5. Choose **Save email settings**.
 
 <Screenshot id="owners-email" shows="The Email panel with the line Ready to send email, the SMTP fields, Send invitations by email and the invitation template" />

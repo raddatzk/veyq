@@ -233,6 +233,8 @@ A refined CR nails **decisions, not keystrokes**:
   finding made unreadable by a rename nobody pointed at it. **And a CR that narrows what is accepted greps the tests
   — web e2e included — for the input it newly refuses**: cr-guests-create-no-application-nodes refused a guest's
   Memory, and its locator (the rule's own names) missed a slice test and an e2e that created one through a helper.
+  **And it names the site pages the change touches** — a change to what a reader sees or does has published pages
+  to update in the same CR ([`changes/README.md`](../../changes/README.md) § The published docs move with the change).
 - **Name the control an input arrives through, per surface, and cite the line behind "as X does".** A refine that
   adds an input names where the user gives it: cr-download-is-the-export decided a picked directory and a drop box's
   ZIP without saying where the picker sits or reconciling the use case's E5, and both came back as owner questions.
@@ -302,10 +304,12 @@ A refined CR nails **decisions, not keystrokes**:
 - **Published** (`site/`): the Use area in plain language, **EN+DE**, for the **non-technical end user** and the
   space owner who want to know *what they can do* and *why their data is safe*; the Run area (English) for Server
   Owners; the Security area (English) for researchers.
-- **Hand-written pages that name their source.** Each use-case carries a short plain-language
-  "What this means for you / Was das für dich bedeutet" section (EN+DE), the material a Use page draws on.
-  The pages are written by hand, one per topic, and each declares the docs it speaks for, which link it back
+- **Hand-written pages that name their source.** User-facing prose lives only on the site. A use-case keeps one
+  English `## User impact` line on why it exists for the user; the Use pages are written by hand, one per topic,
+  and each declares the docs it speaks for, which link it back
   ([`../features/README.md`](../features/README.md) § use-case format).
+- **Kept current by every CR.** A change to what a reader sees or does updates its site pages in the same CR
+  ([`changes/README.md`](../../changes/README.md) § The published docs move with the change).
 
 ## What counts as verified
 

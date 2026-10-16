@@ -581,6 +581,7 @@ watch(
                 <OptimisticTile
                   v-if="item.kind === 'optimistic'"
                   :tile="item.optimistic"
+                  :link="source.upload?.viaLink === true"
                   :style="{
                     transform: `translate(${tile.left}px, ${tile.top}px)`,
                     width: `${tile.renderedWidth}px`,

@@ -40,7 +40,7 @@
    identity-pin store and the device register are re-sealed under `MK'` and travel in the **same request**,
    written in the same transaction — so a rotation that cannot re-seal them does not happen, rather than
    leaving them under a key that no longer exists. Each is opened under the old key through this device's
-   trust-state marks first (E8), and a `stale_version` on either fails that attempt whole: the client re-reads,
+   trust-state marks first (E8), and a `stale_revision` on either fails that attempt whole: the client re-reads,
    re-seals and resubmits. The Memory pins are re-sealed under `MK'` and the caller's own item marks re-tagged —
    their self-tag's key derives from the Master Key, and only a mark whose tag verifies under the old key is
    carried ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9); these two run
@@ -167,33 +167,10 @@ sequenceDiagram
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator
   elsewhere.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** If someone got into your account — say you approved a sign-in code that wasn't really your own new
-phone — signing that device out isn't enough: it still holds the keys to your memories. Rotating replaces
-those keys. Your spaces get new locks, the old device is shut out of everything from that moment on, and
-every other device has to sign in again — with your password and your Emergency Kit, because every saved key,
-this device's too, is gone. Two honest limits. Anything that person already saw, they still
-have — rotation stops what comes next, it can't take back what's gone. And you need your Emergency Kit to do
-it, on purpose: it's the one thing they don't have, which is what stops *them* doing this to *you*. In shared
-spaces someone else has to confirm it's really you — best by comparing the security number over a call —
-before you're back in. Shared spaces also get their new lock from one of their other owners, and until that
-happens the old device can still read what's new there; the security screen shows each space's state whenever
-you look, and if re-locking one failed, you can start it again.
-
-**DE —** Wenn jemand in dein Konto gekommen ist — etwa weil du einen Anmelde-Code bestätigt hast, der gar
-nicht dein neues Handy war — reicht Abmelden nicht: das Gerät hat weiterhin die Schlüssel zu deinen
-Erinnerungen. Beim Rotieren werden diese Schlüssel ersetzt. Deine Bereiche bekommen neue Schlösser, das alte
-Gerät ist ab diesem Moment von allem ausgesperrt, und alle deine anderen Geräte müssen sich neu anmelden —
-mit Passwort und Notfall-Kit, denn jeder gespeicherte Schlüssel ist weg, auch der dieses Geräts.
-Zwei ehrliche Grenzen. Was diese Person schon gesehen hat, hat sie weiterhin — Rotieren stoppt, was danach
-kommt, es holt nichts zurück. Und du brauchst dafür dein Notfall-Kit, mit Absicht: es ist das Einzige, was
-die Person nicht hat, und genau das hindert *sie* daran, das mit *dir* zu machen. In geteilten Bereichen muss
-jemand anderes bestätigen, dass du wirklich du bist — am besten, indem ihr die Sicherheitsnummer am Telefon
-vergleicht — bevor du wieder drin bist. Geteilte Bereiche bekommen ihr neues Schloss außerdem von einer ihrer
-anderen besitzenden Personen, und bis dahin kann das alte Gerät dort Neues noch lesen; die Sicherheitsseite zeigt
-den Stand jedes Bereichs, wann immer du nachsiehst, und ist das neue Schloss für einen gescheitert, kannst du es neu
-anstoßen.
+If someone got into your account, you can replace your keys so that their device is shut out of everything from then
+on.
 
 ## Related
 

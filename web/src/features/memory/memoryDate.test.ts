@@ -87,9 +87,9 @@ describe('sealMemoryDate / unsealMemoryDate', () => {
   })
 })
 
-/** A thrown generated-client failure carrying `409 stale_version` with the server's current blob (ADR 0077). */
+/** A thrown generated-client failure carrying `409 stale_revision` with the server's current blob (ADR 0077). */
 const stale = (wrappedMeta: string | null, metaRevision: number) => ({
-  response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaRevision }), { status: 409 }),
+  response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta, metaRevision }), { status: 409 }),
 })
 const opened = (sealed: string) => JSON.parse(new TextDecoder().decode(v1.open(metaCtx(NODE_ID), nodeKey, fromB64std(sealed))))
 const fresh = (wrappedMeta: string | null = null, metaRevision = 0) => ({ wrappedMeta, metaRevision })
@@ -129,12 +129,12 @@ describe('setMemoryDate', () => {
   })
 
   /**
-   * W1 (ADR 0077, uc.memory.concurrent-curation): a date save from a STALE tree meets `409 stale_version` whose blob
+   * W1 (ADR 0077, uc.memory.concurrent-curation): a date save from a STALE tree meets `409 stale_revision` whose blob
    * holds a peer's place. The retry re-applies only the date on that blob, so the place survives. Before the
    * version existed the stale write simply landed (no 409, no retry) and the place was gone. Control: the retry
    * states the version the conflict handed back.
    */
-  it('W1: on 409 stale_version re-applies only the date on the current blob — a peer\'s place survives', async () => {
+  it('W1: on 409 stale_revision re-applies only the date on the current blob — a peer\'s place survives', async () => {
     const peers = sealMetaJson(JSON.stringify({ v: 1, location: LISBON }))
     const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(stale(peers, 5)).mockResolvedValueOnce(undefined)
     fakeApi(contentApi, { updateNode })

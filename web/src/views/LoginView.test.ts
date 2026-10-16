@@ -16,18 +16,27 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('../features/account/login/login', () => ({ login: vi.fn() }))
+// Whose a restored session is, and ending it, are the wire's: `LoginView.restoredSession.test.ts` runs them over a fake
+// server. Here the answer is stubbed, with the real address comparison.
+vi.mock('../features/account/login/liveSession', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/account/login/liveSession')>()),
+  liveSessionAddress: vi.fn(),
+  leaveLiveSession: vi.fn(),
+}))
 vi.mock('../features/account/login/signOut', () => ({ signOut: vi.fn(), takeSignOutNotice: vi.fn() }))
 vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn(), unlockWithDevice: vi.fn() }))
 vi.mock('../features/account/trustDevice/trustDevice', () => ({
   trustThisDevice: vi.fn(),
   untrustThisDevice: vi.fn(),
   isTrusted: vi.fn(),
+  trustedEmails: vi.fn(),
 }))
 vi.mock('../features/account/rememberMe/deviceKeyWrap', () => ({
   enrolDeviceKey: vi.fn(),
   clearDeviceKey: vi.fn(),
   isRememberSupported: vi.fn(),
   rememberedWrapId: vi.fn(),
+  rememberedEmail: vi.fn(),
 }))
 vi.mock('../features/account/rememberMe/sessionVault', () => ({
   cacheSessionVault: vi.fn(),
@@ -66,10 +75,17 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 import LoginView from './LoginView.vue'
 import { login } from '../features/account/login/login'
 import { signOut, takeSignOutNotice } from '../features/account/login/signOut'
+import { leaveLiveSession, liveSessionAddress } from '../features/account/login/liveSession'
 import { session } from '../app/session'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
-import { trustThisDevice, untrustThisDevice, isTrusted } from '../features/account/trustDevice/trustDevice'
-import { enrolDeviceKey, clearDeviceKey, isRememberSupported, rememberedWrapId } from '../features/account/rememberMe/deviceKeyWrap'
+import { trustThisDevice, untrustThisDevice, isTrusted, trustedEmails } from '../features/account/trustDevice/trustDevice'
+import {
+  enrolDeviceKey,
+  clearDeviceKey,
+  isRememberSupported,
+  rememberedWrapId,
+  rememberedEmail,
+} from '../features/account/rememberMe/deviceKeyWrap'
 import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
 import { cacheSessionVault, clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { revokeOtherSessionFamilies } from '../features/account/sessions/sessions'
@@ -165,6 +181,8 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     // `clearAllMocks` clears calls, not implementations, so every resolved value is restated per test.
     vi.mocked(isTrusted).mockResolvedValue(false)
     vi.mocked(login).mockResolvedValue(undefined)
+    vi.mocked(liveSessionAddress).mockResolvedValue('kevin@example.com')
+    vi.mocked(leaveLiveSession).mockResolvedValue(undefined)
     vi.mocked(signOut).mockResolvedValue(undefined)
     vi.mocked(takeSignOutNotice).mockReturnValue(null)
     session.accessToken = null
@@ -176,6 +194,8 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     vi.mocked(clearDeviceKey).mockResolvedValue(undefined)
     vi.mocked(isRememberSupported).mockReturnValue(true)
     vi.mocked(rememberedWrapId).mockResolvedValue(null)
+    vi.mocked(rememberedEmail).mockResolvedValue(null)
+    vi.mocked(trustedEmails).mockResolvedValue([])
     vi.mocked(deviceId).mockReturnValue('this-device')
     vi.mocked(guessDeviceLabel).mockReturnValue('Firefox · macOS')
     vi.mocked(cacheSessionVault).mockResolvedValue(undefined)
@@ -408,6 +428,125 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
     expect(clearDeviceKey).toHaveBeenCalled()
     expect(trustThisDevice).toHaveBeenCalled()
+  })
+
+  // inbox #450: a sign-in made while a device switch is off. The remembered device keeps the persistent cookie it had,
+  // so switching back on restores it across a browser restart (ADR 0088 decision 5); the chain itself, restart
+  // included, is `LoginView.deviceSwitch.test.ts`'s.
+  const scopeOfLogin = () => vi.mocked(login).mock.calls[0]?.[2]
+
+  it('remember-device.passwordless off: a device that keeps its DEVICE_KEY record signs in with the persistent scope', async () => {
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    vi.mocked(rememberedWrapId).mockResolvedValue('wrap-remembered')
+    const w = mountView()
+    await fillCredentials(w)
+    expect(w.find('#remember-me').exists()).toBe(false) // the toggle stays hidden: nothing new is offered
+    await secretKeyField(w).setValue('the-secret-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(scopeOfLogin()).toBe(LoginVerifyRequestSessionScopeEnum.Persistent)
+    expect(enrolDeviceKey).not.toHaveBeenCalled() // no DEVICE_KEY wrap is enrolled while its switch is off
+  })
+
+  it('control: with passwordless off, a device without such a record still gets the session scope', async () => {
+    // The persistent scope is the record's, not the switch's: a device that never chose "stay signed in" is not
+    // handed a cookie that outlives the browser.
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    const w = mountView()
+    await submitOrdinary(w, false)
+
+    expect(scopeOfLogin()).toBe(LoginVerifyRequestSessionScopeEnum.Session)
+    expect(trustThisDevice).toHaveBeenCalled() // control: the sign-in went through and enrolled as before
+  })
+
+  it('control: with passwordless on, the toggle alone picks the scope, a record or not', async () => {
+    vi.mocked(rememberedWrapId).mockResolvedValue('wrap-remembered')
+    const w = mountView()
+    await submitOrdinary(w, false)
+
+    expect(scopeOfLogin()).toBe(LoginVerifyRequestSessionScopeEnum.Session)
+  })
+
+  it('prefills the email from the device’s one local record, so the hint is right before anything is typed', async () => {
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    vi.mocked(rememberedEmail).mockResolvedValue('kevin@example.com')
+    vi.mocked(rememberedWrapId).mockResolvedValue('wrap-remembered')
+    const w = mountView()
+    await flushPromises()
+
+    expect((w.find('input[name="email"]').element as HTMLInputElement).value).toBe('kevin@example.com')
+    expect(w.text()).toContain(t('unlock.deviceHeldBack'))
+    expect(w.text()).not.toContain(t('unlock.secretKeyHint'))
+  })
+
+  it('prefills from a trusted device’s record too, and the password alone then unlocks it', async () => {
+    vi.mocked(trustedEmails).mockResolvedValue(['kevin@example.com'])
+    vi.mocked(isTrusted).mockImplementation(async (e) => e === 'kevin@example.com')
+    const w = mountView()
+    await flushPromises()
+
+    expect((w.find('input[name="email"]').element as HTMLInputElement).value).toBe('kevin@example.com')
+    expect(secretKeyField(w).exists()).toBe(false)
+  })
+
+  it('prefills nothing where the device holds records of two accounts, or where something is already typed', async () => {
+    vi.mocked(trustedEmails).mockResolvedValue(['a@example.com', 'b@example.com'])
+    const two = mountView()
+    await flushPromises()
+    expect((two.find('input[name="email"]').element as HTMLInputElement).value).toBe('')
+
+    vi.mocked(trustedEmails).mockResolvedValue([])
+    // The record answers late, after the member started typing: their address wins.
+    let answer: (email: string | null) => void = () => {}
+    vi.mocked(rememberedEmail).mockReturnValue(new Promise((r) => { answer = r }))
+    const typing = mountView()
+    await typing.find('input[name="email"]').setValue('typed@example.com')
+    answer('kevin@example.com')
+    await flushPromises()
+    expect((typing.find('input[name="email"]').element as HTMLInputElement).value).toBe('typed@example.com')
+  })
+
+  it('the prefilled email keeps a session a boot restored: the unlock is no second login', async () => {
+    // A prefill of the session's own account is no different account: dropping the restored session for it would make
+    // every sign-in on such a device a new login. Typing it keeps the session too (inbox #454, on the wire in
+    // `LoginView.restoredSession.test.ts`).
+    session.accessToken = 'restored'
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    vi.mocked(rememberedEmail).mockResolvedValue('kevin@example.com')
+    vi.mocked(rememberedWrapId).mockResolvedValue('wrap-remembered')
+    const w = mountView()
+    await flushPromises()
+    await w.find('#login-password').setValue('the-password')
+    await secretKeyField(w).setValue('the-secret-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(login).not.toHaveBeenCalled()
+    expect(leaveLiveSession).not.toHaveBeenCalled()
+    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', 'the-secret-key')
+  })
+
+  it('a restored session keeps its sign-out button while the address is typed over (inbox #454)', async () => {
+    // The card follows the session the tab holds, not the field: typing ends nothing, the submit decides.
+    session.accessToken = 'restored'
+    const w = mountView()
+    await fillCredentials(w, 'other@example.com')
+
+    expect(buttonLabelled(w, t('login.signOut'))).toBeDefined()
+    expect(buttonLabelled(w, t('recovery.forgot'))).toBeUndefined()
+  })
+
+  it('§E3’s entry on a restored session of the typed account logs in no second time, even with the toggle on', async () => {
+    session.accessToken = 'restored'
+    const w = mountView()
+    await fillCredentials(w)
+    await turnRememberOn(w)
+    await enterLocked(w)
+
+    expect(login).not.toHaveBeenCalled()
+    expect(leaveLiveSession).not.toHaveBeenCalled()
+    expect(w.text()).toContain(t('sessions.lockedTitle'))
   })
 
   it('device-linking off: no "sign in with code" entry, and a scanned pairing code is not accepted (the kit still is)', async () => {

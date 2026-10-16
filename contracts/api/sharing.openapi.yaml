@@ -518,22 +518,22 @@ paths:
         **No auth.** The accountless half of the two-tier terms gate (uc.sharing.share-accept,
         [ADR 0035](../../docs/decisions/0035-server-terms-of-service.md) §3). Returns the **owning tenant's**
         public terms so an accountless share visitor can accept them **client-side** before viewing/contributing —
-        `{ tenantId, termsVersion, terms }`. The terms are **public operational content, never E2EE**; `tenantId`
+        `{ tenantId, termsRevision, terms }`. The terms are **public operational content, never E2EE**; `tenantId`
         is opaque metadata (the caller's localStorage key), only **returned**, never passed in — so this adds **no
         `tenantId` existence oracle**. Keyed on the already non-enumerable `shareId`: it reuses the share's
         `activeShare()` gate, so an unknown / disabled / expired share is the **same non-enumerable 404** as
         `resolveShare`. Independent of the share password (terms are public — **no** `X-Share-Password`). The server
         records **nothing** about the accountless visitor: acceptance is client-only, no acceptance is written here.
-        A tenant with no published terms returns `termsVersion: 0` (`terms` null) — the client never gates.
+        A tenant with no published terms returns `termsRevision: 0` (`terms` null) — the client never gates.
       parameters:
         - $ref: "#/components/parameters/ShareId"
       responses:
         "200":
-          description: The owning tenant's current public terms (or version 0 / null when the operator has published none).
+          description: The owning tenant's current public terms (or revision 0 / null when the space owner has published none).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareTerms" }
-              example: { tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, termsVersion: 3, terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" } }
+              example: { tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, termsRevision: 3, terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" } }
         "404":
           description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4) — non-enumerable, identical in every case, like `resolveShare`.
           content:
@@ -2090,22 +2090,22 @@ components:
         The owning tenant's public terms for a share, served to an accountless visitor to accept **client-side**
         (uc.sharing.share-accept). No acceptance is recorded server-side. The `tenantId` is opaque metadata only
         **returned** (never passed in — no existence oracle); it is the client's per-tenant localStorage key.
-      required: [tenantId, termsVersion]
+      required: [tenantId, termsRevision]
       properties:
         tenantId:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The opaque id of the tenant that owns the share — the client's localStorage key for the accepted version. Only returned, never a request parameter.
+          description: The opaque id of the tenant that owns the share — the client's localStorage key for the accepted revision. Only returned, never a request parameter.
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-        termsVersion:
+        termsRevision:
           x-veyq-visibility: structure
           type: integer
           format: int32
-          description: The tenant's current terms version. 0 = no terms published (the client never gates).
+          description: The tenant's current terms revision. 0 = no terms published (the client never gates).
           example: 3
         terms:
-          description: The current per-locale terms (null/absent until the operator publishes any).
+          description: The current per-locale terms (null/absent until the space owner publishes any).
           oneOf:
             - $ref: "#/components/schemas/LocalizedMarkdown"
             - type: "null"

@@ -103,7 +103,7 @@ export async function nameShareGuest(
 const sessionKey = (shareId: string) => `veyq:share-contributor:${shareId}`
 // Bumped on every save and forget, so {@link useGuestSession} re-reads the store: whichever body or section of the page
 // named the guest, or forgot it ("Not you?"), every other one sees it at once — no copy of the session to fall stale.
-const sessionVersion = ref(0)
+const sessionRevision = ref(0)
 
 /** The guest's saved session for `shareId` — its identity and token, plus whatever an application keeps beside them
  *  (`S`; Memories' uploader keeps its `K_up`) — or null when there is none or the store is unreadable. One per link,
@@ -120,14 +120,14 @@ export function loadGuestSession<S extends GuestIdentity = GuestIdentity>(shareI
 /** Save the guest's session for `shareId`. Throws when the store refuses the write, as the caller's naming step reports. */
 export function saveGuestSession(shareId: string, session: GuestIdentity): void {
   localStorage.setItem(sessionKey(shareId), JSON.stringify(session))
-  sessionVersion.value++
+  sessionRevision.value++
 }
 
 /** The guest's saved session for `shareId`, reactive: it changes when any part of the page saves or forgets it
  *  ({@link saveGuestSession}, {@link forgetGuestSession}). Read-only — write through those two. */
 export function useGuestSession<S extends GuestIdentity = GuestIdentity>(shareId: string): ComputedRef<S | null> {
   return computed(() => {
-    void sessionVersion.value
+    void sessionRevision.value
     return loadGuestSession<S>(shareId)
   })
 }
@@ -141,5 +141,5 @@ export function forgetGuestSession(shareId: string): void {
   } catch {
     /* unreadable store: nothing was kept there either */
   }
-  sessionVersion.value++
+  sessionRevision.value++
 }

@@ -193,24 +193,9 @@ stateDiagram-v2
   and **cross-device onboarding** ([uc.account.onboard-device](uc.account.onboard-device.md)) are their own
   use-cases.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** The first time you open your memories on a new device you use your **password** and your **Secret
-Key** (from your Emergency Kit). From then on that device needs only your **password** — veyq sets this up by
-itself at that first sign-in, and your Secret Key goes back in the drawer. It works by locking a key *inside
-this browser* that can't be copied out; opening still needs your password too, so a stolen laptop alone isn't
-enough. The server never sees any of this — only scrambled data. You can make a device **forget** its saved
-key whenever you want (under *Devices and sessions*), and a device without one always falls back to
-password + Secret Key.
-
-**DE —** Wenn du deine Erinnerungen das erste Mal auf einem neuen Gerät öffnest, brauchst du dein **Passwort**
-und deinen **Secret Key** (aus dem Notfall-Kit). Ab dann braucht dieses Gerät nur noch dein **Passwort** — das
-richtet veyq bei dieser ersten Anmeldung von selbst ein, und der Secret Key wandert zurück in die Schublade.
-Das funktioniert über einen Schlüssel, der *in diesem Browser* eingeschlossen ist und nicht herauskopiert
-werden kann; zum Öffnen braucht es trotzdem dein Passwort, ein gestohlener Laptop allein genügt also nicht.
-Der Server sieht davon nichts — nur verschlüsselte Daten. Du kannst ein Gerät seinen gespeicherten Schlüssel
-jederzeit **vergessen** lassen (unter *Geräte und Sitzungen*), und ein Gerät ohne ihn nimmt immer den Weg über
-Passwort + Secret Key.
+After the first time on a device you need only your password there, so your Emergency Kit can stay in the drawer.
 
 ## Related
 

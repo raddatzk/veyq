@@ -1,6 +1,7 @@
 # ADR 0072 — A seal binds the object it belongs to, not only its purpose
 
-- Status: Accepted
+- Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the counter a store binds is a
+  **revision** (the `identity-pins` / `device-register` binding field `revision`, was `version`).
 - Date: 2026-09-23
 
 ## Context
@@ -33,7 +34,7 @@ re-encryption of every existing ciphertext. That is why it is decided now.
 
 **1. A seal binds its purpose and the identity of the object it is stored as.** The AAD carries the purpose,
 **every id the opener addresses the object by** — the scope, and the node, media, blob, bucket, share or member
-it belongs to — and **the epoch or version the wire stores it at**, where the wire carries one. The opener
+it belongs to — and **the epoch or revision the wire stores it at**, where the wire carries one. The opener
 supplies those values from the address it used to fetch the object and never from the ciphertext's own
 envelope, so a ciphertext moved to a different slot fails to open.
 
@@ -58,8 +59,9 @@ member: an opener could not supply one. *Whose* an entry is, is instead a self-t
 the marking member's own client can compute and check ([ADR 0068](0068-favorites-two-confidentiality-levels.md) §9),
 so the server cannot present another member's set as the caller's own. What binding does not give it, it does not
 give here either: the server still chooses which stored version of a set it serves (Decision 5) and may serve
-stored sets again as extra entries in the count (ADR 0068 §9). Likewise a version-carrying store (`identity-pins`, `device-register`) binds the version it is
-stored at — the write's `version + 1` — because that is the one the reader's address names.
+stored sets again as extra entries in the count (ADR 0068 §9). Likewise a revision-carrying store (`identity-pins`,
+`device-register`) binds the revision it is stored at — the write's `revision + 1` — because that is the one the
+reader's address names.
 
 **4. Parents are not bound.** The tree's shape is server-visible metadata and stays that. Binding a node's
 parent would turn every move into a re-seal of everything below it. The harm a parent binding would prevent is
@@ -68,7 +70,7 @@ under a different parent meets a different parent key and does not open. What a 
 `placement_revision` (`node-name`, `content-key`, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
 Decision 3): a move re-seals the moved node's own entry and key once, never its subtree.
 
-**5. Binding makes an epoch or version *authentic*; it does not make it *fresh*.** Which epoch's grant and which
+**5. Binding makes an epoch or revision *authentic*; it does not make it *fresh*.** Which epoch's grant and which
 version of an object a client receives is still the server's choice. Refusing an older but authentic
 ciphertext needs a floor the client holds itself, which inbox #161 owns (the per-scope epoch floor and the pin
 store's rollback). The labels are bound now anyway, because they are part of the stored format and a floor

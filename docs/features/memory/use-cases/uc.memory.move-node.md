@@ -92,24 +92,10 @@ a `READ_WRITE` guest of a folder link moved a folder, a file and a Memory into a
 - **Operator-blind, unchanged.** The server sees the node id, the new parent id, the epoch number, the revision and
   ciphertext — the same class of metadata every create and rename already discloses.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can move a folder, a memory, a chapter, a file or a drop box to another place in your space with "Move
-to…": open the folder it should go to and choose "Move here", and everything inside it comes along and stays readable. If someone shared
-a folder with you and lets you add things, you can move things around inside that folder too — but nothing out of it.
-If a guest sent files into your drop box, you can move their folder out to keep it as an ordinary folder; the guest
-then can no longer add to it. To move several things at once, choose "Select", tick them and choose "Move to…": what
-cannot go is named, the rest moves. A move can be undone right away. The server only learns that something moved, never
-what it is called.
-
-**DE —** Mit „Verschieben nach …“ kannst du einen Ordner, eine Erinnerung, ein Kapitel, eine Datei oder einen
-Briefkasten an einen anderen Ort in deinem Bereich verschieben: Öffne den Ordner, in den es soll, und wähle „Hierher
-verschieben“, und alles darin kommt
-mit und bleibt lesbar. Hat dir jemand einen Ordner freigegeben, in den du etwas hinzufügen darfst, kannst du darin auch
-verschieben – aber nichts heraus. Hat eine Person Dateien in deinen Briefkasten eingeworfen, kannst du ihren Ordner
-herausverschieben und als gewöhnlichen Ordner behalten; die Person kann dann nichts mehr hinzufügen. Um mehreres auf
-einmal zu verschieben, wähle „Auswählen“, hake es an und wähle „Verschieben nach …“: Was nicht dorthin kann, wird
-genannt, der Rest wird verschoben. Ein Verschieben lässt sich sofort rückgängig machen. Der Server erfährt nur, dass etwas verschoben wurde – nie, wie es heißt.
+You can reorganize your space by moving folders, Memories, chapters, files and drop boxes to another place, with
+everything inside coming along and staying readable.
 
 ## Related
 

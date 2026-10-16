@@ -80,7 +80,7 @@ const stubs = {
 }
 
 const OWNER_ROW: ScopeMember[] = [
-  { userId: 'u-own', username: 'owner', avatarVersion: 0, role: 'OWNER', identityPublicKey: 'AA==', hasGrant: true, pendingConsent: false },
+  { userId: 'u-own', username: 'owner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'AA==', hasGrant: true, pendingConsent: false },
 ]
 
 async function mountPanel(opts: { me: string; icon?: Uint8Array | null } = { me: 'owner' }) {
@@ -147,7 +147,7 @@ describe('GroupMembersPanel — space icon (GROUP slice)', () => {
 })
 
 describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decision 4)', () => {
-  const BOB: ScopeMember = { userId: 'u-bob', username: 'bob', avatarVersion: 0, role: 'MEMBER', identityPublicKey: 'Qk9C', hasGrant: true, pendingConsent: false }
+  const BOB: ScopeMember = { userId: 'u-bob', username: 'bob', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'Qk9C', hasGrant: true, pendingConsent: false }
   const PICKED = [...OWNER_ROW, BOB]
 
   beforeEach(() => {

@@ -8,7 +8,7 @@ import { writeSealedMeta, type MetaEditContext, type SealedMetaResult, type Seal
 
 /**
  * Write a node's sealed meta, revision-checked (ADR 0077): open the blob at `base`, apply `edit`, seal, and PATCH
- * it with the `metaRevision` it was built from; on `409 stale_version` re-run `edit` on the blob the conflict
+ * it with the `metaRevision` it was built from; on `409 stale_revision` re-run `edit` on the blob the conflict
  * handed back. Every node-meta writer — the three editors and the two self-heals — goes through here.
  */
 export function writeNodeMeta(

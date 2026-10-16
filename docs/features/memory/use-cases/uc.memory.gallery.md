@@ -139,47 +139,10 @@
   which is present in the header precisely when marks are shared and hidden when they are not (E4). Dropping
   either one puts the user back to guessing from the icon.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Open a Memory and you see its photos as a grid; tap one to view it large and swipe through the rest.
-You can **mark the good ones with a heart**, and then show only the marked ones — either **everyone's** or
-**just yours**. Worth knowing: in a shared space a mark on a photo is **not private** — the others in that
-space see that the photo was marked, and the heart shows **how many** people marked it. veyq does not show
-*who* did, but it cannot hide it either, so treat a mark as something you do in front of the group. The heart
-on the **Memory itself** is the other way round: that one is **only yours**, and nobody else can see it.
-A **video** shows a small ▶ badge on its tile — open it and press play to watch it right there. Everything is
-decrypted on **your own device** — the server only ever stores scrambled files and never sees your pictures or
-videos. Pictures are ordered by **when they were taken**, newest first unless you flip the order — and one that
-is still uploading already sits in its right place, so nothing jumps around once it finishes. Open a picture
-and a panel beside it tells you what the picture knows about itself: the file and its size, the camera and
-lens, how it was exposed, who made it — and, if it was taken with location on, **where**, as a place name and a
-small map rather than a pair of numbers. Nothing you did not give it appears there, and none of it is ever
-readable by the server. To keep it quick, the grid and the large view use **compact copies your device made**; the
-**full-quality original is only fetched when you download it, or zoom into a photo further than the compact copy
-can show** — and a video is **streamed piece by piece as you watch**, so only the parts you actually play are fetched, not the whole file. Double-click or pinch a
-photo to **zoom** in, and press play for a **slideshow** that moves on every five seconds and stops the moment you
-touch anything. Journal, chapters, maps and playlists come in later steps.
-
-**DE —** Öffne eine Erinnerung und du siehst ihre Fotos als Raster; tippe eines an, um es groß zu sehen und
-durch die anderen zu blättern. Du kannst **die guten mit einem Herz markieren** und dann nur die markierten
-anzeigen — entweder **die von allen** oder **nur deine**. Wichtig zu wissen: In einem geteilten Bereich ist
-eine Markierung an einem Foto **nicht privat** — die anderen in diesem Bereich sehen, dass das Foto markiert
-wurde, und das Herz zeigt, **wie viele** Leute es markiert haben. veyq zeigt nicht, *wer* es war, kann es aber
-auch nicht verbergen; betrachte eine Markierung also als etwas, das du vor der Gruppe tust. Das Herz an der
-**Erinnerung selbst** ist umgekehrt: das gehört **nur dir** und ist für niemanden sonst sichtbar. Ein **Video** zeigt ein kleines ▶-Abzeichen auf seiner Kachel — öffne es und
-drücke Play, um es direkt dort anzusehen. Alles wird auf **deinem eigenen Gerät** entschlüsselt — der Server
-speichert nur verschlüsselte Dateien und sieht deine Bilder und Videos nie. Sortiert wird nach **Aufnahmezeit**,
-neueste zuerst, solange du die Richtung nicht umdrehst — und was noch hochlädt, steht schon an seiner richtigen
-Stelle, sodass nach dem Fertigwerden nichts mehr springt. Öffnest du ein Bild, erzählt dir eine Leiste daneben,
-was das Bild über sich selbst weiß: die Datei und ihre Größe, Kamera und Objektiv, wie belichtet wurde, wer es
-gemacht hat — und, wenn es mit eingeschaltetem Ort aufgenommen wurde, **wo**, als Ortsname und kleine Karte
-statt als Zahlenpaar. Es steht dort nichts, was du nicht selbst mitgegeben hast, und nichts davon kann der
-Server lesen. Damit es flott bleibt, nutzen das
-Raster und die Großansicht **kompakte Kopien, die dein Gerät erstellt hat**; das **Original in voller Qualität
-wird nur geladen, wenn du es herunterlädst oder ein Foto weiter vergrößerst, als die kompakte Kopie zeigen kann** — und ein Video wird beim Ansehen **Stück für Stück
-gestreamt**, sodass nur die tatsächlich abgespielten Teile geladen werden, nicht die ganze Datei. Mit Doppelklick oder zwei
-Fingern **vergrößerst** du ein Foto, und Play startet eine **Diashow**, die alle fünf Sekunden weiterblättert und
-anhält, sobald du etwas berührst. Journal, Kapitel, Karten und Playlists kommen in späteren Schritten.
+You look through a Memory's photos and videos quickly and comfortably — grid, large view, details, marks, zoom and
+slideshow — with everything decrypted only on your own device.
 
 ## Related
 

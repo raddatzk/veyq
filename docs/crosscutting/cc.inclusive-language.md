@@ -2,7 +2,7 @@
 
 - **ID:** cc.inclusive-language
 - **Applies to:** every **German user-facing** string — the `de` catalog in `web/src/i18n/index.ts` and the
-  published DE wiki (`wiki/de/*.md`). **English strings and code/identifiers are unaffected** — this is a
+  German pages of the docs site (`site/src/content/docs/de/`). **English strings and code/identifiers are unaffected** — this is a
   language convention for the German product voice only.
 
 ## The rule — neutral-first
@@ -37,16 +37,13 @@ for a generic person.
 - **Grammatical neuter agreement with „Mitglied"** („es", „das Mitglied") is fine; but a possessive that reads
   masculine („seine", „ihm") is rephrased to **„dieser Person" / „der Person"**.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** The German version of veyq speaks to and about everyone the same way — it avoids wording that assumes a
-gender, in the app and in this wiki.
-
-**DE —** Die deutsche Version von veyq spricht alle gleich an — in der App und in diesem Wiki wird Sprache
-vermieden, die ein Geschlecht unterstellt.
+The German version of veyq speaks to and about everyone the same way, avoiding wording that assumes a gender, in
+the app and on the docs site.
 
 ## Related
 
 - Working rule: [docs/ai/README.md](../ai/README.md) § *Language* (converse in the user's language; document +
-  implement in English; the `wiki/` EN+DE exception).
+  implement in English; the docs site's Use area is the EN+DE exception).
 - Built: cr-0112 (the first neutral-first sweep of the DE i18n catalog + the DE wiki pages).

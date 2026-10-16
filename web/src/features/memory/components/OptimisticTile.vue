@@ -18,7 +18,7 @@ const props = defineProps<{
   /** cr-0102 uploader drop-box: a settled tile carries a per-tile delete (session-only own-view). */
   deletable?: boolean
   deleting?: boolean
-  /** The tile is a link visitor's upload (ShareView). A `quota_exceeded` refusal then reads as the link being full
+  /** The tile is a link visitor's upload (the drop-box page, or a guest's Memory detail). A `quota_exceeded` refusal then reads as the link being full
    *  — never which limit was reached — and offers no retry, because none can help (ADR 0073 §6). */
   link?: boolean
 }>()

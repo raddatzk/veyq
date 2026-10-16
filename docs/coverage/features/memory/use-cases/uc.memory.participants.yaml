@@ -18,7 +18,7 @@ acceptanceCriteria:
           - src/features/memory/memoryParticipants.test.ts
           - src/features/memory/components/MemoryParticipants.test.ts
   - id: concurrent-edits-merge
-    text: On `409 stale_version` the writer re-reads the blob and MERGES instead of surfacing a same-field conflict - the union of the stored and the wanted list, a removal by the person editing winning for the id they removed - through its own edit function (`editParticipantsOf`), not `editField`.
+    text: On `409 stale_revision` the writer re-reads the blob and MERGES instead of surfacing a same-field conflict - the union of the stored and the wanted list, a removal by the person editing winning for the id they removed - through its own edit function (`editParticipantsOf`), not `editField`.
     coverage:
       web:
         unit:

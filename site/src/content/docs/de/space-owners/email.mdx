@@ -11,11 +11,15 @@ zurücksetzen oder ihre Adresse bestätigen. Solange du keine E-Mail eingerichte
 richtet für jeden Bereich die Person ein, der er gehört, nicht wer den Server betreibt.
 
 1. Öffne das Menü unten in der Seitenleiste, wähle **Einstellungen**, dann **E-Mail** unter **Geteilter Bereich**.
-2. Gib **SMTP-Host** und **Port** deines Mailservers ein, die **Absenderadresse** sowie **Benutzername** und **Passwort**
-   dafür. Lass **STARTTLS verwenden** an, außer dein Mailserver sagt etwas anderes.
+2. Gib **SMTP-Host** und **Port** deines Mailservers ein sowie **Benutzername** und **Passwort** dafür. Lass **STARTTLS
+   verwenden** an, außer dein Mailserver sagt etwas anderes.
+   Die **Absenderadresse** ist optional: Bleibt sie leer, gehen Mails von `noreply@` und der Domain deines Bereichs raus.
+   Nimmt dein Mailserver Mails ohne Anmeldung an (ein einfaches Relais), lass **Benutzername** und **Passwort** leer.
 3. Schalte **Einladungen per E-Mail senden** ein.
 4. Wenn du magst, schreib unter **Einladungs-E-Mail** einen eigenen **Betreff** und **Text** für die Einladung. Du
    kannst `{{link}}`, `{{domain}}` und `{{expiry}}` verwenden; lass beide leer für den Standardtext.
+   Was du dort schreibst, geht genau so an alle, die du einlädst, und liegt unverschlüsselt auf dem Server; schreib
+   also nur, was zur Einladung gehört.
 5. Wähle **E-Mail-Einstellungen speichern**.
 
 <Screenshot id="owners-email" shows="Der Bereich E-Mail mit der Zeile Versandbereit, den SMTP-Feldern, Einladungen per E-Mail senden und der Vorlage für die Einladung" />

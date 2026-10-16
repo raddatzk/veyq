@@ -9,10 +9,12 @@ title: Sign in & remember this device (web — one screen, one toggle)
 # confirmed by the live browser smokes recorded in cr-0054 / cr-0055.
 acceptanceCriteria:
   - id: one-screen-adaptive
-    text: Web shows one screen that asks only what the device still needs — email+password+Secret Key on the first sign-in, email+password once a wrap exists, and nothing on a remembered device.
+    text: Web shows one screen that asks only what the device still needs — email+password+Secret Key on the first sign-in, email+password once a wrap exists, and nothing on a remembered device; where the device holds a record of exactly one account, the email is filled in from it, so the fields fit before anything is typed.
     coverage:
       web:
         unit:
+          - src/views/LoginView.test.ts
+          - src/features/account/trustDevice/deviceKey.test.ts
           - src/features/account/unlock/unlock.test.ts
           - src/features/account/unlock/unlock.device.test.ts
           - src/features/account/rememberMe/deviceKeyWrap.test.ts

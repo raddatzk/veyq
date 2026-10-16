@@ -5,6 +5,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
   - docs/features/sharing/use-cases/uc.sharing.share-password.md
   - docs/features/sharing/use-cases/uc.sharing.share-note.md
+  - docs/features/depot/use-cases/uc.depot.share-file.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -18,6 +19,8 @@ import Screenshot from '../../../components/Screenshot.astro';
      before opening** if people should read and accept it first.
    - **Password protection**: the link opens only with a password of at least 10 characters. Tell it to people
      another way than the link itself.
+     The password is checked by the server, not built into the encryption: it holds as far as you trust whoever runs
+     the server, fully when that is you. What you shared stays encrypted either way.
    - **Expiry date**: the link stops working after that day.
 6. Choose **Create link**, then **Copy link**, and send it.
 
@@ -29,6 +32,8 @@ import Screenshot from '../../../components/Screenshot.astro';
   is no version history), and move things around inside the shared folder. They cannot delete or rename anything, and
   cannot create a Memory or a drop box.
 - **On a Memory:** guests can add photos and videos, and delete their own again.
+- **On a single file:** guests can see and download it, and put a newer version in its place. veyq warns them first
+  that the file changes for everyone who has the link, you included, and that the old content cannot be brought back.
 
 Guests who add something give their name once, so you can see who added what. Other guests never see it. What guests
 add counts against your space's storage, up to a limit per link that the space owner sets

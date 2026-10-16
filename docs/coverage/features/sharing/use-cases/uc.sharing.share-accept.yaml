@@ -6,7 +6,7 @@ title: Share accept — an accountless visitor accepts the tenant's terms before
 # shareId is a global key resolvable on any Host — so the tenant cannot come from the Host, and the member
 # getTenantTerms is bearerAuth + membership-gated), via a guest GET /api/shares/{shareId}/terms keyed on the already
 # non-enumerable shareId (reusing activeShare()) → the same non-enumerable 404 as resolveShare, so NO tenantId
-# existence oracle (the tenantId is only returned). Acceptance is client-only localStorage keyed per tenant+version
+# existence oracle (the tenantId is only returned). Acceptance is client-only localStorage keyed per tenant+revision
 # (accept once per tenant, not per share); the server records NOTHING about the accountless visitor. Ordering on the
 # share page: password (cr-0118) → terms → display-name (cr-0101/0102) → content. Fail-open on a transient
 # terms-fetch error. Honest limit: an OPERATIONAL gate, not enforcement — client-side localStorage is bypassable by
@@ -15,29 +15,29 @@ title: Share accept — an accountless visitor accepts the tenant's terms before
 acceptanceCriteria:
   - id: terms-shown-and-gated
     text: >
-      An accountless visitor of a resolvable share whose tenant has published terms (termsVersion > 0) sees the
-      operator's terms (viewer's locale, safe markdown renderer) and cannot view or contribute until accepting. A
-      tenant with no terms (version 0) never gates. The terms come from GET /api/shares/{shareId}/terms.
+      An accountless visitor of a resolvable share whose tenant has published terms (termsRevision > 0) sees the
+      space's terms (viewer's locale, safe markdown renderer) and cannot view or contribute until accepting. A
+      tenant with no terms (revision 0) never gates. The terms come from GET /api/shares/{shareId}/terms.
     coverage:
       backend:
-        integration: [ShareSliceTest.shareTermsServesOwningTenantTermsAndRecordsNoAcceptance, ShareSliceTest.shareTermsVersionZeroWhenTenantPublishedNoTerms]
+        integration: [ShareSliceTest.shareTermsServesOwningTenantTermsAndRecordsNoAcceptance, ShareSliceTest.shareTermsRevisionZeroWhenTenantPublishedNoTerms]
       web:
         unit: [src/views/ShareView.test.ts]
   - id: accept-persists-client-side
     text: >
-      Accepting writes the accepted termsVersion to localStorage keyed by tenantId; the gate then clears and the
+      Accepting writes the accepted termsRevision to localStorage keyed by tenantId; the gate then clears and the
       content (or, for WRITE_ONLY, the display-name pre-screen) shows. A reload does not re-prompt for the
-      same version. Accepting on one share of a tenant clears the gate on every share of that tenant.
+      same revision. Accepting on one share of a tenant clears the gate on every share of that tenant.
     # Client-only by design (acceptance is localStorage, keyed per tenant — the server keeps no record for the
     # accountless visitor, so there is no backend behaviour to cover): ShareView.test.ts drives accept → clears +
     # persists, and a reload (seeded localStorage) → no re-prompt.
     coverage:
       web:
         unit: [src/views/ShareView.test.ts]
-  - id: re-accept-on-version-bump
+  - id: re-accept-on-revision-bump
     text: >
-      When the operator bumps the tenant's termsVersion, the stored acceptance is now below current, so the gate
-      re-fires; the visitor re-reads and re-accepts the current version before proceeding.
+      When the space owner bumps the tenant's termsRevision, the stored acceptance is now below current, so the gate
+      re-fires; the visitor re-reads and re-accepts the current revision before proceeding.
     coverage:
       web:
         unit: [src/views/ShareView.test.ts]

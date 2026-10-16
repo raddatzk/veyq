@@ -166,6 +166,16 @@ Schlüssel gar nicht lügen kann, ist **geplant, aber nicht gebaut** — und das
   Daten hindert, hindert uns auch daran, sie zu retten. Das sagen wir von vornherein. Weitere Situationen und was
   zu tun ist: [Hilfe](/veyq/de/help/).
 
+## Die Seite selbst kommt vom Server — eine ehrliche Grenze
+
+All das erledigt die veyq-Seite in deinem Browser, und diese Seite, auch die, die einen geteilten Link öffnet, kommt
+bei jedem Laden vom Server. Deine Sachen bleiben also verschlossen vor einer Person, die den Server ehrlich betreibt,
+und vor allen, die nur an seine gespeicherten Daten kommen. Wer den Server betreibt und es darauf anlegt mitzulesen,
+könnte diese Seite aber verändern. Auf dem Server einer anderen Person schützt dich veyq im Browser also vor ehrlichem
+Betrieb, nicht vor böswilligem, und das sagen wir lieber, als mehr zu versprechen:
+[Bekannte Grenzen](/veyq/security/known-limitations/#the-operator-served-web-client-is-passive-operator-only) (auf
+Englisch)
+
 > **Hinweis fürs Self-Hosting:** Betreibst *du* deinen eigenen veyq-Server, liegt der Betrieb bei *dir* —
 > dann stellt sich die Frage, ob man der betreibenden Person vertrauen kann, für deine eigene Instanz gar nicht.
 

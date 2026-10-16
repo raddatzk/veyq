@@ -67,7 +67,8 @@ uploads and a token-gated **delete-own**. **v1: role WRITE_ONLY, personal scope,
    (b) a **persistent badge** in the uploader header (in place of the viewer's "read-only" badge) — *"visible only
    in this session"*; (c) a dedicated **empty-state after a reload** (not a blank gallery) — *"your earlier
    uploads aren't shown here, for privacy; they arrived safely — you can add more"*; (d) a note that **delete
-   works only in this session**. The plain-language "What this means for you" section states it too.
+   works only in this session**. The docs site's Use page for it ([Ask people to add photos](../../site/src/content/docs/sharing/request-uploads.mdx))
+   states it too.
 
 6. **Everything else inherits ADR 0030.** Mandatory display name → an anonymous share identity (sealed under
    the identity's own key, point 7); the share-scoped, token-gated upload path; direct-append to the shared root

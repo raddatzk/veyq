@@ -57,19 +57,10 @@
 - **The download streams** into a picked file or the Service Worker's download route, and only falls back to an
   in-memory `Blob` up to 512 MiB; a multi-gigabyte download in a real browser is unverified (inbox #371).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can keep ordinary files — documents, PDFs, anything — in the same folders as your memories. Upload
-them, download them again exactly as they were, put a newer version in place, rename them or move them to the trash.
-Each file is encrypted on your device before it leaves it: the person running the server stores it but can read
-neither its contents nor its name. If someone else in your space replaced the same file a moment before you, veyq
-tells you instead of silently overwriting their version.
-
-**DE —** Du kannst ganz normale Dateien — Dokumente, PDFs, alles Mögliche — in denselben Ordnern ablegen wie deine
-Erinnerungen. Lade sie hoch, lade sie genau so wieder herunter, ersetze sie durch eine neuere Fassung, benenne sie um
-oder lege sie in den Papierkorb. Jede Datei wird auf deinem Gerät verschlüsselt, bevor sie es verlässt: Wer den Server
-betreibt, speichert sie, kann aber weder ihren Inhalt noch ihren Namen lesen. Hat jemand anderes in deinem Bereich
-dieselbe Datei kurz vor dir ersetzt, sagt dir veyq das, statt seine Fassung stillschweigend zu überschreiben.
+You keep ordinary files beside your Memories and get them back exactly as they were, without the server ever reading
+their contents or their names.
 
 ## Related
 

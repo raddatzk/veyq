@@ -4,6 +4,7 @@ sources:
   - docs/features/account/use-cases/uc.account.login.md
   - docs/features/account/use-cases/uc.account.unlock.md
   - docs/features/account/use-cases/uc.account.remember-this-device.md
+  - docs/features/platform/use-cases/uc.platform.capability-discovery.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -36,7 +37,9 @@ gespeicherten Schlüssel, der zusammen mit deinem Passwort deinen Bereich ohne S
 
 - **Auf diesem Gerät angemeldet bleiben war an:** Der Bereich öffnet sich, ohne etwas zu fragen. Sobald du dich
   abmeldest, fragt die nächste Anmeldung hier allerdings wieder nach deinem Secret Key.
-- **Es war aus:** Sobald du deine E-Mail eingibst, verschwindet das Secret-Key-Feld: E-Mail und Passwort reichen.
+- **Es war aus:** Deine E-Mail ist schon eingetragen, und es gibt kein Secret-Key-Feld: Dein Passwort reicht. Meldest
+  du dich hier mit mehr als einem Konto an, bleibt die E-Mail leer, und das Secret-Key-Feld verschwindet, sobald du
+  deine eingibst.
 
 ## Ohne dein Notfall-Kit zur Hand
 
@@ -55,10 +58,18 @@ Bereich ist mit **Wartet auf Zugang** markiert, bis das Gerät eines anderen Mit
 ## Wenn es nicht klappt
 
 - **Anmeldung fehlgeschlagen. Prüfe E-Mail und Passwort.** Die E-Mail oder das Passwort stimmt nicht.
+  veyq sagt nicht, welches von beiden: Ein falsches Passwort und eine E-Mail ohne Konto sehen genau gleich aus, so
+  kann niemand über die Anmeldeseite herausfinden, wer hier ein Konto hat.
 - **Entsperren fehlgeschlagen. Prüfe Passwort und Secret Key.** Der Secret Key gehört nicht zu diesem Konto oder hat
   einen Tippfehler.
 - **Konnte das Kit nicht lesen.** Die Datei ist nicht dein Notfall-Kit, oder der QR-Code darin ist nicht lesbar.
   Versuche es mit dem PDF selbst oder tippe den Secret Key ein.
+- **Diese App und dieser Server passen nicht zusammen.** veyq prüft das vor der Anmeldung, damit nichts mittendrin
+  scheitert. Ist deine App älter, aktualisiere sie; ist der Server älter, muss die Person, die ihn betreibt, ihn
+  aktualisieren. Mit deinem Konto und deinen Daten ist alles in Ordnung.
 
 Dein Passwort und dein Secret Key verlassen dieses Gerät nie. Der Server bekommt nichts, womit er öffnen könnte, was
 du aufbewahrst: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)
+
+Die Anmeldung läuft über eine einmalige Signatur, die dein Gerät aus deinem Passwort erzeugt. Der Server prüft sie nur
+und behält nichts, womit er sich als du anmelden könnte.

@@ -78,21 +78,10 @@
 - **Roles are per-scope.** A group OWNER/MEMBER is independent of any tenant role — a GroupOwner need not be the
   tenant owner, and the tenant owner has no say over group roles ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Your group's roster is yours to run: make a trusted member a co-owner so you're not the only one who can
-manage it, step someone back down, or remove someone who no longer belongs. When you remove someone, two things
-happen at once — they immediately lose access, and the group quietly re-keys so that **everything you add from
-then on is sealed away from them**, even if the server itself were turned against you. What they already saw, they
-saw — no app can reach into their memory — but nothing new. A group always keeps at least one owner, so it can
-never be left with no one in charge.
-
-**DE —** Die Mitgliederliste deiner Gruppe gehört dir: mach ein vertrautes Mitglied zum Mit-Owner, damit nicht nur
-du verwalten kannst, stufe jemanden wieder herab, oder entferne jemanden, der nicht mehr dazugehört. Beim Entfernen
-passieren zwei Dinge gleichzeitig — die Person verliert sofort den Zugang, und die Gruppe wechselt still den
-Schlüssel, sodass **alles, was du ab dann hinzufügst, für sie versiegelt bleibt** — selbst wenn der Server gegen
-dich gerichtet würde. Was sie schon gesehen hat, hat sie gesehen — das holt keine App zurück — aber nichts Neues.
-Eine Gruppe behält immer mindestens eine:n Owner, kann also nie führungslos zurückbleiben.
+You run your group's roster yourself — share ownership, step someone back, or remove them so that nothing added from
+then on reaches them — and a group is never left without an owner.
 
 ## Related
 

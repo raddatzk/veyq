@@ -9,7 +9,7 @@
 - **Preconditions:** Signed in and unlocked, a tenant space active, and the member's tenant grant (`K_tenant`).
   Without the grant the picture cannot be sealed yet (E2).
 - **Postconditions (success):** The member's per-tenant profile row carries `sealed_avatar` (one constant-length
-  ciphertext) and a bumped `avatar_version`. Every member of the tenant sees the picture on their next version check;
+  ciphertext) and a bumped `avatar_revision`. Every member of the tenant sees the picture on their next revision check;
   no other tenant is touched; a guest sees nothing.
 
 ## Main flow
@@ -19,19 +19,19 @@
 2. They pick an image file and frame it 1:1 in the cropper.
 3. The client re-encodes it to a 256 px WebP, pads the bytes to the constant length and seals them under `K_tenant`
    with the `member-avatar` purpose at (tenant scope, own user id).
-4. `PUT /api/account/profile/avatar { sealedAvatar }` — the server stores the blob verbatim, bumps `avatar_version`
+4. `PUT /api/account/profile/avatar { sealedAvatar }` — the server stores the blob verbatim, bumps `avatar_revision`
    and answers `204`. In *Your profile* the picture rides with the profile's Save (the profile first, then the picture); on
    the own profile page "Edit profile" opens the same fields with their own Save.
-5. Members read it: the directory and profile carry only `avatarVersion`; when it is non-zero and differs from the
+5. Members read it: the directory and profile carry only `avatarRevision`; when it is non-zero and differs from the
    cached one, the client calls `GET /api/tenants/{tenantId}/members/{userId}/avatar` (with `If-None-Match` for a
-   known version), opens the blob on the device and renders it through `PersonAvatar`.
+   known revision), opens the blob on the device and renders it through `PersonAvatar`.
 
 ## Alternate / exception flows
 
 - **A1 — remove the picture:** `DELETE /api/account/profile/avatar` (idempotent `204`) clears the blob and bumps the
-  version; everyone falls back to the letter.
+  revision; everyone falls back to the letter.
 - **A2 — at join, as the tenant owner:** the owner holds `K_tenant` at accept, so the picker beside the name fields
-  seals name and picture together and sends `sealedAvatar` with the accept request (stored with `avatarVersion` 1).
+  seals name and picture together and sends `sealedAvatar` with the accept request (stored with `avatarRevision` 1).
 - **A3 — at join, as a member:** no `K_tenant` yet, so no picture is offered; after the first unlock with the key a
   one-time "finish your profile" notice (and Settings) offers it - shown when neither a name nor a picture is set, until
   "Not now" or its link dismisses it for that user on that browser (a flag, never an image). Nothing unsealed is cached
@@ -41,9 +41,9 @@
   ([uc.spaces.edit-profile](uc.spaces.edit-profile.md) E2).
 - **E3 — the blob does not open** (wrong key, corrupt, another member's blob on this row, a pad of another length such as the earlier 8 KiB one): the letter shows; never a
   throw and never a broken image.
-- **E4 — `404 avatar_not_found`** on read (cleared since the version was seen): the letter shows and the cached entry
+- **E4 — `404 avatar_not_found`** on read (cleared since the revision was seen): the letter shows and the cached entry
   is dropped. A non-member asking gets the `404` of ADR 0042.
-- **A4 — the member is removed from the tenant:** the removal clears `sealed_avatar` and bumps the version but keeps
+- **A4 — the member is removed from the tenant:** the removal clears `sealed_avatar` and bumps the revision but keeps
   the username ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md)); old Memories show the letter.
 
 ## Quality notes
@@ -54,17 +54,9 @@
 - **Per tenant.** A picture set here changes nothing in another tenant; copying one across is a possible later feature.
 - **Members only.** No share endpoint serves it and a share view shows the letter.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can give yourself a picture in each space you belong to, instead of the plain letter. The picture is
-locked with the space's key on your device first: the people in the space see it, the server only stores a scrambled
-block of always the same size. Remove it any time and the letter returns. If you join a space as a member, you can add
-your picture right after your first unlock.
-
-**DE —** In jedem Bereich, in dem du bist, kannst du dir ein Bild geben statt des einfachen Buchstabens. Das Bild wird
-auf deinem Gerät mit dem Schlüssel des Bereichs verschlossen: Die Leute im Bereich sehen es, der Server speichert nur
-einen verwürfelten Block, immer gleich groß. Du kannst es jederzeit entfernen, dann kehrt der Buchstabe zurück. Trittst
-du einem Bereich als Mitglied bei, kannst du dein Bild gleich nach dem ersten Entsperren hinzufügen.
+You can show a picture of yourself instead of a letter in each space, seen by its members and never by the server.
 
 ## Related
 

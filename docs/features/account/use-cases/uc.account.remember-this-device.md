@@ -23,7 +23,9 @@ decisions. One toggle now covers both options — the password-bound DEVICE wrap
 
 ## Main flow — one adaptive screen
 
-The screen shows only the fields this device still needs:
+The screen shows only the fields this device still needs. Where the device holds a convenience record of exactly
+one account, the email is filled in from it, so the screen knows which fields it needs before anything is typed
+(the record already keeps that email in plaintext on the device; with records of two accounts the field stays empty):
 
 1. **First time on this device** (no convenience wrap yet): **email + password + Secret Key**, plus the
    **"remember me"** toggle. On submit the client **logs in** (password → auth keypair → session, ADR 0003) and
@@ -88,7 +90,12 @@ sequenceDiagram
   ([ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
   decision 5). The device keeps its key, asks for the password and the Secret Key with the field's hint saying why
   (`unlock.deviceHeldBack`), and is not replaced: unlike E2, that sign-in neither clears it nor enrols a DEVICE
-  wrap, so it opens by itself again once the switch is back on.
+  wrap. It also keeps the persistent session cookie, although the toggle is hidden while the switch is off: a session
+  cookie would end with the browser, and the device would meet its restored wrap with no session. So it opens by
+  itself again once the switch is back on, after a browser restart too. The cookie widens nothing the switch forbids:
+  its lifetime is a session matter ([ADR 0004](../../../decisions/0004-session-tokens.md)) that no switch gates, and
+  while the wrap is withheld a revived session still meets the password-and-Secret-Key screen. A device without such
+  a record still signs in with the session cookie.
 
 ## Quality notes
 
@@ -122,22 +129,10 @@ session row in [uc.account.sessions](uc.account.sessions.md), and the rule that 
 deletion; only the surface differs. For a password-less wrap the consequence is the sharpest of any tier: the
 device goes from opening with no credentials at all to needing the password **and** the Secret Key.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you sign in on the web the first time on a device, you enter your password and your Secret Key
-once. Tick "remember me" and that device opens straight to your memories next time — but once you sign out
-there, it asks for your Secret Key again, because signing out removes what let it open by itself. Leave it
-unticked and next time you just need your password, signed out or not. The server only
-ever sees scrambled data, and the key that opens your memories never leaves your device. On a computer that
-isn't yours, use a private/incognito window — nothing is kept.
-
-**DE —** Wenn du dich im Web das erste Mal auf einem Gerät anmeldest, gibst du einmal Passwort und Secret Key
-ein. Setzt du das Häkchen „angemeldet bleiben", öffnet dieses Gerät beim nächsten Mal direkt deine
-Erinnerungen — meldest du dich dort aber ab, fragt es wieder nach deinem Secret Key, weil das Abmelden
-entfernt, womit es sich von selbst öffnen konnte. Ohne Häkchen brauchst du nächstes Mal nur dein Passwort, ob
-abgemeldet oder nicht. Der Server sieht nur verschlüsselte Daten, und der Schlüssel zu deinen
-Erinnerungen verlässt dein Gerät nie. Auf einem fremden Rechner nutze ein privates/Inkognito-Fenster — dann
-bleibt nichts zurück.
+You sign in on the web in one step and decide per device whether it opens straight to your space next time or asks for
+your password.
 
 ## Related
 

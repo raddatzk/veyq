@@ -29,7 +29,7 @@ import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favori
 
 const ARGON = v1.ARGON
 
-/** Bounds the re-read/re-seal/resubmit loop on a `409 stale_version` — the documents' own writes use the same
+/** Bounds the re-read/re-seal/resubmit loop on a `409 stale_revision` — the documents' own writes use the same
  *  bound (`MAX_WRITE_ATTEMPTS` in `identityPins.ts` / `deviceRegister.ts`); a real conflict is another device
  *  writing a document while this one rotates. */
 const MAX_PUBLISH_ATTEMPTS = 5
@@ -172,11 +172,11 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     // them does not happen — where re-sealing them after the publish left them under the retired key whenever
     // that write failed, and every device refuses a document that does not open (ADR 0028 Decision 7).
     //
-    // A `409 stale_version` means another device wrote a document meanwhile and NOTHING was written, so the
+    // A `409 stale_revision` means another device wrote a document meanwhile and NOTHING was written, so the
     // documents are re-read and re-sealed against what is now stored, and the same keys go up again under the
     // same signature (the documents are not part of the proof's statement). A document this device refuses —
     // older than its mark, missing after it held one, unreadable — refuses the rotation before any write.
-    const sealed = { pins: { blob: '', version: 0 }, register: { blob: '', version: 0 } }
+    const sealed = { pins: { blob: '', revision: 0 }, register: { blob: '', revision: 0 } }
     let result: Awaited<ReturnType<ReturnType<typeof accountRotationApi>['rotateAccountKeys']>>
     for (let attempt = 1; ; attempt++) {
       sealed.pins = await resealUnderNewKey(pinStoreDocument, oldMasterKey, newMasterKey)
@@ -197,13 +197,13 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
         )
         break
       } catch (e) {
-        if (attempt < MAX_PUBLISH_ATTEMPTS && (await isCodedError(e, HttpStatus.conflict, 'stale_version'))) continue
+        if (attempt < MAX_PUBLISH_ATTEMPTS && (await isCodedError(e, HttpStatus.conflict, 'stale_revision'))) continue
         throw e
       }
     }
-    // This device wrote both at `version + 1` under MK' — it has held them, in the slot the account reads from
+    // This device wrote both at `revision + 1` under MK' — it has held them, in the slot the account reads from
     // once the vault switches (the rest of its marks are carried across below).
-    await raiseMarks(newMasterKey, { pins: sealed.pins.version + 1, register: sealed.register.version + 1 })
+    await raiseMarks(newMasterKey, { pins: sealed.pins.revision + 1, register: sealed.register.revision + 1 })
 
     // Node pins are re-sealed after the publish, best-effort on purpose, and stay out of the request: one
     // blob per scope, and an unreadable set degrades to empty by ADR 0068 (an unpinned Memory is still there to
@@ -241,7 +241,7 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
 
 /**
  * Read one sealed account document, open it under the OLD Master Key through this device's marks, and seal it
- * under the new one for the version the rotation will store it at. A refusal there — rolled back, missing after a
+ * under the new one for the revision the rotation will store it at. A refusal there — rolled back, missing after a
  * mark, unreadable — is a refusal of the rotation: re-sealing a rolled-back copy under MK' would make the rollback
  * the rotation's own, and the honest way back from a refused document is the user's reset, not this.
  */
@@ -249,7 +249,7 @@ async function resealUnderNewKey<T>(
   doc: AccountDocumentStore<T>,
   oldMk: Uint8Array,
   newMk: Uint8Array,
-): Promise<{ blob: string; version: number }> {
+): Promise<{ blob: string; revision: number }> {
   const served = await doc.fetch()
   let value: T
   try {
@@ -258,7 +258,7 @@ async function resealUnderNewKey<T>(
     if (e instanceof TrustStateRefused) throw new RotationRefused('trustStateRefused')
     throw e
   }
-  return { blob: doc.seal(newMk, value, served.version + 1), version: served.version }
+  return { blob: doc.seal(newMk, value, served.revision + 1), revision: served.revision }
 }
 
 /**

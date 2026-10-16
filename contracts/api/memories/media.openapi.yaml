@@ -420,7 +420,7 @@ paths:
         date correction; geometry and GPS are derived-only. Operator-blind — the server overwrites the ciphertext
         it holds and never inspects the fields inside. Guards: the caller holds a grant for the scope; a media
         target must exist; and the `metaRevision` the blob was built from still matches — else nothing is
-        written and the answer is `409 stale_version` with the current blob and revision (ADR 0077).
+        written and the answer is `409 stale_revision` with the current blob and revision (ADR 0077).
       security:
         - bearerAuth: []
       parameters:
@@ -455,11 +455,11 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
         "409":
           description: >
-            The media's `wrappedMeta` moved since the stated `metaRevision` (`stale_version`, with the current blob
+            The media's `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current blob
             and revision — nothing was written, ADR 0077); or the space is being deleted and read-only
             (`scope_deleting`, uc.spaces.delete-group A4).
           content:
-            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0, metaRevision: 2 } }
+            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_revision, wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0, metaRevision: 2 } }
 
   /api/scopes/{scopeId}/media/{mediaId}:
     delete:

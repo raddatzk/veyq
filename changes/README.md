@@ -436,6 +436,18 @@ and a Use page's steps use the UI's own words (`web/src/i18n/index.ts`), so a ch
 site for the old one. A Use page changes in English and German together; a new user-facing capability gets its
 page, at the same depth as its neighbours. The CR says which pages it touched, or that it touched none and why.
 
+### Text retired because another home carries it is compared claim by claim, and checked at the code
+
+`cr-published-docs-site`'s last phase cut every use-case's bilingual reader section to one line, because the Use
+pages were to carry its material. Compared claim by claim, 28 of the 74 sections said something no page said (that
+signing in never reveals whether an account exists, that a deleted group's links pause for its 30 days). And seven
+were false or stale against the code: the server does know who added you to a group; a guest accepts the space's
+terms, per space, not the server's; re-framing a cover keeps the picture; Personal's address is `~<username>`. A
+section cut unread loses the true half, and one carried over verbatim publishes the false half. So a phase that
+retires text because another home carries it lists each claim. It finds the claim in the new home, or checks it at
+the code and then adds it there, and it reports every claim it found false. A section-level "the page covers this"
+is not that check.
+
 ### Coverage is part of the work, not a follow-up
 
 Every CR updates `docs/coverage/` for the

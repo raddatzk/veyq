@@ -260,7 +260,7 @@ paths:
         [ADR 0084](../../docs/decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)):
         one opaque, constant-length ciphertext (a 256 px WebP padded to 16 KiB, sealed under `K_tenant` with the
         `member-avatar` purpose bound to the tenant scope and the caller's own user id). The server stores it verbatim,
-        overwrites any earlier one and bumps the profile's `avatarVersion`; it never sees the image, its size or its
+        overwrites any earlier one and bumps the profile's `avatarRevision`; it never sees the image, its size or its
         type. Other tenants' profiles of the same account are untouched.
       security:
         - bearerAuth: []
@@ -272,7 +272,7 @@ paths:
             example: { sealedAvatar: c2VhbGVkLWF2YXRhcg== }
       responses:
         "204":
-          description: The picture is stored and `avatarVersion` bumped.
+          description: The picture is stored and `avatarRevision` bumped.
         "400":
           description: The request was malformed (blank, over the constant length, or not base64).
           content:
@@ -296,7 +296,7 @@ paths:
       operationId: clearMyAvatar
       summary: Remove the caller's profile picture in the active tenant.
       description: >
-        Clears the caller's profile picture in the Host tenant and bumps `avatarVersion` (uc.spaces.set-profile-picture
+        Clears the caller's profile picture in the Host tenant and bumps `avatarRevision` (uc.spaces.set-profile-picture
         A1, ADR 0084): everyone falls back to the letter. Idempotent: clearing an absent picture answers `204` too.
       security:
         - bearerAuth: []
@@ -324,14 +324,14 @@ paths:
       description: >
         Returns the authenticated caller's identity-pin store — one opaque blob sealed under the Master Key
         (`symWrap(masterKey, blob, "identity-pins")`, ADR 0028 / en.account.identity-pinning) plus its
-        monotonic `version` for optimistic concurrency. The server stores + relays the ciphertext verbatim and
+        monotonic `revision` for optimistic concurrency. The server stores + relays the ciphertext verbatim and
         never interprets it (no `userId`, no key, no count). Born empty: an account that has never written the
-        store gets `{ blob: null, version: 0 }`. Keyed off the bearer token — only the caller's own store.
+        store gets `{ blob: null, revision: 0 }`. Keyed off the bearer token — only the caller's own store.
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: The caller's sealed pin store (ciphertext only) + its version. `blob` is null when never written.
+          description: The caller's sealed pin store (ciphertext only) + its revision. `blob` is null when never written.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/IdentityPins" }
@@ -347,16 +347,16 @@ paths:
       x-veyq-concurrency:
         mode: revision
         fields:
-          - field: version
+          - field: revision
       summary: Store the caller's sealed identity-pin store (optimistic concurrency).
       description: >
-        Replaces the caller's sealed pin-store blob. `version` is the version the client last read; the write
-        succeeds only if it still matches the server's stored version, which is then bumped by one and returned.
-        The blob is sealed bound to the version it is stored at — `version + 1` (ADR 0072) — so a blob served
-        under another version does not open. If the
-        stored version moved since the client read (another device wrote), the server responds `409
-        stale_version` and the client re-reads, union-merges, and retries (en.account.identity-pinning §Sync).
-        The first write of a born-empty store sends `version: 0`. Operator-blind: the server never sees the
+        Replaces the caller's sealed pin-store blob. `revision` is the revision the client last read; the write
+        succeeds only if it still matches the server's stored revision, which is then bumped by one and returned.
+        The blob is sealed bound to the revision it is stored at — `revision + 1` (ADR 0072) — so a blob served
+        under another revision does not open. If the
+        stored revision moved since the client read (another device wrote), the server responds `409
+        stale_revision` and the client re-reads, union-merges, and retries (en.account.identity-pinning §Sync).
+        The first write of a born-empty store sends `revision: 0`. Operator-blind: the server never sees the
         plaintext pins.
       security:
         - bearerAuth: []
@@ -367,15 +367,15 @@ paths:
             schema: { $ref: "#/components/schemas/IdentityPinsUpdate" }
             example:
               blob: c2VhbGVkLXBpbi1zdG9yZQ==
-              version: 3
+              revision: 3
       responses:
         "200":
-          description: The store was written; the new (bumped) version is returned.
+          description: The store was written; the new (bumped) revision is returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/IdentityPins" }
         "400":
-          description: The request was malformed (missing/invalid blob or version).
+          description: The request was malformed (missing/invalid blob or revision).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -387,11 +387,11 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "409":
-          description: The stored version moved since the client read it — re-read, union-merge, and retry.
+          description: The stored revision moved since the client read it — re-read, union-merge, and retry.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: stale_version }
+              example: { code: stale_revision }
 
   /api/account/device-register:
     get:
@@ -401,16 +401,16 @@ paths:
       description: >
         Returns the authenticated caller's device register — one opaque blob sealed under the Master Key
         (`symWrap(masterKey, blob, "device-register")`, en.account.device-register) plus its monotonic
-        `version` for optimistic concurrency. The server stores + relays the ciphertext verbatim and never
+        `revision` for optimistic concurrency. The server stores + relays the ciphertext verbatim and never
         interprets it: it learns no device name, no device count, and above all **no device↔family link** —
         the link ADR 0004's unnamed families exist to withhold. Born empty: an account that has never written
-        the register gets `{ blob: null, version: 0 }`. Keyed off the bearer token — only the caller's own
+        the register gets `{ blob: null, revision: 0 }`. Keyed off the bearer token — only the caller's own
         register.
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: The caller's sealed device register (ciphertext only) + its version. `blob` is null when never written.
+          description: The caller's sealed device register (ciphertext only) + its revision. `blob` is null when never written.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DeviceRegister" }
@@ -426,17 +426,17 @@ paths:
       x-veyq-concurrency:
         mode: revision
         fields:
-          - field: version
+          - field: revision
       summary: Store the caller's sealed device register (optimistic concurrency).
       description: >
-        Replaces the caller's sealed device-register blob. `version` is the version the client last read; the
-        write succeeds only if it still matches the server's stored version, which is then bumped by one and
-        returned; the blob is sealed bound to that stored version, `version + 1` (ADR 0072). If the stored version
+        Replaces the caller's sealed device-register blob. `revision` is the revision the client last read; the
+        write succeeds only if it still matches the server's stored revision, which is then bumped by one and
+        returned; the blob is sealed bound to that stored revision, `revision + 1` (ADR 0072). If the stored revision
         moved since the client read (another device wrote), the server
-        responds `409 stale_version` and the client re-reads, merges, and retries
+        responds `409 stale_revision` and the client re-reads, merges, and retries
         (en.account.device-register §Sync & merge — note that a family removal is applied as a frozen id-delta
         and an eviction is recomputed on the merged map; the two are not the same operation). The first write
-        of a born-empty register sends `version: 0`. Operator-blind: the server never sees the plaintext.
+        of a born-empty register sends `revision: 0`. Operator-blind: the server never sees the plaintext.
       security:
         - bearerAuth: []
       requestBody:
@@ -446,15 +446,15 @@ paths:
             schema: { $ref: "#/components/schemas/DeviceRegisterUpdate" }
             example:
               blob: c2VhbGVkLWRldmljZS1yZWdpc3Rlcg==
-              version: 3
+              revision: 3
       responses:
         "200":
-          description: The register was written; the new (bumped) version is returned.
+          description: The register was written; the new (bumped) revision is returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DeviceRegister" }
         "400":
-          description: The request was malformed (missing/invalid blob or version).
+          description: The request was malformed (missing/invalid blob or revision).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -466,11 +466,11 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "409":
-          description: The stored version moved since the client read it — re-read, merge, and retry.
+          description: The stored revision moved since the client read it — re-read, merge, and retry.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: stale_version }
+              example: { code: stale_revision }
 
   /api/account/wraps/{id}:
     delete:
@@ -513,7 +513,7 @@ paths:
         `wrappedIdentityPrivateKey` with the identity private key sealed under the new Master Key; rewrite the
         `PASSWORD` and `RECOVERY` wraps; **delete every other wrap** (`DEVICE`, `DEVICE_KEY`, `PASSKEY` — their
         key material is device-held and cannot be rewritten from here); store the identity-pin store and the
-        device register re-sealed under the new Master Key, each guarded by the version the client read;
+        device register re-sealed under the new Master Key, each guarded by the revision the client read;
         supersede every live pairing channel (an unspent envelope carries the *old* Master Key and a live
         delegated session, so a later collect would hand a device a dead key and a working login); revoke every
         other session; and originate a `scope-rotation` job for each scope the caller shares with somebody.
@@ -578,7 +578,7 @@ paths:
         "409":
           description: >
             `rotation_unavailable` — the account has no `PASSWORD` floor or no `RECOVERY` wrap to rewrite, so the
-            rotation cannot be applied whole. `stale_version` — the `version` sent with `identityPins` or
+            rotation cannot be applied whole. `stale_revision` — the `revision` sent with `identityPins` or
             `deviceRegister` is no longer the stored one (another device wrote it meanwhile); the client re-reads,
             re-seals and resubmits with the same new keys and the same signature, which does not cover the two
             documents. **Nothing was written** in either case — a half-rotated account is a lockout, not a
@@ -588,7 +588,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               examples:
                 unavailable: { value: { code: rotation_unavailable } }
-                stale: { value: { code: stale_version } }
+                stale: { value: { code: stale_revision } }
 
   /api/account/rotation/scopes:
     get:
@@ -1101,7 +1101,7 @@ components:
     MemberProfile:
       type: object
       description: The caller's per-tenant identity — a plaintext handle + the sealed real name (ADR 0023).
-      required: [username, avatarVersion, requireGroupAddConsent]
+      required: [username, avatarRevision, requireGroupAddConsent]
       properties:
         username:
           x-veyq-visibility: pii
@@ -1120,13 +1120,13 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
-        avatarVersion:
+        avatarRevision:
           x-veyq-visibility: structure
           type: integer
           format: int32
           minimum: 0
           description: >
-            The version of the caller's profile picture in this tenant: `0` = none, bumped on every set and clear
+            The revision of the caller's profile picture in this tenant: `0` = none, bumped on every set and clear
             (ADR 0084). The picture itself is fetched with `getMemberAvatar` only when this is non-zero and differs
             from the cached one. The operator-visible residual: that a picture exists and how often it changed.
           example: 0
@@ -1199,10 +1199,10 @@ components:
     IdentityPins:
       type: object
       description: >
-        The caller's sealed identity-pin store + its version. `blob` is one opaque ciphertext
-        (`symWrap(masterKey, blob, "identity-pins")`) the server relays verbatim; `version` is the monotonic
-        optimistic-concurrency counter. A born-empty store is `{ blob: null, version: 0 }`.
-      required: [blob, version]
+        The caller's sealed identity-pin store + its revision. `blob` is one opaque ciphertext
+        (`symWrap(masterKey, blob, "identity-pins")`) the server relays verbatim; `revision` is the monotonic
+        optimistic-concurrency counter. A born-empty store is `{ blob: null, revision: 0 }`.
+      required: [blob, revision]
       properties:
         blob:
           type: [string, "null"]
@@ -1212,22 +1212,22 @@ components:
           contentEncoding: base64
           maxLength: 1048576
           example: c2VhbGVkLXBpbi1zdG9yZQ==
-        version:
+        revision:
           x-veyq-visibility: structure
           type: integer
           format: int64
           description: >
-            Monotonic version for optimistic concurrency. `0` for a born-empty store; bumped by one on every
-            successful write. A `PUT` must send the version it last read.
+            Monotonic revision for optimistic concurrency. `0` for a born-empty store; bumped by one on every
+            successful write. A `PUT` must send the revision it last read.
           minimum: 0
           example: 3
 
     IdentityPinsUpdate:
       type: object
       description: >
-        A new sealed pin-store blob to store, guarded by the `version` the client last read (optimistic
-        concurrency → `409 stale_version` on a mismatch).
-      required: [blob, version]
+        A new sealed pin-store blob to store, guarded by the `revision` the client last read (optimistic
+        concurrency → `409 stale_revision` on a mismatch).
+      required: [blob, revision]
       properties:
         blob:
           type: string
@@ -1238,13 +1238,13 @@ components:
           maxLength: 1048576
           example: c2VhbGVkLXBpbi1zdG9yZQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1048576) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        version:
+        revision:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
           type: [integer, "null"]
           format: int64
           description: >
-            The version the client last read (the write succeeds only if it still matches the stored version).
+            The revision the client last read (the write succeeds only if it still matches the stored revision).
             `0` for the first write of a born-empty store.
           minimum: 0
           example: 3
@@ -1253,10 +1253,10 @@ components:
     DeviceRegister:
       type: object
       description: >
-        The caller's sealed device register + its version. `blob` is one opaque ciphertext
-        (`symWrap(masterKey, blob, "device-register")`) the server relays verbatim; `version` is the monotonic
-        optimistic-concurrency counter. A born-empty register is `{ blob: null, version: 0 }`.
-      required: [blob, version]
+        The caller's sealed device register + its revision. `blob` is one opaque ciphertext
+        (`symWrap(masterKey, blob, "device-register")`) the server relays verbatim; `revision` is the monotonic
+        optimistic-concurrency counter. A born-empty register is `{ blob: null, revision: 0 }`.
+      required: [blob, revision]
       properties:
         blob:
           type: [string, "null"]
@@ -1267,22 +1267,22 @@ components:
           contentEncoding: base64
           maxLength: 65532
           example: c2VhbGVkLWRldmljZS1yZWdpc3Rlcg==
-        version:
+        revision:
           x-veyq-visibility: structure
           type: integer
           format: int64
           description: >
-            Monotonic version for optimistic concurrency. `0` for a born-empty register; bumped by one on
-            every successful write. A `PUT` must send the version it last read.
+            Monotonic revision for optimistic concurrency. `0` for a born-empty register; bumped by one on
+            every successful write. A `PUT` must send the revision it last read.
           minimum: 0
           example: 3
 
     DeviceRegisterUpdate:
       type: object
       description: >
-        A new sealed device-register blob to store, guarded by the `version` the client last read (optimistic
-        concurrency → `409 stale_version` on a mismatch).
-      required: [blob, version]
+        A new sealed device-register blob to store, guarded by the `revision` the client last read (optimistic
+        concurrency → `409 stale_revision` on a mismatch).
+      required: [blob, revision]
       properties:
         blob:
           type: string
@@ -1293,13 +1293,13 @@ components:
           maxLength: 65532
           example: c2VhbGVkLWRldmljZS1yZWdpc3Rlcg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 65532) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        version:
+        revision:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
           type: [integer, "null"]
           format: int64
           description: >
-            The version the client last read (the write succeeds only if it still matches the stored version).
+            The revision the client last read (the write succeeds only if it still matches the stored revision).
             `0` for the first write of a born-empty register.
           minimum: 0
           example: 3
@@ -1357,8 +1357,8 @@ components:
         `deviceRegister`), re-sealed under the new Master Key and written by the same transaction as everything
         above. Written after the publish they could be left under a key that no longer exists, and every device
         refuses a document that does not open (ADR 0028 Decision 7) — so a rotation that cannot re-seal them does
-        not happen. Both are required: an account that never wrote one sends it empty, sealed for version 1
-        against `version: 0`. **They are not bound into `secretKeyProofSignature`, on purpose.** The proof
+        not happen. Both are required: an account that never wrote one sends it empty, sealed for revision 1
+        against `revision: 0`. **They are not bound into `secretKeyProofSignature`, on purpose.** The proof
         defends against a session holder without the Secret Key, and that holder can already write both
         documents through their own endpoints with the session alone; binding them would change the
         conformance-pinned statement for no defended case.

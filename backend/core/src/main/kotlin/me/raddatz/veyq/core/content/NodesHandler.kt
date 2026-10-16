@@ -57,9 +57,9 @@ sealed interface UpdateNodeOutcome {
     /** A placement at the scope root sealed at an epoch that is not the scope's current one, or any placement stating
      *  an epoch above it (ADR 0080 Decision 4). */
     object StaleEpoch : UpdateNodeOutcome, HttpFailure by Failures.staleEpoch
-    /** The node's `wrappedMeta` moved past the stated version; nothing was written (ADR 0077). Carries the current
-     *  blob and version for the loser to re-apply its own change on. */
-    data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : UpdateNodeOutcome, HttpFailure by Failures.staleVersion
+    /** The node's `wrappedMeta` moved past the stated revision; nothing was written (ADR 0077). Carries the current
+     *  blob and revision for the loser to re-apply its own change on. */
+    data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : UpdateNodeOutcome, HttpFailure by Failures.staleRevision
 }
 
 sealed interface DeleteNodeOutcome {
@@ -230,7 +230,7 @@ class NodesHandler(
                 epoch != null || placementRevision != null
 
         /** Whether every field a placement needs is there: a rename without a re-wrapped key cannot land, because
-         *  the old wrap is sealed at the old version and would stop opening (bite test 15). */
+         *  the old wrap is sealed at the old revision and would stop opening (bite test 15). */
         val complete: Boolean
             get() = completeWithoutEpoch && epoch != null
 
@@ -339,7 +339,7 @@ class NodesHandler(
                 slugToken = placement.slugToken!!,
                 wrappedContentKey = placement.wrappedContentKey!!,
                 epoch = storedEpoch,
-                expectedVersion = placement.placementRevision!!,
+                expectedRevision = placement.placementRevision!!,
             )
         }
         return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaRevision, boundary)) {

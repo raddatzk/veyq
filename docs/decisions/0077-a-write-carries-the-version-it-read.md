@@ -1,7 +1,8 @@
 # ADR 0077 — A write that re-sends what its writer did not edit carries the revision it read
 
 - Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the counter is a **revision**
-  (`metaRevision`, `placementRevision`, the `revision` mode). The file name keeps the old word so its links hold.
+  (`metaRevision`, `placementRevision`, the `revision` mode), and its conflict is `stale_revision` (was
+  `stale_version`). The file name keeps the old word so its links hold.
 - Date: 2026-10-03
 
 ## Context
@@ -37,7 +38,7 @@ one-element set over the stored one.
    revision it was built from.** Today that is exactly the two blobs above. Each has its own counter
    (`veyq_node.meta_revision`, `veyq_media.meta_revision`), bumped by the one write that replaces that blob and by
    nothing else. The server writes with a compare-and-set (`… where id = ? and meta_revision = ?`) and, on a miss,
-   answers **`409 stale_version` carrying the current blob and its revision** (`StaleSealedMeta`) and writes
+   answers **`409 stale_revision` carrying the current blob and its revision** (`StaleSealedMeta`) and writes
    nothing — a node update that also renamed is refused whole. A success stores `revision + 1`, which the client
    derives, so no success response changes shape.
 2. **The counter is dedicated.** A node's item revision (core's, ADR 0033) moves on every attach, trash, restore, move and meta change; a
@@ -89,7 +90,7 @@ one-element set over the stored one.
   is a corrupted or substituted blob (the key opened, the blob did not); refusing is the honest answer, and an
   explicit "reset" is not built.
 - **Rejected: `If-Match` → `412`.** The repo's one ETag (`mediaRevision`) validates a read cache for a whole list;
-  a per-item precondition header would be a second vocabulary beside the body `version` the pins already use and
+  a per-item precondition header would be a second vocabulary beside the body `revision` the pins already use and
   the generated clients already type.
 - **Rejected: re-GET on conflict.** Neither entity has a single-item read — the node is listed with its whole
   tree, the media through the per-node delta — so the conflict body carries the current value instead.

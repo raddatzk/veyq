@@ -92,15 +92,15 @@ sequenceDiagram
 
 ## Sync & merge
 
-The blob carries a monotonic **`version`**, beside the ciphertext and bound into its seal
+The blob carries a monotonic **`revision`**, beside the ciphertext and bound into its seal
 ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) rather than stored inside it. A write is
-optimistic-concurrency: if the server's stored version moved since the client opened it, the client **re-opens and
+optimistic-concurrency: if the server's stored revision moved since the client opened it, the client **re-opens and
 union-merges** before re-sealing. Pins are **append-heavy** (a new contact), so real conflicts are rare; a
 same-contact conflict resolves to **`verified` wins**, else the later `firstSeenAt`. A **new device** pulls + opens
 the blob and inherits every pin — so the trust state is shared across the account, not re-TOFU'd per device.
 
 **Which copy a device reads is the server's choice, so the device keeps its own mark**
-([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7): the highest version
+([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7): the highest revision
 it has opened, held locally and never synced. A served copy below the mark, a missing store after one was held,
 or a blob that does not open is refused — on read and before every write — never read as empty. A linked
 device starts from its linker's marks, and an account-key rotation carries them to the new Master Key; the
@@ -110,10 +110,10 @@ marks, their slot and what refuses live in `web/src/features/account/trustMarks.
 re-seals the store inside its own request and transaction ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)
 § Consequences) — but a backup restore or corruption at rest still can. Then the settings hub offers *Start a
 list over* (`web/src/features/account/trustReset/`): after a confirmation naming the cost, it writes the empty
-store one version above the served one — never over a copy that opens — and sets this device's mark to that
-version, the only write that lowers a mark. Only the confirm dialog may import it (`veyq/trust-reset-one-door`
+store one revision above the served one — never over a copy that opens — and sets this device's mark to that
+revision, the only write that lowers a mark. Only the confirm dialog may import it (`veyq/trust-reset-one-door`
 in `web/eslint.config.js`), so no server response reaches it. A device whose mark sat at or below the served
-version reads the new store with no action; one whose mark sat above it is offered the same reset.
+revision reads the new store with no action; one whose mark sat above it is offered the same reset.
 
 ## Quality notes
 

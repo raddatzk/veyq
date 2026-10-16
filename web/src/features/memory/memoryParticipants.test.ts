@@ -34,7 +34,7 @@ const date: MemoryDate = { mode: 'single', from: '2026-05-01', to: '2026-05-01' 
 beforeEach(() => vi.clearAllMocks())
 
 const stale = (wrappedMeta: string | null, metaRevision: number) => ({
-  response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaRevision }), { status: 409 }),
+  response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta, metaRevision }), { status: 409 }),
 })
 const idsOf = (wrappedMeta: string | null) => unsealMemoryParticipants(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta })
 
@@ -107,7 +107,7 @@ describe('setMemoryParticipants (read-modify-write, ADR 0077 + ADR 0083)', () =>
     expect(state).toEqual({ wrappedMeta: base, metaRevision: 5 })
   })
 
-  it('on 409 stale_version MERGES: a peer\'s added participant survives, the editor\'s addition lands', async () => {
+  it('on 409 stale_revision MERGES: a peer\'s added participant survives, the editor\'s addition lands', async () => {
     const peers = sealNodeMeta(nodeKey, NODE, { v: 1, date, participants: { userIds: [A, D] } })
     const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(stale(peers, 8)).mockResolvedValueOnce(undefined)
     fakeApi(contentApi, { updateNode })

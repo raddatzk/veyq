@@ -164,23 +164,10 @@ sequenceDiagram
   removal; group/tenant contributor shares — where removal soft-revokes the removed member's shares — are now
   [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) (cr-0104).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can turn one memory into a link where friends and family can **add their own photos** — not just
-look. They open it in a browser, type their name once (so you can see who added what — other visitors of the link
-don't see it), and drop in their pictures
-— no account, nothing to install. It shows them **only that one memory**, never the rest of your space, and you
-can switch the link off any time. New photos show up right away; if something doesn't belong, you can remove it.
-The same honest note as always: on the web this is as private as your trust in whoever runs your veyq server —
-if that's you, it's fully private; the "how safe is this?" link explains the details.
-
-**DE —** Du kannst eine Erinnerung in einen Link verwandeln, bei dem Freunde und Familie **eigene Fotos beisteuern**
-können — nicht nur anschauen. Sie öffnen ihn im Browser, tippen einmal ihren Namen ein (damit du siehst, wer was
-beigetragen hat — andere, die den Link öffnen, sehen ihn nicht) und laden ihre Bilder hoch — ohne Konto, ohne Installation. Der Link zeigt **nur diese eine
-Erinnerung**, nie den Rest deines Bereichs, und du kannst ihn jederzeit abschalten. Neue Fotos erscheinen sofort;
-was nicht passt, kannst du entfernen. Dieselbe ehrliche Anmerkung wie immer: im Browser ist das so privat wie dein
-Vertrauen in den, der deinen veyq-Server betreibt — bist das du selbst, ist es voll privat; der „Wie sicher ist
-das?"-Link erklärt die Details.
+Friends and family can add their own photos to one Memory through a link, without an account, while the rest of your
+space stays private and you see who added what.
 
 ## Related
 

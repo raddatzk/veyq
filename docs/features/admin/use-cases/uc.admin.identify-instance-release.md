@@ -68,19 +68,10 @@ become so.
   user's content or keys — and it is disclosed to fewer parties after this than the capability manifest already
   discloses the feature set to.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Nothing about this changes what your instance can see of your memories — it is about the person running
-it being able to say precisely which version of veyq they are running. That matters to you for one reason: when
-an update goes wrong, an operator who can name the version they came from can put it back. One who cannot is
-guessing with your data. It is a small piece of the same promise as the backup page: the operator holds
-ciphertext, and everything that helps them keep it intact is worth having.
-
-**DE —** Hieran ändert sich nichts daran, was deine Instanz von deinen Erinnerungen sehen kann — es geht darum,
-dass die Person, die sie betreibt, genau sagen kann, welche veyq-Version dort läuft. Für dich zählt das aus einem
-Grund: Wenn ein Update schiefgeht, kann eine Betreiberin, die die vorherige Version benennen kann, sie
-zurückholen. Wer das nicht kann, rät — mit deinen Daten. Es ist ein kleines Stück desselben Versprechens wie auf
-der Backup-Seite: Der Betrieb hält Geheimtext, und alles, was hilft, ihn unversehrt zu halten, ist es wert.
+When an update goes wrong, the person running your server can name the exact release they came from and put it back,
+instead of guessing with your data.
 
 ## Related
 

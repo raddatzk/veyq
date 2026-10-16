@@ -123,9 +123,9 @@ compare safety numbers. The same gap covers three further cases:
 ## Freshness only where a device keeps a mark
 
 Every seal binds its purpose and the identity of the object it is stored as — the scope, the node, media, blob,
-bucket, share or member, and the epoch or version where the wire carries one. A ciphertext served for another object
-therefore fails to open. Binding makes a version **authentic**; it does not make it **fresh**. Which authentic
-version of an object, and which epoch's grant, a client receives is still the server's choice
+bucket, share or member, and the epoch or revision where the wire carries one. A ciphertext served for another object
+therefore fails to open. Binding makes an epoch or revision **authentic**; it does not make it **fresh**. Which
+authentic version of an object, and which epoch's grant, a client receives is still the server's choice
 ([ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md) Decision 5).
 The server also keeps every capability it had over which objects exist and where they sit in the tree.
 
@@ -134,7 +134,7 @@ places:
 
 | Mark | What the device refuses | Decided in |
 |---|---|---|
-| Pin store | a store below the highest version it opened, a missing store once it held one, a store that does not open — before every read and every write | ADR 0028 Decision 7 |
+| Pin store | a store below the highest revision it opened, a missing store once it held one, a store that does not open — before every read and every write | ADR 0028 Decision 7 |
 | Device register | the same rule | ADR 0028 Decision 7 |
 | Per-scope epoch floor | a grant below the highest epoch it has held for that scope; it never seals under a lower one | ADR 0024 Decision 6 |
 

@@ -28,7 +28,7 @@ versions use the new key, and what the borrower already read cannot be retracted
 ## Behaviour that lives in the client
 
 - **Reservations and lending:** the conflict check runs in the client; consistency comes from a
-  compare-and-swap on **one reservation record per item**. The server only sees version changes.
+  compare-and-swap on **one reservation record per item**. The server only sees revision changes.
 - **Search, filter, packing lists:** a local index built after decryption.
 - **Reminders** (inspection due, service life ending): local notifications on the device after a sync. The server
   may at most send a **content-free wake-up push**.

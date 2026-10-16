@@ -20,7 +20,7 @@ import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
 import logoDarkUrl from '../../assets/brand/logo-dark.svg'
 import logoLightUrl from '../../assets/brand/logo-light.svg'
 import { listMyTenants, listMyGroups, openMyTenantIcon, type GroupSpace } from '../../features/spaces/scopes'
-import { spaceIconVersion } from '../../features/spaces/spaceIconSignal'
+import { spaceIconRevision } from '../../features/spaces/spaceIconSignal'
 import { useObjectUrls } from '../../shared/state/useObjectUrls'
 import { activeSpace } from '../../app/activeSpace'
 import CreateGroupDialog from '../../features/spaces/CreateGroupDialog.vue'
@@ -124,7 +124,7 @@ async function loadTenants() {
     }),
   )
 }
-watch(spaceIconVersion, () => { void loadTenants(); void loadGroups() })
+watch(spaceIconRevision, () => { void loadTenants(); void loadGroups() })
 watch(() => suspensionSignals.tenantList, () => void loadTenants())
 
 // Create-group dialog. On success: refresh the list + switch into the new group (`#@<id>`).

@@ -62,18 +62,10 @@ plain folders inside (no drop key, no links, no guest identities).
 - **No memory wall.** A file is never held whole; it is read and re-encrypted by chunk.
 - **Not atomic.** As the import: best-effort rollback to the trash.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** "Copy to…" puts a copy of a folder, file, memory or drop box somewhere else in the same space. Everything in it
-is copied on your device and stored again, so a big folder takes as long as uploading it and uses its space twice.
-Shares, favourites and who took which photo do not come along, and a copied drop box is an ordinary folder. The
-server only sees new things being stored - not that they are a copy.
-
-**DE —** Mit „Kopieren nach …“ legst du eine Kopie eines Ordners, einer Datei, einer Erinnerung oder eines Briefkastens
-an einem anderen Ort im selben Bereich ab. Alles darin wird auf deinem Gerät kopiert und neu gespeichert: Ein großer
-Ordner braucht so lange wie sein Hochladen und belegt seinen Platz doppelt. Freigaben, Favoriten und wer welches Foto
-gemacht hat, kommen nicht mit, und ein kopierter Briefkasten ist ein gewöhnlicher Ordner. Der Server sieht nur, dass
-Neues gespeichert wird - nicht, dass es eine Kopie ist.
+You can duplicate a folder, file, Memory or drop box elsewhere in the same space to reuse or rearrange it, without the
+server learning that it is a copy.
 
 ## Related
 

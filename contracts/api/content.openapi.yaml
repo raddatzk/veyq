@@ -184,7 +184,7 @@ paths:
         **Meta** = a re-sealed `wrappedMeta` with the `metaRevision` it was built from — required whenever
         `wrappedMeta` is sent (else `400 invalid_request`); the server compare-and-sets it and stores
         `metaRevision + 1`, or writes **nothing** (a placement in the same request included) and answers `409
-        stale_version` carrying the current blob and revision (ADR 0077).
+        stale_revision` carrying the current blob and revision (ADR 0077).
       security:
         - bearerAuth: []
       parameters:
@@ -226,10 +226,10 @@ paths:
             the placement against it, ADR 0080 Decision 3); a placement at the scope root stated an `epoch` that is
             not the scope's current one, or any placement one above it (`stale_epoch` — nothing was written, ADR 0080
             Decision 4); or the node's
-            `wrappedMeta` moved since the stated `metaRevision` (`stale_version`, with the current blob and revision —
-            nothing was written, ADR 0077). Every code but `stale_version` carries `code` alone.
+            `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current blob and revision —
+            nothing was written, ADR 0077). Every code but `stale_revision` carries `code` alone.
           content:
-            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: d3JhcHBlZC1tZXRh, metaRevision: 4 } }
+            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_revision, wrappedMeta: d3JhcHBlZC1tZXRh, metaRevision: 4 } }
         "422":
           description: Illegal structure (the node's kind may not live under the destination, the destination is missing, trashed or in another scope, or the move would create a cycle — the destination is the node itself or inside its subtree).
           content:
@@ -295,7 +295,7 @@ paths:
         transaction, the blob the client states it replaces (`expectedBlobId`, null for an empty slot) - and
         compare-and-sets the node's `wrappedMeta` at `metaRevision` (ADR 0077). Either both land or neither does: a
         slot another writer changed since the client read it is `409 cover_stale` (the upload is spent and its blob
-        freed, as a Files replace is), a meta that moved is `409 stale_version` with the current blob and revision and
+        freed, as a Files replace is), a meta that moved is `409 stale_revision` with the current blob and revision and
         **nothing written, the upload still open** - the client re-applies its change and sends the same upload
         again. So a cover and the meta that names it can never part. The compare is the write's own predicate.
 
@@ -496,7 +496,7 @@ components:
   responses:
     CoverConflict:
       description: >
-        The node's `wrappedMeta` moved since the stated `metaRevision` (`stale_version`, with the current blob and
+        The node's `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current blob and
         revision - nothing was written and the upload is still open, ADR 0077); the cover slot holds another blob than
         the one stated (`cover_stale`, with `currentBlobId` - nothing was attached, the upload was spent); or the
         space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
@@ -734,7 +734,7 @@ components:
     NodeCoverConflict:
       type: object
       description: >
-        A refused cover write. `stale_version`: the node's `wrappedMeta` moved since `metaRevision` - nothing was
+        A refused cover write. `stale_revision`: the node's `wrappedMeta` moved since `metaRevision` - nothing was
         written, the upload is still open, and the body carries the current blob and revision to re-apply the change on
         (ADR 0077). `cover_stale`: the cover slot holds another blob than the one stated (`currentBlobId`, null:
         empty) - nothing was attached, the upload was spent. `scope_deleting` carries `code` alone.
@@ -752,7 +752,7 @@ components:
           example: null
         wrappedMeta:
           type: [string, "null"]
-          description: With `stale_version`, the node's current sealed value (opaque base64); null when it has none.
+          description: With `stale_revision`, the node's current sealed value (opaque base64); null when it has none.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -760,7 +760,7 @@ components:
           x-veyq-visibility: structure
           type: [integer, "null"]
           format: int64
-          description: With `stale_version`, the revision the current `wrappedMeta` is at.
+          description: With `stale_revision`, the revision the current `wrappedMeta` is at.
           example: 4
         currentBlobId:
           x-veyq-visibility: id

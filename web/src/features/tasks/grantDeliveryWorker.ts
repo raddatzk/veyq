@@ -37,9 +37,14 @@ export async function runGrantDeliveryWorker(scope: ScopeKeyHolder): Promise<num
   // The identity whose signing key signs every grant this run posts (ADR 0028 Decision 6). Locked vault: no run.
   const priv = identityPrivate()
   if (!priv) return 0
+  // The run's own copy of K_SC. The poll hands over the active space's write key, which leaving or re-entering the
+  // space zeroes in place while a run may still be in flight: read through that reference, a genuine admission no
+  // longer verified (declined for good, found live 2026-10-16) and the seal would wrap an all-zero key to the member.
+  const key = scope.key.slice()
   try {
-    return await drain(scope, priv.sign)
+    return await drain({ ...scope, key }, priv.sign)
   } finally {
+    key.fill(0)
     priv.kemSeed.fill(0)
     priv.sign.fill(0)
   }

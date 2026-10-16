@@ -58,6 +58,12 @@ sequenceDiagram
   wrap) each open the **same** Master Key via their own wrap — separate use-cases, not this flow. So does the
   Secret Key alone, through the `RECOVERY` wrap, but only to reset a forgotten password
   ([recover-access](uc.account.recover-access.md)); there is no separate recovery code.
+- **A2 — unlocking on a session the sign-in found (web, inbox #454):** a device that reaches the sign-in screen
+  with a live session — one boot restored without opening the vault — unlocks **inside** that session when the
+  address entered is the session's account, as the server names it: the password is not first spent on a second
+  login, and no second session family appears in Devices and sessions. A different account first ends that family
+  and signs in ([login](uc.account.login.md) A2). The unlock itself is unchanged: the password and the Secret Key
+  are derived on the device, and the server sees no secret.
 - **E1 — wrong password or Secret Key:** the KEK fails to open the wrap (AEAD tag mismatch) → **generic
   unlock failure**; the server is **uninvolved** and learns nothing; the user retries locally.
 - **E2 — no PASSWORD wrap / not authenticated:** the wrap cannot be fetched or does not exist; the user
@@ -116,22 +122,10 @@ stateDiagram-v2
 - **Unlocks the E2EE layer.** Once unlocked, the account key is available — this is what lets the client
   decrypt **E2EE session names** (planned — `uc.account.sessions` is reserved in ADR 0004, not yet written) and all content.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Logging in proves *who you are*; unlocking is what actually **opens your encrypted memories**. To
-unlock, your device needs two things only you have: your **password** and your **Secret Key** (from your
-Emergency Kit). They are combined **on your device** to open your account's master key — the server never
-sees either and never holds the key that decrypts your content. That is why even the server operator
-cannot read your memories. Because your Secret Key is long and high-entropy, you typically enter it once
-per device; afterwards you can set the device up to unlock with just your password (or biometrics).
-
-**DE —** Die Anmeldung beweist, *wer du bist*; das Entsperren **öffnet erst deine verschlüsselten
-Erinnerungen**. Zum Entsperren braucht dein Gerät zwei Dinge, die nur du hast: dein **Passwort** und
-deinen **Secret Key** (aus deinem Notfall-Kit). Beide werden **auf deinem Gerät** kombiniert, um den
-Hauptschlüssel deines Kontos zu öffnen — der Server sieht keines von beiden und besitzt nie den Schlüssel,
-der deine Inhalte entschlüsselt. Deshalb kann selbst der Server-Betreiber deine Erinnerungen nicht lesen.
-Weil dein Secret Key lang und zufällig ist, gibst du ihn meist einmal pro Gerät ein; danach kannst du das
-Gerät so einrichten, dass es sich nur mit deinem Passwort (oder Biometrie) entsperrt.
+Your password and Secret Key open what you keep on your own device, so nobody running the server can read your
+Memories.
 
 ## Related
 

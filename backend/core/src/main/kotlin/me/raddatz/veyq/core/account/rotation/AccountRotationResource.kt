@@ -53,8 +53,8 @@ class AccountRotationResource(
                 passwordWrap = rotateAccountKeysRequest.passwordWrap.toRewritten(),
                 recoveryWrap = rotateAccountKeysRequest.recoveryWrap.toRewritten(),
                 secretKeyProofSignature = rotateAccountKeysRequest.secretKeyProofSignature,
-                pins = rotateAccountKeysRequest.identityPins.let { ResealedDocument(it.blob, it.version.validated()) },
-                register = rotateAccountKeysRequest.deviceRegister.let { ResealedDocument(it.blob, it.version.validated()) },
+                pins = rotateAccountKeysRequest.identityPins.let { ResealedDocument(it.blob, it.revision.validated()) },
+                register = rotateAccountKeysRequest.deviceRegister.let { ResealedDocument(it.blob, it.revision.validated()) },
             )
         ) {
             is RotationOutcome.Applied -> Response.ok(

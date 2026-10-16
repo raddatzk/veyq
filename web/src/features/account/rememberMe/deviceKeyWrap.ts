@@ -108,6 +108,11 @@ export async function rememberedWrapId(email: string): Promise<string | null> {
   return record.wrapId
 }
 
+/** The email of this device's remember-me record, or null: the record's one plaintext, local like its wrap id. */
+export async function rememberedEmail(): Promise<string | null> {
+  return (await loadRecord())?.email ?? null
+}
+
 /**
  * Carry this device's remember-me record over to the account's new sign-in address (uc.account.change-email), iff
  * it is the record of [oldEmail]. The email is the record's only plaintext and the one thing boot cannot learn

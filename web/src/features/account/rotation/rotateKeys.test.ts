@@ -26,7 +26,7 @@ import type { ScopeMember, ScopeSummary, ScopesApi } from '../../../api/generate
 //
 // The pin store and the device register are REAL too (only their endpoints are faked): the rotation re-seals both
 // inside its one request (ADR 0060 § Consequences), and what has to be proven about that is that the blobs it
-// sends OPEN under the new Master Key at the version they will be stored at — which a mocked re-seal cannot say.
+// sends OPEN under the new Master Key at the revision they will be stored at — which a mocked re-seal cannot say.
 vi.mock('../../../api/client', () => ({
   accountApi: vi.fn(),
   accountRotationApi: vi.fn(),
@@ -104,7 +104,7 @@ const SCOPE_SHARED = '5c09e000-0000-4000-8000-0000000000e2'
 const ME = '0e000000-0000-4000-8000-0000000000e9'
 /** A whole scope member; a test passes the identity it is about. */
 const member = (o: Partial<ScopeMember> & Pick<ScopeMember, 'userId' | 'identityPublicKey'>): ScopeMember => ({
-  username: o.userId, avatarVersion: 0, role: 'OWNER', hasGrant: true, ...o,
+  username: o.userId, avatarRevision: 0, role: 'OWNER', hasGrant: true, ...o,
 })
 const OLD_PUB = b64std(v1.serializeIdentityPublic(OLD_ID.pub))
 /** A scope the caller holds at epoch 0, its grant wrapping `e0` to the old identity — self-signed by it (ADR 0028
@@ -134,17 +134,17 @@ function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = PASSWO
   }
 }
 
-/** The two sealed account documents as fixtures seal them — under the CURRENT Master Key, bound to their version. */
-const pinsAt = (version: number) => ({ purpose: 'identity-pins', version }) as const
-const registerAt = (version: number) => ({ purpose: 'device-register', version }) as const
+/** The two sealed account documents as fixtures seal them — under the CURRENT Master Key, bound to their revision. */
+const pinsAt = (revision: number) => ({ purpose: 'identity-pins', revision }) as const
+const registerAt = (revision: number) => ({ purpose: 'device-register', revision }) as const
 const enc = new TextEncoder()
 const dec = new TextDecoder()
 const PINNED = { u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 1 } }
-const sealedPins = (version: number, pins: Record<string, unknown> = PINNED, mk = MK) =>
-  ({ blob: b64std(v1.seal(pinsAt(version), mk, enc.encode(JSON.stringify({ pins })))), version })
+const sealedPins = (revision: number, pins: Record<string, unknown> = PINNED, mk = MK) =>
+  ({ blob: b64std(v1.seal(pinsAt(revision), mk, enc.encode(JSON.stringify({ pins })))), revision })
 const REGISTERED = { devices: { d1: { label: 'Work laptop', lastSeenAt: 1 } }, families: { fam1: 'd1' }, wraps: {} }
-const sealedRegister = (version: number, reg: Record<string, unknown> = REGISTERED, mk = MK) =>
-  ({ blob: b64std(v1.seal(registerAt(version), mk, enc.encode(JSON.stringify(reg)))), version })
+const sealedRegister = (revision: number, reg: Record<string, unknown> = REGISTERED, mk = MK) =>
+  ({ blob: b64std(v1.seal(registerAt(revision), mk, enc.encode(JSON.stringify(reg)))), revision })
 
 function fakeServer(
   opts: {
@@ -154,8 +154,8 @@ function fakeServer(
     held?: ScopeSummary[]
     pins?: IdentityPins
     register?: DeviceRegister
-    /** How many rotate calls answer `409 stale_version` first — each as if another device had just written the
-     *  pin store (its version moves one up, still sealed under the current key). */
+    /** How many rotate calls answer `409 stale_revision` first — each as if another device had just written the
+     *  pin store (its revision moves one up, still sealed under the current key). */
     staleRotations?: number
   } = {},
 ) {
@@ -167,11 +167,11 @@ function fakeServer(
   }))
   fakeApi(accountApi, { getAccountKeyMaterial })
 
-  // The two documents as the server holds them, with the stores' real compare-and-set: a write whose version is
-  // not the stored one is `409 stale_version`. Their own PUTs answer 500 — the outage a re-seal after the publish
+  // The two documents as the server holds them, with the stores' real compare-and-set: a write whose revision is
+  // not the stored one is `409 stale_revision`. Their own PUTs answer 500 — the outage a re-seal after the publish
   // used to swallow — so a rotation that still wrote them on their own would leave them under the retired key.
-  const pins: IdentityPins = { ...(opts.pins ?? { blob: null, version: 0 }) }
-  const register: DeviceRegister = { ...(opts.register ?? { blob: null, version: 0 }) }
+  const pins: IdentityPins = { ...(opts.pins ?? { blob: null, revision: 0 }) }
+  const register: DeviceRegister = { ...(opts.register ?? { blob: null, revision: 0 }) }
   const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>(async () => {
     throw httpError(500)
   })
@@ -186,16 +186,16 @@ function fakeServer(
     const req = body.rotateAccountKeysRequest
     if (staleLeft > 0) {
       staleLeft -= 1
-      Object.assign(pins, sealedPins(pins.version + 1)) // another device wrote meanwhile
-      throw httpError(409, 'stale_version')
+      Object.assign(pins, sealedPins(pins.revision + 1)) // another device wrote meanwhile
+      throw httpError(409, 'stale_revision')
     }
     // One transaction: both documents or nothing (the backend's RotationSliceTest owns that half). A request
     // without them is applied as the pre-ADR-0060-amendment server did — which is what lets the stranding test
     // below run red against a client that still re-sealed after the publish.
-    if (req.identityPins && req.identityPins.version !== pins.version) throw httpError(409, 'stale_version')
-    if (req.deviceRegister && req.deviceRegister.version !== register.version) throw httpError(409, 'stale_version')
-    if (req.identityPins) Object.assign(pins, { blob: req.identityPins.blob, version: pins.version + 1 })
-    if (req.deviceRegister) Object.assign(register, { blob: req.deviceRegister.blob, version: register.version + 1 })
+    if (req.identityPins && req.identityPins.revision !== pins.revision) throw httpError(409, 'stale_revision')
+    if (req.deviceRegister && req.deviceRegister.revision !== register.revision) throw httpError(409, 'stale_revision')
+    if (req.identityPins) Object.assign(pins, { blob: req.identityPins.blob, revision: pins.revision + 1 })
+    if (req.deviceRegister) Object.assign(register, { blob: req.deviceRegister.blob, revision: register.revision + 1 })
     return { soleMemberScopeIds: opts.sole ?? [], queuedScopeIds: opts.queued ?? [] }
   })
   fakeApi(accountRotationApi, { rotateAccountKeys })
@@ -493,7 +493,7 @@ describe('what a rotation leaves behind', () => {
 
   it('carries this device\u2019s trust-state marks to the new Master Key — the epoch its own re-key made included', async () => {
     // The marks are keyed by the Master Key, so a rotation that did not carry them would leave this device with
-    // none: the next served pin store, of any version, would be taken as the first one (ADR 0028 Decision 7).
+    // none: the next served pin store, of any revision, would be taken as the first one (ADR 0028 Decision 7).
     await raiseMarks(MK, { pins: 3, register: 2, epochs: { [SCOPE_SHARED]: 4 } })
     fakeServer({
       sole: [SCOPE_PERSONAL],
@@ -505,7 +505,7 @@ describe('what a rotation leaves behind', () => {
 
     await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
-    // The two documents' marks are the versions the rotation itself stored them at (served + 1), not merely the
+    // The two documents' marks are the revisions the rotation itself stored them at (served + 1), not merely the
     // ones carried across: this device wrote them, so it has held them.
     const newMk = vi.mocked(setUnlocked).mock.calls[0][0]
     expect(await readMarks(newMk)).toEqual({ pins: 4, register: 3, epochs: { [SCOPE_SHARED]: 4, [SCOPE_PERSONAL]: 1 } })
@@ -557,7 +557,7 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
   it('leaves neither document under the retired key, even when their own endpoints are down', async () => {
     // The live defect: the rotation used to re-seal both AFTER the publish, best-effort, each in its own PUT — and
     // a PUT that failed (500 here) was swallowed, leaving the document sealed under a Master Key the account no
-    // longer has. Every device then refuses it as unreadable, forever. The lever is the served `{ blob, version }`.
+    // longer has. Every device then refuses it as unreadable, forever. The lever is the served `{ blob, revision }`.
     const srv = fakeServer({ pins: sealedPins(3), register: sealedRegister(2) })
 
     await rotateKeys(PASSWORD, SECRET_KEY_B64)
@@ -567,25 +567,25 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
     expect(await getPin('u1')).toEqual(PINNED.u1)
     expect((await readRegisterView(['fam1'], null, 'me')).names).toEqual({ fam1: 'Work laptop' })
 
-    // Asserted by OPENING what was sent, not by its presence: under MK', at the version it is stored at.
+    // Asserted by OPENING what was sent, not by its presence: under MK', at the revision it is stored at.
     const req = sent(srv)
-    expect(req.identityPins.version).toBe(3)
+    expect(req.identityPins.revision).toBe(3)
     const pinsPlain = JSON.parse(dec.decode(v1.open(pinsAt(4), newMasterKey(), fromB64std(req.identityPins.blob))))
     expect(pinsPlain).toEqual({ pins: PINNED })
-    expect(req.deviceRegister.version).toBe(2)
+    expect(req.deviceRegister.revision).toBe(2)
     const regPlain = JSON.parse(dec.decode(v1.open(registerAt(3), newMasterKey(), fromB64std(req.deviceRegister.blob))))
     expect(regPlain).toEqual(REGISTERED)
     expect(srv.putIdentityPins).not.toHaveBeenCalled()
     expect(srv.putDeviceRegister).not.toHaveBeenCalled()
   })
 
-  it('an account that never wrote either document sends both empty, sealed for version 1 against 0', async () => {
+  it('an account that never wrote either document sends both empty, sealed for revision 1 against 0', async () => {
     const srv = fakeServer()
     await rotateKeys(PASSWORD, SECRET_KEY_B64)
     const req = sent(srv)
-    expect(req.identityPins.version).toBe(0)
+    expect(req.identityPins.revision).toBe(0)
     expect(JSON.parse(dec.decode(v1.open(pinsAt(1), newMasterKey(), fromB64std(req.identityPins.blob))))).toEqual({ pins: {} })
-    expect(req.deviceRegister.version).toBe(0)
+    expect(req.deviceRegister.revision).toBe(0)
     expect(JSON.parse(dec.decode(v1.open(registerAt(1), newMasterKey(), fromB64std(req.deviceRegister.blob))))).toEqual({
       devices: {},
       families: {},
@@ -595,18 +595,18 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
 
   it('a stale document fails the attempt, not the rotation: it re-reads, re-seals and publishes once', async () => {
     // Another device wrote the pin store twice while this one was rotating. Each 409 means nothing was written, so
-    // the rotation re-reads, re-seals against the version it now reads, and resubmits the SAME new keys under the
+    // the rotation re-reads, re-seals against the revision it now reads, and resubmits the SAME new keys under the
     // SAME signature — the documents are not part of what the Secret-Key proof signs.
     const srv = fakeServer({ pins: sealedPins(3), register: sealedRegister(2), staleRotations: 2 })
 
     await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
     expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(3)
-    expect(sent(srv, 2).identityPins.version).toBe(5)
+    expect(sent(srv, 2).identityPins.revision).toBe(5)
     expect(() => v1.open(pinsAt(6), newMasterKey(), fromB64std(sent(srv, 2).identityPins.blob))).not.toThrow()
     expect(sent(srv, 2).identityPublicKey).toBe(sent(srv, 0).identityPublicKey)
     expect(sent(srv, 2).secretKeyProofSignature).toBe(sent(srv, 0).secretKeyProofSignature)
-    expect(srv.pins.version).toBe(6)
+    expect(srv.pins.revision).toBe(6)
     expect(vi.mocked(setUnlocked)).toHaveBeenCalledTimes(1)
   })
 
@@ -619,7 +619,7 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
   it('past the bound it rejects — and the vault still holds the old key, because nothing was published', async () => {
     const srv = fakeServer({ pins: sealedPins(3), register: sealedRegister(2), staleRotations: 99 })
 
-    await expect(rotateKeys(PASSWORD, SECRET_KEY_B64)).rejects.toMatchObject({ message: 'http 409 stale_version' })
+    await expect(rotateKeys(PASSWORD, SECRET_KEY_B64)).rejects.toMatchObject({ message: 'http 409 stale_revision' })
 
     expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(5)
     expect(vi.mocked(setUnlocked)).not.toHaveBeenCalled()
