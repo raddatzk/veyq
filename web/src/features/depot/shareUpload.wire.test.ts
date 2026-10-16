@@ -7,7 +7,9 @@
 //     declare under the blob's own K_blob describing the picked file (inbox #397), and the completion carrying ids only
 //     — no body names the file or its type in plaintext;
 //   - a REPLACE: no create, `expectedBlobId` = the blob the guest saw, the new file's meta on the new blob;
-//   - a `409 stale_file`: `StaleFileError` with the current blob, and a rerun sends nothing.
+//   - a `409 stale_file`: `StaleFileError` with the current blob, and a rerun sends nothing;
+//   - a GIVEN-UP new file (a full link's `quota_exceeded`): the queue's `abandon` takes the node it created back
+//     (`abandonShareNode`), and a node that holds the file is never asked for.
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
@@ -55,7 +57,10 @@ function context(): GuestTreeContext {
 type Req = { method: string; path: string; headers: Record<string, string>; json?: Record<string, unknown> }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-function fakeServer(complete?: (body: Record<string, unknown>) => Response | undefined) {
+function fakeServer(
+  complete?: (body: Record<string, unknown>) => Response | undefined,
+  opts: { startError?: string; abandon?: () => Response } = {},
+) {
   const requests: Req[] = []
   const uploads = new Map<string, { blobId: string; chunkCount: number; byteSize: number; wrappedBlobKey: string }>()
   let seq = 0
@@ -68,8 +73,10 @@ function fakeServer(complete?: (body: Record<string, unknown>) => Response | und
     requests.push({ method, path: url.pathname, headers, json: body })
     const path = url.pathname
     if (method === 'POST' && path === `/api/shares/${SHARE}/nodes`) return json({ nodeId: body!.nodeId }, 201)
+    if (method === 'DELETE' && path.startsWith(`/api/shares/${SHARE}/nodes/`)) return opts.abandon?.() ?? new Response(null, { status: 204 })
     if (method === 'POST' && path === `/api/shares/${SHARE}/blob-uploads`) {
       const items = body!.items as { blobId: string; chunkCount: number; byteSize: number; wrappedBlobKey: string }[]
+      if (opts.startError) return json({ results: items.map(() => ({ uploadId: null, presignedPuts: [], error: opts.startError })) })
       return json({ results: items.map((it) => {
         const uploadId = `00000000-0000-4000-8000-00000000010${++seq}`
         uploads.set(uploadId, it)
@@ -155,6 +162,51 @@ describe("a guest's new file on the wire", () => {
     const job = guestFileUploadJob({ ctx: context(), parentId: ROOT }, new File(['x'], 'alt.TXT'))
     await expect(job.run(ctx())).rejects.toThrow('slug_taken')
     expect(requests).toEqual([])
+  })
+})
+
+// The Storage page's promise (site `space-owners/storage`): a full link takes no more uploads, and nothing of the refused
+// one is kept. The create ran before the link refused the bytes (the limit is checked at the start), so the given-up
+// job must take its node back — before this, a "File · Not uploaded yet" row stayed in the folder, the guest unable to
+// remove it.
+describe("a guest's given-up new file on the wire", () => {
+  it('takes back the node it created once the queue gives up on a full link (quota_exceeded)', async () => {
+    const requests = fakeServer(undefined, { startError: 'quota_exceeded' })
+    const job = guestFileUploadJob({ ctx: context(), parentId: ROOT }, fileOf(40))
+    await expect(job.run(ctx())).rejects.toThrow('quota_exceeded')
+    const node = requests[0].json!.nodeId as string
+
+    await job.abandon?.() // what the queue calls on a given-up job (core/blob/queue.ts)
+
+    expect(control(requests)).toEqual([
+      `POST /api/shares/${SHARE}/nodes`,
+      `POST /api/shares/${SHARE}/blob-uploads`,
+      `DELETE /api/shares/${SHARE}/nodes/${node}`,
+    ])
+    expect(requests[2].headers['x-contributor-token']).toBe(TOKEN)
+    expect(requests[2].headers['x-share-password']).toBe(PW)
+    // Forgotten: a retry creates the file afresh rather than uploading into the erased node.
+    await expect(job.run(ctx())).rejects.toThrow('quota_exceeded')
+    expect(requests[3].path).toBe(`/api/shares/${SHARE}/nodes`)
+    expect(requests[3].json!.nodeId).not.toBe(node)
+  })
+
+  it('keeps a node the server says holds something, and never asks for one whose upload completed', async () => {
+    const kept = fakeServer(undefined, {
+      startError: 'quota_exceeded', abandon: () => json({ code: 'not_a_placeholder' }, 409),
+    })
+    const job = guestFileUploadJob({ ctx: context(), parentId: ROOT }, fileOf(40))
+    await expect(job.run(ctx())).rejects.toThrow('quota_exceeded')
+    await job.abandon?.()
+    await job.abandon?.() // nothing left to take back
+    expect(control(kept).filter((c) => c.startsWith('DELETE'))).toHaveLength(1)
+
+    vi.unstubAllGlobals()
+    const done = fakeServer()
+    const delivered = guestFileUploadJob({ ctx: context(), parentId: ROOT }, fileOf(40))
+    await delivered.run(ctx())
+    await delivered.abandon?.()
+    expect(control(done).some((c) => c.startsWith('DELETE')), 'a delivered file is never taken back').toBe(false)
   })
 })
 
