@@ -21,7 +21,8 @@ A release is an immutable GitHub Release (or the operator's mirror of one): its 
 set of bytes. Snapshots have no release and are never installed.
 
 `VEYQ_RELEASE` in `.env` is the operator's upgrade policy: an exact release (`1.1234`, pinned), a major (`1`, the
-newest release of it) or `latest` (crossing majors).
+newest release of it) or `latest` (crossing majors one at a time: a new major is entered only from the last release
+of the one before, so an upgrade from an older release first goes to that one — ADR 0096 decision 5).
 
 ## Main flow
 
