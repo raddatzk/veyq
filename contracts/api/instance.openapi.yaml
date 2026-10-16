@@ -6,10 +6,11 @@ info:
     Operational reads about the running instance itself, for the **Server Owner**. This is the operator's
     view of the software — which bits are running — and not the client's view of the protocol.
 
-    The two are deliberately never merged (ADR 0057 §4). The pre-auth `GET /api/setup` advertises
-    `version: { major, build }`, which answers *can this client and this server talk to each other?* and must
-    be readable before login because that is where its gate fires. The **release version** here answers
-    *which bits are running, and what do I roll back to?* — and it stays authenticated and Server-Owner-only,
+    The two share one major and differ in precision (ADR 0057 §4, ADR 0085 decision 1). The pre-auth
+    `GET /api/setup` advertises `version: { major, build }`, which answers *can this client and this server
+    talk to each other?* and must be readable before login because that is where its gate fires. The
+    **release version** here, `<major>.<minor>`, answers *which bits are running, and what do I roll back to?*
+    — and its minor stays authenticated and Server-Owner-only,
     because a precise release number is what maps an instance to a list of known vulnerabilities, and a
     self-hosted instance is the kind that upgrades late. The capability manifest already discloses this
     instance's feature set to any visitor; the release number does not become public with it.

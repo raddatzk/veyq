@@ -21,10 +21,12 @@ import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
 import type { GuestIdentity } from '../core/sharing/guestIdentity'
 import { guestAccess } from '../core/sharing/guestAccess'
 import { memoryCapabilities, type MemoryCapabilities } from '../features/memory/capabilities'
+import { EXPECTED_MAJOR } from '../shared/state/capabilities'
 
 export const setupStatus = (o: Partial<SetupStatus> = {}): SetupStatus => ({
   setupRequired: false,
-  version: { major: 1, build: 0 },
+  // A compatible instance unless a test says otherwise: the major this build speaks.
+  version: { major: EXPECTED_MAJOR, build: 0 },
   capabilities: [],
   suites: ['v1'],
   instanceSalt: 'AAAAAAAAAAAAAAAAAAAAAA==',

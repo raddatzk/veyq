@@ -70,21 +70,23 @@ interface VeyqConfig {
         fun every(): Duration
     }
 
+    /**
+     * The pre-auth version's configurable half. Its `major` is not here: it is the platform's one major, generated from
+     * the repository's `VERSION` (`PlatformMajor`, ADR 0085 decision 1), so no instance can be configured to advertise a
+     * major its code does not speak.
+     */
     interface Version {
-        /** Hard compatibility-gate major version. */
-        @WithDefault("1")
-        fun major(): Int
-
-        /** Informational build version. */
+        /** Informational build version: hand-kept, gates nothing (ADR 0057 §4). */
         @WithDefault("1")
         fun build(): Int
     }
 
     /**
-     * The release the running image was published under — a **different** number from [Version], never merged
-     * with it (ADR 0057 §4). [Version] answers *"can these two sides talk to each other?"* and is pre-auth;
-     * this answers *"which bits are running, and what do I roll back to?"* and is Server-Owner-only, because a
-     * precise release number is what maps an instance to a list of known vulnerabilities.
+     * The release the running image was published under. It shares its major with the pre-auth version
+     * (ADR 0085 decision 1) and differs in precision (ADR 0057 §4): the pre-auth major answers *"can these two sides
+     * talk to each other?"*; this `<major>.<minor>` answers *"which bits are running, and what do I roll back to?"*
+     * and is Server-Owner-only, because a precise release number is what maps an instance to a list of known
+     * vulnerabilities.
      */
     interface Release {
         /**

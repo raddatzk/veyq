@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.instance
 
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.platform.capabilities.VERSION_FILE_MAJOR
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import io.quarkus.test.junit.QuarkusTest
@@ -59,8 +60,8 @@ class InstanceReleaseSliceTest {
         val body = given().`when`().get("/api/setup").then().statusCode(200).extract().asString()
 
         // The specific observable, not "it failed": the value the owner just read is nowhere in the pre-auth
-        // response, and the protocol version it DOES advertise is untouched (ADR 0057 §4 — two version notions
-        // that are never merged).
+        // response, and the version it DOES advertise is the platform's major alone (ADR 0085 decision 1) — the
+        // precision of the release never goes pre-auth (ADR 0057 §4).
         assertFalse(
             body.contains(STAMPED_RELEASE),
             "the release version must not appear on the pre-auth surface — it is what maps an instance to a " +
@@ -69,7 +70,7 @@ class InstanceReleaseSliceTest {
         )
         assertFalse(body.contains("\"release\""), "GET /api/setup's response shape does not grow a release field")
         given().`when`().get("/api/setup").then().statusCode(200)
-            .body("version.major", equalTo(1))
+            .body("version.major", equalTo(VERSION_FILE_MAJOR))
             .body("version.build", equalTo(1))
     }
 
