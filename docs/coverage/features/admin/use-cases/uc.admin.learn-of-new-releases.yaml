@@ -72,3 +72,14 @@ gaps:
     `release check on|off` (`cli.test.ts`) live in `admin-web` (ADR 0065); their suites exist and pass under
     `npm run check`, and wait until admin-web's CI job has executed (ADR 0040), as uc.admin.switch-capabilities' do.
   web: "No web surface: the Server Owner's client is admin-web (ADR 0065), where this use-case lives."
+  stack: >-
+    Lane L1's browser suite (`e2e/tests/features/instance-mail.spec.ts`) drives
+    `the-check-can-be-switched-off-and-pointed-elsewhere`, `the-address-is-confirmed-before-any-notice`,
+    `instance-mail-reaches-only-the-server-owner` in Chromium against the release candidate's two images, installed
+    through `veyqctl` (ADR 0090), each test tagged with its criterion. Against the overlay's Mailpit: the check pointed
+    at a mirror and switched off, held after a reload; mail settings saved, the code read from the one mail to the
+    Server Owner, a wrong code refused, the mailed one confirming. Not covered there: a notice in the console and its
+    mail with an `.ics` — the check reads releases only on a release-stamped build, and the lane's candidate is a
+    `-SNAPSHOT`. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits
+    the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On
+    that run each file becomes a ref on the criteria its tests are tagged with, and this gap goes.

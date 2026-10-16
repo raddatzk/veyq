@@ -134,6 +134,9 @@ INSTALLED_PLAYWRIGHT = ROOT / "node_modules" / "@playwright" / "test" / "package
 # is mounted at /out.
 ADMIN_UPSTREAM = "admin:8080"
 TRAEFIK_SERVICE = "traefik"
+# The overlay's Mailpit on the run's `admin` network, by the alias a Server Owner types as the SMTP host: its HTTP API,
+# which the suite reads the mail the instance sent from (infra/e2e/docker-compose.e2e.yml says why it is there).
+MAIL_API = "http://mail.relay.test:8025"
 CONTAINER_OUT = "/out"
 APP_TRUSTSTORE = "app-truststore.p12"
 # Not a secret: the store holds one public certificate, and Java asks for a password (the overlay names it too).
@@ -521,6 +524,7 @@ def browser(compose: list[str], workdir: Path, selection: list[str]) -> None:
         # The same port number an operator's tunnel listens on, inside the container (e2e/src/tunnel.ts).
         "adminOrigin": f"http://localhost:{ADMIN_PORT}",
         "adminUpstream": ADMIN_UPSTREAM,
+        "mailApi": MAIL_API,
         "outDir": CONTAINER_OUT,
     }, indent=2) + "\n", encoding="utf-8")
     # `selection` is handed to `playwright test` as it is (a local run's `-- --grep …`); CI passes none.
@@ -662,7 +666,9 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
 
     Not swept here, and why: the HTTP recording and the capability tokens derived from it (the browser suite records no
     HTTP; `run_web_e2e.py` sweeps both at API level), boot logs (the backend's log is the `app` container's, swept as
-    one), and the mailbox (the recipe ships no mail relay, and a fresh tenant has no mail settings).
+    one), and the mailbox: the overlay's Mailpit (the relay a provider would give the instance) is reached only from the
+    run's own networks, and what reaches it is the instance mail a feature scenario sets up — a confirmation code the
+    server minted, never a value the suite typed — while a tenant of the run has no mail settings.
     """
     close_window(opened)
     canary_files = sorted(workdir.glob("canaries-*.json"))

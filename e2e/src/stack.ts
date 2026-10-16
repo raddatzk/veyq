@@ -23,6 +23,12 @@ export interface Stack {
   adminOrigin: string
   /** `admin:8080` — the admin container on the run's `admin` network, the far end of that tunnel (`tunnel.ts`). */
   adminUpstream: string
+  /**
+   * `http://mail.relay.test:8025` — the HTTP API of the run's mail relay (the overlay's Mailpit, on the `admin`
+   * network), where the suite reads what the instance mailed. Its SMTP side is what a Server Owner types into
+   * Server → Mail: host `mail.relay.test`, port 1025, no STARTTLS.
+   */
+  mailApi: string
   /** Where the run keeps its evidence: traces, the report, the state the setup project hands on. */
   outDir: string
 }

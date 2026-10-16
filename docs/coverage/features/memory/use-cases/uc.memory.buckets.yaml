@@ -69,3 +69,12 @@ acceptanceCriteria:
         integration: [MediaBucketsSliceTest.uploadStampsOwnerKeyAndMaterializesPrimary, MediaBucketsSliceTest.renameSubBucketUpdatesSealedName]
       web:
         unit: [src/features/memory/media.buckets.test.ts]
+gaps:
+  stack: >-
+    Lane L1's browser suite (`e2e/tests/features/field-seal.spec.ts`) drives `sub-bucket-endpoints`,
+    `contributions-tab-primary-grouping`, `guest-names-for-members-only` in Chromium against the release candidate's two
+    images, installed through `veyqctl` (ADR 0090), each test tagged with its criterion. A sub-bucket created under the
+    member's own primary, and a contributing guest's name, read back in the Contributions picker after a reload and on a
+    second device. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits
+    the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On
+    that run each file becomes a ref on the criteria its tests are tagged with, and this gap goes.

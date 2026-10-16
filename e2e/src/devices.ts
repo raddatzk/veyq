@@ -1,0 +1,58 @@
+// A device of the scenarios: one browser context, confined to the instance (egress.ts), and the tenant owner the
+// round trip activated (instance.json in the run directory) signing in on it with both secrets, as a new device must.
+import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { recordTyped } from './canaries'
+import { confineToInstance, type Confinement } from './egress'
+import { stack } from './stack'
+
+export interface Instance {
+  owner: { email: string; password: string; secretKey: string }
+  tenantDomain: string
+}
+
+export interface Device {
+  context: BrowserContext
+  page: Page
+  confinement: Confinement
+}
+
+export function instance(): Instance {
+  return JSON.parse(readFileSync(`${stack().outDir}/instance.json`, 'utf8')) as Instance
+}
+
+export const tenantOrigin = () => `https://${instance().tenantDomain}`
+
+export async function newDevice(browser: Browser): Promise<Device> {
+  const context = await browser.newContext()
+  const confinement = await confineToInstance(context)
+  return { context, page: await context.newPage(), confinement }
+}
+
+// PrimeVue's Password field adds its placeholder to the accessible name, so the label is matched as the name's start.
+export const passwordField = (on: Page) => on.getByRole('textbox', { name: /^Password\b/ })
+
+/** A new device of the tenant owner: email, password and Secret Key, then the shared space's toolbar. */
+export async function signInOwner(device: Device): Promise<void> {
+  const { owner } = instance()
+  const { page } = device
+  await page.goto(tenantOrigin())
+  await page.getByLabel('Email', { exact: true }).fill(owner.email)
+  await passwordField(page).fill(recordTyped(owner.password))
+  await page.locator('#unlock-secret-key').fill(recordTyped(owner.secretKey))
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 60_000 })
+}
+
+/**
+ * A section of Settings, reached the one way the shell offers (the profile menu's "Settings"): from the space's home,
+ * so the shared space is the active one — the space's own sections (Your profile, Storage) are listed only then, and an
+ * address typed straight into a new document opens Settings with no active space.
+ */
+export async function openSettings(page: Page, section: string): Promise<void> {
+  await page.goto(tenantOrigin())
+  await expect(page.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 60_000 })
+  await page.locator('.profile-button').click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: section, exact: true }).click()
+}

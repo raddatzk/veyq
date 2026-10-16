@@ -1,6 +1,6 @@
 # The ONLY differences between an end-to-end run and a Server Owner's instance: the ACME server standing in for Let's
-# Encrypt, the DNS name and CA trust the public internet would give the instance, and the browser that drives it
-# (ADR 0090 § Decisions 1 and 3). scripts/run_stack_e2e.py installs the candidate with `veyqctl install` and makes
+# Encrypt, the DNS name and CA trust the public internet would give the instance, the mail relay its provider would,
+# and the browser that drives it (ADR 0090 § Decisions 1 and 3). scripts/run_stack_e2e.py installs the candidate with `veyqctl install` and makes
 # this file the instance's operator override (`<home>/compose.override.yml`), so it is laid OVER the release's own
 # recipe (never over this checkout's copy) on every command veyqctl runs, interpolated from the `.env` veyqctl writes
 # (the run's own `${VEYQ_E2E_*}` values go in through `--set`):
@@ -12,7 +12,7 @@
 # and the /acme volume it must be able to write (ADR 0071's silent failure: an unwritable /acme keeps Traefik up and
 # serving its default certificate). VEYQ_ACME_CASERVER already exists in the recipe for staging; nothing in the
 # production file is edited for this. Every other service, network, posture and secret is the operator's: this file
-# adds two services and gives Traefik's ACME client one CA to trust, and must never weaken what the recipe sets. The
+# adds three services and gives Traefik's ACME client one CA to trust, and must never weaken what the recipe sets. The
 # browser is a CLIENT of the instance — it publishes nothing and changes no operator service — and sits behind a
 # profile, so `up` never starts it.
 #
@@ -30,8 +30,8 @@
 # is OUR wiring, not Let's Encrypt's validator; the price is that Traefik's challenge router on :80 is not exercised.
 #
 # The posture is held BY HAND here: scripts/validate_compose_posture.py reads the production file only (cr-stack-e2e
-# phase 1 decided to keep it so — this file never runs on an operator's host). Pebble and the browser get the
-# recipe's x-hardened triple and a non-root uid, measured to run that way.
+# phase 1 decided to keep it so — this file never runs on an operator's host). Pebble, Mailpit and the browser get
+# the recipe's x-hardened triple and a non-root uid, measured to run that way.
 services:
   pebble:
     image: ghcr.io/letsencrypt/pebble:2.10.1@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
@@ -52,6 +52,24 @@ services:
     # anything else on the host never collide on it.
     ports:
       - "127.0.0.1::15000"
+
+  # The mail relay an operator's provider gives the instance (ADR 0097's instance mail, ADR 0048's tenant mail): the
+  # SMTP host a Server Owner types into Server → Mail. Mailpit, the dev stack's own pin (infra/docker-compose.yml),
+  # accepts everything over plain SMTP on :1025 and keeps it in memory; the suite reads what arrived through its HTTP
+  # API on :8025 (`mailApi` in stack.json) — the confirmation code a save mails, the notices. On `admin`, the one
+  # network the app and the browser share that is not the internet-facing `edge`; its alias is a dotted name because
+  # the settings take only one (`instance.openapi.yaml`'s host pattern refuses a bare `mailpit`). The image has no
+  # USER and would run as root; measured to run with the triple, a non-root uid and only /tmp writable.
+  mailpit:
+    image: axllent/mailpit:v1.20.0@sha256:6105f08377323c3e11a21b6e5e51648e33151fb4e525aab8d0961573c9e94a4d
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    user: "65532:65532"
+    tmpfs: [/tmp]
+    networks:
+      admin:
+        aliases: ["mail.relay.test"]
 
   traefik:
     depends_on:
