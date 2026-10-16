@@ -289,3 +289,6 @@ config-secret.key
 graphify-out/
 # The docs site's generated content types (ADR 0087), rebuilt by `astro check` / `astro build`.
 site/.astro/
+
+# The root launcher's per-checkout ports (settings.gradle.kts): a worktree's own, never shared.
+/local.properties
