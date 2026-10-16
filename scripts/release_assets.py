@@ -6,7 +6,7 @@
 writes, for the release the tree names (`v<major>.<minor>`, counted the way `ci.yml`'s version step counts it):
 
     <out>/releases.json           every release in <out>: tag, date, prerelease flag, manifest — merged, never replaced
-    <out>/<tag>/manifest.json     release, date, both images, unscheduled
+    <out>/<tag>/manifest.json     release, date, both images, unscheduled, and every asset with its sha256
     <out>/<tag>/<asset>           the recipe set, and the tools that operate it
 
 The same three questions — which releases exist, what does one's manifest say, give me one asset — are answered
@@ -38,6 +38,7 @@ from __future__ import annotations  # `str | None` below — the repo's scripts 
 
 import argparse
 import datetime
+import hashlib
 import json
 import pathlib
 import re
@@ -54,8 +55,9 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the guards
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPOSE = ROOT / "infra/docker-compose.prod.yml"
 ENV_TEMPLATE = ROOT / "infra/.env.example"
-# The tools that operate a release, by asset name. veyqctl joins when it exists (cr-veyqctl phase 2).
-TOOLS = {"instance_backup.py": ROOT / "scripts/instance_backup.py"}
+# The tools that operate a release, by asset name: `veyqctl` itself, and the backup tool its `backup`, `restore` and
+# `upgrade` import from the running release's directory (shipped beside it rather than folded in: cr-veyqctl).
+TOOLS = {"veyqctl": ROOT / "scripts/veyqctl.py", "instance_backup.py": ROOT / "scripts/instance_backup.py"}
 MANIFEST = "manifest.json"
 RELEASES = "releases.json"
 
@@ -270,8 +272,12 @@ def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool) -> pathl
     date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
     dest.mkdir()
     try:
-        write_assets(dest)
-        manifest = {"release": release, "date": date, "images": {"app": app, "admin": admin}, "unscheduled": unscheduled}
+        written = write_assets(dest)
+        # The asset list is what `veyqctl` downloads — from any source alike, and an HTTP mirror cannot be listed —
+        # and each sha256 is what it checks a downloaded file against before it lands in `releases/<release>/`.
+        assets = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in written}
+        manifest = {"release": release, "date": date, "images": {"app": app, "admin": admin}, "unscheduled": unscheduled,
+                    "assets": assets}
         (dest / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
     except BaseException:
         shutil.rmtree(dest, ignore_errors=True)

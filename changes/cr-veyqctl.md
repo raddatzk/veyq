@@ -100,7 +100,7 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
     the files and `cmp` matches each recipe file against the tree; `python3 scripts/validate_release_identity.py`
     green; committed.
 
-- [ ] **2 `veyqctl` installs, runs and verifies.** `scripts/veyqctl.py` (the asset is `veyqctl`): Python 3.9, stdlib,
+- [x] **2 `veyqctl` installs, runs and verifies.** `scripts/veyqctl.py` (the asset is `veyqctl`): Python 3.9, stdlib,
   one file. `install`, `start`, `stop`, `status`, `logs`, `verify`, `check`; `--home` (default `/opt/veyq`), `--source`
   (default the GitHub Releases of `raddatzk/veyq`; a URL or a directory in the mirror layout). Resolution of
   `VEYQ_RELEASE` (`<major>.<minor>` | `<major>` | `latest`; prereleases never), signature verification through the
@@ -116,7 +116,7 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
     `veyqctl status` lists every service healthy; `stop`, `start`, healthy again; tear down by project name.
   - **Done when:** selftest green; the live run's log read and kept; guards green; committed.
 
-- [ ] **3 `upgrade`, `backup`, `restore`, `self-update`.** `upgrade` exactly as ADR 0096 decision 5 orders it, nothing
+- [x] **3 `upgrade`, `backup`, `restore`, `self-update`.** `upgrade` exactly as ADR 0096 decision 5 orders it, nothing
   stopped before the template check; `backup`/`restore` delegate to the running release's `instance_backup.py`
   (`--key-into` required for `backup` and for `upgrade`'s backup); `self-update` replaces the running `veyqctl` with
   the installed release's, verified.
@@ -198,3 +198,73 @@ The spelling bites (long-form bind, `env_file`) can only be red while the file t
 the producer share one derivation, so with the file present it is carried and green. Each was run both ways — red
 on the derivation's message naming the spelling and its location, green with the file present and the OK line
 listing it (the positive control). The guard's docstring states the shared derivation as its limit.
+
+**Phase 2.** Decided in the build, each in `veyqctl.py`'s docstring:
+- *The manifest lists every asset with its sha256* (`release_assets.py` writes it): an HTTP mirror cannot be listed,
+  so the list is what `veyqctl` fetches, and each file is checked before it lands in `releases/<release>/`, the
+  manifest kept there verbatim. It binds the files to the manifest, not the manifest to veyq — the images' signatures
+  do that, and for the recipe only the source does (an immutable GitHub Release, or a mirror the operator trusts).
+- *The project is named once.* `install` reads it from `docker compose config` (the recipe's `name:`, or a
+  `COMPOSE_PROJECT_NAME` in `.env`, which beats it), records it in `state.json`, and every later command passes `-p`;
+  a `COMPOSE_*` in the operator's shell is dropped and every command runs in the home. The live run set the project
+  through `--set COMPOSE_PROJECT_NAME=…`, so the overlay stayed a verbatim copy.
+- *Assertion 7 reads `veyqctl`'s `COSIGN_OIDC_ISSUER` and `COSIGN_IDENTITY_REGEXP`* (by AST, without importing it),
+  holds them to the page's one identity and to the same accepts and rejects; the self-test holds the `cosign verify`
+  call to exactly those two. Bitten by snapshot-and-restore, each red on its own message, the untouched tree green:
+  the `^` dropped, `master` added, another issuer, the constant renamed away.
+- *Not done here: the self-test is not in `ci.yml`.* The implementing run's brief kept the workflows off limits
+  (cr-one-pipeline-per-commit edits `ci.yml` in parallel); the step belongs beside `instance_backup_selftest.py`'s.
+- *Live*, measured (log in the implementing session, not committed): `veyq:ctl-p2` and `veyq-admin:ctl-p2` built from
+  the tree; `release_assets.py` → `v0.528`, six assets, the three recipe files byte-identical to `infra/`; the stack
+  lane's own `pebble()` under the run's project first (Pebble's root must be in the app's truststore before the app
+  starts — `install` brings everything up at once, so phase 4 meets the same ordering); `veyqctl install
+  --unsigned-local` with every line prefixed `NOTHING VERIFIED`, `.env` and `state.json` `0600`, every service
+  healthy, the stack lane's certificate check green through Traefik (`GET https://veyq.test/api/setup` → 200);
+  `stop` → `status` exit 1, `start` → healthy again; `verify` without the flag refused the local build; teardown by
+  project name, the host's 5 containers and 4 volumes unchanged.
+- **Next time:** a Done-when the brief overrides (here `ci.yml`) is named in the brief as overridden, so the
+  implementer does not have to find the contradiction.
+
+**Phase 3.** Decided in the build, each in `veyqctl.py`'s docstring:
+- *Step 3 refuses every key the new template assigns and `.env` lacks*, not only a `${…:?}` the recipe names: the
+  template's assigned keys are its required ones (its optional ones are comments), so taking a template's example
+  value for one would boot on a placeholder. The filled result is staged as `.env.next` and `docker compose config`
+  checks it before anything stops. A selector BELOW the running release is refused: there is no downgrade.
+- *Step 4's "back up; stop the app" is one act*: the capture is cold (ADR 0056 §2), so the app stops for it and stays
+  stopped through the switch; a failed capture switches nothing and starts the running release again.
+- *"Import" is read as "run the release's own copy"*: `instance_backup.py` runs as a child process from
+  `releases/<running>/`, checked against its manifest's sha256 first, so its `umask 077` and environment stay its own.
+- *Leg (c) needs no root and no readable Docker data root*: it leaves the stopped app container by `docker cp` and a
+  restored key goes back through a one-off `app` container as the image's user (born `10001:10001 0600`) — the route
+  `instance_backup.py`'s own refusal already names. The Run page's mountpoint-and-`sudo -E` form still works by hand;
+  phase 6 rewrites the page around this.
+- *`restore --domain` is required*, found live: defaulting it to `.env`'s `VEYQ_DOMAIN` was refused by the tool's gate
+  (no write) — a capture holds its TENANTS' domains, and `VEYQ_DOMAIN` is the bootstrap one.
+- *Open for phase 5*: `self-update` checks the installed `veyqctl` against its release's manifest only; ADR 0096
+  decision 3 signs it with `cosign sign-blob`, and phase 5's text does not say `self-update` then verifies that bundle.
+- *Live*, measured (log in the implementing session, not committed). Release A `v0.529` from `bc23009b` (phase 2), B
+  `v0.530` from this phase's head; B's images came out of the build cache identical to A's — nothing in the image
+  changed between the two commits, so the run proves `veyqctl`'s switch, not a schema migration. A installed by A's
+  own `veyqctl` (pinned), seeded by the stack lane's whole browser suite (10 tests: first run, a Memory with a photo),
+  `VEYQ_RELEASE` moved from the pin to `0`, then `upgrade` with B's `veyqctl`: every service healthy,
+  `backups/<stamp>-before-0.530/` with `database.sql`, `objects/` (4) and a manifest saying leg (c) `separate`,
+  `verify` OK, `releases/0.529/` kept, `.env` on B's image lines; the Memory then opened on a fresh device (a scratch
+  spec, not committed). `self-update` of a locally edited copy left it `cmp`-identical to B's with its mode kept, and
+  found nothing to do a second time. The upgrade's backup restored onto a fresh install of B: 46 tables dropped,
+  dump and 4 objects loaded, the key in the app's volume `10001:10001 600` with the backup key's sha256, and the
+  Memory opened there too. Teardown by project name, nothing left, the host's containers and volumes unchanged.
+- *Bites*, each against the seeded instance with every container's `StartedAt` compared: (c) `--key-into` omitted →
+  refused, unchanged; (b) B produced with digest references, the app digest one hex digit off → refused at `cosign
+  verify` (`no signatures found`), no pull among the commands it printed, unchanged, no `releases/0.530/`; (a) B'
+  produced from the tree with `VEYQ_BITE_REQUIRED=` in the template and `${VEYQ_BITE_REQUIRED:?…}` in the recipe
+  (snapshot-and-restore of `infra/`, byte-identical after) → refused naming it, unchanged, `backups/` empty, `.env`
+  and `state.json` byte-identical. Bite (b)'s limit: nothing is published, so the unaltered digest is refused too —
+  its positive control is the self-test's stand-in host; and its "local images unchanged" sensor read CHANGED, because
+  another session builds images on this host, so the printed command list is the evidence there. The self-test's new
+  checks were bitten by six mutants of a copy of `veyqctl.py` (stop before the template check, a template example taken,
+  `--key-into` checked late, no restart after a failed backup, `.env`'s selector ignored, the key in an argv): each
+  red, the unmutated copy green.
+- *What went wrong*: the first live run called `self-update` on release A's `veyqctl`, which predates the command (a
+  harness error), and defaulted the restore's domain wrongly (a product bug, fixed above); the whole run was repeated
+  at the fixed head. **Next time:** a live proof that mixes two releases' tools names, per step, which release's tool
+  runs it — the CR's "install the first … `upgrade` to the second" leaves that to the harness.
