@@ -1,7 +1,7 @@
 ---
 id: cr-veyqctl
 title: veyqctl — install and upgrade a Compose instance from immutable releases; the recipe leaves the image
-status: planned
+status: in-progress
 satisfies: ["uc.admin.install-and-upgrade-instance"]
 adrs: ["0096", "0057", "0090", "0091", "0056", "0086"]
 invariants:
@@ -21,7 +21,7 @@ them; and the end of the recipe inside the image (ADR 0057 §3), which closes th
 (inbox #26). The stack lane of [ADR 0090](../docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md) then
 boots the candidate through `veyqctl install`, so the operator's path is the tested one.
 
-Implementation waits for the owner's go on this CR.
+The owner's go covers every phase, landing on `main` included (2026-10-16).
 
 ## Context & constraints
 
@@ -32,9 +32,11 @@ Implementation waits for the owner's go on this CR.
   reads it; the immutable-releases repository setting is the owner's, once the remote exists (inbox #26 item 1).
   Every other phase is proven by local runs: images built with `docker build`, assets produced into a directory,
   `veyqctl --source <dir>`.
-- **No pipeline CR exists** for ADR 0091 (`ls changes/` → no `cr-one-pipeline-*`); the publish is still the
-  dispatch-only `publish` job of `.github/workflows/container.yml` (`grep -n "name: Publish the release" .github/workflows/container.yml`).
-  Phase 5 wires the release into that job; ADR 0091's promotion inherits it when that CR is written.
+- **The publish is the dispatch-only `publish` job of `.github/workflows/ci.yml`** (`grep -n "^  publish:" .github/workflows/ci.yml`):
+  cr-one-pipeline-per-commit (in progress) folded `container.yml` into `ci.yml` (its phase 2, landed); that CR's
+  open phases touch budgets, guard gaps in CI and a local runner, and it leaves the release as a promotion (inbox
+  #460) to a later CR. Phase 5 wires the release into the `publish` job; that promotion inherits it when it is
+  written.
 - **`cr-stack-e2e` is live and writes `scripts/run_stack_e2e.py` too** (its phases 2–5; a session is on phase 2 at
   refine time). Two CRs, one file: this CR owns the recipe-and-`.env` half (`extract()`, `write_env()`), cr-stack-e2e
   everything after `up`. Phase 4 here re-reads that file on `main` before editing, and its hand-off names the change
@@ -73,7 +75,7 @@ Implementation waits for the owner's go on this CR.
 | The in-image recipe and everything that reads it | `git grep -n -e "opt/veyq/deploy" -e "docker cp veyq-recipe" -e "RECIPE" -- ':!docs/decisions/0096*' ':!changes/'` |
 | Files the production compose file reads beside itself (the recipe set the producer must carry) | `grep -n '\./' infra/docker-compose.prod.yml` and `docker compose -f infra/docker-compose.prod.yml config --no-interpolate --format json` (bind sources) — two angles, compare |
 | Guards reading the recipe files | `grep -l -e "env.example" -e "docker-compose.prod.yml" scripts/validate_*.py` |
-| The publish job's steps (refuse, sign, chart, tag) | `grep -n -e "- name:" .github/workflows/container.yml \| sed -n '/Publish the release/,$p'` |
+| The publish job's steps (refuse, sign, chart, tag) | `sed -n '/^  publish:/,$p' .github/workflows/ci.yml \| grep -n -e "- name:"` (the job is the file's last) |
 | Run pages with Compose procedures | `git grep -c -e "docker compose" -e "instance_backup" -e "infra/" -- site/src/content/docs/run` |
 | `.env` keys and the reference page | `python3 scripts/validate_run_config_reference.py` (names the page lines it reads) |
 | `run_stack_e2e.py`'s recipe half | `grep -n -e "^def extract" -e "^def write_env" -e "^def copy_out" -e "RECIPE" scripts/run_stack_e2e.py` |
