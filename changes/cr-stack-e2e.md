@@ -16,7 +16,7 @@ A CI job that boots the two candidate images with the compose recipe taken **out
 ACME certificate from a Pebble, drives admin-web and web in Chromium through first run and a Memory round trip,
 sweeps the stack for every typed value, and gates `publish` on the exact `build-<sha>-<arch>` bytes it then signs.
 [ADR 0090](../docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md) holds every decision, its
-rejected alternatives and the four refine answers; this CR orders the work. Inbox #448; #447 is its phase 5.
+rejected alternatives and the four refine answers; this CR orders the work. Inbox #448; phase 5 automates the browser pass inbox #447 ran by hand on 2026-10-15.
 
 **Entry condition met:** ADR 0090 was accepted on 2026-10-16. Implementation still waits for the owner's go on this CR.
 
@@ -87,10 +87,13 @@ trust-chain green. Each phase names its bites — the case that must make the ne
       tier growing per scenario; the first CI run's numbers replace it in ADR 0090 § Consequences. A tier that grows
       past its budget is split into shards with a stack each, never made faster by weakening what ships (no lowered
       Argon2 parameters, no skipped TLS).
-- [ ] 5 **Capability off states (inbox #447).** `capability-off-states.spec.ts` for the four ids, through admin-web's
-      switch and back, the `unlock.deviceHeldBack` hint and no DELETE/POST on `/api/account/wraps`. Its coverage ref
-      lands in `uc.admin.switch-capabilities.yaml` under `stack.e2e`, and the `off-state-in-a-browser` gap names this
-      spec until `stack` is admitted.
+- [ ] 5 **Capability off states — inbox #447's hand pass, automated.** `capability-off-states.spec.ts` for the four ids,
+      through admin-web's Server → Capabilities and back, asserting what #447's row recorded: the affordances gone
+      ("New drop box" and its tab, "Sign in with a QR code", "Add a device", "Stay signed in"), a trusted and a
+      remembered device asking for password + Secret Key with the `unlock.deviceHeldBack` hint once the email is
+      entered (the lookup is keyed on it, inbox #450), no DELETE/POST on `/api/account/wraps`, everything restored when
+      switched on. Its coverage ref lands in `uc.admin.switch-capabilities.yaml` under `stack.e2e`; the
+      `off-state-in-a-browser` gap's "does not run in CI (inbox #448)" then names this spec, until `stack` is admitted.
 
 ## Definition of done
 

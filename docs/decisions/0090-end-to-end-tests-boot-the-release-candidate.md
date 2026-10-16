@@ -55,7 +55,7 @@ What a green run proves today stops short of what a Server Owner runs:
 
 7. **Two tiers, one suite.** `@smoke` (first run in admin-web, a tenant, a Memory with a photo written on one device
    and read on another, a READ link opened anonymously, the sweeps) runs on every dry run and every publish; the full
-   set (starting with inbox #447's capability off-states) runs on every publish. Retries are 0.
+   set (starting with the capability off states inbox #447 ran by hand) runs on every publish. Retries are 0.
 
 8. **It is not a replacement for `run_web_e2e.py`.** That layer stays: per-file fresh instances, API-level, fast to
    bisect, and the home of the upgrade proof. This one is few scenarios, one instance per run, and the shipped artifact.
