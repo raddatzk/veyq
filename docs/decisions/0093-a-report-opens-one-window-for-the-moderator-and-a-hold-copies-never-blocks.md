@@ -153,7 +153,7 @@ The last editor of each field group — name, meta, note, icon — is stored as 
 reason (a sealed attribution could name anyone). The server knows it; whether members see it is a product question
 outside this ADR. A hold freezes the reported revision with its editor. This also tightens
 [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 6: a guest may abandon
-an empty placeholder only if its name was last written by that guest's identity.
+an empty placeholder only if its name was last written by that guest's identity. The editor is the authenticated caller of the write, never a request field, and every write of the ciphertext counts — a re-seal by a move or a restore as much as a new text, since the server cannot tell them apart (owner 2026-10-16). Clearing a field clears its editor. A field only its own row's subject writes (a share identity's name, a member's profile) needs no column. The model is [en.platform.field-editor](../features/platform/enablers/en.platform.field-editor.md).
 
 ### 9. A text or icon field seals under a key of its own
 

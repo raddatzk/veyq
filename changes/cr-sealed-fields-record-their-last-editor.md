@@ -2,11 +2,11 @@
 id: cr-sealed-fields-record-their-last-editor
 title: Every sealed field records its last editor, and a guest takes back only a placeholder it named
 status: planned
-satisfies: ["uc.depot.share-folder-files", "uc.depot.drop-box"]
+satisfies: ["en.platform.field-editor", "uc.depot.share-folder-files", "uc.depot.drop-box"]
 adrs: ["0093", "0080", "0034", "0083", "0092", "0094"]
 invariants:
   - "Operator-blind: the server records only an opaque `user:{id}` / `share:{identityId}` per field group — the class ADR 0034 and ADR 0083 already disclose; no plaintext, no new key, no client-supplied editor"
-  - "API-first: no wire shape changes in this CR (decision D5); if the owner exposes the editor, a contracts phase comes first and the DTO is generated"
+  - "API-first: no wire shape changes in this CR (D5: the editor is served to no client); a later exposure starts with a contracts phase and generated DTOs"
   - "ADR 0080 decision 6: a guest's take-back erases only where nobody could lose anything"
 ---
 
@@ -20,7 +20,7 @@ decision 6's take-back (`abandonShareNode`) erases a placeholder only if its nam
 guest's identity, so a guest no longer erases a member's empty file or folder. The hold that copies these columns
 (§ 4), the per-field keys (§ 9) and the guest-write record (§ 10) are **not** in this CR (§ Not in this cut).
 
-Implementation waits for the owner's go on this CR, and on the open decisions below.
+Implementation waits for the owner's go on this CR; its decisions are settled (§ Decided with the owner).
 
 ## Context & constraints
 
@@ -76,40 +76,32 @@ Implementation waits for the owner's go on this CR, and on the open decisions be
   before the moderation line ships. This CR adds no personal data beyond the opaque class ADR 0034/0083 disclose and
   makes an erasure stricter, so it may be built and merged before that review; it does not make V1 shippable.
 
-### Open decisions (owner, before go)
+### Decided with the owner (2026-10-16)
 
-- **D1 — Which objects in this cut.** *Recommended: every non-self-attributed field group* listed above (node
-  name/meta, share name/note/share name, scope name/icon, bucket name, media meta), as phases 1–3. ADR 0093 § 8 is
-  one property ("every sealed field"), the hold CR then only copies columns, and each writer gets its slice test.
-  The cost: outside the node name, the columns have no reader until the hold exists. *Alternative:* node name/meta
-  only now (the one with a reader), the rest with the hold CR.
-- **D2 — A guest's move writes the name.** A placement re-seals the name under the new parent's key (ADR 0080
-  decision 2), and the server cannot tell a re-seal from a new text, so a `READ_WRITE` guest who **moves** a member's
-  empty folder becomes its name's last editor — and could then take it back. *Recommended: accept it*, as ADR 0093 § 8
-  reads ("its name was last written by that guest's identity"): what it can erase is a name with nothing behind it,
-  which the same guest could already rename away (ADR 0080's own residual), and D3 removes the one case where someone
-  loses more. State the residual in ADR 0080. *Alternative:* a creator column on `veyq_node`, written once, and the
-  take-back asks "created by this identity" — exact for "the node its upload created", but a second attribution
-  concept ADR 0093 does not have, so an ADR amendment.
-- **D3 — No take-back of a link's root.** *Recommended: in this CR* — `isPlaceholder` also refuses a node that
-  carries a live link (`not_a_placeholder`). A guest's own placeholder never carries one (only members create
-  links), so nothing the feature needs is lost, and "erased only where nobody could lose anything" holds again.
-- **D4 — One core ref type.** *Recommended:* a core sealed type (`User(id)` / `Share(identityId)`, `format()` /
-  `parse()`, the `user:{id}` / `share:{identityId}` spelling of ADR 0034) that the editor columns use, and that
-  `OwnerKey`, `NodeAttachmentEntity.uploaderKey` and Depot's `SHARE_KEY` move onto — four spellings of one class
-  otherwise. Memories may import it (an application uses core); core never imports `OwnerKey`.
-- **D5 — The editor is not served.** *Recommended: no wire field in this CR.* Whether members see "last changed by"
-  is the product question ADR 0093 leaves open (and #383's idea); the server's own check needs no client. So no
-  contracts phase — only descriptions change, in the commit that changes the behaviour.
-- **D6 — Where the property's criteria live.** "Each write records its writer" is a property with many triggers, so
-  by [`changes/README.md`](README.md) § Coverage it wants a home of its own rather than rows under the Depot
-  use-cases (which keep only the take-back). *Recommended:* the owner names it before go — an enabler under
-  `docs/features/platform/` (e.g. `en.platform.field-editor`) with a `planned` coverage file, written in the refine,
-  not invented in a phase.
-- **D7 — Not decided here: a guest deleting its own content.** ADR 0080 decision 6 says a guest's delete of a node
-  that holds something "comes with stored authorship". This CR stores who wrote a *name*, not who owns a subtree's
-  content; whether a guest may then delete "its own" file or folder (by which editor: name, attachment, all?) is a
-  refine of its own. *Recommended:* an inbox row, out of this CR.
+Each was put with a recommendation and taken as recommended. D2 and D3 are rules, so they live in ADR 0080 decision 6
+and ADR 0093 § 8; the model is [en.platform.field-editor](../docs/features/platform/enablers/en.platform.field-editor.md).
+
+- **D1 — Every non-self-attributed field group in this CR** (node name/meta, share name/note/share name, scope
+  name/icon, bucket name, media meta), as phases 1–3. ADR 0093 § 8 is one property; the hold CR then only copies
+  columns. Outside the node name the columns have no product reader until the hold exists — the per-writer slice
+  tests are their reader meanwhile.
+- **D2 — A guest's move writes the name, and that is accepted.** A placement re-seals the name and the server cannot
+  tell a re-seal from a new text, so a `READ_WRITE` guest who moves a member's empty node becomes its name's last
+  editor and may take it back: a name with nothing behind it, which the guest could already rename away, and D3
+  removes the case where someone loses more. No creator column.
+- **D3 — A node that carries a live link is never a placeholder** (`not_a_placeholder`), in this CR. A guest's own
+  placeholder never carries one, so the feature loses nothing.
+- **D4 — One core ref type** (`User(id)` / `Share(identityId)`, `format()` / `parse()`, ADR 0034's spelling) for the
+  editor columns; `OwnerKey`, `NodeAttachmentEntity.uploaderKey` and Depot's `SHARE_KEY` move onto it in phase 1.
+  Memories imports it; core never imports `OwnerKey`.
+- **D5 — The editor is served to no client.** No wire field, so no contracts phase: only descriptions change, in the
+  commit that changes the behaviour. "Last changed by" for members is a product question of its own (#383's idea).
+- **D6 — The property's home is the enabler** `en.platform.field-editor` (written 2026-10-16, `planned`), which this
+  CR `satisfies:`. **Measured:** enablers carry no coverage file — `validate_coverage.py` reads only
+  `docs/coverage/*/use-cases/uc.*.yaml` — so the enabler's criteria name the slice tests that verify them in the
+  enabler itself when built, and the take-back's criteria get refs under the two Depot use-cases' coverage.
+- **D7 — A guest deleting its own content is not in this CR**: inbox #466 holds it (which editor makes a node "its
+  own", and whether it goes to the trash).
 
 ### Not in this cut
 
@@ -145,7 +137,7 @@ Implementation waits for the owner's go on this CR, and on the open decisions be
   iff `wrapped_meta` is. Edited into the core baseline with its pin line. `NodesStore`'s four writers take the editor
   as a required parameter (no default: every caller states it), and every caller passes it from the authenticated
   principal. `GuestIdentityUsage` counts the identity columns. The `OwnerKey` / `uploaderKey` / `SHARE_KEY` move
-  (D4) is in this phase if decided. · Done when: a slice test per writer path — member create, rename, move, meta
+  onto it (D4) is in this phase. · Done when: a slice test per writer path — member create, rename, move, meta
   (cover), restore A1; guest create, rename, move, identity folder — reads the stored editor and asserts it, each with
   a control of the other principal kind; `dropDeadIdentities` keeps an identity that is the last editor of a name and
   drops it once that node is gone (positive and negative); `./gradlew check` green.
@@ -157,24 +149,25 @@ Implementation waits for the owner's go on this CR, and on the open decisions be
   authorship" follow. · Done when: the flipped controls in `ShareNodeAbandonCoreSliceTest` and `ShareFilesSliceTest`
   now assert a member's empty folder / file is `409 not_a_placeholder`, beside the positive control — the guest's own
   placeholder made **through `createShareNode`** is erased; new cases, each failing exactly one check: a member renamed
-  the guest's placeholder → kept; another identity's placeholder → kept; (D2 as decided) a guest moved a member's
-  empty folder → the decided outcome; an empty folder carrying a link → kept, link live. `DropBoxSliceTest` and
+  the guest's placeholder → kept; another identity's placeholder → kept; (D2) a guest moved a member's
+  empty folder (no link) → erased, the accepted residual, pinned so a change to it is a decision; an empty folder carrying a link → kept, link live. `DropBoxSliceTest` and
   `ShareNodeAbandonRaceSliceTest` green unchanged. Bitten: phase 1's editor write on `ShareNodesHandler.create`
   injected to record a member → the positive control goes red. `./gradlew check` and `npm run generate:api` +
   `npm run check` (web, admin-web: descriptions only, expected green) green.
-- [ ] **3 backend — the other field groups** (D1 as decided). Core: `veyq_share` (name, note, share name; the
+- [ ] **3 backend — the other field groups** (D1). Core: `veyq_share` (name, note, share name; the
   tombstone nulls the editors with the seals), `veyq_scope` (name, icon; `clearIcon` nulls the icon editor). Memories:
   `veyq_bucket` name (the primary bucket's copied name names the identity whose name it copies), `veyq_media` meta
   (`attach` the uploader, `setMeta` the member). Baselines edited with their pins. · Done when: a slice test per writer
   reads the editor (create, update, re-seal, clear, tombstone/reissue), `./gradlew check` green.
-- [ ] **4 docs + coverage.** ADR 0080 decision 6 and its "Decided with the owner" paragraph: the rule as built, D2's
-  residual, D3; ADR 0093 status line: § 8 built (and which objects, per D1). `docs/apps/depot.md` (§ Guests' role
+- [ ] **4 docs + coverage.** ADR 0080 decision 6 and ADR 0093 § 8 (D2 and D3 are already written there, as not built): say
+  they are built; ADR 0093 status line: § 8 built; `en.platform.field-editor` status `built` and its criteria naming their
+  slice tests (D6). `docs/apps/depot.md` (§ Guests' role
   table, § abandon), `uc.depot.share-folder-files` (E5, the deletes quality note), `uc.depot.drop-box` (E9),
   `uc.depot.share-file` (the "no authorship" clause), `docs/crosscutting/security-model.md` (what the server sees: the
   last editor per field group), `site/src/content/docs/security/what-the-server-sees.md` (same bullet); the web
   comments that cite "no authorship" (`web/src/core/access.ts`, `features/depot/source.ts`, `rights.ts`,
   `components/FileDetail.vue`) say what is now true. Coverage: the take-back criteria under the two Depot use-cases
-  and the property's under D6's home. Inbox #462 row: § 8 built; a row for D7. · Done when:
+  (the enabler carries its own, D6). Inbox #462 row: § 8 built. · Done when:
   `python3 scripts/validate_coverage.py` and the `trust-chain` job's guards green, `npm run check` in `site/` and
   `web/` green; the locator for "no authorship" returns only text that is still true.
 
@@ -190,7 +183,7 @@ Every sealed field group of D1's scope stores its last editor from the authentic
 writer; `abandonShareNode` erases only the calling identity's own named placeholder and never a link's root, pinned by
 positive and negative controls on the real guest path and bitten as phase 2 says; `./gradlew check` green; contracts
 descriptions, ADR 0080, the Depot use-cases, `docs/apps/depot.md`, the security model and the Security page
-`what-the-server-sees` say what is built; `docs/coverage/` updated for both `satisfies:` use-cases and D6's home with
+`what-the-server-sees` say what is built; `docs/coverage/` updated for both Depot use-cases, the enabler's criteria naming their tests, with
 `python3 scripts/validate_coverage.py` green; the `trust-chain` job green; `npm run check` green in `site/` and
 `web/`. No permanent guard is added: the property is pinned per writer by slice tests, and `NodesStore`'s required
 editor parameter makes a new node writer that forgets it fail to compile — a new writer elsewhere would bypass
