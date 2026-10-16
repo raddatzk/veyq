@@ -30,6 +30,13 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [TenantCapabilitySwitchesSliceTest.aTenantShareSwitchStopsThatTenantsExistingLinksAtOnceAndNoOtherTenants]
+  - id: tenant-share-switch-named-in-the-share-list
+    text: A tenant's share switch marks every link it stops in that tenant's share lists as switched off in the space, and no other tenant's; with both levels off each switch that would have to come back on is listed, the root entry first (inbox #457).
+    coverage:
+      backend:
+        integration: [ShareGuestStopsCoreSliceTest.aTenantSwitchNamesItsEntryInThatTenantOnlyAndBothLevelsAreListed, ShareGuestStopsCoreSliceTest.theListAndTheGuestGateAgreeOverTheMatrix]
+      web:
+        unit: [src/core/sharing/ShareGuestStops.test.ts, src/features/memory/components/ShareDialog.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
   - id: tenant-switch-confirmed
     text: Switching off asks first and shows the entry's own effect-when-off; switching on asks nothing; the row shows the server's answer and the app's own capability set follows at once.
     coverage:

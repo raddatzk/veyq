@@ -21,7 +21,8 @@
    <id>` switches and then prints the same text, taken from the backend's answer for the entry it switched.
 4. The backend stores the switch and answers with the new state. From then on the entry is missing from the
    pre-auth manifest (`GET /api/setup`). Its gates refuse with `422 capability_disabled`. Where the entry acts on
-   existing data (ADR 0088 decision 5), that takes effect too.
+   existing data (ADR 0088 decision 5), that takes effect too; a member's share list then marks every link a share
+   switch stops and says it is switched off on this server (inbox #457).
 5. Switching the entry back **on** restores it. An entry's own state survives while its parent is off and applies
    again once the parent is on.
 

@@ -48,6 +48,7 @@ import {
 } from './manageShares'
 import { NO_NOTE, type ShareNote } from './shareNote'
 import ShareNoteAcceptField from './ShareNoteAcceptField.vue'
+import ShareGuestStops from './ShareGuestStops.vue'
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { lastExpiryDay, linkRules } from './linkRules'
 import { decodeHttpError } from '../../shared/httpError'
@@ -628,6 +629,15 @@ function onDialogVisible(visible: boolean) {
                     {{ t('share.reissueRequiredBadge') }}
                   </span>
                 </div>
+                <!-- inbox #457: the guest gate's own answer why a guest gets no link, with the edit or renew that fixes it. -->
+                <ShareGuestStops
+                  :stops="share.guestStops"
+                  :created-at="share.createdAt"
+                  :can-edit="canEdit(share)"
+                  :can-renew="canReissue(share)"
+                  @edit="openEdit(share)"
+                  @renew="onReissue(share)"
+                />
               </div>
               <div class="folder-share-actions">
                 <Button

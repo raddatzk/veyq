@@ -97,6 +97,43 @@ acceptanceCriteria:
         integration: [ShareSharedScopeSliceTest.theOwnerDeletesALinkAndItIsGoneEverywhere, ShareSharedScopeSliceTest.aCoMembersLinkIsDeletableOnlyOnceItsOwnerLeft]
       web:
         unit: [src/features/memory/components/ShareDialog.test.ts, src/features/memory/share.test.ts]
+  - id: a-stopped-link-says-why
+    text: >
+      Every row of the manage list carries why a guest is not served the link now (`guestStops`, empty exactly when one
+      is): revoked, expired, a space paused or being deleted, an instance or a tenant switch with its entry, a missing
+      password, a lifetime beyond the one in effect with its days — computed by the predicate the guest gate is the
+      emptiness of, so over every combination of both levels' switches and both requirements a link is listed as served
+      exactly when a guest is, and a stopped one still answers its guest as an unknown link, byte for byte; the resolve
+      carries no stop. The Memory, folder, file and drop-box panels word each reason in English and German, a switch
+      with who can switch it back on, a requirement with whether its fix keeps the link's address (A8, inbox #457).
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.offSwitchesNameEverySwitchOnThePathRootFirstInstanceBeforeTenantAndAreEmptyExactlyWhenActive, LinkRequirementsTest.missedNamesEveryRequirementALinkMissesThePasswordFirstAndTheRefusalIsItsFirst]
+        integration: [ShareGuestStopsCoreSliceTest.aServedLinkListsNoStopAndARevokedOrExpiredOneSaysSo, ShareGuestStopsCoreSliceTest.aSpaceBeingDeletedSaysSoToTheMemberWhoStillReadsIt, ShareGuestStopsCoreSliceTest.theListAndTheGuestGateAgreeOverTheMatrix, ShareGuestStopsCoreSliceTest.aGuestIsNeverToldTheStops]
+      web:
+        unit: [src/core/sharing/ShareGuestStops.test.ts, src/features/memory/components/ShareDialog.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts, src/features/memory/share.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          Component tests over the served stops; a stopped link's row has not been looked at in a real browser.
+  - id: a-stopped-link-is-fixed-in-place
+    text: >
+      A link a requirement stops comes back as the same link (its id, so its address and key) once its owner gives it
+      what it misses, from the row in every panel: a password, after which its guest meets the password prompt instead
+      of the 404; an end date within the days counted from when it was made, after which it is served. The edit is judged
+      as it leaves the link, so a write toward the requirement is accepted and one that still misses one is refused
+      (422, nothing written); switching it back on is never refused by a requirement. A link older than the lifetime
+      takes no end date and is renewed as a new link with a new address, which its row says (owner, 2026-10-16).
+    coverage:
+      backend:
+        integration: [ShareGuestStopsCoreSliceTest.aMemberGivesAStoppedLinkAPasswordAndItsGuestMeetsThePromptInsteadOfThe404, ShareGuestStopsCoreSliceTest.aMemberGivesAStoppedLinkAnEndDateWithinTheLifetimeAndTheSameLinkServesAgain, ShareGuestStopsCoreSliceTest.aWriteThatMeetsOneRequirementOfTwoIsRefusedAndOneThatMeetsBothServes, ShareGuestStopsCoreSliceTest.aLinkOlderThanTheLifetimeIsRefusedEveryEditAndIsRenewedAsANewLink, ShareGuestStopsCoreSliceTest.aSwitchedOffLinkThatMissesAPasswordIsSwitchedBackOnAndThenGivenOne]
+      web:
+        unit: [src/core/sharing/ShareGuestStops.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts, src/features/memory/components/ShareCreateDialog.test.ts, src/features/memory/components/ShareDialog.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          Component tests over the edit, with the share API stubbed at its module; the backend's slice test carries the
+          same link from stopped to served. Not run end to end in a real browser.
   - id: a-deleted-links-uploads-stay
     text: >
       Deleting a link keeps the photos its guests added: members' media page still serves the uploader guest's wrapped

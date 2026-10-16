@@ -32,7 +32,7 @@ describe('resealShareNames on the wire', () => {
         row = {
           shareId: body!.shareId, nodeId: NODE_ID, scopeId: SCOPE_ID, role: 'READ', sealedName: body!.sealedName,
           sealedShareKey: body!.sealedShareKey, sealedShareKeyEpoch: body!.sealedShareKeyEpoch, enabled: true, mine: false,
-          reissueRequired: false, deletable: false, newGuestsRefused: false, writeVerifierMissing: false,
+          reissueRequired: false, deletable: false, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
           createdAt: '2026-10-01T10:00:00Z',
         }
         return json({ shareId: body!.shareId }, 201)

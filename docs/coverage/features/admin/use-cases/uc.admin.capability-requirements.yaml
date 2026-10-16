@@ -46,6 +46,14 @@ acceptanceCriteria:
         integration: [CapabilityRequirementsSliceTest.aTenantsMaximumLifetimeRefusesALinkBeyondItInThatTenantOnly, CapabilityRequirementsSliceTest.clearingARequirementServesTheLinkItStoppedAgain]
       web:
         unit: [src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/linkRules.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
+  - id: stopped-link-named-in-the-share-list
+    text: A link a requirement stops is marked in its members' share list with the requirement it misses (a password; a lifetime with the days in effect, the strictest of both levels), from the predicate the guest gate runs; its owner gives the same link what it misses from the row (a write toward the requirement accepted, one still missing it refused), or renews it as a new link once the lifetime has passed since it was made (inbox #457).
+    coverage:
+      backend:
+        unit: [LinkRequirementsTest.missedNamesEveryRequirementALinkMissesThePasswordFirstAndTheRefusalIsItsFirst]
+        integration: [ShareGuestStopsCoreSliceTest.aMemberGivesAStoppedLinkAPasswordAndItsGuestMeetsThePromptInsteadOfThe404, ShareGuestStopsCoreSliceTest.aWriteThatMeetsOneRequirementOfTwoIsRefusedAndOneThatMeetsBothServes, ShareGuestStopsCoreSliceTest.aMissedRequirementIsNamedWithTheLifetimeInEffect, ShareGuestStopsCoreSliceTest.theListAndTheGuestGateAgreeOverTheMatrix]
+      web:
+        unit: [src/core/sharing/ShareGuestStops.test.ts, src/features/memory/components/ShareDialog.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts]
   - id: group-add-consent-required
     text: While being added to a group needs a yes, the owner's resolve says consent is required and an add without a sealed name key is 400 consent_required, whatever the member's own setting, in that tenant only; members already added stay; the profile says the space asks anyway.
     coverage:

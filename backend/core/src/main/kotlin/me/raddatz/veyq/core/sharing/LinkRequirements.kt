@@ -18,16 +18,32 @@ import java.time.Instant
  */
 object LinkRequirements {
 
-    /** The refusal a link with these properties meets, or null when it meets every requirement in effect. The password
-     *  first, so a link that misses both names the one an edit can always fix. */
-    fun refusal(requirements: Map<String, Int>, hasPassword: Boolean, createdAt: Instant, expiresAt: Instant?): HttpFailure? {
-        if (requirements[CapabilityRequirements.LINK_PASSWORD] != null && !hasPassword) return Failures.linkPasswordRequired
-        val maxDays = requirements[CapabilityRequirements.LINK_MAX_DAYS] ?: return null
-        if (expiresAt == null || expiresAt.isAfter(createdAt.plus(Duration.ofDays(maxDays.toLong())))) return Failures.linkExpiryRequired
-        return null
+    /** Every requirement in effect a link with these properties misses, the password first; empty when it meets them
+     *  all. The one rule: [refusal] is its first, and the guest gate's stops ([ShareGuestGate.guestStops]) are all of it. */
+    fun missed(requirements: Map<String, Int>, hasPassword: Boolean, createdAt: Instant, expiresAt: Instant?): List<Missed> {
+        val password = Missed.Password.takeIf { requirements[CapabilityRequirements.LINK_PASSWORD] != null && !hasPassword }
+        val lifetime = requirements[CapabilityRequirements.LINK_MAX_DAYS]?.let { maxDays ->
+            Missed.Lifetime(maxDays).takeIf { expiresAt == null || expiresAt.isAfter(createdAt.plus(Duration.ofDays(maxDays.toLong()))) }
+        }
+        return listOfNotNull(password, lifetime)
     }
 
-    /** Whether an existing [share] meets them — the guest gate's question; a link that does not answers as unknown. */
-    fun admits(requirements: Map<String, Int>, share: ShareEntity): Boolean =
-        refusal(requirements, share.pwVerifier != null, share.createdAt, share.expiresAt) == null
+    /** The refusal a link with these properties meets, or null when it meets every requirement in effect. The password
+     *  first, so a link that misses both names the one an edit can always fix. */
+    fun refusal(requirements: Map<String, Int>, hasPassword: Boolean, createdAt: Instant, expiresAt: Instant?): HttpFailure? =
+        when (missed(requirements, hasPassword, createdAt, expiresAt).firstOrNull()) {
+            null -> null
+            Missed.Password -> Failures.linkPasswordRequired
+            is Missed.Lifetime -> Failures.linkExpiryRequired
+        }
+
+    /** What an existing [share] misses — the guest gate's question; a link that misses anything answers as unknown. */
+    fun missed(requirements: Map<String, Int>, share: ShareEntity): List<Missed> =
+        missed(requirements, share.pwVerifier != null, share.createdAt, share.expiresAt)
+
+    /** One requirement a link misses: `linkPassword`, or `linkMaxDays` with the [Lifetime.maxDays] in effect. */
+    sealed interface Missed {
+        object Password : Missed
+        data class Lifetime(val maxDays: Int) : Missed
+    }
 }

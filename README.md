@@ -65,6 +65,11 @@ surface documents its own checks: [`backend/CLAUDE.md`](backend/CLAUDE.md) (`./g
 
 Found a vulnerability? See [SECURITY.md](SECURITY.md). Please do not open a public issue for it.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md): contributions stay AGPL-3.0-only, with a DCO sign-off on every commit and
+no CLA.
+
 ## License
 
 [AGPL-3.0-only](LICENSE). Brand assets are excluded — see [NOTICE](NOTICE).

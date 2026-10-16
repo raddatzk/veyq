@@ -36,7 +36,11 @@ register (ADR 0088 decision 13).
 3. The server stores the value and answers with the requirement as it now stands. From then on every client reads the
    effective value with the capability (`[{ id, …values }]`, ADR 0032 §2), the share dialogs ask for what is required,
    and every gate refuses what does not meet it.
-4. Clearing a requirement restores everything: a link it refused serves again, because nothing was written onto it.
+4. A member's share list marks every link a requirement stops and names the requirement (with the days in effect).
+   Its owner gives that same link what it misses from the row, and it serves again with its address and key; a link
+   older than the lifetime is renewed as a new link, and the row says so (inbox #457,
+   [uc.sharing.share-shared-scope](../../sharing/use-cases/uc.sharing.share-shared-scope.md) A8).
+5. Clearing a requirement restores everything: a link it refused serves again, because nothing was written onto it.
 
 ## Alternate / exception flows
 

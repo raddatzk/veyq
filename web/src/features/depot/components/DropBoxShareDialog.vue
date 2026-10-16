@@ -6,7 +6,10 @@
 // (core's `reactivateShare`, as the folder dialog does, inbox #394); a link a departed member may hold comes back only by
 // a renew (ADR 0075), which this dialog does not build — it says so and points at a new link. Not built here (the folder
 // dialog's extras): a label, a note, a renew; a password and an end date only where the space requires them (ADR 0088
-// decision 8, `core/sharing/linkRules.ts`), since a link without them would be refused.
+// decision 8, `core/sharing/linkRules.ts`), since a link without them would be refused. A link such a requirement stops
+// is fixed in place (inbox #457, owner 2026-10-16): its row says why (core's `ShareGuestStops`) and its owner gives the
+// SAME link the password or the end date it misses (`updateShare`), so its address and key stay; a link older than the
+// lifetime is replaced by a new one from the form below, since no end date fits it.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
@@ -16,13 +19,15 @@ import DatePicker from 'primevue/datepicker'
 import Message from 'primevue/message'
 import type { NodeShareDialogProps } from '../../../core/applications/registry'
 import {
-  deleteShare, isReissueRequired, listSharesFor, reactivateShare, revokeShare, type ManagedShare,
+  deleteShare, isReissueRequired, listSharesFor, reactivateShare, readShareName, readShareNote, revokeShare, updateShare,
+  type ManagedShare,
 } from '../../../core/sharing/manageShares'
 import { buildShareLink, recoverShareLink } from '../../../core/sharing/shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
 import { mintDropBoxLink } from '../dropBox'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { lastExpiryDay, linkRules } from '../../../core/sharing/linkRules'
+import ShareGuestStops from '../../../core/sharing/ShareGuestStops.vue'
 
 const props = defineProps<NodeShareDialogProps>()
 const emit = defineEmits<{ close: [] }>()
@@ -119,6 +124,41 @@ const switchOn = (shareId: string) =>
     }
   })
 
+/** The link whose missed requirement its owner is fixing in place (inbox #457): the same link, address and key kept. */
+const fixing = ref<ManagedShare | null>(null)
+const fixPassword = ref('')
+const fixExpiresAt = ref<Date | null>(null)
+/** The fix only for the owner of a link whose recovery copy re-opens `K_share` (a password is sealed under it). */
+const canFix = (s: ManagedShare) => s.mine && !!s.sealedShareKey
+const fixNeedsPassword = computed(() => !!fixing.value?.guestStops.some((stop) => stop.reason === 'linkPassword'))
+/** The lifetime the server named (its strictest), else the one this client holds. */
+const fixDays = computed(() => fixing.value?.guestStops.find((stop) => stop.reason === 'linkMaxDays')?.maxDays ?? rules.maxDays)
+const fixNeedsExpiry = computed(
+  () => !!fixing.value?.guestStops.some((stop) => stop.reason === 'linkMaxDays' || stop.reason === 'expired'),
+)
+/** Counted from when the link was made, as the server measures it: the last day an end date may fall on. */
+const fixMaxExpiry = computed(() => (fixing.value ? lastExpiryDay(fixDays.value, fixing.value.createdAt) : null))
+const fixMissing = computed(
+  () => (fixNeedsPassword.value && fixPassword.value.trim().length < MIN_PW) || (fixNeedsExpiry.value && !fixExpiresAt.value),
+)
+function openFix(s: ManagedShare) {
+  fixing.value = s
+  fixPassword.value = ''
+  fixExpiresAt.value = fixMaxExpiry.value
+}
+const saveFix = () =>
+  run(async () => {
+    const s = fixing.value!
+    const address = { scopeId: props.scopeId, nodeId: props.nodeId, shareId: s.shareId }
+    // A full replace of note, label and end date: what the link holds is sent back unchanged beside the fix.
+    const note = readShareNote(props.epochs, address, s, s.sealedNote)
+    const name = readShareName(props.epochs, address, s, s.sealedShareName)
+    const expiry = fixNeedsExpiry.value && fixExpiresAt.value ? endOfDay(fixExpiresAt.value) : s.expiresAt
+    await updateShare(address, props.epochs, s, note, name, expiry, undefined, fixNeedsPassword.value ? { set: fixPassword.value } : undefined)
+    fixing.value = null
+    fixPassword.value = ''
+  })
+
 /** End of the picked local day — the link works THROUGH that day, as the core dialogs save it. */
 function endOfDay(d: Date): Date {
   const e = new Date(d)
@@ -153,6 +193,15 @@ async function copy(text: string, id: string) {
               <span class="veyq-badge muted dropbox-link-off">{{ t('depot.dropBox.shareOff') }}</span>
               <template v-if="row.share.reissueRequired"> {{ t('depot.dropBox.shareReissueHint') }}</template>
             </span>
+            <!-- inbox #457: why a guest gets no link, and for a missed requirement the fix on this same link. No renew:
+                 a link older than the lifetime is replaced by a new one from the form below. -->
+            <ShareGuestStops
+              :stops="row.share.guestStops"
+              :created-at="row.share.createdAt"
+              :can-edit="canFix(row.share)"
+              :can-renew="false"
+              @edit="openFix(row.share)"
+            />
           </span>
           <span class="veyq-action-group veyq-action-group-icons">
             <Button
@@ -204,6 +253,32 @@ async function copy(text: string, id: string) {
           </span>
         </li>
       </ul>
+      <div v-if="fixing" class="veyq-form dropbox-fix">
+        <strong>{{ t('share.guestStops.fixTitle') }}</strong>
+        <template v-if="fixNeedsPassword">
+          <label for="dropbox-fix-password">{{ t('share.passwordLabel') }}</label>
+          <InputText id="dropbox-fix-password" v-model="fixPassword" type="password" autocomplete="new-password" :disabled="busy" />
+          <small class="veyq-form-copy">{{ t('share.passwordSectionHint', { min: MIN_PW }) }}</small>
+        </template>
+        <template v-if="fixNeedsExpiry">
+          <label for="dropbox-fix-expiry">{{ t('share.expiryLabel') }}</label>
+          <DatePicker
+            id="dropbox-fix-expiry"
+            v-model="fixExpiresAt"
+            :min-date="minExpiry"
+            :max-date="fixMaxExpiry ?? undefined"
+            date-format="yy-mm-dd"
+            show-icon
+            icon-display="input"
+            :disabled="busy"
+            fluid
+          />
+        </template>
+        <div class="veyq-dialog-action-row">
+          <Button type="button" :label="t('common.cancel')" severity="secondary" outlined :disabled="busy" @click="fixing = null" />
+          <Button type="button" class="dropbox-fix-save" :label="t('common.save')" icon="pi pi-check" :loading="busy" :disabled="fixMissing" @click="saveFix" />
+        </div>
+      </div>
       <template v-if="rules.passwordRequired">
         <label for="dropbox-share-password">{{ t('share.passwordLabel') }}</label>
         <InputText id="dropbox-share-password" v-model="password" type="password" autocomplete="new-password" :disabled="busy" />

@@ -310,3 +310,48 @@ describe("ShareCreateDialog — the note's acceptance switch", () => {
     expect(w.find(`[aria-label="${t('share.passwordSection')}"]`).attributes('disabled')).toBeUndefined()
   })
 })
+
+// inbox #457 (owner, 2026-10-16): the row's "Add a password" opens this dialog's edit of a link a password requirement
+// stopped; the edit holds the password on, waits for one, and sets it with updateShare on that same link.
+describe('ShareCreateDialog — a stopped link gets its password on the same link (#457)', () => {
+  const typing = {
+    ...stubs,
+    InputText: {
+      props: ['modelValue'],
+      emits: ['update:modelValue'],
+      template: '<input v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+    },
+  }
+
+  it('locks the password on, saves nothing without one, then sets it on that link', async () => {
+    setTenantCapabilities([{ id: 'core.public-shares', linkPassword: true }])
+    try {
+      updateShare.mockClear()
+      createShare.mockClear()
+      // The edit handed over as the other mounts here hand it (a row built by `editShareWith`, not a whole ManagedShare).
+      const edit: Record<string, unknown> = { editShare: editShareWith({ shareId: 's-stopped', guestStops: [{ reason: 'linkPassword' }] }) }
+      const w = mount(ShareCreateDialog, {
+        props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...edit },
+        global: { plugins: [realI18n()], stubs: typing },
+      })
+      await flushPromises()
+      expect(w.find(`[aria-label="${t('share.passwordSection')}"]`).attributes('disabled')).toBeDefined()
+      const save = () => w.findAll('button').find((b) => b.text() === t('share.noteSave'))!
+      await save().trigger('click')
+      await flushPromises()
+      expect(updateShare, 'no save without a password').not.toHaveBeenCalled()
+
+      await w.find('#share-create-password').setValue('a long new password')
+      await save().trigger('click')
+      await flushPromises()
+      expect(updateShare).toHaveBeenCalledTimes(1)
+      const [address, , copy, , , , , passwordChange] = updateShare.mock.calls[0]!
+      expect(address).toMatchObject({ shareId: 's-stopped' })
+      expect(copy).toMatchObject({ shareId: 's-stopped' })
+      expect(passwordChange).toEqual({ set: 'a long new password' })
+      expect(createShare).not.toHaveBeenCalled()
+    } finally {
+      setTenantCapabilities(null)
+    }
+  })
+})

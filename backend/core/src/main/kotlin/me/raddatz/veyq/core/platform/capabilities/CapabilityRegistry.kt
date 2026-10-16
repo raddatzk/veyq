@@ -53,6 +53,18 @@ class CapabilityRegistry(
     fun isActiveInScope(id: String, scopeId: String): Boolean = isActive(id, ScopeEntity.findById(scopeId)?.tenantId)
 
     /**
+     * Each switch that keeps [id] off for [tenantId] (the instance level alone when null): every entry on its path that
+     * is off, once per level that has it off, the root first and the instance level before the tenant's — empty exactly
+     * when an advertised [id] is active. [isActive] is this list being empty, so the reason a member's share list
+     * names (inbox #457) and the gate cannot disagree.
+     */
+    fun offSwitches(id: String, tenantId: String?): List<OffSwitch> =
+        offSets(tenantId).let { (off, tenantOff) -> offSwitches(id, off, tenantOff) }
+
+    /** [offSwitches] for the tenant [scopeId] lives in, as [isActiveInScope] asks it. */
+    fun offSwitchesInScope(id: String, scopeId: String): List<OffSwitch> = offSwitches(id, ScopeEntity.findById(scopeId)?.tenantId)
+
+    /**
      * Every entry in [CapabilityIds.ADVERTISED] order with its own switch and its effective state, both from ONE read of
      * [switches] — the register as the Server Owner reads it. A child of a switched-off parent is `off = false`,
      * `effective = false`: its own switch survives the parent's.
@@ -129,8 +141,16 @@ class CapabilityRegistry(
     }
 
     private fun isActive(id: String, off: Set<String>, tenantOff: Set<String>): Boolean =
-        id in CapabilityIds.ADVERTISED &&
-            selfAndAncestors(id).none { it in off || (it in tenantOff && it in CapabilityIds.TENANT_SWITCHABLE) }
+        id in CapabilityIds.ADVERTISED && offSwitches(id, off, tenantOff).isEmpty()
+
+    /** The one rule behind [isActive] and [offSwitches]: a tenant's switch counts only on an entry it may switch. */
+    private fun offSwitches(id: String, off: Set<String>, tenantOff: Set<String>): List<OffSwitch> =
+        selfAndAncestors(id).reversed().flatMap { entry ->
+            listOfNotNull(
+                OffSwitch(SwitchLevel.INSTANCE, entry).takeIf { entry in off },
+                OffSwitch(SwitchLevel.TENANT, entry).takeIf { entry in tenantOff && entry in CapabilityIds.TENANT_SWITCHABLE },
+            )
+        }
 
     /** [id] and each of its dotted prefixes that is an entry: `a.b.c` → `a.b.c`, `a.b` (and `a` if it were one). */
     private fun selfAndAncestors(id: String): List<String> {
@@ -139,6 +159,12 @@ class CapabilityRegistry(
             .filter { it in CapabilityIds.ADVERTISED }
     }
 }
+
+/** Who switched an entry off: the Server Owner for the instance, or a tenant owner for their tenant (ADR 0088 decision 12). */
+enum class SwitchLevel { INSTANCE, TENANT }
+
+/** One entry [capabilityId] switched off at [level] — a reason an id below or at it is not active. */
+data class OffSwitch(val level: SwitchLevel, val capabilityId: String)
 
 /** One register entry's state: [off] is its own switch, [effective] the AND along its path (what the gates follow). */
 data class CapabilityState(val id: String, val off: Boolean, val effective: Boolean)

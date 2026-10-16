@@ -67,6 +67,10 @@ sequenceDiagram
   the counter is touched) and the tokenless challenge-fetch never counts. The verifier is never served.
 - **A3 — revoked / expired:** `404` as ever — the password gate sits **after** the enabled/expiry check; a revoked
   share is non-enumerable regardless of the password.
+- **A-req — the space now requires a password:** a link made without one stops serving guests at once (ADR 0088
+  decision 8), and the manage list says so on its row. Its owner adds a password from that row; the link keeps its
+  address and key, and its guests meet the password prompt instead of the unknown link's `404`
+  ([uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) A8, inbox #457).
 - **A4 — curator forgets the password:** they **reveal** it from the manage list (recovering `K_share` from its copy
   under `K_SC`), or **change** it — they are never locked out of their own share. The reveal is for the Memory's
   scope members only: the holder of another link to the same Memory — who holds `K_node` — cannot open it even with
