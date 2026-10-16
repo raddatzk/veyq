@@ -3,7 +3,8 @@
 // date (read-modify-write, operator-blind). The map + geocoding are gated behind a personal two-stage opt-in
 // (ADR 0016/0018); the position is the medoid of the Memory's photo GPS (`auto`, self-heals as media arrive) or a
 // hand-dropped pin (`fixed`). Pure place maths + geocoding live in `./memoryLocation` + `./geocode`; this owns the
-// reactive wiring (editor/consent state, the header label, save + the geocoding self-heal).
+// reactive wiring (editor/consent state, the header label, save + the geocoding self-heal). On a server without the
+// map (`memories.map` off) there is nothing to consent to: the editor opens without a map (inbox #458).
 import { computed, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -68,9 +69,9 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
   /** Open the location editor — but first gate on the personal maps opt-in (no consent ⇒ ask, no external calls). */
   function openLocationEditor() {
     if (!ctx.memoryKey()) return
-    // No map service on this server (`memories.map`, ADR 0088 decision 7): nothing to consent to, no editor to open.
-    if (!mapsOffered.value) return
-    if (mapsAvailable.value) locationEditorOpen.value = true
+    // No map service on this server (`memories.map`, ADR 0088 decision 7): nothing to consent to, so the editor opens
+    // without a map and the place is named by hand (inbox #458).
+    if (!mapsOffered.value || mapsAvailable.value) locationEditorOpen.value = true
     else consentDialogOpen.value = true
   }
 

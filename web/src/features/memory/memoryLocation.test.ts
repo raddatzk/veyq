@@ -18,7 +18,7 @@ import {
   type MemoryLocation,
 } from './memoryLocation'
 import { unsealMemoryDate, type MemoryDate } from './memoryDate'
-import { sealNodeMeta } from '../../core/node/nodeMeta'
+import { sealNodeMeta, unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { MediaItem, MediaMeta } from './media'
 import { contentApi } from '../../api/client'
 import { fakeApi, stubApi } from '../../test/apiMock'
@@ -179,6 +179,17 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
     expect(updateNode.mock.calls[0][0].updateNodeRequest.wrappedMeta).toBe(sealed)
     expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(loc)
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(date) // date survived
+  })
+
+  it('a place that is a name only (inbox #458) round-trips the sealed v1 format unchanged, the date beside it', async () => {
+    mockUpdate()
+    const nameOnly: MemoryLocation = { name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' }
+    const withDate = sealNodeMeta(nodeKey, NODE, { v: 1, date })
+    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, nameOnly, { wrappedMeta: withDate, metaRevision: 0 })
+
+    expect(unsealNodeMeta(nodeKey, NODE, sealed)).toMatchObject({ v: 1, date, location: { name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' } })
+    expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual({ ...nameOnly, derived: undefined, nameAnchor: undefined })
+    expect(isLocationPending(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed }))).toBe(false) // a set place, not a pending one
   })
 
   it('removing the location (null) keeps the date and drops only the place', async () => {

@@ -1,6 +1,7 @@
 {
   "name": "veyq-site",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "//": "The published documentation (ADR 0087): Use, Run and Security, built by Astro + Starlight to static files in dist/. Deliberately OUTSIDE the root npm workspace, with its own package-lock.json: the workspace exists for @veyq/crypto alone, and the site shares no code with web/ or admin-web/. Installed through the same deprecated-package gate as every npm package: `python3 scripts/npm_ci_no_deprecated.py --package-dir site` from the repo root.",
   "scripts": {

@@ -1,6 +1,7 @@
 {
   "name": "veyq",
   "private": true,
+  "license": "AGPL-3.0-only",
   "//": "Repo-root manifest for ONE reason: npm workspaces, so `web/` and `admin-web/` resolve the same `@veyq/crypto` on disk instead of each carrying a copy (ADR 0065 — duplicating the crypto suite would be a security defect, not a maintenance nuisance). It is deliberately not a build orchestrator: each surface keeps its own `npm run check` and is proven on its own, and nothing here aggregates them. Adding a workspace is the whole feature set.",
   "workspaces": [
     "packages/crypto",

@@ -228,9 +228,14 @@ both off a place still works, named by hand. The user's own consent to the two
   (and the tiles' `serviceAttribution`), the web reads only that, and the served CSP names an origin only while its
   entry is active at the instance level: the origins are a snapshot recomputed after each write, because the header is
   written on the event loop, so a tenant's own switch acts through its set and not through the policy. `memories` is
-  the first application root of the tree. Not built: a place named by hand with no map at all (the location editor
-  needs the tiles, so without `memories.map` no place is set; inbox #458), and admin-web's own policy, a static `<meta>`, which
-  keeps the default HIBP origin.
+  the first application root of the tree. **A place works with both off** (inbox #458, measured:
+  `MemoryLocationEditor`, `useMemoryLocation.openLocationEditor`): without `memories.map` the location editor opens
+  with no map and no consent dialog, takes a typed name and keeps the position the photos' GPS gives (`auto`, the
+  medoid), a pin set earlier, or none — a place that is a name only, which the sealed `location` always allowed
+  (`derived` is optional in the v1 shape, so no new version) and which every map skips. Without the map the editor
+  asks no geocoder even where `memories.places` is on, because the one consent the geocoder rides on is asked only
+  with the map (ADR 0018); `memories.places` alone still names a photo in the lightbox for a member who consented
+  earlier. Not built: admin-web's own policy, a static `<meta>`, which keeps the default HIBP origin.
 - **Not built:** configuration as code (#444). The off states have not yet been seen in a real browser, nor has a
   share list's row of a stopped link.
 - **The two enforcement gaps of the flat ids are closed.** The server gated `core.group-space` only at group creation

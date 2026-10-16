@@ -1225,8 +1225,8 @@ def _site_sources(page: pathlib.Path) -> list[str]:
 def forge_wiki_pair_declares_fewer(root: pathlib.Path) -> str:
     # The page is read out of the tree, not named: any German page whose frontmatter declares two docs or more.
     for page in sorted((root / SITE_PAGES / "de").rglob("*.md")):
-        if page.name == "index.md" and page.parent == root / SITE_PAGES / "de":
-            continue  # the landing page declares nothing
+        if page.name == "start.md" and page.parent == root / SITE_PAGES / "de":
+            continue  # the Use start page declares nothing
         sources = _site_sources(page)
         if len(sources) >= 2:
             page.write_text(_sub(page.read_text(), f"\n  - {sources[-1]}\n", "\n"))
@@ -1242,8 +1242,8 @@ def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
     pages = (root / SITE_PAGES)
     english = (p for p in pages.rglob("*") if p.suffix in {".md", ".mdx"} and not p.relative_to(pages).parts[0] == "de")
     for page in sorted(english):
-        if page.relative_to(pages).as_posix() == "index.md":
-            continue  # the landing page declares nothing
+        if page.relative_to(pages).as_posix() == "start.md":
+            continue  # the Use start page declares nothing
         for s in _site_sources(page):
             doc = root / s
             if not (s.startswith("docs/") and doc.is_file()):

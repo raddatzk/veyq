@@ -49,7 +49,7 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PAGES = ROOT / "site" / "src" / "content" / "docs"
 DE = "de"  # the one translation locale; English is the root
-LANDING = {"index.md", "de/index.md"}  # the landing pair lists the pages and speaks for no doc
+LANDING = {"start.md", "de/start.md"}  # the Use start pair lists the pages and speaks for no doc
 ENGLISH_ONLY = ("run/", "security/")  # areas English by design (ADR 0087 §1): Run and Security
 
 FRONTMATTER = re.compile(r"\A---\n(?P<yaml>.*?)\n---\n", re.S)

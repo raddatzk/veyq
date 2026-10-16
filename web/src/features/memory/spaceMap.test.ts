@@ -37,6 +37,8 @@ const located = (lat: number, lng: number): MemoryLocation => ({
 })
 // A pending auto place: armed at creation, no geotagged media yet → no `derived` position.
 const pendingAuto: MemoryLocation = { name: '', nameSource: 'geocoded', derivedMode: 'auto' }
+// A place that is a name only (inbox #458: set on a server without a map, no photo carrying GPS) → no position.
+const nameOnly: MemoryLocation = { name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' }
 
 /** Build a content node (MEMORY/CHAPTER): mint a K_node, wrap it under `parentKey`, seal the location under it —
  *  each bound to the node (the same contexts tree.ts / nodeMeta.ts open with). `metaFor` seals the meta as if it
@@ -76,13 +78,14 @@ describe('collectLocatedPins', () => {
   const memB = content('memB', MEMORY_KIND, 'fB', fB.key, { location: located(3, 3) })
   const memRoot = content('memRoot', MEMORY_KIND, null, scopeKey, { location: located(4, 4) })
   const memPending = content('memPending', MEMORY_KIND, null, scopeKey, { location: pendingAuto })
+  const memNameOnly = content('memNameOnly', MEMORY_KIND, null, scopeKey, { location: nameOnly })
   const memLocked = content('memLocked', MEMORY_KIND, null, scopeKey, {
     location: located(9, 9),
     wrapUnder: v1.randomBytes(32), // K_node sealed under a key we don't have → nodeContentKey can't chain it
   })
   const memMoved = content('memMoved', MEMORY_KIND, null, scopeKey, { location: located(7, 7), metaFor: 'memRoot' })
   const tree: TreeNode[] = [
-    fA.node, fB.node, memA.node, chapA.node, memB.node, memRoot.node, memPending.node, memLocked.node, memMoved.node,
+    fA.node, fB.node, memA.node, chapA.node, memB.node, memRoot.node, memPending.node, memNameOnly.node, memLocked.node, memMoved.node,
   ]
 
   it('root (null) pins every located MEMORY/CHAPTER across the whole tree', () => {
@@ -104,6 +107,10 @@ describe('collectLocatedPins', () => {
 
   it('skips a pending auto place (no derived ⇒ no pin)', () => {
     expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null))).not.toContain('memPending')
+  })
+
+  it('skips a place that is a name only (no derived ⇒ no pin, never a pin at 0,0)', () => {
+    expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null))).not.toContain('memNameOnly')
   })
 
   it('skips a node whose key cannot be chained (best-effort, never a broken map)', () => {
