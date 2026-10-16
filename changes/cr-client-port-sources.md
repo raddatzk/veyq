@@ -150,7 +150,7 @@ through the recipe's Traefik. This lands **before** the moderation CR, which is 
   `{client_port}` and Cloudflare's `cf.edge.client_port`. Envoy's `%DOWNSTREAM_DIRECT_REMOTE_PORT%` header route is
   named only if phase 4's measure-first step confirms it; Azure's IPv6 form stays R4's caveat.
 
-## Measured at refine (substrate: worktree `agent-a175d172daff841cf` at `6b67a082`, clean)
+## Measured at refine (substrate: worktree `agent-a175d172daff841cf` at `6b67a082`, clean; ADR 0093 lines re-measured after merging `8cadad88`)
 
 - **M10 — Vert.x 4.5.27 / Netty 4.1.133 / Quarkus 3.36.0 sources** (from the Gradle cache's `-sources.jar`s):
   - `HAProxyMessageCompletionHandler.decode`: a TCP4/TCP6 header sets **both** `REMOTE_ADDRESS_OVERRIDE` (source) and
@@ -193,7 +193,7 @@ a `PROXY TCP4 …` line arrives as a malformed request line and is answered 400 
 | Guards that anchor on what changes | `grep -ln -i -e 'x-forwarded-for' -e 'proxy-protocol' -e 'localplugins' -e 'clientPort' -e 'readinessProbe' -e 'port: http' scripts/*.py` | `validate_lookup_single_home.py` (rule D, extended D7). `chart_meta_check.py` names probes nowhere today (gains the D5 assertion). `validate_compose_posture.py` gains rule 5. `release_assets.py`/`validate_release_identity.py` pick the two new files up by derivation, unedited |
 | The rendered middleware | `grep -n 'INERT\|fun render\|router(' backend/core/src/main/kotlin/me/raddatz/veyq/core/tenant/TraefikFileIngressSink.kt` and its tests `ls backend/core/src/test/kotlin/me/raddatz/veyq/core/tenant/ \| grep -i traefik` | **changes** (D6) |
 | Chart probes and values | `grep -n 'port: http\|trustedProxies' charts/veyq/templates/app-deployment.yaml`; `grep -n 'trustedProxies' charts/veyq/values.yaml charts/veyq/values.schema.json`; `ls charts/veyq/ci/` | probes conditional (D5); `app.clientPort` beside `trustedProxies`; a ci values file with `proxyProtocol` so chart_meta_check renders that branch |
-| Prose that says the port is unknown on Compose / that the socket is the address | `git grep -n -i -e 'port is unknown' -e 'port unknown' -e 'unknown (M6)' -e 'write none' -e 'writes none' -e 'adds no port' -e 'until a second source' -e 'inbox #472' -e '(inbox #472)' -- docs site/src/content/docs charts infra backend/core/src/main ':!docs/inbox.md'` | ADR 0094 `:4`, `:58`, `:79`, `:88`, `:136`; ADR 0093 `:229-234`, `:457-463` (open legal question 4); `run/networking.md:104`, `:113`. Each **edited** in phase 4 |
+| Prose that says the port is unknown on Compose / that the socket is the address | `git grep -n -i -e 'port is unknown' -e 'port unknown' -e 'unknown (M6)' -e 'write none' -e 'writes none' -e 'adds no port' -e 'until a second source' -e 'inbox #472' -e '(inbox #472)' -- docs site/src/content/docs charts infra backend/core/src/main ':!docs/inbox.md'` | ADR 0094 `:4`, `:58`, `:79`, `:88`, `:136`; ADR 0093 `:237-242`, `:465-471` (open legal question 4; re-measured after merging `8cadad88`); `run/networking.md:104`, `:113`. Each **edited** in phase 4 |
 | Site pages that speak for the docs this CR edits | `git grep -ln -e 0094-a-clients -e 0093-a-report -e uc.admin.admin-channel -e cc.security.rate-limit -- site/src/content/docs` | `run/networking.md`, `run/configuration.md` **edited**; `run/operations.md` (the probe, `:13-21`) and `run/kubernetes.md` **edited**; `run/hardening.md`, `run/first-run.mdx`, `security/known-limitations.md`, `security/threat-model.md` **checked, unchanged unless the sweep finds a port claim** |
 
 ## Open for the owner
@@ -342,7 +342,7 @@ a `PROXY TCP4 …` line arrives as a malformed request line and is answered 400 
     residual; Rejected alternatives gain "detect the source" and, if O1 (a), the echo; § For the moderation CR gains the
     end-to-end port assertion; M10–M12 into the ledger; the status line.
   - **ADR 0093:** § 10's port sentence and open legal question 4 narrowed: where the port comes from is decided
-    (ADR 0094 decision 7); what stays open is legal, not technical. `:229-234` likewise.
+    (ADR 0094 decision 7); what stays open is legal, not technical. `:237-242` likewise.
   - **cc.security.rate-limit § Verified by:** B1–B5 by method name. **uc.admin.admin-channel:** step 3 says "by its
     real socket, whatever the PROXY protocol states"; a new acceptance criterion
     `a-proxy-header-cannot-name-the-admin-listener` with B4's method in its coverage YAML.
