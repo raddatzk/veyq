@@ -90,7 +90,7 @@ components:
       # no single-item read to re-GET: the conflict body IS the re-read.
       type: object
       description: >
-        A refused write. With `code: stale_version` the blob moved since the caller read it: nothing was written,
+        A refused write. With `code: stale_revision` the blob moved since the caller read it: nothing was written,
         and the body carries the blob's current `wrappedMeta` (null when it has none) and its `metaRevision` — the
         base the caller re-applies its own change to before retrying (ADR 0077). Any other 409 code
         (`scope_deleting`, `slug_taken`) carries `code` alone. Operator-blind: the ciphertext is what the caller
@@ -102,7 +102,7 @@ components:
           type: string
           description: Stable, client-localizable error code.
           maxLength: 64
-          example: stale_version
+          example: stale_revision
         message:
           x-veyq-visibility: public
           type: [string, "null"]
@@ -111,7 +111,7 @@ components:
           example: null
         wrappedMeta:
           type: [string, "null"]
-          description: The blob's current sealed value (opaque base64), present with `stale_version`; null when it has none.
+          description: The blob's current sealed value (opaque base64), present with `stale_revision`; null when it has none.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -119,7 +119,7 @@ components:
           x-veyq-visibility: structure
           type: [integer, "null"]
           format: int64
-          description: The blob's current revision, present with `stale_version` — a retry states this one.
+          description: The blob's current revision, present with `stale_revision` — a retry states this one.
           example: 4
 
     TenantStatus:

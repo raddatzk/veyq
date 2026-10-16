@@ -13,16 +13,18 @@ with a `mode` of one of two values:
     request schema, resolved through `$ref` across spec files, declared once); the field is `required`, or the
     declaration's `requiredWith` names the property — or the list of properties — whose presence makes it required
     (the server enforces that half). The operation's `409` response — inline or a `$ref` into `_common` — names each
-    declaration's `conflictCode` (default `stale_version`) in its description or example.
+    declaration's `conflictCode` (default `stale_revision`) in its description or example. A declared field is
+    named as a revision (`revision` or `…Revision`), never as a version: ADR 0086 keeps "version" for
+    compatibility, so a counter that says version is a word error the contract would carry onto every client.
   - `last-writer-wins` — with a non-empty `reason`: why no revision is needed (one writer, or the write carries
     only what its writer typed).
 
 The reverse angle: any non-GET operation whose request schema carries a counter-shaped property (`revision` or
 `version`, or a name ending in `Revision` or `Version`) must be declared `revision` with that property as the `field`
 of one of its declarations — subject or not, so a revision-checked write outside the verb list is still held to its
-wire form, and a second counter added beside a declared one is not carried silently. Both words, because ADR 0086
-names a concurrency counter a revision (`metaRevision`, `placementRevision`) while identity pins, device
-registration and the terms still carry a bare `version`; a shape that knew one word would be blind to the other.
+wire form, and a second counter added beside a declared one is not carried silently. The shape keeps reading both
+words although every counter now says revision (inbox #452): a new counter named version must still be found, so the
+naming rule above can refuse it rather than the reverse angle never seeing it.
 
 The failure names the list — spec, operation, rule — never a count.
 
@@ -34,7 +36,9 @@ second writer lose data here?" was never asked per operation. Its first run, bef
 named the 20 subject operations and `acceptTenantTerms` (a POST outside the verb list carrying `version`).
 When inbox #437 renamed the node counters to revisions, the shape still read `Version` only: run on the renamed
 contract it was red on `removeNodeCover` (a write the counter alone makes a subject), and an undeclared
-`placementRevision` would have passed unseen. The shape learned `Revision` in the same change.
+`placementRevision` would have passed unseen. The shape learned `Revision` in the same change. When inbox #452
+renamed the rest (the pins, the register, the terms), nothing held the word itself: a counter could be re-added
+as `version`, consistently declared, and pass — so the naming rule came with it.
 
 **Its limit.** It proves a **declaration** and its **wire form**, never behaviour: that the server actually
 compares the revision is proven by the red-first slice tests (`NodesSliceTest`, `MediaSliceTest`,
@@ -46,7 +50,7 @@ method alone (PUT/PATCH), which misses six POST edits (`renameGroup`, `setScopeI
 was one `field` per operation until ADR 0080 gave `updateNode` a second, independent counter (`placementRevision`
 beside `metaRevision`); a single slot would have forced one of them undeclared, so `fields` became a list with a
 conflict code each. Its bite cases are `validate_guard_gaps.py` 59–61 (a declaration dropped, a second
-counter-shaped field undeclared, a conflict code the `409` does not name).
+counter-shaped field undeclared, a conflict code the `409` does not name) and 82 (a declared field named version).
 """
 from __future__ import annotations
 
@@ -64,7 +68,8 @@ API = contract_specs.API
 EDIT_VERB = re.compile(r"^(rename|set|update|change|commit|move|put)[A-Z]")
 COUNTER_SHAPED = re.compile(r"^(revision|version|[a-z][A-Za-z0-9]*(Revision|Version))$")
 MODES = ("revision", "last-writer-wins")
-DEFAULT_CONFLICT = "stale_version"
+VERSION_SHAPED = re.compile(r"^(version|[a-z][A-Za-z0-9]*Version)$")
+DEFAULT_CONFLICT = "stale_revision"
 METHODS = ("get", "put", "post", "patch", "delete")
 
 
@@ -136,6 +141,9 @@ def check_declaration(
     if field not in props:
         return [f"{where}: revision field {field!r} is not a property of the request schema"]
     declared.append(field)
+    if VERSION_SHAPED.match(field):
+        errors.append(f"{where}: revision field {field!r} is named as a version — a counter is a revision "
+                      f"(ADR 0086)")
     if not is_integer(props[field]):
         errors.append(f"{where}: revision field {field!r} is not an integer")
     with_ = entry.get("requiredWith")
