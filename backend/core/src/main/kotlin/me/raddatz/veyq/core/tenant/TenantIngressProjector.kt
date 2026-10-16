@@ -16,11 +16,11 @@ import org.jboss.logging.Logger
  *
  * **This class is the DB-facing half only.** *Which* domains route is decided here and is identical on every
  * deployment target; *how* a proxy is told about them is a [TenantIngressSink] — a Traefik file on
- * docker-compose, Kubernetes `Ingress` objects on ADR 0064's chart. This file knows neither.
+ * docker-compose, Kubernetes Gateway API objects on ADR 0064's chart. This file knows neither.
  *
  * **Full regenerate, never an incremental patch.** [regenerate] recomputes the whole routable set from the
  * table every time and hands the sink the complete answer, which is what makes the projection self-healing: a
- * wiped volume, a fresh Traefik container, a file some operator edited, an `Ingress` somebody deleted by hand
+ * wiped volume, a fresh Traefik container, a file some operator edited, an `HTTPRoute` somebody deleted by hand
  * all repair themselves on the next call — and one runs at [onStartup], before this instance serves traffic.
  * An incremental "add one router" would leave every one of those states permanently wrong, with nothing that
  * ever notices.
@@ -65,7 +65,7 @@ class TenantIngressProjector(config: VeyqConfig, private val sink: TenantIngress
         val routable = domains
             .map { it.lowercase() }
             // Routed from configuration on both targets — by the Traefik sink's own bootstrap pair, by the chart's
-            // Ingress on Kubernetes. A row carrying it again would be a second router on one Host.
+            // HTTPRoute on Kubernetes. A row carrying it again would be a second router on one Host.
             .filter { it != bootstrapDomain }
             .filter { isRoutableHostname(it) }
             .distinct()
@@ -84,7 +84,7 @@ class TenantIngressProjector(config: VeyqConfig, private val sink: TenantIngress
          * at the boundary. This is the point where a stored string becomes **proxy configuration**: a row that
          * predates that validation, or arrives by any path that skips it, is otherwise handed to a sink that
          * will interpolate it — into a Traefik `Host(` matcher, where a backtick closes the rule, or into an
-         * `Ingress` rule host and object name, where an illegal character makes the API server reject the
+         * `HTTPRoute`/listener hostname and object name, where an illegal character makes the API server reject the
          * object and, on a reconcile whose failure boundary is the whole call, strands every *other* tenant's
          * routing too. Cheaper to drop the row than to trust every past and future writer of the column.
          *

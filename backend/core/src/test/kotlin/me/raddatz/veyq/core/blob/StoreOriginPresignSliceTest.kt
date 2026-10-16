@@ -22,7 +22,7 @@ import java.util.UUID
 
 /**
  * [me.raddatz.veyq.core.config.VeyqConfig.SigningMode.STORE_ORIGIN] over a **real request** (ADR 0067 Decision 5):
- * a store reached at an origin of its own — ADR 0064's Kubernetes Ingress host, a tenant on their own bucket —
+ * a store reached at an origin of its own — ADR 0064's Kubernetes store host, a tenant on their own bucket —
  * is signed for that one origin, for every tenant and for every `Host`.
  *
  * **Why this cannot be a unit test, given [me.raddatz.veyq.core.blobstore.S3BlobStorePresigningTest] already

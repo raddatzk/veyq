@@ -23,7 +23,7 @@ import java.util.logging.Logger
  * exactly the failure TLS-as-precondition names.
  *
  * `@WithKubernetesTestServer` is here so the namespace IS resolvable — the disabled sink must be disabled for
- * the missing secret and for nothing else. [KubernetesIngressTlsSharedTest] is the positive control: the same
+ * the missing secret and for nothing else. [KubernetesGatewayTlsSharedTest] is the positive control: the same
  * server and mode with the secret named, and there the sink is enabled.
  *
  * **The loudness is asserted by re-running the decision, not by capturing the boot.** The producer runs once,
@@ -32,9 +32,9 @@ import java.util.logging.Logger
  * [theRefusalIsLoggedLoudlyNamingTheMissingKey] listens to.
  */
 @QuarkusTest
-@TestProfile(KubernetesIngressTlsSharedWithoutSecretTest.SharedWithoutASecret::class)
+@TestProfile(KubernetesGatewayTlsSharedWithoutSecretTest.SharedWithoutASecret::class)
 @WithKubernetesTestServer
-class KubernetesIngressTlsSharedWithoutSecretTest {
+class KubernetesGatewayTlsSharedWithoutSecretTest {
 
     class SharedWithoutASecret : QuarkusTestProfile {
         override fun getConfigOverrides() = mapOf(

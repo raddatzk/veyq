@@ -167,7 +167,7 @@ class InMemoryBlobStore : BlobStore {
  * deployment shapes. [SigningMode.TENANT_DOMAIN] is the per-domain swap above, and the only one where a
  * tenant's domain reaches the signed URL at all: it is same-origin *because* our own proxy serves the store on
  * that domain. [SigningMode.STORE_ORIGIN] signs `public-endpoint` verbatim, for a store on an origin of its own
- * that the backend does **not** reach at that address (ADR 0064's Kubernetes Ingress host; a tenant's own
+ * that the backend does **not** reach at that address (ADR 0064's Kubernetes store host; a tenant's own
  * bucket) — every tenant then shares one signed host, and that branch needs a bucket CORS policy which signing
  * cannot see the absence of. [SigningMode.INTERNAL_ENDPOINT] signs the endpoint the backend itself uses, for a
  * store already publicly reachable there (external S3); a blank `public-endpoint` lands here whatever the mode

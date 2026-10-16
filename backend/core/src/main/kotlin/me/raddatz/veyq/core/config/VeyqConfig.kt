@@ -135,7 +135,7 @@ interface VeyqConfig {
             /**
              * The deployment-time bootstrap domain (`VEYQ_DOMAIN`), routable before any tenant row exists. The
              * Traefik sink renders its router pair from this value on every regenerate; the chart's own
-             * `Ingress` routes it on Kubernetes. Either way the projector drops a tenant row carrying the same
+             * `HTTPRoute` routes it on Kubernetes. Either way the projector drops a tenant row carrying the same
              * domain, because two routers on one `Host` make Traefik drop both.
              */
             fun bootstrapDomain(): Optional<String>
@@ -180,17 +180,18 @@ interface VeyqConfig {
                 fun namespace(): Optional<String>
 
                 /**
-                 * The `spec.ingressClassName` to stamp on every projected `Ingress`. Absent leaves the field
-                 * unset, which hands the object to the cluster's default IngressClass — the right answer when
-                 * there is exactly one controller, and the reason this is not required. ADR 0064's controller is
-                 * operator-chosen, so this is passed through and never interpreted.
+                 * The chart's `Gateway`, in the same namespace: every projected `ListenerSet` names it as its
+                 * parent, and under `none`/`shared` every projected `HTTPRoute` attaches to one of its listeners.
+                 * The backend never writes it (ADR 0064: the Role grants nothing on `gateways`), and the gateway
+                 * implementation behind its `gatewayClassName` is the operator's choice, so nothing here names
+                 * one. The default is the chart's own name; an operator who renames the `Gateway` sets this.
                  */
-                fun ingressClassName(): Optional<String>
+                @WithDefault("veyq")
+                fun gatewayName(): String
 
                 /**
-                 * The `Service` every projected `Ingress` routes to, and its port — this sink's counterpart of
-                 * [Upstream.app]. An `Ingress` cannot omit a backend, and the backend is a deployment-time name
-                 * the chart owns. The defaults are the chart's own names; an operator who renames the Service
+                 * The `Service` every projected `HTTPRoute` routes to, and its port — this sink's counterpart of
+                 * [Upstream.app]. A route's backend is a deployment-time name the chart owns. The defaults are the chart's own names; an operator who renames the Service
                  * sets these.
                  */
                 @WithDefault("veyq-app")
@@ -199,18 +200,19 @@ interface VeyqConfig {
                 @WithDefault("8080")
                 fun servicePort(): Int
 
-                /** `veyq.tenant.ingress.kubernetes.tls.*` — whether and how every projected `Ingress` carries `spec.tls`. */
+                /** `veyq.tenant.ingress.kubernetes.tls.*` — where a projected route is served: plain HTTP, a shared HTTPS listener, or its own. */
                 fun tls(): Tls
 
                 /**
-                 * Stamped **verbatim** as `metadata.annotations` on every projected `Ingress`, and never
-                 * interpreted — this is how the chart hands the operator's certificate issuer to objects the
-                 * backend writes at runtime (cert-manager's `cert-manager.io/cluster-issuer`, Traefik's CRD
-                 * annotations, whatever the operator's controller reads). The same cut the compose sink makes by
+                 * Stamped **verbatim** as `metadata.annotations` on every projected `ListenerSet` — so only under
+                 * `tls.mode=per-domain`, the one mode that writes one — and never interpreted: this is how the
+                 * chart hands the operator's certificate issuer to objects the backend writes at runtime
+                 * (cert-manager's `cert-manager.io/issuer`, whatever else the operator's tooling reads). An
+                 * `HTTPRoute` carries no certificate and gets none. The same cut the compose sink makes by
                  * *referencing* the `letsencrypt` resolver by name and never configuring one: the reference is
                  * ours to stamp, the configuration is the chart's and the operator's. Property text quotes the
                  * key, because annotation keys carry dots and slashes:
-                 * `veyq.tenant.ingress.kubernetes.annotations."cert-manager.io/cluster-issuer"=letsencrypt`.
+                 * `veyq.tenant.ingress.kubernetes.annotations."cert-manager.io/issuer"=veyq-acme`.
                  */
                 fun annotations(): Map<String, String>
 
@@ -218,14 +220,16 @@ interface VeyqConfig {
                     /**
                      * [IngressTlsMode.NONE] is the default for the same reason `traefik-file` is the sink
                      * default: no existing deployment moves, and it is the right answer where TLS terminates
-                     * upstream of the cluster's ingress (a cloud load balancer, a service mesh).
+                     * upstream of the cluster's gateway (a cloud load balancer, a service mesh).
                      */
                     @WithDefault("none")
                     fun mode(): IngressTlsMode
 
                     /**
-                     * The one pre-provisioned TLS `Secret` every projected `Ingress` points at — **required by
-                     * [IngressTlsMode.SHARED]** and ignored by the other modes. `TenantIngressSinkProducer`
+                     * The one pre-provisioned TLS `Secret` the `Gateway`'s shared HTTPS listener references, and so
+                     * every route attached to it — **required by [IngressTlsMode.SHARED]** and ignored by the other
+                     * modes. The sink writes no listener on the `Gateway`, so it never stamps this name itself; the
+                     * value is required because a `shared` sink without it describes a listener nobody can check. `TenantIngressSinkProducer`
                      * refuses `shared` without it the way it refuses an unresolvable namespace: loud and
                      * disabled, never a failed boot.
                      */
@@ -507,7 +511,7 @@ interface VeyqConfig {
          * `public-endpoint` is signed against **verbatim**: every tenant gets the same store host, because the
          * store's origin has nothing to do with which tenant is asking. Two callers, neither a special case of
          * the other (ADR 0067 Decision 5): ADR 0064's Kubernetes branch, where the backend reaches Garage at an
-         * in-cluster Service name while the browser reaches it at an Ingress host, and a SaaS tenant on their
+         * in-cluster Service name while the browser reaches it at a host the chart's `Gateway` serves, and a SaaS tenant on their
          * own bucket.
          *
          * **This mode needs a bucket CORS policy to work end to end** — it is ADR 0013 §4's non-same-origin
@@ -531,7 +535,7 @@ interface VeyqConfig {
      * Which [me.raddatz.veyq.core.tenant.TenantIngressSink] the tenant→routing projection is written to
      * (ADR 0063's principle, ADR 0064's second target). Property text is hyphenated
      * (`veyq.tenant.ingress.sink=kubernetes`), the same SmallRye mapping [StoreType] and [SigningMode] use;
-     * `KubernetesIngressSinkUnreachableTest` pins that binding by selecting this sink from config rather than
+     * `KubernetesGatewaySinkUnreachableTest` pins that binding by selecting this sink from config rather than
      * trusting the mapping.
      */
     enum class IngressSinkType {
@@ -543,38 +547,43 @@ interface VeyqConfig {
         TRAEFIK_FILE,
 
         /**
-         * `Ingress` objects managed directly through the Kubernetes API, in the backend's **own** namespace
-         * (ADR 0064). Needs no connection settings: the in-cluster ServiceAccount supplies both the API server
+         * Gateway API objects (`HTTPRoute`, `ListenerSet`) managed directly through the Kubernetes API, in the
+         * backend's **own** namespace (ADR 0064). Needs no connection settings: the in-cluster ServiceAccount supplies both the API server
          * and the namespace.
          */
         KUBERNETES,
     }
 
     /**
-     * Whether and how `KubernetesIngressSink` emits `spec.tls` on every projected `Ingress` (ADR 0064, the
-     * TLS passthrough). Named, never inferred — the same shape as [IngressSinkType]. What the sink emits is a
-     * **reference** (a `secretName`, plus the operator's annotations); what it never does is create an
-     * `Issuer`, a `Certificate` or a `Secret` — that is the ingress controller's and the operator's, and it
-     * needs no RBAC beyond the `Ingress` verbs the sink already has. Property text is hyphenated
-     * (`veyq.tenant.ingress.kubernetes.tls.mode=per-domain`).
+     * Where `KubernetesGatewaySink` serves every projected route, and so whether it is TLS (ADR 0064, the TLS
+     * passthrough). Named, never inferred — the same shape as [IngressSinkType]. What the sink emits is a
+     * **reference** (a listener to attach to, a `certificateRefs` name, the operator's annotations); what it
+     * never does is create an `Issuer`, a `Certificate` or a `Secret` — that is cert-manager's and the
+     * operator's, and it needs no RBAC beyond the `httproutes`/`listenersets` verbs the sink already has. The
+     * name keeps "ingress" in ADR 0063's sense (the projection), not the Kubernetes kind. Property text is
+     * hyphenated (`veyq.tenant.ingress.kubernetes.tls.mode=per-domain`).
      */
     enum class IngressTlsMode {
-        /** No `spec.tls` at all — TLS terminates upstream, or the operator wires it some other way. The default. */
+        /**
+         * Every route attaches to the `Gateway`'s plain-HTTP listener and no `ListenerSet` is written — TLS
+         * terminates upstream, or the operator wires it some other way. The default.
+         */
         NONE,
 
         /**
-         * One `spec.tls` entry per domain, `secretName` = the `Ingress` object's **own name**. cert-manager's
-         * ingress-shim shape, and the one that keeps per-tenant custom domains working. Reusing the object name
-         * rather than deriving a second one is load-bearing: a `Secret` name has the same 253-character cap an
-         * object name has, and `KubernetesIngressSink.nameFor` already keeps the name legal for a domain at the
-         * contract's own cap — a `-tls` suffix on it would not be.
+         * One `ListenerSet` per domain carrying one HTTPS listener whose `certificateRefs` names the object's
+         * **own name**, and the domain's route attaches to it — the shape cert-manager's Gateway support reads,
+         * and the one that keeps per-tenant custom domains working. Reusing the object name rather than deriving
+         * a second one is load-bearing: a `Secret` name has the same 253-character cap an object name has, and
+         * `KubernetesGatewaySink.nameFor` already keeps the name legal for a domain at the contract's own cap — a
+         * `-tls` suffix on it would not be.
          */
         PER_DOMAIN,
 
         /**
-         * Every projected `Ingress` points at the one pre-provisioned `Secret` named by
-         * `veyq.tenant.ingress.kubernetes.tls.secret-name` — a wildcard certificate, kept as an **operator's
-         * choice** rather than as everyone's ceiling: an operator who bought one `*.example.com` certificate
+         * Every projected route attaches to the `Gateway`'s one hostname-less HTTPS listener, which references
+         * the pre-provisioned `Secret` named by `veyq.tenant.ingress.kubernetes.tls.secret-name` — a wildcard
+         * certificate, kept as an **operator's choice** rather than as everyone's ceiling: an operator who bought one `*.example.com` certificate
          * and runs no ACME gets a working instance, and gives up custom domains knowingly.
          */
         SHARED,
