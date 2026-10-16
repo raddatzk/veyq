@@ -16,7 +16,9 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      checkout. Executing it is the only honest way to assert what a publish *would* stamp; reading it would only
      assert what it looks like. The step is also held to declaring no network tool at all (a `git` that talks to
      a remote included), because a version a registry decides is not an identity (ADR 0057 § Rejected), and to
-     receiving each input the scenarios set from the expression a run sets it from.
+     receiving each input the scenarios set from the expression a run sets it from. `scripts/release_assets.py`
+     counts the release a second time, to name the release's assets, and is held to the step's count on the same
+     history and to refusing the shallow clone.
   3. **Only a dispatch writes to a registry; a release refuses to replace itself and leaves exactly one git ref.**
      `workflow_dispatch` takes a boolean `release` input defaulting to false. Every registry write in the file —
      found by what a step does (a login or build-push action, or a `run:` that pushes, logs in or signs), never
@@ -44,12 +46,15 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      (`site/src/content/docs/run/verify-a-release.md`) verifies by digest — `image.repository` the chart's own
      name, `admin.image.repository` its `-admin` sibling. And that page verifies the chart itself by digest (assertion 7 collects `ghcr.io/<owner>/charts/<name>`
      tokens as it collects the images', and holds them to a digest the same way).
-  4. **The deployment recipe travels in the image, in every runtime target.** Every `runtime-*` stage of the
-     `Dockerfile` (one today, `runtime-jvm`) copies `infra/docker-compose.prod.yml` and `infra/.env.example`
-     from their real in-tree paths, to the same destination, and that destination is neither `/work` (it holds
-     `quarkus-app/`; a mount there freezes an upgrade — see the Dockerfile's own comment) nor under
-     `/var/lib/veyq` (the config-secret volume). Plus: every veyq image tag written down under `infra/` or on the
-     Run pages (`site/src/content/docs/run/`, where the operator procedures live) matches a tag the pipeline emits.
+  4. **The release carries every file its recipe reads** (ADR 0096). `scripts/release_assets.py` derives the
+     recipe set — the production compose file, `.env.example`, and every file the compose file reads relative to
+     itself, in each spelling Compose has for that (`volumes` short and long-form `type: bind`, `env_file`,
+     `label_file`, top-level `configs`/`secrets` `file:`) — and refuses what it cannot derive (`${…}` in such a
+     path, `../`, a directory in it, `include:`, `extends`). Here that derivation is run on the tree, its refusals
+     are this guard's reds, and the producer's carry step is run into a scratch directory, where every derived
+     file must be, byte-identical to the tree. The derived list is printed on the OK line. Plus: every veyq image
+     tag written down under `infra/` or on the Run pages (`site/src/content/docs/run/`, where the operator
+     procedures live) matches a tag the pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
      `infra/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
      `.github/workflows/ci.yml` actually publishes — the set is read out of that workflow's build
@@ -80,6 +85,12 @@ the operator to pin `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0`, a three-part shape 
 `infra/docker-compose.prod.yml`'s `${VEYQ_IMAGE:?…}` message repeated the invented shape as `…/veyq:1.2.3`. The
 file had been deleted by a "cleanup" commit that also took `Dockerfile` and `scripts/run_web_e2e.py`; those two
 were recovered and this one was not, and nothing noticed for the two months in which no container run happened.
+
+Assertion 4 replaced a check that the `Dockerfile` copies the compose file and `.env.example` into the image
+(cr-veyqctl, 2026-10-16), and what bought the replacement is the gap that check could not see: the compose file
+reads `./garage.toml` beside itself, the image carried only the two files the check listed, and a recipe taken
+out of the image could not start its store — `run_stack_e2e.py` had to take `garage.toml` from the checkout
+instead (inbox #26, ADR 0096). A listed set is only as complete as the day it was written; this one is derived.
 
 Assertion 5 was bought by a live defect too, and by the cheapest kind — its first run on the untouched tree
 named the offender (2026-09-10). The release recipe carried a one-shot init sidecar built from a local
@@ -126,13 +137,17 @@ scan — puts a hole in exactly the place a future instruction would hide.
 version step's shell, against a history it built — so `fetch-depth: 0` on the real checkout is proven only by a
 run, where its absence is a loud red at the shallow refusal). It cannot prove a publish ever ran, that a tag was created, that a republish was
 refused, or that the registry holds what the workflow says it would push — this repository has **no remote**
-and no workflow has ever executed, so the publish path stays an explicitly stated ADR 0040 gap. The trust chain
-is also **buildless**: nothing here can inspect a *built* image, so assertion 4 proves the `Dockerfile`
-**declares** the copy, never that the file is in the image — that is proven by building it and reading the file
-back out, which is cr-release-identity's phase-2 done-when and not a guard. It says nothing about the backup
-manifest's `app.version` (its observable is a capture run against a live instance, not a file), and its scan
-for written-down image tags covers `infra/` only: `docs/` quotes the *old, wrong* shapes on purpose, as the
-defect being described.
+and no workflow has ever executed, so the publish path stays an explicitly stated ADR 0040 gap. It says nothing
+about the backup manifest's `app.version` (its observable is a capture run against a live instance, not a file),
+and its scan for written-down image tags covers `infra/` and the Run pages only: `docs/` quotes the *old, wrong*
+shapes on purpose, as the defect being described.
+
+Assertion 4's limits. **The guard and the producer share one derivation**, so a way of reading a file that the
+derivation does not know — a Compose key added after it was written — is missed by both, and green; the spellings
+it knows are the list above. **An absolute host path is the host's, unchecked**: `/srv/…` or `~/…` in the compose
+file is neither carried nor refused. It runs the carry step, never the whole producer (the release number needs the
+full history, and this guard's checkout may be shallow), and never a published release: that a GitHub Release holds
+these assets is a publish's to prove.
 
 Assertion 3's gating is read as a conservative model of GitHub's expression language: an `if:` counts as gated
 only if it is a pure `&&` chain with the dispatch (or release) test as one term, so an equivalent condition
@@ -181,10 +196,12 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import release_assets  # the producer: assertion 4 holds it to its own derivation, assertion 2 its release number
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
 VERSION_FILE = ROOT / "VERSION"
 WORKFLOW = ROOT / ".github/workflows/ci.yml"
-DOCKERFILE = ROOT / "Dockerfile"
 INFRA = ROOT / "infra"
 
 # `VERSION` holds the major alone; the minor is a commit count, so no tree can hold it (ADR 0057 §1).
@@ -203,21 +220,6 @@ CHART_DIR = ROOT / "charts/veyq"
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
 VERSION_EXPR = "${{ needs.version.outputs.version }}"
-
-# `FROM <image> AS <stage>` — the same anchor validate_config_secret_persistence.py uses, for the same reason:
-# there is more than one runtime target and a guard anchored on one is no guard.
-STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
-COPY = re.compile(r"^\s*COPY\s+(?!--from)(?:--\S+\s+)*(\S+)\s+(\S+)\s*$", re.IGNORECASE)
-
-# The deployment recipe, by its in-tree path. Both files, every runtime target (ADR 0057 §3).
-RECIPE = ("infra/docker-compose.prod.yml", "infra/.env.example")
-# Forbidden destinations, with the reason each is forbidden. /work holds quarkus-app/, so a volume mounted
-# there is seeded once and never refreshed — an upgrade that silently keeps running the first image's jar.
-# /var/lib/veyq is the config-secret volume, which a mount likewise covers.
-FORBIDDEN_DESTS = {
-    "/work": "it holds quarkus-app/, and a volume mounted there freezes the app at its first image",
-    "/var/lib/veyq": "it is the config-secret volume's mount point",
-}
 
 # A veyq image reference with a literal tag: `…/veyq:<tag>` or a bare `veyq:<tag>`. The character after `veyq`
 # must be `:`, so a `veyq-<something>:<tag>` sibling is not claimed as the app image — live today for
@@ -477,6 +479,22 @@ elif compute is not None and version_match:
         try:
             with tempfile.TemporaryDirectory(prefix="release_identity_") as tmp:
                 full, shallow = build_history(pathlib.Path(tmp), major)
+                # The producer counts the release a second time, in Python (it names the release's assets); the
+                # two counts must agree, and its copy must refuse a shallow checkout as the step does.
+                try:
+                    produced = release_assets.tree_release(full)
+                except release_assets.ReleaseError as e:
+                    produced = f"a refusal ({e})"
+                if produced != release:
+                    fail(
+                        f"scripts/release_assets.py counts this history as `{produced}` where the `{VERSION_STEP}` "
+                        f"step counts `{release}` — a release's assets would carry another number than its images"
+                    )
+                try:
+                    release_assets.tree_release(shallow)
+                    fail("scripts/release_assets.py counts a release from a shallow checkout, which the version step refuses")
+                except release_assets.ReleaseError:
+                    pass
                 for label, use_shallow, env, expect_rc, expect in scenarios:
                     try:
                         rc, written, message = run_scenario(script, shallow if use_shallow else full, env)
@@ -748,58 +766,34 @@ if workflow_doc:
                 )
 
 
-# ---- 4. the recipe travels in the image, and written-down tags name a shape the pipeline emits ---------------
+# ---- 4. the release carries every file its recipe reads; written-down tags name a shape the pipeline emits --
 
-def runtime_stages(body: str) -> dict[str, str]:
-    """Every `runtime-*` stage's body, keyed by stage name."""
-    stages = [(m.start(), m.group(1)) for m in STAGE.finditer(body)]
-    out: dict[str, str] = {}
-    for index, (offset, name) in enumerate(stages):
-        end = stages[index + 1][0] if index + 1 < len(stages) else len(body)
-        if name.startswith("runtime-"):
-            out[name] = body[offset:end]
-    return out
-
-
-if not DOCKERFILE.is_file():
-    fail("there is no Dockerfile — the image the recipe travels in does not exist")
-else:
-    stages = runtime_stages(DOCKERFILE.read_text())
-    if not stages:
-        fail("the Dockerfile declares no `runtime-*` stage — nothing to carry the deployment recipe")
-    destinations: dict[str, set[str]] = {}
-    for stage_name, stage_body in sorted(stages.items()):
-        copied = {}
-        for line in stage_body.splitlines():
-            match = COPY.match(line)
-            if match and match.group(1) in RECIPE:
-                copied[match.group(1)] = match.group(2)
-        for source in RECIPE:
-            if not (ROOT / source).is_file():
-                fail(f"`{source}` does not exist in the tree, so no runtime target can copy it into the image")
-            elif source not in copied:
-                fail(
-                    f"the Dockerfile's `{stage_name}` target does not COPY `{source}` into the image. The "
-                    f"recipe travels inside the image so it cannot drift from the bits it describes and "
-                    f"inherits their cosign signature (ADR 0057 §3) — and it must be in EVERY runtime target, "
-                    f"because a guard anchored on one passes a Dockerfile whose other one drifted."
-                )
-            else:
-                dest = copied[source]
-                destinations.setdefault(source, set()).add(dest)
-                dest_dir = dest if dest.endswith("/") else dest.rsplit("/", 1)[0] + "/"
-                for forbidden, reason in FORBIDDEN_DESTS.items():
-                    if dest_dir == forbidden + "/" or dest_dir.startswith(forbidden + "/"):
-                        fail(
-                            f"the Dockerfile's `{stage_name}` target copies `{source}` to `{dest}`, under "
-                            f"`{forbidden}` — {reason}. Put the recipe where nothing mounts and nothing writes."
-                        )
-    for source, dests in sorted(destinations.items()):
-        if len(dests) > 1:
-            fail(
-                f"the runtime targets disagree about where `{source}` lands (" + ", ".join(sorted(dests)) +
-                ") — a tool reading the recipe out of a published image cannot say which target it got"
-            )
+recipe_assets: list[str] = []
+reads, refusals = release_assets.recipe_reads()
+for refusal in refusals:
+    fail(f"the release recipe cannot be derived: {refusal}")
+if not refusals:
+    derived = {release_assets.COMPOSE.name: "the recipe itself", release_assets.ENV_TEMPLATE.name: "the .env template"}
+    derived.update({asset: ", ".join(wheres) for asset, wheres in reads.items()})
+    with tempfile.TemporaryDirectory(prefix="release_assets_") as tmp:
+        carried = pathlib.Path(tmp)
+        try:
+            release_assets.write_assets(carried)
+        except (release_assets.ReleaseError, OSError) as e:
+            fail(f"the producer's carry step failed, so no release can be produced: {e}")
+        else:
+            for asset, why in sorted(derived.items()):
+                source = release_assets.COMPOSE.parent / asset
+                got = carried / asset
+                if not got.is_file():
+                    fail(
+                        f"scripts/release_assets.py does not carry `{asset}`, which the release recipe reads "
+                        f"({why}) — an operator would install a recipe that reads a file its release does not have"
+                    )
+                elif got.read_bytes() != source.read_bytes():
+                    fail(f"scripts/release_assets.py carries a `{asset}` that differs from {source.relative_to(ROOT)}")
+                else:
+                    recipe_assets.append(asset)
 
 written_tags = 0
 # Tracked files only, as in assertion 9's flag scan. A gitignored `infra/.env` is one operator's local pin (a
@@ -1231,8 +1225,8 @@ print(
     f"({len(publishing_branches)} publishing branch(es), a shallow checkout refused), every registry write waits for "
     f"a dispatch, the stamp is declared by the {stamped_targets} published target stage(s) and no other, a release "
     f"refuses a republish and creates its v{version_value}.<minor> ref, the publish waits on every one of the "
-    f"{len([j for j in (workflow_doc.get('jobs') or {}) if j != PUBLISH_JOB])} other jobs as a green stage, the recipe is declared in "
-    f"{len(runtime_stages(DOCKERFILE.read_text()))} runtime target(s), {written_tags} written-down image "
+    f"{len([j for j in (workflow_doc.get('jobs') or {}) if j != PUBLISH_JOB])} other jobs as a green stage, the producer carries "
+    f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
 )
