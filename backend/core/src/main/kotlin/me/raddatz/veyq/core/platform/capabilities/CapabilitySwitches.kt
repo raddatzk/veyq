@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.platform.capabilities
 
 import me.raddatz.veyq.core.instance.VeyqInstance
+import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -11,6 +12,8 @@ import jakarta.persistence.Id
 import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -92,6 +95,91 @@ class StoredCapabilitySwitches(
      *  could read and cache the old set under the new generation. */
     fun invalidate() {
         generation.incrementAndGet()
+    }
+
+    private class Cached(val generation: Long, val off: Set<String>)
+}
+
+/**
+ * Which entries a tenant owner switched off for their tenant (ADR 0088 decisions 2 and 12): the tenant level the
+ * registry ANDs with the instance level. A `fun interface` for the same reason as [CapabilitySwitches]. Only an entry in
+ * [CapabilityIds.TENANT_SWITCHABLE] is ever stored, because [TenantCapabilitySwitchStore.set]'s caller refuses any other.
+ */
+fun interface TenantCapabilitySwitches {
+    /** The catalog ids [tenantId] switched off right now; an id here switches off every entry below it in that tenant. */
+    fun switchedOff(tenantId: String): Set<String>
+}
+
+/**
+ * One entry a tenant owner switched off for their tenant; an entry that is on has no row. Unique per tenant and entry;
+ * the row id is a server-minted UUID with no other meaning. Erased with its tenant (`ON DELETE CASCADE`).
+ */
+@Entity
+@Table(name = "veyq_tenant_capability_switch")
+@DynamicUpdate
+class TenantCapabilitySwitchEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "id", columnDefinition = "uuid")
+    lateinit var id: String
+
+    @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
+    lateinit var tenantId: String
+
+    @Column(name = "capability_id", nullable = false, length = 64)
+    lateinit var capabilityId: String
+
+    companion object : PanacheCompanionBase<TenantCapabilitySwitchEntity, String>
+}
+
+/** The tenant switches' persistence. Every method runs in the caller's transaction. */
+@ApplicationScoped
+class TenantCapabilitySwitchStore {
+
+    fun switchedOff(tenantId: String): Set<String> =
+        TenantCapabilitySwitchEntity.list("tenantId", tenantId).mapTo(mutableSetOf()) { it.capabilityId }
+
+    /**
+     * Store [capabilityId]'s own switch for [tenantId]: a row while it is off, none while it is on; writing the state it
+     * has changes nothing. **Under the tenant row's lock**, for the reason [CapabilitySwitchStore.set] takes the
+     * instance's: two writes of one entry would otherwise both read "no row" and the second fail on the key.
+     */
+    fun set(tenantId: String, capabilityId: String, off: Boolean) {
+        TenantEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE)
+        val row = TenantCapabilitySwitchEntity.find("tenantId = ?1 and capabilityId = ?2", tenantId, capabilityId).firstResult()
+        when {
+            off && row == null -> TenantCapabilitySwitchEntity().apply {
+                this.id = UUID.randomUUID().toString()
+                this.tenantId = tenantId
+                this.capabilityId = capabilityId
+            }.persist()
+            !off && row != null -> row.delete()
+        }
+    }
+}
+
+/**
+ * The production [TenantCapabilitySwitches]: each tenant's stored switches, read once and cached, all under ONE
+ * generation that [invalidate] bumps after any committed write — the [StoredCapabilitySwitches] argument (one backend
+ * process serves an instance) and its guard against a reader caching the old set after the write's invalidate.
+ */
+@ApplicationScoped
+class StoredTenantCapabilitySwitches(
+    private val store: TenantCapabilitySwitchStore,
+) : TenantCapabilitySwitches {
+    private val generation = AtomicLong()
+    private val cached = ConcurrentHashMap<String, Cached>()
+
+    override fun switchedOff(tenantId: String): Set<String> {
+        val current = generation.get()
+        cached[tenantId]?.takeIf { it.generation == current }?.let { return it.off }
+        return QuarkusTransaction.joiningExisting().call { store.switchedOff(tenantId) }
+            .also { cached[tenantId] = Cached(current, it) }
+    }
+
+    /** Forget every cached set. Call after the transaction that changed a switch has COMMITTED. */
+    fun invalidate() {
+        generation.incrementAndGet()
+        cached.clear()
     }
 
     private class Cached(val generation: Long, val off: Set<String>)

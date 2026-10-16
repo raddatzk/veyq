@@ -48,8 +48,9 @@ async function currentSealedDropKey(scopeId: string, nodeId: string): Promise<st
  */
 export function mintDropBoxLink(
   scopeId: string, nodeId: string, nodeKey: Uint8Array, epochs: EpochKeys, nodeName: string, name = '', password = '',
+  expiresAt: Date | null = null,
 ): Promise<MintedShare> {
-  return mintShare(scopeId, nodeId, nodeKey, epochs, nodeName, ShareRole.WriteOnly, null, NO_NOTE, name, password, {
+  return mintShare(scopeId, nodeId, nodeKey, epochs, nodeName, ShareRole.WriteOnly, expiresAt, NO_NOTE, name, password, {
     dropFields: async (kShare) => dropKeysForShare(scopeId, nodeId, nodeKey, kShare, await currentSealedDropKey(scopeId, nodeId)),
     retryOnce: (e) => isCodedError(e, HttpStatus.conflict, 'drop_key_exists'),
   })

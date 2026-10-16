@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.spaces.scope
 
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirements
 import me.raddatz.veyq.core.tasks.CompromiseRotationPolicy
 import me.raddatz.veyq.core.tasks.CompromiseRotationState
 import me.raddatz.veyq.core.tasks.RequeueResult
@@ -278,9 +279,10 @@ class ScopesHandler(
     fun createGroup(
         userId: String, tenantId: String?, scopeId: String, encryptedName: String, grant: SignedGrant, admission: Admission,
     ): CreateGroupOutcome {
-        // Instance policy first (ADR 0032): a personal-only instance switches group scopes off → 422, enforced
-        // server-side even if a stale client still offers the affordance.
-        if (!capabilities.isActive(CapabilityIds.GROUP_SPACE)) return CreateGroupOutcome.CapabilityDisabled
+        // Policy first (ADR 0032, ADR 0088): a personal-only instance or tenant switches group scopes off → 422,
+        // enforced server-side even if a stale client still offers the affordance. The instance level is asked even
+        // without a tenant, so a request from no tenant's domain still reads as the operator's switch.
+        if (!capabilities.isActive(CapabilityIds.GROUP_SPACE, tenantId)) return CreateGroupOutcome.CapabilityDisabled
         tenantId ?: return CreateGroupOutcome.NoTenant
         access.check(userId, tenantId, WRITE)
             .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return it }
@@ -410,7 +412,7 @@ class ScopesHandler(
         // membership grant-delivery skips — so `K_SC` is gated **before** the wrap — carrying the wrapped name-key
         // `K_name`. The owner must have derived + sealed it (learned consent is required from the prior resolve);
         // no name-key → ConsentRequired.
-        if (store.requiresGroupAddConsent(targetId)) {
+        if (consentRequired(targetId, tenantId)) {
             if (sealedNameKey == null) return AddGroupMemberOutcome.ConsentRequired
             if (!store.addSoftPendingMember(targetId, tenantId, scopeId, sealedNameKey, callerId, admission)) {
                 return AddGroupMemberOutcome.StaleEpoch
@@ -423,6 +425,13 @@ class ScopesHandler(
         val row = store.scopeMemberRow(scopeId, targetId) ?: return AddGroupMemberOutcome.MemberNotFound
         return AddGroupMemberOutcome.Added(row.copy(email = null))
     }
+
+    /** Whether adding [targetId] in [tenantId] must ask them first: their own setting, or the `addConsent` requirement in
+     *  effect for the tenant (ADR 0088 decision 8), which overrides a "no". Asked by the resolve that tells the owner's
+     *  client to seal a name key and by the add that refuses one without it, so the two never disagree. */
+    private fun consentRequired(targetId: String, tenantId: String): Boolean =
+        store.requiresGroupAddConsent(targetId) ||
+            capabilities.requirements(tenantId)[CapabilityRequirements.ADD_CONSENT] != null
 
     /**
      * Resolve a per-tenant username to a group-add candidate (uc.spaces.consent-group-add, cr-0094) — records
@@ -445,7 +454,7 @@ class ScopesHandler(
         if (!store.belongsToTenant(targetId, tenantId)) return ResolveCandidateOutcome.MemberNotFound
         val pubkey = store.identityPublicKeyOf(targetId) ?: return ResolveCandidateOutcome.MemberNotFound
         return ResolveCandidateOutcome.Ok(
-            ResolvedCandidateRow(targetId, username.trim().lowercase(), pubkey, store.requiresGroupAddConsent(targetId)),
+            ResolvedCandidateRow(targetId, username.trim().lowercase(), pubkey, consentRequired(targetId, tenantId)),
         )
     }
 

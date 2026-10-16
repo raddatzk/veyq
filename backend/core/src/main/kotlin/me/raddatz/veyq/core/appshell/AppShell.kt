@@ -48,18 +48,32 @@ sealed interface AppShell {
          * `default-src`, and a directive written here from scratch would replace that fallback instead of
          * extending it — a narrowing or a widening nobody reviewed, depending on what `default-src` says.
          */
-        fun withStoreOrigin(policy: String, storeOrigin: String?): String {
+        fun withStoreOrigin(policy: String, storeOrigin: String?): String =
+            withOrigins(policy, listOfNotNull(storeOrigin), emptyList())
+
+        /**
+         * [policy] with [connect] appended to its `connect-src` and [img] to its `img-src`: the store's origin and the
+         * origins of the outside services in use (ADR 0088 decision 7, [ExternalOrigins]). A directive the policy lacks
+         * is refused, never written from scratch, for the reason [withStoreOrigin] gives; an origin already listed is not
+         * listed twice.
+         */
+        fun withOrigins(policy: String, connect: List<String>, img: List<String>): String {
             val directives = policy.split(';').map { it.trim() }.filter { it.isNotEmpty() }
-            if (storeOrigin == null) return directives.joinToString("; ")
-            check(directives.any { it.split(' ').first() == CONNECT_SRC }) {
-                "the emitted policy has no $CONNECT_SRC, so the store origin $storeOrigin cannot be appended to it"
+            val additions = mapOf(CONNECT_SRC to connect, IMG_SRC to img).filterValues { it.isNotEmpty() }
+            additions.forEach { (name, origins) ->
+                check(directives.any { it.split(' ').first() == name }) {
+                    "the emitted policy has no $name, so ${origins.joinToString()} cannot be appended to it"
+                }
             }
-            return directives.joinToString("; ") {
-                if (it.split(' ').first() == CONNECT_SRC) "$it $storeOrigin" else it
+            return directives.joinToString("; ") { directive ->
+                val name = directive.split(' ').first()
+                val extra = additions[name]?.filter { it !in directive.split(' ') }.orEmpty()
+                if (extra.isEmpty()) directive else "$directive ${extra.joinToString(" ")}"
             }
         }
 
         private const val CONNECT_SRC = "connect-src"
+        private const val IMG_SRC = "img-src"
 
         /** The same shape `web/scripts/assert-csp-policy-in-dist.mjs` refuses. */
         private val CSP_META = Regex("""<meta[^>]*http-equiv\s*=\s*["']?content-security-policy""", RegexOption.IGNORE_CASE)

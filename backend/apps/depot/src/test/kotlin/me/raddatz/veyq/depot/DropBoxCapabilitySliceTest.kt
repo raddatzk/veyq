@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_DROP_BOX
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
+import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchFixtures
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import io.quarkus.test.junit.QuarkusTest
@@ -57,6 +58,17 @@ class DropBoxCapabilitySliceTest {
             // `.drop-box`'s own entry is on; the AND along the path refuses it.
             create(userId, scopeId, null, DepotNodeKinds.DROPBOX).statusCode(422).body("code", equalTo("capability_disabled"))
             create(userId, scopeId, null, NodeEntity.FOLDER).statusCode(201) // control
+        }
+    }
+
+    @Test
+    fun aTenantsDropBoxSwitchRefusesANewDropBoxInThatTenantAndNotInAnother() {
+        // The tenant level (ADR 0088 decision 2): the gate asks the tenant of the scope the node is created in.
+        val a = seedMemberScope()
+        val b = seedMemberScope()
+        TenantCapabilitySwitchFixtures.with(a.tenantId, PUBLIC_SHARES_DROP_BOX) {
+            create(a.userId, a.scopeId, null, DepotNodeKinds.DROPBOX).statusCode(422).body("code", equalTo("capability_disabled"))
+            create(b.userId, b.scopeId, null, DepotNodeKinds.DROPBOX).statusCode(201) // control: another tenant
         }
     }
 

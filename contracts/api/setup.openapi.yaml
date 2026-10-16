@@ -131,7 +131,8 @@ components:
         capabilities:
           type: array
           description: >
-            The instance's ACTIVE capability manifest (ADR 0032, ADR 0088): the abilities this build supports,
+            The instance's ACTIVE capability manifest (ADR 0032, ADR 0088), the instance level only: a tenant owner's
+            narrowing is delivered after sign-in (`getTenantCapabilities`). The abilities this build supports,
             sourced from the catalog contracts/platform/capabilities.json, minus the ids the Server Owner switched
             off (`setInstanceCapability`, which acts without a restart). An id is listed only when it and every ancestor entry
             are active (the AND along the path), so a switched-off parent drops its children too; the server
@@ -199,22 +200,7 @@ components:
           example: 1
 
     Capability:
-      type: object
-      description: >
-        One entry in the active capability manifest. The wire shape is intentionally `{ id }` only; it is
-        extensible to `{ id, state, ... }` later without a `major` bump (additive => `build`).
-      required: [id]
-      properties:
-        id:
-          x-veyq-visibility: public
-          type: string
-          description: >
-            Stable lowercase-dotted capability id, a path in the register tree (e.g. "core.public-shares.drop-box"),
-            from the catalog contracts/platform/capabilities.json. A capability is instance-wide + pre-auth ("this server can do
-            X at all") — NOT a per-scope/role permission ("you may do X here"). A feature is offered only when
-            the capability is present AND local policy permits.
-          maxLength: 64
-          example: core.public-shares.drop-box
+      $ref: '_common.openapi.yaml#/components/schemas/Capability'
 
     MasterKeyWrap:
       $ref: '_common.openapi.yaml#/components/schemas/MasterKeyWrap'

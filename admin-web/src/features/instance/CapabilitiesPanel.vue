@@ -10,21 +10,28 @@
 //   - switching off asks first and shows the entry's own `whenOff`, since it can send members to their
 //     Emergency Kit (a device switch says so in its own text); switching on only restores, so it asks nothing —
 //     the split `TenantDetailPanel`'s suspend / reactivate makes;
-//   - a row re-renders from the PUT's answer, not from what was asked for.
+//   - a row re-renders from the PUT's answer, not from what was asked for;
+//   - an entry a tenant owner may narrow further says so (`tenantSwitchable`, the catalog's levels): "on" here is not
+//     "on in every tenant".
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
+import InputText from 'primevue/inputtext'
 import {
   capabilityError,
   capabilityTree,
+  clearInstanceCapabilityRequirement,
+  setInstanceCapabilityRequirement,
   hasDescendants,
   inLocale,
   listInstanceCapabilities,
   setInstanceCapability,
 } from './capabilities'
-import type { CapabilityLocale, CapabilityState, InstanceCapability, InstanceCapabilityText } from './capabilities'
+import type {
+  CapabilityLocale, CapabilityState, InstanceCapability, InstanceCapabilityRequirement, InstanceCapabilityText,
+} from './capabilities'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useConfirm } from '../../shared/state/useConfirm'
 import { handle401 } from '../../shared/handle401'
@@ -46,10 +53,55 @@ const loadError = computed(() => loadErrorKind(loadErr.value))
 const tree = computed(() => capabilityTree(entries.value))
 const words = (text: InstanceCapabilityText) => inLocale(text, locale.value as CapabilityLocale)
 
-const STATE_TONE = { on: 'success', off: 'danger', offThrough: 'warning' } as const
+const STATE_TONE = { on: 'success', off: 'danger', offThrough: 'warning', notConfigured: 'warning' } as const
 function stateLabel(state: CapabilityState): string {
   if (state.kind === 'offThrough') return t('capabilities.offThrough', { parent: words(state.through.title) })
+  if (state.kind === 'notConfigured') return t('capabilities.notConfigured')
   return t(state.kind === 'on' ? 'capabilities.on' : 'capabilities.off')
+}
+
+// --- requirements (ADR 0088 decision 8): the instance's value of each; a tenant may tighten it further for itself.
+// Setting one asks first and shows what it does to what exists (`whenSet`); clearing one only loosens, so it asks nothing.
+const daysTyped = ref<Record<string, string>>({})
+function requirementState(r: InstanceCapabilityRequirement): string {
+  if (r.value === null || r.value === undefined) return t('capabilities.requirementNone')
+  return r.kind === 'flag' ? t('capabilities.requirementOn') : t('capabilities.requirementDays', { days: r.value })
+}
+
+async function changeRequirement(entry: InstanceCapability, r: InstanceCapabilityRequirement, value: number | null) {
+  const title = words(r.title)
+  if (value !== null) {
+    const accepted = await ask({
+      header: t('capabilities.requirementConfirmTitle', { title }),
+      message: words(r.whenSet),
+      acceptLabel: t('capabilities.requirementSet'),
+      acceptIcon: 'pi pi-lock',
+    })
+    if (!accepted) return
+  }
+  error.value = ''
+  switching.value = `${entry.id}:${r.name}`
+  try {
+    const now = value === null
+      ? await clearInstanceCapabilityRequirement(entry.id, r.name)
+      : await setInstanceCapabilityRequirement(entry.id, r.name, value)
+    entries.value = entries.value.map((e) => (e.id === now.id ? now : e))
+  } catch (e) {
+    on401(e)
+    const { status } = await capabilityError(e)
+    if (status !== 401) error.value = t('capabilities.switchFailed', { title })
+  } finally {
+    switching.value = null
+  }
+}
+
+function saveDays(entry: InstanceCapability, r: InstanceCapabilityRequirement) {
+  const days = Number((daysTyped.value[r.name] ?? '').trim())
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    error.value = t('capabilities.requirementInvalidDays')
+    return
+  }
+  void changeRequirement(entry, r, days)
 }
 
 async function toggle(entry: InstanceCapability) {
@@ -109,7 +161,58 @@ async function toggle(entry: InstanceCapability) {
               <strong class="capability__title">{{ words(node.entry.title) }}</strong>
               <span class="veyq-badge capability__state" :class="STATE_TONE[node.state.kind]">{{ stateLabel(node.state) }}</span>
               <small class="settings-muted capability__purpose">{{ words(node.entry.purpose) }}</small>
+              <small v-if="node.entry.tenantSwitchable" class="settings-muted capability__tenant">{{ t('capabilities.tenantSwitchable') }}</small>
               <code class="capability__id">{{ node.entry.id }}</code>
+              <ul v-if="node.entry.requirements.length" class="capability__requirements">
+                <li v-for="r in node.entry.requirements" :key="r.name" class="requirement" :data-requirement="r.name">
+                  <span class="requirement__title">{{ words(r.title) }}</span>
+                  <span class="veyq-badge requirement__state">{{ requirementState(r) }}</span>
+                  <span class="requirement__controls">
+                    <template v-if="r.kind === 'days'">
+                      <InputText
+                        v-model="daysTyped[r.name]"
+                        class="requirement__days"
+                        inputmode="numeric"
+                        :placeholder="r.value ? String(r.value) : ''"
+                        :aria-label="words(r.title)"
+                        :disabled="switching !== null"
+                      />
+                      <Button
+                        type="button"
+                        class="requirement__set"
+                        :label="t('capabilities.requirementSet')"
+                        severity="secondary"
+                        outlined
+                        size="small"
+                        :disabled="switching !== null"
+                        @click="saveDays(node.entry, r)"
+                      />
+                    </template>
+                    <Button
+                      v-else-if="r.value === null || r.value === undefined"
+                      type="button"
+                      class="requirement__set"
+                      :label="t('capabilities.requirementSet')"
+                      severity="secondary"
+                      outlined
+                      size="small"
+                      :disabled="switching !== null"
+                      @click="changeRequirement(node.entry, r, 1)"
+                    />
+                    <Button
+                      v-if="r.value !== null && r.value !== undefined"
+                      type="button"
+                      class="requirement__clear"
+                      :label="t('capabilities.requirementClear')"
+                      severity="secondary"
+                      text
+                      size="small"
+                      :disabled="switching !== null"
+                      @click="changeRequirement(node.entry, r, null)"
+                    />
+                  </span>
+                </li>
+              </ul>
             </div>
             <Button
               type="button"
@@ -154,6 +257,8 @@ async function toggle(entry: InstanceCapability) {
   min-width: 0;
 }
 .capability__purpose,
+.capability__tenant,
+.capability__requirements,
 .capability__id {
   flex-basis: 100%;
 }
@@ -161,6 +266,27 @@ async function toggle(entry: InstanceCapability) {
   font-family: var(--app-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.8rem;
   color: var(--app-muted);
+}
+.capability__requirements {
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+.requirement {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  align-items: center;
+}
+.requirement__controls {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+.requirement__days {
+  width: 5rem;
 }
 .capability__toggle {
   flex-shrink: 0;

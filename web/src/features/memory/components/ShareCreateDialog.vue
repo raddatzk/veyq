@@ -22,6 +22,8 @@ import { buildShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { EpochKeys } from '../../spaces/epochs'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
+import { lastExpiryDay, linkRules } from '../../../core/sharing/linkRules'
+import { decodeHttpError } from '../../../shared/httpError'
 
 /** cr-0118: a password-protected share requires at least this many characters (a client-side convention — the
  *  server never sees the password). */
@@ -88,6 +90,13 @@ const passwordEnabled = ref(false)
 const expiryEnabled = ref(false)
 const expiresAt = ref<Date | null>(null)
 const minExpiry = new Date()
+// The space's link requirements (ADR 0088 decision 8): a required password or end date turns its card on and locks it,
+// and the picker ends at the last day the link may run — counted from when it was made, an edited link's own start.
+const rules = linkRules()
+const maxExpiry = computed(() => lastExpiryDay(rules.maxDays, props.editShare?.createdAt ?? new Date()))
+const expiryMissing = computed(() => rules.maxDays !== null && !expiresAt.value)
+/** The server refused the link for a requirement the form could not know of (a rule set while the dialog was open). */
+const requirementRefused = ref(false)
 const error = ref(false)
 // A renew lost to another renew or a delete (`409 share_deleted`, ADR 0075 point 1): nothing was minted, the list is
 // re-read behind the dialog, and a retry could only be refused again — so the submit stays off.
@@ -115,6 +124,12 @@ onMounted(() => {
     passwordEnabled.value = !!s.passwordRequired || currentPassword.value.length > 0
     expiryEnabled.value = !!s.expiresAt
     expiresAt.value = s.expiresAt
+  }
+  if (rules.passwordRequired) passwordEnabled.value = true
+  if (rules.maxDays !== null) {
+    expiryEnabled.value = true
+    const last = maxExpiry.value
+    if (last && (!expiresAt.value || expiresAt.value > last)) expiresAt.value = last
   }
 })
 
@@ -182,6 +197,8 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
   },
   {
     onError: async (e) => {
+      const { code } = await decodeHttpError(e)
+      requirementRefused.value = code === 'link_password_required' || code === 'link_expiry_required'
       if (isReissue.value && (await isShareDeleted(e))) {
         alreadyReplaced.value = true
         emit('saved') // the parent re-reads the list: the link that won is there, the old one is gone
@@ -192,8 +209,9 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
 
 async function onSubmit() {
   // Both guarded (the button is also disabled): never mint an under-length password, never retry a lost renew.
-  if (passwordTooShort.value || alreadyReplaced.value) return
+  if (passwordTooShort.value || alreadyReplaced.value || expiryMissing.value) return
   error.value = false
+  requirementRefused.value = false
   await runSubmit()
 }
 
@@ -306,8 +324,9 @@ function endOfDay(d: Date): Date {
             <div class="share-group-title">{{ t('share.passwordSection') }}</div>
             <p class="share-group-sub">{{ t('share.passwordSectionHint', { min: MIN_PW }) }}</p>
           </div>
-          <ToggleSwitch v-model="passwordEnabled" :aria-label="t('share.passwordSection')" :disabled="busy" />
+          <ToggleSwitch v-model="passwordEnabled" :aria-label="t('share.passwordSection')" :disabled="busy || rules.passwordRequired" />
         </div>
+        <p v-if="rules.passwordRequired" class="share-group-sub share-rule">{{ t('share.passwordRequiredByRule') }}</p>
         <div v-if="passwordEnabled" class="share-group-body">
           <label for="share-create-password">{{ t('share.passwordLabel') }}</label>
           <div class="share-password-row">
@@ -342,14 +361,16 @@ function endOfDay(d: Date): Date {
             <div class="share-group-title">{{ t('share.expirySection') }}</div>
             <p class="share-group-sub">{{ t('share.expirySectionHint') }}</p>
           </div>
-          <ToggleSwitch v-model="expiryEnabled" :aria-label="t('share.expirySection')" :disabled="busy" />
+          <ToggleSwitch v-model="expiryEnabled" :aria-label="t('share.expirySection')" :disabled="busy || rules.maxDays !== null" />
         </div>
+        <p v-if="rules.maxDays !== null" class="share-group-sub share-rule">{{ t('share.expiryRequiredByRule', { days: rules.maxDays }) }}</p>
         <div v-if="expiryEnabled" class="share-group-body">
           <label for="share-create-expiry">{{ t('share.expiryLabel') }}</label>
           <DatePicker
             id="share-create-expiry"
             v-model="expiresAt"
             :min-date="minExpiry"
+            :max-date="maxExpiry ?? undefined"
             date-format="yy-mm-dd"
             show-icon
             icon-display="input"
@@ -360,6 +381,7 @@ function endOfDay(d: Date): Date {
       </div>
 
       <p v-if="alreadyReplaced" class="share-error">{{ t('share.reissueAlreadyReplaced') }}</p>
+      <p v-else-if="error && requirementRefused" class="share-error">{{ t('share.requirementRefused') }}</p>
       <p v-else-if="error" class="share-error">{{ isEdit ? t('share.noteSaveFailed') : isReissue ? t('share.reissueFailed') : t('share.createFailed') }}</p>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="emit('close')" />
@@ -369,7 +391,7 @@ function endOfDay(d: Date): Date {
             : (isEdit ? t('share.noteSave') : isReissue ? t('share.reissueSubmit') : t('share.create'))"
           :icon="isEdit ? 'pi pi-check' : isReissue ? 'pi pi-replay' : 'pi pi-link'"
           :loading="busy"
-          :disabled="busy || passwordTooShort || alreadyReplaced"
+          :disabled="busy || passwordTooShort || alreadyReplaced || expiryMissing"
           @click="onSubmit"
         />
       </div>

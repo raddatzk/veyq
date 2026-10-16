@@ -80,9 +80,10 @@ It defends a leaked database backup, not a compromised host. So:
   surface alike. Turn it off (`VEYQ_HSTS_ENABLED=false` / `hsts.enabled: false`) only if a hostname of the instance
   is also served over plain HTTP, or your own proxy sets the header already. A browser that saw it keeps it for 180
   days.
-- **The Content Security Policy is built in** and has no setting: scripts only from the instance itself, no framing,
-  and network connections only to the instance, its store and the two third-party services a user's browser may call
-  (the breached-password check and the map and place-name lookup)
+- **The Content Security Policy is built in**: scripts only from the instance itself, no framing, and network
+  connections only to the instance, its store and the outside services you configured (the breached-password check,
+  the map tiles and the place-name lookup, [External services](/veyq/run/capabilities/#external-services)); a service
+  without an address, or switched off, is not allowed at all
   ([cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md)).
 - **Test certificates against a staging directory** (`VEYQ_ACME_CASERVER` / `ingress.tls.acme.server`), and switch
   back before anyone uses the instance: staging certificates are not trusted by browsers.

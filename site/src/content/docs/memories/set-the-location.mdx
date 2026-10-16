@@ -2,6 +2,7 @@
 title: "Set the location"
 sources:
   - docs/features/memory/use-cases/uc.memory.place.md
+  - docs/features/admin/use-cases/uc.admin.configure-external-services.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -14,6 +15,10 @@ The first time you set a location, veyq asks **Enable maps for locations?** A ma
 pictures are loaded from a map provider, and, if you want a name for a place, the point you chose is sent to a service
 that turns it into a name. Both go straight from your device to that provider and never through the veyq server. You
 can turn this off again at any time. Choose **Enable maps** to continue, or **Cancel** to leave maps off.
+
+Which map provider and which naming service are used is decided by whoever runs your server. If it uses none, the
+space says **This server shows no maps.** and no location can be set; without a naming service you type a place's
+name yourself.
 
 <Screenshot id="memories-maps-consent" shows="The dialog Enable maps for locations? with its text and the Cancel and Enable maps buttons" />
 

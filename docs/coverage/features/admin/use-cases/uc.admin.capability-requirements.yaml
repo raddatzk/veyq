@@ -1,0 +1,58 @@
+useCase: uc.admin.capability-requirements
+feature: admin
+title: Set requirements on capabilities
+# Built by cr-capability-requirements (inbox #439 step 3, ADR 0088 decision 8): the catalog's `requirements` generated
+# into CapabilityRequirements, two stores and a per-level cache, the registry's strictest-of-both, the gates in
+# SharingHandler, ShareGuestGate, ScopesHandler and SessionService, both levels' API, web's share dialogs, profile line
+# and tenant panel, admin-web's panel and CLI. Every negative in the slice test has its control (the compliant request,
+# another tenant, the fixed link, the cleared rule).
+acceptanceCriteria:
+  - id: requirement-set-at-each-level
+    text: The Server Owner (console, CLI) and, on a tenant-switchable entry, the tenant owner (web) set a requirement - a flag (1) or a number of days (1 to 3650) - and clear it, each after reading what it does to what exists; a requirement of another entry, a tenant's of an instance-only one, and an unknown name are 404 requirement_not_found, a flag other than 1 or days out of range 400, a non-owner 403, and nothing is stored on a refusal.
+    coverage:
+      backend:
+        integration: [CapabilityRequirementsSliceTest.theServerOwnerSetsAndClearsARequirementAndEveryClientReadsItWithItsEntry, CapabilityRequirementsSliceTest.aTenantTightensButALooserValueIsNotInEffectAndAnInstanceOnlyRequirementIsRefused]
+      web:
+        unit: [src/features/tenant/TenantCapabilitiesPanel.test.ts]
+  - id: strictest-in-effect
+    text: The value in effect for a tenant is the strictest of both levels - a flag set at either, the smaller number of days - so a tenant tightens and never loosens; a looser tenant value is stored and shown as not in effect; a tenant value of an instance-only requirement is ignored.
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.theStrictestOfBothLevelsIsInEffectAndATenantOnlyTightens, CapabilityRegistryTest.aTenantValueOfAnInstanceOnlyRequirementIsIgnored]
+        integration: [CapabilityRequirementsSliceTest.aTenantTightensButALooserValueIsNotInEffectAndAnInstanceOnlyRequirementIsRefused]
+      web:
+        unit: [src/features/tenant/TenantCapabilitiesPanel.test.ts]
+  - id: values-on-the-wire
+    text: Both deliveries carry the values in effect on their own entry as [{ id, ...values }] - the pre-auth manifest the instance's, the tenant's set the strictest - and every catalog requirement has its property, set on its entry and on no other.
+    coverage:
+      backend:
+        unit: [CapabilityWireTest.everyRequirementIsCarriedOnItsEntryAndOnNoOther, CapabilityRegistryTest.theGeneratorReadTheCatalogsRequirements]
+        integration: [CapabilityRequirementsSliceTest.theServerOwnerSetsAndClearsARequirementAndEveryClientReadsItWithItsEntry, CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller]
+      web:
+        unit: [src/shared/state/useCapabilities.test.ts, src/core/sharing/linkRules.test.ts]
+  - id: link-password-required
+    text: While every link needs a password, creating, renewing or editing a link into one without a password is 422 link_password_required, and an existing link without one answers every guest as an unknown link until its owner gives it one; the share dialogs turn the password card on and lock it.
+    coverage:
+      backend:
+        unit: [LinkRequirementsTest.aRequiredPasswordRefusesALinkWithoutOneAndNamesItBeforeTheEndDate]
+        integration: [CapabilityRequirementsSliceTest.aRequiredPasswordRefusesANewLinkWithoutOneAndAcceptsOneWithIt, CapabilityRequirementsSliceTest.aRequiredPasswordStopsAnExistingLinkWithoutOneAtOnceAndAnEditThatGivesOneServesItAgain]
+      web:
+        unit: [src/features/memory/components/ShareCreateDialog.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
+  - id: link-lifetime-limited
+    text: While links must end within N days, a link with no end date or one more than N days after it was made is refused (422 link_expiry_required) and an existing one answers guests as an unknown link, in that tenant only; an edit that gives a younger link a fitting end date serves it again, and clearing the requirement serves every link it stopped; the pickers end on the last day allowed.
+    coverage:
+      backend:
+        unit: [LinkRequirementsTest.aMaximumLifetimeCountsFromWhenTheLinkWasMadeAndIncludesItsLastInstant]
+        integration: [CapabilityRequirementsSliceTest.aTenantsMaximumLifetimeRefusesALinkBeyondItInThatTenantOnly, CapabilityRequirementsSliceTest.clearingARequirementServesTheLinkItStoppedAgain]
+      web:
+        unit: [src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/linkRules.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
+  - id: group-add-consent-required
+    text: While being added to a group needs a yes, the owner's resolve says consent is required and an add without a sealed name key is 400 consent_required, whatever the member's own setting, in that tenant only; members already added stay; the profile says the space asks anyway.
+    coverage:
+      backend:
+        integration: [CapabilityRequirementsSliceTest.aTenantsConsentRequirementOverridesAMembersNoAndLeavesAnotherTenantDirect]
+  - id: password-again-after-days
+    text: While a device must ask for the password again after N days, a session family that began more than N days ago is not renewed (401, nothing revoked) and a younger one is; clearing the requirement renews it again.
+    coverage:
+      backend:
+        integration: [CapabilityRequirementsSliceTest.aSessionOlderThanTheLimitIsNotRenewedAndAYoungOneIs]
