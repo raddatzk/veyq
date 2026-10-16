@@ -27,7 +27,7 @@ import { activeSpace } from '../../app/activeSpace'
 import { tenantStorageFits } from '../../features/tenant/tenantStorage'
 import { prepareCopy, type PreparedCopy } from './copySubtree'
 import { ImportFailed } from './importSubtree'
-import { ExportError } from './manifest'
+import { ExportError, MANIFEST_APP_VERSION } from './manifest'
 
 const props = defineProps<{
   /** What is copied: one node, or the copyable part of a level's selection (every one of them on that level). */
@@ -96,7 +96,7 @@ onMounted(async () => {
       access: props.access,
       tree: props.tree,
       rootIds: props.nodes.map((n) => n.id),
-      appVersion: __APP_VERSION__,
+      appVersion: MANIFEST_APP_VERSION,
       signal: control.signal,
     })
     step.value = 'ready'

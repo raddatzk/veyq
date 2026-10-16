@@ -168,8 +168,6 @@ export default defineConfig(({ command, mode }) => {
     plugins: [vue(), cspPlugin(env, command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin()],
     define: {
       __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
-      // The release identity the build was made for (informational: an export names it in its manifest); `dev` outside a release.
-      __APP_VERSION__: JSON.stringify(env.VEYQ_RELEASE ?? 'dev'),
       // The platform's one major (ADR 0085 decision 1), read from the repository's VERSION as the backend's build reads
       // it, so the web gate and the server built from the same tree cannot disagree. The Dockerfile copies VERSION in.
       __VEYQ_MAJOR__: JSON.stringify(platformMajor()),

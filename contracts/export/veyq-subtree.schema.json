@@ -28,7 +28,7 @@
     "appVersion": {
       "type": "string",
       "maxLength": 64,
-      "description": "The exporting web client's release identity (informational)."
+      "description": "The platform major the exporting web client was built for (informational; ADR 0085 decision 1), e.g. `0`. Never the precise release: the client that writes it is served before any login, and ADR 0057 decision 4 keeps the release off that surface. A reader must not rely on its shape; archives written before 2026-10-16 carry `dev`."
     },
     "options": {
       "type": "object",

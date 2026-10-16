@@ -17,6 +17,13 @@ import { isArchivePath } from './archiveName'
 export const MANIFEST_FORMAT = 'veyq-subtree'
 /** The version this build writes; it reads every version up to it. */
 export const MANIFEST_VERSION = 2
+/**
+ * What `appVersion` names: the platform's one major (ADR 0085 decision 1), never the precise release. The built bundle is
+ * served to anyone who asks, before any login, so a release compiled into it is a release on the pre-auth surface, which
+ * ADR 0057 §4 keeps to the Server Owner (a precise release is a CVE list); the major is public already (`GET /api/setup`).
+ * scripts/validate_release_identity.py holds the image build to it: no stage that compiles the client takes the stamp.
+ */
+export const MANIFEST_APP_VERSION = String(__VEYQ_MAJOR__)
 /** Where version 2 keeps the manifest: beside the tree, in a directory no node may take. */
 export const MANIFEST_PATH = '.veyq/manifest.json'
 /** Where version 1 kept it. */

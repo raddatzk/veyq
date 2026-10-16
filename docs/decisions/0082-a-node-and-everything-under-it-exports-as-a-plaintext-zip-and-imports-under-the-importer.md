@@ -153,7 +153,7 @@ shows it:
   "format": "veyq-subtree",
   "version": 2,
   "exportedAt": "2026-10-14T09:30:00Z",
-  "appVersion": "0.9",
+  "appVersion": "0",
   "applications": [
     { "id": "files", "contentSchema": 1 },
     { "id": "memories", "contentSchema": 1 }
