@@ -44,84 +44,129 @@ Forces:
 
 **A `charts/veyq` Helm chart ships alongside `infra/`, covering the same services**: `app`, `mariadb` (with
 a `mariadb.enabled: false` escape hatch onto an operator-managed database, which K8s deployments commonly
-already have), `garage`, an ingress-controller-agnostic Ingress resource set, and the admin container
-([ADR 0065](0065-admin-ui-cli-separate-service.md)).
+already have), `garage`, an implementation-neutral **Gateway API** resource set (`Gateway`, `HTTPRoute`, `ListenerSet`), and the
+admin container ([ADR 0065](0065-admin-ui-cli-separate-service.md)).
+
+**Routing is decided as the Gateway API and not yet built.** The chart and the sink still render one `Ingress` per
+host, in the shape the bullets below replace (same names, same label, same three TLS modes, `ingress.*` values);
+the move is cr-helm-gateway-api's. Until it lands, this ADR's routing and TLS bullets are the target, and
+`charts/veyq/templates/` plus `KubernetesIngressSink` are what runs.
 
 **The store's bring-up is not this chart's to solve.** It once travelled with a `garage-init` sidecar whose
 image was built locally and never published — which a chart cannot pull, because Helm builds nothing.
 [ADR 0067](0067-store-provisioning-from-a-declared-type.md) removes it: the backend provisions the store
 itself from a declared store type, so the chart deploys `garage` and nothing beside it.
 
-- **Ingress projection reuses [ADR 0063](0063-database-driven-tenant-ingress.md)'s principle, not a new
-  one.** The same backend projector gets a second sink: instead of a Traefik dynamic file, it manages
-  Kubernetes `Ingress` objects directly via the K8s API, scoped to a **namespace-local ServiceAccount +
-  Role** the chart creates — never a cluster-wide `ClusterRole`; the backend manages ingress only in its own
-  namespace. No separate operator/sidecar container: the same single backend process that already owns this
-  projection for compose owns it here, so there is exactly one code path to keep correct, not two.
+- **Routing is the Gateway API, not `Ingress`** (owner, 2026-10-16). The `Ingress` API is **frozen, not
+  deprecated**: GA, no removal planned, no further development, and the Kubernetes project recommends Gateway
+  instead (kubernetes.io, *Ingress*). So the no-deprecated-dependencies rule does not force the move — what bit it
+  was the chart's ingress-nginx example, a controller retired in March 2026 with no security fixes since. The
+  move is taken anyway because the chart has **no release yet**: switching now costs no operator a migration, and
+  after V1 every install would have to migrate. *Rejected:* `Ingress` and Gateway side by side — two sinks, two
+  template sets, two RBAC shapes and a doubled `chart_meta_check.py` matrix, kept alive for an API that gains
+  nothing; and staying on `Ingress` with only the example replaced — every new install on the frozen API, the
+  move deferred to when there are installs to move.
 
-  **What the sink already does, which the chart must match rather than re-decide.** It reconciles: one
-  `Ingress` per routable domain, named `veyq-tenant-<domain>`, labelled
-  `app.kubernetes.io/managed-by: veyq-tenant-ingress`, and it **lists by that label** — so the Role needs
-  `list`, `create`, `update` **and `delete`** on `networking.k8s.io/ingresses` in the one namespace, and an
-  operator's own `Ingress` beside it is untouched. The namespace is read from the pod's mounted ServiceAccount
-  token, never from a chart value: a required namespace setting would mean one image per install, which is the
-  property the compose/admin-web work already paid for. `veyq.tenant.ingress.kubernetes.service-name`/`-port`
-  name the `Service` the rules point at, so renaming the app `Service` in the chart means setting them.
+  **The chart owns its `Gateway`; the operator picks the implementation.** One `Gateway`, `veyq`, in the release
+  namespace, its `gatewayClassName` from `gateway.className` (what `ingress.className` was; Traefik is the docs'
+  example, never a requirement). Its listeners: plain HTTP on 80 with no hostname, an HTTPS listener per chart
+  host (`domain`, `storeDomain`, `admin.domain` when set), and `allowedListeners` from the **same namespace only**,
+  so the backend's `ListenerSet`s attach and nothing from another namespace does. A listener on the `Gateway` wins
+  a hostname conflict against any `ListenerSet` (Gateway API's own precedence), so a tenant domain cannot take
+  the bootstrap, store or admin host — by the API, not only by the sink's bootstrap exclusion. *Rejected:* an
+  operator-provided `Gateway` named by `parentRef`. It fits Gateway API's role split (the `Gateway` is the
+  cluster's infrastructure), but the operator then has to open `allowedListeners` to veyq's namespace, the chart's
+  own hosts become `ListenerSet`s as well, and supporting both forms is two shapes to check. Stated cost: some
+  implementations provision a load balancer per `Gateway` — operator-visible, and the operator's choice of
+  implementation.
+
+- **Projection reuses [ADR 0063](0063-database-driven-tenant-ingress.md)'s principle, not a new one.** The same
+  backend projector has a second sink beside the Traefik file: it manages Gateway API objects directly via the
+  K8s API, scoped to a **namespace-local ServiceAccount + Role** the chart creates — never a cluster-wide
+  `ClusterRole`. No separate operator/sidecar container: the single backend process that owns this projection
+  for compose owns it here, so there is one code path to keep correct, not two.
+
+  **What the sink does, which the chart must match rather than re-decide.** It reconciles: per routable domain
+  one `HTTPRoute` (that host to the app `Service`) and, under `per-domain`, one `ListenerSet` carrying that
+  host's HTTPS listener, which the route attaches to. Both are named `veyq-tenant-<domain>` (a digest past the
+  253-character cap), both are labelled `app.kubernetes.io/managed-by: veyq-tenant-ingress`, and the sink
+  **lists each kind by that label** — so an operator's own route beside them is untouched. The Role grants
+  `get`, `list`, `watch`, `create`, `update`, `patch` **and `delete`** on `gateway.networking.k8s.io`
+  `httproutes` and `listenersets` in the one namespace, and **nothing on `gateways`**: the backend can neither
+  add nor change a listener on the `Gateway`, and a tenant domain reaches the network only through a
+  `ListenerSet` the chart's `Gateway` admits. The namespace is read from the pod's mounted ServiceAccount token,
+  never from a chart value: a required namespace setting would mean one image per install.
+  `veyq.tenant.ingress.kubernetes.gateway-name` names the parent `Gateway`, and `…service-name`/`-port` the
+  `Service` the routes point at, so renaming either in the chart means setting them.
 
   **TLS is a passthrough on the sink: it stamps a reference the chart tells it to, and configures nothing.**
   The compose sink is not TLS-free — it emits `tls.certResolver: letsencrypt` on every router, a *reference* to
   a resolver the compose **recipe** configures (`VEYQ_ACME_EMAIL`, the CA directory, HTTP-01). The cut is
   between referencing and configuring, not between emitting and not emitting — and it falls between the *sink*
   and the *recipe*, not between the backend and the whole deployment. So the faithful translation has two
-  halves. The sink's: `spec.tls` plus an operator-supplied annotation map on every projected `Ingress` — never
-  an `Issuer`, a `Certificate` or a `Secret`, which would need RBAC this design exists to avoid (cert-manager
-  watches the `Ingress` objects the sink is already permitted to write). The chart's, as the recipe's
+  halves. The sink's: a listener's `certificateRefs` plus an operator-supplied annotation map on every
+  projected `ListenerSet` — never an `Issuer`, a `Certificate` or a `Secret`, which would need RBAC this design
+  exists to avoid (cert-manager reads the `Gateway` and the `ListenerSet`s the sink is already permitted to
+  write; an `HTTPRoute` carries no certificate and gets no annotations). The chart's, as the recipe's
   counterpart: it **may template the one thing the recipe configures — an ACME issuer — as an opt-in**,
-  `ingress.tls.acme.*`: one **namespaced** cert-manager `Issuer` (`veyq-acme`; ACME HTTP-01; the operator's
-  e-mail, required as `VEYQ_ACME_EMAIL` is; a CA directory URL defaulting to Let's Encrypt production exactly as
-  `VEYQ_ACME_CASERVER` does), and `cert-manager.io/issuer: veyq-acme` stamped through the same annotation map
-  every `Ingress` already receives — the chart's own and the projected ones alike, so a tenant created at
-  runtime is a certificate order with no chart edit and no restart. It needs no backend RBAC at all: Helm
-  applies the `Issuer` with the operator's credentials, and the backend's `Role` keeps its `Ingress` verbs and
-  nothing else. It requires `mode: per-domain` and refuses any other mode in `values.schema.json` rather than
-  overriding an explicit `shared` silently — ACME is a way of *obtaining* the per-domain certificates, not a
-  fourth mode, and the sink's `when` over the three modes stays total. What the chart does **not** do, each for
-  the same reason: install cert-manager (a subchart is cluster-scoped CRDs plus a `ClusterRole` — the
-  no-cluster-wide-RBAC bar the self-hostability story states), template a `ClusterIssuer` (cluster-scoped), or
-  let the backend speak ACME itself (`create` on `Secret`s cannot be narrowed by `resourceNames`, in the
-  namespace that holds the database and store credentials; it would also have to route HTTP-01, and it would
-  reimplement cert-manager). cert-manager is therefore a **precondition the operator meets**, like the ingress
-  controller — a CNCF-graduated project with two supported releases at any time. Its absence is left to the API
-  server: `helm install` builds every object before it creates any, and an unknown kind fails the whole release
-  with *"ensure CRDs are installed first"*; a `.Capabilities.APIVersions.Has` check would buy a friendlier
-  sentence at the price of breaking every offline render (`helm template` knows no cluster, `helm lint` has no
+  `gateway.tls.acme.*`: one **namespaced** cert-manager `Issuer` (`veyq-acme`; ACME HTTP-01 through a
+  `gatewayHTTPRoute` solver on the `Gateway`'s port-80 listener; the operator's e-mail, required as
+  `VEYQ_ACME_EMAIL` is; a CA directory URL defaulting to Let's Encrypt production exactly as
+  `VEYQ_ACME_CASERVER` does), and `cert-manager.io/issuer: veyq-acme` plus
+  `acme.cert-manager.io/http01-parentreffallback: "true"` stamped through the same annotation map the
+  `Gateway` and every `ListenerSet` receive — the fallback sends each tenant's challenge to the `Gateway`'s one
+  port-80 listener instead of requiring an HTTP listener per `ListenerSet`, and a tenant created at runtime is a
+  certificate order with no chart edit and no restart. It needs no backend RBAC at all: Helm applies the
+  `Issuer` with the operator's credentials. It requires `mode: per-domain` and refuses any other mode in
+  `values.schema.json` rather than overriding an explicit `shared` silently — ACME is a way of *obtaining* the
+  per-domain certificates, not a fourth mode, and the sink's `when` over the three modes stays total. What the
+  chart does **not** do, each for the same reason: install cert-manager or the Gateway API CRDs (cluster-scoped
+  CRDs plus a `ClusterRole` — the no-cluster-wide-RBAC bar the self-hostability story states), template a
+  `ClusterIssuer` (cluster-scoped), or let the backend speak ACME itself (`create` on `Secret`s cannot be
+  narrowed by `resourceNames`, in the namespace that holds the database and store credentials; it would also
+  have to route HTTP-01, and it would reimplement cert-manager). Their absence is left to the API server:
+  `helm install` builds every object before it creates any, and an unknown kind fails the whole release with
+  *"ensure CRDs are installed first"*; a `.Capabilities.APIVersions.Has` check would buy a friendlier sentence at
+  the price of breaking every offline render (`helm template` knows no cluster, `helm lint` has no
   `--api-versions`), so there is none. The ACME account key is cert-manager's `Secret`, generated by it — the
   chart still generates nothing (below).
 
+  **Preconditions the operator meets**, stated where the chart's notes and the Run area say them: the Gateway
+  API CRDs at **v1.5 or later, standard channel** (where `ListenerSet` is GA), and an implementation serving the
+  named `GatewayClass`. Under `per-domain` additionally an implementation that supports `ListenerSet`, and
+  cert-manager 1.20 or later with its Gateway API support and its `ListenerSets` feature gate on. **Residue taken
+  knowingly:** cert-manager's Gateway support is beta and its `ListenerSet` support **alpha** (1.20), so
+  per-domain certificates for runtime tenants rest on an alpha feature until it graduates. `shared`, `none` and
+  the chart's own hosts need no `ListenerSet` at all.
+
   Three named modes under `veyq.tenant.ingress.kubernetes.tls.*`, never inferred: `none` (the default — TLS
-  terminates upstream, and no existing deployment moves), `per-domain` (one `spec.tls` per domain whose
-  `secretName` is the object's **own** name, cert-manager's ingress-shim shape — the one that keeps per-tenant
-  custom domains working), and `shared` (every object references one pre-provisioned `Secret`: the wildcard
-  certificate, kept as an operator's choice rather than as everyone's ceiling, because a wildcard *certificate*
-  takes away at the TLS layer exactly the custom-domain capability
+  terminates upstream, and no existing deployment moves; the `Gateway` has its port-80 listener only, routes
+  attach to it, no `ListenerSet` is written), `per-domain` (an HTTPS listener per host whose `certificateRefs`
+  names the object's **own** name — the chart's `veyq-app`, `veyq-garage`, `veyq-admin` on the `Gateway`, each
+  tenant's `ListenerSet` on its own — the one mode that keeps per-tenant custom domains working), and `shared`
+  (one HTTPS listener with no hostname on the `Gateway`, referencing one pre-provisioned `Secret`, which every
+  route attaches to: the wildcard certificate, kept as an operator's choice rather than as everyone's ceiling,
+  because a wildcard *certificate* takes away at the TLS layer exactly the custom-domain capability
   [ADR 0063](0063-database-driven-tenant-ingress.md) refused to give up at the routing layer). The chart's own
-  `Ingress` objects follow the same mode, so the operator decides once. Why `secretName` reuses the object name
-  rather than deriving a second one: a `Secret` name has the same 253-character cap an object name has,
+  hosts follow the same mode, so the operator decides once. Why the `Secret` reuses the object name rather than
+  deriving a second one: a `Secret` name has the same 253-character cap an object name has,
   `contracts/api/tenants.openapi.yaml` allows a 253-character domain, and the object name is the one string
   already kept legal at that cap — a `-tls` suffix on it is an object the API server rejects, which on this
-  sink's failure boundary strands *every* tenant's routing. Stated residue: the `Certificate` ingress-shim
-  creates is owned by its `Ingress` and goes with it, but a withdrawn domain's issued `Secret` is not deleted
-  by cert-manager unless it runs with `--enable-certificate-owner-ref` — operator-visible, not a routing or
-  access leak, and not swept, because sweeping `Secret`s would need the RBAC this shape avoids. **TLS on this
-  target is a precondition, not a preference:** the refresh cookie is `Secure` by default and every mailed link
-  is `https`, so a chart that cannot obtain a certificate for a tenant domain ships an instance that boots and
-  then silently breaks sessions — which is why `none` is the default for continuity and the chart's notes say
-  so loudly.
-- **Garage gets its own Ingress host by default on Kubernetes**, not the compose same-origin path route.
-  Because the ingress controller is operator-chosen and its exact prefix/Host-preservation behavior is not
+  sink's failure boundary strands *every* tenant's routing. Under `per-domain` and `shared` the chart also renders
+  one `HTTPRoute` on the port-80 listener that redirects to `https` (Gateway API's core `RequestRedirect`
+  filter), so the redirect is the chart's and not an implementation's default; cert-manager's challenge routes
+  name a host and an exact path, which Gateway API ranks above it. Stated residue: a withdrawn domain's issued
+  `Secret` is not deleted by cert-manager unless it runs with `--enable-certificate-owner-ref` —
+  operator-visible, not a routing or access leak, and not swept, because sweeping `Secret`s would need the RBAC
+  this shape avoids. **TLS on this target is a precondition, not a preference:** the refresh cookie is `Secure`
+  by default and every mailed link is `https`, so a chart that cannot obtain a certificate for a tenant domain
+  ships an instance that boots and then silently breaks sessions — which is why `none` is the default for
+  continuity and the chart's notes say so loudly.
+- **Garage gets its own host by default on Kubernetes**, not the compose same-origin path route.
+  Because the gateway implementation is operator-chosen and its exact prefix/Host-preservation behavior is not
   guaranteed, the chart defaults to the CORS-policy branch [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)
   already documents as the alternative for stores that aren't behind the specific bundled-Traefik route —
-  Garage gets its own Ingress host, a CORS policy on its bucket, and presigned URLs signed against that host.
+  Garage gets its own host, a CORS policy on its bucket, and presigned URLs signed against that host.
   (§4 is updated in place to name this as the Kubernetes branch.)
 
   Two things about that branch are easy to get wrong, and both are settled elsewhere rather than here.
@@ -135,7 +180,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
 
   **The branch is not free on the backend.** `S3BlobStore.endpointFor` swaps `public-endpoint`'s host for the
   resolved tenant's domain, which is right for the compose same-origin route and wrong for a store on its own
-  Ingress host, where every tenant signs against the *same* store origin. That second signing mode is
+  host, where every tenant signs against the *same* store origin. That second signing mode is
   [ADR 0067](0067-store-provisioning-from-a-declared-type.md)'s Decision 5 — one mechanism, of which this
   chart is one of two callers.
 - **The chart is released the same way the image is.** Packaged and pushed as an **OCI artifact** to the same
@@ -173,7 +218,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   runs in `container.yml`'s test job.
 - **The chart generates nothing and every pod passes `restricted`**, to which
   [ADR 0071](0071-runtime-hardening-on-both-targets.md) adds a read-only root and a NetworkPolicy set whose
-  ingress-controller peer the operator must name. Every secret is the operator's to supply
+  gateway data-plane peer the operator must name. Every secret is the operator's to supply
   (or to name in an existing `Secret`), enforced by `values.schema.json` — a value Helm generated would be
   re-rolled on any render where `lookup` is blind, and a chart that generates values cannot be asserted
   because no two renders agree. The config-secret KEK is the one exception and stays one: the app generates
