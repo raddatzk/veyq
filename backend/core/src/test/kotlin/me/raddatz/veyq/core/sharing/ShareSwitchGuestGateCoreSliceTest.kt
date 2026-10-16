@@ -116,13 +116,13 @@ class ShareSwitchGuestGateCoreSliceTest {
             given().contentType(ContentType.JSON).header("X-Contributor-Token", token)
                 .body(
                     """{"parentId":"${w.root}","encryptedName":"cGxhY2Vk","slugToken":"${GuestTreeShare.slug()}",""" +
-                        """"wrappedContentKey":"cmUtd3JhcHBlZA==","placementVersion":${placementVersion(w.sub)}}""",
+                        """"wrappedContentKey":"cmUtd3JhcHBlZA==","placementRevision":${placementRevision(w.sub)}}""",
                 )
                 .`when`().patch("/api/shares/$id/nodes/${w.sub}")
         },
     )
 
-    private fun placementVersion(nodeId: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.findById(nodeId)!!.placementVersion }
+    private fun placementRevision(nodeId: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.findById(nodeId)!!.placementRevision }
 
     private fun sha256b64(tokenB64: String): String =
         Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(Base64.getDecoder().decode(tokenB64)))
