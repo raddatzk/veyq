@@ -131,6 +131,18 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
   - **Done when:** the live upgrade and the three bites read; selftest extended (decision order, `VEYQ_RELEASE` per
     line) and green; committed.
 
+- [ ] **3b A major is entered from its predecessor's last release** (owner 2026-10-16, ADR 0096 decision 5 step 1,
+  decided after phase 3 landed). `upgrade`'s resolution: if the selected release lies in a later major than the
+  running one and the running release is not the newest of its major, the target becomes that newest release, and
+  the run ends by saying the next `upgrade` enters the next major; a run never crosses more than one major (from the
+  last of major N, `latest` or a pin in N+2 goes to the newest of N+1). A pin inside the next major is reached
+  directly once the running release is its predecessor's last. `--help` and the `VEYQ_RELEASE` messages stop saying
+  "crossing majors" plainly. Pure resolution, no Docker needed.
+  - **Bites (selftest):** the rule removed → a run from 1.3 with `latest` at 2.5 (1.9 newest of major 1) resolves
+    2.5, red; the one-major cap removed → from 1.9 with 3.1 listed resolves 3.1, red; control: within a major, 1.3 →
+    1.9 directly, green.
+  - **Done when:** the bites read; `veyqctl_selftest.py` and every guard green; committed.
+
 - [ ] **4 The recipe leaves the image; the stack lane boots through `veyqctl`.** Re-read `scripts/run_stack_e2e.py` on
   `main` first (cr-stack-e2e moves it). Delete the two `COPY … /opt/veyq/deploy/` lines and their comment block from
   the `Dockerfile`; `extract()` and `write_env()` give way to `release_assets.py` into the run directory plus
