@@ -107,7 +107,9 @@ export function editField(
 export function editParticipantsOf(merge: (stored: string[]) => string[]): (meta: RawNodeMeta, ctx: MetaEditContext) => RawNodeMeta | null {
   return (meta) => {
     const raw = meta.participants
-    const rawIds = raw && typeof raw === 'object' && Array.isArray((raw as { userIds?: unknown }).userIds) ? ((raw as { userIds: unknown[] }).userIds) : []
+    // No `typeof raw === 'object'` guard here: the blob is parsed JSON, and no JSON primitive has a `userIds`, so
+    // that conjunct changed nothing — Stryker measured it as an equivalent mutant (2026-10-17).
+    const rawIds = Array.isArray((raw as { userIds?: unknown } | null | undefined)?.userIds) ? ((raw as { userIds: unknown[] }).userIds) : []
     const stored = rawIds.filter((id): id is string => typeof id === 'string' && id !== '')
     const next = merge([...new Set(stored)])
     if (stableJson(next) === stableJson(stored)) return null
