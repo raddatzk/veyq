@@ -1930,7 +1930,7 @@ const de: typeof en = {
     revokeConfirm: 'Diese Einladung zurückziehen? Ihr Link wird ungültig.',
     inviteSentTo: 'Einladung an {email} gesendet.',
     inviteSentIntro: 'Die Einladung ging per E-Mail an die Person — sie ist an sie adressiert, du musst also nichts weitergeben. Der Zugang zum geteilten Bereich wird automatisch ausgeliefert, sobald sie beitritt und ein Mitglied online ist.',
-    mailUnavailable: 'Dieser Bereich kann noch keine E-Mails senden, deshalb können keine Einladungen rausgehen. Eine Besitzerin oder ein Besitzer muss E-Mail in den Bereichseinstellungen einrichten.',
+    mailUnavailable: 'Dieser Bereich kann noch keine E-Mails senden, deshalb können keine Einladungen rausgehen. Eine besitzende Person muss E-Mail in den Bereichseinstellungen einrichten.',
     mailSendFailed: 'Die E-Mail konnte nicht gesendet werden, deshalb wurde keine Einladung erstellt. Bitte versuch es noch einmal.',
     inviteRateLimited: 'Gerade zu viele Einladungen — bitte versuch es gleich noch einmal.',
     inviteRevoked: 'Einladung zurückgezogen.',

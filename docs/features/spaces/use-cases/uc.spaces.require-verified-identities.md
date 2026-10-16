@@ -46,7 +46,7 @@ how it could protect a space other members also share into is still open.
 
 **DE —** **Geplant — heute noch nicht in der App.** Die Sicherheitsnummer eines Mitglieds kannst du schon heute in
 seinem Profil vergleichen und es als „verifiziert" markieren. Was es noch nicht gibt, ist eine Einstellung, die das
-Teilen mit allen verweigert, die du nicht verifiziert hast: Wie sie einen Raum schützen soll, in den auch andere
+Teilen mit allen verweigert, die du nicht verifiziert hast: Wie sie einen Bereich schützen soll, in den auch andere
 Mitglieder teilen, ist noch offen.
 
 ## Related
