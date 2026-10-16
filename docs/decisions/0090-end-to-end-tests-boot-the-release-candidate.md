@@ -30,11 +30,12 @@ What a green run proves today stops short of what a Server Owner runs:
    image's own `.env.example`. The only file laid over the recipe is `infra/e2e/docker-compose.e2e.yml`, which adds
    an ACME test server and changes nothing an operator's instance has.
 
-2. **It gates the publish, on the exact bytes it publishes.** A job `e2e` in `container.yml` needs `build`; `publish`
-   needs `e2e`. On a dispatch it pulls `build-<sha>-<arch>` by digest — the manifests `publish` then tags and signs —
-   so a snapshot and a release are both only ever names for an image that passed. On a push or pull request (a dry
-   run, which pushes nothing) it rebuilds from `build`'s cache and runs the smoke tier; that informs and gates nothing.
-   Both architectures run, since nothing else ever starts the arm64 image.
+2. **It gates the snapshot, on the exact bytes it publishes.** On a push to `main` or `release/<major>.x` the lanes
+   pull `build-<sha>-<arch>` by digest, and the snapshot is published on those digests only when every lane is green;
+   a release promotes that snapshot without building again
+   ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 5), so a snapshot and a
+   release are both only ever names for bytes that passed. A pull request builds and tests in the same job and
+   publishes nothing. Both architectures run on a push, since nothing else ever starts the arm64 image.
 
 3. **TLS is real.** Traefik obtains its certificate from **Pebble** (Let's Encrypt's test ACME server) through the
    recipe's existing `VEYQ_ACME_CASERVER`; Pebble's per-run root is put into the browser's trust store and
@@ -53,9 +54,11 @@ What a green run proves today stops short of what a Server Owner runs:
 6. **The browser may reach the instance and nothing else.** Every request to another origin is aborted and fails the
    test, except the HIBP range query, answered locally with no match. Self-hostable by default, checked per page.
 
-7. **Two tiers, one suite.** `@smoke` (first run in admin-web, a tenant, a Memory with a photo written on one device
-   and read on another, a READ link opened anonymously, the sweeps) runs on every dry run and every publish; the full
-   set (starting with the capability off states inbox #447 ran by hand) runs on every publish. Retries are 0.
+7. **One suite, run whole, as the lanes of ADR 0091 decision 3.** This ADR's harness is lane L1 (the candidate,
+   fresh): first run in admin-web, a tenant, a Memory written on one device and read on another, a READ link opened
+   anonymously, the feature scenarios (starting with the capability off states inbox #447 ran by hand), the sweeps.
+   Every scenario is tagged with the acceptance criterion it covers. The same harness boots L2's predecessor and L3's
+   restores. Retries are 0.
 
 8. **It is not a replacement for `run_web_e2e.py`.** That layer stays: per-file fresh instances, API-level, fast to
    bisect, and the home of the upgrade proof. This one is few scenarios, one instance per run, and the shipped artifact.
@@ -68,9 +71,8 @@ What a green run proves today stops short of what a Server Owner runs:
   Testcontainers would earn its place is the backend's own integration tests (a real MariaDB instead of H2 for a
   `@QuarkusTest`); that is a separate question.
 - **Testing the published snapshot.** Testing after the publish tests a name that is already pullable; the gate has to
-  sit before it. A release that *promotes* a tested snapshot instead of building again would be stronger still, but
-  the version is baked in at build (`VEYQ_VERSION`), so a promoted snapshot would report `-SNAPSHOT` as a release —
-  it would mean reopening ADR 0057 §1. Gating on `build-<sha>` gives the same guarantee without it.
+  sit before it — which is why the lanes test `build-<sha>` and the snapshot follows them, and why a release promotes
+  rather than builds (ADR 0057 §1, reopened for exactly this by ADR 0091).
 - **Extending `run_web_e2e.py`.** Its premise is the dev stack plus a jar, fresh per file; this one's is the image
   plus the production recipe, one instance per run. Sharing the sweeps is the overlap worth having.
 - **Kubernetes now.** The chart is the second target (ADR 0064) and gets the same smoke tier later on a `kind`
@@ -84,19 +86,21 @@ What a green run proves today stops short of what a Server Owner runs:
 - **The coverage model gains a surface, `stack`** (answer 2), unadmitted until a CI run executed it.
 - **Port 80/443 belong to the run.** The recipe publishes Traefik on them, so a local run needs them free; the admin
   port is the run's own (`ADMIN_PORT`), never the developer's 8081.
-- **A publish gets slower** by a stack boot plus the full tier, per architecture in parallel; a dry run by the smoke
-  tier, which gates nothing. Estimated at refine, not measured: ~6–10 min for smoke. What it rests on: the image is
+- **A push gets slower** by a stack boot plus the suite, per architecture in parallel; ADR 0091 budgets the lane at 15
+  min. Estimated at refine, not measured: ~6–10 min for the first scenarios. What it rests on: the image is
   built once by `build` and only pulled (dispatch) or rebuilt from its cache (dry run); one instance per run, not per
   file; a cold birth is a few Argon2id derivations at `t=3, m=32 MiB` (`packages/crypto/src/v1.ts`); the fast-jar
   started in 2–6 s in a local `run_web_e2e.py` run on 2026-10-15. The first CI run's per-stage times replace this
   paragraph. Speed is never bought by weakening what ships.
+- **Published** for security researchers on the docs site, with every other stage: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 - **The Run pages become checkable.** first-run.setup.ts uses admin-web's own labels in the order first-run.mdx gives
   them; a renamed button or a reordered step is a red run.
 
 ## Answered at refine (2026-10-16, accepted with this ADR)
 
-1. **Smoke on every push and pull request, the full tier on every publish** — Decision 7. A dry run is where a
-   regression is cheapest to find; the publish is where it must not pass.
+1. **The whole suite on every push and pull request** — replaced at the same refine by ADR 0091 decision 4, which the
+   owner chose over the first answer (smoke per push, the full tier per publish): a regression is cheapest found at
+   the commit that causes it.
 2. **Coverage gets a surface of its own, `stack`**, resolving refs relative to `e2e/` (`validate_coverage.py`'s
    `SURFACES` + `FILE_ROOTS`, the extension point that file names). Filing a spec under `web` or `admin-web` would
    claim a surface's own CI job ran it, which none does; one spec also drives both. `stack` is not OWED, and it is

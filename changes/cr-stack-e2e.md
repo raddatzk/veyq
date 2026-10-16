@@ -1,9 +1,9 @@
 ---
 id: cr-stack-e2e
-title: The release candidate booted from its own recipe and driven in a real browser, gating the publish
+title: Lane L1 — the candidate booted from its own recipe and driven in a real browser, gating the snapshot
 status: planned
 satisfies: ["uc.admin.setup-server", "uc.admin.configure-object-store", "uc.admin.switch-capabilities", "cc.security.wire-assertion"]
-adrs: ["0090", "0057", "0053", "0040", "0071", "0065"]
+adrs: ["0090", "0091", "0057", "0053", "0040", "0071", "0065"]
 invariants:
   - "Operator-blind E2EE: every value a scenario types is a canary the run sweeps the database, the bucket and every log for (ADR 0053)"
   - "Self-hostable by default: the browser may reach the instance only; the run needs no internet once its images and browser are pulled"
@@ -12,9 +12,11 @@ invariants:
 
 ## Goal
 
-A CI job that boots the two candidate images with the compose recipe taken **out of the app image**, gets a real
-ACME certificate from a Pebble, drives admin-web and web in Chromium through first run and a Memory round trip,
-sweeps the stack for every typed value, and gates `publish` on the exact `build-<sha>-<arch>` bytes it then signs.
+Lane L1 of [ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md): a job
+that boots the two candidate images with the compose recipe taken **out of the app image**, gets a real ACME
+certificate from a Pebble, drives admin-web and web in Chromium through first run, a Memory round trip and the
+feature scenarios, sweeps the stack for every typed value, and gates the snapshot on the exact `build-<sha>-<arch>`
+bytes it is published on.
 [ADR 0090](../docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md) holds every decision, its
 rejected alternatives and the four refine answers; this CR orders the work. Inbox #448; phase 5 automates the browser pass inbox #447 ran by hand on 2026-10-15.
 
@@ -22,6 +24,10 @@ rejected alternatives and the four refine answers; this CR orders the work. Inbo
 
 ## Context & constraints
 
+- **ADR 0091 (accepted 2026-10-16) sets the frame:** one pipeline per commit, every stage budgeted, the gate on every
+  push, a release that promotes. This CR builds lane L1 only. **It needs the pipeline CR first** (ADR 0091
+  § Consequences, the work order: one workflow, the build not waiting for the tests), because phase 4 wires L1 into
+  that pipeline; phases 1–3 and 5 do not need it. Promotion, attestations, L2 (inbox #453) and L3 are CRs of their own.
 - **There is no remote.** No phase can be proven in CI; each phase's proof is a **local** run of
   `scripts/run_stack_e2e.py` against locally built images (`docker build` of both Dockerfiles), and its log is read.
   The CI job is written in phase 4 and first proven by the first push — after which `stack` is admitted (ADR 0040).
@@ -72,21 +78,22 @@ trust-chain green. Each phase names its bites — the case that must make the ne
 - [ ] 3 **The Memory round trip, swept.** The sweeps move into `scripts/e2e_sweeps.py`, parameterised by compose
       project, imported by both orchestrators; `run_web_e2e.py`'s own run is unchanged (its CI job's steps, run locally,
       green). `memory-roundtrip.spec.ts` with real web/ locators; every typed value through `recordTyped`; the run
-      refuses a green with zero executed tests (junit.xml). Bites: a canary written into a container log by hand →
-      red naming canary and log; an empty `--grep` → red, not green.
-- [ ] 4 **CI.** The `e2e` job in `container.yml` per architecture (dry run: both images rebuilt from `build`'s cache,
-      smoke tier; dispatch: both pulled by digest, full tier); `publish` needs it and requires its `success`; the
-      gate promoted to a guard — `validate_release_identity.py` asserts `publish` waits on `e2e` and on its success
-      (bite: drop the `needs` → red). Coverage: `stack` added to `SURFACES` and `FILE_ROOTS` (→ `e2e/`), not to
-      `ADMITTED`; the served use-cases gain a `stack` gap "awaiting the first CI run (no remote)". Proof: the
-      workflow's steps run locally in order; the CI run itself waits for the remote.
-      **Runtime is budgeted, not hoped for.** The orchestrator prints each stage's wall time (pull or rebuild, browser
-      install, boot to `--wait`, each Playwright project, sweeps, teardown) into its summary; the job carries a
-      `timeout-minutes` set from the measured local run; the browser install is cached by Playwright's version. The
-      budget at refine (estimated, not measured — no CI run exists): smoke **~6–10 min** per architecture, the full
-      tier growing per scenario; the first CI run's numbers replace it in ADR 0090 § Consequences. A tier that grows
-      past its budget is split into shards with a stack each, never made faster by weakening what ships (no lowered
-      Argon2 parameters, no skipped TLS).
+      refuses a green with zero executed tests (junit.xml). Every scenario carries its criterion tag
+      (`@uc.<feature>.<use-case>:<criterion-id>`, ADR 0091 decision 3). Bites: a canary written into a container log by
+      hand → red naming canary and log; a selection that executes no test → red, not green.
+- [ ] 4 **L1 in the pipeline.** The lane job per architecture after the build (a pull request: amd64, built and tested
+      in the same job, nothing pushed; a push: both architectures, `build-<sha>-<arch>` pulled by digest), and the
+      snapshot publish needs it with `success`; the gate promoted to a guard — `validate_release_identity.py` asserts the
+      snapshot waits on L1 (bite: drop the `needs` → red). The criterion-tag guard: every tag names a criterion, every
+      `stack` ref names a tagged test (bites: a tag with a typo → red; a ref to an untagged test → red). Coverage: `stack`
+      added to `SURFACES` and `FILE_ROOTS` (→ `e2e/`), not to `ADMITTED`; the served use-cases gain a `stack` gap
+      "awaiting the first CI run (no remote)". Proof: the job's steps run locally in order; the CI run waits for the remote.
+      **Runtime is budgeted, not hoped for.** The orchestrator prints each stage's wall time (pull or build, browser
+      install, boot to `--wait`, each Playwright project, sweeps, teardown) into its summary; the job's
+      `timeout-minutes` is ADR 0091's 15; the browser install is cached by Playwright's version. Estimated at refine,
+      not measured: ~6–10 min per architecture for the first scenarios; the first CI run's numbers replace it. A lane
+      that grows past its budget is sharded with a stack per shard, never made faster by weakening what ships (no
+      lowered Argon2 parameters, no skipped TLS).
 - [ ] 5 **Capability off states — inbox #447's hand pass, automated.** `capability-off-states.spec.ts` for the four ids,
       through admin-web's Server → Capabilities and back, asserting what #447's row recorded: the affordances gone
       ("New drop box" and its tab, "Sign in with a QR code", "Add a device", "Stay signed in"), a trusted and a
@@ -97,9 +104,10 @@ trust-chain green. Each phase names its bites — the case that must make the ne
 
 ## Definition of done
 
-A local run of `scripts/run_stack_e2e.py --tier full` against both locally built images is green, with every bite
-above made red once; `container.yml` gates `publish` on `e2e`; the trust-chain is green; ADR 0090's Status says what
-is built and that the CI run awaits the remote; the first-run Run page (`site/src/content/docs/run/first-run.mdx`)
+A local run of `scripts/run_stack_e2e.py` against both locally built images is green, with every bite above made red
+once; the pipeline gates the snapshot on L1; the trust-chain is green; ADR 0090's Status says what is built and that
+the CI run awaits the remote; [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md) moves
+L1 from designed to built, with what has run where (ADR 0091 decision 8); the first-run Run page (`site/src/content/docs/run/first-run.mdx`)
 drops its "not exercised on a running instance" note in favour of naming this suite. Follow-up, not this CR: the
 chart on `kind` (ADR 0090 answer 3).
 
