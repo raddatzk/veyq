@@ -1,8 +1,8 @@
 import { instanceApi } from '../../api/client'
-import type { InstanceCapability, InstanceCapabilityText } from '../../api/generated/instance'
+import type { InstanceCapability, InstanceCapabilityRequirement, InstanceCapabilityText } from '../../api/generated/instance'
 import { decodeHttpError } from '../../shared/httpError'
 
-export type { InstanceCapability, InstanceCapabilityText } from '../../api/generated/instance'
+export type { InstanceCapability, InstanceCapabilityRequirement, InstanceCapabilityText } from '../../api/generated/instance'
 
 /**
  * The capability register at the instance level (ADR 0088 decision 12, uc.admin.switch-capabilities) —
@@ -23,6 +23,26 @@ export function listInstanceCapabilities(): Promise<InstanceCapability[]> {
  */
 export function setInstanceCapability(capabilityId: string, off: boolean): Promise<InstanceCapability> {
   return instanceApi().setInstanceCapability({ capabilityId, instanceCapabilityUpdate: { off } })
+}
+
+/**
+ * Set one requirement on an entry for the instance (ADR 0088 decision 8): `1` for a flag, else a number of days (1 to
+ * 3650). It acts at once, existing links and sessions included as its `whenSet` says. Refusals: 404
+ * `requirement_not_found`, 400 `invalid_request`.
+ */
+export function setInstanceCapabilityRequirement(capabilityId: string, requirement: string, value: number): Promise<InstanceCapability> {
+  return instanceApi().setInstanceCapabilityRequirement({ capabilityId, requirement, instanceCapabilityRequirementUpdate: { value } })
+}
+
+/** Clear the instance's value of one requirement; a tenant's own stays in effect for that tenant. */
+export function clearInstanceCapabilityRequirement(capabilityId: string, requirement: string): Promise<InstanceCapability> {
+  return instanceApi().clearInstanceCapabilityRequirement({ capabilityId, requirement })
+}
+
+/** A requirement's value as the CLI prints it: `on`, `<n> days`, or `not set` — fixed tokens, as the state token is. */
+export function requirementValue(r: InstanceCapabilityRequirement): string {
+  if (r.value === null || r.value === undefined) return 'not set'
+  return r.kind === 'flag' ? 'on' : `${r.value} days`
 }
 
 /** Decode a failed capability call into `{ status, code }` for UI mapping (the refusals named above). */

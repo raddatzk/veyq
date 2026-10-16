@@ -75,7 +75,7 @@ describe('enterScope — tenant', () => {
   it('loads the tenant\'s effective capability set on entry, falls back on a failed read, and forgets it on clear', async () => {
     // ADR 0088 decision 3: after sign-in the shell soft-gates on what THIS tenant offers, not the pre-auth manifest.
     vi.mocked(openScope).mockResolvedValue(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, new Uint8Array(32).fill(9)))
-    vi.mocked(getTenantCapabilities).mockResolvedValueOnce(['core.group-space'])
+    vi.mocked(getTenantCapabilities).mockResolvedValueOnce([{ id: 'core.group-space' }])
     await enterScope(TENANT_SCOPE)
     expect(getTenantCapabilities).toHaveBeenCalledWith(TENANT_ID)
     expect(capabilityState.tenantIds).toEqual(['core.group-space'])
@@ -84,7 +84,7 @@ describe('enterScope — tenant', () => {
     await enterScope(TENANT_SCOPE)
     expect(capabilityState.tenantIds).toBeNull() // the instance's manifest stands; the server gates anyway
 
-    vi.mocked(getTenantCapabilities).mockResolvedValueOnce(['core.group-space'])
+    vi.mocked(getTenantCapabilities).mockResolvedValueOnce([{ id: 'core.group-space' }])
     await enterScope(TENANT_SCOPE)
     clearActiveSpace()
     expect(capabilityState.tenantIds).toBeNull()

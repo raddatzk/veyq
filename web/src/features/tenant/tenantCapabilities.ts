@@ -3,13 +3,14 @@
 // `403 not_tenant_owner`, and the owner is an ordinary member of their own tenant (ADR 0065). The effective set is
 // every member's.
 import { tenantsApi } from '../../api/client'
-import type { CapabilityText, TenantCapabilitySwitch } from '../../api/generated/tenants'
+import type { Capability, CapabilityText, TenantCapabilitySwitch } from '../../api/generated/tenants'
 
-export type { CapabilityText, TenantCapabilitySwitch } from '../../api/generated/tenants'
+export type { CapabilityText, TenantCapabilityRequirement, TenantCapabilitySwitch } from '../../api/generated/tenants'
 
-/** Any member: the ids this tenant serves, the instance level ANDed with the tenant's along the path (server-computed). */
-export async function getTenantCapabilities(tenantId: string): Promise<string[]> {
-  return (await tenantsApi().getTenantCapabilities({ tenantId })).capabilities.map((c) => c.id)
+/** Any member: the entries this tenant serves, the instance level ANDed with the tenant's along the path, each with the
+ *  requirement values in effect (the strictest of both levels) — all server-computed. */
+export async function getTenantCapabilities(tenantId: string): Promise<Capability[]> {
+  return (await tenantsApi().getTenantCapabilities({ tenantId })).capabilities
 }
 
 /** Owner-only: the entries a tenant may switch, with the catalog's words and both levels' state. */
@@ -20,6 +21,21 @@ export function listTenantCapabilitySwitches(tenantId: string): Promise<TenantCa
 /** Owner-only: switch one entry off or back on for this tenant, and resolve to the entry as it now stands. */
 export function setTenantCapabilitySwitch(tenantId: string, capabilityId: string, off: boolean): Promise<TenantCapabilitySwitch> {
   return tenantsApi().setTenantCapabilitySwitch({ tenantId, capabilityId, tenantCapabilitySwitchUpdate: { off } })
+}
+
+/** Owner-only: set one requirement for this tenant — `1` for a flag, else a number of days (ADR 0088 decision 8). The
+ *  value in effect is the strictest of the tenant's and the server's; the answer says which it is. */
+export function setTenantCapabilityRequirement(
+  tenantId: string, capabilityId: string, requirement: string, value: number,
+): Promise<TenantCapabilitySwitch> {
+  return tenantsApi().setTenantCapabilityRequirement({
+    tenantId, capabilityId, requirement, tenantCapabilityRequirementUpdate: { value },
+  })
+}
+
+/** Owner-only: clear the tenant's value of one requirement; the server's, if any, stays in effect. */
+export function clearTenantCapabilityRequirement(tenantId: string, capabilityId: string, requirement: string): Promise<TenantCapabilitySwitch> {
+  return tenantsApi().clearTenantCapabilityRequirement({ tenantId, capabilityId, requirement })
 }
 
 /** A language the catalog writes every entry's words in; any other locale reads the English. */

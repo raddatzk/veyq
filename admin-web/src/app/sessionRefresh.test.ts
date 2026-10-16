@@ -35,7 +35,7 @@ function server(opts: { rotation: 'ok' | 'refused'; acceptsNothing?: boolean }) 
     if (url.includes('/api/login')) return json(401, { code: 'unauthorized' })
     if (opts.acceptsNothing || auth !== `Bearer ${fresh}`) return json(401, { code: 'unauthorized' })
     if (url.includes('/api/instance/capabilities/')) {
-      return json(200, { id: 'core.remember-device', title: { en: 'e', de: 'd' }, purpose: { en: 'e', de: 'd' }, whenOff: { en: 'e', de: 'd' }, off: true, effective: false })
+      return json(200, { id: 'core.remember-device', title: { en: 'e', de: 'd' }, purpose: { en: 'e', de: 'd' }, whenOff: { en: 'e', de: 'd' }, off: true, effective: false, tenantSwitchable: false, requirements: [] })
     }
     if (url.endsWith('/api/instance/capabilities')) return json(200, [])
     return json(200, [])

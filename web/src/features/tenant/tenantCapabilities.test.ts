@@ -5,7 +5,7 @@ import { hasDescendants, inLocale, tenantCapabilityTree, type TenantCapabilitySw
 
 const text = { en: 'x', de: 'y' }
 function entry(id: string, over: Partial<TenantCapabilitySwitch> = {}): TenantCapabilitySwitch {
-  return { id, title: { en: id, de: id }, purpose: text, whenOff: text, off: false, serverOff: false, effective: true, ...over }
+  return { id, title: { en: id, de: id }, purpose: text, whenOff: text, off: false, serverOff: false, effective: true, requirements: [], ...over }
 }
 
 describe('tenantCapabilityTree', () => {

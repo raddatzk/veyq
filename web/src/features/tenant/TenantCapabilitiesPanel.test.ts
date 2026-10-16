@@ -12,12 +12,17 @@ vi.mock('./tenantCapabilities', async (orig) => ({
   listTenantCapabilitySwitches: vi.fn(),
   setTenantCapabilitySwitch: vi.fn(),
   getTenantCapabilities: vi.fn(),
+  setTenantCapabilityRequirement: vi.fn(),
+  clearTenantCapabilityRequirement: vi.fn(),
 }))
 const ask = vi.fn()
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask }) }))
 
 import TenantCapabilitiesPanel from './TenantCapabilitiesPanel.vue'
-import { getTenantCapabilities, listTenantCapabilitySwitches, setTenantCapabilitySwitch, type TenantCapabilitySwitch } from './tenantCapabilities'
+import {
+  clearTenantCapabilityRequirement, getTenantCapabilities, listTenantCapabilitySwitches, setTenantCapabilityRequirement,
+  setTenantCapabilitySwitch, type TenantCapabilityRequirement, type TenantCapabilitySwitch,
+} from './tenantCapabilities'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { capabilityState } from '../../shared/state/capabilities'
 import { ScopeKind } from '../../api/generated/scopes'
@@ -26,12 +31,24 @@ import { realI18n, t } from '../../test/i18n'
 const stubs = {
   Button: { props: ['label', 'loading', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  InputText: {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
+}
+
+function requirement(name: string, kind: 'flag' | 'days', over: Partial<TenantCapabilityRequirement> = {}): TenantCapabilityRequirement {
+  return {
+    name, kind, title: { en: `${name} title`, de: 'Titel' }, whenSet: { en: `${name} does this to what exists`, de: 'Wirkung' },
+    value: null, serverValue: null, effective: null, ...over,
+  } as TenantCapabilityRequirement
 }
 
 function entry(id: string, title: string, over: Partial<TenantCapabilitySwitch> = {}): TenantCapabilitySwitch {
   return {
     id, title: { en: title, de: `${title} (de)` }, purpose: { en: `${title} purpose`, de: 'Zweck' },
-    whenOff: { en: `${title} off effect`, de: 'Wirkung' }, off: false, serverOff: false, effective: true, ...over,
+    whenOff: { en: `${title} off effect`, de: 'Wirkung' }, off: false, serverOff: false, effective: true, requirements: [], ...over,
   }
 }
 
@@ -70,7 +87,7 @@ describe('TenantCapabilitiesPanel (uc.admin.tenant-switch-capabilities, web)', (
   it('switches off only after a confirmation showing the entry\'s own words, then re-reads the shell\'s set', async () => {
     vi.mocked(listTenantCapabilitySwitches).mockResolvedValue([entry('core.group-space', 'Groups')])
     vi.mocked(setTenantCapabilitySwitch).mockResolvedValue(entry('core.group-space', 'Groups', { off: true, effective: false }))
-    vi.mocked(getTenantCapabilities).mockResolvedValue(['core.public-shares'])
+    vi.mocked(getTenantCapabilities).mockResolvedValue([{ id: 'core.public-shares' }])
     const wrapper = await mountPanel()
 
     ask.mockResolvedValueOnce(false) // declined: nothing is sent
@@ -103,5 +120,53 @@ describe('TenantCapabilitiesPanel (uc.admin.tenant-switch-capabilities, web)', (
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('tenantCapabilities.notOwner'))
     expect(wrapper.find('li').exists()).toBe(false)
+  })
+
+  it('sets a requirement only after showing what it does to what exists, and clears one without asking', async () => {
+    vi.mocked(listTenantCapabilitySwitches).mockResolvedValue([
+      entry('core.public-shares', 'Public links', { requirements: [requirement('linkPassword', 'flag'), requirement('linkMaxDays', 'days', { value: 30, effective: 30 })] }),
+    ])
+    vi.mocked(setTenantCapabilityRequirement).mockResolvedValue(entry('core.public-shares', 'Public links', {
+      requirements: [requirement('linkPassword', 'flag', { value: 1, effective: 1 }), requirement('linkMaxDays', 'days', { value: 30, effective: 30 })],
+    }))
+    vi.mocked(clearTenantCapabilityRequirement).mockResolvedValue(entry('core.public-shares', 'Public links', { requirements: [] }))
+    vi.mocked(getTenantCapabilities).mockResolvedValue([{ id: 'core.public-shares', linkPassword: true }])
+    const wrapper = await mountPanel()
+    const flag = wrapper.find('li[data-requirement="linkPassword"]')
+    expect(flag.text()).toContain(t('tenantCapabilities.requirementNone'))
+
+    ask.mockResolvedValueOnce(true)
+    await flag.find('button').trigger('click')
+    await flushPromises()
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ message: 'linkPassword does this to what exists' }))
+    expect(setTenantCapabilityRequirement).toHaveBeenCalledWith('t-1', 'core.public-shares', 'linkPassword', 1)
+    expect(capabilityState.tenantEntries?.['core.public-shares']?.linkPassword).toBe(true) // the shell's values followed
+
+    const days = wrapper.find('li[data-requirement="linkMaxDays"]')
+    await days.find('input').setValue('7')
+    ask.mockResolvedValueOnce(true)
+    await days.find('.requirement__set').trigger('click')
+    await flushPromises()
+    expect(setTenantCapabilityRequirement).toHaveBeenLastCalledWith('t-1', 'core.public-shares', 'linkMaxDays', 7)
+
+    ask.mockClear()
+    await wrapper.find('li[data-requirement="linkMaxDays"] .requirement__clear').trigger('click')
+    await flushPromises()
+    expect(ask).not.toHaveBeenCalled()
+    expect(clearTenantCapabilityRequirement).toHaveBeenCalledWith('t-1', 'core.public-shares', 'linkMaxDays')
+  })
+
+  it('says when the server\'s stricter value is the one in effect, and refuses days out of range without calling', async () => {
+    vi.mocked(listTenantCapabilitySwitches).mockResolvedValue([
+      entry('core.public-shares', 'Public links', { requirements: [requirement('linkMaxDays', 'days', { value: 60, serverValue: 30, effective: 30 })] }),
+    ])
+    const wrapper = await mountPanel()
+    const days = wrapper.find('li[data-requirement="linkMaxDays"]')
+    expect(days.text()).toContain(t('tenantCapabilities.requirementByServer', { value: t('tenantCapabilities.requirementDays', { days: 30 }) }))
+    await days.find('input').setValue('0')
+    await days.find('.requirement__set').trigger('click')
+    await flushPromises()
+    expect(setTenantCapabilityRequirement).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(t('tenantCapabilities.requirementInvalidDays'))
   })
 })

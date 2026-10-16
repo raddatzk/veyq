@@ -17,13 +17,17 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
+import InputText from 'primevue/inputtext'
 import {
+  clearTenantCapabilityRequirement,
   hasDescendants,
   inLocale,
   listTenantCapabilitySwitches,
+  setTenantCapabilityRequirement,
   setTenantCapabilitySwitch,
   tenantCapabilityTree,
   type CapabilityText,
+  type TenantCapabilityRequirement,
   type TenantCapabilityState,
   type TenantCapabilitySwitch,
 } from './tenantCapabilities'
@@ -55,6 +59,57 @@ const STATE_TONE = { on: 'success', off: 'danger', offThrough: 'warning', server
 function stateLabel(state: TenantCapabilityState): string {
   if (state.kind === 'offThrough') return t('tenantCapabilities.offThrough', { parent: words(state.through.title) })
   return t(`tenantCapabilities.${state.kind}`)
+}
+
+// --- requirements (ADR 0088 decision 8): a flag set or cleared, or a number of days; the value in effect is the
+// strictest of the tenant's and the server's, as the server computes and returns it. Setting one asks first and shows
+// what it does to what exists (the requirement's own `whenSet`); clearing one only loosens, so it asks nothing.
+/** The days typed per requirement name, before they are saved. */
+const daysTyped = ref<Record<string, string>>({})
+function requirementState(r: TenantCapabilityRequirement): string {
+  const value = (v: number) => (r.kind === 'flag' ? t('tenantCapabilities.requirementOn') : t('tenantCapabilities.requirementDays', { days: v }))
+  if (r.effective === null || r.effective === undefined) return t('tenantCapabilities.requirementNone')
+  if (r.value !== r.effective) return t('tenantCapabilities.requirementByServer', { value: value(r.effective) })
+  return value(r.effective)
+}
+
+async function changeRequirement(entry: TenantCapabilitySwitch, r: TenantCapabilityRequirement, value: number | null) {
+  const tenantId = activeSpace.tenantId
+  if (!tenantId) return
+  const title = words(r.title)
+  if (value !== null) {
+    const accepted = await ask({
+      header: t('tenantCapabilities.requirementConfirmTitle', { title }),
+      message: words(r.whenSet),
+      acceptLabel: t('tenantCapabilities.requirementSet'),
+      acceptIcon: 'pi pi-lock',
+    })
+    if (!accepted) return
+  }
+  error.value = ''
+  switching.value = `${entry.id}:${r.name}`
+  try {
+    const now = value === null
+      ? await clearTenantCapabilityRequirement(tenantId, entry.id, r.name)
+      : await setTenantCapabilityRequirement(tenantId, entry.id, r.name, value)
+    entries.value = entries.value.map((e) => (e.id === now.id ? now : e))
+    await refreshTenantCapabilities(tenantId) // the shell's own values (the share dialogs) follow at once
+  } catch (e) {
+    on401(e)
+    if (isUnauthorized(e)) return
+    error.value = t('tenantCapabilities.switchFailed', { title })
+  } finally {
+    switching.value = null
+  }
+}
+
+function saveDays(entry: TenantCapabilitySwitch, r: TenantCapabilityRequirement) {
+  const days = Number((daysTyped.value[r.name] ?? '').trim())
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    error.value = t('tenantCapabilities.requirementInvalidDays')
+    return
+  }
+  void changeRequirement(entry, r, days)
 }
 
 async function toggle(entry: TenantCapabilitySwitch) {
@@ -118,6 +173,56 @@ async function toggle(entry: TenantCapabilitySwitch) {
               <strong class="capability__title">{{ words(node.entry.title) }}</strong>
               <span class="veyq-badge capability__state" :class="STATE_TONE[node.state.kind]">{{ stateLabel(node.state) }}</span>
               <small class="settings-muted capability__purpose">{{ words(node.entry.purpose) }}</small>
+              <ul v-if="node.entry.requirements.length" class="capability__requirements">
+                <li v-for="r in node.entry.requirements" :key="r.name" class="requirement" :data-requirement="r.name">
+                  <span class="requirement__title">{{ words(r.title) }}</span>
+                  <span class="veyq-badge requirement__state">{{ requirementState(r) }}</span>
+                  <span class="requirement__controls">
+                    <template v-if="r.kind === 'days'">
+                      <InputText
+                        v-model="daysTyped[r.name]"
+                        class="requirement__days"
+                        inputmode="numeric"
+                        :placeholder="r.value ? String(r.value) : ''"
+                        :aria-label="words(r.title)"
+                        :disabled="switching !== null"
+                      />
+                      <Button
+                        type="button"
+                        class="requirement__set"
+                        :label="t('tenantCapabilities.requirementSet')"
+                        severity="secondary"
+                        outlined
+                        size="small"
+                        :disabled="switching !== null"
+                        @click="saveDays(node.entry, r)"
+                      />
+                    </template>
+                    <Button
+                      v-else-if="r.value === null || r.value === undefined"
+                      type="button"
+                      class="requirement__set"
+                      :label="t('tenantCapabilities.requirementSet')"
+                      severity="secondary"
+                      outlined
+                      size="small"
+                      :disabled="switching !== null"
+                      @click="changeRequirement(node.entry, r, 1)"
+                    />
+                    <Button
+                      v-if="r.value !== null && r.value !== undefined"
+                      type="button"
+                      class="requirement__clear"
+                      :label="t('tenantCapabilities.requirementClear')"
+                      severity="secondary"
+                      text
+                      size="small"
+                      :disabled="switching !== null"
+                      @click="changeRequirement(node.entry, r, null)"
+                    />
+                  </span>
+                </li>
+              </ul>
             </div>
             <Button
               type="button"
@@ -161,8 +266,30 @@ async function toggle(entry: TenantCapabilitySwitch) {
   align-items: baseline;
   min-width: 0;
 }
-.capability__purpose {
+.capability__purpose,
+.capability__requirements {
   flex-basis: 100%;
+}
+.capability__requirements {
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+.requirement {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  align-items: center;
+}
+.requirement__controls {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+.requirement__days {
+  width: 5rem;
 }
 .capability__toggle {
   flex-shrink: 0;

@@ -6,7 +6,7 @@
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
 // + the tenant storage quota + release info + the config-secret state + the object-store setting and its check + the
-// capability switches. Per-tenant mail settings, terms authoring and the per-link storage
+// capability switches with their requirements. Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
 // they are not Server-Owner commands.
 // First-run **setup** is excluded on purpose (cr-admin-cli): it is a one-time interactive ceremony that mints
@@ -40,6 +40,9 @@ import {
   inLocale,
   listInstanceCapabilities,
   setInstanceCapability,
+  setInstanceCapabilityRequirement,
+  clearInstanceCapabilityRequirement,
+  requirementValue,
   type CapabilityLocale,
   type CapabilityNode,
   type InstanceCapability,
@@ -106,7 +109,9 @@ function renderCapabilities(entries: InstanceCapability[], locale: CapabilityLoc
   const stateWidth = Math.max(...states.map((st) => st.length))
   const under = ' '.repeat(idWidth + stateWidth + 4)
   return tree
-    .map((n, i) => `${ids[i].padEnd(idWidth)}  ${states[i].padEnd(stateWidth)}  ${inLocale(n.entry.title, locale)}\n${under}${inLocale(n.entry.purpose, locale)}`)
+    .map((n, i) => `${ids[i].padEnd(idWidth)}  ${states[i].padEnd(stateWidth)}  ${inLocale(n.entry.title, locale)}\n${under}${inLocale(n.entry.purpose, locale)}${
+      n.entry.requirements.map((r) => `\n${under}requirement ${r.name}: ${requirementValue(r)}  ${inLocale(r.title, locale)}`).join('')
+    }`)
     .join('\n')
 }
 
@@ -275,6 +280,28 @@ export const COMMANDS: Record<string, Command> = {
       const entry = r as InstanceCapability
       const locale = cliLocale(f, env)
       return `${inLocale(entry.whenOff, locale)}\n\n${renderSwitched(entry, locale)}`
+    },
+  },
+  'capabilities require': {
+    usage: 'capabilities require <id> --requirement <name> --value <n|off> [--lang en|de]',
+    summary: 'Set a requirement on an entry for the instance (1 for a flag, else days 1-3650), or clear it with off, and print what it does to new and to existing data.',
+    flags: {
+      requirement: { describe: 'the requirement name, as `capabilities list` prints it', required: true },
+      value: { describe: '1 for a flag, a number of days (1-3650), or off to clear', required: true },
+      lang,
+    },
+    operand: capabilityId,
+    run: (f) => (f.value === 'off'
+      ? clearInstanceCapabilityRequirement(f.id, f.requirement)
+      : setInstanceCapabilityRequirement(f.id, f.requirement, Number(f.value))),
+    // Printed from the answer: the server's words for the requirement it stored, never a copy kept here.
+    render: (r, f, env) => {
+      const entry = r as InstanceCapability
+      const locale = cliLocale(f, env)
+      const req = entry.requirements.find((x) => x.name === f.requirement)
+      if (!req) return renderSwitched(entry, locale)
+      const effect = req.value === null || req.value === undefined ? '' : `${inLocale(req.whenSet, locale)}\n\n`
+      return `${effect}${entry.id}  requirement ${req.name}: ${requirementValue(req)}  ${inLocale(req.title, locale)}`
     },
   },
   'capabilities on': {

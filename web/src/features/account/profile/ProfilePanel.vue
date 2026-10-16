@@ -19,8 +19,13 @@ import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { useToast } from '../../../shared/state/useToast'
 import { handle401 } from '../../../shared/handle401'
 import { isUnauthorized, decodeHttpError } from '../../../shared/httpError'
+import { useCapabilities } from '../../../shared/state/useCapabilities'
+import { CORE_GROUP_SPACE } from '../../platform/capabilities'
 
 const { t } = useI18n()
+// The open space may require consent for everyone (ADR 0088 decision 8, `addConsent`): the preference still holds in the
+// other spaces, so it stays editable, and the line says that here a group add asks anyway.
+const consentRequiredHere = computed(() => useCapabilities().capabilityValues(CORE_GROUP_SPACE)?.addConsent === true)
 const toast = useToast()
 const on401 = handle401(useRouter())
 
@@ -100,6 +105,7 @@ async function save() {
           <label class="consent-label" for="require-group-add-consent">
             <span>{{ t('profile.consentGroupAdd') }}</span>
             <small class="field-hint">{{ t('profile.consentGroupAddHint') }}</small>
+            <small v-if="consentRequiredHere" class="field-hint consent-required-here">{{ t('profile.consentRequiredHere') }}</small>
           </label>
         </div>
 

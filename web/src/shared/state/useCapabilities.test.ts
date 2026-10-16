@@ -37,7 +37,7 @@ describe('useCapabilities', () => {
     // ADR 0088 decision 3: the server computes the tenant's set (a subset); the client reads it, never ANDs.
     const { hasCapability } = useCapabilities()
     setCapabilities(status({ capabilities: [{ id: 'core.public-shares' }, { id: 'core.group-space' }] }))
-    setTenantCapabilities(['core.group-space'])
+    setTenantCapabilities([{ id: 'core.group-space' }])
     expect(hasCapability('core.public-shares')).toBe(false) // the tenant switched it off
     expect(hasCapability('core.group-space')).toBe(true)
     setTenantCapabilities(null) // sign-out, or the set could not be read

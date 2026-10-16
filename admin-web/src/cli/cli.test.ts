@@ -34,6 +34,8 @@ vi.mock('../features/instance/capabilities', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/instance/capabilities')>()),
   listInstanceCapabilities: vi.fn(),
   setInstanceCapability: vi.fn(),
+  setInstanceCapabilityRequirement: vi.fn(),
+  clearInstanceCapabilityRequirement: vi.fn(),
 }))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
@@ -44,7 +46,9 @@ import { getInstanceRelease } from '../features/instance/release'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import { checkInstanceStore, discardPendingInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
 import type { InstanceStore, InstanceStoreCheck } from '../features/instance/store'
-import { listInstanceCapabilities, setInstanceCapability } from '../features/instance/capabilities'
+import {
+  clearInstanceCapabilityRequirement, listInstanceCapabilities, setInstanceCapability, setInstanceCapabilityRequirement,
+} from '../features/instance/capabilities'
 import type { InstanceCapability } from '../features/instance/capabilities'
 import { httpError } from '../test/httpError'
 import type { TenantCreated, TenantInviteState, TenantSummary } from '../features/tenants/tenants'
@@ -97,6 +101,7 @@ function capability(id: string, name: string, off: boolean, effective: boolean):
     off,
     effective,
     tenantSwitchable: false,
+    requirements: [],
   }
 }
 const register: InstanceCapability[] = [
@@ -371,6 +376,30 @@ describe('veyq-admin — the capability switches (uc.admin.switch-capabilities)'
     expect(two.err).toContain('exactly one <id>')
     expect(signIn).not.toHaveBeenCalled()
     expect(setInstanceCapability).not.toHaveBeenCalled()
+  })
+
+  it('capabilities require sets a requirement, prints what it does to what exists, and off clears it', async () => {
+    const req = (value: number | null) => ({
+      ...capability('core.x', 'Ex', false, true),
+      requirements: [{
+        name: 'linkMaxDays', kind: 'days' as const, value,
+        title: { en: 'Links end EN', de: 'Links enden DE' }, whenSet: { en: 'Old links stop EN', de: 'Alte Links stoppen DE' },
+      }],
+    })
+    vi.mocked(setInstanceCapabilityRequirement).mockResolvedValueOnce(req(30) as InstanceCapability)
+    const r = await invoke(['capabilities', 'require', 'core.x', '--requirement', 'linkMaxDays', '--value', '30'])
+    expect(r.code).toBe(0)
+    expect(setInstanceCapabilityRequirement).toHaveBeenCalledWith('core.x', 'linkMaxDays', 30)
+    expect(r.out.split('\n')[0]).toBe('Old links stop EN')
+    expect(r.out).toContain('core.x  requirement linkMaxDays: 30 days  Links end EN')
+
+    vi.mocked(clearInstanceCapabilityRequirement).mockResolvedValueOnce(req(null) as InstanceCapability)
+    const off = await invoke(['capabilities', 'require', 'core.x', '--requirement', 'linkMaxDays', '--value', 'off'])
+    expect(clearInstanceCapabilityRequirement).toHaveBeenCalledWith('core.x', 'linkMaxDays')
+    expect(off.out).toBe('core.x  requirement linkMaxDays: not set  Links end EN')
+
+    vi.mocked(listInstanceCapabilities).mockResolvedValueOnce([req(14) as InstanceCapability])
+    expect((await invoke(['capabilities', 'list'])).out).toContain('requirement linkMaxDays: 14 days  Links end EN')
   })
 
   it('list takes no id: a stray word is still an unknown command', async () => {
