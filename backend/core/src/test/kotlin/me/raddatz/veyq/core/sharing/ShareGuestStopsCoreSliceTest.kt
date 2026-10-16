@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
@@ -18,6 +19,10 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
+import io.restassured.http.ContentType
+import io.restassured.response.Response
+import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -126,6 +131,100 @@ class ShareGuestStopsCoreSliceTest {
         }
     }
 
+    // --- the fix: the same link back (owner, 2026-10-16) ----------------------------------------------------------------
+
+    /**
+     * A link a new password requirement stopped comes back as the SAME link (its id, so its URL and key) once a member
+     * gives it a password: the write toward the requirement is accepted, one that still misses it refused, and the guest
+     * then meets the password prompt (the locked resolve) instead of the unknown link's 404.
+     */
+    @Test
+    fun aMemberGivesAStoppedLinkAPasswordAndItsGuestMeetsThePromptInsteadOfThe404() {
+        val w = world()
+        val l = link(w, ShareEntity.READ)
+        CapabilityRequirementFixtures.with(instance = mapOf(LINK_PASSWORD to 1)) {
+            assertEquals(listOf("linkPassword"), stopsOnNode(w).getValue(l))
+            assertEquals(emptyList<String>(), GuestPaths.refusedLikeAnUnknownLink(l, resolve, "before the fix"))
+            edit(w, l, """{"passwordRequired":false}""").then().statusCode(422).body("code", equalTo("link_password_required"))
+            edit(w, l, PASSWORD_EDIT).then().statusCode(204)
+            assertEquals(emptyList<String>(), stopsOnNode(w).getValue(l))
+            given().`when`().get("/api/shares/$l").then().statusCode(200)
+                .body("passwordRequired", equalTo(true)).body("pwSalt", equalTo(PW_SALT)).body("wrap", nullValue())
+        }
+    }
+
+    /** The lifetime's fix: an end date within the days counted from when the link was made, on the same link; one
+     *  beyond them is refused and leaves the link stopped. */
+    @Test
+    fun aMemberGivesAStoppedLinkAnEndDateWithinTheLifetimeAndTheSameLinkServesAgain() {
+        val w = world()
+        val l = link(w, ShareEntity.READ)
+        CapabilityRequirementFixtures.with(tenantId = w.space.tenantId, tenant = mapOf(LINK_MAX_DAYS to 7)) {
+            assertEquals(listOf("linkMaxDays:7"), stopsOnNode(w).getValue(l))
+            edit(w, l, """{"expiresAt":"${Instant.now().plus(Duration.ofDays(30))}"}""")
+                .then().statusCode(422).body("code", equalTo("link_expiry_required"))
+            assertEquals(listOf("linkMaxDays:7"), stopsOnNode(w).getValue(l), "a refused write changed nothing")
+            edit(w, l, """{"expiresAt":"${Instant.now().plus(Duration.ofDays(2))}"}""").then().statusCode(204)
+            assertEquals(emptyList<String>(), stopsOnNode(w).getValue(l))
+            given().`when`().get("/api/shares/$l").then().statusCode(200).body("passwordRequired", equalTo(false))
+        }
+    }
+
+    /** With both requirements missed, a write that meets one is still refused by the other; one that meets both serves. */
+    @Test
+    fun aWriteThatMeetsOneRequirementOfTwoIsRefusedAndOneThatMeetsBothServes() {
+        val w = world()
+        val l = link(w, ShareEntity.READ)
+        CapabilityRequirementFixtures.with(instance = mapOf(LINK_PASSWORD to 1, LINK_MAX_DAYS to 7)) {
+            edit(w, l, PASSWORD_EDIT).then().statusCode(422).body("code", equalTo("link_expiry_required"))
+            edit(w, l, PASSWORD_EDIT.dropLast(1) + ""","expiresAt":"${Instant.now().plus(Duration.ofDays(3))}"}""")
+                .then().statusCode(204)
+            assertEquals(emptyList<String>(), stopsOnNode(w).getValue(l))
+            assertEquals(emptyList<String>(), GuestPaths.served(l, resolve, "after both fixes"))
+        }
+    }
+
+    /**
+     * A link older than the lifetime has no end date an edit may give it (the days count from when it was made), so it is
+     * renewed: a new link (a new id, so a new URL) with an end date within the days from now, the old one deleted.
+     */
+    @Test
+    fun aLinkOlderThanTheLifetimeIsRefusedEveryEditAndIsRenewedAsANewLink() {
+        val w = world()
+        val old = link(w, ShareEntity.READ) { createdAt = Instant.now().minus(Duration.ofDays(10)) }
+        CapabilityRequirementFixtures.with(instance = mapOf(LINK_MAX_DAYS to 7)) {
+            edit(w, old, """{"expiresAt":"${Instant.now().plus(Duration.ofHours(1))}"}""")
+                .then().statusCode(422).body("code", equalTo("link_expiry_required"))
+            val renewed = TestIds.shareId()
+            given().header("Authorization", bearer(w.space.userId)).contentType(ContentType.JSON)
+                .body(
+                    """{"shareId":"$renewed",${ShareWriteProof.field(renewed)},"wrap":"d3JhcA==","sealedName":"c2VhbGVk",""" +
+                        """${ShareWriteProof.recovery()},"expiresAt":"${Instant.now().plus(Duration.ofDays(5))}"}""",
+                )
+                .`when`().post("/api/shares/$old/reissue").then().statusCode(201)
+            val stops = stopsOnNode(w)
+            assertEquals(emptyList<String>(), stops.getValue(renewed))
+            assertFalse(old in stops, "the old link is deleted")
+            assertEquals(emptyList<String>(), GuestPaths.served(renewed, resolve, "the renewed link"))
+        }
+    }
+
+    /** Switching a link back on is never refused by a requirement it misses: it comes back on and says what it lacks,
+     *  and the password then serves it — the same link throughout. */
+    @Test
+    fun aSwitchedOffLinkThatMissesAPasswordIsSwitchedBackOnAndThenGivenOne() {
+        val w = world()
+        val l = link(w, ShareEntity.READ) { enabled = false }
+        CapabilityRequirementFixtures.with(instance = mapOf(LINK_PASSWORD to 1)) {
+            assertEquals(listOf("revoked", "linkPassword"), stopsOnNode(w).getValue(l))
+            given().header("Authorization", bearer(w.space.userId)).`when`().post("/api/shares/$l/reactivate").then().statusCode(204)
+            assertEquals(listOf("linkPassword"), stopsOnNode(w).getValue(l))
+            edit(w, l, PASSWORD_EDIT).then().statusCode(204)
+            assertEquals(emptyList<String>(), stopsOnNode(w).getValue(l))
+            assertEquals(emptyList<String>(), GuestPaths.served(l, resolve, "switched on and given a password"))
+        }
+    }
+
     // --- the property: the list and the guest gate agree ------------------------------------------------------------
 
     /**
@@ -228,6 +327,12 @@ class ShareGuestStopsCoreSliceTest {
 
     private val resolve = listOf(Path("resolveShare") { id -> given().`when`().get("/api/shares/$id") })
 
+    private companion object {
+        const val PW_SALT = "cHctc2FsdA=="
+        const val PASSWORD_EDIT =
+            """{"passwordRequired":true,"pwSalt":"$PW_SALT","pwVerifier":"cHctdmVyaWZpZXI=","sealedPassword":"c2VhbGVkLXB3"}"""
+    }
+
     private data class World(val space: MemberScope, val folder: String)
 
     private fun world(): World {
@@ -241,6 +346,11 @@ class ShareGuestStopsCoreSliceTest {
         QuarkusTransaction.requiringNew().run { ShareEntity.findById(id)!!.edit() }
         return id
     }
+
+    /** The share edit (`updateShare`) by the world's member, the link's owner. */
+    private fun edit(w: World, shareId: String, body: String): Response =
+        given().header("Authorization", bearer(w.space.userId)).contentType(ContentType.JSON).body(body)
+            .`when`().patch("/api/shares/$shareId")
 
     private fun ShareEntity.password() {
         passwordRequired = true; pwSalt = "cHctc2FsdA=="; pwVerifier = "cHctdmVyaWZpZXI="
