@@ -83,7 +83,8 @@ class NodeEntity : PanacheEntityBase {
      *  [sealedDropPrivateKey], then the identity's wrapped `K_up`, then the entry. Inside such a folder only that
      *  identity creates (`NodesHandler.createInScope`); a placement clears it (the only placement it can take is a
      *  member's move out, which re-wraps the key under the new parent). Kept on a trashed row: the trash and a restore
-     *  still need the identity's key to open the entry, and `NodeGuestIdentityUsage` keeps the identity alive. */
+     *  still need the identity's key to open the entry, and `NodeGuestIdentityUsage` keeps the identity alive. It is
+     *  no editor and no creator: a move clears it, and who last wrote the name is [nameEditor]. */
     @Column(name = "share_identity_id", columnDefinition = "uuid")
     var shareIdentityId: String? = null
 

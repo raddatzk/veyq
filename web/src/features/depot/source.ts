@@ -4,7 +4,7 @@
 // guest create, the shell's naming flow and re-resolve). Neither reads the other's world.
 //
 // **A write exists only where the session has its door.** The guest's source has no `deleteFile` and no `rename` (a
-// guest deletes nothing — nodes store no authorship, ADR 0080 decision 6 — and no guest page offers a rename yet), and a
+// guest deletes nothing but its own empty placeholder, ADR 0080 decision 6 — and no guest page offers a rename yet), and a
 // `move` only for a `READ_WRITE` link (core's move dialog, the host's, inbox #358); a view offers a write where `depotRights` grants it AND the source carries it (`sourceRights`), so
 // a forgotten guard cannot fall through to a member call — there is no member call to fall to.
 //

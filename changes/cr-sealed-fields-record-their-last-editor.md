@@ -1,7 +1,7 @@
 ---
 id: cr-sealed-fields-record-their-last-editor
 title: Every sealed field records its last editor, and a guest takes back only a placeholder it named
-status: in-progress
+status: done
 satisfies: ["en.platform.field-editor", "uc.depot.share-folder-files", "uc.depot.drop-box"]
 adrs: ["0093", "0080", "0034", "0083", "0092", "0094"]
 invariants:
@@ -131,7 +131,7 @@ and ADR 0093 § 8; the model is [en.platform.field-editor](../docs/features/plat
 
 ## Phases
 
-- [ ] **1 backend (core) — node editors.** The core ref type (D4). On `veyq_node`, per field group a pair
+- [x] **1 backend (core) — node editors.** The core ref type (D4). On `veyq_node`, per field group a pair
   `<group>_editor_user_id` (no FK, as the attachment's) and `<group>_editor_identity_id` (FK to
   `veyq_share_identity`), at most one set; the name pair exactly one (a node always has a name), the meta pair set
   iff `wrapped_meta` is. Edited into the core baseline with its pin line. `NodesStore`'s four writers take the editor
@@ -141,7 +141,7 @@ and ADR 0093 § 8; the model is [en.platform.field-editor](../docs/features/plat
   (cover), restore A1; guest create, rename, move, identity folder — reads the stored editor and asserts it, each with
   a control of the other principal kind; `dropDeadIdentities` keeps an identity that is the last editor of a name and
   drops it once that node is gone (positive and negative); `./gradlew check` green.
-- [ ] **2 backend (core) — the take-back asks the editor.** `isPlaceholder` adds: the name's last editor is the
+- [x] **2 backend (core) — the take-back asks the editor.** `isPlaceholder` adds: the name's last editor is the
   calling identity, and (D3) no live link on the node. The descriptions in `contracts/api/sharing.openapi.yaml`
   (`updateShareNode`, `abandonShareNode`, its `409`), `contracts/api/depot/files.openapi.yaml` (the tag text, the
   `uploaderKey` note) and `contracts/api/memories/share-media.openapi.yaml` say the new rule; the KDocs
@@ -154,12 +154,12 @@ and ADR 0093 § 8; the model is [en.platform.field-editor](../docs/features/plat
   `ShareNodeAbandonRaceSliceTest` green unchanged. Bitten: phase 1's editor write on `ShareNodesHandler.create`
   injected to record a member → the positive control goes red. `./gradlew check` and `npm run generate:api` +
   `npm run check` (web, admin-web: descriptions only, expected green) green.
-- [ ] **3 backend — the other field groups** (D1). Core: `veyq_share` (name, note, share name; the
+- [x] **3 backend — the other field groups** (D1). Core: `veyq_share` (name, note, share name; the
   tombstone nulls the editors with the seals), `veyq_scope` (name, icon; `clearIcon` nulls the icon editor). Memories:
   `veyq_bucket` name (the primary bucket's copied name names the identity whose name it copies), `veyq_media` meta
   (`attach` the uploader, `setMeta` the member). Baselines edited with their pins. · Done when: a slice test per writer
   reads the editor (create, update, re-seal, clear, tombstone/reissue), `./gradlew check` green.
-- [ ] **4 docs + coverage.** ADR 0080 decision 6 and ADR 0093 § 8 (D2 and D3 are already written there, as not built): say
+- [x] **4 docs + coverage.** ADR 0080 decision 6 and ADR 0093 § 8 (D2 and D3 are already written there, as not built): say
   they are built; ADR 0093 status line: § 8 built; `en.platform.field-editor` status `built` and its criteria naming their
   slice tests (D6). `docs/apps/depot.md` (§ Guests' role
   table, § abandon), `uc.depot.share-folder-files` (E5, the deletes quality note), `uc.depot.drop-box` (E9),
@@ -191,4 +191,19 @@ editor parameter makes a new node writer that forgets it fail to compile — a n
 
 ## Retrospective
 
-(filled at implementation)
+- **Planning: phase 2 promised `ShareNodeAbandonRaceSliceTest` "green unchanged", and it could not be.** The test seeds
+  its placeholder directly, so under the new precondition its file had to name the guest as its editor (one fixture
+  argument). The rule that catches this exists (§ A refine that adds a precondition to a call reads that call's
+  FIXTURES); the locator grepped the take-back's callers, not the seeds that feed the predicate. Next time: when a new
+  precondition reads a column, grep the tests that seed that column's row and list which must change.
+- **Planning: the column shape for member-only field groups was unsaid.** Phase 1 fixed a pair per group on `veyq_node`;
+  phase 3 did not say whether a share's and a scope's fields get one. Built: the member column only (no guest writes
+  them), stated in the enabler's § How it is stored; a later guest writer adds its identity column and its usage count.
+- **Execution: the run stopped mid-phase 3 and was taken over from an unreviewed `wip:` commit** that mixed phase 3 and
+  phase 4 files. Every edit was re-read; the baseline edits held (`release: none`, pins in the same commit, as
+  `backend/CLAUDE.md` § Migrations allows), the web edits were phase 4's comment updates, and phase 3's writers were
+  bitten (seven levers, each red) before the commit.
+- **Process: phase 2's browser pass was not walked.** The implement brief forbade a dev stack while the CR asked for a
+  live walk of E5, and nobody reconciled the two before the run; the pass stays an open item (§ A UI phase's done-when
+  names its browser pass). Next time: a brief's machine constraint that disables a proof the CR names is reconciled when
+  the brief is written: the proof moves, or it is marked the owner's.

@@ -171,9 +171,11 @@ export async function createShareNodeAsGuest(
 
 /**
  * Take back `nodeId` as a guest — the empty placeholder this guest created for an upload that was then refused (a full
- * link) or given up (`abandonShareNode`, ADR 0080 decision 6). The server erases it at once, but only a node that holds
- * nothing: no child, no upload a member or another guest has open into it, and its kind's owner calls it empty (Depot: a
- * file whose slot never held a blob; core: a folder with no attachment and no sealed metadata); anything else is a {@link GuestTreeError} `not_a_placeholder`, and nothing changes.
+ * link) or given up (`abandonShareNode`, ADR 0080 decision 6). The server erases it at once, but only this guest's own
+ * — a node whose name its identity wrote last (ADR 0093 § 8) and on which no link is rooted — that holds nothing: no
+ * child, no upload a member or another guest has open into it, and its kind's owner calls it empty (Depot: a file whose
+ * slot never held a blob; core: a folder with no attachment and no sealed metadata); anything else is a
+ * {@link GuestTreeError} `not_a_placeholder`, and nothing changes.
  */
 export async function abandonShareNodeAsGuest(
   ctx: Pick<GuestTreeContext, 'shareId' | 'contributorToken' | 'pwToken'>, nodeId: string,

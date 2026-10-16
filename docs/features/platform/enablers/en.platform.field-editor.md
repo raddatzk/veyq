@@ -4,10 +4,10 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
   A **model** enabler: it states what is stored and when, not a flow.
-- **Status:** **planned** — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-  § 8, to be built by `cr-sealed-fields-record-their-last-editor`.
-  Nothing of it exists yet: today the server records an uploader per medium and per Depot file, and nobody for a
-  name, a meta, a note or an icon.
+- **Status:** **built** — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+  § 8, built by cr-sealed-fields-record-their-last-editor (2026-10-16). The ref is core's `PrincipalKey`
+  (`core/identity`), the one spelling of `user:{id}` / `share:{identityId}` that Memories' owner key and an
+  attachment's uploader use too.
 - **Provides:** for every sealed field group — **name, meta, note, icon** — the opaque reference of whoever last
   wrote its ciphertext: `user:{id}` for a member, `share:{identityId}` for a link's guest. The server knows it and
   checks with it; no client is served it.
@@ -36,6 +36,16 @@ at creation), a member's profile name and avatar (only that member writes their 
 (written once, with the upload: its uploader, `veyq_media.created_by` / `share_identity_id`). Key material
 (`sealed_share_key`, `sealed_password`, the drop keys, a membership's name key) is no field group.
 
+## How it is stored
+
+Per field group a column pair on the row it attributes: `<group>_editor_user_id` (a member, no foreign key) and, where
+a guest can write the field, `<group>_editor_identity_id` (a guest identity) — on `veyq_node` (`name_editor_*`,
+`meta_editor_*`, the identity a foreign key onto `veyq_share_identity`; the baseline checks exactly one for the name and
+exactly one while there is a meta), `veyq_bucket` (`name_editor_*`) and `veyq_media` (`meta_editor_*`, no foreign key,
+as Memories' `share_identity_id`). A share's (`name_`, `note_`, `share_name_editor_user_id`) and a scope's
+(`name_`, `icon_editor_user_id`) take only the member column: no guest writes them. `NodesStore`'s four writers take the
+editor as a required parameter, so a new node writer states it or does not compile.
+
 ## Rules
 
 1. **The editor is the authenticated caller of the write**, never a field of the request: a member's session
@@ -59,15 +69,35 @@ Per field group, which member or which opaque guest identity wrote it last — t
 already disclose for uploads, for the same reason (a sealed attribution could name anyone). Never a name, never
 what was written.
 
-## Acceptance criteria (verified by the CR's slice tests, planned)
+## Acceptance criteria
+
+An enabler carries no coverage file (`validate_coverage.py` reads use-cases only), so each criterion names the slice
+tests that verify it here. Every one runs in CI's backend job.
 
 - **field-editor-per-writer** — each writer of the table above stores its caller as the field's editor, a member as
-  `user:{id}` and a guest as `share:{identityId}`.
-- **field-editor-from-the-caller** — no request carries an editor; a guest's write records its token's identity.
-- **field-editor-rewrite** — a move, a restore and a re-seal record their caller.
-- **field-editor-cleared-with-the-field** — a removed meta, a cleared icon, a tombstoned share hold no editor.
+  `user:{id}` and a guest as `share:{identityId}`: `NodeFieldEditorCoreSliceTest` (a node's create, rename, move,
+  meta and cover, member and guest), `DropBoxSliceTest.anIdentityFolderAndItsFilesNameTheirGuestAsTheNamesEditorUntilAMemberMovesItOut`
+  (the identity folder), `ShareFieldEditorCoreSliceTest` (a share's create, edit, re-seal of the name, re-issue),
+  `ScopesSliceTest.aGroupsNameAndIconRecordTheMemberWhoWroteThemAndAClearedIconHasNone` (a group's name and icon),
+  `MediaFieldEditorSliceTest` (a medium's meta, a primary's copied name, a sub-bucket's create and rename).
+- **field-editor-from-the-caller** — no request carries an editor; a guest's write records its token's identity:
+  `NodeFieldEditorCoreSliceTest.theEditorIsTheTokensIdentityNeverAnotherGuestOfTheLink`, and every test above, which
+  sends no editor.
+- **field-editor-rewrite** — a move, a restore and a re-seal record their caller:
+  `NodeFieldEditorCoreSliceTest.aMembersRenameAndMoveTakeTheNameOverFromTheGuest`,
+  `NodeFieldEditorCoreSliceTest.aGuestsRenameAndMoveTakeTheNameOverFromTheMember`,
+  `NodeFieldEditorCoreSliceTest.aRestoreThatReSealsTheNameNamesItsCallerOneThatDoesNotKeepsTheEditor`,
+  `ShareFieldEditorCoreSliceTest.aMembersReSealOfTheNameTakesTheNameOver`.
+- **field-editor-cleared-with-the-field** — a removed meta, a cleared icon, a tombstoned share hold no editor:
+  `MediaFieldEditorSliceTest.aMediumsMetaIsItsUploadersThenTheEditingMembersAndAClearedOneHasNone`,
+  `ScopesSliceTest.aGroupsNameAndIconRecordTheMemberWhoWroteThemAndAClearedIconHasNone`,
+  `ShareFieldEditorCoreSliceTest.aReissueNamesItsCallerOnTheNewLinkAndTheTombstonesHoldNoEditor`,
+  `ShareFieldEditorCoreSliceTest.anEditNamesItsCallerForEachFieldItSetsAndClearsTheEditorOfOneItClears`.
 - **field-editor-keeps-the-identity** — a guest identity that is the last editor of a name is not dropped, and is
-  dropped once nothing names it.
+  dropped once nothing names it: `NodeFieldEditorCoreSliceTest.anIdentityThatLastNamedANodeOutlivesItsLinkUntilTheNodeIsGone`.
+
+The take-back it serves is the two Depot use-cases' criteria (`a-guest-takes-back-only-its-own-placeholder`,
+`a-refused-file-leaves-nothing-behind`).
 
 _No user-impact section: an enabler's value reaches the user through the use-cases it serves — here the narrowed
 take-back in the two Depot use-cases._
