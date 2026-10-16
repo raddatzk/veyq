@@ -1405,7 +1405,8 @@ browser pass needed a fresh instance — which the done-when never said, and a `
 dev data to get. A database of its own on the same compose stack leaves theirs alone: `CREATE DATABASE` beside `veyq`
 (root credential as in `scripts/run_web_e2e.py`), boot the fast-jar under `-Dquarkus.profile=e2e` with
 `QUARKUS_DATASOURCE_JDBC_URL` pointed at it, its own `VEYQ_SECURITY_CONFIG_SECRET_FILE`, and
-`VEYQ_BLOB_STORE_PUBLIC_ENDPOINT` set to the browsed origin, then `npm run bootstrap:user` — which writes `.run/.env`
+`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` set to the browsed origin (the old `VEYQ_BLOB_STORE_…` name is read by nothing
+any more, so a boot that sets it signs for the store's own endpoint and the seeder's store check fails), then `npm run bootstrap:user` — which writes `.run/.env`
 back, so that file is snapshotted first and restored byte-equal after. A CR that changes a stored format names this
 instance in its browser pass.
 Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused even a scratchpad snapshot on
@@ -1413,6 +1414,11 @@ Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused
 copy of `web/scripts/bootstrap-user.mts` that reads an env file of generated test values outside the repo seeds it, the
 copy is deleted after, and the login goes through the form (`?devlogin` reads only `.run/.env`). Boot a COPY of the
 fast-jar, too: a neighbour's `./gradlew` rebuilds `backend/build/` under a running pass.
+Two devices are two HOSTS, not two ports: cookies ignore the port, so `capx.localhost:8087` and `capx.localhost:8085`
+share one refresh cookie and the second "device" opens on the first one's session (inbox #447's pass). A second Vite with
+`VEYQ_SMOKE_HOST=<tenant domain>` serves the same tenant under another `*.localhost` name with cookies and storage of
+its own. And the instance takes its own ports (`QUARKUS_HTTP_PORT`, `VEYQ_ADMIN_CHANNEL_PORT`) when a neighbour holds
+8080/8090, with admin-web's Vite pointed at that admin port (`VEYQ_API_TARGET`, `VITE_ADMIN_PORT`).
 
 ### A UI phase's done-when names its browser pass
 

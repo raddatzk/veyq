@@ -43,14 +43,22 @@ acceptanceCriteria:
       backend:
         integration: [InstanceCapabilitiesSliceTest.aDeviceSwitchWithholdsItsWrapsFromTheNextKeyMaterialReadAndSwitchingOnRestoresThem, AccountKeyMaterialSliceTest.rememberDeviceOffWithholdsBothDeviceWrapsAndServesThePasswordWrap, AccountKeyMaterialSliceTest.passwordlessOffWithholdsOnlyTheDeviceKeyWrap]
       web:
-        unit: [src/views/LoginView.test.ts, src/features/account/rememberMe/deviceKeyWrap.test.ts, src/features/account/unlock/unlock.device.test.ts, src/features/account/trustDevice/trustDevice.test.ts]
+        unit: [src/views/LoginView.test.ts, src/features/account/rememberMe/deviceKeyWrap.test.ts, src/features/account/unlock/unlock.device.test.ts, src/features/account/trustDevice/trustDevice.test.ts, src/features/account/sessions/SessionsPanel.test.ts]
     gaps:
       - surface: web
         reason: >-
           The web suites run over mocked key material: a withheld wrap keeps the device's record and key, the
           sign-in asks for the password and the Secret Key with the `unlock.deviceHeldBack` hint, the device is not
-          re-enrolled to the other tier, and the same wrap served again opens it with no new enrolment. A real
-          browser restoring a device after a switch-on is inbox #447, not yet run.
+          re-enrolled to the other tier, its line in Devices and sessions says it is held back instead of how it
+          unlocks, and the same wrap served again opens it with no new enrolment. A real browser ran it once by hand
+          on 2026-10-15 (inbox #447) against a fresh instance: with each device switch off, a trusted and a
+          remembered device unlocked with the password and the Secret Key, sent no DELETE or POST to
+          `/api/account/wraps` (a fetch hook and Resource Timing; the database's four wraps stayed byte-identical),
+          kept their local records and stayed listed in Devices and sessions; switched back on, the trusted device
+          unlocked with the password alone through the same DEVICE wrap and the remembered one opened without a
+          prompt in a new tab. Not covered: a browser restart after a sign-in made while the switch was off, which
+          leaves a remembered device only a session cookie (inbox #450, read from the code); and none of it runs in
+          CI (inbox #448).
   - id: off-state-in-a-browser
     text: In a real browser, a switched-off drop box, device linking and password-less remember are absent from the web client, and a device remembered before its switch went off asks for what its wrap replaced.
     coverage:
@@ -59,10 +67,16 @@ acceptanceCriteria:
     gaps:
       - surface: web
         reason: >-
-          The browser pass was waived by the owner on 2026-10-15 and is held as inbox #447. The refs are component tests over a
-          hand-set manifest and mocked key material - the toggle, the "sign in with code" entry and the drop-box
-          id absent, and a remembered device asking for the password and the Secret Key - not a real browser
-          against an instance switched off through admin-web.
+          The refs are component tests over a hand-set manifest and mocked key material - the toggle, the "sign in
+          with code" entry and the drop-box id absent, and a remembered device asking for the password and the
+          Secret Key. A real browser ran it once by hand on 2026-10-15 (inbox #447): a fresh instance switched off
+          one entry at a time through admin-web's Server → Capabilities, each confirmation showing the entry's
+          served `whenOff` word for word; the web client then offered no "New drop box" and no drop-box tab, no
+          "Sign in with a QR code" and no "Add a device" (its address led back to Settings), and no "Stay signed
+          in"; a trusted and a remembered device each asked for the password and the Secret Key with the
+          `unlock.deviceHeldBack` hint once the email was entered (before that, the first-sign-in hint: the lookup
+          is keyed on the entered email, inbox #450); a child switched on under a parent still off showed "off
+          through" it. Switched on again, every affordance returned. It does not run in CI (inbox #448).
 gaps:
   admin-web: >-
     The console's Server → Capabilities panel and `veyq-admin capabilities list | off <id> | on <id>` live in
