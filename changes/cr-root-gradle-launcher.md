@@ -1,7 +1,7 @@
 ---
 id: cr-root-gradle-launcher
 title: A root Gradle build that triggers the existing dev, build and image mechanisms, replacing the IntelliJ run configurations
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0057"]
 invariants:
@@ -160,7 +160,7 @@ compose). The order stays documented, in `infra/README.md`, now as task names. N
 Done when, per phase: the tasks it adds were each run once and their output read; the bites below made red once;
 `python3 scripts/validate_build_input_pins.py` and the trust-chain green.
 
-- [ ] 1 **The root build, the dev defaults and the finite tasks.** Root `settings.gradle.kts`
+- [x] 1 **The root build, the dev defaults and the finite tasks.** Root `settings.gradle.kts`
       (`rootProject.name = "veyq"`, the five `include`s with their `launcher/<name>` directories, the optional
       `local.properties` load — and `local.properties` added to `.gitignore`, which does not name it today), the wrapper copied
       from `backend/` (`gradlew`, `gradlew.bat`, `gradle/wrapper/*`), an empty `gradle/verification-metadata.xml`
@@ -173,7 +173,7 @@ Done when, per phase: the tasks it adds were each run once and their output read
       `validate_build_input_pins.py` red; the root `distributionSha256Sum` removed → red; a task named `check` added
       to two launcher projects → `./gradlew check` runs both (the reason for the naming rule, shown once).
       `infra:wipe` is run once by the owner, not by an agent (the classifier blocks DB wipes).
-- [ ] 2 **The dev servers, and that stopping them stops them.** `web:run`, `admin:run`, `site:run`. For each of those
+- [x] 2 **The dev servers, and that stopping them stops them.** `web:run`, `admin:run`, `site:run`. For each of those
       and `backend:run`: start from IntelliJ's Gradle tool window, stop it there, then `lsof -nP -iTCP:<port>
       -sTCP:LISTEN` is empty (8081, 5174, the site's dev port, 8080 and 8090); the same with Ctrl-C from a terminal. An
       orphan is the bite this phase exists for — if `npm run dev` leaves one, start the dev server's bin with `node`
@@ -185,7 +185,7 @@ Done when, per phase: the tasks it adds were each run once and their output read
       second instance's browser reaches the store (its endpoint followed its web port). Stopping one leaves the
       other's ports listening. Bite: `veyq.webPort` given but the endpoint derivation removed → the second instance's
       upload fails — the reason a property sets every derived value.
-- [ ] 3 **The run configurations go.** Delete each `.run/*.xml` whose replacement passed phase 2 (all seven, unless a
+- [x] 3 **The run configurations go.** Delete each `.run/*.xml` whose replacement passed phase 2 (all seven, unless a
       dev server orphaned and could not be fixed — then it stays, and so does `validate_run_configs.py` for it). With
       no XML left: delete `scripts/validate_run_configs.py` and `validate_guard_gaps.py`'s
       `forge_run_config_env_path_into_the_void` (and its registration). Docs: `infra/README.md` (the dev stack and the
@@ -195,6 +195,48 @@ Done when, per phase: the tasks it adds were each run once and their output read
       `backend/`), and the root `CLAUDE.md` § Repository shape gains `launcher/`. Bite: `grep -rn 'Run Backend\|Run
       Frontend\|Run Admin\|Bootstrap DB\|Bootstrap User\|Bootstrap Frontend\|Bootstrap Admin' --include='*.md'
       --include='*.py' --include='*.ts' --include='*.kts' .` (node_modules excluded) returns nothing.
+
+## As built (2026-10-16) — what the phases measured, and where it went differently
+
+- **Phase 1.** Every finite task ran green once (`infra:up` a no-op on the running infra, the three `bootstrap`s —
+  the lockfile unchanged —, the four `build`s, both `image`s). The `node` every `Exec` runs is
+  `/opt/homebrew/bin/node` 23.11.0 (`EBADENGINE` warnings), the only node on the machine, so the interpreter the
+  npm configurations used was the same one: no behaviour change, and the engines mismatch predates this CR. Bites:
+  a plugin in a launcher project → `Dependency verification failed … com.github.node-gradle.node` (on a scratch copy);
+  a byte appended to the root wrapper JAR, the root `distributionSha256Sum` removed, the root `verify-metadata` set to
+  `false`, the root metadata file untracked → each red in `validate_build_input_pins.py`, green restored. The
+  check-naming bite was shown by the scratch build of § Context (a bare verb selects every project's task), not
+  re-run. **`validate_build_input_pins.py` needed two fixes the CR did not foresee:** check 4 formatted the metadata
+  path as `f"{root}/gradle/…"`, which for a `gradlew` at the repo root is `./gradle/…` and never matches `git ls-files`
+  (red on a tracked file — a root wrapper had never existed); and it refused an empty component list, which for a
+  build that resolves nothing is the strictest file there is (the plugin bite above is the proof).
+- **Not in the plan: `infra:*` runs the MAIN checkout's compose file.** From a worktree, its own copy is the same
+  compose project (`infra`) with other mount sources; `up --dry-run` with it answered *Recreate* for `veyq-garage`
+  and `veyq-traefik`, with the main checkout's file *Running* for all four. The task resolves the main checkout from
+  `git rev-parse --git-common-dir`.
+- **Phase 2.** Ctrl-C through a pseudo-terminal on `web:run`, `admin:run`, `site:run`, `backend:run` (this worktree's
+  `local.properties`: 8082, 5175, 4322, 8180, 8190, 5006) left no port listening; SIGTERM to the Gradle client did the
+  same for `web:run`. npm did NOT orphan Vite, so the `node`-direct fallback was not needed. **`site:run` did detach at
+  first:** Astro 7 backgrounds `astro dev` when `am-i-vibing` detects an AI agent in the environment, so the task
+  ended while the server held the port; it now passes `--ignore-lock` (Astro's documented one-off foreground server).
+  `backend:run` on the moved ports listened on 8180, 8190 and 5006, and its process carried
+  `VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT=http://veyq.localhost:8082` — the bundled store reads that hint at runtime
+  (`BundledStoreHint`), not from the database, so the derivation reaches the signer. `backend:run web:run --parallel`
+  ran both. The main checkout's servers (8081, 5174, 4321) kept listening throughout.
+- **Not proven, and why:** the upload in a browser. The shared dev database is on a baseline older than `main`'s
+  (`3ff35070` renamed the counters to revisions 11 hours earlier): `Unknown column 'meta_revision'`, `Table
+  'veyq.veyq_capability_switch' doesn't exist` — the pre-release baseline rule's "every existing database is then
+  recreated" (`backend/CLAUDE.md` § Migrations) has not happened on it yet, and a wipe is the owner's. Flyway applied
+  nothing (`Schema veyq is up to date`; `repair-at-start` re-wrote the checksums, as every `%dev` start does). Also not
+  exercised: starting and stopping from IntelliJ's Gradle tool window (a terminal Ctrl-C and a client SIGTERM are,
+  and both cancel the build the same way).
+- **Phase 3.** All seven `.run/*.xml`, `scripts/validate_run_configs.py` and guard-gap case 15 are gone; `.run/` keeps
+  `.env` and `.env.example`. The run-configuration names remain only in this CR and in two closed inbox rows.
+  `validate_release_identity.py` refused `veyq:local` written in `infra/README.md` (its tag scan covers `infra/`, where
+  a tag is one an operator would pin); the README says "tagged `local`" and the full names live in the task
+  descriptions. `npm run check` in `web/` green; the trust-chain green. `./gradlew check` in `backend/` was not
+  run: no test reads `%dev` (`grep` over `backend/**/*.kt` finds no `application-dev` or port reader), and
+  `backend:run` booted the changed `application-dev.properties` live.
 
 ## Definition of done
 

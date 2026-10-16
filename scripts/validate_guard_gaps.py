@@ -258,16 +258,6 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      Python guard, and the honest alternative (widen the filter to the four scope directories) costs ~70 files'
      worth of no-op mutation runs against the 10 that are in scope. Pinned so the limit in that guard's
      docstring is executable rather than a sentence.
-  15 a `$PROJECT_DIR$`-rooted path inside a run configuration's `<env>`/`<entry>` value pointing nowhere passes
-     `validate_run_configs`, which resolves a configuration's *subject* (the `package.json` plus the script it
-     names, the Gradle project, the shell working directory) and never an env value. **Left open on purpose** —
-     a build output legitimately does not exist on a clean tree (an env value naming a file the backend it
-     configures writes under `backend/build/`), so resolving env paths would make that guard red on arrival,
-     and red-because-wrong is indistinguishable from red-because-broken for every later reader. The same limit
-     covers the value that actually bites — a
-     `VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` disagreeing with the origin you browse is green here and a broken
-     presigned URL in the browser — which no file-shaped assertion can decide at all. Pinned so the limit in
-     that guard's docstring is executable rather than a sentence.
   16 a CSS class that no markup applies passes `validate_stylesheet_anchors` when it is not the selector's
      ANCHOR — `.a-live-class .never-applied` is green, `.never-applied` alone is red. **Left open on purpose**
      — the inside of a selector is exactly where a stylesheet legitimately reaches into a dependency's DOM
@@ -1105,24 +1095,6 @@ def forge_tenant_suspend_without_reproject(root: pathlib.Path) -> str:
     return "a tenant suspend that never re-projects the routing (must be REJECTED — the domain keeps resolving)"
 
 
-def forge_run_config_env_path_into_the_void(root: pathlib.Path) -> str:
-    # validate_run_configs resolves a configuration's SUBJECT and never an env value, so add an env value naming
-    # a path that does not exist and it still reports green. The forgery brings its own entry rather than bending
-    # an existing one: env values are developer-tunable lines, and since the dev-invite file left (inbox #285)
-    # none of them is a `$PROJECT_DIR$` path at all — pinning one's spelling would turn an innocent edit red.
-    env_map = re.compile(r"(<envs>|<map>)")
-    for f in sorted((root / ".run").glob("*.xml")):
-        src = f.read_text()
-        if env_map.search(src):
-            probe = '<entry key="VEYQ_GUARD_GAP_PROBE" value="$PROJECT_DIR$/does-not-exist/guard-gap-probe.jsonl" />'
-            if "<envs>" in src:
-                probe = probe.replace("<entry key=", "<env name=")
-            f.write_text(env_map.sub(lambda m: m.group(1) + probe, src, count=1))
-            return ("a run configuration's env value pointing at a path that does not exist "
-                    "(the env-values-unresolved open gap)")
-    raise ForgeError("no .run/*.xml carries an env map — re-anchor this forgery")
-
-
 def forge_host_read_through_an_alias(root: pathlib.Path) -> str:
     # validate_lookup_single_home matches the header name as a literal AT the call (or anywhere, for the forwarded
     # header). Hold the plain header's name in a constant and read through it, and no spelling matches: the call
@@ -1399,7 +1371,6 @@ CASES = [
     ("12", "validate_blob_reference_arity.py", forge_fourth_blob_reference_arm, False),
     ("13", "validate_store_reclaim_arity.py", forge_direct_store_delete_bypass, False),
     ("14", "validate_tenant_ingress_triggers.py", forge_tenant_suspend_without_reproject, False),
-    ("15", "validate_run_configs.py", forge_run_config_env_path_into_the_void, True),
     ("16", "validate_stylesheet_anchors.py", forge_dead_class_inside_a_selector, True),
     ("17", "validate_coverage.py", forge_backend_ref_env_gated,          False),
     ("18", "validate_coverage.py", forge_backend_tests_never_run_in_ci,  False),

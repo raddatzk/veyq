@@ -1,5 +1,47 @@
 # infra — local dev stack
 
+## The launcher: `./gradlew <surface>:<verb>`
+
+The repo root is a Gradle build whose only job is to **trigger** what this file and the surfaces' own docs
+describe — the compose lines below, the npm scripts, the backend's own `./gradlew` — from a terminal or from
+IntelliJ's Gradle tool window (link the root `settings.gradle.kts` as a Gradle project beside `backend/`, which
+stays its own). It replaces the IntelliJ run configurations `.run/` used to carry. It is not an orchestrator: it
+holds no surface's build, and no task aggregates their checks — each still proves itself with its own
+`npm run check` / `./gradlew check` (the tasks live in `launcher/<surface>/build.gradle.kts`; no task is named
+`check`, `test` or `clean`, so a bare `./gradlew check` aggregates nothing).
+
+| Task | Runs |
+|---|---|
+| `infra:up` · `infra:down` · `infra:wipe` | the compose lines below with `--profile s3 --profile mail` (`up -d`, then waiting on MariaDB's healthcheck) · `down` · `down -v` — **wipe deletes the dev database and every blob** |
+| `web:bootstrap` | `npm install` in `web/` — the workspace install, and its `prepare` regenerates web's API client |
+| `admin:bootstrap` | `npm run generate:api` in `admin-web/` |
+| `site:bootstrap` | `npm install` in `site/` (outside the workspace) |
+| `backend:run` · `web:run` · `admin:run` · `site:run` | `quarkusDev` · Vite on 8081 · Vite on 5174 · Astro on 4321 |
+| `backend:seed` | `npm run bootstrap:user` in `web/` ([§ Seeding](#seeding-the-local-dev-principal)) |
+| `backend:build` · `web:build` · `admin:build` · `site:build` | `quarkusBuild` (no tests) · `npm run build` in each |
+| `backend:image` · `admin:image` | `docker build` of `Dockerfile` (the app image, web's SPA baked in) · of `admin-web/Dockerfile`, context the repo root as CI builds them; both tagged `local`, a tag no publish emits, so it is never one to deploy |
+
+A cold start is `infra:up` → `backend:run` → `web:run` (and `admin:run` for first-run setup) → `backend:seed`, then
+browse `veyq.localhost:8081`. `backend:run` does not start the infra on its own: a backend restart should not touch
+compose. A verb without a surface selects every surface's — `./gradlew bootstrap`, `./gradlew build`; a bare
+`./gradlew run` selects all four `run`s, which run one after another and so block on the first unless `--parallel`
+is given (`backend:run web:run --parallel` ran both, measured).
+
+**`infra:*` always runs the main checkout's compose file**, also from a worktree. The containers are named
+(`veyq-mariadb`, …) and the project is named after the file's directory, so a worktree's copy is the same project
+with other mount sources, and `up` would recreate the running containers onto the worktree's files (measured with
+`--dry-run`: `veyq-garage` and `veyq-traefik` *Recreate*). One machine, one dev infra.
+
+**A second instance from a worktree** moves its ports in an untracked `local.properties` at the worktree's root
+(or `-P…` per call, which wins): `veyq.webPort`, `veyq.adminPort`, `veyq.sitePort`, `veyq.backendPort`,
+`veyq.backendAdminPort`, `veyq.debugPort`. An absent property sets nothing — every surface keeps its own default —
+and a given one sets everything derived from it: `veyq.webPort` also moves the store endpoint `backend:run` signs
+presigned URLs for (`http://veyq.localhost:<webPort>`), `veyq.backendPort` / `veyq.backendAdminPort` also move
+web's and admin-web's proxy targets and `backend:seed`'s bases. Ports do not separate the data: both instances run
+on the one dev database and bucket, so a branch's schema meets the other checkout's backend (inbox #455).
+
+## Compose profiles
+
 Docker Compose for the local dev dependencies. Three profiles:
 
 - **default** — `mariadb`: the persistent dev database (prod-parity for `quarkusDev`). The test suites use
@@ -164,14 +206,14 @@ This file keeps the development stack and how a release is cut.
 
 ## Seeding the local dev principal
 
-`npm run bootstrap:user` (IntelliJ: *Bootstrap User*) births one user who is Server Owner **and** owner of a
+`npm run bootstrap:user` (`./gradlew backend:seed`) births one user who is Server Owner **and** owner of a
 `*.localhost` tenant with a personal scope, over the real API, and writes its key material back into `.run/.env`
 ([`web/CLAUDE.md`](../web/CLAUDE.md) § Prove your work owns the inputs and the cold start):
 
 ```sh
-docker compose -f infra/docker-compose.yml down -v && docker compose -f infra/docker-compose.yml up -d
-# start the backend (IntelliJ: Run Backend), then:
-cd web && npm run bootstrap:user
+./gradlew infra:wipe infra:up
+# start the backend (./gradlew backend:run), then:
+./gradlew backend:seed
 ```
 
 It talks to two bases: `VEYQ_BASE` (the public port, default `http://localhost:8080`) for everything a member

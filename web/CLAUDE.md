@@ -47,8 +47,8 @@ here; the server is blind.
     (gitignored — note it is at the **repo root**, not `web/.run/`; template `<repo-root>/.run/.env.example`):
     `VEYQ_EMAIL` / `VEYQ_PASSWORD` / `VEYQ_TENANT` / `VEYQ_TENANT_DOMAIN`, and the seeder writes back
     `VEYQ_SECRET_KEY` + `VEYQ_WRAPPED_MASTERKEY`. It creates ONE user that is Server Owner AND tenant owner
-    (holds the **TENANT grant** + a personal scope). This is the current dev instance (IntelliJ "Bootstrap User"
-    run config) — the tenant is **`veyq.localhost`** (e.g. "Familie Raddatz"), so **live-verify browses
+    (holds the **TENANT grant** + a personal scope). This is the current dev instance (`./gradlew backend:seed`
+    from the repo root) — the tenant is **`veyq.localhost`** (e.g. "Familie Raddatz"), so **live-verify browses
     `veyq.localhost:<viteport>`** and logs in with the `.run/.env` creds/secret key. **Cold start (fresh/empty
     DB):** the `.run/.env` key material is stale after a `docker compose … down -v` (it was written against the
     old DB), so **re-run `npm run bootstrap:user`** against the fresh backend first — it reseeds
@@ -87,11 +87,11 @@ here; the server is blind.
   browse renders. If no tenant claims the Host you get the *“no space”* state (expected).
 - **Multiple workspaces in parallel from one dev server (cr-0051):** the dev proxy forwards the **real browser
   Host** (`changeOrigin: false`), so register each tenant under its own `*.localhost` hostname (e.g.
-  `workspace-a.localhost`) and browse `workspace-a.localhost:5173` vs `workspace-b.localhost:5173` — each resolves
+  `workspace-a.localhost`) and browse `workspace-a.localhost:8081` vs `workspace-b.localhost:8081` — each resolves
   its own tenant. `*.localhost` resolves to loopback in browsers without `/etc/hosts` (prefer it over `*.local`,
   which is mDNS on macOS); for another suffix, add it to `allowedHosts` in `vite.config.ts`. `VEYQ_SMOKE_HOST=<host>`
   pins one fixed tenant regardless of the browser URL (headless smoke). **Footgun:** with the real Host forwarded,
-  `localhost:5173`, `127.0.0.1:5173` and `veyq.localhost:5173` are three different tenants to the backend — browse
+  `localhost:8081`, `127.0.0.1:8081` and `veyq.localhost:8081` are three different tenants to the backend — browse
   the one `.run/.env` names. A dev tenant is never an IP literal: the contract's hostname pattern refuses one, so
   `bootstrap:user` refuses an all-digits `VEYQ_TENANT_DOMAIN` before it births anyone, and no seeder writes to the
   database to get around the pattern.
