@@ -876,8 +876,10 @@ paths:
         move needs the source parent's owner to let a READ_WRITE guest move that kind out and the destination's to
         let it move in, a rename the parent's to let it rename — `422 illegal_scope` otherwise); the slug is free
         there (`409 slug_taken`). The server compare-and-sets the placement revision and writes everything at once,
-        or nothing (`409 stale_placement`). No guest delete of a node that holds anything: nodes store no authorship
-        (a guest takes back only an empty upload placeholder, `abandonShareNode`).
+        or nothing (`409 stale_placement`). The server records the guest's identity as the last editor of the node's
+        name — a rename and a move alike, since both re-seal it (ADR 0093 § 8); it serves that to no client. No guest
+        delete of a node that holds anything (a guest takes back only an empty upload placeholder whose name it wrote
+        last, `abandonShareNode`).
         **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
         token → `403 share_password_incorrect`.
       parameters:
@@ -943,14 +945,16 @@ paths:
         Decision 6). Behind core's guest gate like `updateShareNode`, without spending the upload budget; a
         **READ_WRITE** link takes it for a node strictly inside its subtree, never a guest's identity folder or
         anything inside one; a **WRITE_ONLY** link only for a node strictly inside its guest's own identity folder; a
-        READ link is `403 share_not_contributable`. **Only a placeholder:** nodes store no authorship, so the server
-        cannot tell whose node it is, and it erases only one that holds nothing anybody could lose — no child (live or
-        trashed), no upload another identity or a member is sending into it, and the owner of the node's kind
-        declares it empty (`GuestPlaceholders`: Depot's `FILE` whose slot never held a blob; core's own `FOLDER` that
-        carries no attachment and no sealed metadata — the folders a guest's folder-tree upload created before every
-        file of it was refused). So any guest in reach may take back any such node, a member's empty folder too: all it
-        can remove is a name with nothing behind it. Anything else is `409
-        not_a_placeholder`, and nothing is written. The erase is the trash purge's (the node's links ended, its
+        READ link is `403 share_not_contributable`. **Only the guest's own placeholder:** the server records who last
+        wrote each node's name (ADR 0093 § 8), and erases a node only if that is the calling guest's identity — so a
+        member's empty file or folder, one a member renamed, or another guest's is none. A move writes the name too, so
+        a guest that moved a member's empty node may take it back: a name with nothing behind it, which that guest could
+        already rename away (ADR 0080 Decision 6). And only one that holds nothing anybody could lose — no live link
+        rooted on it (a revoked one included: the erase would end it), no child (live or trashed), no upload another
+        identity or a member is sending into it, and the owner of the node's kind declares it empty
+        (`GuestPlaceholders`: Depot's `FILE` whose slot never held a blob; core's own `FOLDER` that carries no
+        attachment and no sealed metadata — the folders a guest's folder-tree upload created before every file of it
+        was refused). Anything else is `409 not_a_placeholder`, and nothing is written. The erase is the trash purge's (the node's links ended, its
         guest identities dropped where nothing names them any more) and moves the scope's tree revision.
         **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
         token → `403 share_password_incorrect`.
@@ -971,7 +975,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
-          description: The node is not an empty upload placeholder — it has a child, an upload by another identity or a member is open into it, or the owner of its kind does not declare it empty (`not_a_placeholder`); nothing was written.
+          description: The node is not this guest's empty upload placeholder — its name was last written by anybody but the calling identity, a link is rooted on it, it has a child, an upload by another identity or a member is open into it, or the owner of its kind does not declare it empty (`not_a_placeholder`); nothing was written.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_a_placeholder } }
         "422":

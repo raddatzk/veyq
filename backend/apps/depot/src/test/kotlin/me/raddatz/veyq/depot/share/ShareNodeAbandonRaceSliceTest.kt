@@ -6,9 +6,11 @@ import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
 import me.raddatz.veyq.core.content.NodeSubtreePurge
 import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.AbandonShareNodeOutcome
 import me.raddatz.veyq.core.sharing.GuestTreeShare
+import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.core.sharing.ShareNodesHandler
 import me.raddatz.veyq.core.testing.FakePresignProfile
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
@@ -56,14 +58,16 @@ class ShareNodeAbandonRaceSliceTest {
     @Inject lateinit var purge: NodeSubtreePurge
     @Inject lateinit var tree: NodesStore
 
-    /** `folder` (the share root) holds `file`, an empty file the guest is uploading into. */
+    /** `folder` (the share root) holds `file`, an empty file the guest made (its name's editor) and is uploading into. */
     private data class Tree(val scopeId: String, val file: String, val link: GuestTreeShare.Link)
 
     private fun tree(): Tree {
         val (userId, scopeId) = seedMemberScope()
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
-        val file = seedNode(scopeId, DepotNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY)
-        return Tree(scopeId, file, GuestTreeShare.seed(userId, scopeId, folder))
+        val link = GuestTreeShare.seed(userId, scopeId, folder)
+        val identity = tx { ShareIdentityEntity.find("shareId", link.shareId).firstResult()!!.id }
+        val file = seedNode(scopeId, DepotNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY, nameEditor = PrincipalKey.Share(identity))
+        return Tree(scopeId, file, link)
     }
 
     @Test

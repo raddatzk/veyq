@@ -82,8 +82,9 @@ sealed interface AbandonShareNodeOutcome {
     /** The share's root, a `WRITE_ONLY` guest's identity folder itself, or — for a `READ_WRITE` guest — an identity
      *  folder or a node inside one. */
     object IllegalStructure : AbandonShareNodeOutcome, HttpFailure by Failures.illegalStructure
-    /** The node holds something — a child, an upload somebody else has open into it, its application's content — or
-     *  its kind's owner declares nothing ([GuestPlaceholders]): nothing is written. */
+    /** The node is no placeholder of this guest's: its name was last written by anybody but the calling identity, a
+     *  live link is rooted on it, it holds something — a child, an upload somebody else has open into it, its
+     *  application's content — or its kind's owner declares nothing ([GuestPlaceholders]): nothing is written. */
     object NotAPlaceholder : AbandonShareNodeOutcome, HttpFailure by httpFailure("not_a_placeholder", CONFLICT)
 }
 
@@ -92,9 +93,9 @@ sealed interface AbandonShareNodeOutcome {
  * subtree, and move or rename one (one placement write). Core's, because they carry no application semantics: behind
  * [ShareGuestGate] instead of a member session, then [NodesHandler]'s principal-free operations with the share's
  * [SubtreeBoundary]. The server checks structure only and opens nothing. **No guest delete of anything that holds
- * something:** nodes store no authorship, so "delete your own" cannot be checked, and a contributor could remove
- * anything below the root. What a guest may take back is an **empty upload placeholder** ([abandon]): the node it
- * created for an upload that was then refused (a full link) or given up, erased at once so nothing of it is kept.
+ * something** (whether a guest deletes content of its own is inbox #467's question). What a guest may take back is an
+ * **empty upload placeholder its own identity named** ([abandon]): the node it created for an upload that was then
+ * refused (a full link) or given up, erased at once so nothing of it is kept.
  *
  * Who may do what is the container's owner's ([GuestNodeRules], both sides of a move), on top of where a kind may live
  * at all (`NodeKindRules`, which the node operations ask). A `WRITE_ONLY` guest only creates, and only inside its own
@@ -247,12 +248,19 @@ class ShareNodesHandler(
     /**
      * Erase an empty upload placeholder (ADR 0080 decision 6, `abandonShareNode`): the node a guest created for an upload
      * that was refused or given up. Within the guest's reach — strictly inside the subtree for `READ_WRITE` (never an
-     * identity folder or anything inside one), strictly inside its own identity folder for `WRITE_ONLY` — and only a
-     * node that holds nothing anybody could lose: no child (live or trashed: a trashed one is restorable), no upload
-     * session a member or another identity opened for it (so no guest cuts another's upload off), and its kind's owner
-     * declares it empty ([GuestPlaceholders]). The erase is the trash purge's ([NodeSubtreePurge.erase]), at once, with
-     * the bump of the tree revision. Spends no budget: it removes a row. A session this identity opened for the node
-     * stays and ages out (`UploadSessionPurge`), as every given-up upload's does.
+     * identity folder or anything inside one), strictly inside its own identity folder for `WRITE_ONLY` — and only the
+     * calling identity's own: its name was last written by that identity ([NodeEntity.nameEditor], ADR 0093 § 8), so
+     * a member's empty node, or one a member renamed, is none. And only a node that holds nothing anybody could lose:
+     * no live link rooted on it (the erase would end that link — a guest's own placeholder never carries one), no
+     * child (live or trashed: a trashed one is restorable), no upload session a member or another identity opened for
+     * it (so no guest cuts another's upload off), and its kind's owner declares it empty ([GuestPlaceholders]). The
+     * erase is the trash purge's ([NodeSubtreePurge.erase]), at once, with the bump of the tree revision. Spends no
+     * budget: it removes a row. A session this identity opened for the node stays and ages out (`UploadSessionPurge`),
+     * as every given-up upload's does.
+     *
+     * A move counts as naming (ADR 0080 decision 6, owner 2026-10-16): a placement re-seals the name, so a guest that
+     * moved a member's empty node is its name's last editor and may take it back — a name with nothing behind it,
+     * which that guest could already rename away; the link check keeps it from ending anybody's link.
      *
      * The lock order of the class: everything below is decided under the scope lock, so a completion into the node
      * either committed first — and the owner's check sees its content — or runs after and finds no node.
@@ -290,10 +298,14 @@ class ShareNodesHandler(
         }
     }
 
-    /** [node] holds nothing anybody could lose (see [abandon]); under the scope lock. A session row names the node it
-     *  was opened for as its client declared it (`ownerId`), so one naming this node blocks the erase whoever's it really
-     *  is — it can only keep a placeholder, never erase anything that is not one. */
+    /** [node] is [identityId]'s own and holds nothing anybody could lose (see [abandon]); under the scope lock. A
+     *  session row names the node it was opened for as its client declared it (`ownerId`), so one naming this node
+     *  blocks the erase whoever's it really is — it can only keep a placeholder, never erase anything that is not one. */
     private fun isPlaceholder(scopeId: String, node: NodeEntity, identityId: String): Boolean {
+        if (node.nameEditor != PrincipalKey.Share(identityId)) return false
+        // A link is rooted on it (ADR 0080 decision 6, D3): the erase tombstones every link on the node, so a revoked one
+        // counts too — only a deleted one is no link any more.
+        if (ShareEntity.count("nodeId = ?1 and deleted = false", node.id) > 0) return false
         if (NodeEntity.count("parentId", node.id) > 0) return false
         val openByAnother = UploadSessionEntity.count(
             "scopeId = ?1 and ownerId = ?2 and (openerShareIdentityId is null or openerShareIdentityId <> ?3)",
