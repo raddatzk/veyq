@@ -1,15 +1,17 @@
 name: Trust chain
 
-# Deliberately unfiltered: this runs on every push and every PR, docs included.
+# The product guards run unfiltered: on every push and every PR, docs included.
 #
-# It used to be a job in ci.yml, which ignores `docs/**` and `**/*.md` so a doc change does not pay for
+# They used to be a job in ci.yml, which ignores `docs/**` and `**/*.md` so a doc change does not pay for
 # `./gradlew check` + `npm ci`. That filter is right for those jobs and was wrong for this one: the guards whose
 # whole purpose is validating `docs/` only fired when *code* changed. Two of the three commits that found this
-# were doc-only, and would have skipped their own validation.
+# were doc-only, and would have skipped their own validation. ci.yml's `guards` job runs the same glob again, so
+# the pipeline's publish can wait on it (ADR 0091 decision 2); a docs-only commit is validated here and nowhere else.
 #
-# Nothing is filtered back in, because there is nothing to filter: a code change can dangle a coverage ref just
-# as a doc change can, and the whole run is seconds. A path filter here would be machinery guarding a job that is
-# cheaper than the machinery.
+# One guard is the exception, and it is its own job: `validate_guard_gaps.py` tests the GUARDS, not the commit, and
+# was 90 % of this workflow's time (ADR 0091 § Context). So it runs when a guard or the gap map changes — the same
+# inputs its local skip hashes — and nightly in full on `main` (ADR 0091 decision 4). What that filter cannot see is
+# its docstring's limit: a forgery's anchor renamed outside `scripts/` shows at the next nightly run.
 
 on:
   push:
@@ -18,6 +20,9 @@ on:
   pull_request:
     branches:
       - main
+  # Nightly, on the default branch (a schedule runs nowhere else): the guard gaps in full, whatever changed.
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -25,9 +30,9 @@ permissions:
 
 jobs:
   trust-chain:
-    name: Trust-chain validation
+    name: Trust-chain validation (the product guards)
     runs-on: ubuntu-latest
-    timeout-minutes: 13
+    timeout-minutes: 3
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,7 +43,8 @@ jobs:
       #
       # What each guard asserts, and the defect that bought it, is that validator's own module docstring.
       # `scripts/` is the registry; this file does not restate it, because a restated list drifts — the list
-      # that used to live here said "three" and "four" long after there were nine.
+      # that used to live here said "three" and "four" long after there were nine. The one name it carries is the
+      # guard it hands to `guard-gaps` below.
       - name: Validate trust-chain guards
         run: |
           # nullglob is load-bearing, not tidiness: without it an unmatched glob hands the loop the literal
@@ -50,6 +56,9 @@ jobs:
           .venv/bin/pip install --quiet pyyaml
           count=0
           for f in scripts/validate_*.py; do
+            if [ "$f" = "scripts/validate_guard_gaps.py" ]; then
+              continue
+            fi
             echo "--- $f"
             .venv/bin/python "$f"
             count=$((count + 1))
@@ -59,3 +68,52 @@ jobs:
             exit 1
           fi
           echo "$count guards green"
+
+  # Which guard-gap inputs this push or pull request touched. A schedule and a dispatch have no diff to read, and
+  # `guard-gaps` runs on both regardless, so the filter is not asked there.
+  guard-gap-inputs:
+    name: Detect changed guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      guards: ${{ steps.filter.outputs.guards }}
+    steps:
+      - name: Check out repository
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The inputs `validate_guard_gaps.py` hashes for its local skip (`SKIP_INPUTS`), plus this file, which says
+      # how the guard runs. scripts/validate_pipeline_shape.py holds this list to that constant.
+      - name: Filter changed paths
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            guards:
+              - 'scripts/**'
+              - '.claude/skills/trust-chain/**'
+              - '.github/workflows/trust-chain.yml'
+
+  guard-gaps:
+    name: Guard gaps (the guards still bite as documented)
+    needs: guard-gap-inputs
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      || needs.guard-gap-inputs.outputs.guards == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Always the full run here (`--force`): a CI checkout has no stamp to skip by, and saying so keeps this job's
+      # meaning from resting on the `CI` variable.
+      - name: Validate the guard gaps
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet pyyaml
+          .venv/bin/python scripts/validate_guard_gaps.py --force

@@ -354,12 +354,16 @@ this section only points at it (rule 2) — assembling this picture by hand each
   what it must carry is defined once in [`../../changes/README.md`](../../changes/README.md) § trust-chain
   guards. Run the chain locally as CI does:
   `for f in scripts/validate_*.py; do python3 "$f"; done` — with one difference, `validate_guard_gaps.py`, which
-  skips locally while no guard changed (`--force` runs it; CI never skips).
-- **Three CI runs, three triggers.** [`trust-chain.yml`](../../.github/workflows/trust-chain.yml) —
-  deliberately unfiltered and buildless, the whole guard glob; a docs-only change is validated **there and
-  nowhere else**, because [`ci.yml`](../../.github/workflows/ci.yml) `paths-ignore`s `docs/**`.
+  skips locally while no guard changed (`--force` runs it).
+- **What runs where.** [`trust-chain.yml`](../../.github/workflows/trust-chain.yml) — deliberately unfiltered
+  and buildless, the guard glob minus `validate_guard_gaps.py`; a docs-only change is validated **there and
+  nowhere else**, because [`ci.yml`](../../.github/workflows/ci.yml) — the one pipeline per commit, whose
+  `guards` job runs the same glob — `paths-ignore`s `docs/**`. `validate_guard_gaps.py` is `trust-chain.yml`'s
+  second job: when a push or pull request changes `scripts/` or the trust-chain skill, and nightly in full
+  ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 4).
   [`mutation.yml`](../../.github/workflows/mutation.yml) /
   [`mutation-backend.yml`](../../.github/workflows/mutation-backend.yml) are path-gated onto their scope files.
+  Every job runs on its budget, ADR 0091 decision 1.
 - **What green proves — and where it stops.** A reference **resolves**; not that what it points at carries
   weight. Those limits are **executable, not prose**:
   [`validate_guard_gaps.py`](../../scripts/validate_guard_gaps.py) injects each documented gap into a

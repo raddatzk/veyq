@@ -143,11 +143,27 @@ restored by snapshot-and-restore.
       --porcelain`): `chart`'s `timeout-minutes` removed → red naming `ci.yml › chart`; a new `bite-new.yml` with two
       jobs and no budget → red naming both. Glob green; `validate_guard_gaps.py --force` green (79 cases, 6 workers,
       166 s, load 30 → 24).
-- [ ] 4 **Guard gaps in CI.** `trust-chain.yml`'s loop runs every guard but `validate_guard_gaps.py`; a second job
+- [x] 4 **Guard gaps in CI.** `trust-chain.yml`'s loop runs every guard but `validate_guard_gaps.py`; a second job
       runs that one when `scripts/**` or `.claude/skills/trust-chain/**` change (`dorny/paths-filter`, pinned as
       `codeql.yml` pins it) and on a nightly `schedule` on `main`, always in full there. `changes/README.md`
       § The trust-chain guards stay green and `docs/ai/README.md` say what runs where. Bite: a path filter that misses
       `scripts/` (the forged filter) → the guard of phase 3, or a new assertion beside it, red.
+      **Built 2026-10-16:** `trust-chain.yml` has three jobs — `trust-chain` (the glob minus `validate_guard_gaps.py`,
+      3 min), `guard-gap-inputs` (the pinned `dorny/paths-filter` on `scripts/**`, `.claude/skills/trust-chain/**` and
+      the workflow itself, only on a push or pull request, 5 min) and `guard-gaps` (`--force`, 10 min) when the filter
+      says `true`, on a dispatch and on the nightly `schedule` (`17 3 * * *`; a schedule runs on the default branch
+      only). `validate_pipeline_shape.py` assertion 2: a glob loop names `validate_guard_gaps.py` (its exclusion); some
+      job runs it alone; that job's workflow has a `schedule`; its `if:` admits the schedule and a
+      `needs.<job>.outputs.<filter> == 'true'`; that job's one paths-filter step exports the output and lists every
+      `SKIP_INPUTS` entry of `validate_guard_gaps.py` as `<input>/**` — read from that constant, so the local skip and
+      the CI filter watch one set. Docs moved: `changes/README.md`, `docs/ai/README.md`, `docs/README.md`, the
+      trust-chain skill's map (its line numbers re-measured), `validate_guard_gaps.py`'s docstring (the CI filter has
+      the skip's blind spot: an anchor outside the inputs shows at the next nightly run), ADR 0091 § Consequences, and
+      the Security page *Verify it yourself*. **Bites** (snapshot-and-restore of `trust-chain.yml`, restore confirmed by
+      byte comparison and an unchanged `git status --porcelain`): the pre-phase `trust-chain.yml` (live) → red twice
+      (the loop runs the guard gaps; no job runs them alone); the forged filter without `scripts/**` → red naming
+      `guard-gap-inputs`' filter; the `schedule` removed → red. Glob green; `validate_guard_gaps.py --force` green (79
+      cases, 6 workers, 431 s under a load of 66 → 99); `npm run check` in `site/` green.
 - [ ] 5 **The pipeline, locally.** `scripts/run_pipeline.py` reads `ci.yml`, resolves each job's `needs`, runs the
       `run:` steps of every job the host can run (its own Java, Node, Docker; the host architecture of a matrix),
       independent jobs in parallel, each under its `timeout-minutes`, and prints per job: ran / green / red / **not

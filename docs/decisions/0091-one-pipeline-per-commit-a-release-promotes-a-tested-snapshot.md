@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`) and every job's budget (decision 1); the rest is not (§ Consequences)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1) and the guard gaps' CI trigger (decision 4); the rest is not (§ Consequences)
 - Date: 2026-10-16
 
 ## Context
@@ -150,8 +150,14 @@ Three structural costs sit on top of those numbers:
   `cr-stack-e2e` (L1), re-cut to this ADR; promotion and attestations (decision 5); L2 (inbox #453); the archive and
   L3 (decision 6). None is provable in CI before the repository has a remote.
 - **The local skip of `validate_guard_gaps.py`** is the first piece built (2026-10-16): a green full run stamps the
-  hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does. The CI half of
-  decision 4 — the path filter and the nightly run — comes with the pipeline CR.
+  hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does.
+- **The guard gaps run in CI on their own trigger** (2026-10-16, `cr-one-pipeline-per-commit` phase 4):
+  `trust-chain.yml`'s glob skips `validate_guard_gaps.py`, and its `guard-gaps` job runs it in full when a push or pull
+  request changes what the local skip hashes (a `dorny/paths-filter` job beside it), on a dispatch, and nightly on
+  `main`. `scripts/validate_pipeline_shape.py` holds the filter to `validate_guard_gaps.py`'s `SKIP_INPUTS`, the
+  schedule, and every glob's exclusion of it. The cost of the filter is the local skip's: a forgery's anchor renamed
+  outside those inputs shows at the next nightly run, not on the push that renamed it. Whether the filter fires on a
+  real push is a fact only the first CI run shows.
 - **The guard-gap cases run in parallel** (2026-10-16, `cr-one-pipeline-per-commit` phase 1): a pool of
   `min(cpu_count, 6)` workers, `VEYQ_GUARD_GAPS_WORKERS=1` the sequential run. Measured on the same Mac with a
   neighbour's Docker-heavy session running: the full run **167 s at 6 workers** (load average 13 → 30) against
@@ -169,11 +175,10 @@ Three structural costs sit on top of those numbers:
   the images' `npm ci` by the publish needing the gate, not the build. The signer's identity moved with the file:
   [Verify a release](../../site/src/content/docs/run/verify-a-release.md) pins `.github/workflows/ci.yml`; no image
   had ever been published under the old one. The pipeline's `guards` job runs the glob minus `validate_guard_gaps.py`,
-  which stays in `trust-chain.yml` until decision 4's filtered job.
-- **Every job runs on its budget** (2026-10-16, `cr-one-pipeline-per-commit` phase 3): `timeout-minutes` on all 17
-  jobs of the six workflows, the values of decision 1; `scripts/validate_pipeline_shape.py` reds a job, or a whole new
-  workflow, without one. `trust-chain.yml`'s one job runs the guards and the guard gaps together until decision 4's
-  filtered job splits them, so it carries the sum of both stages, 13 min.
+  which is `trust-chain.yml`'s `guard-gaps` job.
+- **Every job runs on its budget** (2026-10-16, `cr-one-pipeline-per-commit` phase 3): `timeout-minutes` on every
+  job of every workflow, the values of decision 1; `scripts/validate_pipeline_shape.py` reds a job, or a whole new
+  workflow, without one.
 - **The remote comes when the owner judges veyq ready to publish, and it will be public** (owner, 2026-10-16). Until
   then every stage's only run is local, so the pipeline must run locally from the workflow file itself, by one command
   (`changes/cr-one-pipeline-per-commit.md` phase 5); the first public push is also the first CI run.

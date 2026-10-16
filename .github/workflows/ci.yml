@@ -72,7 +72,8 @@ jobs:
     # The pipeline's own run of the guards, so `publish` can wait on them (ADR 0091 decision 2). trust-chain.yml runs
     # the same glob unfiltered, because a docs-only commit is validated there and nowhere else; the overlap is these
     # cheap guards, about a minute and a half. `validate_guard_gaps.py` is not run here: it tests the guards, not the
-    # commit, and is its own stage (ADR 0091 decisions 1 and 4) — trust-chain.yml runs it.
+    # commit, and is its own stage (ADR 0091 decisions 1 and 4) — trust-chain.yml's `guard-gaps` job runs it when a
+    # guard changes, and nightly.
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:

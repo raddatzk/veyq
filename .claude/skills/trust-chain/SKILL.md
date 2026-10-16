@@ -80,8 +80,9 @@ always-current list, so this skill does not restate it: a restated list is a *re
 the moment a validator is tightened — the very failure this section is about, one level up. The coupling is
 deliberate — closing a gap flips a documented pass/fail and turns that guard red, forcing the closure to be
 recorded here, not landed silently. **Read its line before citing a local green as evidence:** locally it prints
-`SKIPPED` while no guard changed since the checkout's last green full run (CI never skips), and a skip re-checks
-nothing — after renaming what a forgery anchors on, run it with `--force`.
+`SKIPPED` while no guard changed since the checkout's last green full run (CI runs it in full when a guard
+changed, and nightly — § The map), and a skip re-checks nothing — after renaming what a forgery anchors on, run it
+with `--force`.
 
 Four documented gaps sit **outside** that guard, on purpose:
 
@@ -145,12 +146,15 @@ each has a canonical home — point there, don't try to build past it:
 
 `measured`:
 
-- **Three CI runs, three triggers.** `trust-chain.yml` — unfiltered, buildless, runs the whole guard glob
-  (`:14-21`, no paths filter). `ci.yml` — the one pipeline per commit (ADR 0091); its `guards` job runs the
-  same glob minus `validate_guard_gaps.py`, and `paths-ignore` includes `docs/**` (`:28-33`, `:38-43`), so a
-  docs-only change is validated *only* by trust-chain. `mutation.yml` / `mutation-backend.yml` — path-gated
-  onto their scope files (`:16-43` / `:17-51`).
-- **The glob is the registry.** `trust-chain.yml:47-60` runs `for f in scripts/validate_*.py` with a
+- **Three CI runs, three triggers.** `trust-chain.yml` — unfiltered, buildless, runs the guard glob minus
+  `validate_guard_gaps.py` (`:16-26`, no paths filter); that one is its `guard-gaps` job (`:101-119`), gated
+  by a `dorny/paths-filter` on `scripts/**` and `.claude/skills/trust-chain/**` (`:74-99`) plus a nightly
+  `schedule` (`:24-25`) — ADR 0091 decision 4, held by `validate_pipeline_shape.py` assertion 2. `ci.yml` —
+  the one pipeline per commit (ADR 0091); its `guards` job runs the same glob minus `validate_guard_gaps.py`,
+  and `paths-ignore` includes `docs/**` (`:28-33`, `:38-43`), so a docs-only change is validated *only* by
+  trust-chain. `mutation.yml` / `mutation-backend.yml` — path-gated onto their scope files (`:16-49` /
+  `:17-73`).
+- **The glob is the registry.** `trust-chain.yml:48-70` runs `for f in scripts/validate_*.py` with a
   `count == 0` backstop — a new `validate_*.py` runs automatically, no registration. The
   `mutation_meta_check*.py` sit **outside** that glob (filename prefix) and run only from the mutation jobs.
   Run every guard locally the same way: `for f in scripts/validate_*.py; do python3 "$f"; done`.
