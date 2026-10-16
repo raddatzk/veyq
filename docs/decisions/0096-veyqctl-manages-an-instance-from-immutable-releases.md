@@ -2,7 +2,9 @@
 
 - Status: Accepted 2026-10-16; built: `veyqctl` (decisions 1, 2, 4–7), the producer of a release's assets, and no
   image carries a recipe (`scripts/veyqctl.py`, `scripts/release_assets.py`); the stack lane installs every candidate
-  through it. Not built: the publish creating the GitHub Release (decision 3), the Run pages around `veyqctl`
+  through it; the publish creating the GitHub Release (decision 3, `ci.yml`'s `publish` job, held by
+  `scripts/validate_release_identity.py` assertion 11 and never run: there is no remote). Not built: the Run pages
+  around `veyqctl`
 - Date: 2026-10-16
 
 ## Context
@@ -52,9 +54,10 @@ its Node CLI (`admin-web/src/cli/`). Management is the instance's lifecycle *on 
 `python3` for backups. One file because the operator fetches it with `curl`: no `pip`, no virtualenv.
 
 **3. A release is an immutable GitHub Release, and the recipe is its assets.** The publish creates, per release, a
-GitHub Release on the tag `v<major>.<minor>` carrying `docker-compose.prod.yml`, `.env.example`, `garage.toml`,
-`veyqctl` (signed keylessly with `cosign sign-blob`, the same identity as the images), and a manifest naming both
-images by `tag@digest`. The repository has immutable releases switched on before the first release, so nothing a
+GitHub Release on the tag `v<major>.<minor>` carrying `docker-compose.prod.yml`, `.env.example` (as `env.example`:
+GitHub renames an asset whose name starts with a period), `garage.toml`, `veyqctl` (signed keylessly with `cosign
+sign-blob`, the same identity as the images, its bundle an asset beside it), and a manifest naming both images by
+`tag@digest`, all uploaded in the one call that creates the release. The repository has immutable releases switched on before the first release, so nothing a
 release carries can change after it is published. Snapshots get no GitHub Release; `veyqctl` never installs one.
 
 **4. The operator picks a release line in `.env`: `VEYQ_RELEASE`.**

@@ -13,8 +13,8 @@ the recipe:
   1. **assets** — the candidate becomes a release: `scripts/release_assets.py` (the publish's producer) writes it into
      the run's mirror directory `src/` — the recipe set it derives from the compose file (`garage.toml` included),
      `veyqctl`, `instance_backup.py` and the manifest naming both images. What is installed is what a release ships.
-     A value this run gives as a template value (`VEYQ_DOMAIN`, `VEYQ_ACME_EMAIL`) that the release's `.env.example`
-     no longer assigns is red here.
+     A value this run gives as a template value (`VEYQ_DOMAIN`, `VEYQ_ACME_EMAIL`) that the release's template
+     (`env.example`) no longer assigns is red here.
   2. **pebble** — Pebble alone first, under the run's own project, `veyq-e2e-<stamp>`, so it cannot address an
      instance on this host. Its root is generated when it starts, and the app must trust it before IT starts, while
      `veyqctl install` starts everything at once: so this stage brings Pebble up from the release's recipe and the
@@ -302,10 +302,10 @@ def assets(app_image: str, admin_image: str, workdir: Path) -> Release:
     if len(listed) != 1:
         raise Red(f"the run's mirror lists {len(listed)} releases, not the one it just produced")
     tag = source / listed[0]["tag"]
-    template = {m.group(1) for m in map(ASSIGNMENT.match, (tag / ".env.example").read_text().splitlines()) if m}
+    template = {m.group(1) for m in map(ASSIGNMENT.match, (tag / "env.example").read_text().splitlines()) if m}
     gone = sorted(set(TEMPLATE_VALUES) - template)
     if gone:
-        raise Red(f"this run gives {gone} as template values, which the release's .env.example no longer assigns — "
+        raise Red(f"this run gives {gone} as template values, which the release's env.example no longer assigns — "
                   "the recipe moved on")
     names = sorted(json.loads((tag / "manifest.json").read_text(encoding="utf-8"))["assets"])
     print(f"assets: {tag.name} in {source.relative_to(ROOT)}: {', '.join(names)}", flush=True)

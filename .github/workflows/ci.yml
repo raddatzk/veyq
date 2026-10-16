@@ -47,6 +47,10 @@ on:
         description: "Publish a release (<major>.<minor>, refused if it exists, git ref v<major>.<minor>) instead of a snapshot (<major>.<minor>-SNAPSHOT, replaced on every publish of that commit)"
         type: boolean
         default: false
+      unscheduled_major:
+        description: "Mark this release as an unscheduled major (a security fix that needed a removal, ADR 0085) in its manifest — refused unless the release is the first of its major"
+        type: boolean
+        default: false
 
 # Two groups, so a push never queues behind a publish: every publish shares one (two publishes racing for the same
 # name is the thing the refusal below must see in order), every dry run is grouped by its own ref.
@@ -764,7 +768,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish the release (both images and the chart)
+    name: Publish the release (both images, the chart and the GitHub Release)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Every other job of this file is a stage, and a publish waits for each to be green (ADR 0091 decision 2) — it is
@@ -796,12 +800,16 @@ jobs:
       && needs.stack.result == 'success'
       && contains(fromJSON('["success", "skipped"]'), needs.upgrade-proof.result)
     permissions:
-      contents: write # create the one `v<major>.<minor>` ref a release is named by (ADR 0057 §2)
+      contents: write # the one `v<major>.<minor>` ref a release is named by (ADR 0057 §2), and its GitHub Release
       packages: write
       id-token: write # keyless cosign signing via GitHub OIDC
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The release's producer counts the release from the history, as the version step does, and refuses an
+          # unscheduled major when an earlier `v<major>.*` tag exists — it needs the whole history and the tags.
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -812,6 +820,15 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The per-arch digests `build` pushed — the bytes lane L1 pulled by the same artifacts and installed — so the
+      # release is assembled from exactly those, never from the staging tags, which a later build of the commit could
+      # move (ADR 0090 decision 2). One directory per artifact: `digests/digest-<image>-<arch>/<image>`.
+      - name: Fetch the digests build pushed
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
 
       # The pinned Helm (workflow-level env above): verified against the pin BEFORE it is extracted, so a
       # tarball that does not match never runs. The same step installs it in `chart` and in `publish`.
@@ -854,6 +871,36 @@ jobs:
             exit 1
           fi
 
+      # The release's producer, scripts/release_assets.py, runs for real only after the tag (the last step). What it
+      # can refuse without the published digests — an unscheduled major on a release that does not change the major, a
+      # recipe it cannot derive, a count of the history it cannot make — is refused HERE, before anything is pushed,
+      # signed or tagged: a refusal at the end would leave images, a chart and a ref with no GitHub Release. It runs the
+      # producer with two local image names into a scratch directory and discards it. A snapshot is no release, so an
+      # unscheduled major asked for on one is refused too.
+      - name: Check the release's assets before anything is published
+        id: release-assets-check
+        env:
+          KIND: ${{ needs.version.outputs.kind }}
+          UNSCHEDULED_MAJOR: ${{ inputs.unscheduled_major }}
+        run: |
+          set -euo pipefail
+          if [[ "$KIND" != "release" ]]; then
+            if [[ "$UNSCHEDULED_MAJOR" == "true" ]]; then
+              echo "unscheduled_major marks a release that changes the major; a snapshot is no release" >&2
+              exit 1
+            fi
+            exit 0
+          fi
+          python3 -m venv "${RUNNER_TEMP}/producer-venv"
+          "${RUNNER_TEMP}/producer-venv/bin/pip" install --quiet pyyaml
+          unscheduled=""
+          if [[ "$UNSCHEDULED_MAJOR" == "true" ]]; then
+            unscheduled="--unscheduled"
+          fi
+          "${RUNNER_TEMP}/producer-venv/bin/python" scripts/release_assets.py "${RUNNER_TEMP}/release-check" \
+            --app veyq:check --admin veyq-admin:check ${unscheduled:+"$unscheduled"}
+          rm -rf "${RUNNER_TEMP}/release-check"
+
       # One metadata step per image: the two carry the SAME tag set (the publish names both), and metadata-action
       # takes one image list but emits fully-qualified tags, so deriving the second image's tags by string-editing
       # the first's would put a substitution between the release and its own names. A snapshot's version already
@@ -884,39 +931,58 @@ jobs:
       - name: Create multi-arch manifest (app)
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/veyq
+          NAME: veyq
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
+          set -euo pipefail
           mapfile -t tags <<< "$TAGS"
           tag_args=()
           for tag in "${tags[@]}"; do
             tag_args+=("-t" "$tag")
           done
 
-          docker buildx imagetools create \
-            "${tag_args[@]}" \
-            "$IMAGE:build-${GITHUB_SHA}-amd64" \
-            "$IMAGE:build-${GITHUB_SHA}-arm64"
+          sources=()
+          for arch in amd64 arm64; do
+            digest="$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/digest-${NAME}-${arch}/${NAME}")"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "no digest for ${NAME} (${arch}) from build: '${digest}'" >&2
+              exit 1
+            fi
+            sources+=("${IMAGE}@${digest}")
+          done
+
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
 
       - name: Create multi-arch manifest (admin)
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/veyq-admin
+          NAME: veyq-admin
           TAGS: ${{ steps.meta-admin.outputs.tags }}
         run: |
+          set -euo pipefail
           mapfile -t tags <<< "$TAGS"
           tag_args=()
           for tag in "${tags[@]}"; do
             tag_args+=("-t" "$tag")
           done
 
-          docker buildx imagetools create \
-            "${tag_args[@]}" \
-            "$IMAGE:build-${GITHUB_SHA}-amd64" \
-            "$IMAGE:build-${GITHUB_SHA}-arm64"
+          sources=()
+          for arch in amd64 arm64; do
+            digest="$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/digest-${NAME}-${arch}/${NAME}")"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "no digest for ${NAME} (${arch}) from build: '${digest}'" >&2
+              exit 1
+            fi
+            sources+=("${IMAGE}@${digest}")
+          done
+
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
 
       - name: Sign the published images (keyless)
+        id: sign-images
         env:
           # Both images of the release. An unsigned admin image would be the weaker half of a pair an operator
           # is told to pin together — and it is the higher-privilege half (ADR 0065).
@@ -932,6 +998,8 @@ jobs:
             digest="sha256:$(docker buildx imagetools inspect --raw "$image:sha-${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)"
             echo "Signing $image@${digest}"
             cosign sign --yes "$image@${digest}"
+            # The signed index digest, by image name: the GitHub Release's manifest names each image by it.
+            echo "${image##*/}=${digest}" >> "$GITHUB_OUTPUT"
           done
 
       # The chart is the release's third artifact (ADR 0064): packaged with the publish's own version as both
@@ -983,3 +1051,44 @@ jobs:
 
           git tag "v${VERSION}" "${GITHUB_SHA}"
           git push origin "refs/tags/v${VERSION}"
+
+      # The release as files (ADR 0096 decision 3): scripts/release_assets.py writes the recipe set, `veyqctl`, the
+      # backup tool and the manifest naming both images by the digests signed above; `veyqctl` is signed keylessly, its
+      # bundle an asset beside it and not in the manifest (it vouches for the `veyqctl` an operator fetches by hand,
+      # before any manifest is checked); and ONE `gh release create` uploads the whole directory — because an immutable
+      # release (a repository setting the owner switches on before the first release) takes no asset after it is
+      # published — on the ref the step above pushed (`--verify-tag`), never a draft or a prerelease, which `veyqctl`
+      # would not install. The manifest is also what an instance's release check reads (ReleaseFeed, ADR 0097). LAST,
+      # after every signature and the ref, so a release that has a GitHub Release is a whole one.
+      # scripts/validate_release_identity.py holds this step's place, its gate and its flags, and that no step uploads
+      # a release asset after it.
+      - name: Create the GitHub Release
+        id: github-release
+        if: needs.version.outputs.kind == 'release'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          APP: ghcr.io/${{ github.repository_owner }}/veyq:${{ needs.version.outputs.version }}@${{ steps.sign-images.outputs.veyq }}
+          ADMIN: ghcr.io/${{ github.repository_owner }}/veyq-admin:${{ needs.version.outputs.version }}@${{ steps.sign-images.outputs.veyq-admin }}
+          UNSCHEDULED_MAJOR: ${{ inputs.unscheduled_major }}
+          PUBLISH_LATEST: ${{ needs.version.outputs.publish_latest }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/release"
+          unscheduled=""
+          if [[ "$UNSCHEDULED_MAJOR" == "true" ]]; then
+            unscheduled="--unscheduled"
+          fi
+          "${RUNNER_TEMP}/producer-venv/bin/python" scripts/release_assets.py "$out" \
+            --app "$APP" --admin "$ADMIN" ${unscheduled:+"$unscheduled"}
+          if [[ ! -f "${out}/v${VERSION}/manifest.json" ]]; then
+            echo "the producer wrote no v${VERSION}: it counts another release than the version step" >&2
+            exit 1
+          fi
+
+          cosign sign-blob --yes --bundle "${out}/v${VERSION}/veyqctl.bundle" "${out}/v${VERSION}/veyqctl"
+
+          gh release create "v${VERSION}" --verify-tag --repo "$GITHUB_REPOSITORY" \
+            --title "veyq ${VERSION}" --latest="$PUBLISH_LATEST" \
+            --notes "veyq ${VERSION}. manifest.json names both images by digest; veyqctl installs and upgrades from this release, and veyqctl.bundle is its cosign signature." \
+            "${out}/v${VERSION}"/*
