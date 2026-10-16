@@ -939,7 +939,10 @@ paths:
         READ link is `403 share_not_contributable`. **Only a placeholder:** nodes store no authorship, so the server
         cannot tell whose node it is, and it erases only one that holds nothing anybody could lose — no child (live or
         trashed), no upload another identity or a member is sending into it, and the owner of the node's kind
-        declares it empty (`GuestPlaceholders`: Depot's `FILE` whose slot never held a blob). Anything else is `409
+        declares it empty (`GuestPlaceholders`: Depot's `FILE` whose slot never held a blob; core's own `FOLDER` that
+        carries no attachment and no sealed metadata — the folders a guest's folder-tree upload created before every
+        file of it was refused). So any guest in reach may take back any such node, a member's empty folder too: all it
+        can remove is a name with nothing behind it. Anything else is `409
         not_a_placeholder`, and nothing is written. The erase is the trash purge's (the node's links ended, its
         guest identities dropped where nothing names them any more) and moves the scope's tree revision.
         **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
