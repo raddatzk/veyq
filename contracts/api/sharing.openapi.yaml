@@ -14,7 +14,7 @@ info:
     the kind's application's (`ShareGuestWrites`).
 
     **Operator-blind.** The server stores only the opaque `shareId` (256-bit unguessable), the wrap, the
-    plaintext `role`, the node's name **re-sealed under `K_share`**, and the shared `nodeId`. It never sees
+    plaintext `role`, the node's name **re-sealed under a field key derived from `K_share`**, and the shared `nodeId`. It never sees
     `K_share`, a content key, any name, the viewer, or — because blobs are fetched direct-from-store via
     presigned GETs — which blob a viewer opens.
 
@@ -41,7 +41,7 @@ paths:
       summary: Create a public share of a node the caller is a member of (any scope).
       description: >
         The client generates a fresh 32-byte `K_share`, computes `wrap = symWrap(K_share, content key)` over the
-        node's content key, re-seals the node's name under `K_share`, seals `K_share` under the scope key as the
+        node's content key, re-seals the node's name under a field key derived from `K_share`, seals `K_share` under the scope key as the
         members' recovery copy, and POSTs `{ nodeId, role, wrap, sealedName, sealedShareKey, sealedShareKeyEpoch, expiresAt? }` — `role` is
         the access mode (`ShareRole`: **READ**, **READ_WRITE** or **WRITE_ONLY**). The server verifies the caller
         is a **member** of the node's scope — personal, group, or tenant (cr-0104, ADR 0029 §6); a node whose kind
@@ -319,9 +319,9 @@ paths:
         reason: >-
           The value is always the share root's current name, re-sealed by whichever member renamed it last; a
           later write carries a later name, so no revision guards it (ADR 0080 decision 14).
-      summary: Store a share's root name re-sealed under `K_share` (any member with write access).
+      summary: Store a share's root name re-sealed under a field key derived from `K_share` (any member with write access).
       description: >
-        Replaces the share's `sealedName` — the shared root's name re-sealed under `K_share` (seal purpose
+        Replaces the share's `sealedName` — the shared root's name re-sealed under a field key derived from `K_share` (seal purpose
         `share-memory-name`), the title `resolveShare` serves — after a member renamed that root
         ([ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
         decision 14). The renaming member's client opens each share on the root through its recovery copy
@@ -1129,7 +1129,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: string
-          description: The shared node's name re-sealed under `K_share` (seal purpose `share-memory-name`, a stored seal id that keeps its name; opaque base64) — so a viewer with only the fragment key can show the title without `K_SC`.
+          description: The shared node's name re-sealed under a field key derived from `K_share` (seal purpose `share-memory-name`, a stored seal id that keeps its name; opaque base64) — so a viewer with only the fragment key can show the title without `K_SC`.
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
@@ -1143,7 +1143,7 @@ components:
         sealedNote:
           type: [string, "null"]
           description: >
-            OPTIONAL curator note sealed under `K_share` (AAD `share-note`, opaque base64) — the plaintext is a
+            OPTIONAL curator note sealed under a field key derived from `K_share` (AAD `share-note`, opaque base64) — the plaintext is a
             **per-locale JSON map** `{ "de": "…", "en": "…" }` (cr-0116); the share page renders the viewer's
             locale (exact → base → en → first). Absent/blank = no note (cr-0115/cr-0116, ADR 0036).
           contentEncoding: base64
@@ -1153,7 +1153,7 @@ components:
         sealedShareName:
           type: [string, "null"]
           description: >
-            OPTIONAL private label for this share, sealed under `K_share` (AAD `share-name`, opaque base64) — a
+            OPTIONAL private label for this share, sealed under a field key derived from `K_share` (AAD `share-name`, opaque base64) — a
             **management-only** name (e.g. "For Grandma") shown in the curator's share list, distinct from the
             shared node's name; **never served to the viewer** (cr-0116).
           contentEncoding: base64
@@ -1244,14 +1244,14 @@ components:
       properties:
         sealedNote:
           type: [string, "null"]
-          description: The new curator note (per-locale JSON map) sealed under `K_share` (AAD `share-note`). Null/empty clears it.
+          description: The new curator note (per-locale JSON map) sealed under a field key derived from `K_share` (AAD `share-note`). Null/empty clears it.
           contentEncoding: base64
           maxLength: 16384
           example: c2VhbGVkLW5vdGUtdjI=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16384) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedShareName:
           type: [string, "null"]
-          description: The new private share name sealed under `K_share` (AAD `share-name`). Null/blank clears it (cr-0116).
+          description: The new private share name sealed under a field key derived from `K_share` (AAD `share-name`). Null/blank clears it (cr-0116).
           contentEncoding: base64
           maxLength: 512
           example: c2VhbGVkLXNoYXJlLW5hbWU=
@@ -1332,7 +1332,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: string
-          description: The shared node's name sealed under the new `K_share` (seal purpose `share-memory-name`, opaque base64).
+          description: The shared node's name sealed under a field key derived from the new `K_share` (seal purpose `share-memory-name`, opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
@@ -1345,14 +1345,14 @@ components:
           example: null
         sealedNote:
           type: [string, "null"]
-          description: The curator note (per-locale JSON map) sealed under the new `K_share` (AAD `share-note`). Absent = no note.
+          description: The curator note (per-locale JSON map) sealed under a field key derived from the new `K_share` (AAD `share-note`). Absent = no note.
           contentEncoding: base64
           maxLength: 16384
           example: null
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16384) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedShareName:
           type: [string, "null"]
-          description: The private label sealed under the new `K_share` (AAD `share-name`), management-only. Absent = none.
+          description: The private label sealed under a field key derived from the new `K_share` (AAD `share-name`), management-only. Absent = none.
           contentEncoding: base64
           maxLength: 512
           example: null
@@ -1416,12 +1416,12 @@ components:
       type: object
       required: [sealedName]
       description: >
-        A share root's new name, re-sealed under the share's `K_share` by the member who renamed the root (ADR 0080
+        A share root's new name, re-sealed under a field key derived from the share's `K_share` by the member who renamed the root (ADR 0080
         decision 14). The bounds are `CreateShareRequest.sealedName`'s.
       properties:
         sealedName:
           type: string
-          description: The shared node's current name re-sealed under `K_share` (seal purpose `share-memory-name`, a stored seal id that keeps its name; opaque base64) — what `resolveShare` serves as the title.
+          description: The shared node's current name re-sealed under a field key derived from `K_share` (seal purpose `share-memory-name`, a stored seal id that keeps its name; opaque base64) — what `resolveShare` serves as the title.
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
@@ -1465,19 +1465,19 @@ components:
           $ref: "#/components/schemas/ShareRole"
         sealedName:
           type: string
-          description: The shared node's name re-sealed under `K_share` (opaque base64) — the curator UI unwraps it to label the row.
+          description: The shared node's name re-sealed under a field key derived from `K_share` (opaque base64) — the curator UI unwraps it to label the row.
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
         sealedNote:
           type: [string, "null"]
-          description: The curator note (per-locale JSON map) under `K_share` (opaque base64), or null — the manage UI shows + edits it.
+          description: The curator note (per-locale JSON map) under a field key derived from `K_share` (opaque base64), or null — the manage UI shows + edits it.
           contentEncoding: base64
           maxLength: 16384
           example: null
         sealedShareName:
           type: [string, "null"]
-          description: The share's private label under `K_share` (opaque base64), or null — the manage UI shows it as the row title, falling back to the role (cr-0116).
+          description: The share's private label under a field key derived from `K_share` (opaque base64), or null — the manage UI shows it as the row title, falling back to the role (cr-0116).
           contentEncoding: base64
           maxLength: 512
           example: null
@@ -1686,13 +1686,13 @@ components:
             of the subtree is served either). Core interprets no kind: it is the stored value.
         sealedName:
           type: [string, "null"]
-          description: The shared node's name re-sealed under `K_share` (opaque base64). Null in a locked response.
+          description: The shared node's name re-sealed under a field key derived from `K_share` (opaque base64). Null in a locked response.
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
         sealedNote:
           type: [string, "null"]
-          description: The curator note (per-locale JSON map) sealed under `K_share` (opaque base64), or null when the share has none. The page renders the viewer's locale (cr-0115/cr-0116).
+          description: The curator note (per-locale JSON map) sealed under a field key derived from `K_share` (opaque base64), or null when the share has none. The page renders the viewer's locale (cr-0115/cr-0116).
           contentEncoding: base64
           maxLength: 16384
           example: null
@@ -1706,7 +1706,7 @@ components:
       description: >
         One node of the shared subtree. The **root** carries `parentId: null` (the viewer takes its content key
         from the share `wrap`); a descendant carries its parent's id, its content key wrapped under the parent's
-        in `wrappedContentKey`, and its name sealed under the parent's content key in `encryptedName` (ADR 0080
+        in `wrappedContentKey`, and its name sealed under a field key derived from the parent's content key in `encryptedName` (ADR 0080
         Decision 2), so whoever holds the root's key opens every name below it. Nothing of the root's own
         placement is served: no parent id, no `encryptedName` (both belong to the parent's key, which the guest
         does not hold, ADR 0080 Decision 9) — the root's name comes from the share's `sealedName`.
@@ -1750,7 +1750,7 @@ components:
           # simply not part of what a share serves.
           x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
           description: >
-            A descendant's name, AEAD-sealed under its **parent's** content key (seal purpose `node-name`, bound to
+            A descendant's name, AEAD-sealed under a field key derived from its **parent's** content key (seal purpose `node-name`, bound to
             scope, node, epoch and placement revision; opaque base64) — the same value as `NodeSummary.encryptedName`, which the viewer
             opens with the key chain it derives from the root. Omitted at the root: its name is sealed under a key
             above the share (ADR 0080 Decision 9); the root's title is the share's `sealedName`.
@@ -1765,7 +1765,7 @@ components:
           example: d3JhcHBlZC1rLW1lbQ==
         wrappedMeta:
           type: [string, "null"]
-          description: The node's sealed payload, with its own revision, sealed under its content key (AAD `node-meta`; opaque base64); its format is the kind's application's. Null when unset.
+          description: The node's sealed payload, with its own revision, sealed under a field key derived from its content key (AAD `node-meta`; opaque base64); its format is the kind's application's. Null when unset.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -1828,7 +1828,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under the parent's content key (seal purpose `node-name`), bound to scope, node, `epoch` and placement revision 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
+          description: The node name, AEAD-sealed under a field key derived from the parent's content key (seal purpose `node-name`), bound to scope, node, `epoch` and placement revision 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -1892,7 +1892,7 @@ components:
           example: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
         encryptedName:
           type: string
-          description: The name re-sealed under the destination parent's content key (seal purpose `node-name`), bound to scope, node, the node's stored epoch and `placementRevision + 1` (ADR 0072, ADR 0080 Decision 3; opaque base64).
+          description: The name re-sealed under a field key derived from the destination parent's content key (seal purpose `node-name`), bound to scope, node, the node's stored epoch and `placementRevision + 1` (ADR 0072, ADR 0080 Decision 3; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: cmVuYW1lZA==
@@ -1951,7 +1951,7 @@ components:
         sealedDisplayName:
           type: string
           description: >
-            The display name sealed (opaque base64) — under the shared node's content key for READ_WRITE, under `K_up` for WRITE_ONLY;
+            The display name sealed (opaque base64) under a field key derived from the shared node's content key for READ_WRITE, or from `K_up` for WRITE_ONLY;
             mandatory, never in clear.
           contentEncoding: base64
           maxLength: 512

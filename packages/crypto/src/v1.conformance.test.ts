@@ -7,7 +7,7 @@ import * as v1 from './v1'
 import { ed25519 } from '@noble/curves/ed25519.js'
 // The raw primitives are not in the package's exports (ADR 0072 Decision 6); only this suite reaches them.
 import * as raw from './primitives'
-import { SEAL_PURPOSES, SEAL_TO_PURPOSES } from './seal'
+import { FIELD_PURPOSES, SEAL_PURPOSES, SEAL_TO_PURPOSES, STATEMENT_PURPOSES } from './seal'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from './testArgon'
 
 const unhex = (s: string) => Uint8Array.from(Buffer.from(s, 'hex'))
@@ -20,6 +20,17 @@ const vectors = JSON.parse(
 )
 
 type SymVector = { context: Record<string, string | number>; context_bytes: string; kek: string; nonce: string; plaintext: string; blob: string }
+type FieldVector = {
+  context: Record<string, string | number>
+  context_bytes: string
+  parent_key: string
+  salt: string
+  info: string
+  field_key: string
+  nonce: string
+  plaintext: string
+  envelope: string
+}
 type AsymVector = {
   context: Record<string, string | number>
   context_bytes: string
@@ -287,16 +298,16 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
 
     describe('a context that does not describe an object is refused before any AEAD runs', () => {
-      const v = symVectors['node-name']
-      const base = symCtx('node-name')
+      const v = symVectors['content-key']
+      const base = symCtx('content-key')
       it.each([
         ['an upper-case id', { ...base, nodeId: (base as { nodeId: string }).nodeId.toUpperCase() }, /nodeId is not a canonical lowercase UUID/],
         ['a non-UUID id', { ...base, scopeId: 'root' }, /scopeId is not a canonical lowercase UUID/],
-        ['a missing field', { purpose: 'node-name', scopeId: (base as { scopeId: string }).scopeId, nodeId: (base as { nodeId: string }).nodeId }, /epoch is not an unsigned integer/],
+        ['a missing field', { purpose: 'content-key', scopeId: (base as { scopeId: string }).scopeId, nodeId: (base as { nodeId: string }).nodeId }, /epoch is not an unsigned integer/],
         ['a negative epoch', { ...base, epoch: -1 }, /epoch is not an unsigned integer/],
         ['a fractional epoch', { ...base, epoch: 1.5 }, /epoch is not an unsigned integer/],
-        ['an extra field', { ...base, parentId: (base as { nodeId: string }).nodeId }, /node-name does not bind parentId/],
-        ['two extra fields', { ...base, parentId: 'x', role: 'COVER' }, /node-name does not bind parentId, role$/],
+        ['an extra field', { ...base, parentId: (base as { nodeId: string }).nodeId }, /content-key does not bind parentId/],
+        ['two extra fields', { ...base, parentId: 'x', role: 'COVER' }, /content-key does not bind parentId, role$/],
         ['an unknown purpose', { purpose: 'album-name' }, /unknown purpose album-name/],
         ['an inherited purpose', { purpose: 'toString' }, /unknown purpose toString/],
       ])('%s', (_name, ctx, message) => {
@@ -376,6 +387,136 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
         expect(new v1.OpenRefused('node-name').name).toBe('OpenRefused')
         expect(new v1.OpenRefused('node-name').purpose).toBe('node-name')
         expect(new v1.OpenRefused('node-name').message).toBe('open_refused: node-name')
+      })
+    })
+  })
+
+  // ── Field seal (ADR 0093 § 9) ──────────────────────────────────────────────────────────────────────────────
+  // One vector per FIELD purpose, compared with FIELD_PURPOSES in both directions as the seal vectors are. And no
+  // purpose sits in two tables: a field purpose also left in SEAL_PURPOSES could be sealed straight under its parent's
+  // key again, which is the key-sharing the field seal removes (ADR 0072 Decision 6: the structure is the guard).
+  describe('field seal (#field_seal, ADR 0093 § 9)', () => {
+    const fieldVectors: Record<string, FieldVector> = Object.fromEntries(
+      Object.entries(vectors.field_seal as Record<string, FieldVector | string>).filter(
+        (e): e is [string, FieldVector] => e[0] !== 'note',
+      ),
+    )
+    const ctx = (purpose: string): v1.FieldContext => ({ purpose, ...fieldVectors[purpose].context }) as v1.FieldContext
+    const refusal = (purpose: string) => new v1.OpenRefused(purpose)
+
+    it('every field purpose has a vector, and every vector names a live field purpose', () => {
+      expect(Object.keys(FIELD_PURPOSES).filter((p) => !(p in fieldVectors))).toEqual([])
+      expect(Object.keys(fieldVectors).filter((p) => !Object.hasOwn(FIELD_PURPOSES, p))).toEqual([])
+    })
+
+    it('no purpose sits in two tables', () => {
+      const all = [SEAL_PURPOSES, SEAL_TO_PURPOSES, FIELD_PURPOSES, STATEMENT_PURPOSES].flatMap((t) => Object.keys(t))
+      expect(all.filter((p, i) => all.indexOf(p) !== i)).toEqual([])
+      expect(Object.keys(vectors.seal.sym).filter((p) => p in fieldVectors)).toEqual([])
+    })
+
+    it('every vector context carries exactly its purpose\'s binding fields, in the table\'s order', () => {
+      const table: Record<string, readonly (readonly [string, string])[]> = FIELD_PURPOSES
+      for (const [purpose, v] of Object.entries(fieldVectors)) {
+        expect(Object.keys(v.context), purpose).toEqual(table[purpose].map(([name]) => name))
+      }
+    })
+
+    describe.each(Object.keys(fieldVectors))('%s', (purpose) => {
+      const v = fieldVectors[purpose]
+      it('encodes its context canonically', () => {
+        expect(hex(v1.encodeFieldContext(ctx(purpose)))).toBe(v.context_bytes)
+      })
+      it('derives its field key from the parent key and the salt, under the purpose\'s own label', () => {
+        expect(hex(v1.utf8(`veyq/v1/field/${purpose}`))).toBe(v.info)
+        expect(hex(raw.fieldKey(unhex(v.parent_key), unhex(v.salt), purpose))).toBe(v.field_key)
+        expect(hex(v1.fieldKeyOf(ctx(purpose), unhex(v.parent_key), unhex(v.envelope)))).toBe(v.field_key)
+      })
+      it('seals to the vector envelope, and opens it back with the parent key and with the field key', () => {
+        const envelope = raw.fieldWrap(unhex(v.field_key), unhex(v.plaintext), unhex(v.context_bytes), unhex(v.salt), unhex(v.nonce))
+        expect(hex(envelope)).toBe(v.envelope)
+        expect(hex(v1.openField(ctx(purpose), unhex(v.parent_key), unhex(v.envelope)))).toBe(v.plaintext)
+        expect(hex(v1.openFieldWith(ctx(purpose), unhex(v.field_key), unhex(v.envelope)))).toBe(v.plaintext)
+      })
+      it('sealField draws a fresh salt and nonce per write, and round-trips through openField', () => {
+        const a = v1.sealField(ctx(purpose), unhex(v.parent_key), unhex(v.plaintext))
+        const b = v1.sealField(ctx(purpose), unhex(v.parent_key), unhex(v.plaintext))
+        expect(a[0]).toBe(0x03)
+        expect(a.length).toBe(1 + 16 + 12 + unhex(v.plaintext).length + 16)
+        expect(hex(a.slice(1, 17))).not.toBe(hex(b.slice(1, 17)))
+        expect(hex(a.slice(17, 29))).not.toBe(hex(b.slice(17, 29)))
+        expect(hex(v1.openField(ctx(purpose), unhex(v.parent_key), a))).toBe(v.plaintext)
+      })
+      it.each(Object.keys(v.context))('does not open with a different %s', (field) => {
+        const moved = { ...ctx(purpose), [field]: otherValue(v.context[field]) } as v1.FieldContext
+        expect(() => v1.openField(moved, unhex(v.parent_key), unhex(v.envelope))).toThrow(refusal(purpose))
+        expect(() => v1.openFieldWith(moved, unhex(v.field_key), unhex(v.envelope))).toThrow(refusal(purpose))
+      })
+      it('does not open as any other field purpose', () => {
+        for (const other of Object.keys(fieldVectors).filter((p) => p !== purpose)) {
+          expect(() => v1.openField(ctx(other), unhex(v.parent_key), unhex(v.envelope))).toThrow(refusal(other))
+        }
+      })
+      it('does not open under another parent key, and fieldKeyOf hands over no key that does not open it', () => {
+        const other = unhex(v.parent_key).map((b) => b ^ 1)
+        expect(() => v1.openField(ctx(purpose), other, unhex(v.envelope))).toThrow(refusal(purpose))
+        expect(() => v1.fieldKeyOf(ctx(purpose), other, unhex(v.envelope))).toThrow(refusal(purpose))
+      })
+      it('the parent key itself does not open the field: only the key derived from it does', () => {
+        expect(() => v1.openFieldWith(ctx(purpose), unhex(v.parent_key), unhex(v.envelope))).toThrow(refusal(purpose))
+      })
+    })
+
+    // B4's lever is the field envelope's own type byte: were it the plain seal's, the AEAD inside a field envelope
+    // would BE a plain seal under K_field, and the other way round.
+    describe('a field envelope and a plain seal never open as each other', () => {
+      const v = fieldVectors['node-meta']
+      const key = unhex(v.field_key)
+      const context = unhex(v.context_bytes)
+      it('a field envelope does not open through open, nor a seal through openField', () => {
+        const env = unhex(v.envelope)
+        const asSeal = raw.concat(env.slice(0, 1), env.slice(17))
+        expect(() => raw.symUnwrap(key, asSeal, context)).toThrow()
+        const sealed = raw.symWrap(key, unhex(v.plaintext), context, unhex(v.nonce))
+        const asField = raw.concat(sealed.slice(0, 1), unhex(v.salt), sealed.slice(1))
+        expect(() => v1.openFieldWith(ctx('node-meta'), key, asField)).toThrow(refusal('node-meta'))
+      })
+      it('an envelope whose type byte is relabelled does not open, though its AEAD is intact', () => {
+        const env = unhex(v.envelope)
+        expect(hex(v1.openFieldWith(ctx('node-meta'), key, env))).toBe(v.plaintext)
+        for (const type of [0x01, 0x02, 0x04]) {
+          const relabelled = raw.concat(Uint8Array.of(type), env.slice(1))
+          expect(() => v1.openFieldWith(ctx('node-meta'), key, relabelled)).toThrow(refusal('node-meta'))
+        }
+      })
+      it('the salt is read from the envelope: a moved salt derives another key', () => {
+        const env = unhex(v.envelope)
+        expect(hex(raw.fieldSaltOf(env))).toBe(v.salt)
+        const moved = env.slice()
+        moved[16] ^= 1
+        expect(() => v1.openField(ctx('node-meta'), unhex(v.parent_key), moved)).toThrow(refusal('node-meta'))
+      })
+    })
+
+    describe('a field purpose is sealed only through the field seal (ADR 0072 Decision 6)', () => {
+      const v = fieldVectors['node-name']
+      // Typed as the ONE purpose, not the field union: the union holds purposes no seal table ever had, so it would
+      // stay a type error even with node-name back in SEAL_PURPOSES — and the directive below would prove nothing.
+      const nodeName = ctx('node-name') as Extract<v1.FieldContext, { purpose: 'node-name' }>
+      it('seal and open refuse a field purpose, by type and at runtime', () => {
+        // @ts-expect-error -- a field purpose is not a SealContext
+        expect(() => v1.seal(nodeName, unhex(v.parent_key), unhex(v.plaintext))).toThrow(/unknown purpose node-name/)
+        // @ts-expect-error -- a field purpose is not a SealContext
+        expect(() => v1.open(nodeName, unhex(v.parent_key), unhex(v.envelope))).toThrow(v1.SealContextInvalid)
+      })
+      it('sealField, openField and fieldKeyOf refuse a purpose that is not a field', () => {
+        const contentKey = { purpose: 'content-key', scopeId: v.context.scopeId as string, nodeId: v.context.nodeId as string, epoch: 0, placementRevision: 0 } as const
+        // @ts-expect-error -- a plain seal purpose is not a FieldContext
+        expect(() => v1.sealField(contentKey, unhex(v.parent_key), unhex(v.plaintext))).toThrow(/unknown purpose content-key/)
+        // @ts-expect-error -- a plain seal purpose is not a FieldContext
+        expect(() => v1.openField(contentKey, unhex(v.parent_key), unhex(v.envelope))).toThrow(v1.SealContextInvalid)
+        // @ts-expect-error -- a plain seal purpose is not a FieldContext
+        expect(() => v1.fieldKeyOf(contentKey, unhex(v.parent_key), unhex(v.envelope))).toThrow(v1.SealContextInvalid)
       })
     })
   })

@@ -1542,7 +1542,7 @@ components:
         sealedName:
           type: [string, "null"]
           description: >
-            The member's real name (first + last) **sealed under `K_tenant`** (opaque base64), decrypted locally
+            The member's real name (first + last) **sealed under a field key derived from `K_tenant`** (opaque base64), decrypted locally
             by any tenant member. `null` when not yet sealed (a grant-less "awaiting access" member has no
             `K_tenant` yet). The server never sees the plaintext name.
           contentEncoding: base64
