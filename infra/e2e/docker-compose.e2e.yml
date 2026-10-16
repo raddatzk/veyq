@@ -1,0 +1,51 @@
+# The ONLY difference between an end-to-end run and a Server Owner's instance: the ACME server (ADR 0090 § Decision 1).
+# It is laid OVER the production recipe extracted from the candidate image (never over this checkout's copy) by
+# scripts/run_stack_e2e.py, which also writes the `.env` both files are interpolated from:
+#
+#     docker compose -p veyq-e2e-<stamp> -f <run>/recipe/docker-compose.prod.yml -f infra/e2e/docker-compose.e2e.yml \
+#         --env-file <run>/recipe/.env up -d --wait
+#
+# Pebble is Let's Encrypt's own test ACME server, so Traefik walks the real issuance path — resolver, account, order,
+# and the /acme volume it must be able to write (ADR 0071's silent failure: an unwritable /acme keeps Traefik up and
+# serving its default certificate). VEYQ_ACME_CASERVER already exists in the recipe for staging; nothing in the
+# production file is edited for this. Every other service, network, posture and secret is the operator's: this file
+# adds a service and gives Traefik's ACME client one CA to trust, and must never weaken what the recipe sets.
+#
+# PEBBLE_VA_ALWAYS_VALID: tenant domains are created at run time (`family.veyq.test`), and Pebble would have to
+# resolve each one to Traefik — on its own HTTP-01 port, 5002 by default, not 80 — to validate it. What is under test
+# is OUR wiring, not Let's Encrypt's validator; the price is that Traefik's challenge router on :80 is not exercised.
+#
+# The posture is held BY HAND here: scripts/validate_compose_posture.py reads the production file only (cr-stack-e2e
+# phase 1 decided to keep it so — this file never runs on an operator's host). Pebble gets the recipe's x-hardened
+# triple and a non-root uid, measured to run that way.
+services:
+  pebble:
+    image: ghcr.io/letsencrypt/pebble:2.10.1@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    # The image has no USER and would run as root. It writes nothing and binds only ports above 1024.
+    user: "65532:65532"
+    networks: [edge]
+    # Its listener certificate (test/certs/localhost/cert.pem, SANs localhost, pebble, 127.0.0.1) is the image's own
+    # and is valid until 2027-10-03; a Pebble bump re-reads that date.
+    command: ["-config", "/test/config/pebble-config.json", "-strict"]
+    environment:
+      PEBBLE_VA_ALWAYS_VALID: "1"
+      PEBBLE_VA_NOSLEEP: "1"
+    # The management port serves the run's freshly generated root (/roots/0), the one CA the run's certificate
+    # assertion trusts. Loopback only, on an ephemeral host port (`docker compose port pebble 15000`), so two runs or
+    # anything else on the host never collide on it.
+    ports:
+      - "127.0.0.1::15000"
+
+  traefik:
+    depends_on:
+      pebble:
+        condition: service_started
+    environment:
+      # Traefik's ACME client (lego) must trust Pebble's own HTTPS listener: the orchestrator copies Pebble's minica
+      # root out of the pinned image above into the run directory and names it here.
+      LEGO_CA_CERTIFICATES: /pebble/minica.pem
+    volumes:
+      - ${VEYQ_E2E_PEBBLE_MINICA:?set by scripts/run_stack_e2e.py}:/pebble/minica.pem:ro
