@@ -66,6 +66,13 @@ async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise
     // session alone (no vault), or the operator, can create a membership but not a tag; such a target is declined,
     // never wrapped to, and the member stays awaiting access. Checked before the TOFU pin, so an unadmitted target's
     // key is never pinned either.
+    //
+    // An admission stated AHEAD of this worker's epoch is the one exception: a rotation landed and re-tagged it while
+    // this tab still holds the older key. That is a fact about the worker, not the target — a decline would exclude
+    // this key-holder for good, even once it holds the new key. PAUSE, like `stale_epoch` below: nothing is wrapped,
+    // the lease lapses, and every further job would meet the same behind key. A tag made BEFORE a rotation (behind
+    // the worker) still declines.
+    if (target.admissionEpoch != null && target.admissionEpoch > scope.epoch) break
     if (!admissionVerifies(scope.key, scope.epoch, scope, target.targetUserId, target)) {
       await declineJob(job.jobId, ADMISSION_UNVERIFIED)
       continue

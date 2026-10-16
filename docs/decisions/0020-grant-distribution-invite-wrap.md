@@ -114,6 +114,21 @@ key, wraps, or unwraps.** Concretely:
      worker (the tag's epoch must be the worker's own current epoch, so a tag computed before a rotation does not
      admit) and the rotation re-grant. A membership whose tag does not verify is skipped and surfaced, like a
      changed key ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 2).
+   - **What a refusal lasts.** The worker declines such a job (`admission_unverified`), which keeps that key-holder's
+     account off it for as long as the decline stands. That exclusion is **not the security control** — every claim
+     runs this check and the pin check again, so no re-offer can lead to a wrap a fresh check refuses. It protects
+     liveness: a worker never re-claims a job it will refuse again, and the job reaches the other key-holders at
+     once. So it is lifted exactly where its premise can have moved, and nowhere else. A tag stated **ahead** of the
+     worker's epoch — a rotation this device has not caught up with — is about the worker, not the target: it is
+     never declined, the worker pauses and the lease lapses (a tag stated *behind* still declines). A rotation that
+     **re-tags** the admission lifts every `admission_unverified` decline on that membership's delivery job, because
+     a key-holder has just verified the old tag and vouched for it under the new epoch; a dropped one keeps its
+     declines. An admission nothing moves has no lift, and that is deliberate: the two ways a worker's own state
+     could make it refuse a genuine tag are the two closed here (and the key a worker holds is its own copy, which
+     leaving the space cannot zero under it), so a stand-alone owner "retry" would only ask the server to overrule a
+     key-holder's judgment on a guess. A member refused anyway — by a worker fault — comes back by any rotation of
+     the scope, which re-tags their admission, or by being removed and added again: a new membership is a new
+     delivery job that no worker has declined.
    - **What the server checks — presence, never the tag.** It holds no epoch key, so it stores, copies (an
      accepted invite's admission becomes the membership's; a reissued invite keeps its admission) and relays tags.
      It refuses two things only. A rotation that leaves any **open admission** of the scope — every membership's,

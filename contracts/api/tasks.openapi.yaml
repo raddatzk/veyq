@@ -589,7 +589,7 @@ components:
           format: uuid
           description: >
             The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the target membership's. The worker recomputes the tag under its **own current** epoch key and declines `admission_unverified` on a mismatch, on an epoch that is not its current one, or on `null`.
+            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the target membership's. The worker recomputes the tag under its **own current** epoch key and declines `admission_unverified` on a mismatch, on an epoch before its current one, or on `null`; on an epoch ahead of its own it pauses instead (its key is behind, not the target).
           example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
         admissionEpoch:
           x-veyq-visibility: structure
@@ -695,7 +695,8 @@ components:
           description: >
             Optional developer-facing decline reason; never content or secrets. For the TOFU seam this is
             typically `identity_changed`; a target whose admission tag does not verify under the worker's current
-            epoch key is declined `admission_unverified` (ADR 0020 move 6).
+            epoch key is declined `admission_unverified` (ADR 0020 move 6) — lifted when a rotation re-tags that
+            admission.
           maxLength: 256
           example: identity_changed
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'

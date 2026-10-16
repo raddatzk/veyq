@@ -517,6 +517,58 @@ class ScopesSliceTest {
     }
 
     @Test
+    fun aReTaggedAdmissionLiftsTheAdmissionDeclinesItsOldTagEarned() {
+        // An `admission_unverified` decline judged ONE admission: nothing else excludes that key-holder from the job
+        // for good. A rotation that re-tags the admission means a key-holder verified the old tag and vouched for it
+        // under the new epoch, so the old judgment is moot and every worker judges again. What it must leave alone: a
+        // decline about the target's KEY (`identity_changed` is the pin's question, not the tag's), and the decline on
+        // an admission the rotator DROPPED — still unadmitted, so lifting it would only make its workers spin.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        seedTenantMember(tenantIdOf(domain), "pending")
+        seedTenantMember(tenantIdOf(domain), "forged")
+        val pending = UUID.randomUUID().toString()
+        val forged = UUID.randomUUID().toString()
+        for ((username, admissionId) in listOf("pending" to pending, "forged" to forged)) {
+            given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+                .body("""{"username":"$username",${TestAdmission.json(0, admissionId)}}""")
+                .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
+        }
+        val creator = (admissionRows(groupId).keys - pending - forged).single()
+        val otherWorker = seedUser()
+        val pendingJob = seedDeliveryJob(groupId, admissionId = pending)
+        val forgedJob = seedDeliveryJob(groupId, admissionId = forged)
+        seedDecline(pendingJob, owner, TasksStore.ADMISSION_UNVERIFIED)
+        seedDecline(pendingJob, otherWorker, "identity_changed")
+        seedDecline(forgedJob, owner, TasksStore.ADMISSION_UNVERIFIED)
+
+        rotateCarrying(owner, groupId, retagged = listOf(creator, pending), dropped = listOf(forged)).then().statusCode(201)
+
+        assertEquals(setOf(otherWorker to "identity_changed"), declinesOf(pendingJob))
+        assertEquals(setOf(owner to TasksStore.ADMISSION_UNVERIFIED), declinesOf(forgedJob))
+    }
+
+    /** A live grant-delivery job for the membership carrying [admissionId] in [scopeId]. Returns the job id. */
+    private fun seedDeliveryJob(scopeId: String, admissionId: String): String = QuarkusTransaction.requiringNew().call {
+        val membership = MembershipEntity.find("scopeId = ?1 and admissionId = ?2", scopeId, admissionId).singleResult()
+        JobEntity().apply {
+            id = UUID.randomUUID().toString(); this.scopeId = scopeId; capabilityTag = CapabilityTags.GRANT_DELIVERY
+            resourceRef = membership.id; status = JobEntity.PENDING; attempts = 0; maxAttempts = 5; createdAt = Instant.now()
+        }.also { it.persist() }.id
+    }
+
+    private fun seedDecline(jobId: String, workerId: String, reason: String) = QuarkusTransaction.requiringNew().run {
+        JobDeclineEntity().apply {
+            id = UUID.randomUUID().toString(); this.jobId = jobId; this.workerId = workerId; this.reason = reason
+        }.persist()
+    }
+
+    /** The (worker, reason) declines recorded on [jobId]. */
+    private fun declinesOf(jobId: String): Set<Pair<String, String?>> = QuarkusTransaction.requiringNew().call {
+        JobDeclineEntity.find("jobId", jobId).list().map { it.workerId to it.reason }.toSet()
+    }
+
+    @Test
     fun aTenantRotationMustCarryItsOpenMemberInvites() {
         // A tenant scope's open admissions include the member invites not yet accepted: their tag is copied onto the
         // membership at accept, so a rotation that skipped one would admit its invitee at an epoch nobody holds.
