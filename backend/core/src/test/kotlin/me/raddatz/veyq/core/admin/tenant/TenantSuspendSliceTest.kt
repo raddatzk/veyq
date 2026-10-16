@@ -190,14 +190,14 @@ class TenantSuspendSliceTest {
         // after it. A full-row UPDATE wrote the `status` it had read back, and the suspension was undone.
         repeat(RACE_ROUNDS) { round ->
             val (tenantId, _) = seedActiveTenant()
-            val version = whileUncommitted(
+            val revision = whileUncommitted(
                 change = { assertTrue(store.suspend(tenantId)) },
                 overlapping = { store.updateTerms(tenantId, "{\"en\":\"terms $round\"}") },
             )
             assertEquals(TenantEntity.SUSPENDED, statusOf(tenantId), "round $round: the terms edit lifted the suspension")
             // Control: the edit itself landed.
-            assertEquals(1, version, "round $round")
-            assertEquals(1, termsVersionOf(tenantId), "round $round")
+            assertEquals(1, revision, "round $round")
+            assertEquals(1, termsRevisionOf(tenantId), "round $round")
         }
     }
 
@@ -217,8 +217,8 @@ class TenantSuspendSliceTest {
 
     // --- helpers ---
 
-    private fun termsVersionOf(tenantId: String): Int =
-        QuarkusTransaction.requiringNew().call { store.findTenant(tenantId)!!.termsVersion }
+    private fun termsRevisionOf(tenantId: String): Int =
+        QuarkusTransaction.requiringNew().call { store.findTenant(tenantId)!!.termsRevision }
 
     private fun ownerToken() = sessions.issue(seedUser(serverRole = "SERVER_OWNER")).accessToken
     private fun memberToken() = sessions.issue(seedUser()).accessToken

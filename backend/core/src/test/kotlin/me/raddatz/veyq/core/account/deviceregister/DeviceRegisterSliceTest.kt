@@ -14,8 +14,8 @@ import java.util.UUID
 
 /**
  * Slice tests for the operator-blind device register (en.account.device-register, ADR 0004). The server stores +
- * serves one opaque sealed blob + a version: a born-empty account reads `{ blob: null, version: 0 }`; a
- * version-guarded PUT round-trips and bumps the version; a stale version is a `409 stale_version`; and the
+ * serves one opaque sealed blob + a revision: a born-empty account reads `{ blob: null, revision: 0 }`; a
+ * revision-guarded PUT round-trips and bumps the revision; a stale revision is a `409 stale_revision`; and the
  * register is keyed off the caller's own token (no cross-account read).
  *
  * The 409 cases carry the most weight here and are not mere race guards: the client's whole correctness argument
@@ -33,79 +33,79 @@ class DeviceRegisterSliceTest {
     lateinit var sessions: SessionService
 
     @Test
-    fun bornEmptyRegisterReadsNullBlobVersionZero() {
+    fun bornEmptyRegisterReadsNullBlobRevisionZero() {
         get(issueToken(seedUser()))
             .then().statusCode(200)
             .body("blob", nullValue())
-            .body("version", equalTo(0))
+            .body("revision", equalTo(0))
     }
 
     @Test
-    fun firstWriteRoundTripsAndBumpsToVersionOne() {
+    fun firstWriteRoundTripsAndBumpsToRevisionOne() {
         val token = issueToken(seedUser())
         put(token, BLOB_1, 0)
             .then().statusCode(200)
             .body("blob", equalTo(BLOB_1))
-            .body("version", equalTo(1))
+            .body("revision", equalTo(1))
         get(token)
             .then().statusCode(200)
             .body("blob", equalTo(BLOB_1))
-            .body("version", equalTo(1))
+            .body("revision", equalTo(1))
     }
 
     @Test
-    fun subsequentWriteAtCurrentVersionBumpsAgain() {
+    fun subsequentWriteAtCurrentRevisionBumpsAgain() {
         val token = issueToken(seedUser())
-        put(token, BLOB_1, 0).then().statusCode(200).body("version", equalTo(1))
+        put(token, BLOB_1, 0).then().statusCode(200).body("revision", equalTo(1))
         put(token, BLOB_2, 1)
             .then().statusCode(200)
             .body("blob", equalTo(BLOB_2))
-            .body("version", equalTo(2))
+            .body("revision", equalTo(2))
     }
 
     @Test
-    fun staleVersionOnFirstWriteIsConflict() {
+    fun staleRevisionOnFirstWriteIsConflict() {
         val token = issueToken(seedUser())
-        // A born-empty register only accepts a first write against version 0 — a non-zero expected version is stale.
+        // A born-empty register only accepts a first write against revision 0 — a non-zero expected revision is stale.
         put(token, BLOB_1, 5)
-            .then().statusCode(409).body("code", equalTo("stale_version"))
+            .then().statusCode(409).body("code", equalTo("stale_revision"))
         // The control the status code cannot give: the rejected write created no row at all.
-        get(token).then().statusCode(200).body("blob", nullValue()).body("version", equalTo(0))
+        get(token).then().statusCode(200).body("blob", nullValue()).body("revision", equalTo(0))
     }
 
     @Test
-    fun staleVersionAfterAWriteIsConflictAndLeavesTheStoredBlobIntact() {
+    fun staleRevisionAfterAWriteIsConflictAndLeavesTheStoredBlobIntact() {
         val token = issueToken(seedUser())
-        put(token, BLOB_1, 0).then().statusCode(200).body("version", equalTo(1))
-        // Another device already moved the register to version 1; a second write still based on version 0 is stale.
+        put(token, BLOB_1, 0).then().statusCode(200).body("revision", equalTo(1))
+        // Another device already moved the register to revision 1; a second write still based on revision 0 is stale.
         put(token, BLOB_2, 0)
-            .then().statusCode(409).body("code", equalTo("stale_version"))
+            .then().statusCode(409).body("code", equalTo("stale_revision"))
         // The register is untouched by the rejected write — this is what makes the client's re-read honest.
         get(token).then().statusCode(200)
             .body("blob", equalTo(BLOB_1))
             .body("blob", not(equalTo(BLOB_2)))
-            .body("version", equalTo(1))
+            .body("revision", equalTo(1))
     }
 
     @Test
-    fun aWriteAtAFutureVersionIsAlsoRejected() {
+    fun aWriteAtAFutureRevisionIsAlsoRejected() {
         val token = issueToken(seedUser())
-        put(token, BLOB_1, 0).then().statusCode(200).body("version", equalTo(1))
+        put(token, BLOB_1, 0).then().statusCode(200).body("revision", equalTo(1))
         // The guard is an equality compare-and-set, not "at least" — a client that guessed ahead is stale too,
-        // and must re-read rather than skip a version nobody wrote.
-        put(token, BLOB_2, 7).then().statusCode(409).body("code", equalTo("stale_version"))
-        get(token).then().statusCode(200).body("blob", equalTo(BLOB_1)).body("version", equalTo(1))
+        // and must re-read rather than skip a revision nobody wrote.
+        put(token, BLOB_2, 7).then().statusCode(409).body("code", equalTo("stale_revision"))
+        get(token).then().statusCode(200).body("blob", equalTo(BLOB_1)).body("revision", equalTo(1))
     }
 
     @Test
-    fun aWriteWithoutItsVersionIs400AndStoresNothing() {
-        // A missing `version` must not bind to 0 — on a born-empty register 0 is exactly the version that wins.
+    fun aWriteWithoutItsRevisionIs400AndStoresNothing() {
+        // A missing `revision` must not bind to 0 — on a born-empty register 0 is exactly the revision that wins.
         val token = issueToken(seedUser())
         given().header("Authorization", "Bearer $token").contentType(ContentType.JSON)
             .body("""{"blob":"$BLOB_1"}""")
             .`when`().put(PATH)
             .then().statusCode(400)
-        get(token).then().statusCode(200).body("blob", nullValue()).body("version", equalTo(0))
+        get(token).then().statusCode(200).body("blob", nullValue()).body("revision", equalTo(0))
     }
 
     @Test
@@ -114,10 +114,10 @@ class DeviceRegisterSliceTest {
         put(mine, BLOB_1, 0).then().statusCode(200)
         // A different account that has never written is still born-empty (one account's blob never leaks to another)…
         val theirs = issueToken(seedUser())
-        get(theirs).then().statusCode(200).body("blob", nullValue()).body("version", equalTo(0))
+        get(theirs).then().statusCode(200).body("blob", nullValue()).body("revision", equalTo(0))
         // …and writing theirs does not disturb mine. Without this control, a single shared row would satisfy the
         // assertion above for the wrong reason on the very first read.
-        put(theirs, BLOB_2, 0).then().statusCode(200).body("version", equalTo(1))
+        put(theirs, BLOB_2, 0).then().statusCode(200).body("revision", equalTo(1))
         get(mine).then().statusCode(200).body("blob", equalTo(BLOB_1))
     }
 
@@ -125,13 +125,13 @@ class DeviceRegisterSliceTest {
     fun theRegisterNeedsASessionAndRefusesWithoutOne() {
         given().`when`().get(PATH)
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
-        given().contentType(ContentType.JSON).body("""{"blob":"$BLOB_1","version":0}""")
+        given().contentType(ContentType.JSON).body("""{"blob":"$BLOB_1","revision":0}""")
             .`when`().put(PATH)
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
 
     @Test
-    fun theRegisterCarriesNothingButTheSealedBlobAndItsVersion() {
+    fun theRegisterCarriesNothingButTheSealedBlobAndItsRevision() {
         // Structural, and the point of the whole feature: whatever the client puts in the blob, the server's own
         // response surface stays two fields. A device name that ever became a server-readable field would show up
         // here as a third one.
@@ -140,7 +140,7 @@ class DeviceRegisterSliceTest {
         get(token).then().statusCode(200)
             .body("$", org.hamcrest.Matchers.aMapWithSize<String, Any>(2))
             .body("$", org.hamcrest.Matchers.hasKey("blob"))
-            .body("$", org.hamcrest.Matchers.hasKey("version"))
+            .body("$", org.hamcrest.Matchers.hasKey("revision"))
     }
 
     // --- helpers ---
@@ -150,10 +150,10 @@ class DeviceRegisterSliceTest {
     private fun get(token: String) =
         given().header("Authorization", "Bearer $token").`when`().get(PATH)
 
-    private fun put(token: String, blob: String, version: Long) =
+    private fun put(token: String, blob: String, revision: Long) =
         given().header("Authorization", "Bearer $token")
             .contentType(ContentType.JSON)
-            .body("""{"blob":"$blob","version":$version}""")
+            .body("""{"blob":"$blob","revision":$revision}""")
             .`when`().put(PATH)
 
     companion object {

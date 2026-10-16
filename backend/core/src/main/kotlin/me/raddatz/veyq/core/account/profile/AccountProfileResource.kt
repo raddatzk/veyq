@@ -57,7 +57,7 @@ class AccountProfileResource(
         }
 
     private fun memberProfile(o: ProfileOutcome.Found) = MemberProfile(
-        username = o.username, avatarVersion = o.avatarVersion, requireGroupAddConsent = o.requireGroupAddConsent,
+        username = o.username, avatarRevision = o.avatarRevision, requireGroupAddConsent = o.requireGroupAddConsent,
         sealedName = o.sealedName,
     )
 }

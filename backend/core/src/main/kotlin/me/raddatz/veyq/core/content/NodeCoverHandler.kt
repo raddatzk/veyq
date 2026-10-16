@@ -38,8 +38,8 @@ sealed interface NodeCoverOutcome {
     /** The slot holds another blob than the one the caller stated; nothing attached, a stated upload spent - a 409. */
     data class CoverStale(val currentBlobId: String?) : NodeCoverOutcome, HttpFailure by httpFailure("cover_stale", CONFLICT)
 
-    /** The node's `wrappedMeta` moved past the stated version; NOTHING was written, the upload is still open (ADR 0077). */
-    data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : NodeCoverOutcome, HttpFailure by Failures.staleVersion
+    /** The node's `wrappedMeta` moved past the stated revision; NOTHING was written, the upload is still open (ADR 0077). */
+    data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : NodeCoverOutcome, HttpFailure by Failures.staleRevision
 }
 
 /**

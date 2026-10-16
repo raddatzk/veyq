@@ -268,8 +268,8 @@ class SharingResource(
             is ShareTermsOutcome.Found -> Response.ok(
                 ShareTerms(
                     tenantId = UUID.fromString(o.tenantId),
-                    termsVersion = o.termsVersion,
-                    // null when the operator has published no terms (termsVersion 0) — the client never gates.
+                    termsRevision = o.termsRevision,
+                    // null when the operator has published no terms (termsRevision 0) — the client never gates.
                     terms = if (o.de == null && o.en == null) null else LocalizedMarkdown(de = o.de, en = o.en),
                 ),
             ).build()

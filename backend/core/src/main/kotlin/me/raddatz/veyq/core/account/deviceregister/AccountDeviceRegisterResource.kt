@@ -14,15 +14,15 @@ import jakarta.ws.rs.core.Response
 /**
  * HTTP adapter for the operator-blind device register (en.account.device-register, ADR 0004). Implements the
  * generated [AccountDeviceRegisterApi]; thin (ADR 0001) — delegates to [DeviceRegisterHandler] and maps the
- * stored ciphertext + version to the generated models. Keyed off the authenticated caller (the `SecurityIdentity`
+ * stored ciphertext + revision to the generated models. Keyed off the authenticated caller (the `SecurityIdentity`
  * principal), never an id in the request, so it is no cross-account read. Central auth (`@Authenticated`,
  * cr-0012): a missing/invalid token is a generic 401 before this runs. The server performs no content crypto —
  * the blob it serves and stores is opaque.
  *
  * A missing register is NOT an inconsistency: a born-empty account simply has no devices recorded yet, so GET
- * returns `{ blob: null, version: 0 }` (never a 500), and the sessions view degrades to unnamed rows that are
- * still fully revocable (uc.account.sessions §E4). PUT is version-guarded optimistic concurrency — a stale
- * version is a `409 stale_version` so the client re-reads, merges, and retries.
+ * returns `{ blob: null, revision: 0 }` (never a 500), and the sessions view degrades to unnamed rows that are
+ * still fully revocable (uc.account.sessions §E4). PUT is revision-guarded optimistic concurrency — a stale
+ * revision is a `409 stale_revision` so the client re-reads, merges, and retries.
  */
 @Authenticated
 @RateLimitExempt(
@@ -37,12 +37,12 @@ class AccountDeviceRegisterResource(
 
     override fun getDeviceRegister(): Response {
         val view = handler.forAccount(identity.principal.name)
-        return Response.ok(DeviceRegister(blob = view.blob, version = view.version)).build()
+        return Response.ok(DeviceRegister(blob = view.blob, revision = view.revision)).build()
     }
 
     override fun putDeviceRegister(deviceRegisterUpdate: DeviceRegisterUpdate): Response =
-        when (val r = handler.store(identity.principal.name, deviceRegisterUpdate.blob, deviceRegisterUpdate.version.validated())) {
-            is PutResult.Written -> Response.ok(DeviceRegister(blob = deviceRegisterUpdate.blob, version = r.version)).build()
+        when (val r = handler.store(identity.principal.name, deviceRegisterUpdate.blob, deviceRegisterUpdate.revision.validated())) {
+            is PutResult.Written -> Response.ok(DeviceRegister(blob = deviceRegisterUpdate.blob, revision = r.revision)).build()
             is HttpFailure -> httpError(r)
         }
 }

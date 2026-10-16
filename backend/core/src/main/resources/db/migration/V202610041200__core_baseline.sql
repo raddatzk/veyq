@@ -143,7 +143,7 @@ CREATE TABLE veyq_tenant (
     owner_email              VARCHAR(254) NOT NULL,
     status                   VARCHAR(16) NOT NULL,
     terms_markdown_by_locale MEDIUMTEXT,
-    terms_version            INT NOT NULL DEFAULT 0,
+    terms_revision           INT NOT NULL DEFAULT 0,
     share_link_limit_bytes   BIGINT NOT NULL DEFAULT 10737418240,
     storage_quota_bytes      BIGINT NULL,
     CONSTRAINT ux_tenant_domain UNIQUE (domain)
@@ -335,9 +335,9 @@ CREATE TABLE veyq_tenant_profile (
     username    VARCHAR(32) NOT NULL,
     sealed_name TEXT,
     -- The member's profile picture (ADR 0084): one constant-length ciphertext sealed under K_tenant, null = none. The
-    -- version is bumped on every set and clear (it is the avatar read's ETag) and rides the directory, never the bytes.
+    -- revision is bumped on every set and clear (it is the avatar read's ETag) and rides the directory, never the bytes.
     sealed_avatar  TEXT,
-    avatar_version INT NOT NULL DEFAULT 0,
+    avatar_revision INT NOT NULL DEFAULT 0,
     CONSTRAINT fk_tp_user   FOREIGN KEY (user_id)   REFERENCES veyq_user (id),
     CONSTRAINT fk_tp_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id)
 );
@@ -365,11 +365,11 @@ CREATE TABLE veyq_scope_favorites (
     PRIMARY KEY (id)
 );
 
--- The sealed identity-pin store (ADR 0028); version is the compare-and-set counter. 1 MiB cap: MEDIUMTEXT.
+-- The sealed identity-pin store (ADR 0028); revision is the compare-and-set counter. 1 MiB cap: MEDIUMTEXT.
 CREATE TABLE veyq_identity_pins (
     account_id  UUID NOT NULL PRIMARY KEY,
     sealed_blob MEDIUMTEXT,
-    version     BIGINT      NOT NULL DEFAULT 0,
+    revision    BIGINT      NOT NULL DEFAULT 0,
     CONSTRAINT fk_identity_pins_user FOREIGN KEY (account_id) REFERENCES veyq_user (id)
 );
 
@@ -466,14 +466,14 @@ CREATE TABLE veyq_node_attachment (
 CREATE INDEX ix_attachment_scope ON veyq_node_attachment (scope_id);
 CREATE INDEX ix_attachment_share_identity ON veyq_node_attachment (share_identity_id);
 
--- A member's acceptances of the tenant terms (ADR 0035 §4): one row per accepted version, kept as evidence.
+-- A member's acceptances of the tenant terms (ADR 0035 §4): one row per accepted revision, kept as evidence.
 CREATE TABLE veyq_tenant_terms_acceptance (
     id               UUID NOT NULL PRIMARY KEY,
     user_id          UUID NOT NULL,
     tenant_id        UUID NOT NULL,
-    accepted_version INT         NOT NULL,
+    accepted_revision INT        NOT NULL,
     accepted_at      TIMESTAMP   NOT NULL,
-    CONSTRAINT ux_terms_acceptance UNIQUE (user_id, tenant_id, accepted_version),
+    CONSTRAINT ux_terms_acceptance UNIQUE (user_id, tenant_id, accepted_revision),
     CONSTRAINT fk_terms_acceptance_user FOREIGN KEY (user_id) REFERENCES veyq_user (id),
     CONSTRAINT fk_terms_acceptance_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id) ON DELETE CASCADE
 );
@@ -515,7 +515,7 @@ CREATE INDEX ix_account_recovery_user_status ON veyq_account_recovery (user_id, 
 CREATE TABLE veyq_device_register (
     account_id  UUID NOT NULL PRIMARY KEY,
     sealed_blob TEXT,
-    version     BIGINT      NOT NULL DEFAULT 0,
+    revision    BIGINT      NOT NULL DEFAULT 0,
     CONSTRAINT fk_device_register_user FOREIGN KEY (account_id) REFERENCES veyq_user (id)
 );
 

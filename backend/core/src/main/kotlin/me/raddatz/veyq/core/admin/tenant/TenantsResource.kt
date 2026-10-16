@@ -201,8 +201,8 @@ class TenantsResource(
     override fun getMemberAvatar(tenantId: UUID, userId: UUID, ifNoneMatch: String?): Response =
         when (val o = avatarHandler.read(identity.principal.name, tenantId.toString(), userId.toString(), AvatarETag.parse(ifNoneMatch))) {
             is MemberAvatarOutcome.Found -> Response.ok(MemberAvatar(o.sealedAvatar))
-                .header("ETag", AvatarETag.of(o.version)).header("Cache-Control", "private").build()
-            is MemberAvatarOutcome.NotModified -> Response.notModified().header("ETag", AvatarETag.of(o.version)).header("Cache-Control", "private").build()
+                .header("ETag", AvatarETag.of(o.revision)).header("Cache-Control", "private").build()
+            is MemberAvatarOutcome.NotModified -> Response.notModified().header("ETag", AvatarETag.of(o.revision)).header("Cache-Control", "private").build()
             is HttpFailure -> httpError(o)
         }
 
@@ -271,7 +271,7 @@ class TenantsResource(
     @Authenticated
     override fun getTenantTerms(tenantId: UUID): Response =
         when (val o = termsHandler.read(identity.principal.name, tenantId.toString())) {
-            is TermsReadOutcome.Ok -> Response.ok(TenantTerms(o.version, o.acceptedVersion, o.terms?.toDto())).build()
+            is TermsReadOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.acceptedRevision, o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -280,14 +280,14 @@ class TenantsResource(
         when (val o = termsHandler.update(
             identity.principal.name, tenantId.toString(), tenantTermsUpdate.terms.de, tenantTermsUpdate.terms.en,
         )) {
-            is TermsUpdateOutcome.Ok -> Response.ok(TenantTerms(o.version, o.acceptedVersion, o.terms?.toDto())).build()
+            is TermsUpdateOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.acceptedRevision, o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)
         }
 
     @Authenticated
     override fun acceptTenantTerms(tenantId: UUID, acceptTermsRequest: AcceptTermsRequest): Response =
-        when (val o = termsHandler.accept(identity.principal.name, tenantId.toString(), acceptTermsRequest.version)) {
-            is TermsAcceptOutcome.Ok -> Response.ok(TenantTerms(o.version, o.acceptedVersion, o.terms?.toDto())).build()
+        when (val o = termsHandler.accept(identity.principal.name, tenantId.toString(), acceptTermsRequest.revision)) {
+            is TermsAcceptOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.acceptedRevision, o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)
         }
 

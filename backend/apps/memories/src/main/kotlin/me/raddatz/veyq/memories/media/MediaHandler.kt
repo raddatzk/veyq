@@ -59,8 +59,8 @@ sealed interface MetaOutcome {
     object Deleting : MetaOutcome, HttpFailure by Failures.scopeDeleting
     data class Found(val wrappedMeta: String?) : MetaOutcome
     object NoMedia : MetaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
-    /** The tier moved past the stated version; nothing was written (ADR 0077). Carries the current tier + version. */
-    data class Stale(val wrappedMeta: String?, val metaRevision: Long) : MetaOutcome, HttpFailure by Failures.staleVersion
+    /** The tier moved past the stated revision; nothing was written (ADR 0077). Carries the current tier + revision. */
+    data class Stale(val wrappedMeta: String?, val metaRevision: Long) : MetaOutcome, HttpFailure by Failures.staleRevision
 }
 
 sealed interface DeleteMediaOutcome {
