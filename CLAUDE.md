@@ -48,7 +48,7 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   task list and the per-worktree ports.
 - `packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
   suite + the cold account birth + the Emergency Kit codec that carries its Secret Key + the wire base64,
-  shared by `web/` and `admin-web/`
+  shared by `web/` and `admin-web/` (and read by `e2e/`, with the wire assertion's canary collision rule, ADR 0090)
   ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). The workspace exists **for that one
   package** — duplicating key-material logic would be a security defect, not a maintenance nuisance. Nothing
   else is shared: no UI, no router, no state. `npm ci` runs from the repo root; each package still proves

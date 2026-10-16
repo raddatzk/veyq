@@ -53,5 +53,9 @@ export default defineConfig({
     // test's timeout.
     actionTimeout: 15_000,
   },
-  projects: [{ name: 'setup', testMatch: /setup\/.*\.setup\.ts/ }],
+  projects: [
+    { name: 'setup', testMatch: /setup\/.*\.setup\.ts/ },
+    // The scenarios start from the instance the setup project left (instance.json in the run directory).
+    { name: 'scenarios', testMatch: /scenarios\/.*\.spec\.ts/, dependencies: ['setup'] },
+  ],
 })

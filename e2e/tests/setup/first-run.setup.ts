@@ -4,10 +4,12 @@
 // a red run here and a stale Run page at the same time. It is the scenario, not a fixture (ADR 0090 answer 4): it
 // runs once per instance, one browser context throughout, and hands what later scenarios need — the owner's
 // credentials and Secret Key, the tenant's domain and invite link — to them in `instance.json` in the run directory,
-// never in the repository.
+// never in the repository. What it types that the product promises never to send — the password — is recorded for the
+// orchestrator's sweep (src/canaries.ts); the email and the tenant's name are declared plaintext and are not.
 import { test, expect, type BrowserContext, type Page } from '@playwright/test'
 import { writeFileSync } from 'node:fs'
 import { freshOwner, readKit } from '../../src/accounts'
+import { recordTyped } from '../../src/canaries'
 import { confineToInstance, type Confinement } from '../../src/egress'
 import { stack } from '../../src/stack'
 
@@ -55,7 +57,8 @@ test(
     await page.goto(stack().adminOrigin)
     await expect(page.getByText('Set up this instance', { exact: true })).toBeVisible()
     await page.getByLabel('Email', { exact: true }).fill(owner.email)
-    await password(page).fill(owner.password)
+    // The password never leaves the page (Model B: only what Argon2id derives from it does) — a canary for the sweep.
+    await password(page).fill(recordTyped(owner.password))
     // Leaving the field runs the breach check: one range query, answered locally with "no match" (egress.ts).
     await password(page).blur()
     await expect.poll(() => confinement.breachQueries().length, { message: 'the breach check asked once' }).toBe(1)
@@ -74,7 +77,7 @@ test(
     // Only now is the account created; the console asks for a sign-in.
     await expect(page.getByText('Sign in as the Server Owner to administer this instance.')).toBeVisible()
     await page.getByLabel('Email', { exact: true }).fill(owner.email)
-    await password(page).fill(owner.password)
+    await password(page).fill(recordTyped(owner.password))
     await page.getByRole('button', { name: 'Sign in' }).click()
     await expect(page.getByRole('heading', { name: 'Server administration', level: 1 })).toBeVisible()
 

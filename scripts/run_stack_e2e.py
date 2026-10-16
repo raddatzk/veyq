@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Boot the release candidate as a Server Owner would, from the recipe inside its image, and drive it in a browser (ADR 0090, lane L1 of ADR 0091).
 
-**What it does — phases 1 and 2 of `changes/cr-stack-e2e.md`: a boot, then first run in a browser.** Takes the two candidate images (`--app`,
+**What it does — phases 1–3 of `changes/cr-stack-e2e.md`: a boot, first run and a Memory round trip in a browser,
+and the stack swept for every value the browser typed.** Takes the two candidate images (`--app`,
 `--admin`: a registry reference pinned by digest, or a local tag for a local run) and from there follows the Run area
 of the docs site rather than this repository:
 
@@ -26,26 +27,39 @@ of the docs site rather than this repository:
      verified connection must answer 200. Traefik serves its default certificate until ACME has finished, so this
      polls until `VEYQ_STACK_CERT_SECS`; at the deadline it names the certificate Traefik served instead. A Traefik
      that cannot write `/acme` (ADR 0071's silent failure) is red here, not up.
-  6. **browser** — `e2e/`'s Playwright suite, whole, in the Playwright image the overlay pins, started with
+  6. **window** — opened before the browser types anything: MariaDB's statement log switched on for the run's window
+     (`e2e_sweeps.StatementLog`, a sentinel statement at each end), and one unsigned request for a run-unique key
+     sent through Traefik to the bucket, which Garage's log must then carry percent-encoded (the container sweep's
+     control). The stack's own containers only, through the run's compose project.
+  7. **browser** — `e2e/`'s Playwright suite, whole, in the Playwright image the overlay pins, started with
      `docker compose run --rm browser` on the run's own `edge` and `admin` networks — never on the host, so a laptop
      runs what CI runs. The container first trusts the run's Pebble root (and nothing more) in Chromium's NSS db
      (`infra/e2e/nss_trust_root.py`); the suite reaches the domain through Traefik and the admin console through an
      in-container loopback tunnel to `admin:8080` (`e2e/src/tunnel.ts`), and everything it may reach is named in
      `stack.json`, which this stage writes. Its exit code is the verdict; the JUnit report's tests and times are
      printed. Preflight refuses a run whose installed `@playwright/test` is not exactly the image's version (the
-     browser is baked into the image; a library one patch apart fails at launch) or is not installed at all.
-  7. **evidence** — `compose.log` (every container, timestamped) and `ps.json` into the run directory, always.
-  8. **teardown** — `docker compose down -v` (unless `--keep`).
-  9. **host** — the run touched nothing that is not its own: every container that existed before it still exists
+     browser is baked into the image; a library one patch apart fails at launch) or is not installed at all. **A
+     green needs at least one EXECUTED test** (the JUnit report): a selection that matched nothing, or a run whose
+     every test was skipped, is red, never "nothing failed". Arguments after `--` go to `playwright test` as they are.
+  8. **sweep** — the ADR 0053 wire assertion, with the sensors `run_web_e2e.py` uses (`scripts/e2e_sweeps.py`,
+     parameterised by compose project): every value the suite typed (`canaries-<spec>.json`, `e2e/src/canaries.ts`)
+     must be absent from the instance's database, its bucket (keys and bytes), every container log of the project
+     since the run began, and every statement the database received in the window — each sensor armed by a positive
+     control, and every spec file that executed a test must have recorded canaries. [sweep] lists what is not swept.
+  9. **evidence** — `compose.log` (every container, timestamped) and `ps.json` into the run directory, always.
+  10. **teardown** — `docker compose down -v` (unless `--keep`).
+  11. **host** — the run touched nothing that is not its own: every container that existed before it still exists
      with the same state and start time, every volume still exists, and nothing of the run's project is left.
 
 The summary prints each stage's wall time — the budget ADR 0091 decision 1 holds the lane to — and the verdict.
-The sweeps of ADR 0053 are a later phase of the CR.
 
 **The run directory survives the run** (`.e2e-stack-out/<stamp>/`, gitignored): the extracted recipe, the `.env`
 (every secret of an instance that no longer exists), Pebble's root, `up.log`, `compose.log`, `ps.json`, and the
 browser's: `stack.json`, `browser.log`, `junit.xml`, `report/` (Playwright's HTML report), `playwright/` (a trace per
-test, `npx playwright show-trace <zip>`), `instance.json` (the owner's credentials and Secret Key, the invite link).
+test, `npx playwright show-trace <zip>`), `instance.json` (the owner's credentials and Secret Key, the invite link);
+and the sweeps': `canaries-<spec>.json` and their union `swept-canaries.json`, `database-veyq.sql` (the dump the
+database sweep read), `container-<service>.log`, `mariadb-general.log` (the window's statements), and a mirror of the
+bucket only where the store sweep found something.
 
 **Not a `validate_*` guard.** It needs Docker, two images, host ports 80 and 443 and the root `npm ci`, so it
 cannot join the buildless trust-chain glob; lane L1 calls it directly.
@@ -57,10 +71,13 @@ domain is asserted by the browser, which opens the invite link over it. The brow
 certificate stage only. The host check compares before and after: it
 cannot tell this run's touch from another process's on the same host in the same window, so a red there names the
 container and leaves the attribution to the reader; and a container created AND removed by someone during the run is
-invisible to it.
+invisible to it. The sweep proves absence for what the suite TYPED (and the text inside the photo it uploaded), not for
+everything the page sealed: a value the browser derived or unsealed and nobody typed is not a canary here — web's
+API-level suites, which record what they unseal, cover that half (`run_web_e2e.py`). And the round trip creates one
+tenant, one Memory, one photo and one link; a leak on a path no scenario walks is not seen.
 
 Usage:
-    python3 scripts/run_stack_e2e.py --app veyq:local --admin veyq-admin:local [--keep]
+    python3 scripts/run_stack_e2e.py --app veyq:local --admin veyq-admin:local [--keep] [-- <playwright test args>]
 
 Environment (all optional):
     VEYQ_STACK_WAIT_SECS   `up --wait` timeout. Default: 300
@@ -81,12 +98,16 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
+from typing import NamedTuple
 
 try:
     import yaml
 except ModuleNotFoundError:  # pragma: no cover - same shape as the guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
+
+# The ADR 0053 sweeps, shared with run_web_e2e.py and parameterised by compose project (ADR 0090 decision 5).
+import e2e_sweeps as sweeps  # noqa: E402 - after the PyYAML check, which it needs too
 
 ROOT = Path(__file__).resolve().parent.parent
 OVERLAY = ROOT / "infra" / "e2e" / "docker-compose.e2e.yml"
@@ -117,6 +138,16 @@ WAIT_SECS = int(os.environ.get("VEYQ_STACK_WAIT_SECS", "300"))
 CERT_SECS = int(os.environ.get("VEYQ_STACK_CERT_SECS", "120"))
 ASSIGNMENT = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
 MISSING_VARIABLE = re.compile(r"required variable (\w+) is missing a value")
+# What the sweeps read in the recipe's instance. The database is the one the recipe names (`MARIADB_DATABASE: veyq`,
+# the app's JDBC URL); the bucket is the backend's default `veyq.bundled-store.bucket`, which the recipe does not
+# override; the store is reached the way the backup tool reaches it, by its internal name on the network the recipe
+# puts it on (`edge`, ADR 0071 §3).
+DATABASE = "veyq"
+STORE_BUCKET = "blobs"
+STORE_SERVICE = "garage"
+STORE_INTERNAL = "http://garage:3900"
+STORE_NETWORK = "edge"
+APP_SERVICE = "app"
 
 
 class Red(Exception):
@@ -412,7 +443,7 @@ def certificate(workdir: Path) -> None:
 # ---------------------------------------------------------------- browser
 
 
-def browser(compose: list[str], workdir: Path) -> None:
+def browser(compose: list[str], workdir: Path, selection: list[str]) -> None:
     (workdir / "stack.json").write_text(json.dumps({
         "domain": DOMAIN,
         "appOrigin": f"https://{DOMAIN}",
@@ -422,7 +453,8 @@ def browser(compose: list[str], workdir: Path) -> None:
         "adminUpstream": ADMIN_UPSTREAM,
         "outDir": CONTAINER_OUT,
     }, indent=2) + "\n", encoding="utf-8")
-    cmd = [*compose, "run", "--rm", "--no-deps", "-T", "browser"]
+    # `selection` is handed to `playwright test` as it is (a local run's `-- --grep …`); CI passes none.
+    cmd = [*compose, "run", "--rm", "--no-deps", "-T", "browser", *selection]
     print("+", " ".join(cmd), flush=True)
     with (workdir / "browser.log").open("w", encoding="utf-8") as log:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -438,6 +470,26 @@ def browser(compose: list[str], workdir: Path) -> None:
         failed = [name for name, _, verdict in tests if verdict == "failed"]
         raise Red(f"Playwright exited {status}" + (f"; failed: {'; '.join(failed)}" if failed else "")
                   + " — browser.log, report/ and the traces under playwright/ in the run directory say where")
+    executed = [name for name, _, verdict in tests if verdict in ("passed", "failed")]
+    if not executed:
+        # Playwright exits 0 on a selection that matches nothing when asked to (`--pass-with-no-tests`), and on a run
+        # whose every test was skipped. "Nothing failed" is not "the instance works": a lane that ran no test proves
+        # nothing, so it must not render like one whose tests passed (the same refusal run_web_e2e.py makes on zero
+        # files, scripts/validate_e2e_discovery.py).
+        raise Red(f"Playwright exited 0 but executed no test ({len(tests)} in the JUnit report, none passed or failed)"
+                  " — refusing a green that proves nothing")
+    print(f"browser: {len(executed)} test(s) executed", flush=True)
+
+
+def junit_files(path: Path) -> dict[str, int]:
+    """Every spec file the JUnit report names, with how many of its tests executed (passed or failed)."""
+    if not path.is_file():
+        return {}
+    files: dict[str, int] = {}
+    for suite in ElementTree.parse(path).getroot().iter("testsuite"):
+        ran = sum(1 for case in suite.iter("testcase") if case.find("skipped") is None)
+        files[suite.get("name", "?")] = files.get(suite.get("name", "?"), 0) + ran
+    return files
 
 
 def junit(path: Path) -> list[tuple[str, float, str]]:
@@ -452,6 +504,117 @@ def junit(path: Path) -> list[tuple[str, float, str]]:
     return cases
 
 
+# ---------------------------------------------------------------- the window and the sweeps (ADR 0053)
+
+
+def env_value(env: Path, name: str) -> str:
+    for line in env.read_text(encoding="utf-8").splitlines():
+        m = ASSIGNMENT.match(line)
+        if m and m.group(1) == name:
+            return m.group(2)
+    raise Red(f"{name} is not in the run's .env")
+
+
+def sweep_stack(compose: list[str], project: str, env: Path) -> sweeps.Stack:
+    """The run's instance as the sweeps address it: its own compose project, never the dev stack's containers."""
+    return sweeps.Stack(
+        compose=tuple(compose), db_root_password=env_value(env, "MARIADB_ROOT_PASSWORD"), store_service=STORE_SERVICE,
+        store_endpoint=STORE_INTERNAL, store_admin_token=env_value(env, "GARAGE_ADMIN_TOKEN"),
+        docker_network=f"{project}_{STORE_NETWORK}",
+    )
+
+
+class Window(NamedTuple):
+    """What the window stage opened, and the sweeps read back: when it began, its sentinels, the statement log."""
+    since: str
+    store_sentinel: str
+    statements: sweeps.StatementLog
+    statement_sentinels: list[str]
+
+
+def plant_store_sentinel(stamp: str, workdir: Path) -> str:
+    """One unsigned GET for the run's sentinel key, the way a browser reaches the bucket: through Traefik on :443.
+
+    The public origin routes `/<bucket>/…` to Garage (the recipe's ingress, ADR 0063), so this is the path every
+    presigned URL of the run takes. Over TLS with the run's Pebble root as the only CA — the certificate stage's
+    connection, by SNI, no `/etc/hosts`. Garage refuses it (anonymous access) and logs the URI as sent.
+    """
+    sentinel, key = sweeps.store_sentinel(stamp)
+    ctx = ssl.create_default_context(cafile=str(workdir / "pebble-root.pem"))
+    with socket.create_connection(("127.0.0.1", 443), timeout=10) as raw:
+        with ctx.wrap_socket(raw, server_hostname=DOMAIN) as tls:
+            tls.sendall(f"GET /{STORE_BUCKET}/{key} HTTP/1.1\r\nHost: {DOMAIN}\r\nConnection: close\r\n\r\n".encode())
+            status = tls.recv(64).decode("latin-1").split("\r\n", 1)[0]
+    print(f"window: planted the store-log sentinel {sentinel!r} through https://{DOMAIN}/{STORE_BUCKET}/…: {status}",
+          flush=True)
+    return sentinel
+
+
+def window(stack: sweeps.Stack, stamp: str, workdir: Path, since: str) -> Window:
+    """Open what must be open BEFORE the browser types anything: the statement log, and the store's log control."""
+    sentinel = plant_store_sentinel(stamp, workdir)
+    statements = sweeps.StatementLog(stack, stamp, workdir)
+    statements.open()
+    return Window(since, sentinel, statements, [statements.plant("window opened")])
+
+
+def close_window(opened: Window) -> None:
+    """The second sentinel, then the statement log off and retained. Idempotent; runs whether the browser was red."""
+    if not opened.statements.closed:
+        opened.statement_sentinels.append(opened.statements.plant("window closing"))
+        opened.statements.close()
+
+
+def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
+    """Every typed canary of the run, swept everywhere an operator of this instance could read it (ADR 0053).
+
+    The browser suite records what it typed (`e2e/src/canaries.ts`), one `canaries-<spec>.json` per spec file; every
+    spec file that executed a test must have left one, or that file's values were never looked for. Then: the
+    instance's database (data-only dump), its bucket (keys and bytes), every container log of the project since the
+    run began, and every statement the database received in the window. Each is armed by a positive control — the
+    owner's email (declared plaintext the app wrote) found in the dump and in a statement literal, the planted sentinel
+    in the store's log, the app's log naming its database, and the window's two sentinel statements — because 0 hits
+    from a sensor that read nothing is not a pass.
+
+    Not swept here, and why: the HTTP recording and the capability tokens derived from it (the browser suite records no
+    HTTP; `run_web_e2e.py` sweeps both at API level), boot logs (the backend's log is the `app` container's, swept as
+    one), and the mailbox (the recipe ships no mail relay, and a fresh tenant has no mail settings).
+    """
+    close_window(opened)
+    canary_files = sorted(workdir.glob("canaries-*.json"))
+    silent = [name for name, ran in junit_files(workdir / "junit.xml").items()
+              if ran and not (workdir / f"canaries-{Path(name).name.removesuffix('.ts')}.json").is_file()]
+    if silent:
+        raise Red(f"spec file(s) {silent} executed tests but recorded no canary — what they typed was never swept for "
+                  "(every typed value goes through recordTyped, e2e/src/canaries.ts)")
+    carriers, problems = sweeps.load_canaries(canary_files)
+    if problems or not carriers:
+        raise Red("the run's canaries could not be read: " + "; ".join(problems or ["the canary files hold none"]))
+    union = workdir / "swept-canaries.json"
+    union.write_text(json.dumps(sorted(carriers), indent=2, ensure_ascii=False), encoding="utf-8")
+    instance = json.loads((workdir / "instance.json").read_text(encoding="utf-8"))
+    email = instance["owner"]["email"]
+    print(f"sweep: {len(carriers)} typed canary/canaries from {', '.join(p.name for p in canary_files)}", flush=True)
+
+    rel = "the browser suite"
+    verdicts = [
+        ("database", sweeps.sweep(stack, DATABASE, union, rel, retain=workdir / f"database-{DATABASE}.sql",
+                                  present=[email])),
+        ("store", sweeps.sweep_store(stack, STORE_BUCKET, DATABASE, union, rel, workdir)),
+        ("container logs", sweeps.sweep_containers(
+            stack, workdir, canary_files, opened.since, opened.store_sentinel,
+            controls={APP_SERVICE: lambda text: None if sweeps.names_database(text, DATABASE) else
+                      f"the app's log never names its database {DATABASE} (Flyway's JDBC line) — not the whole log"})),
+        ("statement log", sweeps.sweep_statements(
+            opened.statements.retained, canary_files, opened.statement_sentinels, databases=[],
+            problems=opened.statements.problems, written=[email])),
+    ]
+    failed = [f"{surface}: {why}" for surface, why in verdicts if why]
+    if failed:
+        raise Red("the wire assertion failed — " + " | ".join(failed))
+    print(f"sweep: GREEN on {', '.join(surface for surface, _ in verdicts)}", flush=True)
+
+
 # ---------------------------------------------------------------- the run
 
 
@@ -460,17 +623,21 @@ def main() -> int:
     parser.add_argument("--app", required=True, help="the candidate app image")
     parser.add_argument("--admin", required=True, help="the candidate admin image")
     parser.add_argument("--keep", action="store_true", help="leave the stack running (no teardown)")
+    parser.add_argument("selection", nargs=argparse.REMAINDER,
+                        help="after `--`: handed to `playwright test` as it is (e.g. `-- --grep @uc.admin`)")
     args = parser.parse_args()
+    selection = args.selection[1:] if args.selection[:1] == ["--"] else args.selection
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
+    since = str(int(time.time()))
     workdir = RUN_ROOT / stamp
     workdir.mkdir(parents=True)
     project = f"veyq-e2e-{stamp}"
     stages: list[tuple[str, float, str]] = []
     red: list[str] = []
 
-    def stage(name: str, fn, *fargs):
-        if red and name not in ("evidence", "teardown", "host"):
+    def stage(name: str, fn, *fargs, always: bool = False):
+        if red and not always and name not in ("evidence", "teardown", "host"):
             stages.append((name, 0.0, "skipped"))
             return None
         print(f"\n== {name}", flush=True)
@@ -490,14 +657,21 @@ def main() -> int:
     env = stage("env", write_env, recipe, args.app, args.admin, workdir / "pebble-minica.pem") if recipe else None
     compose = compose_cmd(project, recipe, env) if env else None
     started = False
+    opened = None
     try:
         if compose:
             started = not red
             stage("pebble", pebble, compose, workdir, args.app)
             stage("up", up, compose, workdir)
             stage("certificate", certificate, workdir)
-            stage("browser", browser, compose, workdir)
+            stack = sweep_stack(compose, project, env)
+            opened = stage("window", window, stack, stamp, workdir, since)
+            stage("browser", browser, compose, workdir, selection)
+            stage("sweep", sweep, stack, workdir, opened)
     finally:
+        if opened is not None:
+            # Retained even when the browser was red: the statement log is evidence either way.
+            stage("window close", close_window, opened, always=True)
         if started:
             stage("evidence", evidence, project, workdir)
             if not args.keep:
