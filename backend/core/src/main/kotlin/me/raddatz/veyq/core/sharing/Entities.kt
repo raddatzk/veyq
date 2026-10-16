@@ -126,6 +126,19 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "write_verifier")
     var writeVerifier: String? = null
 
+    /** The member who last wrote [sealedName], [sealedNote] and [sealedShareName] (ADR 0093 § 8, en.platform.field-editor):
+     *  no foreign key (a member who left stays named), null exactly while its field is — the tombstone clears them with
+     *  the seals. Only members write a share's fields. Written by `SharingStore` from the authenticated caller; served to
+     *  no client. */
+    @Column(name = "name_editor_user_id", columnDefinition = "uuid")
+    var nameEditorUserId: String? = null
+
+    @Column(name = "note_editor_user_id", columnDefinition = "uuid")
+    var noteEditorUserId: String? = null
+
+    @Column(name = "share_name_editor_user_id", columnDefinition = "uuid")
+    var shareNameEditorUserId: String? = null
+
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 

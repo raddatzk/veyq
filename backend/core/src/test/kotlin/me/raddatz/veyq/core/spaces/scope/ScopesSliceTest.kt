@@ -622,6 +622,33 @@ class ScopesSliceTest {
             .body("find { it.id == '$groupId' }.nameEpoch", equalTo(0))
     }
 
+    /** ADR 0093 § 8 (en.platform.field-editor): a group's name and icon record the member who last wrote them — the
+     *  creator, then whoever renames or sets the icon — and a cleared icon has no editor. The rename lands on a name a
+     *  stand-in holds, so the write is seen to move it. */
+    @Test
+    fun aGroupsNameAndIconRecordTheMemberWhoWroteThemAndAClearedIconHasNone() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        fun editors() = QuarkusTransaction.requiringNew().call {
+            ScopeEntity.findById(groupId)!!.let { it.nameEditorUserId to it.iconEditorUserId }
+        }
+        assertEquals(owner to null, editors(), "the creator named it; no icon, no editor of it")
+
+        val standIn = UUID.randomUUID().toString()
+        QuarkusTransaction.requiringNew().run { ScopeEntity.findById(groupId)!!.nameEditorUserId = standIn }
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/name").then().statusCode(204)
+        assertEquals(owner to null, editors())
+
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/icon").then().statusCode(204)
+        assertEquals(owner to owner, editors())
+        given().header("Authorization", bearer(owner)).`when`().delete("/api/scopes/$groupId/icon").then().statusCode(204)
+        assertEquals(owner to null, editors(), "a cleared icon has no editor")
+    }
+
     @Test
     fun renameNonOwnerIs403() {
         val (owner, domain) = seedMember()

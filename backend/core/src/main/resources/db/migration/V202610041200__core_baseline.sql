@@ -170,7 +170,10 @@ CREATE INDEX ix_tenant_invite_tenant ON veyq_tenant_invite (tenant_id);
 
 -- A scope (TENANT / GROUP / PERSONAL). It holds no key. personal_owner is the owning account on a PERSONAL
 -- scope and null on every other kind, so ux_scope_personal_owner allows one personal scope per member and
--- tenant (both engines admit any number of nulls in a unique index).
+-- tenant (both engines admit any number of nulls in a unique index). name_editor_user_id / icon_editor_user_id: the
+-- member who last wrote encrypted_name / sealed_icon (ADR 0093 § 8, en.platform.field-editor) - no foreign key, a
+-- member who left stays named; only a member writes either, so there is no guest column. Null exactly while the field
+-- is (ScopesStore writes both together; the per-writer slice tests pin it).
 CREATE TABLE veyq_scope (
     id              UUID NOT NULL PRIMARY KEY,
     tenant_id       UUID NOT NULL,
@@ -183,6 +186,8 @@ CREATE TABLE veyq_scope (
     icon_epoch      INT NOT NULL DEFAULT 0,
     member_removals INT NOT NULL DEFAULT 0,
     personal_owner  UUID NULL,
+    name_editor_user_id UUID NULL,
+    icon_editor_user_id UUID NULL,
     CONSTRAINT fk_scope_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id)
 );
 CREATE INDEX ix_scope_tenant ON veyq_scope (tenant_id);
@@ -400,6 +405,9 @@ CREATE UNIQUE INDEX ux_job_decline ON veyq_job_decline (job_id, worker_id);
 -- A public share (ADR 0029). A deleted link is a tombstone: the row keeps its ids and creation time, every
 -- ciphertext column goes and deleted marks it — a flag, not a time: nothing reads when a link was deleted (#398). wrap is null on a WRITE_ONLY share, which carries the drop public key
 -- instead (ADR 0031). write_verifier = SHA-256 of the link's write token (ADR 0076); null takes no new guest.
+-- name_editor_user_id, note_editor_user_id, share_name_editor_user_id: the member who last wrote sealed_name,
+-- sealed_note, sealed_share_name (ADR 0093 § 8) - no foreign key, members only, null exactly while the field is (the
+-- tombstone clears them with the seals; SharingStore writes each with its field).
 CREATE TABLE veyq_share (
     id                      VARCHAR(64)  NOT NULL PRIMARY KEY,
     owner_account           UUID  NOT NULL,
@@ -424,6 +432,9 @@ CREATE TABLE veyq_share (
     reissue_only            BOOLEAN NOT NULL DEFAULT FALSE,
     deleted                 BOOLEAN NOT NULL DEFAULT FALSE,
     write_verifier          TEXT NULL,
+    name_editor_user_id       UUID NULL,
+    note_editor_user_id       UUID NULL,
+    share_name_editor_user_id UUID NULL,
     CONSTRAINT fk_share_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );
 CREATE INDEX ix_share_owner ON veyq_share (owner_account);

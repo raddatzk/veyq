@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.spaces.scope
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.admin.tenant.TenantStore
 import me.raddatz.veyq.core.sharing.SharingStore
 import me.raddatz.veyq.core.tasks.CompromiseRotationPolicy
@@ -181,6 +182,7 @@ class ScopesStore(
             this.tenantId = tenantId
             kind = ScopeEntity.GROUP
             this.encryptedName = encryptedName
+            nameEditorUserId = userId // ADR 0093 § 8: the creator sealed the name
         }.persist()
         MembershipEntity().apply {
             id = UUID.randomUUID().toString()
@@ -208,9 +210,10 @@ class ScopesStore(
      *  a read before the write, a rotation committed in between and a name sealed under the pre-rotation epoch landed
      *  — readable by the member that rotation removed (ADR 0024). */
     @Transactional
-    fun renameGroup(scopeId: String, encryptedName: String, nameEpoch: Int): Boolean =
+    fun renameGroup(scopeId: String, encryptedName: String, nameEpoch: Int, editor: PrincipalKey.User): Boolean =
         ScopeEntity.update(
-            "encryptedName = ?1, nameEpoch = ?2 where id = ?3 and currentEpoch = ?2", encryptedName, nameEpoch, scopeId,
+            "encryptedName = ?1, nameEpoch = ?2, nameEditorUserId = ?4 where id = ?3 and currentEpoch = ?2",
+            encryptedName, nameEpoch, scopeId, editor.userId,
         ) == 1
 
     /** Set/replace a scope's icon (uc.spaces.set-space-icon): overwrite `sealed_icon` (re-sealed under `K_icon` of
@@ -218,9 +221,10 @@ class ScopesStore(
      *  nothing written, when [iconEpoch] is not the scope's current epoch — the [renameGroup] gate, for the same
      *  reason. */
     @Transactional
-    fun setIcon(scopeId: String, sealedIcon: String, iconEpoch: Int): Boolean =
+    fun setIcon(scopeId: String, sealedIcon: String, iconEpoch: Int, editor: PrincipalKey.User): Boolean =
         ScopeEntity.update(
-            "sealedIcon = ?1, iconEpoch = ?2 where id = ?3 and currentEpoch = ?2", sealedIcon, iconEpoch, scopeId,
+            "sealedIcon = ?1, iconEpoch = ?2, iconEditorUserId = ?4 where id = ?3 and currentEpoch = ?2",
+            sealedIcon, iconEpoch, scopeId, editor.userId,
         ) == 1
 
     /** Clear a scope's icon (uc.spaces.set-space-icon A5): reset `sealed_icon` + `icon_epoch` so every member falls
@@ -230,6 +234,7 @@ class ScopesStore(
     fun clearIcon(scopeId: String) {
         ScopeEntity.findById(scopeId)?.let {
             it.sealedIcon = null
+            it.iconEditorUserId = null // a cleared field has no editor (ADR 0093 § 8)
             it.iconEpoch = 0
             it.persist()
         }

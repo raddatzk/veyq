@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
@@ -182,7 +183,7 @@ class ShareSealedNameCoreSliceTest {
         repeat(RACE_ROUNDS) { round ->
             val shareId = createShare(w.owner, w.folder)
             val outcome = whileUncommitted(
-                change = { assertTrue(sharing.setSealedName(shareId, newName), "round $round") },
+                change = { assertTrue(sharing.setSealedName(shareId, newName, PrincipalKey.User(w.owner)), "round $round") },
                 overlapping = { handler.revoke(w.owner, shareId) },
             )
             assertEquals(RevokeShareOutcome.Done, outcome, "round $round")

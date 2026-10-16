@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import jakarta.persistence.Column
@@ -39,6 +40,20 @@ class MediaEntity : PanacheEntityBase {
      *  `MediaStore.setMeta`. Not the node's item revision (core's `NodeItemsRevisions`), which every attach and trash also moves. */
     @Column(name = "meta_revision", nullable = false)
     var metaRevision: Long = 0
+
+    /** Who last wrote [wrappedMeta] (ADR 0093 § 8, en.platform.field-editor): the uploader at attach, then the member
+     *  who edits it — a member ([metaEditorUserId]) or a guest identity ([metaEditorIdentityId]), at most one, both null
+     *  exactly while there is no meta. No foreign key, as [shareIdentityId]; `MediaGuestIdentityUsage` keeps the
+     *  identity while one names it. Written by `MediaStore` from the authenticated caller; served to no client. */
+    @Column(name = "meta_editor_user_id", columnDefinition = "uuid")
+    var metaEditorUserId: String? = null
+
+    @Column(name = "meta_editor_identity_id", columnDefinition = "uuid")
+    var metaEditorIdentityId: String? = null
+
+    /** [metaEditorUserId] / [metaEditorIdentityId] as one ref, null while there is no meta. */
+    val metaEditor: PrincipalKey?
+        get() = PrincipalKey.of(metaEditorUserId, metaEditorIdentityId)
 
     /**
      * The original's **lazy, panel-only** metadata bundle sealed under `K_node` (opaque base64); fetched per item
@@ -146,6 +161,26 @@ class BucketEntity : PanacheEntityBase {
 
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
+
+    /** Who last wrote [sealedName] (ADR 0093 § 8, en.platform.field-editor): a member who named or renamed it
+     *  ([nameEditorUserId]), or — a contributor's primary, whose name is a copy of its guest identity's display name —
+     *  that identity ([nameEditorIdentityId]); at most one, both null exactly while there is no name. No foreign key, as
+     *  `veyq_media.share_identity_id`; `MediaGuestIdentityUsage` keeps the identity while one names it. */
+    @Column(name = "name_editor_user_id", columnDefinition = "uuid")
+    var nameEditorUserId: String? = null
+
+    @Column(name = "name_editor_identity_id", columnDefinition = "uuid")
+    var nameEditorIdentityId: String? = null
+
+    /** [nameEditorUserId] / [nameEditorIdentityId] as one ref, null while there is no name. */
+    val nameEditor: PrincipalKey?
+        get() = PrincipalKey.of(nameEditorUserId, nameEditorIdentityId)
+
+    /** Record [editor] as the last writer of the name (null: there is no name). */
+    fun nameWrittenBy(editor: PrincipalKey?) {
+        nameEditorUserId = editor?.userId
+        nameEditorIdentityId = editor?.identityId
+    }
 
     companion object : PanacheCompanionBase<BucketEntity, String>
 }

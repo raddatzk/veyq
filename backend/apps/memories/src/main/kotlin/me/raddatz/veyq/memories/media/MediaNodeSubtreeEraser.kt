@@ -31,8 +31,8 @@ class MediaNodeSubtreeEraser(
         val media = MediaEntity.find("nodeId in ?1 order by id", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list()
         val buckets = BucketEntity.find("nodeId in ?1", nodeIds).list()
         val guests = (
-            media.mapNotNull { it.shareIdentityId } +
-                buckets.mapNotNull { (PrincipalKey.parse(it.ownerKey) as? PrincipalKey.Share)?.identityId }
+            media.flatMap { listOfNotNull(it.shareIdentityId, it.metaEditorIdentityId) } +
+                buckets.flatMap { listOfNotNull((PrincipalKey.parse(it.ownerKey) as? PrincipalKey.Share)?.identityId, it.nameEditorIdentityId) }
             ).toSet()
         media.forEach { mediaStore.purgeMediaRows(it) }
         BucketEntity.delete("nodeId in ?1", nodeIds)

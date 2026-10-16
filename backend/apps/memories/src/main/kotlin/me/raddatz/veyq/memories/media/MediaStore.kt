@@ -148,6 +148,10 @@ class MediaStore(
             this.nodeId = nodeId
             this.blobId = originalBlobId
             this.wrappedMeta = wrappedMeta
+            // ADR 0093 § 8: the uploader — the upload's authenticated opener — wrote the meta it carries.
+            val uploader = PrincipalKey.of(uploaderUserId, shareIdentityId)?.takeIf { wrappedMeta != null }
+            metaEditorUserId = uploader?.userId
+            metaEditorIdentityId = uploader?.identityId
             this.wrappedExif = wrappedExif
             this.shareIdentityId = shareIdentityId
             this.createdBy = ownerKey // cr-0113: the buckets attribution (denormalized owner_key)
@@ -323,17 +327,18 @@ class MediaStore(
      * `NodesStore.applyUpdate` explains: the entity read afterwards holds the row as it now is.
      */
     @Transactional
-    fun setMeta(scopeId: String, mediaId: String, wrappedMeta: String?, expectedRevision: Long): SetMetaResult {
+    fun setMeta(scopeId: String, mediaId: String, wrappedMeta: String?, expectedRevision: Long, editor: PrincipalKey.User): SetMetaResult {
         // cr-0107: the edit advances updatedAt (the keyset cursor), so the live poll re-fetches it. Panache binds no
-        // null parameter, so a cleared tier (null) is spelled into the statement rather than bound.
+        // null parameter, so a cleared tier (null) is spelled into the statement rather than bound — and so is its
+        // editor (ADR 0093 § 8): a cleared meta has none, a written one the member who wrote it.
         val guard = "metaRevision = ?1, updatedAt = ?2 where id = ?3 and scopeId = ?4 and metaRevision = ?5"
         val bound = arrayOf<Any>(expectedRevision + 1, Instant.now(), mediaId, scopeId, expectedRevision)
         val rows = if (wrappedMeta == null) {
-            MediaEntity.update("wrappedMeta = null, $guard", *bound)
+            MediaEntity.update("wrappedMeta = null, metaEditorUserId = null, metaEditorIdentityId = null, $guard", *bound)
         } else {
             MediaEntity.update(
-                "wrappedMeta = ?6, $guard",
-                *bound, wrappedMeta,
+                "wrappedMeta = ?6, metaEditorUserId = ?7, metaEditorIdentityId = null, $guard",
+                *bound, wrappedMeta, editor.userId,
             )
         }
         val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return SetMetaResult.Missing
@@ -416,8 +421,15 @@ class MediaStore(
     private fun ensurePrimaryBucket(scopeId: String, nodeId: String, ownerKey: String, sealedName: String?): BucketEntity {
         NodeEntity.find("id", nodeId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
         val existing = BucketEntity.find("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", nodeId, ownerKey).firstResult()
+        // A primary's name is a copy of its contributor identity's display name (primarySealedNameFor), so that identity is
+        // its editor (ADR 0093 § 8) whoever's write materializes it; a member's primary has no name and no editor.
+        val editor = (PrincipalKey.parse(ownerKey) as? PrincipalKey.Share)?.takeIf { sealedName != null }
         if (existing != null) {
-            if (existing.sealedName == null && sealedName != null) { existing.sealedName = sealedName; existing.persist() }
+            if (existing.sealedName == null && sealedName != null) {
+                existing.sealedName = sealedName
+                existing.nameWrittenBy(editor)
+                existing.persist()
+            }
             return existing
         }
         return BucketEntity().apply {
@@ -427,6 +439,7 @@ class MediaStore(
             this.ownerKey = ownerKey
             parentBucketId = null
             this.sealedName = sealedName
+            nameWrittenBy(editor)
             isPrimary = true
             createdAt = Instant.now()
         }.also { it.persist() }
@@ -457,7 +470,9 @@ class MediaStore(
     /** Create a sub-bucket one level under `ownerKey`'s primary (materialized if needed) — the caller's own or,
      *  post-cr0123, a contributor root a member curates. */
     @Transactional
-    fun createSubBucket(bucketId: String, scopeId: String, nodeId: String, ownerKey: String, sealedName: String): BucketRow? {
+    fun createSubBucket(
+        bucketId: String, scopeId: String, nodeId: String, ownerKey: String, sealedName: String, editor: PrincipalKey.User,
+    ): BucketRow? {
         if (bucketIdTaken(bucketId)) return null // taken anywhere → nothing written (ADR 0072)
         val primary = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         val sub = BucketEntity().apply {
@@ -467,6 +482,7 @@ class MediaStore(
             this.ownerKey = ownerKey
             parentBucketId = primary.id
             this.sealedName = sealedName
+            nameWrittenBy(editor) // the member who named it, also under a contributor's root (ADR 0093 § 8)
             isPrimary = false
             createdAt = Instant.now()
         }.also { it.persist() }
@@ -479,9 +495,10 @@ class MediaStore(
 
     /** Re-store a sub-bucket's sealed name (the handler validated own + non-primary). Returns the updated row. */
     @Transactional
-    fun renameBucket(bucketId: String, sealedName: String): BucketRow? {
+    fun renameBucket(bucketId: String, sealedName: String, editor: PrincipalKey.User): BucketRow? {
         val b = BucketEntity.findById(bucketId) ?: return null
         b.sealedName = sealedName
+        b.nameWrittenBy(editor)
         b.persist()
         val count = MediaEntity.count("nodeId = ?1 and bucketId = ?2 and deletedAt is null", b.nodeId, b.id).toInt()
         return BucketRow(b.id, b.ownerKey, b.parentBucketId, b.isPrimary, b.sealedName, count)

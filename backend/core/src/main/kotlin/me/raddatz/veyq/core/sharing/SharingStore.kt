@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.content.NodesStore
@@ -167,12 +168,17 @@ class SharingStore(
             this.wrap = (keys as? ShareKeys.MemoryWrap)?.wrap
             this.sealedDropPublicKey = (keys as? ShareKeys.Drop)?.sealedPublicKey
             this.sealedName = sealedName
+            // ADR 0093 § 8: [ownerAccount] is the authenticated caller of a create and of a re-issue — the editor of
+            // every sealed field this write sets.
+            nameEditorUserId = ownerAccount
             this.enabled = true
             this.expiresAt = expiresAt
             this.sealedNote = sealedNote
+            noteEditorUserId = ownerAccount.takeIf { sealedNote != null }
             this.sealedShareKey = sealedShareKey
             this.sealedShareKeyEpoch = sealedShareKeyEpoch
             this.sealedShareName = sealedShareName
+            shareNameEditorUserId = ownerAccount.takeIf { sealedShareName != null }
             this.passwordRequired = passwordRequired // cr-0118 (ADR 0037): the access-control gate + reveal copy
             this.pwSalt = pwSalt
             this.pwVerifier = pwVerifier
@@ -211,8 +217,12 @@ class SharingStore(
             share.pwVerifier = if (passwordRequired) pwVerifier else null
             share.sealedPassword = if (passwordRequired) sealedPassword else null
         }
+        // Both fields are full-replaced, so the caller — the owner, checked above — is the editor of each that is set
+        // (ADR 0093 § 8), and a cleared one has none.
         share.sealedNote = sealedNote
+        share.noteEditorUserId = ownerAccount.takeIf { sealedNote != null }
         share.sealedShareName = sealedShareName
+        share.shareNameEditorUserId = ownerAccount.takeIf { sealedShareName != null }
         share.expiresAt = expiresAt // full replace (cr-share-link-expiry-edit) — the manage UI re-sends the current value
         return UpdateResult.DONE
     }
@@ -226,9 +236,10 @@ class SharingStore(
      *  never hold what one waits for while it waits itself, so no order of the two deadlocks
      *  (`ShareSealedNameCoreSliceTest`). Taking the scope row after this one would be the inversion. */
     @Transactional
-    fun setSealedName(shareId: String, sealedName: String): Boolean {
+    fun setSealedName(shareId: String, sealedName: String, editor: PrincipalKey.User): Boolean {
         val share = liveForUpdate(shareId) ?: return false
         share.sealedName = sealedName
+        share.nameEditorUserId = editor.userId // ADR 0093 § 8: the member who re-sealed it
         return true
     }
 
@@ -330,6 +341,9 @@ class SharingStore(
         share.sealedName = null
         share.sealedNote = null
         share.sealedShareName = null
+        share.nameEditorUserId = null // a cleared field has no editor (ADR 0093 § 8)
+        share.noteEditorUserId = null
+        share.shareNameEditorUserId = null
         share.sealedShareKey = null
         share.sealedShareKeyEpoch = null
         share.passwordRequired = false

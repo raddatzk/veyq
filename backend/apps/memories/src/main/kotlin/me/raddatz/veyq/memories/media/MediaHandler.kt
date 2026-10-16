@@ -221,7 +221,7 @@ class MediaHandler(
     fun updateMeta(userId: String, scopeId: String, mediaId: String, wrappedMeta: String?, metaRevision: Long): MetaOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(MetaOutcome.NoMedia, MetaOutcome.Suspended, MetaOutcome.Deleting)?.let { return it }
-        return when (val r = store.setMeta(scopeId, mediaId, wrappedMeta, metaRevision)) {
+        return when (val r = store.setMeta(scopeId, mediaId, wrappedMeta, metaRevision, PrincipalKey.User(userId))) {
             is MediaStore.SetMetaResult.Written -> MetaOutcome.Found(r.wrappedMeta)
             MediaStore.SetMetaResult.Missing -> MetaOutcome.NoMedia
             is MediaStore.SetMetaResult.Stale -> MetaOutcome.Stale(r.wrappedMeta, r.metaRevision)
@@ -288,7 +288,7 @@ class MediaHandler(
         }
         // The client-minted id (ADR 0072): the sealed name is bound to it.
         return createOrConflict(conflict = { if (store.bucketIdTaken(bucketId)) CreateBucketOutcome.IdTaken else null }) {
-            store.createSubBucket(bucketId, scopeId, nodeId, ownerKey, sealedName)
+            store.createSubBucket(bucketId, scopeId, nodeId, ownerKey, sealedName, PrincipalKey.User(userId))
                 ?.let { CreateBucketOutcome.Ok(it) } ?: CreateBucketOutcome.IdTaken
         }
     }
@@ -303,7 +303,7 @@ class MediaHandler(
         if (store.findNode(scopeId, nodeId) == null) return RenameBucketOutcome.NoBucket
         val b = store.findBucket(scopeId, nodeId, bucketId) ?: return RenameBucketOutcome.NoBucket
         if (b.isPrimary) return RenameBucketOutcome.Forbidden
-        val row = store.renameBucket(bucketId, sealedName) ?: return RenameBucketOutcome.NoBucket
+        val row = store.renameBucket(bucketId, sealedName, PrincipalKey.User(userId)) ?: return RenameBucketOutcome.NoBucket
         return RenameBucketOutcome.Ok(row)
     }
 
