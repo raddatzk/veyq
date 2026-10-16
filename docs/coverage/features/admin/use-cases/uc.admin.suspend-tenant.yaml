@@ -76,7 +76,7 @@ acceptanceCriteria:
 gaps:
   admin-web: >-
     The suspend/reactivate controls live here (ADR 0065), and their suites exist and pass locally, but
-    `admin-web`'s job (`container.yml` → `test` → "Admin surface checks") has never executed, so ADR 0040 admits
+    `admin-web`'s job (`ci.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR 0040 admits
     none of them: a declared run is enough only on a job a run has already executed. There are two callers —
     the detail panel and `veyq-admin tenant suspend|reactivate` (cr-admin-cli) — each pinned to the operation
     and tenant id it sends, and neither to the flip itself, which is the backend ref's sentence. On the first

@@ -191,7 +191,8 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   GHCR registry, at `ghcr.io/<owner>/charts/veyq`, by the same publish as the images, with the same version, and
   **cosign-signed** the same way — extending [ADR 0057](0057-release-identity-and-deployment-recipe.md)'s
   release-identity story to a second artifact type rather than inventing a separate distribution channel
-  (Helm's native OCI support makes this a config addition to the existing `container.yml` workflow, not a new
+  (Helm's native OCI support makes this a config addition to the existing publish workflow — `container.yml` then,
+  `ci.yml` since [ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) — not a new
   tool). The path has a `charts/` segment because `helm push` appends the chart's **name** to the target: pushed
   to `oci://ghcr.io/<owner>` the chart `veyq` would land on `ghcr.io/<owner>/veyq`, the app image's own
   repository. The chart's `version` and `appVersion` are **both** the release version (`<major>.<minor>`, or
@@ -211,7 +212,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   default to the upstream's own (`ghcr.io/raddatzk/veyq`, `ghcr.io/raddatzk/veyq-admin`), written out for the
   same reason the verify identity is: a fork that deploys its own images overrides them, knowingly. A release
   refuses to republish the chart as it does the images; a release with two images and no chart is a partial
-  release. **Built, publish unobserved:** `container.yml`'s publish packages, pushes and signs the chart, and
+  release. **Built, publish unobserved:** `ci.yml`'s publish packages, pushes and signs the chart, and
   `scripts/validate_release_identity.py` holds it there — but its only proof is a workflow run, and no CI run has
   ever executed in this repository (no remote). The first proof is the staged run [infra/README](../../infra/README.md)
   § Cutting a release lists; until its refused repeat release has run, this stays *unobserved*, not *released*.
@@ -219,7 +220,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   no tree can hold, and `helm install ./charts/veyq` from a checkout sets the image tags itself. The image
   repositories' defaults are held to the names the Run area's
   [Verify a release](../../site/src/content/docs/run/verify-a-release.md) verifies by the same guard; `chart_meta_check.py`
-  runs in `container.yml`'s test job.
+  runs in `ci.yml`'s `chart` job.
 - **The chart generates nothing and every pod passes `restricted`**, to which
   [ADR 0071](0071-runtime-hardening-on-both-targets.md) adds a read-only root and a NetworkPolicy set whose
   gateway data-plane peer the operator must name. Every secret is the operator's to supply
@@ -244,7 +245,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   `chart_upgrade_check_selftest.py`) renders the predecessor's chart and the candidate's with the same values and
   compares those fields, and renders the candidate with the predecessor's `ci/` values
   ([Upgrade](../../site/src/content/docs/run/upgrade.mdx), Kubernetes). The predecessor is the upgrade proof's
-  (`default_predecessor`); the check runs in `container.yml`'s `test` job and is **information until the first
+  (`default_predecessor`); the check runs in `ci.yml`'s `chart` job and is **information until the first
   release and red from it** (the same switch as the upgrade proof), so from then on it gates `publish`.
 - **Backup/restore stays explicitly out of this ADR's scope.** [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
   gap statement is accurate and stays accurate; a Kubernetes-native backup story (a `CronJob` running

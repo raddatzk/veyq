@@ -1,7 +1,7 @@
 ---
 id: cr-one-pipeline-per-commit
 title: One pipeline per commit — every stage once, on a budget, the build beside the tests, runnable locally
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0091", "0057", "0040", "0045"]
 invariants:
@@ -88,7 +88,7 @@ restored by snapshot-and-restore.
       run 334 s at 1 worker (load average 24 → 13) and 167 s at 6 (13 → 30); bitten, 350 s and 147 s. About 2×,
       not 6×: the copies are bound by the file system and its watchers. Both well inside the 10-min budget here;
       the 809–1073 s of the morning were sequential under a heavier load.
-- [ ] 2 **One workflow.** `ci.yml` (or the name confirmed above) holds every stage of ADR 0091 decision 1 that exists
+- [x] 2 **One workflow.** `ci.yml` (or the name confirmed above) holds every stage of ADR 0091 decision 1 that exists
       today: the guards; the surface checks — backend, crypto, web, **admin-web** and the **chart** check, which only
       `container.yml`'s `test` ran; the races; the API end-to-end run; the image build matrix, needing only the version
       job, not the tests; the disabled upgrade proof; the dispatch publish, which now needs **every** stage with
@@ -98,6 +98,36 @@ restored by snapshot-and-restore.
       ADR 0091, the Run pages. Bites: drop one stage from the publish's `needs` → `validate_release_identity.py` red
       (that assertion is added here); a registry write on a push → red (exists); a backend ref whose Gradle run is
       no longer declared → `validate_coverage.py` red (exists).
+      **Built 2026-10-16:** `ci.yml` jobs `guards` (the glob minus `validate_guard_gaps.py`, which stays in
+      `trust-chain.yml` until phase 4), `backend`, `backend-races`, `frontend` (crypto, web, admin-web; the one
+      registry-asking install), `chart` (pinned Helm, `chart_meta_check.py`, the upgrade check and its self-test),
+      `web-e2e`, `version`, `build` (`needs: version` only), `upgrade-proof` (`if: false`, no `needs`) and `publish`
+      (needs all nine, `always()` plus one `== 'success'` term per need, the upgrade proof's `skipped` tolerated).
+      Triggers `main` + `release/**` with `container.yml`'s `paths-ignore`; concurrency groups `veyq-publish` /
+      `veyq-ci-<ref>`. `validate_release_identity.py` assertion 9 (new): every other job of the file is in the
+      publish's `needs`, and a status-function `if:` names each need's `success`. `validate_npm_installs_gated.py`'s
+      premise moved from "the gate before the build" to "the gate before the publish" (a job building an image runs
+      the gate, needs it, or is needed only by jobs that do) — consequence, stated in ADR 0091: on a dispatch the
+      `build-<sha>-<arch>` staging tags are pushed before the tests finish, unsigned and unnamed until `publish`.
+      Signer identity on Verify a release → `ci.yml`. **Bites** (snapshot-and-restore of `ci.yml`, restore confirmed
+      by `cmp` and an unchanged `git status --porcelain`): `chart` dropped from `publish.needs` → release identity
+      red (assertion 9); its `success` term dropped from the `if:` → red; `frontend` dropped from `needs` →
+      `validate_npm_installs_gated.py` red (the registry-asking install no longer before the publish); the build's
+      registry login ungated → release identity red (assertion 3); the backend job's `check` turned into `assemble`
+      → `validate_coverage.py` red (no run executes the 1249 backend refs). Glob green, `validate_guard_gaps.py
+      --force` green (79 cases, 6 workers, 302 s under load 30–44); `npm run check` in `site/` green.
+      **Run locally, in the workflow's order** (14-core Mac, a neighbour's Docker-heavy session running, load 24–38):
+      `frontend` — the gate with its registry half (64 skipped locked packages asked), crypto 449, web 4055 (32
+      skipped), admin-web 252 tests green, 4 min; `chart` — all three scripts green against the local Helm 4.0.1 (the
+      pinned-tarball step is Linux-only and was not run); `version` — the step's script with a push's inputs →
+      `0.481-SNAPSHOT`, kind `none`; `backend` — `./gradlew --no-daemon check` green, 8 m 15 s; `backend-races` —
+      56 filters in 3 projects on the pinned MariaDB, green, 7.5 min; `build` — `docker build` of `runtime-jvm` and
+      `runtime-nginx` on arm64 (the host's matrix leg), green, both from BuildKit's cache (15 s and 1 s, the inputs
+      unchanged by this phase), the app image carrying `VEYQ_VERSION` and the recipe under `/opt/veyq/deploy`.
+      **Not run:** `guards` as a job (its loop is the glob run above); `web-e2e` (`run_web_e2e.py` recreates the dev
+      compose stack's services from a worktree unless pinned, and a parallel session runs Docker-heavy e2e on it);
+      the amd64 image leg and Buildx's provenance/SBOM (no `docker/build-push-action` locally); `upgrade-proof`
+      (disabled); `publish` (registry writes and keyless signing exist only in GitHub). No CI run exists.
 - [ ] 3 **Budgets.** Every job of every workflow declares `timeout-minutes`, the values ADR 0091's table gives; a new
       guard holds the presence (every job, every workflow) and names the ADR as the values' home — it does not keep a
       second copy of the table. Bites: a job without `timeout-minutes` → red; a workflow added without any → red.

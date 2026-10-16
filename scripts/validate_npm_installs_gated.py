@@ -13,9 +13,11 @@ that installed the same lockfile first.
      install the lockfile, so no earlier scan of the lockfile speaks for it. One that runs `npm ci` is accepted
      **without** running the gate itself, on two premises this guard checks rather than trusts: (a) the stage
      `COPY`s the root `package-lock.json` before that `RUN` — so it installs the file the gate scanned — and (b)
-     every workflow job that builds the Dockerfile (a job carrying its path as a value, e.g. a matrix
-     `dockerfile:` entry) runs the gate itself or `needs:`, transitively, a job that does, so the gate has passed
-     on the same commit before the image build starts. A Dockerfile with an `npm ci` that no workflow job builds
+     no image built from it is published before the gate passed on the same commit: every workflow job that builds
+     the Dockerfile (a job carrying its path as a value, e.g. a matrix `dockerfile:` entry) runs the gate itself or
+     `needs:`, transitively, a job that does — or, when it starts beside the gate instead (ADR 0091 decision 2: the
+     build does not wait for the tests), it has jobs that need it, the ones that turn its build into a published
+     artifact, and every one of them needs a gating job. A Dockerfile with an `npm ci` that no workflow job builds
      is red too: nothing then covers its install.
   3. **Exactly one gated install per lockfile asks the registry** (inbox #312). The gate's registry half — the
      locked packages an install skipped, i.e. other platforms' bindings — depends only on the lockfile, so every
@@ -25,7 +27,8 @@ that installed the same lockfile first.
      per commit). The one that asks must cover the others of its lockfile: its workflow fires on every
      `push`/`pull_request` branch the other workflows gating that lockfile fire on (a missing `branches:` is every
      branch) and its path filter admits the lockfile's path; and for the root lockfile, every job that builds a
-     Dockerfile `needs:` it — the arm64 image is where those bindings are actually installed.
+     Dockerfile `needs:` it, or is needed only by jobs that do (premise (b)'s rule) — the arm64 image is where those
+     bindings are actually installed.
   4. **Every tracked `package-lock.json` is installed through the gate** by some workflow step — the root's and
      each package directory's outside the root workspace (`site/`, ADR 0087) — and every `--package-dir` a step
      names holds a tracked lockfile. A lockfile no gated step installs is a dependency tree nobody looks at.
@@ -36,8 +39,11 @@ logic in shell — both to scan a lockfile the gating job has already scanned at
 **The defect that bought it — no incident.** Built 2026-10-03 for inbox #293 and extended for #294, both left by
 #232: the gate existed, all four workflow installs called it, and nothing would have noticed a fifth that did not —
 the gate's own docstring said so as its limit. The two Dockerfiles' `npm ci` were, by the same docstring,
-"ungated", which on reading turned out to be true of the image step and false of the lockfile: `container.yml`'s
-`build` job `needs: test`, and `test` installs through the gate. That argument was prose; this makes it a check.
+"ungated", which on reading turned out to be true of the image step and false of the lockfile: the image workflow's
+(then `container.yml`) `build` job `needs: test`, and `test` installs through the gate. That argument was prose;
+this makes it a check. When the build stopped waiting for the tests (ADR 0091, 2026-10-16), the premise moved from
+"before the build starts" to "before the build is published": a dry-run build that installed a lockfile the gate
+then refuses ships nothing, because the publish needs the gate.
 
 **Its limits — what a green run does NOT prove.**
   - **Spellings it does not parse.** An install reached through `npx`, `yarn`/`pnpm`, a shell variable or alias, a
@@ -46,6 +52,10 @@ the gate's own docstring said so as its limit. The two Dockerfiles' `npm ci` wer
     `run_web_e2e.py --upgrade`, which installs a PREDECESSOR's lockfile in a worktree of that older commit - one the
     gate passed when it was the candidate, deliberately not gated again (a package deprecated since would turn the
     upgrade proof red for a reason that is not the upgrade; its `prepare_predecessor` says so).
+  - **Published, not built.** Premise (b)'s second form lets an image build install the lockfile before the gate's
+    verdict, and a dispatch's build pushes its per-arch staging tags (`build-<sha>-<arch>`) in that window; what it
+    holds is that no job that turns them into a release name runs without the gate. A registry write in the build
+    job itself is not judged here — `validate_release_identity.py` holds every registry write to a dispatch.
   - **Declarations, not runs.** Premise (b) is the `needs:` graph as written: a gating step or job whose `if:` is
     an expression is counted as running (only a literal `false` is not), and a build job that checks out a
     different ref than the gating job is not detected. There is no remote, so no CI run has executed either.
@@ -218,6 +228,15 @@ def needs_closure(jobs: dict, job_id: str) -> set[str]:
     return seen
 
 
+def gated_before_published(jobs: dict, builder: str, wanted: set[str]) -> bool:
+    """Whether a job of `wanted` has passed before the image `builder` builds can be published: the builder needs one
+    itself, or it has dependants — the jobs that turn its build into a published artifact — and every one does."""
+    if needs_closure(jobs, builder) & wanted:
+        return True
+    after = [j for j in jobs if j != builder and builder in needs_closure(jobs, j)]
+    return bool(after) and all(needs_closure(jobs, j) & wanted for j in after)
+
+
 # --- 2. Dockerfiles -----------------------------------------------------------------------------------------
 def instructions(body: str) -> list[tuple[int, str, str]]:
     """(line number, keyword, arguments) per instruction, continuation lines joined and comment lines dropped."""
@@ -279,11 +298,12 @@ for rel in sorted(dockerfiles):
                                   f"runs before it and nothing covers this install")
                 for wf, job_id in builders:
                     jobs = workflows[wf].get("jobs") or {}
-                    if not needs_closure(jobs, job_id) & gating.get(LOCKFILE, {}).get(wf, set()):
+                    if not gated_before_published(jobs, job_id, gating.get(LOCKFILE, {}).get(wf, set())):
                         errors.append(
                             f"{where} runs `npm {sub}`, and `{wf}` job `{job_id}` builds it without running "
-                            f"`{GATE}` itself or `needs:`-ing a job that does — so the image installs a lockfile "
-                            f"no gate has scanned on that commit"
+                            f"`{GATE}` itself or `needs:`-ing a job that does, and is needed by no job that "
+                            f"publishes only after one does — so an image of a lockfile no gate has scanned on that "
+                            f"commit can be published"
                         )
 
 
@@ -344,10 +364,11 @@ for lockfile in sorted(asking):
         for job_id, job in jobs.items():
             if not isinstance(job, dict) or not any(rel in scalars(job) for rel in npm_images):
                 continue
-            if wf != asking_wf or asking_job not in needs_closure(jobs, job_id):
-                errors.append(f"`{wf}` job `{job_id}` builds an image without `needs:`-ing the one registry-asking "
-                              f"install ({asking_label}) — the locked packages that image installs and the gating "
-                              f"platform skipped are then unasked on that commit")
+            if wf != asking_wf or not gated_before_published(jobs, job_id, {asking_job}):
+                errors.append(f"`{wf}` job `{job_id}` builds an image, and neither it nor every job that publishes "
+                              f"its build `needs:` the one registry-asking install ({asking_label}) — the locked "
+                              f"packages that image installs and the gating platform skipped are then unasked "
+                              f"before it ships")
 
 
 # --- 4. every tracked lockfile is installed through the gate -------------------------------------------------
@@ -369,6 +390,6 @@ if errors:
 
 askers = "; ".join(f"{lockfile} by {calls[0][0]} job `{calls[0][1]}`" for lockfile, calls in sorted(asking.items()))
 print(f"npm installs gated OK: {gate_calls} workflow step(s) install through {GATE} and none bypasses it; "
-      f"{image_installs} Dockerfile `npm ci` install the scanned lockfile behind a gated job; every tracked lockfile "
+      f"{image_installs} Dockerfile `npm ci` install the scanned lockfile, published only behind a gated job; every tracked lockfile "
       f"is installed through the gate, and each is asked of the registry by exactly one install ({askers}), which "
       f"covers the others")
