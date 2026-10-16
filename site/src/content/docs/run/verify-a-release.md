@@ -23,10 +23,10 @@ admin_digest="$(docker buildx imagetools inspect "ghcr.io/raddatzk/veyq-admin:${
 # 2. verify both signatures against the one identity that publishes veyq
 cosign verify "ghcr.io/raddatzk/veyq@${app_digest}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/container\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
 cosign verify "ghcr.io/raddatzk/veyq-admin@${admin_digest}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/container\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
 
 # 3. pull both by digest, and extract the recipe from the verified app image
 docker pull "ghcr.io/raddatzk/veyq-admin@${admin_digest}"
@@ -45,12 +45,12 @@ Under Helm, verify the chart the same way, once, and install it by that digest (
 chart_digest="$(docker buildx imagetools inspect "ghcr.io/raddatzk/charts/veyq:${version}" --format '{{.Manifest.Digest}}')"
 cosign verify "ghcr.io/raddatzk/charts/veyq@${chart_digest}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/container\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
 ```
 
 **If either `cosign verify` fails, stop.** Nothing has run yet, and nothing should.
 
-**What the identity accepts, and why it is this narrow.** A signature made by `container.yml` in
+**What the identity accepts, and why it is this narrow.** A signature made by `ci.yml`, veyq's one pipeline, in
 `raddatzk/veyq`, on `main` or a `release/<major>.x` branch, under GitHub's own OIDC issuer — which are exactly the
 branches the publish runs from, so what signs and what verifies agree. It rejects every other workflow in the
 repository, every other branch, pull-request and tag refs, every other owner, and every repository whose name
