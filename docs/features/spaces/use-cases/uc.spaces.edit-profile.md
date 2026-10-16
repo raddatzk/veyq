@@ -8,7 +8,7 @@
   hub is offered only there). Setting or removing the real name additionally needs the member's tenant grant
   (`K_tenant`); the username does not.
 - **Postconditions (success):** The member's per-tenant profile row carries the new `username` (plaintext,
-  unique in this tenant) and a real-name blob sealed under `K_tenant` at the address (this tenant's scope, the
+  unique in this tenant) and a real-name blob sealed under a field key derived from `K_tenant` at the address (this tenant's scope, the
   member's user id). Every member of the tenant sees the change in the directory; nothing changes in any other
   tenant.
 
@@ -20,7 +20,7 @@
 3. The client opens `K_tenant` from the member's own tenant grant and unseals the name on the device, at the
    address (tenant scope, own user id).
 4. The member edits the username, the first name and/or the last name.
-5. On save, the client seals the first and last name under `K_tenant` at that address. The name may be empty,
+5. On save, the client seals the first and last name under a field key derived from `K_tenant` at that address. The name may be empty,
    and an empty name is sealed like any other. The client sends the username (trimmed, lower-cased), the sealed
    blob and the consent preference.
 6. The server re-checks that the username is free in this tenant, stores the handle and the blob verbatim, and

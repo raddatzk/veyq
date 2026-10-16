@@ -2,14 +2,14 @@ useCase: uc.memory.date
 feature: memory
 title: Curate a Memory's date — sealed on the node
 # Slice 1 (cr-0067) = the sealed date. The node gains one opaque, client-versioned `wrappedMeta` blob
-# (`{v, date{mode,from?,to?}, location?}`) sealed under K_node (AAD context node-meta) — set at createNode + the
+# (`{v, date{mode,from?,to?}, location?}`) sealed under a field key derived from K_node (AAD context node-meta) — set at createNode + the
 # partial updateNode, returned on listNodes; the blind server only stores + echoes ciphertext. Web ships the
 # 4-mode date editor in the detail header, the materialized `auto` range (self-healing on open + after an upload
 # batch), and the browse card range + date-sort. Place (the node's `location`) is its own use-case
 # (uc.memory.place); the aggregated range is a later slice (see gaps).
 acceptanceCriteria:
   - id: sealed-wrapped-meta-node
-    text: A MEMORY/CHAPTER node carries an optional opaque `wrappedMeta` blob (a client-versioned JSON `{v,date,location?}` sealed under the node's K_node, AAD context node-meta). It is set at createNode, updated by the partial updateNode (a non-null value replaces it; a rename that omits it leaves it unchanged), and returned on listNodes so a browse card can read it without loading media. The operator-blind server stores + echoes the ciphertext and never inspects it.
+    text: A MEMORY/CHAPTER node carries an optional opaque `wrappedMeta` blob (a client-versioned JSON `{v,date,location?}` sealed under a field key derived from the node's K_node, AAD context node-meta). It is set at createNode, updated by the partial updateNode (a non-null value replaces it; a rename that omits it leaves it unchanged), and returned on listNodes so a browse card can read it without loading media. The operator-blind server stores + echoes the ciphertext and never inspects it.
     coverage:
       backend: { integration: [NodesSliceTest.wrappedMetaRoundTripsAndPartialUpdateLeavesItUnchanged] }
       web:

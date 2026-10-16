@@ -4,13 +4,13 @@ title: Share note — a curator attaches an editable message to a share
 # cr-0115 (ADR 0036) delivers it end-to-end: contracts (sealedNote + sealedShareKey on create, sealedNote on
 # resolve/summary, a new owner-gated updateShare) → backend (two nullable TEXT columns on veyq_share, updateNote
 # owner-gated) → web (share.ts seal/recover/read + updateShareNote, the ShareDialog note field + in-place editor,
-# the ShareView note banner reusing the cr-0114 markdown renderer). The note seals under K_share (AAD share-note);
+# the ShareView note banner reusing the cr-0114 markdown renderer). The note seals under a field key derived from K_share (AAD share-note);
 # a member-recoverable sealed_share_key (K_share under K_SC(epoch), ADR 0036 point 4) lets the curator edit it in
 # place — operator-blind (K_share never in the clear). Backend slice tests run over the full HTTP stack; the note
 # lifecycle is hermetic there (it needs the grant flow + client crypto), and sharing.http asserts the updateShare
 # auth wall.
-# cr-0116 extends this: the note becomes PER-LOCALE (a {de,en} JSON map under K_share, no contract change — the
-# viewer picks their locale), a share gains an optional private NAME (sealed_share_name under K_share, management-
+# cr-0116 extends this: the note becomes PER-LOCALE (a {de,en} JSON map sealed the same way, no contract change — the
+# viewer picks their locale), a share gains an optional private NAME (sealed_share_name, a field key derived from K_share, management-
 # only — never on the viewer resolve), and the dialog is redesigned (list-only + a separate create dialog, the
 # uploader as its own rights-gated action, copy-only links). The anonymous acceptance gate + password
 # protection are later CRs (cr-0117 / cr-0118).
@@ -21,7 +21,7 @@ title: Share note — a curator attaches an editable message to a share
 # `mustAccept` is no field on the raw wire) also runs in src/features/memory/folderShare.e2e.test.ts.
 acceptanceCriteria:
   - id: curator-sets-note-at-creation
-    text: When creating a share, the curator may attach an optional note; the client seals it under K_share (AAD share-note) and stores it alongside sealed_share_key (K_share sealed under K_SC at the scope's current epoch, with that epoch). A share with no note stores nothing and shows no banner.
+    text: When creating a share, the curator may attach an optional note; the client seals it under a field key derived from K_share (AAD share-note) and stores it alongside sealed_share_key (K_share sealed under K_SC at the scope's current epoch, with that epoch). A share with no note stores nothing and shows no banner.
     coverage:
       backend: { integration: [ShareNoteSliceTest.createWithNoteThenAnonymousResolveReturnsIt, ShareNoteSliceTest.createWithoutNoteResolvesNullAndTheManageListCarriesTheRecoverableKey] }
       web: { unit: [src/features/memory/share.test.ts] }
@@ -49,7 +49,7 @@ acceptanceCriteria:
     text: >
       With a note, the curator may tick "must be accepted before opening" — a checkbox under the note editor, off by
       default, enabled only while the note has text, read back on edit from the opened note and carried by a renew.
-      It is sealed INSIDE the note under K_share — the plaintext is {"texts": {locale: markdown}, "mustAccept": true}
+      It is sealed INSIDE the note — the plaintext is {"texts": {locale: markdown}, "mustAccept": true}
       — and a note with the switch off is written as the flat {locale: markdown} map, exactly as before, so the
       operator cannot tell which links ask. A note with no text seals nothing, switch or not.
     coverage:

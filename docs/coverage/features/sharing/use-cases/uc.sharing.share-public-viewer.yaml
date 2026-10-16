@@ -11,7 +11,7 @@ title: Share a Memory as a public viewer link (web)
 # and notices are separate later slices.
 acceptanceCriteria:
   - id: create-public-share
-    text: A curator turns one of their personal-scope Memories into a public share — the client generates a random K_share and a 256-bit unguessable shareId, computes symWrap(K_share, K_node), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role READ, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id; it never sees K_share, K_node, or the name. The link is /s/{shareId}#k=base64url(K_share) with the key in the fragment.
+    text: A curator turns one of their personal-scope Memories into a public share — the client generates a random K_share and a 256-bit unguessable shareId, computes symWrap(K_share, K_node), re-seals the Memory name under a field key derived from K_share, and POSTs { shareId, nodeId, role READ, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id; it never sees K_share, K_node, or the name. The link is /s/{shareId}#k=base64url(K_share) with the key in the fragment.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.listReturnsCallersSharesForTheMemory]
@@ -29,7 +29,7 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: anonymous-media-read
-    text: GET /api/shares/{shareId}/media is unauthenticated, passes the same password gate as the resolve, and returns the Memory's media metadata (sealed under K_node) plus the wrapped keys of the uploader identities whose media it holds — never a name. The viewer decrypts it locally with the K_node the resolve's wrap yields.
+    text: GET /api/shares/{shareId}/media is unauthenticated, passes the same password gate as the resolve, and returns the Memory's media metadata (sealed under field keys derived from K_node) plus the wrapped keys of the uploader identities whose media it holds — never a name. The viewer decrypts it locally with the K_node the resolve's wrap yields.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName, SharePasswordSliceTest.theMediaReadRequiresThePasswordToken]
@@ -85,7 +85,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/memory/share.test.ts]
   - id: operator-blind-and-tier-honesty
-    text: The server stores only shareId, the wrap, the plaintext role, the K_share-sealed name, and nodeId — never K_share/K_node/names/viewer/which-media. The no-install viewer is operator-served web (passive-operator-safe, not operator-proof against an active foreign operator); this is surfaced honestly via a footer link to veyq's security documentation, not an explicit in-viewer warning. Self-hosted (operator = curator) makes the gap moot.
+    text: The server stores only shareId, the wrap, the plaintext role, the sealed name, and nodeId — never K_share/K_node/names/viewer/which-media. The no-install viewer is operator-served web (passive-operator-safe, not operator-proof against an active foreign operator); this is surfaced honestly via a footer link to veyq's security documentation, not an explicit in-viewer warning. Self-hosted (operator = curator) makes the gap moot.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.createRequiresAuth]
@@ -94,8 +94,8 @@ acceptanceCriteria:
   - id: folder-share-root
     text: >-
       A member shares a folder READ through core's own dialog: the link wraps the folder's own key under K_share and
-      seals its name under K_share. The guest's resolve has rootKind FOLDER and the descendants' names and key wraps,
-      each under its parent's key, and nothing of the root's own entry nor of anything beside or above it; a blob
+      seals its name under a field key derived from K_share. The guest's resolve has rootKind FOLDER and the descendants'
+      names and key wraps, each under (a field key derived from) its parent's key, and nothing of the root's own entry nor of anything beside or above it; a blob
       under the subtree is served, one beside it is 404. The guest page browses the folder as a member does — core's
       level view handed the guest's access and tree (inbox #401 S2): a Memory is the member's card with its sealed date
       and cover, a sub-folder a folder card, nothing a member alone may do is offered and no authenticated client is

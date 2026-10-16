@@ -45,8 +45,8 @@ under the chapter's key). Consequence of this layout: every content node is a **
 single **re-wrap, never a data re-encrypt** — the *decision + rationale* (why recursive, not "shares the
 parent's key") is ADR 0012.
 
-A node's **directory entry** — its name and its slug token — lives under the **same parent key** its content key
-wraps under (`K_SC` at the node's epoch for a scope-root entry, the parent node's key below it — [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+A node's **directory entry** — its name, sealed under a field key derived from it, and its slug token — lives under
+the **same parent key** its content key wraps under (`K_SC` at the node's epoch for a scope-root entry, the parent node's key below it — [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
 Decision 2). A member, holding `K_SC`, decrypts the whole tree top-down in one pass (each node's key opens the
 names below it); whoever holds one node's key — a share guest — reads every name below that node and nothing
 above it. Dedup keys off `K_SC`; a Memory's *content* needs its `K_node` ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)).
@@ -54,7 +54,7 @@ above it. Dedup keys off `K_SC`; a Memory's *content* needs its `K_node` ([ADR 0
 ## Main flow — create a folder / a Memory
 
 1. The client picks a name; it computes the **slug token** `HMAC/HKDF(K_parent, parentId ‖ slugify(name))` (blind;
-   the server can't reverse it) and **encrypts the name** under `K_parent` — the parent's content key, `K_SC` at the
+   the server can't reverse it) and **encrypts the name** under a field key derived from `K_parent` — the parent's content key, `K_SC` at the
    scope root.
 2. Generate a fresh random content key (a Memory's **`K_node`**, a folder's key) and wrap it under `K_parent`.
 3. POST the node: `{ nodeId, parentId, kind, encryptedName, slugToken, orderIndex, wrappedContentKey? }` — the
@@ -88,7 +88,7 @@ sequenceDiagram
 
 - **Move and rename are one placement write** ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   Decision 3; a rename is a move to the same parent): the node's own key is **re-wrapped** under the destination
-  parent's key, its name re-sealed and its **slug token recomputed** under that key, all bound to the next
+  parent's key, its name re-sealed (under a field key derived from that key, freshly salted) and its **slug token recomputed** under that key, all bound to the next
   `placementRevision`, which the request states it was built on. The server compare-and-sets it
   (`409 stale_placement`: the client re-reads and rebuilds once) and checks structure only — a live destination in
   the same scope, the kind's placement rule, no cycle, a free slug — under the tree's scope lock. An entry at the

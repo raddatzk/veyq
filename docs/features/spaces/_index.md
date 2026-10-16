@@ -49,7 +49,7 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   [ADR 0020](../../decisions/0020-grant-distribution-invite-wrap.md); delivery + onboarding + a mail-only invite,
   [ADR 0055](../../decisions/0055-mail-is-a-precondition-not-a-capability.md))
 - [Edit your profile in a space](use-cases/uc.spaces.edit-profile.md) — **built (web)** (change your per-tenant
-  username and your real name, sealed under `K_tenant` on the device; empty both name fields to remove the name;
+  username and your real name, sealed under a field key derived from `K_tenant` on the device; empty both name fields to remove the name;
   [en.spaces.member-identity](enablers/en.spaces.member-identity.md), [ADR 0023](../../decisions/0023-per-tenant-member-identity.md))
 - [Set your profile picture in a space](use-cases/uc.spaces.set-profile-picture.md) — **built (web, backend, contract)**
   (a sealed constant-length picture on the per-tenant profile row, tenant members only, set in Settings or on your

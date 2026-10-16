@@ -31,7 +31,7 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
 
 1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Contributor** role (instead of
    Viewer). The client mints `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_node)`, re-seals
-   the Memory name under `K_share`, and `POST`s the share record `{ shareId, nodeId, role: READ_WRITE, wrap,
+   the Memory name under a field key derived from `K_share`, and `POST`s the share record `{ shareId, nodeId, role: READ_WRITE, wrap,
    sealedName, writeVerifier, expiresAt? }` — `writeVerifier` is the hash of a write token derived from `K_share`
    ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)). The server stores the record opaquely under that id.
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` rides the
@@ -40,7 +40,7 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
    auth**) → the record + the sealed subtree, and renders the Memory exactly as a member sees it (inbox #401) — the
    same view, with the functions a contributor lacks removed. At the visitor's **first write** the page asks for a
    **mandatory display name** in its one naming dialog (core's `GuestNaming`; nothing is sent before it). The
-   visitor enters a display name; the client **seals it under `K_node`** and creates an
+   visitor enters a display name; the client **seals it under a field key derived from `K_node`** and creates an
    **anonymous share identity** under an `identityId` it mints (`POST /api/shares/{shareId}/identities
    { identityId, sealedDisplayName }` → `{ identityId, contributorToken }`, held on device). The request proves the
    visitor holds the whole link: `X-Share-Write` carries the token derived from the fragment key, and the server
@@ -84,7 +84,7 @@ sequenceDiagram
   C->>V: hand off link /s/{shareId}#35;k=…   (fragment, never sent)
   V->>S: GET /api/shares/{shareId}   (no auth)
   S-->>V: record (role READ_WRITE) + sealed subtree — no guest's name
-  V->>V: K_node = unwrap(wrap, K_share)#59; seal display name under K_node
+  V->>V: K_node = unwrap(wrap, K_share)#59; seal display name under a field key from K_node
   V->>S: POST /identities { identityId (client-minted), sealedDisplayName } + X-Share-Write (from K_share)
   S-->>V: identityId + contributorToken
   V->>V: seal photo under fresh K_blob (wrapped under K_node) + derivatives + meta
@@ -134,7 +134,7 @@ sequenceDiagram
 ## Quality notes
 
 - **Operator-blind.** The server stores the share record (as in ADR 0029) **plus** an opaque `share_identity`
-  (the `K_node`-sealed contributor name + a token hash) and a `share_identity_id` stamp on each contributed media.
+  (the sealed contributor name + a token hash) and a `share_identity_id` stamp on each contributed media.
   It never sees `K_share`, `K_node`, the Memory name, the contributor's name, the photo bytes, or *who* the person
   is — only that an opaque identity contributed opaque ciphertext.
 - **Mandatory name = the buckets hook.** The contributor names themselves once; the sealed name → the anonymous

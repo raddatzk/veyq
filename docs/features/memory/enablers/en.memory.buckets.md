@@ -1,11 +1,11 @@
-# Enabler: Media uploader buckets (`owner_key` + `K_node`-sealed names, virtual primary + sub-buckets)
+# Enabler: Media uploader buckets (`owner_key` + sealed names, virtual primary + sub-buckets)
 
 - **ID:** en.memory.buckets
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
 - **Provides:** the **bucket data layer** for a Memory — a per-**uploader** container within a Memory node, keyed
   by an opaque **`owner_key`**, with a **lazy, virtual primary** bucket per uploader + optional **one-level
-  sub-buckets**, names **sealed under `K_node`**, and media attached through a nullable **`bucket_id`**. It is the
+  sub-buckets**, names **sealed under a field key derived from `K_node`** (or from a guest's `K_up`), and media attached through a nullable **`bucket_id`**. It is the
   **attribution + organization substrate** (who contributed a medium, and into which of *their* containers); the
   *experience* — the "Beiträge" grouping tab, the sub-bucket management UI — is the use-cases on top.
 - **Serves (use-cases):** [uc.memory.buckets](../use-cases/uc.memory.buckets.md) (the "Beiträge" per-uploader
@@ -54,12 +54,12 @@
 - **Virtual-until-upload primary.** A primary bucket materializes **lazily** — a find-or-create keyed on
   `(node_id, owner_key)` on the uploader's **first upload** (or first sub-bucket). An uploader with no media has
   **no row** and does not appear. Its name is **derived** (member = the per-tenant username; contributor = the
-  identity's sealed name) and **sealed under `K_node`** so the grouping view is uniform + operator-blind; the
+  identity's sealed name) and **sealed** like any bucket name, so the grouping view is uniform + operator-blind; the
   primary is **not renameable**. Exactly **one primary per `(node, owner_key)`**: the find-or-create runs under
   the node row's lock, so two concurrent first uploads share one
   ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md) §4).
 - **Sub-buckets.** **One level** under a primary (the parent must be a primary), **owner inherited** from the
-  parent, a **`K_node`-sealed** user-chosen name. **No reparenting**, no arbitrary nesting.
+  parent, a **sealed** user-chosen name. **No reparenting**, no arbitrary nesting.
 - **Reparent-on-delete.** Deleting a sub-bucket sets its media **`bucket_id = null`** (they fall back to the
   owner's primary) — media are **never lost**. **Primaries are not deletable.** *(This reverses the pre-E2EE
   code, which hard-deleted a sub-bucket's media — see ADR 0034.)*

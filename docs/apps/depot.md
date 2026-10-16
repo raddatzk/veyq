@@ -23,7 +23,7 @@
   § The drop box); a `WRITE_ONLY` link on a plain `FOLDER` stays refused. Viewer and
   contributor shares carry over from the platform; what a guest may do with a `FILE` is the role matrix in § Guests
   (ADR 0080 decision 6; no declaration allows nothing).
-- Rides on the platform's blobs, quota and trash; names sit under the parent's key, `K_SC` only at the scope root.
+- Rides on the platform's blobs, quota and trash; names seal under a field key derived from the parent's key, `K_SC` only at the scope root.
 
 ## How a file is stored
 
@@ -461,9 +461,9 @@ write and the display are core's, the image is the box's own blob in the `COVER`
 - **The keys.** The drop box's drop key pair is core's (`veyq_node.sealed_drop_private_key` under the drop box's key,
   the public half per link under `K_share`, set with the first link exactly as for a Memory's uploader link,
   `core/sharing/dropKey.ts`). A guest names itself with its own identity key `K_up`, wrapped to the drop public key
-  (`veyq_share_identity.wrapped_identity_key`, seal `upload-identity-key`) and its name sealed under `K_up`. Its folder's
-  entry — name (the guest's display name), slug and the folder's fresh key `K_F` — is sealed under **`K_up`** (seals
-  `node-name`, `content-key`, epoch 0); everything below the folder is an ordinary subtree under `K_F`. A member (or a
+  (`veyq_share_identity.wrapped_identity_key`, seal `upload-identity-key`) and its name sealed under a field key derived from `K_up`. Its folder's
+  entry — name (the guest's display name), slug and the folder's fresh key `K_F` — lives under **`K_up`** (the name
+  under a field key derived from it, `node-name`; the key wrapped, `content-key`; epoch 0); everything below the folder is an ordinary subtree under `K_F`. A member (or a
   guest of a link above the drop box) opens drop box key → drop private key → `K_up` → `K_F` (core's tree,
   `childEntryKey`); no new seal purpose, no vector change. A guest-sealed entry that does not open leaves that folder
   out of the member's tree instead of failing it.

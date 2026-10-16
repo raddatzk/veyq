@@ -98,7 +98,7 @@ sequenceDiagram
   stores the grant as opaque ciphertext. No scope key ever crosses the wire.
 - **Member identity ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md), cr-0083).** Each
   member shows a per-tenant **`username`** (plaintext handle, chosen at join, unique in the tenant) and their
-  **real name sealed under `K_tenant`** — decrypted on-device by any member, never seen by the server;
+  **real name sealed under a field key derived from `K_tenant`** — decrypted on-device by any member, never seen by the server;
   **`email` is owner-only** ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)).
 - **Auth ≠ content.** Onboarding makes someone a *member* (a role); it grants **no content**. Only the
   identity-unwrapped grant yields the key — a role without a grant is deliberately hollow

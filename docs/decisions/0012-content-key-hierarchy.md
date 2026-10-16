@@ -26,7 +26,7 @@ it once a folder had to be shareable, with a move as one O(1) re-wrap.)
    Obtained by a member by **opening their grant** — the grant's plaintext *is* the scope's current epoch key;
    there is no key in between. It is the **navigation root**: the **names** and **blinded slug tokens**
    (`slug_token`) of the **scope-root entries** key off the scope's **current content-epoch key**; every node below
-   keeps its name and slug token under its **parent's** content key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+   keeps its name (under a field key derived from it) and slug token under its **parent's** content key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
    Decision 2). A member who holds the scope therefore opens the **whole tree's keys and names** down the chain from
    `K_SC`. (The per-scope **dedup token** is the one exception: it
    keys off a **stable, non-rotating** scope sub-key so identical blobs still deduplicate across epochs, [ADR 0024](0024-scope-key-rotation.md).)

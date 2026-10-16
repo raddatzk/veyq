@@ -3,7 +3,7 @@ feature: memory
 title: Memory cover — a chosen, cropped cover shown everywhere
 # Built web-first. The cover reuses the node's `wrappedMeta` blob (date cr-0067, location cr-0069) and adds a
 # `cover` sub-object `{ source (media mediaId | upload blob ref), crop{x,y,width,height} 0..1 }`, sealed under
-# K_node, set via the same partial updateNode, returned on listNodes. Deliberate pick (no auto-cover), one
+# a field key derived from K_node, set via the same partial updateNode, returned on listNodes. Deliberate pick (no auto-cover), one
 # normalized crop shown identically on **three** surfaces: the browse card, the detail header and the map pin (the
 # sidebar's Favorites entry was a fourth until core took the section over, inbox #409). cr-0072 built the existing-media source (web, no backend); cr-0073 added the
 # new-upload source — a standalone cover blob (contract + backend + web) committed with no `veyq_media` row; the
@@ -14,7 +14,7 @@ title: Memory cover — a chosen, cropped cover shown everywhere
 # which core's one cover dialog offers it). The dialog, the crop editor and the write are core's too (follow-up 2026-10-12).
 acceptanceCriteria:
   - id: sealed-cover-on-node
-    text: A MEMORY/CHAPTER node's `wrappedMeta.cover` carries ONE cover — a source (an existing media `mediaId`, or a standalone uploaded blob ref) + a `crop {x,y,width,height}` normalized to 0..1 of the source image — sealed under K_node in the same client-versioned blob as the date + location (no contract change for the media source), set via the partial updateNode and returned on listNodes. The operator-blind server never sees which image or the crop.
+    text: A MEMORY/CHAPTER node's `wrappedMeta.cover` carries ONE cover — a source (an existing media `mediaId`, or a standalone uploaded blob ref) + a `crop {x,y,width,height}` normalized to 0..1 of the source image — sealed under a field key derived from K_node in the same client-versioned blob as the date + location (no contract change for the media source), set via the partial updateNode and returned on listNodes. The operator-blind server never sees which image or the crop.
     coverage:
       web:
         unit:

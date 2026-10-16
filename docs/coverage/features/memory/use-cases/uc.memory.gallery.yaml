@@ -112,7 +112,7 @@ acceptanceCriteria:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps, MediaSliceTest.mediaWithoutDerivativesListsEmptyTiers] }
       web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MemoryDetail.test.ts, src/features/memory/components/MediaLightbox.test.ts] }
   - id: justified-grid-sealed-dimensions
-    text: The web grid is laid out justified (aspect-preserving rows that fill the width); each media's geometry (w,h) rides the always-listed metadata tier (wrappedMeta, cr-0068 consolidating cr-0064's wrappedLayout + cr-0066's wrappedCapturedAt) sealed under K_node at upload and unwrapped on device to drive the layout, so the blind server never sees pixel dimensions. Media without a sealed geometry fall back to a default aspect.
+    text: The web grid is laid out justified (aspect-preserving rows that fill the width); each media's geometry (w,h) rides the always-listed metadata tier (wrappedMeta, cr-0068 consolidating cr-0064's wrappedLayout + cr-0066's wrappedCapturedAt) sealed under a field key derived from K_node at upload and unwrapped on device to drive the layout, so the blind server never sees pixel dimensions. Media without a sealed geometry fall back to a default aspect.
     coverage:
       backend: { integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.mediaWithoutDerivativesListsEmptyTiers] }
       web:
@@ -121,7 +121,7 @@ acceptanceCriteria:
           - src/features/memory/media.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: lightbox-exif-detail
-    text: Opening an item lazily fetches its sealed panel bundle (wrappedExif) via the exif endpoint (getMediaExif) — kept out of the list so it stays constant-small — and unwraps it on device under K_node to fill the detail panel. The bundle's contents are a versioned client-only shape and are deliberately NOT enumerated here (the fields themselves are covered by panel-shows-what-the-photo-knows); what this criterion pins is the tier mechanics. The capture date, coordinates and resolved place name come instantly from the always-listed metadata tier (wrappedMeta), not the lazy bundle. The blind server never sees any field; an item without a sealed bundle shows a no-detail message (cr-0064/0068).
+    text: Opening an item lazily fetches its sealed panel bundle (wrappedExif) via the exif endpoint (getMediaExif) — kept out of the list so it stays constant-small — and unwraps it on device with K_node to fill the detail panel. The bundle's contents are a versioned client-only shape and are deliberately NOT enumerated here (the fields themselves are covered by panel-shows-what-the-photo-knows); what this criterion pins is the tier mechanics. The capture date, coordinates and resolved place name come instantly from the always-listed metadata tier (wrappedMeta), not the lazy bundle. The blind server never sees any field; an item without a sealed bundle shows a no-detail message (cr-0064/0068).
     coverage:
       backend: { integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.mediaExifWithoutExifIsNull, MediaSliceTest.mediaExifForUnknownMediaIs404] }
       web:
@@ -148,7 +148,7 @@ acceptanceCriteria:
           - src/features/memory/media.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
   - id: date-sorted-grid
-    text: The gallery sorts tiles by effective capture time (newest first by default, a header toggle for oldest first; undated media last). Each media's capturedAt is sealed under K_node in the always-listed metadata tier (wrappedMeta — geometry + capture time + GPS; cr-0066/0068) — the derived original is the EXIF DateTimeOriginal or the file's creation date, so the blind server never sees a timestamp yet the grid can order client-side. A lightbox correction re-sorts without a refetch. The rule covers EVERY tile, including one still uploading — an in-flight tile takes its capture-time place from the same EXIF-else-file-date rule the sealed tier will carry, derived on device before a byte is uploaded, so finishing an upload changes a tile's content and never its place. There is no privileged front block, and one surface — a share guest's gallery is the member's (inbox #401), and the drop page's own tiles sort through the same comparator.
+    text: The gallery sorts tiles by effective capture time (newest first by default, a header toggle for oldest first; undated media last). Each media's capturedAt is sealed under a field key derived from K_node in the always-listed metadata tier (wrappedMeta — geometry + capture time + GPS; cr-0066/0068) — the derived original is the EXIF DateTimeOriginal or the file's creation date, so the blind server never sees a timestamp yet the grid can order client-side. A lightbox correction re-sorts without a refetch. The rule covers EVERY tile, including one still uploading — an in-flight tile takes its capture-time place from the same EXIF-else-file-date rule the sealed tier will carry, derived on device before a byte is uploaded, so finishing an upload changes a tile's content and never its place. There is no privileged front block, and one surface — a share guest's gallery is the member's (inbox #401), and the drop page's own tiles sort through the same comparator.
     coverage:
       # Sorting is client-side; cite the tests that assert the ORDER. MemoryDetail.test.ts asserts newest-first
       # default + the oldest-first toggle re-sorting already-listed tiles with no refetch (and a lightbox date
@@ -167,7 +167,7 @@ acceptanceCriteria:
           - src/features/memory/components/MemoryDetail.test.ts
           - src/features/memory/components/MemoryDetail.optimistic.test.ts
   - id: lightbox-correct-capturedat
-    text: From the lightbox a user can correct (or set) a media's capture time; the correction is sealed under K_node inside the listed metadata tier (wrappedMeta) as capturedAtOverride alongside the immutable extracted original (geometry + GPS ride along unchanged), re-sealed client-side and PUT verbatim (updateMediaMeta) — the blind server never sees the date. The panel shows the effective time (override ?? original) with a "corrected" indicator and can reset to the original; a media with no EXIF can have a date set (cr-0065/0068).
+    text: From the lightbox a user can correct (or set) a media's capture time; the correction is sealed under a field key derived from K_node inside the listed metadata tier (wrappedMeta) as capturedAtOverride alongside the immutable extracted original (geometry + GPS ride along unchanged), re-sealed client-side and PUT verbatim (updateMediaMeta) — the blind server never sees the date. The panel shows the effective time (override ?? original) with a "corrected" indicator and can reset to the original; a media with no EXIF can have a date set (cr-0065/0068).
     coverage:
       backend: { integration: [MediaSliceTest.updateMetaOverwritesSealedTierAndLists, MediaSliceTest.updateMetaForUnknownMediaIs404] }
       web:
@@ -175,7 +175,7 @@ acceptanceCriteria:
           - src/features/memory/media.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
   - id: sealed-media-type
-    text: A media's full MIME type is sealed under K_node inside the always-listed metadata tier (wrappedMeta) at upload — never a server-visible field (an application of ADR 0044 — a plaintext mediaType would leak photo-vs-video-vs-PDF per medium; ADR 0047). The blind server relays the same opaque blob it already does (its opaque relay is proven under justified-grid-sealed-dimensions); the client unseals it (isVideoMediaType) to drive the video signal. cr-inline-video-playback (#104/#105).
+    text: A media's full MIME type is sealed under a field key derived from K_node inside the always-listed metadata tier (wrappedMeta) at upload — never a server-visible field (an application of ADR 0044 — a plaintext mediaType would leak photo-vs-video-vs-PDF per medium; ADR 0047). The blind server relays the same opaque blob it already does (its opaque relay is proven under justified-grid-sealed-dimensions); the client unseals it (isVideoMediaType) to drive the video signal. cr-inline-video-playback (#104/#105).
     coverage:
       web:
         unit:

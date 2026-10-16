@@ -2,7 +2,7 @@
 
 - **ID:** uc.memory.cover
 - **Primary actor:** A member with an **unlocked vault** who has a Memory open and wants to give it a **cover**.
-- **Goal:** Curate a Memory's **cover** — pick **one image** and **crop** it — **sealed under the Memory's `K_node`**
+- **Goal:** Curate a Memory's **cover** — pick **one image** and **crop** it — **sealed under a field key derived from the Memory's `K_node`**
   and shown identically wherever the Memory appears: its **browse card**, its **detail header**, its **map pin**
   ([uc.memory.place](uc.memory.place.md)) and its entry in the **sidebar's Favorites**. **A cover is core's since inbox
    #411** ([uc.platform.node-cover](../../platform/use-cases/uc.platform.node-cover.md)): the action ("Set cover" /
@@ -31,7 +31,7 @@ nothing; unset ⇒ a placeholder shows, like a location is never auto-created). 
 The **crop is normalized `{ x, y, width, height }` in 0..1** against the source image (the pre-E2EE design source's
 `CoverCrop`), so **one stored crop renders identically at any size** — a rail tile, a small card, a larger detail
 header, or a map pin — with no per-surface crop and no cropped-image upload. The whole `cover { source, crop }` is sealed in the
-node's `wrappedMeta` under `K_node`; the display just expands the decrypted thumbnail inside an `overflow:hidden` box
+node's `wrappedMeta` (under a field key derived from `K_node`); the display just expands the decrypted thumbnail inside an `overflow:hidden` box
 and offsets it.
 
 ## Main flow
@@ -50,7 +50,7 @@ and offsets it.
    the lightbox**, an **uploaded image**, or the **current cover re-framed**; the user **drag-pans** and **zooms**
    (1–3×) to frame it. Save normalizes the pan/zoom back to the `0..1` crop rectangle.
 3. On save, the client seals `cover { source, crop }` — `source` = the media `mediaId` or the uploaded blob ref —
-   into the node's `wrappedMeta` under `K_node` (read-modify-write — the sibling date/location are preserved) and sends it with
+   into the node's `wrappedMeta` (read-modify-write — the sibling date/location are preserved) and sends it with
    core's write: a new image is `setNodeCover` (the open upload AND the meta that names it, one transaction), a switch away
    from an uploaded cover or its removal is `removeNodeCover` (the blob freed in the same write), anything else a plain
    `updateNode`. The blob step is decided from the cover the write replaced
@@ -80,7 +80,7 @@ and offsets it.
 ## Quality notes
 
 - **Operator-blind.** The server holds the node shape + the **opaque `wrappedMeta`**; never the chosen image id or
-  the crop. The cover is sealed under `K_node` and unsealed only on device. (Envelope + node-level blindness:
+  the crop. The cover is sealed in `wrappedMeta` and unsealed only on device. (Envelope + node-level blindness:
   [en.memory.node-meta](../enablers/en.memory.node-meta.md).)
 - **One normalized crop, one image, everywhere.** A single `0..1` crop drives the card, the detail header, the
   map pin through one shared display formula — a Memory reads as itself wherever

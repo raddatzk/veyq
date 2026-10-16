@@ -26,7 +26,7 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
 1. **The share resource (opaque server state).** A share record holds: a **256-bit random `shareId`**
    (base64url, unguessable — the id is half the capability), the wrap **`symWrap(K_share, K_node)`**, the fixed
    **`role = READ`** (renamed 2026-10-06 from `VIEWER` —
-   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)'s three access modes), the shared Memory's **name re-sealed under `K_share`**, the **`nodeId`** of the shared
+   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)'s three access modes), the shared Memory's **name re-sealed under a field key derived from `K_share`**, the **`nodeId`** of the shared
    Memory (the subtree root, used only to gate blob reads), `enabled`, and an optional `expiresAt`. The server
    **never** sees `K_share`, `K_node`, any name, or the viewer — only ciphertext + these opaque fields.
 
@@ -38,7 +38,7 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
    ([ADR 0076](0076-a-guest-write-proves-it-holds-the-links-key.md)).
 
 3. **Anonymous resolve.** `GET /api/shares/{shareId}` is **unauthenticated** and returns the record **plus the
-   sealed subtree** (nodes + media metadata under `nodeId`, all still sealed under `K_node`). The viewer unwraps
+   sealed subtree** (nodes + media metadata under `nodeId`, all still sealed under `K_node` or keys derived from it). The viewer unwraps
    `K_node` with the fragment key, then decrypts names, layout, media metadata and blob frames **locally**. This is
    a **parallel authorization path keyed on share state** — never a relaxed tenant/scope filter.
 
@@ -123,7 +123,7 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
 - **Least-privilege is crypto-enforced**, not server-gated: a leaked share exposes exactly one Memory subtree,
   never the scope or a sibling Memory.
 - **New server-visible operational surface** (all non-sensitive): the opaque `shareId`, the wrapped key, the
-  plaintext `role`, and the `K_share`-sealed name. No content, no identity, no viewer. A deleted link leaves its
+  plaintext `role`, and the sealed name. No content, no identity, no viewer. A deleted link leaves its
   id, scope, node, role and its `deleted_at` (to the second) behind — the operator served its deletion anyway.
 - **Scope rotation does not revoke a share.** A share wraps `symWrap(K_share, K_node)`, independent of `K_SC`.
   Removing a scope member rotates `K_SC` forward (a new epoch, [ADR 0024](0024-scope-key-rotation.md)) but leaves

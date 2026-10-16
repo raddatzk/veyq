@@ -9,8 +9,8 @@
   placement write exist ([en.memory.tree](../enablers/en.memory.tree.md),
   [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 3).
 - **Postconditions (success):** the node lists under its new parent, its own content key unchanged — so every key, name
-  and blob below it opens as before — its key re-wrapped and its name and slug token re-sealed under the destination's
-  key at the next placement revision. A drop-box guest's folder moved out by a member is an ordinary folder from then on.
+  and blob below it opens as before — its key re-wrapped and its slug token recomputed under the destination's
+  key, its name re-sealed under a field key derived from it, at the next placement revision. A drop-box guest's folder moved out by a member is an ordinary folder from then on.
 
 ## Main flow
 
@@ -32,7 +32,7 @@
 4. Moving a drop-box guest's folder out asks first: it becomes an ordinary folder, its guest can add nothing more, and
    it cannot be moved back into the drop box.
 5. The client re-wraps the node's own content key under the destination's key (`K_SC` at the current epoch at the scope
-   root, else the destination node's key), re-seals its name and slug token there, binds all of it to the next
+   root, else the destination node's key), re-seals its name (a field key derived from that key) and recomputes its slug token there, binds all of it to the next
    placement revision and sends one placement write stating the revision it was built on — a member's `updateNode`, a
    guest's `updateShareNode` after the page's naming flow.
 6. The server checks structure only (the destination live and in the scope or subtree, the kind's placement rule, no

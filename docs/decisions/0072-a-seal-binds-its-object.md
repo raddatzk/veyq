@@ -42,9 +42,12 @@ envelope, so a ciphertext moved to a different slot fails to open.
 Chunk frames under a per-blob `K_blob` (their AAD stays `index ‖ total`, and the `K_blob` wrap itself is bound
 to its blob), a blob's sealed metadata under that same `K_blob` (`blob-meta` — its type, upload name and
 modification time; its AAD `0x02 ‖ 'v1' ‖ lp('blob-meta')` is 16 bytes against a frame's 8, so the two never open as
-each other), a share's fields under its own `K_share`, the Master-Key wraps under a KEK with a fresh salt, the
-single-use pairing envelope, and the two WebCrypto seals under a non-extractable per-device key. Those WebCrypto
-seals carry no AAD today, and they gain their purpose as `additionalData`.
+each other), a share's three fields under field keys derived from its own `K_share`, the Master-Key wraps under a
+KEK with a fresh salt, the single-use pairing envelope, and the two WebCrypto seals under a non-extractable
+per-device key. Those WebCrypto seals carry no AAD today, and they gain their purpose as `additionalData`. A field
+under its own `K_field` ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+§ 9) has a key unique to that one revision as well, but keeps Decision 1's object binding wherever its purpose
+names an object; only the share's three bind their purpose alone.
 
 **3. The client mints the id of every sealed object it creates** (UUIDv4, carried in the create request). The
 server refuses an id that is already taken — `id_taken`, the same answer wherever the taken id lives — and never
@@ -77,7 +80,8 @@ store's rollback). The labels are bound now anyway, because they are part of the
 compares against nothing trustworthy unless the label is authenticated.
 
 **6. The typed seal is the only entry point, and the vectors pin every purpose.** `@veyq/crypto` exports a
-`seal`/`open` pair (and its asymmetric twin) whose context is a **typed union**: each purpose is a variant
+`seal`/`open` pair (and its asymmetric twin, and the field seal of ADR 0093 § 9, the only entry point for a field
+purpose) whose context is a **typed union**: each purpose is a variant
 carrying exactly its binding fields, encoded canonically (length-prefixed, fixed field order). The helper draws
 its own nonce. The raw `symWrap`/`asymWrap`/`aeadSeal` leave the package's public exports, so an unbound seal
 cannot be written from `web/` or `admin-web/` at all — the structure is the guard. `contracts/crypto/vectors/v1.json`
