@@ -1,6 +1,7 @@
 // "Upload folder…" (inbox #424, cr-download-is-the-export Decision 6): the PLAN of a picked directory - its tree of folders and
 // files, every name through core's `archiveName` and numbered where a sibling's slug (folded by its own kind) or a level's
-// existing sibling holds it - and the folders' CREATION through a session's tree door, top-down, before any file job exists.
+// existing sibling holds it - the folders' CREATION through a session's tree door, top-down, before any file job exists, and
+// the TAKE-BACK of the folders a settled upload left holding nothing.
 // The registry is a fresh one with Depot registered, so each kind folds as it does in the app.
 import { describe, it, expect } from 'vitest'
 import { createRegistry } from '../../core/applications/registry'
@@ -8,8 +9,9 @@ import { FOLDER_KIND } from '../../core/node/kind'
 import type { DirectoryInput } from '../../core/export/importSource'
 import { registerDepot } from './register'
 import { FILE_KIND } from './kinds'
-import { createFolders, planFolderUpload, type FolderPlan } from './uploadFolder'
-import { FileUploadError } from './uploadFile'
+import { createFolders, planFolderUpload, takeBackEmptyFolders, type FolderPlan } from './uploadFolder'
+import { FileUploadError, type FileJobExtra, type FileUploadResult } from './uploadFile'
+import type { UploadItem, UploadStatus } from '../../core/blob/queue'
 import type { FilesTreeUpload } from './source'
 
 const reg = createRegistry()
@@ -108,6 +110,8 @@ describe('createFolders', () => {
     ])
     expect(out.jobs.map((j) => j.name)).toEqual(['a.txt', 'b.jpg', 'c.jpg', 'd.jpg'])
     expect(out).toMatchObject({ rootName: 'Trip', failed: [] })
+    // each created folder with the jobs below it, a parent before its children: what a take-back walks in reverse
+    expect(out.folders).toEqual([{ id: 'f1', jobs: [0, 4] }, { id: 'f2', jobs: [1, 2] }, { id: 'f3', jobs: [2, 4] }, { id: 'f4', jobs: [3, 4] }])
   })
 
   it('the top folder takes the next suffix on a slug_taken the plan could not see (a sibling only the server knows)', async () => {
@@ -130,5 +134,40 @@ describe('createFolders', () => {
     expect(made.map((m) => m.name)).toEqual(['Trip', 'Day 1'])
     expect(out.failed).toEqual(['Trip/Day 2'])
     expect(out.jobs.map((j) => j.name)).toEqual(['a.txt', 'b.jpg'])
+    expect(out.folders.map((f) => f.id)).toEqual(['f1', 'f2'])
+  })
+})
+
+describe('takeBackEmptyFolders', () => {
+  const tree = () => planFolderUpload(dir('Trip', file('a.txt'), file('Day 1/b.jpg'), file('Day 2/c.jpg')), [], slugFor)
+  const item = (file: File, status: UploadStatus, error?: string) =>
+    ({ id: file.name, name: file.name, sizeBytes: 1, status, error, attempts: 1, progress: 0, controller: new AbortController(), file }) as UploadItem<FileUploadResult, FileJobExtra>
+
+  it('asks nothing of a door without a take-back (a member trashes)', async () => {
+    const { d } = door()
+    const out = await createFolders(tree(), d)
+    await expect(takeBackEmptyFolders(out, d, [])).resolves.toBeUndefined()
+  })
+
+  it('a folder whose every file was refused, cancelled or removed from the tray goes; one a file is in or may still reach stays', async () => {
+    const { d } = door()
+    const asked: string[] = []
+    const out = await createFolders(tree(), d)
+    const [a, b, c] = out.jobs.map((j) => j.extra!.file)
+    // Trip f1 (a.txt), Day 1 f2 (b.jpg), Day 2 f3 (c.jpg)
+    await takeBackEmptyFolders(out, { ...d, abandon: async (id) => { asked.push(id) } }, [item(a, 'failed', 'quota_exceeded'), item(b, 'done'), item(c, 'cancelled')])
+    expect(asked, 'only Day 2: Trip holds Day 1, Day 1 holds b.jpg').toEqual(['f3'])
+    asked.length = 0
+    await takeBackEmptyFolders(out, { ...d, abandon: async (id) => { asked.push(id) } }, [item(a, 'failed', 'upload_failed'), item(c, 'failed', 'quota_exceeded')])
+    expect(asked, 'a retry could still land a.txt in Trip; b.jpg left the tray').toEqual(['f3', 'f2'])
+  })
+
+  it('a refusal keeps that folder, and the next is still asked', async () => {
+    const { d } = door()
+    const asked: string[] = []
+    const abandon = async (id: string) => { asked.push(id); if (id === 'f3') throw new Error('not_a_placeholder') }
+    const out = await createFolders(tree(), d)
+    await takeBackEmptyFolders(out, { ...d, abandon }, [])
+    expect(asked).toEqual(['f3', 'f2', 'f1'])
   })
 })

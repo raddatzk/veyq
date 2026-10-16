@@ -16,12 +16,19 @@
 // failure while the others go on. A folder that cannot be created is named, and what lies below it is not sent; one that the
 // top-level create refuses ends the upload before anything else is written.
 //
+// **Taking back.** A guest cannot trash, so once the queue settled the batch, the folders this upload created that hold
+// nothing are taken back (`takeBackEmptyFolders`, a guest's door only: core's `abandonShareNode`, which erases an empty
+// `FOLDER` at once - ADR 0080 decision 6): a link that refused every file (it was full) keeps none of them. Deepest first,
+// so a parent is empty by the time it is asked; a folder below which a file landed, or one a retry could still land, stays,
+// and the server keeps any folder somebody else filled meanwhile (`not_a_placeholder`).
+//
 // The quota preflight (the tenant's yes or no for the tree's total bytes) is the caller's, before the first write.
+import { toRaw } from 'vue'
 import { registry } from '../../core/applications/registry'
 import { archiveName } from '../../core/export/archiveName'
 import type { DirectoryInput } from '../../core/export/importSource'
 import { FOLDER_KIND, type NodeKind } from '../../core/node/kind'
-import type { UploadJob } from '../../core/blob/queue'
+import { isRetryable, type UploadItem, type UploadJob } from '../../core/blob/queue'
 import { FILE_KIND } from './kinds'
 import type { FilesTreeUpload } from './source'
 import { FileUploadError, type FileJobExtra, type FileUploadResult } from './uploadFile'
@@ -101,6 +108,8 @@ export type CreatedFolders = {
   rootName: string
   /** The paths (below the level, `/`-joined) of the folders that could not be created; nothing below them was sent. */
   failed: string[]
+  /** Every folder that was created, each before what lies below it, with the range `[from, to)` of `jobs` below it. */
+  folders: { id: string; jobs: [number, number] }[]
 }
 
 /**
@@ -121,7 +130,10 @@ export async function createFolders(plan: FolderUploadPlan, door: FilesTreeUploa
   }
   const jobs: UploadJob<FileUploadResult, FileJobExtra>[] = []
   const failed: string[] = []
+  const folders: CreatedFolders['folders'] = []
   const walk = async (folder: FolderPlan, id: string, path: string): Promise<void> => {
+    const created: CreatedFolders['folders'][number] = { id, jobs: [jobs.length, jobs.length] }
+    folders.push(created)
     jobs.push(...door.jobs(id, folder.files))
     for (const sub of folder.folders) {
       const subPath = `${path}/${sub.name}`
@@ -134,7 +146,37 @@ export async function createFolders(plan: FolderUploadPlan, door: FilesTreeUploa
       }
       await walk(sub, subId, subPath)
     }
+    created.jobs[1] = jobs.length
   }
   await walk(plan.root, rootId, rootName)
-  return { jobs, rootName, failed }
+  return { jobs, rootName, failed, folders }
+}
+
+/**
+ * Take back, through `door`, the folders of `made` that hold nothing (see the header), once its batch settled: `items` are
+ * the queue's items of `made.jobs`, matched by their `File` - one the tray no longer holds was removed and lands nothing. A
+ * folder stays when a file below it landed or a retry could still land one. Best effort, one folder at a time, deepest
+ * first: a refusal keeps that folder and the next is asked. Nothing without the door's `abandon` (a member trashes).
+ */
+export async function takeBackEmptyFolders(
+  made: CreatedFolders, door: FilesTreeUpload, items: readonly UploadItem<FileUploadResult, FileJobExtra>[],
+): Promise<void> {
+  const abandon = door.abandon?.bind(door)
+  if (!abandon) return
+  // the queue's items are reactive: the File it hands back may be a proxy of the job's own
+  const byFile = new Map(items.map((item) => [toRaw(item.file), item]))
+  const holds = (job: UploadJob<FileUploadResult, FileJobExtra>): boolean => {
+    const item = job.extra && byFile.get(job.extra.file)
+    if (!item) return false
+    return item.status === 'done' || item.status === 'queued' || item.status === 'preparing' || item.status === 'uploading' ||
+      (item.status === 'failed' && isRetryable(item))
+  }
+  for (const folder of [...made.folders].reverse()) {
+    if (made.jobs.slice(...folder.jobs).some(holds)) continue
+    try {
+      await abandon(folder.id)
+    } catch {
+      /* the server keeps it (somebody filled it, or it is gone): the next is still asked */
+    }
+  }
 }
