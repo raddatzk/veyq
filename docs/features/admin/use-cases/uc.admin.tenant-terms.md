@@ -54,22 +54,10 @@ infra ships a default.
   **bumps the version, re-gating every member**. The editor asks first and names both consequences.
 - **Only one locale filled** → the other locale falls back to the filled one at display time (no empty ToS shown).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** If you run a veyq server, this is where you write the rules for your space — what's allowed, what isn't
-(illegal content, others' privacy), and how to reach you. You add a language, write the rules in it, and add a
-second language if you want one; the page shows you the languages you have written, not the ones you haven't. If
-you would rather not start from a blank page, ask for the ready-made text and it fills that one language — it
-asks first, and tells you if there is something it would replace. When you change the rules, everyone is asked to
-agree again. Your server, your terms — veyq still can't read anyone's private content.
-
-**DE —** Wenn du einen veyq-Server betreibst, legst du hier die Regeln für deinen Bereich fest — was erlaubt ist,
-was nicht (illegale Inhalte, die Privatsphäre anderer) und wie man dich erreicht. Du fügst eine Sprache hinzu,
-schreibst die Regeln darin und fügst eine zweite hinzu, wenn du möchtest; die Seite zeigt dir die Sprachen, die
-du geschrieben hast — nicht die, die du nicht geschrieben hast. Wenn du nicht mit einer leeren Seite anfangen
-möchtest, kannst du den fertigen Text anfordern: Er füllt genau diese eine Sprache, fragt vorher nach und sagt
-dir, wenn er etwas ersetzen würde. Änderst du die Regeln, wird allen erneut die Zustimmung abverlangt. Dein
-Server, deine Regeln — veyq kann die privaten Inhalte trotzdem nicht lesen.
+The owner of a space sets its own rules of use in their own words and languages, and everyone agrees to them — again
+after every change — before they go on.
 
 ## Related
 

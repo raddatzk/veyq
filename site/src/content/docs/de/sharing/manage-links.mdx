@@ -3,6 +3,7 @@ title: "Links ändern, abschalten, erneuern und löschen"
 sources:
   - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
   - docs/features/sharing/use-cases/uc.sharing.share-shared-scope.md
+  - docs/features/sharing/use-cases/uc.sharing.share-password.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -16,6 +17,8 @@ listet jeden Link mit seiner Rolle, wann er erstellt wurde und, falls gesetzt, w
 - **Link kopieren** kopiert ihn noch einmal.
 - **Bearbeiten** ändert Name, Hinweis, Passwort oder Ablaufdatum, bei einem Ordner oder einer Datei auch die Rolle. Die
   Adresse bleibt gleich.
+  Hat der Link ein Passwort, ist es dort eingetragen; das Auge daneben zeigt es an, so kannst du es später
+  nachschauen.
 - **Widerrufen** schaltet den Link sofort ab. Was Gäste hinzugefügt haben, bleibt bei dir.
 - **Reaktivieren** schaltet einen widerrufenen Link wieder ein.
 - **Link erneuern** macht eine neue Adresse und löscht die alte; gib den neuen Link weiter. Tu das, wenn jemand den alten
@@ -25,6 +28,9 @@ listet jeden Link mit seiner Rolle, wann er erstellt wurde und, falls gesetzt, w
   anderen, sobald die Person, die sie erstellt hat, den Bereich verlassen hat.
 
 Ändern kannst du nur Links, die du erstellt hast; der Link eines anderen Mitglieds zeigt **Von einem anderen Mitglied**.
+Wird ein Mitglied aus dem Bereich oder aus einer Gruppe entfernt, schalten sich die Links, die diese Person dort
+erstellt hat, im selben Moment ab. Danach kann jedes verbliebene Mitglied einen solchen Link löschen oder erneuern;
+der erneuerte Link gehört dann der Person, die ihn erneuert hat.
 
 ## Alle Links auf einmal abschalten
 

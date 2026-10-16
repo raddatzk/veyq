@@ -129,22 +129,10 @@ session row in [uc.account.sessions](uc.account.sessions.md), and the rule that 
 deletion; only the surface differs. For a password-less wrap the consequence is the sharpest of any tier: the
 device goes from opening with no credentials at all to needing the password **and** the Secret Key.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you sign in on the web the first time on a device, you enter your password and your Secret Key
-once. Tick "remember me" and that device opens straight to your memories next time — but once you sign out
-there, it asks for your Secret Key again, because signing out removes what let it open by itself. Leave it
-unticked and next time you just need your password, signed out or not. The server only
-ever sees scrambled data, and the key that opens your memories never leaves your device. On a computer that
-isn't yours, use a private/incognito window — nothing is kept.
-
-**DE —** Wenn du dich im Web das erste Mal auf einem Gerät anmeldest, gibst du einmal Passwort und Secret Key
-ein. Setzt du das Häkchen „angemeldet bleiben", öffnet dieses Gerät beim nächsten Mal direkt deine
-Erinnerungen — meldest du dich dort aber ab, fragt es wieder nach deinem Secret Key, weil das Abmelden
-entfernt, womit es sich von selbst öffnen konnte. Ohne Häkchen brauchst du nächstes Mal nur dein Passwort, ob
-abgemeldet oder nicht. Der Server sieht nur verschlüsselte Daten, und der Schlüssel zu deinen
-Erinnerungen verlässt dein Gerät nie. Auf einem fremden Rechner nutze ein privates/Inkognito-Fenster — dann
-bleibt nichts zurück.
+You sign in on the web in one step and decide per device whether it opens straight to your space next time or asks for
+your password.
 
 ## Related
 

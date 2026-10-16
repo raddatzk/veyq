@@ -62,22 +62,10 @@
 - **Operator-blind.** A switch is instance configuration. It carries no member data, and withholding a wrap
   reveals nothing the server did not already hold.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** The person who runs your instance can decide that some things are not offered on it, for example public
-links or devices that unlock without your password. Switching something off never deletes what you stored. If public
-links are switched off, the links you made stop working for the people you sent them to until they are switched on
-again; they then work as before. If
-remembered devices are switched off, your device asks for your password and your Secret Key from the Emergency Kit,
-and says why. Your data stays readable with them, and your device keeps what it had: once the switch is back on, it
-opens as before.
-
-**DE —** Die Person, die deine Instanz betreibt, kann festlegen, dass manches dort nicht angeboten wird, zum
-Beispiel öffentliche Links oder Geräte, die sich ohne dein Passwort entsperren. Abschalten löscht nie etwas, das du
-gespeichert hast. Werden öffentliche Links abgeschaltet, funktionieren die Links, die du verschickt hast, für alle,
-denen du sie geschickt hast, nicht mehr, bis wieder eingeschaltet ist; danach funktionieren sie wie zuvor. Werden gemerkte Geräte abgeschaltet, fragt dein Gerät nach deinem Passwort und deinem Secret Key aus
-dem Emergency Kit und sagt dir, warum. Mit ihnen bleiben deine Daten lesbar, und dein Gerät behält, was es hatte:
-Sobald wieder eingeschaltet ist, öffnet es wie zuvor.
+The person running a server can decide what it offers, such as public links or remembered devices, without anything
+you stored being deleted: switched back on, everything works as before.
 
 ## Related
 

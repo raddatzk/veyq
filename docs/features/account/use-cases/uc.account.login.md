@@ -108,21 +108,10 @@ stateDiagram-v2
 - **PQ posture.** Ed25519 now; migrate to a PQ/hybrid signature (ML-DSA) later via a suite bump. A login
   signature is a one-time live check — there is no harvest-now-decrypt-later for authentication.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you log in to your veyq instance, your password never leaves your device. Your device uses
-it to prove who you are with a **one-time signature**, and the server only ever checks that signature —
-it never learns your password and stores nothing it could reuse to impersonate you. Logging in gets you a
-**session**; actually opening your encrypted memories is a **separate unlock step** that also needs your
-Secret Key. The server can't tell a wrong password apart from an account that doesn't exist, so it never
-reveals who has an account.
-
-**DE —** Wenn du dich bei deiner veyq-Instanz anmeldest, verlässt dein Passwort nie dein Gerät. Dein
-Gerät beweist mit einer **einmaligen Signatur**, wer du bist, und der Server prüft nur diese Signatur —
-er erfährt dein Passwort nie und speichert nichts, womit er sich als du ausgeben könnte. Die Anmeldung
-verschafft dir eine **Sitzung**; deine verschlüsselten Erinnerungen tatsächlich zu öffnen ist ein
-**separater Entsperr-Schritt**, der zusätzlich deinen Secret Key braucht. Der Server kann ein falsches
-Passwort nicht von einem nicht existierenden Konto unterscheiden und verrät so nie, wer ein Konto hat.
+You sign in to your space without your password ever leaving your device, so the server cannot learn it or use it to
+pose as you.
 
 ## Related
 

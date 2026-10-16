@@ -88,17 +88,10 @@ sequenceDiagram
 - **Not a substitute for revoke.** A weak password is weak; already-fetched content isn't retractable. Revoke stays
   the hard stop.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can put a password on a share, so that even if the link ends up with the wrong person, they can't open
-it without the password. You can change it, remove it, or look it up later — all on the same link. Honest note: this
-works as long as you trust whoever runs the server (if that's you, it's airtight); it's a lock on the door, and your
-photos themselves stay encrypted either way.
-
-**DE —** Du kannst eine Freigabe mit einem Passwort schützen — selbst wenn der Link bei der falschen Person landet,
-kommt sie ohne Passwort nicht hinein. Du kannst es ändern, entfernen oder später nachschauen — alles am selben Link.
-Ehrliche Anmerkung: Das wirkt, solange du der Person vertraust, die den Server betreibt (bist das du selbst, ist es
-dicht); es ist ein Schloss an der Tür, und deine Fotos selbst sind ohnehin verschlüsselt.
+A link that reaches the wrong person still does not open without the password, and you can change or remove that
+password without handing out a new link.
 
 ## Related
 
@@ -112,3 +105,4 @@ dicht); es ist ein Schloss an der Tür, und deine Fotos selbst sind ohnehin vers
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md),
   [cc.security.rate-limit](../../../crosscutting/cc.security.rate-limit.md).
 - End-user view (docs site): [Create a link](../../../../site/src/content/docs/sharing/create-a-link.mdx)
+- End-user view (docs site): [Change, switch off, renew and delete links](../../../../site/src/content/docs/sharing/manage-links.mdx)

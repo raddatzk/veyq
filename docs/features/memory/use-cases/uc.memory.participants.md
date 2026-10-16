@@ -107,18 +107,10 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 - **Routing:** the profile is a fragment route handled only in `core/node/location.ts`; `people` is a reserved route
   segment (an application cannot claim it, and a folder, file or drop box called "People" at a scope root is numbered `people-2`). A history-mode path would reach the server's access log.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can say who was there: add the people of your space to a memory, and they show in its header as a row of avatars. Hover or tap them for the names, click a name
-to see that person and every memory of theirs you can open - as tiles, as a list, or on a map where they have a place. People who later leave the space stay listed, greyed out as
-"former member". Only members see this; the page of someone who gets a memory through a link shows nobody. The server
-never learns who was on which memory — the list is sealed with the memory. The list holds only anonymous ids, never names.
-
-**DE —** Du kannst festhalten, wer dabei war: Füge Personen deines Bereichs zu einer Erinnerung hinzu, sie erscheinen in
-deren Kopfzeile als Reihe von Avataren. Fahre darüber oder tippe darauf, um die Namen zu sehen; mit einem Klick auf einen Namen siehst du die Person und alle ihre Erinnerungen, die du öffnen darfst – als Kacheln, als Liste oder auf einer Karte, wo sie einen Ort haben.
-Wer den Bereich später verlässt, bleibt eingetragen und wird grau als „ehemaliges Mitglied“ gezeigt. Das sehen nur
-Mitglieder; wer eine Erinnerung über einen Link bekommt, bekommt keine Personen angezeigt. Die Liste enthält nur anonyme IDs, nie Namen. Der Server erfährt nie, wer bei
-welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
+You record who was at an occasion and find every Memory a person took part in, while the server never learns who was
+together with whom.
 
 ## Where it is built (web)
 

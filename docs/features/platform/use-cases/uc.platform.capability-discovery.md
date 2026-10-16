@@ -53,18 +53,10 @@
   the instance in admin-web or its CLI ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md));
   no tenant level is built.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** veyq can be run by anyone, so the server you use and the app you open it with may not be the same age,
-and not every server offers every feature. When they don't fit together, veyq tells you straight away — before
-you sign in — instead of letting you get halfway through something that then fails. And a feature your server
-doesn't offer simply isn't shown, rather than sitting there and breaking when you touch it.
-
-**DE —** veyq kann jede und jeder selbst betreiben — der Server, den du nutzt, und die App, mit der du ihn
-öffnest, sind also nicht zwangsläufig gleich alt, und nicht jeder Server bietet jede Funktion an. Wenn beides
-nicht zusammenpasst, sagt veyq dir das sofort — noch vor der Anmeldung — statt dich mitten in etwas laufen zu
-lassen, das dann scheitert. Und was dein Server nicht anbietet, wird gar nicht erst angezeigt, anstatt da zu
-sein und beim Antippen kaputtzugehen.
+Whoever runs your server and whichever version you open it with, veyq tells you up front when they do not fit and
+shows only what your server actually offers.
 
 ## Related
 
@@ -76,3 +68,5 @@ sein und beim Antippen kaputtzugehen.
   "new feature" notices/acks, audience filtering, folding `suites` into the unified manifest, and client device
   self-capabilities. (`directTransport` was **removed** rather than folded in — a byte-path store is now a hard
   requirement, cr-0105.)
+- End-user view (docs site): [Sign in](../../../../site/src/content/docs/getting-started/sign-in.mdx)
+- End-user view (docs site): [Help](../../../../site/src/content/docs/help/index.mdx)

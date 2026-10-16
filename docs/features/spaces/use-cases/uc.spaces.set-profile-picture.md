@@ -54,17 +54,9 @@
 - **Per tenant.** A picture set here changes nothing in another tenant; copying one across is a possible later feature.
 - **Members only.** No share endpoint serves it and a share view shows the letter.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can give yourself a picture in each space you belong to, instead of the plain letter. The picture is
-locked with the space's key on your device first: the people in the space see it, the server only stores a scrambled
-block of always the same size. Remove it any time and the letter returns. If you join a space as a member, you can add
-your picture right after your first unlock.
-
-**DE —** In jedem Bereich, in dem du bist, kannst du dir ein Bild geben statt des einfachen Buchstabens. Das Bild wird
-auf deinem Gerät mit dem Schlüssel des Bereichs verschlossen: Die Leute im Bereich sehen es, der Server speichert nur
-einen verwürfelten Block, immer gleich groß. Du kannst es jederzeit entfernen, dann kehrt der Buchstabe zurück. Trittst
-du einem Bereich als Mitglied bei, kannst du dein Bild gleich nach dem ersten Entsperren hinzufügen.
+You can show a picture of yourself instead of a letter in each space, seen by its members and never by the server.
 
 ## Related
 

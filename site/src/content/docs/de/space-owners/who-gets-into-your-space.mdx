@@ -5,6 +5,7 @@ sources:
   - docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md
   - docs/features/spaces/use-cases/uc.spaces.remove-tenant-member.md
   - docs/features/spaces/use-cases/uc.spaces.set-space-icon.md
+  - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -46,6 +47,16 @@ deinem Rücken hereinlassen.
 
 Sie verliert den Zugang zum Bereich und seinen Gruppen. Was sie schon gesehen hat, kann sie behalten haben. Eine Gruppe,
 die ihr allein gehörte, wird übergeben oder geschlossen.
+
+Genauer: Eine Gruppe, die ihr allein gehörte, geht an das Mitglied, das am längsten darin ist, und eine Gruppe, in der
+sie die einzige Person war, wird nach 30 Tagen gelöscht. Du bekommst dabei nie Zugang zur Gruppe von jemand anderem.
+Ihren persönlichen Bereich verliert sie nicht sofort: 30 Tage lang kann sie sich noch anmelden, ihn durchsehen und
+speichern, was sie behalten will, aber nichts mehr ändern. Danach wird er gelöscht.
+
+Jede Gruppe, die sie mit anderen geteilt hat, bekommt außerdem ein neues Schloss. Das Gerät einer Person, die die
+Gruppe besitzt, baut es von selbst ein, sobald diese veyq das nächste Mal öffnet. Der Server sperrt die entfernte
+Person sofort aus, aber bis das neue Schloss eingebaut ist, würde ihr alter Schlüssel Neues in dieser Gruppe noch
+öffnen.
 
 Ein anderes Mitglied zur besitzenden Person des geteilten Bereichs machen kannst du hier nicht; das geht nur bei einer
 [Gruppe](/veyq/de/spaces/group-members/).

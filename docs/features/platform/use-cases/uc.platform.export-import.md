@@ -65,11 +65,10 @@ Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, 
 - **Not atomic.** The server has no multi-node transaction; the rollback is best effort and says so when it fails.
 - **Quota, without exposing it.** The preflight is the rule an upload start applies, asked without a lock: the tenant's usage (trash and open uploads included) plus the declared bytes against the quota the Server Owner set; a tenant with no quota fits anything. It answers **yes or no, never a number**, so a member learns no more than a refused upload already tells; because a long run of questions could still be bisected towards the free space, it is rate-limited per member and per tenant (`veyq.ratelimit.storage-fit.*`, default 10 and 60 per minute, `429` with `Retry-After`). It is advisory: another upload may take the room first, and the start stays the one decision.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can take any folder, file or memory out of veyq as one ZIP file — the photos, the names, the dates and places — and bring such a file back in, into the same or another veyq. The file is **not encrypted**: whoever has it can read everything in it, so keep it somewhere you trust. Everything is prepared on your own device; the server never sees the contents. Coming back in, everything becomes yours; shares and members do not travel with it.
-
-**DE —** Du kannst jeden Ordner, jede Datei und jede Erinnerung als eine ZIP-Datei aus veyq herausnehmen — mit Fotos, Namen, Daten und Orten — und eine solche Datei wieder hineinladen, in dasselbe oder ein anderes veyq. Die Datei ist **nicht verschlüsselt**: Wer sie hat, kann alles darin lesen, bewahre sie also an einem Ort auf, dem du vertraust. Alles wird auf deinem eigenen Gerät vorbereitet; der Server sieht die Inhalte nie. Beim Hineinladen wird alles deins; Freigaben und Mitglieder reisen nicht mit.
+You can take anything out of veyq as one ordinary ZIP that outlives veyq, and bring such a file back into this or
+another veyq as your own content.
 
 ## Related
 

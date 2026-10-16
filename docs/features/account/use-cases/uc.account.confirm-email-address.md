@@ -87,20 +87,9 @@ Two other events set the same record without this flow:
   [security-model](../../../crosscutting/security-model.md) inventory. They defend against a mistake, not
   against the operator.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** If you ever forget your password, veyq sends the reset link to your email address, and you'll also need
-your Emergency Kit. So it matters that the address is really yours and that you read it. If you were invited
-by email, it's already confirmed. If you set up your space through a link someone handed you, confirm it once:
-veyq sends you a mail, and you open the link while signed in. If this space can't send email yet, you can't
-confirm, and you couldn't reset your password either. Ask whoever runs the space to set up email.
-
-**DE —** Wenn du dein Passwort vergisst, schickt veyq den Link zum Zurücksetzen an deine E-Mail-Adresse, und du
-brauchst zusätzlich dein Notfall-Kit. Deshalb ist wichtig, dass die Adresse wirklich deine ist und du sie liest.
-Wenn du per E-Mail eingeladen wurdest, ist sie schon bestätigt. Hast du deinen Bereich über einen Link
-eingerichtet, den dir jemand gegeben hat, bestätige sie einmal: veyq schickt dir eine Mail, und du öffnest den
-Link, während du angemeldet bist. Kann dieser Bereich noch keine E-Mails senden, kannst du nicht bestätigen, und
-auch kein Passwort zurücksetzen. Bitte die Person, die den Bereich betreibt, E-Mail einzurichten.
+You find out now, not on the day you need it, that a password-reset link would actually reach a mailbox you read.
 
 ## Related
 

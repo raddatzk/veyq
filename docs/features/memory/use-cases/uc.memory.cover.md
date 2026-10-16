@@ -94,17 +94,10 @@ and offsets it.
   are existing components (core's `CoverDialog` with the shared `ImageCropper`, `MemoryCoverImage`, `CoverCrop`);
   only the data layer is swapped to the contracts client + `K_node` sealing. No crop library is added.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Give a memory a **face**. Pick one of its photos, crop it how you like, and that cover shows up everywhere
-the memory appears — its card, its page, and its pin on the map. Which photo you chose and how you framed it are
-locked with the memory's own key on your device; the server only ever stores scrambled data.
-
-**DE —** Gib einer Erinnerung ein **Gesicht**. Wähle eines ihrer Fotos, schneide es zu, wie du magst — und dieses
-Cover erscheint überall, wo die Erinnerung auftaucht: auf ihrer Karte, ihrer Seite, ihrem Pin auf der Landkarte
-und auf der Landkarte.
-Welches Foto du gewählt und wie du es zugeschnitten hast, wird mit dem eigenen Schlüssel der Erinnerung auf deinem
-Gerät verschlüsselt; der Server speichert nur verschlüsselte Daten.
+A chosen, cropped cover gives each Memory a recognizable face on its card, its page and its map pin, while the server
+never sees which picture you picked.
 
 ## Related
 

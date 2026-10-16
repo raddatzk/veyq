@@ -109,20 +109,10 @@ sequenceDiagram
   where a member IS removed — is now [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) (cr-0104),
   which soft-revokes the removed member's shares as the honest-server revocation ([ADR 0029](../../../decisions/0029-public-viewer-share.md) §6).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can turn one memory into a link and send it to anyone — a grandparent, a friend, a group chat — and
-they just open it in a browser, nothing to install, no account. Only someone with the **exact** link can see it,
-and it shows them **only that one memory** — never the rest of your space. You can switch the link off whenever you
-like. One honest note: on the web, this is as private as your trust in whoever runs your veyq server — if that's
-you (self-hosted), it's fully private; the little "how safe is this?" link in the footer explains the details.
-
-**DE —** Du kannst eine Erinnerung in einen Link verwandeln und ihn an irgendwen schicken — Oma, eine Freundin,
-einen Gruppenchat — und sie öffnen ihn einfach im Browser, ohne Installation, ohne Konto. Nur wer den **genauen**
-Link hat, sieht sie, und er zeigt **nur diese eine Erinnerung** — nie den Rest deines Bereichs. Du kannst den Link
-jederzeit abschalten. Eine ehrliche Anmerkung: im Browser ist das so privat wie dein Vertrauen in den, der deinen
-veyq-Server betreibt — bist das du selbst (self-hosted), ist es voll privat; der kleine „Wie sicher ist das?"-Link
-im Footer erklärt die Details.
+You can show one Memory to anyone, a grandparent or a group chat, through a link they open in a browser, without an
+account, and switch it off whenever you like.
 
 ## Related
 

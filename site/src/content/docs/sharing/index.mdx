@@ -4,6 +4,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
   - docs/features/depot/use-cases/uc.depot.share-folder-files.md
   - docs/features/depot/use-cases/uc.depot.share-file.md
+  - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -37,3 +38,8 @@ The key that opens a link sits in the part of the address after the `#`, which a
 people with the link can open what you shared, and the person running the server still cannot. A link cannot be
 unseen, though: switching it off stops future access, but not what someone already saved:
 [Is my data safe?](/veyq/privacy/is-my-data-safe/#when-you-share)
+
+One honest limit: the page that opens a link comes from the veyq server each time, so a link is only as private as
+your trust in whoever runs that server. Someone who runs it honestly cannot read along; someone set on it could change
+that page. If you run the server yourself, nobody else is in that position: [Known
+limitations](/veyq/security/known-limitations/#the-operator-served-web-client-is-passive-operator-only)

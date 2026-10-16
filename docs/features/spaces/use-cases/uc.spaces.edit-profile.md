@@ -51,18 +51,10 @@
 - **The consent checkbox** on the same panel is [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md)
   step 1. It is account-global, not per-tenant.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** In each shared space you have a username that others use to find you, and optionally your real name.
-You can change both under *Settings → Your profile*, and you can remove your real name again at any time.
-Your real name is locked with the space's key before it leaves your device, so the people in the space can
-read it but the server cannot. A change in one space does not touch any other space you belong to.
-
-**DE —** In jedem geteilten Bereich hast du einen Benutzernamen, über den andere dich finden, und optional
-deinen echten Namen. Beides änderst du unter *Einstellungen → Dein Profil*, und deinen echten Namen kannst du
-jederzeit wieder entfernen. Dein echter Name wird mit dem Schlüssel des Bereichs verschlossen, bevor er dein
-Gerät verlässt: Die Mitglieder des Bereichs können ihn lesen, der Server nicht. Eine Änderung in einem Bereich
-berührt keinen anderen Bereich, in dem du bist.
+You choose how the members of each shared space find and recognise you, by a username and an optional real name that
+they can read and the server cannot.
 
 ## Related
 

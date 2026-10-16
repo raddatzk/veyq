@@ -116,22 +116,10 @@ stateDiagram-v2
 - **Unlocks the E2EE layer.** Once unlocked, the account key is available — this is what lets the client
   decrypt **E2EE session names** (planned — `uc.account.sessions` is reserved in ADR 0004, not yet written) and all content.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Logging in proves *who you are*; unlocking is what actually **opens your encrypted memories**. To
-unlock, your device needs two things only you have: your **password** and your **Secret Key** (from your
-Emergency Kit). They are combined **on your device** to open your account's master key — the server never
-sees either and never holds the key that decrypts your content. That is why even the server operator
-cannot read your memories. Because your Secret Key is long and high-entropy, you typically enter it once
-per device; afterwards you can set the device up to unlock with just your password (or biometrics).
-
-**DE —** Die Anmeldung beweist, *wer du bist*; das Entsperren **öffnet erst deine verschlüsselten
-Erinnerungen**. Zum Entsperren braucht dein Gerät zwei Dinge, die nur du hast: dein **Passwort** und
-deinen **Secret Key** (aus deinem Notfall-Kit). Beide werden **auf deinem Gerät** kombiniert, um den
-Hauptschlüssel deines Kontos zu öffnen — der Server sieht keines von beiden und besitzt nie den Schlüssel,
-der deine Inhalte entschlüsselt. Deshalb kann selbst der Server-Betreiber deine Erinnerungen nicht lesen.
-Weil dein Secret Key lang und zufällig ist, gibst du ihn meist einmal pro Gerät ein; danach kannst du das
-Gerät so einrichten, dass es sich nur mit deinem Passwort (oder Biometrie) entsperrt.
+Your password and Secret Key open what you keep on your own device, so nobody running the server can read your
+Memories.
 
 ## Related
 

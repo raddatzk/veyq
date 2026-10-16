@@ -53,19 +53,10 @@
   between the subtree's folders through core's move dialog ([uc.memory.move-node](../../memory/use-cases/uc.memory.move-node.md)).
 - The metadata is the blob's, declared with the upload and written in the attach transaction, for a guest as for a member (docs/apps/depot.md § How a file is stored).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Share a folder and the files in it come along. With a view link, people can download them; with a
-contributor link, they can also add files or put a newer version in place — without an account. Everything stays
-encrypted end to end: the files are decrypted only in the browser of whoever holds the link, and the person running
-the server sees neither contents nor names. Anything a guest adds counts against the space you allowed that link, and
-it stays yours when you switch the link off.
-
-**DE —** Teilst du einen Ordner, gehen die Dateien darin mit. Mit einem Ansichtslink können andere sie herunterladen,
-mit einem Mitmach-Link auch Dateien hinzufügen oder eine neuere Fassung ablegen — ohne Konto. Alles bleibt Ende-zu-Ende
-verschlüsselt: Entschlüsselt wird nur im Browser derer, die den Link haben, und wer den Server betreibt, sieht weder
-Inhalte noch Namen. Was Gäste hinzufügen, zählt gegen den Platz, den du dem Link erlaubt hast, und bleibt bei dir, wenn
-du den Link abschaltest.
+You can hand a folder's files to people without an account, letting them download or, if you allow it, add and replace
+files, all still end-to-end encrypted.
 
 ## Related
 

@@ -76,16 +76,10 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
   open; the manage list shows no label, note or password for it and cannot re-copy its link. Its guests are
   unaffected.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you share a memory, you can add a short message that whoever opens the link will see — "Enjoy our
-trip!" or "Drop your photos here." You can change that message later without making a new link. It's encrypted
-like everything else: the person running the server can't read it, only people you send the link to.
-
-**DE —** Wenn du eine Erinnerung teilst, kannst du eine kurze Nachricht hinzufügen, die alle sehen, die den Link
-öffnen — „Viel Spaß mit unserer Reise!" oder „Ladet eure Fotos hier hoch." Du kannst die Nachricht später ändern,
-ohne einen neuen Link zu erzeugen. Sie ist wie alles andere verschlüsselt: Die Person, die den Server betreibt,
-kann sie nicht lesen — nur wer den Link von dir bekommt.
+You can greet or instruct whoever opens your link with a short message you can change later, readable only by people
+with the link.
 
 ## Related
 

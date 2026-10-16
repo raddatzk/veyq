@@ -78,20 +78,10 @@
   not the file twice, and its size is bounded by the server's ceiling rather than by how fast the uplink is
   ([en.memory.media](../enablers/en.memory.media.md)).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Drop photos or videos into a memory and they upload in the background — each picture tells you what it
-is doing (waiting, getting ready, uploading), a button up top shows one list per memory (what you add to the same
-memory joins its list until you close it), and you can cancel any of them. Getting a photo ready takes a moment
-before anything is sent, which is why a big batch does not start moving the instant you pick it. Everything is
-scrambled on your device before it leaves; the server only ever stores the scrambled pieces.
-
-**DE —** Leg Fotos oder Videos in eine Erinnerung — sie laden im Hintergrund hoch; jedes Bild sagt dir, was
-gerade passiert (wartet, wird vorbereitet, lädt hoch), ein Button oben zeigt eine Liste pro Erinnerung (was du
-dazulegst, kommt in ihre Liste, bis du sie schließt), und du kannst jeden Upload abbrechen. Ein Foto vorzubereiten
-dauert einen Moment, bevor überhaupt etwas gesendet wird — deshalb setzt sich ein großer Stapel nicht sofort in
-Bewegung. Alles wird auf deinem Gerät verschlüsselt, bevor es das Gerät verlässt; der Server speichert nur die
-verschlüsselten Teile.
+You add photos and videos to a Memory in the background and can follow or cancel each upload, with everything
+encrypted on your device before it leaves.
 
 ## Related
 

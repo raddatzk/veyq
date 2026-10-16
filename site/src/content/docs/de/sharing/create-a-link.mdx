@@ -5,6 +5,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
   - docs/features/sharing/use-cases/uc.sharing.share-password.md
   - docs/features/sharing/use-cases/uc.sharing.share-note.md
+  - docs/features/depot/use-cases/uc.depot.share-file.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -19,6 +20,9 @@ import Screenshot from '../../../../components/Screenshot.astro';
      Haken bei **Muss vor dem Öffnen akzeptiert werden**, wenn man sie zuerst lesen und akzeptieren soll.
    - **Passwortschutz**: Der Link öffnet sich nur mit einem Passwort ab 10 Zeichen. Gib es auf einem anderen Weg weiter
      als den Link selbst.
+     Das Passwort prüft der Server, es steckt nicht in der Verschlüsselung: Es hält so weit, wie du der Person
+     vertraust, die den Server betreibt, ganz, wenn du das selbst bist. Verschlüsselt bleibt, was du geteilt hast, so
+     oder so.
    - **Ablaufdatum**: Der Link funktioniert nach diesem Tag nicht mehr.
 6. Wähle **Link erstellen**, dann **Link kopieren**, und schick ihn weiter.
 
@@ -30,6 +34,9 @@ import Screenshot from '../../../../components/Screenshot.astro';
   (veyq warnt, dass es keinen Versionsverlauf gibt) und Dinge innerhalb des geteilten Ordners verschieben. Löschen oder
   umbenennen können sie nichts, und eine Erinnerung oder einen Briefkasten können sie nicht anlegen.
 - **Bei einer Erinnerung:** Gäste können Fotos und Videos hinzufügen und ihre eigenen wieder löschen.
+- **Bei einer einzelnen Datei:** Gäste können sie ansehen, herunterladen und eine neuere Fassung an ihre Stelle legen.
+  veyq warnt vorher, dass sich die Datei für alle ändert, die den Link haben, auch für dich, und dass sich der alte
+  Inhalt nicht zurückholen lässt.
 
 Gäste, die etwas hinzufügen, nennen einmal ihren Namen, damit du siehst, wer was hinzugefügt hat. Andere Gäste sehen ihn
 nie. Was Gäste hinzufügen, zählt zum Speicher deines Bereichs, bis zu einer Grenze pro Link, die die Person festlegt, der

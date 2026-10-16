@@ -81,19 +81,10 @@ blip is worse than none, and it is not enforcement anyway) — mirroring the mem
 - **Revoked / expired / unknown share** → `GET …/terms` is the same non-enumerable `404` as `resolveShare`; there
   is nothing to gate.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you open a shared link, the person running the server may ask you to accept their terms of use first —
-the house rules for what may be shared (no illegal content, how to report something). You accept once per server; a
-reload won't ask again unless the operator updates the terms. Your acceptance stays **on your device** — the server
-records nothing about you, so opening a share stays anonymous. It's a courtesy prompt, not a lock: it shows you the
-rules, it doesn't police them.
-
-**DE —** Wenn du einen geteilten Link öffnest, kann die Person, die den Server betreibt, dich bitten, zuerst ihre
-Nutzungsbedingungen zu akzeptieren — die Hausordnung dafür, was geteilt werden darf (keine illegalen Inhalte, wie
-man etwas meldet). Du akzeptierst einmal pro Server; ein Neuladen fragt nicht erneut, außer die betreibende Person
-ändert die Bedingungen. Deine Zustimmung bleibt **auf deinem Gerät** — der Server speichert nichts über dich, das
-Öffnen eines Shares bleibt anonym. Es ist ein Hinweis, keine Sperre: Er zeigt dir die Regeln, erzwingt sie nicht.
+Someone opening your link sees the space's terms of use first and accepts them once, without giving up their
+anonymity.
 
 ## Related
 

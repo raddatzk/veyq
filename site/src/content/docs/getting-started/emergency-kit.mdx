@@ -3,6 +3,7 @@ title: "Your Emergency Kit"
 sources:
   - docs/features/account/enablers/en.account.key-model.md
   - docs/features/account/use-cases/uc.account.recover-access.md
+  - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -38,6 +39,10 @@ you cannot get a new kit, and without it you cannot reset a forgotten password o
 If you lose **both** your password and your Emergency Kit, nobody can bring back what you keep, not the people who
 own your space and not the person who runs the server. There is no master key on their side and no back door. The
 same thing that stops them from reading your photos stops them from rescuing them.
+
+A server brought back from a backup changes nothing about this. If the person who runs the server restores it and you
+still have your password and your Emergency Kit, everything you keep opens exactly as before: nothing was unlocked,
+re-encrypted or handed to anyone on the way.
 
 The Secret Key is long and completely random, so nobody can guess it. Because your data needs it as well as your
 password, a guessed or leaked password alone opens nothing: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

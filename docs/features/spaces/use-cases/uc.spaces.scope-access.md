@@ -100,21 +100,10 @@
   `status` — operational metadata the server already holds ([ADR 0007](../../../decisions/0007-membership-role-grant-relation.md)).
   No key, no name, no content.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Whether you can open a space depends on one thing: whether you are in it. If you are not, veyq answers
-exactly as if the space did not exist — it doesn't tell you whether it is being deleted or has been taken
-offline. Someone who was invited but hasn't said yes can't see inside yet. A group that is being deleted can
-still be looked at by its members, but nothing about it changes any more. And if the operator takes a space
-offline, it is offline everywhere: for its members, for its shared links and for anything running in the
-background — until it comes back, exactly as it was.
-
-**DE —** Ob du einen Bereich öffnen kannst, hängt an genau einer Sache: ob du dazugehörst. Wenn nicht, antwortet
-veyq so, als gäbe es den Bereich nicht — du erfährst weder, dass er gerade gelöscht wird, noch, dass er offline
-genommen wurde. Wer eingeladen ist, aber noch nicht zugestimmt hat, sieht noch nichts davon. Eine Gruppe, die
-gerade gelöscht wird, können ihre Mitglieder weiter ansehen, aber an ihr ändert sich nichts mehr. Und nimmt der
-Betreiber einen Bereich offline, ist er überall offline: für seine Mitglieder, für geteilte Links und für alles,
-was im Hintergrund läuft — bis er genau so zurückkommt, wie er war.
+Only the people in a space can reach it, and to everyone else it looks as if it did not exist — not even whether it is
+being deleted or taken offline.
 
 ## Related
 

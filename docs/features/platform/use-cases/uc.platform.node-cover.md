@@ -82,20 +82,10 @@
 - **Core names no application kind.** The opt-in is a seam on each kind's own rules; the tests assert the matrix across core and
   every application.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Give a folder, a drop box or a memory a **face**: choose **Set cover** in its menu, pick any picture from your
-device and frame it — the same window everywhere. It replaces the icon in the list, on the page and in your favorites. The picture is locked on your device with the
-entry's own key; the server only stores scrambled data. **Change cover** re-frames or swaps it, and **Remove cover** inside the same window takes it away; either really deletes the old picture from the
-server's storage — only copies other people's browsers already hold cannot be taken back. People you share a link with can see
-the covers but cannot set them.
-
-**DE —** Gib einem Ordner, einem Briefkasten oder einer Erinnerung ein **Gesicht**: Wähle im Menü **Cover festlegen**, such ein
-beliebiges Bild von deinem Gerät aus und wähle den Ausschnitt — überall derselbe. Es ersetzt das Symbol in der Liste, auf der Seite und in deinen Favoriten. Das Bild wird
-auf deinem Gerät mit dem eigenen Schlüssel des Eintrags verschlüsselt; der Server speichert nur verschlüsselte Daten. Mit
-**Cover ändern** richtest du den Ausschnitt neu ein oder tauschst das Bild, mit **Cover entfernen** im selben Fenster nimmst du es weg;
-beides löscht das alte Bild wirklich aus dem Speicher des Servers gelöscht — nur Kopien, die andere Browser
-schon geladen haben, lassen sich nicht zurückholen. Wer nur einen Link bekommt, sieht die Cover, kann sie aber nicht festlegen.
+You can give a folder, a drop box or a Memory a picture of your own so you recognise it at a glance in lists, on its
+page and in your favorites.
 
 ## Related
 

@@ -84,20 +84,10 @@
 - **Auth ≠ content.** Switching shows a space only if its grant opens (the identity-unwrapped scope key); a
   session alone reveals nothing.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Everything you can reach lives in one place: switch between the families/teams (tenants) you belong to,
-and — within one — between the **shared space** you all use, your **private** space, and your groups, right from
-the sidebar. Opening the app drops you in the shared space by default; your private space is one click (or the
-`~me` link) away. The app knows your spaces because you hold a key to each — the server only knows *that* you're
-a member, never what's inside.
-
-**DE —** Alles, worauf du Zugriff hast, an einem Ort: wechsle zwischen den Familien/Teams (Tenants), zu denen du
-gehörst, und — innerhalb eines Tenants — zwischen dem **gemeinsamen Bereich**, den ihr alle nutzt, deinem
-**privaten** Bereich und deinen Gruppen — direkt in der Seitenleiste. Beim Öffnen landest du standardmäßig im
-gemeinsamen Bereich; dein privater Bereich ist einen Klick (oder den `~me`-Link) entfernt. Die App kennt deine
-Bereiche, weil du für jeden einen Schlüssel hältst — der Server weiß nur, *dass* du Mitglied bist, nie was darin
-liegt.
+Everything you can reach sits in one sidebar, so you move between your shared spaces, your personal space and your
+groups in one click.
 
 ## Related
 
