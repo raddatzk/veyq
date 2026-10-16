@@ -215,6 +215,18 @@ restored by snapshot-and-restore.
       load 13 → 35) had the races **red, over their 10-minute budget** beside the backend's Gradle run, and green in 7.0
       alone: locally the races share the machine with `./gradlew check`, in CI they get a runner of their own, so 9.5
       of 10 here says more about local parallelism than about the budget. No CI run exists.
+      **`web-e2e` under the pipeline, at close** (2026-10-16/17, measured by the coordinating session: `python3
+      scripts/run_pipeline.py --job web-e2e` from a worktree, `VEYQ_INFRA_DIR` pinned to the main checkout's `infra/`,
+      the owner's dev stack untouched — its containers' uptime unchanged; logs in that worktree's `.pipeline-out/`, not
+      in git). First run, commit `1cf88638` (its `summary.json`): **red after 1.45 min** in the job's first check step,
+      *Backup tool self-test*: `instance_backup_selftest.py`'s seeded-table case named `veyq_release_check`, which a
+      migration of that day seeds, so every restore onto a fresh install was refused. Fixed in `23177221`
+      (`instance_backup.py`'s `NOT_DATA`; `backend/CLAUDE.md` carries the rule). Second run, commit `23177221`:
+      **green, partial, 13.8 min of its 15** — fast-jar, install, the three tool self-tests (backup, `veyqctl`, upgrade
+      proof) and `[e2e] total: 27 passed: 27 failed: 0 run-level sweeps failed: 0`; the one step not run is the
+      Gradle wrapper validation (a `uses:` action). Load average ~15–19 throughout (other agents building), so 13.8
+      is a loaded figure, and the 15-minute budget is tight under that load; the direct run of 2026-10-15 took 9.2
+      for 26 suites. The first CI run replaces it.
 - [x] 6 **The page says what runs where.** [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md)
       (ADR 0091 decision 8): the stages now run in one pipeline and locally by one command; guard gaps' CI trigger;
       measured wall times where they exist, estimates marked; still nothing has run in CI.
@@ -232,12 +244,9 @@ restored by snapshot-and-restore.
       that has never run. *Re-run it* names `run_pipeline.py` and `validate_guard_gaps.py --force`. The L1 row's
       status facts moved into the new table unchanged (its pipeline job, 75–90 s, no CI run). `npm run check` in
       `site/` green; the glob green.
-      **What remains for the close** (the CR stays open): the Definition of done's local run of every stage the host
-      can run, of which only **`web-e2e`** has never run under `run_pipeline.py` — it drives the developer's compose
-      stack, so it is run from the main checkout, not a worktree (`python3 scripts/run_pipeline.py --job web-e2e`, or
-      the full run on a quiet machine), its wall time recorded here and in ADR 0091 § Consequences and the page's
-      *Local run* cell for the API end-to-end row updated (it says "not yet run by the local pipeline"); then the
-      retrospective, the harvest, and the CR deleted.
+      **The close (2026-10-17):** `web-e2e` ran under `run_pipeline.py` (phase 5's record), from a worktree with the
+      infra directory pinned rather than from the main checkout; its wall time is in ADR 0091 § Consequences and the
+      page's *Local run* cell for the API end-to-end row.
 
 ## Definition of done
 
@@ -249,4 +258,30 @@ filter on a real push — is listed in ADR 0091 as awaiting the remote.
 
 ## Retrospective
 
-(filled at close)
+**Done against the Definition of done, measured, with one deviation named.** Every stage the host can run has run
+green under `run_pipeline.py` — but in two runs of two commits, not one run of one: the full run at `04c9f6d1`
+without `web-e2e` (guards 1.5 min, backend 8.1, races 9.5, frontend 5.0, chart 0.4, version 0.1, the arm64 build
+from cache) and `web-e2e` alone at `23177221` (13.8). Neither machine was quiet (load 10 → 18 and ~15–19). The DoD's
+"replacing the estimate" in ADR 0091 does not hold and was never going to: a local wall time is not a CI runner's,
+so the 20–25 min critical path stays an estimate until the first CI run, and the ADR says so. The publish waits on
+every stage (`validate_release_identity.py` assertion 9); no job lacks a budget (`validate_pipeline_shape.py`); the
+guard gaps green with `--force` at each phase; the site check green.
+
+**The pipeline's first `web-e2e` run found a real defect, and that is the CR's best result.** A migration of
+2026-10-16 seeded `veyq_release_check`, so every restore onto a fresh install was refused — the second seeding
+migration that day to do so. Both migrations had landed past `./gradlew check` and the guard glob, which cannot see
+it: the one check that reads the seeded tables, `instance_backup_selftest.py`, runs only in `ci.yml`'s `web-e2e`
+job, and neither landing ran that job. With no remote, a job that only CI runs is a job nobody runs.
+Harvested: the specific rule (run that self-test for a seeding migration) to `backend/CLAUDE.md` with the fix; the
+general one — a done-when built from the surface checks and the glob does not cover `web-e2e`'s tool self-tests — to
+`changes/README.md` beside the "no remote" gate.
+
+**Budgets under local load are near their edge.** `web-e2e` 13.8 of 15 and the races 9.5 of 10, both while other
+sessions built. Decision 1 forbids lowering a stage's parameters to fit; whether a budget is too tight is a CI
+runner's question, recorded in ADR 0091 as awaiting the first run rather than answered here by raising it.
+
+**Process.** The close's one live step needed the developer's compose stack and so waited on a quiet window that a
+parallel wave never offered; it ran under load instead, from a worktree, safe only because phase 5 had pinned
+`VEYQ_INFRA_DIR` for every job — the CR's "run it from the main checkout" was stricter than the runner required. A CR
+whose last proof shares a host resource with every other session names who runs it and when at refine (§ *Split an
+expensive live proof*), not at close.
