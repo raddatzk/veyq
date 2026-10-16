@@ -4,7 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
-  "//": "The ONE thing `web/` and `admin-web/` share (ADR 0065). Not a general code-sharing package: no UI, no router, no state — only the operator-blind crypto suite, the cold account birth built on it, and the Emergency Kit codec that serializes that birth's Secret Key, because a second copy of THAT would be a security defect rather than a maintenance nuisance (the kit codec proved it: both packages write kits, their two copies were each tested only against themselves, and a change to one would have broken the other's kits unseen). The kit's PDF writer stays per package: this package depends on @noble/* alone. Consumed as TypeScript source (both consumers are Vite apps that compile it themselves), so there is no build step and no dist/ to drift from src/.",
+  "//": "The ONE thing `web/` and `admin-web/` share (ADR 0065). Not a general code-sharing package: no UI, no router, no state — only the operator-blind crypto suite, the cold account birth built on it, and the Emergency Kit codec that serializes that birth's Secret Key, because a second copy of THAT would be a security defect rather than a maintenance nuisance (the kit codec proved it: both packages write kits, their two copies were each tested only against themselves, and a change to one would have broken the other's kits unseen). Two test affordances ride along for the same one-copy reason: `testArgon` (the cost params a test may choose) and `canaryRule` (which plaintext the wire-assertion sweeps could find inside this package's own encodings by chance — shared by web/'s recordCanaries and e2e/'s recordTyped, the latter being why e2e/ is the third consumer, ADR 0090 decision 4). The kit's PDF writer stays per package: this package depends on @noble/* alone. Consumed as TypeScript source (both consumers are Vite apps that compile it themselves), so there is no build step and no dist/ to drift from src/.",
   "exports": {
     "./v1": "./src/v1.ts",
     "./argonWorker": "./src/argonWorker.ts",
@@ -12,6 +12,7 @@
     "./emergencyKit": "./src/emergencyKit.ts",
     "./base64": "./src/base64.ts",
     "./testArgon": "./src/testArgon.ts",
+    "./canaryRule": "./src/canaryRule.ts",
     "./eslint-argon-door": "./eslint-argon-door.js"
   },
   "scripts": {

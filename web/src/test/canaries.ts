@@ -21,6 +21,7 @@
 // should grow a test affordance. And `aeadSeal` is reached by `symWrap`/`asymWrap` too, so a hook there would
 // record **key material**: searching a database for random bytes proves nothing while burying the strings that
 // matter. ADR 0053 § Decision 2.
+import { collidesWithCiphertext, MIN_CANARY_LENGTH } from '@veyq/crypto/canaryRule'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
@@ -62,16 +63,11 @@ function walk(value: unknown, into: Set<string>): void {
 
 /**
  * The shortest canary the sweep can tell from chance, when it is spelled only in the base64/base64url/hex alphabet
- * (inbox #323). The sweep matches a plain substring (`scripts/run_web_e2e.py` `occurrences`) over every statement
- * the database received, most of it base64 ciphertext, so such a canary of length L lands in random bytes at
- * 64^-L per position: the 4-character `city` and `auto` did, twice in a week (`…jicityF8…`, `…WZWautoqvJLM…`), and
- * each time the run went red on nothing. At 10 it is 64^-10 ≈ 9·10^-19 — under 10^-6 per run even for 10^9
- * swept characters and a thousand canaries — and an ISO day (`2026-05-01`, user plaintext with no longer
- * spelling) is exactly 10. A canary with ANY other character (a space, `.`, an umlaut) cannot occur inside
- * base64 or hex at all, so it is exempt at every length.
+ * (inbox #323), and the test against it. ONE rule for both recorders — this one and the browser suite's
+ * `recordTyped` (`e2e/src/canaries.ts`) — so it lives in `@veyq/crypto/canaryRule`, the one package both may import;
+ * re-exported here under the names this file always had. The measurements behind 10 are stated there.
  */
-export const MIN_CANARY_LENGTH = 10
-const ENCODING_ALPHABET = /^[A-Za-z0-9+/=_-]+$/
+export { MIN_CANARY_LENGTH, collidesWithCiphertext } from '@veyq/crypto/canaryRule'
 
 /**
  * The closed enum values an unsealed envelope carries — `MemoryDate.mode`, `MemoryLocation.nameSource` /
@@ -88,11 +84,6 @@ export const ENVELOPE_VOCABULARY: ReadonlySet<string> = new Set([
   'media', 'upload',
   'exif', 'file',
 ])
-
-/** Whether the sweep could find [canary] inside random encoded bytes by chance. */
-export function collidesWithCiphertext(canary: string): boolean {
-  return canary.length < MIN_CANARY_LENGTH && ENCODING_ALPHABET.test(canary)
-}
 
 /**
  * Record every string leaf of one or more **unsealed** values as canaries for the database sweep.
