@@ -131,6 +131,24 @@ describe('runGrantDeliveryWorker', () => {
     expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe(ADMISSION_UNVERIFIED)
   })
 
+  it('pauses (neither wraps nor declines) when the admission is AHEAD of its key — n+1 reaching a worker still at n', async () => {
+    // A rotation landed and re-tagged the admission at n+1 while this tab still holds n. That is a fact about the
+    // worker, not the target: a decline would exclude this key-holder from the job for good, even once it holds n+1.
+    const E3 = v1.randomBytes(32)
+    const E4 = v1.randomBytes(32)
+    const claimTask = vi.fn<TasksApi['claimTask']>()
+      .mockResolvedValueOnce(job(admitted(E4, 4))).mockResolvedValueOnce(job(admitted(E4, 4))).mockResolvedValueOnce(null)
+    const completeTask = vi.fn<TasksApi['completeTask']>()
+    const declineTask = vi.fn<TasksApi['declineTask']>()
+    mockTasks(claimTask, completeTask, vi.fn<TasksApi['failTask']>(), declineTask)
+
+    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: E3, epoch: 3 })).toBe(0)
+    expect(declineTask).not.toHaveBeenCalled()
+    expect(completeTask).not.toHaveBeenCalled()
+    expect(claimTask).toHaveBeenCalledTimes(1) // stops draining: every further job meets the same behind key
+    expect(checkAndPin).not.toHaveBeenCalled()
+  })
+
   it('control: a tag made at n+1 reaching the worker at n+1 is delivered', async () => {
     const E4 = v1.randomBytes(32)
     const { completeTask, declineTask } = oneJob(job(admitted(E4, 4)))
