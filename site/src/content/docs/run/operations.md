@@ -1,9 +1,11 @@
 ---
 title: Operations
-description: The health probe, what the logs hold and leave out, that there are no metrics, and the background jobs an instance runs.
+description: The health probe, what the logs hold and leave out, that there are no metrics, the background jobs an instance runs, and its daily look for new releases.
 sources:
   - docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md
   - docs/crosscutting/cc.security.wire-assertion.md
+  - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
+  - docs/features/admin/use-cases/uc.admin.learn-of-new-releases.md
 ---
 
 ## Health
@@ -62,6 +64,7 @@ The application runs its own cleanup on a schedule; there is nothing to set up.
 | Recovery and address-confirmation links | valid 1 and 24 hours, removed 7 days after | hourly |
 | Device-linking codes | valid 10 minutes, removed after a day | every 5 minutes |
 | Deleting store objects | retried 5 times with growing pauses, then given up | hourly |
+| Looking for new releases ([below](#new-releases)) | what it found, until you run a release as new | daily, and once after each start |
 
 Deleting a file's stored object is the job of one sweep only. An object it gave up on is logged once and stays in the
 store; count them in the database:
@@ -70,7 +73,35 @@ store; count them in the database:
 SELECT count(*) FROM veyq_store_reclaim WHERE abandoned_at IS NOT NULL;
 ```
 
+## New releases
+
+Once a day — and once shortly after each start — the application reads the published releases and compares them
+with its own, on the instance itself
+([ADR 0097](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)).
+This is the one outbound request the application makes that you did not configure, and it is on by default, so that a
+forgotten instance still hears of a security fix.
+
+- **What it asks.** An anonymous `GET` of the release list from `api.github.com`, and, for a new major only, that
+  release's `manifest.json` from `github.com` (a redirect to GitHub's download host). The request names no release
+  of yours and nothing about the instance's users; the source learns only that this address asks.
+- **What it does with the answer.** Nothing but show it: the console's **Server → Release** lists every newer release
+  — a newer one of your major, a planned new major with the day your major leaves the apps' window, an unscheduled
+  major marked **urgent** — and `veyq-admin release` prints the same. Upgrading stays yours
+  ([Upgrade](/veyq/run/upgrade/)). With the instance's own mail set up, each notice is also mailed to you once
+  ([Storage and email](/veyq/run/storage-and-email/#the-instances-own-mail-to-you)).
+- **When it fails.** A source that cannot be reached, answers slowly (10 s), too much or something that is not a
+  release list is logged as a warning and asked again the next day. Nothing waits on it. The panel shows when it
+  last succeeded.
+- **A build without a release stamp** (a local image, a development run) checks nothing.
+
+**Switch it off** on **Server → Release**, or `veyq-admin release check off`: the application then makes no request
+at all. **Point it at a mirror** instead by entering the mirror's `http(s)` address on the same panel: the check then
+reads `<mirror>/releases.json` and `<mirror>/<tag>/manifest.json`, the layout `veyqctl` reads too.
+
 ## How far this is proven
+
+The release check runs in the backend's tests against a source inside the test run — each kind of notice, each way a
+source fails, the switch, and that no request names a release; it has not run against GitHub.
 
 The health probe ran in the one live run of the hardened Compose recipe (2026-09-28). The log sweep runs with every
 end-to-end run, on the development stack. The Kubernetes probes have not run in a cluster.

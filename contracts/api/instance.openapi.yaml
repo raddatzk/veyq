@@ -22,13 +22,20 @@ info:
     them on the admin channel instead of in environment variables. The store describes the operator's own
     infrastructure; the store it names holds ciphertext only, and its secrets are sealed server-side and never
     returned. A capability switch is instance configuration and carries no member data (ADR 0088 decision 12).
+
+    The release check and the instance mail are ADR 0097's: the instance reads the published releases once a day
+    with an anonymous request that names no release, and mails what it found to the Server Owner only, from SMTP
+    settings of its own that never send a tenant's mail. The only personal value here is the Server Owner's own
+    account address, shown back to its holder.
+
     Authorization is enforced by code annotations, not this spec (ADR 0008).
 tags:
   - name: instance
     description: >
       Server-Owner reads and settings of the running instance (release identity, store provisioning,
-      config-secret state, the object-store setting and its check, the capability switches). One tag = one
-      resource interface owning the whole `/api/instance` subtree.
+      config-secret state, the object-store setting and its check, the capability switches, the release check
+      and its notices, the instance mail settings). One tag = one resource interface owning the whole
+      `/api/instance` subtree.
 
 # x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
 # request that came through the admin container; the public port 404s it. Reachability, not a role: the role
@@ -877,6 +884,297 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: service_not_found }
 
+  /api/instance/release/notices:
+    get:
+      tags: [instance]
+      operationId: getInstanceReleaseNotices
+      x-veyq-channel: admin
+      summary: Read the release check's setting and state, and every notice of a newer release it found.
+      description: >
+        Once a day a stamped instance reads the published releases from its source and compares them with its own
+        release **locally** ([ADR 0097](../../docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md),
+        uc.admin.learn-of-new-releases). This returns the check's setting (on or off, and the source), when it last
+        succeeded, and what it found — the notices of decision 2 whose release is still newer than the running one,
+        newest first. Server-Owner only.
+
+        A notice is never an action: nothing is pulled, and upgrading stays the operator's, by hand (ADR 0096). A
+        build with no release stamp, or a snapshot, is on no release line, so it checks nothing (`releaseLine:
+        false`). Reading changes nothing.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The check's setting and state, and the notices that still apply to the running release.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceReleaseNotices" }
+              example:
+                releaseLine: true
+                enabled: true
+                source: null
+                lastSuccessAt: 2026-10-16T04:00:00Z
+                notices:
+                  - id: 3f2c1a5e-8b1d-4c7a-9e0f-2a6b4d8c1e7f
+                    kind: PLANNED_MAJOR
+                    release: "2.0"
+                    date: 2029-05-01
+                    daysAhead: null
+                    foundAt: 2027-05-02T04:00:00Z
+                    mailedAt: 2027-05-02T04:00:01Z
+                  - id: 7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+                    kind: RELEASE
+                    release: "1.42"
+                    date: null
+                    daysAhead: null
+                    foundAt: 2027-04-20T04:00:00Z
+                    mailedAt: null
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+  /api/instance/release/check:
+    put:
+      tags: [instance]
+      operationId: setInstanceReleaseCheck
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the write carries the whole setting — the switch and the source — as the
+          form or the CLI shows it.
+      x-veyq-channel: admin
+      summary: Switch the daily release check on or off, and choose where it reads the published releases.
+      description: >
+        On by default (ADR 0097 decision 1). Off, the instance makes no request at all. The source is the published
+        GitHub Releases of veyq (`source: null`), or an `http`/`https` mirror in the release layout `veyqctl` reads
+        (ADR 0096 decision 3: `<source>/releases.json` and `<source>/<tag>/manifest.json`). The request names no
+        release and carries nothing about the instance's content or users; the comparison is local. A change applies
+        from the next check. Server-Owner only. Returns the state as `getInstanceReleaseNotices` reads it.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceReleaseCheckUpdate" }
+            examples:
+              off:
+                summary: Switch the check off
+                value: { enabled: false, source: null }
+              mirror:
+                summary: Read a mirror instead of GitHub
+                value: { enabled: true, source: "https://mirror.example.com/veyq" }
+      responses:
+        "200":
+          description: The setting was stored; the check's state and notices are returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceReleaseNotices" }
+        "400":
+          description: The request was malformed, `enabled` is missing, or the source is not an `http`/`https` URL. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+  /api/instance/mail-settings:
+    get:
+      tags: [instance]
+      operationId: getInstanceMailSettings
+      x-veyq-channel: admin
+      summary: Read the instance's own mail settings, which send release notices to the Server Owner only.
+      description: >
+        The instance's one SMTP configuration (ADR 0097 decision 3): the same transport fields as a tenant's, the
+        password write-only (`passwordSet`) and sealed under the config-secret key exactly as a tenant's is
+        ([ADR 0050](../../docs/decisions/0050-operator-config-secret-encryption.md)). It sends **only** instance notices
+        and **only** to the Server Owner's account address, and it is never a default or a fallback for a tenant's
+        mail ([ADR 0048](../../docs/decisions/0048-provider-neutral-smtp-mail-transport.md) §4). Notices are mailed
+        only once the address is confirmed by the code the test mail carried (decision 5). Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The instance mail settings, the password redacted to `passwordSet`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceMailSettings" }
+              example:
+                host: smtp.example.com
+                port: 587
+                from: veyq@example.com
+                username: veyq
+                tls: true
+                passwordSet: true
+                configSecretState: OK
+                address: owner@example.com
+                confirmation: CONFIRMED
+                confirmedAt: 2026-10-16T12:00:00Z
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+    put:
+      tags: [instance]
+      operationId: updateInstanceMailSettings
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the form shows every field it sends, and an omitted password keeps the
+          stored one.
+      x-veyq-channel: admin
+      summary: Save the instance mail settings and send the test mail that carries the confirmation code.
+      description: >
+        Replaces the settings (the password excepted: omit it to keep the stored one; a supplied one is sealed under
+        the config-secret key with that key's fingerprint, never returned or logged). Every save asks again (ADR 0097
+        decision 5): the confirmation is cleared, and with a host set, a test mail carrying a short one-time code goes
+        to the caller's account address — the code is then typed into `POST /api/instance/mail-settings/confirmation`.
+        One mail proves both that the settings work and that the address reaches its owner. `confirmation` says
+        whether the test mail went out (`CODE_SENT`) or could not be delivered (`SEND_FAILED`). A `null` host clears
+        the instance mail; nothing is sent then. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceMailSettingsUpdate" }
+            example:
+              host: smtp.example.com
+              port: 587
+              from: veyq@example.com
+              username: veyq
+              password: example-password
+              tls: true
+      responses:
+        "200":
+          description: The settings were stored and, with a host set, the test mail attempted; the settings as they now stand are returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceMailSettings" }
+              example:
+                host: smtp.example.com
+                port: 587
+                from: veyq@example.com
+                username: veyq
+                tls: true
+                passwordSet: true
+                configSecretState: OK
+                address: owner@example.com
+                confirmation: CODE_SENT
+                confirmedAt: null
+        "400":
+          description: The request was malformed (invalid host, port, from or username), or a host was given without a from address. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "503":
+          description: >
+            A password was supplied, but no config-secret key is available to seal it (ADR 0050). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_secret_unavailable }
+
+  /api/instance/mail-settings/confirmation:
+    post:
+      tags: [instance]
+      operationId: confirmInstanceMail
+      x-veyq-channel: admin
+      summary: Confirm the instance mail settings with the code the test mail carried.
+      description: >
+        Takes the one-time code of the last test mail (ADR 0097 decision 5). A code and not a link, because the admin
+        console is reachable on localhost only ([ADR 0065](../../docs/decisions/0065-admin-ui-cli-separate-service.md))
+        and the instance has no address of its own, so a link opened on another device would reach nothing. The code
+        is stored hashed, expires, and is spent by a few wrong entries; the endpoint is rate-limited per caller. Once
+        confirmed, each notice is mailed once. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceMailConfirmation" }
+            example: { code: "48213075" }
+      responses:
+        "200":
+          description: The address is confirmed; the settings as they now stand are returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceMailSettings" }
+        "400":
+          description: The request was malformed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "409":
+          description: >
+            `mail_code_invalid` = no code is outstanding, it expired, it was entered wrong too often, the address
+            changed since it was sent, or this is not it. Save the settings again for a new one. Nothing is confirmed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_code_invalid }
+        "429":
+          description: Too many requests from this caller; retry after the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
 components:
   schemas:
     InstanceRelease:
@@ -1422,6 +1720,278 @@ components:
           description: True switches the entry off, false switches it back on.
           example: true
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+
+    InstanceReleaseNotices:
+      type: object
+      description: >
+        The release check's setting and state, and what it found (ADR 0097). Server self-description about the
+        software and the operator's own choice of source; nothing here is user data.
+      required: [releaseLine, enabled, source, lastSuccessAt, notices]
+      properties:
+        releaseLine:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether the running build is on a release line at all. False for a build with no release stamp and for a
+            snapshot: neither has a release to compare, so the check makes no request whatever `enabled` says.
+          example: true
+        enabled:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the daily check runs. On by default; off, the instance makes no request.
+          example: true
+        source:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            The mirror the check reads, an `http`/`https` URL in the release layout; null = the published GitHub
+            Releases of veyq.
+          maxLength: 2048
+          example: null
+        lastSuccessAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When a check last read the source successfully; null when none has yet.
+          example: 2026-10-16T04:00:00Z
+        notices:
+          type: array
+          description: >
+            The notices whose release is still newer than the running one, newest release first. A notice found
+            once stays until the instance runs a release at least as new.
+          maxItems: 1000
+          items:
+            $ref: "#/components/schemas/InstanceReleaseNotice"
+
+    InstanceReleaseNotice:
+      type: object
+      description: >
+        One row of ADR 0097 decision 2: what the check found, and whether it was mailed. About published software,
+        never about anything in the instance.
+      required: [id, kind, release, date, daysAhead, foundAt, mailedAt]
+      properties:
+        id:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The notice's id; stable, so a calendar entry made from it is the same event every time.
+          example: 3f2c1a5e-8b1d-4c7a-9e0f-2a6b4d8c1e7f
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            `RELEASE` = a newer release within the running major. `PLANNED_MAJOR` = a new major off the yearly train
+            (ADR 0085 decision 3); `date` is when the running major leaves a store-shipped client's window.
+            `UNSCHEDULED_MAJOR` = a major the release manifest marks unscheduled: a security fix that needed a
+            removal — upgrade now. `WINDOW_REMINDER` = the running major's window ends on `date`, `daysAhead` days
+            after this reminder was raised.
+          enum: [RELEASE, PLANNED_MAJOR, UNSCHEDULED_MAJOR, WINDOW_REMINDER]
+          example: PLANNED_MAJOR
+        release:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            The release found, `<major>.<minor>`: the newer release, or a new major's first release. For a window
+            reminder, the planned major whose train started the window.
+          maxLength: 32
+          example: "2.0"
+        date:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          format: date
+          description: >
+            For a planned major and a window reminder, the day the running major leaves a store-shipped client's
+            window (ADR 0085 decision 5: the second train after the one that made it non-current). Until such a
+            client exists it is the day the window would close. Null for the other kinds.
+          example: 2029-05-01
+        daysAhead:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          description: For a window reminder, 90 or 30 — how many days before `date` it is due. Null for the other kinds.
+          example: null
+        foundAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the check first found it.
+          example: 2027-05-02T04:00:00Z
+        mailedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When it was mailed to the Server Owner; null while it has not been (no confirmed instance mail, or the send failed).
+          example: null
+
+    InstanceReleaseCheckUpdate:
+      type: object
+      description: The release check's setting to store.
+      required: [enabled]
+      properties:
+        enabled:
+          x-veyq-visibility: flag
+          # nullable type + @NotNull: a required primitive binds a missing field to false (backend/CLAUDE.md)
+          type: [boolean, "null"]
+          description: True runs the daily check; false stops it, and the instance makes no request.
+          example: true
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        source:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: An `http`/`https` URL of a mirror in the release layout; null (or omitted) = the published GitHub Releases.
+          maxLength: 2048
+          example: null
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 2048)'
+
+    InstanceMailSettings:
+      type: object
+      description: >
+        The instance mail settings as read back (ADR 0097 decision 3): the SMTP transport fields, whether a password
+        is stored (never the password itself, ADR 0050), the config-secret state, and where the confirmation
+        stands. Operator configuration, plus the Server Owner's own address.
+      required: [host, port, from, username, tls, passwordSet, configSecretState, address, confirmation, confirmedAt]
+      properties:
+        host:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: SMTP server host (operator infrastructure config). Null = no instance mail.
+          maxLength: 253
+          example: smtp.example.com
+        port:
+          x-veyq-visibility: public
+          type: [integer, "null"]
+          format: int32
+          description: SMTP server port; null = 587.
+          example: 587
+        from:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The From address the notices are sent from.
+          maxLength: 254
+          example: veyq@example.com
+        username:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: SMTP auth username; null = an auth-less relay.
+          maxLength: 254
+          example: veyq
+        tls:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether to use STARTTLS.
+          example: true
+        passwordSet:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether an SMTP password is stored — the password itself is never returned (ADR 0050).
+          example: true
+        configSecretState:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            Whether the stored password can be opened (ADR 0050, ADR 0089 decision 4): `OK`; `ABSENT` = no
+            config-secret key is available, so nothing can be sealed and a password cannot be used; `MISMATCH` = the
+            key is not the one that sealed the stored password — re-enter it. While it is not `OK` and a username is
+            set, no instance mail is sent.
+          enum: [OK, ABSENT, MISMATCH]
+          example: OK
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The Server Owner's own account address (uc.admin.setup-server), already server-held plaintext — the only
+            address instance mail may reach (ADR 0097 decision 3), shown back to its holder so they see where the
+            code and the notices go.
+          type: string
+          format: email
+          description: The address the test mail and the notices go to — the Server Owner's account address.
+          maxLength: 254
+          example: owner@example.com
+        confirmation:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            `NOT_CONFIGURED` = no host is set. `CODE_SENT` = the test mail went out; enter its code before it expires.
+            `SEND_FAILED` = the test mail of the last save could not be delivered — check the settings and save
+            again. `UNCONFIRMED` = no code is outstanding (it expired or was entered wrong too often), or the account
+            address changed since it was confirmed — save again for a new code. `CONFIRMED` = notices are mailed.
+          enum: [NOT_CONFIGURED, CODE_SENT, SEND_FAILED, UNCONFIRMED, CONFIRMED]
+          example: CONFIRMED
+        confirmedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the current settings were confirmed; null unless `confirmation` is `CONFIRMED`.
+          example: 2026-10-16T12:00:00Z
+
+    InstanceMailSettingsUpdate:
+      type: object
+      description: >
+        The instance mail settings to store. The password is write-only (sealed at rest, ADR 0050) — omit it to keep
+        the stored one; every other field is a full replace. A host needs a from address (the instance has no
+        address of its own to fall back on).
+      required: [tls]
+      properties:
+        host:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          pattern: '^([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$'
+          description: SMTP server host (a bare hostname). Null = clear (no instance mail).
+          maxLength: 253
+          example: smtp.example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
+        port:
+          x-veyq-visibility: public
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 65535
+          format: int32
+          description: SMTP server port; null = 587.
+          example: 587
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(65535)'
+        from:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          format: email
+          description: The From address; required with a host.
+          maxLength: 254
+          example: veyq@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        username:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: SMTP auth username; null = an auth-less relay.
+          maxLength: 254
+          example: veyq
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 254)'
+        password:
+          x-veyq-visibility: token
+          type: [string, "null"]
+          description: >
+            WRITE-ONLY SMTP password; sealed at rest under the config-secret key with that key's fingerprint (ADR 0050),
+            never returned or logged. Omit (or null) to keep the stored one.
+          maxLength: 256
+          example: example-password
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
+        tls:
+          x-veyq-visibility: flag
+          # nullable type + @NotNull: a required primitive binds a missing field to false (backend/CLAUDE.md)
+          type: [boolean, "null"]
+          description: Whether to use STARTTLS.
+          example: true
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+
+    InstanceMailConfirmation:
+      type: object
+      description: The code the last test mail carried.
+      required: [code]
+      properties:
+        code:
+          x-veyq-visibility: token
+          type: string
+          description: The one-time code, as the test mail shows it.
+          minLength: 1
+          maxLength: 16
+          example: "48213075"
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 16)'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

@@ -59,7 +59,7 @@ enough to survive a controller restart trusts every pod beside it.
 
 ## Keep the config-secret key apart
 
-The application seals each tenant's SMTP password, and the secrets of a store of your own, under a key file it
+The application seals each tenant's SMTP password, the instance mail's password, and the secrets of a store of your own, under a key file it
 generates on first start, on the
 `veyq-config-secret` volume (Compose) or claim (Kubernetes; the chart keeps the claim on uninstall)
 ([ADR 0050](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0050-operator-config-secret-encryption.md)).

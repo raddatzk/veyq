@@ -20,6 +20,7 @@ vi.mock('../features/tenants/tenants', async (importOriginal) => ({
   reactivateTenant: vi.fn(),
 }))
 vi.mock('../features/instance/release', () => ({ getInstanceRelease: vi.fn() }))
+vi.mock('../features/instance/releaseNotices', () => ({ getReleaseNotices: vi.fn(), setReleaseCheck: vi.fn() }))
 vi.mock('../features/instance/configSecret', () => ({ getInstanceConfigSecret: vi.fn() }))
 vi.mock('../features/instance/store', async (importOriginal) => ({
   // the builders stay real: what `store set` sends is what is asserted on
@@ -46,6 +47,7 @@ import { run } from './cli'
 import { signIn } from './adminSession'
 import * as tenants from '../features/tenants/tenants'
 import { getInstanceRelease } from '../features/instance/release'
+import { getReleaseNotices, setReleaseCheck, type InstanceReleaseNotices } from '../features/instance/releaseNotices'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import { checkInstanceStore, discardPendingInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
 import type { InstanceStore, InstanceStoreCheck } from '../features/instance/store'
@@ -107,6 +109,16 @@ function capability(id: string, name: string, off: boolean, effective: boolean):
     requirements: [],
   }
 }
+const noticesRead: InstanceReleaseNotices = {
+  releaseLine: true,
+  enabled: true,
+  source: 'https://mirror.example.com/veyq',
+  lastSuccessAt: new Date('2026-10-16T04:00:00.000Z'),
+  notices: [{
+    id: 'n1', kind: 'UNSCHEDULED_MAJOR', release: '2.0', date: null, daysAhead: null,
+    foundAt: new Date('2026-10-16T04:00:00.000Z'), mailedAt: null,
+  }],
+}
 const register: InstanceCapability[] = [
   capability('core.x', 'Ex', false, true),
   capability('core.a', 'Alpha', true, false),
@@ -132,6 +144,8 @@ beforeEach(() => {
   vi.mocked(tenants.suspendTenant).mockResolvedValue(undefined)
   vi.mocked(tenants.reactivateTenant).mockResolvedValue(undefined)
   vi.mocked(getInstanceRelease).mockResolvedValue({ release: '1.4.0' })
+  vi.mocked(getReleaseNotices).mockResolvedValue(noticesRead)
+  vi.mocked(setReleaseCheck).mockImplementation(async (enabled, source) => ({ ...noticesRead, enabled, source }))
   vi.mocked(getInstanceConfigSecret).mockResolvedValue({ state: 'MISMATCH' })
 })
 
@@ -200,11 +214,31 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
     expect(tenants.setTenantStorageQuota).not.toHaveBeenCalled()
   })
 
-  it('release prints the running instance release (uc.admin.identify-instance-release)', async () => {
+  it('release prints the running instance release and what the release check found (uc.admin.identify-instance-release, uc.admin.learn-of-new-releases)', async () => {
     const r = await invoke(['release'])
     expect(getInstanceRelease).toHaveBeenCalledOnce()
-    expect(JSON.parse(r.out)).toEqual({ release: '1.4.0' })
+    const doc = JSON.parse(r.out)
+    expect(Object.keys(doc)[0]).toBe('release') // a script that read `.release` before still does
+    expect(doc.release).toBe('1.4.0')
+    expect(doc.enabled).toBe(true)
+    expect(doc.notices).toEqual([expect.objectContaining({ kind: 'UNSCHEDULED_MAJOR', release: '2.0' })])
     expect(r.code).toBe(0)
+  })
+
+  it('release check off switches the check off and keeps its source (uc.admin.learn-of-new-releases A1)', async () => {
+    const r = await invoke(['release', 'check', 'off'])
+    expect(r.code).toBe(0)
+    expect(setReleaseCheck).toHaveBeenCalledWith(false, 'https://mirror.example.com/veyq')
+    expect(JSON.parse(r.out).enabled).toBe(false)
+    expect((await invoke(['release', 'check', 'on'])).code).toBe(0)
+    expect(setReleaseCheck).toHaveBeenLastCalledWith(true, 'https://mirror.example.com/veyq')
+  })
+
+  it('release check refuses anything but on or off, and switches nothing', async () => {
+    const r = await invoke(['release', 'check', 'maybe'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('on or off')
+    expect(setReleaseCheck).not.toHaveBeenCalled()
   })
 
   it('config-secret prints the config-secret state (uc.admin.back-up-and-restore-instance step 11)', async () => {
