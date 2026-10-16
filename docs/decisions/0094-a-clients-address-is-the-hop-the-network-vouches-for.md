@@ -7,7 +7,7 @@
 
 Two consumers need the address of the client that sent a request:
 
-- **The guest-write record** (the moderation ADR, 0093) keeps the address and time of a guest's write as evidence
+- **The guest-write record** (the moderation ADR, [0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)) keeps the address and time of a guest's write as evidence
   for an abuse report. A forged address there can name an innocent third party.
 - **The per-IP rate limiter** (`RateLimitFilters.kt:80`, `request.remoteAddress()`) keys its bucket on it. A forged
   address there opens a fresh bucket per request.
@@ -146,7 +146,6 @@ This CR touches `app-deployment.yaml`, `values.yaml`, `NOTES.txt`, `networking.m
   - `cc.security.rate-limit.md`: the "Trusts the client IP" bullet, the deferred "address-based `trusted-proxies`
     default" (`:164`) resolved, and § Verified by (`:171`).
   - ADR 0071 decision 4 and its Context, edited in place.
-  - ADR 0092 § 2 points here.
 
 ## Measurement ledger
 

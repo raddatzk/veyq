@@ -181,7 +181,9 @@ range and its no-extension rule (§ 2 there).
   [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md): the record takes the address of
   veyq's one core resolver, the rightmost `X-Forwarded-For` entry that is not a trusted proxy. When the resolver
   yields no address, nothing is recorded. On Compose the address is strong by construction; on Helm it is only as
-  strong as an enforced NetworkPolicy (0094 decision 6), and the disclosure and the Run docs say so.
+  strong as an enforced NetworkPolicy (0094 decision 6), and the disclosure and the Run docs say so. The
+  slice test is 0094's: a guest write carrying `198.51.100.66, 203.0.113.77` records `203.0.113.77` (the
+  control), and `198.51.100.66` is in no record and no log.
 - **Switch `core.public-shares.guest-write-record`**, operator only (`*`), on by default
   ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)). Off: nothing is
   recorded, and the next purge deletes every live row; hold copies stay.
