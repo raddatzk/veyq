@@ -47,3 +47,10 @@ gaps:
     one trace is the router guard sending every route to `/not-set-up` while `setupRequired` is true
     (`src/router.ts`), whose `NotSetUpView` deliberately names no admin URL — the operator chose it at deploy
     time and this app is never told. The criteria here are the setup API's; none describes that redirect.
+  stack: >-
+    Lane L1's browser suite (`e2e/tests/setup/first-run.setup.ts`) drives `create-owner-and-complete`, `status-
+    required-when-fresh` in Chromium against the release candidate's two images, installed through `veyqctl` (ADR
+    0090), each test tagged with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's
+    CI job (`ci.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a
+    run's log shows the suite executed. On that run each file becomes a ref on the criteria its tests are tagged
+    with, and this gap goes.

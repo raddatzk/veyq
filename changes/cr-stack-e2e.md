@@ -228,7 +228,7 @@ trust-chain green. Each phase names its bites — the case that must make the ne
         not a published store port — the recipe publishes none.
       - **No HTTP sweep and no capability tokens on the lane**: the browser records no traffic. The API suites keep
         both; the concern's § Lane L1 says what the lane does not sweep.
-- [ ] 4 **L1 in the pipeline.** The lane job per architecture after the build (a pull request: amd64, built and tested
+- [x] 4 **L1 in the pipeline.** The lane job per architecture after the build (a pull request: amd64, built and tested
       in the same job, nothing pushed; a push: both architectures, `build-<sha>-<arch>` pulled by digest and re-tagged
       to a local name, since the lane installs through `veyqctl install --unsigned-local`), and the
       snapshot publish needs it with `success`; the gate promoted to a guard — `validate_release_identity.py` asserts the
@@ -242,6 +242,45 @@ trust-chain green. Each phase names its bites — the case that must make the ne
       not measured: ~6–10 min per architecture for the first scenarios; the first CI run's numbers replace it. A lane
       that grows past its budget is sharded with a stack per shard, never made faster by weakening what ships (no
       lowered Argon2 parameters, no skipped TLS).
+      **Done 2026-10-16.** What was built: `ci.yml`'s `stack` job (needs `version`, `frontend`, `build`; arch matrix
+      amd64 + arm64, arm64 excluded on a pull request; 15 min); the build hands each pushed digest over as an artifact
+      `digest-<image>-<arch>`; `publish` needs `stack` with `success`. `validate_release_identity.py` assertion 10 (the
+      job that runs `run_stack_e2e.py` exists, needs `build`, covers every published architecture, is waited on with
+      `success`); `scripts/validate_stack_criterion_tags.py`; `stack` in `validate_coverage.py`'s `SURFACES` and
+      `FILE_ROOTS` (a `*.setup.ts` counts as a test file there), not `ADMITTED`; the nine use-cases the suite's tags
+      name carry a `stack` gap naming the spec files and the first CI run; the orchestrator times a `browser image`
+      stage and each spec file (one per Playwright project) under `browser`.
+      Proof, against `4266dc50`: `run_pipeline.py --job build` — `version` and both arm64 build legs green (the amd64
+      legs not run on this arm64 host); then the `stack` job's `run:` steps by hand, in order, as a push runs them on a
+      host that is not GitHub's (the gated install, the venv, the host's-Docker stand-in build, the lane): **green, 91 s
+      for the steps, the lane 48.5 s** (pebble 3.3, install 16.5, browser 25.0 — setup 9.7, scenarios 8.8 —, sweep 1.3,
+      teardown 1.5; images from cache, load 4–6); log read, ten tests passed, sweep green on all four sensors, the
+      host's five containers and four volumes unchanged, the owner's dev stack untouched. The CI run awaits the remote.
+      Bites, each red once by snapshot-and-restore, bytes restored identical: (1) `stack` dropped from `publish`'s
+      `needs` → red, "the `publish` job does not wait on lane L1 (`stack`)…" (assertion 9 red beside it); (1b) the whole
+      lane job deleted with its need and its `if` term — green under assertion 9 alone — → red, "no job … runs
+      `scripts/run_stack_e2e.py` — lane L1 is gone"; (2) `status-required-when-fresh` misspelt in its tag → red, naming
+      the tag, the file and the criterion ids; (3) a `stack` ref on that criterion to `memory-roundtrip.spec.ts` → red,
+      "names a file none of whose tests is tagged @uc.admin.setup-server:status-required-when-fresh"; its control, the
+      ref to `first-run.setup.ts`, green. The tag guard's first run on the untouched tree was red on the nine use-cases
+      that said nothing on `stack`, which is how their gaps were written. Guards 58 of 58, `validate_guard_gaps.py
+      --force` 79 cases holding.
+      What it changed against the plan:
+      - **A push writes to no registry today** (ADR 0057 §1; a snapshot per push is ADR 0091 decision 5, not built), so
+        only a dispatch has a `build-<sha>-<arch>` to pull: the lane pulls by digest there and builds in its own job on a
+        push as on a pull request, from `build`'s cache, pushing nothing. When a push publishes the snapshot, the push
+        moves to the pull path. The digest travels as an artifact because matrix legs cannot each set a job output —
+        one more pinned action, `actions/download-artifact` v8.0.2 (a commit, `node24`).
+      - **The lane needs `frontend` too**: `validate_npm_installs_gated.py` was red on the first draft — the images
+        install the lockfile whose registry half only `frontend` asks, and every job that needs a build must need it.
+      - **No browser cache**: the browser is the pinned Playwright image (phase 2), not an install; its pull is the timed
+        `browser image` stage, and the first CI run shows whether it needs one. The candidate's build or pull are job
+        steps, timed by the CI log, not by the orchestrator.
+      - **`run_pipeline.py` cannot run `stack` on this host**: its arm64 leg needs the whole `build` matrix, whose amd64
+        legs an arm64 Mac does not run, so the tool reports it `not run` — hence the steps by hand.
+      - The tag guard holds two more things than the plan named: every test carries a tag (bitten: the first test's
+        `tag` removed → red, "carries no tag"), and every use-case a tag names says something on `stack` (its first run
+        on the untouched tree, above).
 - [ ] 5 **Capability off states — inbox #447's hand pass, automated.** `capability-off-states.spec.ts` for the four ids,
       through admin-web's Server → Capabilities and back, asserting what #447's row recorded: the affordances gone
       ("New drop box" and its tab, "Sign in with a QR code", "Add a device", "Stay signed in"), a trusted and a

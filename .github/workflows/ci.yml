@@ -467,6 +467,7 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
 
       - name: Build image
+        id: image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -500,6 +501,211 @@ jobs:
           docker build --file "$DOCKERFILE" --target "$TARGET" --platform "$PLATFORM" \
             --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
             --tag "veyq-pipeline/${IMAGE}:${ARCH}" .
+
+      # The digest this leg pushed, handed to the stack lane of its architecture, which pulls the image by it — never by
+      # the staging tag, which a later build of the same commit could move (ADR 0090 decision 2: the lane tests the
+      # exact bytes). One small artifact per image and architecture; matrix legs cannot each set a job output.
+      - name: Hand the pushed digest to the stack lane
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "the build pushed no digest the lane could pull by: '${DIGEST}'" >&2
+            exit 1
+          fi
+          mkdir -p "${RUNNER_TEMP}/digests"
+          printf '%s\n' "$DIGEST" > "${RUNNER_TEMP}/digests/${IMAGE}"
+
+      - name: Keep the pushed digest
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.image }}
+          if-no-files-found: error
+          retention-days: 7
+
+  # Lane L1 (ADR 0090; ADR 0091 decision 3): the release candidate installed the way a Server Owner installs it —
+  # `veyqctl install --unsigned-local` from the release assets `scripts/release_assets.py` produces for these two
+  # images — with a real ACME certificate from Pebble, first run, a Memory round trip and the feature scenarios driven
+  # in Chromium (`e2e/`, in the Playwright image the overlay pins), then the ADR 0053 sweeps over the whole stack. One
+  # instance per run; the orchestrator prints every stage's wall time into its summary, which the job's budget (ADR
+  # 0091 decision 1, 15 min) is held against.
+  #
+  # Which bytes it tests (ADR 0090 decision 2): on a dispatch, the `build-<sha>-<arch>` images `build` pushed, pulled
+  # by the digest `build` handed over and given a local name, because `veyqctl --unsigned-local` takes only a local
+  # build's bare `name:tag` — the publish waits on this job, so it names nothing this lane did not install. A push and
+  # a pull request write to no registry (ADR 0057 §1), so there is nothing to pull: the lane builds the two images in
+  # its own job, with `build`'s arguments and from its cache, and pushes nothing. A pull request runs the amd64 leg
+  # only; a push and a dispatch run both architectures, since nothing else ever starts the arm64 image.
+  stack:
+    name: Stack lane L1 (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    # `frontend` too: it is the one install of the lockfile that asks the registry about the packages this platform
+    # skipped (inbox #312), and the images this lane builds or pulls install that lockfile — so nothing is booted here
+    # from a lockfile that check has not passed (validate_npm_installs_gated.py). It runs beside `build`, so the
+    # wait costs only what it takes longer.
+    needs:
+      - version
+      - frontend
+      - build
+    permissions:
+      contents: read
+      packages: read # a dispatch pulls the staged images by digest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        exclude:
+          - arch: ${{ github.event_name == 'pull_request' && 'arm64' || 'none' }}
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The browser container installs nothing: it mounts this root install read-only, with `@playwright/test` pinned
+      # to the image's version (the orchestrator refuses a mismatch). The registry half is asked once per commit, by
+      # `frontend`.
+      - name: Install dependencies
+        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+
+      # The orchestrator, the release producer and `veyqctl` run on the job's Python; PyYAML is the one dependency.
+      - name: Set up the orchestrator's Python
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/stack-venv"
+          "${RUNNER_TEMP}/stack-venv/bin/pip" install --quiet pyyaml
+
+      - name: Set up Docker Buildx
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # A push or a pull request: the candidate is built here, as `build` built it (same Dockerfile, target, platform
+      # and arguments), from the cache `build` wrote for this image and architecture, loaded into this runner's Docker
+      # and never pushed.
+      - name: Build the candidate app image
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile
+          target: runtime-jvm
+          platforms: ${{ matrix.platform }}
+          push: false
+          load: true
+          provenance: false
+          sbom: false
+          tags: veyq:candidate-${{ matrix.arch }}
+          build-args: |
+            VEYQ_VERSION=${{ needs.version.outputs.version }}
+            VEYQ_REVISION=sha-${{ github.sha }}
+          cache-from: type=gha,scope=veyq-${{ matrix.arch }}
+
+      - name: Build the candidate admin image
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: admin-web/Dockerfile
+          target: runtime-nginx
+          platforms: ${{ matrix.platform }}
+          push: false
+          load: true
+          provenance: false
+          sbom: false
+          tags: veyq-admin:candidate-${{ matrix.arch }}
+          build-args: |
+            VEYQ_VERSION=${{ needs.version.outputs.version }}
+            VEYQ_REVISION=sha-${{ github.sha }}
+          cache-from: type=gha,scope=veyq-admin-${{ matrix.arch }}
+
+      # Never runs on GitHub. scripts/run_pipeline.py cannot run the two actions above, so on its host this builds the
+      # same two images with the host's own Docker, under the same local names.
+      - name: Build the candidate images (the host's Docker)
+        if: runner.environment != 'github-hosted' && github.event_name != 'workflow_dispatch'
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+          VEYQ_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker build --file Dockerfile --target runtime-jvm --platform "$PLATFORM" \
+            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
+            --tag "veyq:candidate-${ARCH}" .
+          docker build --file admin-web/Dockerfile --target runtime-nginx --platform "$PLATFORM" \
+            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
+            --tag "veyq-admin:candidate-${ARCH}" .
+
+      # A dispatch: the images `build` pushed for this architecture, by the digests it handed over.
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch the digests build pushed
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Pull the candidate by digest and name it locally
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          for image in veyq veyq-admin; do
+            digest="$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/${image}")"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "no digest for ${image} (${ARCH}) from build: '${digest}'" >&2
+              exit 1
+            fi
+            docker pull "${REGISTRY}/${image}@${digest}"
+            docker tag "${REGISTRY}/${image}@${digest}" "${image}:candidate-${ARCH}"
+            echo "${image}:candidate-${ARCH} is ${REGISTRY}/${image}@${digest}"
+          done
+
+      - name: Run lane L1
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          "${RUNNER_TEMP}/stack-venv/bin/python" scripts/run_stack_e2e.py \
+            --app "veyq:candidate-${ARCH}" --admin "veyq-admin:candidate-${ARCH}"
+
+      # The run directory: the release and the instance's home, every container's log, the browser's report and a trace
+      # per test, the sweeps' dumps. Kept on success too, so a green run can be compared with a red one. It holds the
+      # secrets and Secret Key of a throwaway instance that no longer exists.
+      - name: Keep the stack run directory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stack-out-${{ matrix.arch }}
+          path: .e2e-stack-out/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
 
   # The upgrade proof (ADR 0057 Decision 7, site/src/content/docs/run/upgrade.mdx): the predecessor's own jar and e2e
   # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
@@ -573,6 +779,7 @@ jobs:
       - web-e2e
       - version
       - build
+      - stack
       - upgrade-proof
     # `always()` so that the upgrade proof being SKIPPED (disabled, above) does not skip the publish, as a skipped need
     # otherwise would; every result then gates it explicitly. Its "skipped" goes with the job's `if: false`.
@@ -586,6 +793,7 @@ jobs:
       && needs.web-e2e.result == 'success'
       && needs.version.result == 'success'
       && needs.build.result == 'success'
+      && needs.stack.result == 'success'
       && contains(fromJSON('["success", "skipped"]'), needs.upgrade-proof.result)
     permissions:
       contents: write # create the one `v<major>.<minor>` ref a release is named by (ADR 0057 §2)
