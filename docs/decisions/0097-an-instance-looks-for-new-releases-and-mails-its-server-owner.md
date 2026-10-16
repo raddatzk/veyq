@@ -58,9 +58,11 @@ notice is mailed twice. Without instance mail, admin-web shows them and that is 
 ([ADR 0049](0049-email-delivery-boundary.md)).
 
 **5. The address is confirmed by the first mail.** Saving the instance mail settings sends a test mail to the Server
-Owner's address with a confirmation link; notices are mailed only after it was followed. One mail proves both that
-the SMTP settings work and that setup's address — collected there, never confirmed — reaches its owner. A changed
-address or changed settings ask again.
+Owner's address carrying a short one-time code, which the Server Owner types into the admin console; notices are
+mailed only after that. One mail proves both that the SMTP settings work and that setup's address — collected there,
+never confirmed — reaches its owner. A changed address or changed settings ask again. A code and not a link, because
+the admin console is reachable on localhost only ([ADR 0065](0065-admin-ui-cli-separate-service.md)) and the instance
+has no address of its own: a link opened on another device would reach nothing.
 
 **6. The channel is built for instance notices, and carries release notices only.** Nothing in decisions 3–5 is
 specific to releases, so another kind of notice (a certificate about to expire, a failed backup) is one decision

@@ -28,8 +28,8 @@ acceptanceCriteria:
       only instance notices and only to the Server Owner's address, and never a tenant's mail.
   - id: the-address-is-confirmed-before-any-notice
     text: >-
-      Saving the instance mail settings sends a test mail with a confirmation link; no notice is mailed until it was
-      followed, and a changed address or changed settings ask again.
+      Saving the instance mail settings sends a test mail with a one-time code; no notice is mailed until the code
+      was entered in the admin console, and a changed address or changed settings ask again.
   - id: each-notice-is-mailed-once-with-a-calendar-date
     text: >-
       Each notice is mailed once; a planned major and the window reminders carry their date written out and as an

@@ -28,11 +28,10 @@ Implementation waits for the owner's go on this CR.
 - **Entry condition: [`cr-veyqctl`](cr-veyqctl.md) phase 1 has landed** — the mirror layout (`releases.json`, per-tag
   `manifest.json` with `unscheduled`) is what the check reads, and it is defined there. Until it lands, this CR cites it
   as planned (§ *a sibling CR still in flight*).
-- **Owner decision before phase 1 — the confirmation is a code, not a link.** ADR 0097 decision 5 says "confirmation
-  link", but the admin console is reachable on localhost only ([ADR 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)),
-  and the instance has no address of its own (only tenants do — `uc.admin.setup-server`, "No instance name either").
-  A link opened on a phone reaches nothing. Proposed: the test mail carries a short one-time code the Server Owner
-  types into Server → Mail. If the owner agrees, phase 4 edits ADR 0097 decision 5 and the use-case's step 3 in place.
+- **The confirmation is a code, not a link** (owner 2026-10-16; ADR 0097 decision 5): the admin console is reachable
+  on localhost only ([ADR 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)) and the instance has no
+  address of its own (`uc.admin.setup-server`, "No instance name either"), so a link opened on a phone would reach
+  nothing. The code is a short one-time value, stored hashed (`Tokens.hash`), expiring, and rate-limited on entry.
 - **Who checks: a stamped release only.** An unstamped build (`veyq.release.version` empty —
   `grep -n "veyq.release.version" backend/core/src/main/resources/application.properties`) and a `-SNAPSHOT` are on no
   release line and check nothing. That keeps every test lane quiet by construction (local images and quarkusDev are
@@ -116,8 +115,7 @@ Implementation waits for the owner's go on this CR.
   switch, source and last success; Server → Mail holds the settings, the send-and-confirm step and the code entry; the
   CLI's `release` prints the notices and `release check on|off` toggles (mail stays console-only, as tenant mail is,
   `admin-web/src/cli/commands.ts:8-9`). `admin-web/src/i18n/index.ts` EN and DE. ADR 0048 §4 edited in place ("no
-  instance-wide secret for tenant mail"; instance notices per ADR 0097); ADR 0097 decision 5 per the owner's call on
-  the code. Run pages: `run/storage-and-email.md` (instance mail), `run/operations.md` (the daily request and how to
+  instance-wide secret for tenant mail"; instance notices per ADR 0097); Run pages: `run/storage-and-email.md` (instance mail), `run/operations.md` (the daily request and how to
   switch it off or mirror it), `run/configuration.md` if a key is added (`validate_run_config_reference.py` says). The
   coverage file loses `status: planned`, every criterion gets its backend and admin-web refs, `web` keeps its gap.
   - **Browser pass:** in a dev instance with a stub source and Mailpit — enable, see a notice, save mail, enter the code

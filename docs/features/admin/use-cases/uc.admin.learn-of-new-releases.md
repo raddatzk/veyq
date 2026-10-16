@@ -20,7 +20,7 @@
    release of the running major; a planned new major with the date the running major leaves the client window; an
    unscheduled new major, marked urgent.
 3. The Server Owner opens Server → Mail, enters the instance's SMTP settings and saves. A test mail with a
-   confirmation link goes to the Server Owner's account address; following the link confirms it.
+   one-time code goes to the Server Owner's account address; typing the code into Server → Mail confirms it.
 4. From then on, each notice is mailed once: what was found, the link to the Run area's upgrade page, and for a dated
    notice the date written out and attached as an `.ics` event. Reminders follow 90 and 30 days before the running
    major's window ends.
