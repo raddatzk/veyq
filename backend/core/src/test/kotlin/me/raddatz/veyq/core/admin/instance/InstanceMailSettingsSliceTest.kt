@@ -29,6 +29,9 @@ import org.junit.jupiter.api.Test
  * full HTTP stack: the password write-only and sealed at rest exactly as a tenant's (ADR 0050), its fingerprint part
  * of the instance-wide key state, a host without a from address refused, and the role gate. What the save sends and
  * what the code confirms are [InstanceNoticeMailSliceTest]'s.
+ *
+ * Every save here sends its test mail, so the hosts are under `.invalid` (RFC 2606: it never resolves): the send fails
+ * at once, inside the JVM, instead of reaching a real relay on the internet.
  */
 @QuarkusTest
 class InstanceMailSettingsSliceTest {
@@ -61,9 +64,9 @@ class InstanceMailSettingsSliceTest {
 
     @Test
     fun theOwnerConfiguresSmtpAndThePasswordIsWriteOnlyAndSealed() {
-        save("""{"host":"smtp.example.com","port":2525,"from":"veyq@example.com","username":"veyq","password":"$SECRET","tls":true}""")
+        save("""{"host":"smtp.veyq.invalid","port":2525,"from":"veyq@example.com","username":"veyq","password":"$SECRET","tls":true}""")
             .statusCode(200)
-            .body("host", equalTo("smtp.example.com"))
+            .body("host", equalTo("smtp.veyq.invalid"))
             .body("port", equalTo(2525))
             .body("from", equalTo("veyq@example.com"))
             .body("username", equalTo("veyq"))
@@ -82,11 +85,11 @@ class InstanceMailSettingsSliceTest {
 
     @Test
     fun omittingThePasswordKeepsTheStoredOne() {
-        save("""{"host":"smtp.example.com","from":"veyq@example.com","username":"veyq","password":"$SECRET","tls":true}""").statusCode(200)
+        save("""{"host":"smtp.veyq.invalid","from":"veyq@example.com","username":"veyq","password":"$SECRET","tls":true}""").statusCode(200)
         val sealed = row().passwordCiphertext
 
-        save("""{"host":"smtp2.example.com","from":"veyq@example.com","username":"veyq","tls":false}""").statusCode(200)
-            .body("host", equalTo("smtp2.example.com"))
+        save("""{"host":"smtp2.veyq.invalid","from":"veyq@example.com","username":"veyq","tls":false}""").statusCode(200)
+            .body("host", equalTo("smtp2.veyq.invalid"))
             .body("tls", equalTo(false))
             .body("passwordSet", equalTo(true))
         assertEquals(sealed, row().passwordCiphertext)
@@ -94,11 +97,11 @@ class InstanceMailSettingsSliceTest {
 
     @Test
     fun aHostWithoutAFromAddressIsRefusedAndNothingIsStored() {
-        save("""{"host":"smtp.example.com","tls":true}""").statusCode(400).body("code", equalTo("invalid_request"))
-        save("""{"host":"smtp.example.com","from":"not-an-address","tls":true}""").statusCode(400)
-        save("""{"host":"smtp.example.com","from":"veyq@example.com"}""").statusCode(400) // a missing tls is no answer
+        save("""{"host":"smtp.veyq.invalid","tls":true}""").statusCode(400).body("code", equalTo("invalid_request"))
+        save("""{"host":"smtp.veyq.invalid","from":"not-an-address","tls":true}""").statusCode(400)
+        save("""{"host":"smtp.veyq.invalid","from":"veyq@example.com"}""").statusCode(400) // a missing tls is no answer
         owner().`when`().get(PATH).then().statusCode(200).body("confirmation", equalTo("NOT_CONFIGURED"))
-        save("""{"host":"smtp.example.com","from":"veyq@example.com","tls":true}""").statusCode(200) // control
+        save("""{"host":"smtp.veyq.invalid","from":"veyq@example.com","tls":true}""").statusCode(200) // control
     }
 
     @Test
@@ -107,7 +110,7 @@ class InstanceMailSettingsSliceTest {
         val sealed = seal.seal(SECRET)
         QuarkusTransaction.requiringNew().run {
             InstanceMailSettingsEntity().apply {
-                host = "smtp.example.com"; fromAddress = "veyq@example.com"; username = "veyq"
+                host = "smtp.veyq.invalid"; fromAddress = "veyq@example.com"; username = "veyq"
                 passwordCiphertext = sealed.ciphertext; passwordNonce = sealed.nonce; passwordFingerprint = "the-lost-key"
                 ownerUserId = OWNER_ID
             }.persist()
@@ -118,14 +121,14 @@ class InstanceMailSettingsSliceTest {
         owner().`when`().get(PATH).then().statusCode(200).body("configSecretState", equalTo("MISMATCH"))
 
         // Re-entering it seals it under the current key: the recovery path.
-        save("""{"host":"smtp.example.com","from":"veyq@example.com","username":"veyq","password":"$SECRET","tls":true}""")
+        save("""{"host":"smtp.veyq.invalid","from":"veyq@example.com","username":"veyq","password":"$SECRET","tls":true}""")
             .statusCode(200).body("configSecretState", equalTo("OK"))
         assertEquals(ConfigSecretKeyState.OK, committedState())
     }
 
     @Test
     fun aCodeIsRefusedWhenNoneIsOutstanding() {
-        save("""{"host":"smtp.example.com","from":"veyq@example.com","tls":true}""").statusCode(200)
+        save("""{"host":"smtp.veyq.invalid","from":"veyq@example.com","tls":true}""").statusCode(200)
         owner().contentType(ContentType.JSON).body("""{"code":"12345678"}""")
             .`when`().post("$PATH/confirmation").then().statusCode(409).body("code", equalTo("mail_code_invalid"))
         owner().contentType(ContentType.JSON).body("""{"code":""}""")
@@ -137,7 +140,7 @@ class InstanceMailSettingsSliceTest {
         val member = givenAdminChannel().header("Authorization", bearer(MEMBER_ID))
         member.`when`().get(PATH).then().statusCode(403)
         givenAdminChannel().header("Authorization", bearer(MEMBER_ID)).contentType(ContentType.JSON)
-            .body("""{"host":"smtp.example.com","from":"veyq@example.com","tls":true}""").`when`().put(PATH).then().statusCode(403)
+            .body("""{"host":"smtp.veyq.invalid","from":"veyq@example.com","tls":true}""").`when`().put(PATH).then().statusCode(403)
         givenAdminChannel().header("Authorization", bearer(MEMBER_ID)).contentType(ContentType.JSON)
             .body("""{"code":"12345678"}""").`when`().post("$PATH/confirmation").then().statusCode(403)
         assertEquals(null, QuarkusTransaction.requiringNew().call { InstanceMailSettingsEntity.findById(InstanceMailSettingsEntity.SINGLETON_ID) })

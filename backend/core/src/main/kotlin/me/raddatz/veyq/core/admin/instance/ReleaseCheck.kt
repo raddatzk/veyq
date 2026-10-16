@@ -19,14 +19,15 @@ sealed interface ReleaseCheckRun {
     /** The source could not be read or answered something malformed; nothing changed but the log. */
     data class Failed(val reason: String) : ReleaseCheckRun
 
-    /** The source was read; [newNotices] notices were found for the first time. */
-    data class Checked(val newNotices: Int) : ReleaseCheckRun
+    /** The source was read; [newNotices] notices were found for the first time, and [mailed] notices were mailed. */
+    data class Checked(val newNotices: Int, val mailed: Int = 0) : ReleaseCheckRun
 }
 
 /**
  * The daily look for new releases (ADR 0097 decision 1, uc.admin.learn-of-new-releases). It reads the published
  * releases from the Server Owner's chosen source ([ReleaseFeed]), compares them with this instance's own release
- * **locally** ([ReleaseNoticePolicy]) and stores what it found as notices, each once ([ReleaseNoticeStore.recordFound]).
+ * **locally** ([ReleaseNoticePolicy]) and stores what it found as notices, each once ([ReleaseNoticeStore.recordFound]),
+ * then hands the ones not mailed yet to [InstanceNoticeMailer], which sends only with confirmed instance mail.
  *
  * **Nothing waits on it.** It runs on the scheduler's own thread, never in a request or at startup; a failed run —
  * unreachable, slow past `veyq.release-check.timeout`, a status other than 200, an oversized or malformed answer — is
@@ -40,6 +41,7 @@ sealed interface ReleaseCheckRun {
 class ReleaseCheck(
     private val identity: ReleaseIdentity,
     private val store: ReleaseNoticeStore,
+    private val mailer: InstanceNoticeMailer,
     config: VeyqConfig,
 ) {
     private val log = Logger.getLogger(ReleaseCheck::class.java)
@@ -80,7 +82,15 @@ class ReleaseCheck(
         val new = store.recordFound(found, now)
         store.recordSuccess(now)
         if (new > 0) log.infof("The release check found %d new notice(s).", new)
-        return ReleaseCheckRun.Checked(new)
+        // Each notice not mailed yet goes to a confirmed Server Owner once (ADR 0097 decision 4). A mail that fails
+        // stays for the next check; nothing about the mail can fail the check itself.
+        val mailed = try {
+            mailer.mailPending(version, now)
+        } catch (e: RuntimeException) {
+            log.errorf(e, "Mailing the release notices failed; they stay in the console and are tried at the next check")
+            0
+        }
+        return ReleaseCheckRun.Checked(new, mailed)
     }
 
     private fun feedFor(source: String?): ReleaseFeed =

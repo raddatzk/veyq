@@ -108,7 +108,7 @@ Implementation waits for the owner's go on this CR.
     Bitten: unstamped/snapshot, switched off, the release in a request header, the body cap and the window year each
     turned their test red.
 
-- [ ] **3 backend: instance mail.** Generalise the sender's transport so tenant and instance settings build the same
+- [x] **3 backend: instance mail.** Generalise the sender's transport so tenant and instance settings build the same
   `MailClient` (every caller from the locator keeps its behaviour — its tests are the check), add one attachment kind
   (`text/calendar`), and an `InstanceNoticeMailer`: the test mail with the code on save, the confirmation, and one mail
   per unmailed notice after a check, only with confirmed settings, only to the Server Owner's account address. The
@@ -119,6 +119,13 @@ Implementation waits for the owner's go on this CR.
     instance settings never reach a tenant mailer (a test per direction); the config-secret key absent → no mail,
     state reported.
   - **Done when:** `./gradlew check` green; committed.
+  - **Built:** the wire is `core/mail/SmtpDelivery` (`SmtpTransport` in, one optional `CalendarAttachment`);
+    `TenantMailSender` keeps its API and delegates, so no tenant caller changed. Tested with GreenMail in the JVM, as
+    tenant mail actually is (not Mailpit). A notice is *claimed* (`mailed_at` set) before its send and given back on a
+    failure, so "once" means at most once. The `.ics` is read by Jakarta Mail's MIME parser and a strict RFC 5545
+    line reader in the test — no iCalendar library, which would have been a new dependency for one assertion. The
+    "key absent" criterion is proven on `MISMATCH`, the same `state != OK` branch. Bitten: the confirmation gate,
+    the claim's `mailed_at is null`, the claim's release, the line fold and the key check each turned a test red.
 
 - [ ] **4 admin-web, docs, coverage.** Server → Release lists the notices (urgent styled as such) and the check's
   switch, source and last success; Server → Mail holds the settings, the send-and-confirm step and the code entry; the

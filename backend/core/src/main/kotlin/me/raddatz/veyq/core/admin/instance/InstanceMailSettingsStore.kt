@@ -148,10 +148,16 @@ class InstanceMailSettingsStore {
         }
     }
 
-    /** Record that the test mail of the save that minted [codeHash] could not be delivered — only if no later save replaced it. */
+    /**
+     * Record that the test mail of the save that minted [codeHash] could not be delivered, and drop that code — it
+     * reached nobody — only if no later save replaced it.
+     */
     fun markTestMailFailed(codeHash: String) {
         QuarkusTransaction.requiringNew().run {
-            InstanceMailSettingsEntity.update("testMailFailed = true where id = ?1 and codeHash = ?2", InstanceMailSettingsEntity.SINGLETON_ID, codeHash)
+            InstanceMailSettingsEntity.update(
+                "testMailFailed = true, codeHash = null, codeAddress = null, codeExpiresAt = null where id = ?1 and codeHash = ?2",
+                InstanceMailSettingsEntity.SINGLETON_ID, codeHash,
+            )
         }
     }
 

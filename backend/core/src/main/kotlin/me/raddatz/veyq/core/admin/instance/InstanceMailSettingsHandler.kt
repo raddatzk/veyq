@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.crypto.ConfigSecretKeyGuard
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
 import me.raddatz.veyq.core.crypto.ConfigSecretSeal
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.generated.model.DeliveryResult
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
@@ -12,6 +13,7 @@ import me.raddatz.veyq.core.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.time.Duration
 import java.time.Instant
 
@@ -63,6 +65,11 @@ object InstanceMailConfirmation {
     /** Wrong entries that spend a code. With eight digits and the per-caller rate limit, guessing is not a strategy. */
     const val MAX_ATTEMPTS = 5
 
+    private val rng = SecureRandom()
+
+    /** A fresh code: eight digits, short enough to type from a phone's mail into the console. Stored only hashed. */
+    fun newCode(): String = "%08d".format(rng.nextInt(100_000_000))
+
     fun state(row: InstanceMailRow?, ownerAddress: String?, now: Instant): InstanceMailConfirmationState = when {
         row == null || row.transport.host == null -> InstanceMailConfirmationState.NOT_CONFIGURED
         row.confirmedAt != null && ownerAddress != null && row.confirmedAddress.sameAddress(ownerAddress) ->
@@ -98,6 +105,7 @@ class InstanceMailSettingsHandler(
     private val store: InstanceMailSettingsStore,
     private val seal: ConfigSecretSeal,
     private val keyState: ConfigSecretKeyGuard,
+    private val mailer: InstanceNoticeMailer,
 ) {
 
     fun read(callerId: String, now: Instant = Instant.now()): InstanceMailSettingsView = view(store.find(), callerId, now)
@@ -131,7 +139,20 @@ class InstanceMailSettingsHandler(
             passwordCiphertext = sealed.first, passwordNonce = sealed.second, passwordFingerprint = sealed.third,
             tls = tls,
         )
-        store.save(transport, callerId, codeHash = null, codeAddress = null, codeExpiresAt = null)
+        if (cleanHost == null) {
+            // Cleared: no instance mail, nothing to confirm, nothing sent.
+            store.save(transport, callerId, codeHash = null, codeAddress = null, codeExpiresAt = null)
+            return InstanceMailUpdateOutcome.Ok(view(store.find(), callerId, now))
+        }
+        // Every save asks again (decision 5): a new code for the address the caller's account has now, stored hashed
+        // before the send, and the send after the save's own transaction committed — a slow relay holds no connection.
+        val address = InstanceMailConfirmation.addressOf(callerId)
+        val code = InstanceMailConfirmation.newCode()
+        val hash = Tokens.hash(code)
+        val expiresAt = now.plus(InstanceMailConfirmation.CODE_TTL)
+        store.save(transport, callerId, codeHash = hash, codeAddress = address, codeExpiresAt = expiresAt)
+        val sent = address != null && mailer.sendCode(transport, address, code, expiresAt) == DeliveryResult.SENT
+        if (!sent) store.markTestMailFailed(hash)
         return InstanceMailUpdateOutcome.Ok(view(store.find(), callerId, now))
     }
 

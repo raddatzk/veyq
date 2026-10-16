@@ -146,10 +146,24 @@ class ReleaseNoticeStore {
     fun notices(): List<StoredNotice> =
         QuarkusTransaction.joiningExisting().call { ReleaseNoticeEntity.listAll().mapNotNull { it.toStored() } }
 
-    /** Mark [id] mailed at [at], once: a notice already marked keeps its first time. */
-    fun markMailed(id: String, at: Instant) {
+    /**
+     * Claim [id] for its one mail: set `mailed_at` to [at] if it has none, and say whether this call set it. A notice
+     * already claimed — mailed, or being mailed — is never claimed again, which is what makes it mailed at most once.
+     */
+    fun claimForMail(id: String, at: Instant): Boolean =
+        QuarkusTransaction.requiringNew().call {
+            ReleaseNoticeEntity.update("mailedAt = ?1 where id = ?2 and mailedAt is null", at, id) == 1
+        }
+
+    /**
+     * Give back the claim [claimForMail] took, because that send failed: the next check may try again. Only the mailer
+     * claims, and only from the check, which never runs twice at once (`ConcurrentExecution.SKIP`), so the claim given
+     * back is the one this run took. (Matched by id alone: a `TIMESTAMP(3)` column does not round-trip an `Instant`'s
+     * nanoseconds, so an equality on the time would miss on MariaDB.)
+     */
+    fun releaseClaim(id: String) {
         QuarkusTransaction.requiringNew().run {
-            ReleaseNoticeEntity.update("mailedAt = ?1 where id = ?2 and mailedAt is null", at, id)
+            ReleaseNoticeEntity.update("mailedAt = null where id = ?1", id)
         }
     }
 
