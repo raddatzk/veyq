@@ -324,6 +324,9 @@ const en = {
     // a session and can only ever reach the server's wrap (ADR 0058).
     deviceRemembered: 'This device stays signed in — it opens your memories without a password.',
     deviceTrusted: 'This device is trusted — it unlocks with just your password.',
+    // Instead of the two lines above while that tier's switch is off (ADR 0088 decision 5): the wrap is withheld, not
+    // deleted, so this device keeps its key and opens with it again once the switch is back on.
+    deviceHeldBack: 'This server does not allow remembered devices right now, so unlocking here needs your Secret Key. This device keeps its saved key: once the server allows it again, it unlocks as before.',
     deviceUntrusted: 'This device has no saved unlock — you’ll need your Secret Key here.',
     deviceUnsupported: 'This browser can’t remember a device, so unlocking here always needs your Secret Key.',
     untrustConfirmTitle: 'Forget this device?',
@@ -2119,6 +2122,7 @@ const de: typeof en = {
     // nie die `escalate*`-Texte oben, die eine Sitzung beenden und nur den Server-Wrap erreichen (ADR 0058).
     deviceRemembered: 'Dieses Gerät bleibt angemeldet — es öffnet deine Erinnerungen ohne Passwort.',
     deviceTrusted: 'Diesem Gerät wird vertraut — es entsperrt allein mit deinem Passwort.',
+    deviceHeldBack: 'Dieser Server lässt gemerkte Geräte gerade nicht zu, darum brauchst du zum Entsperren hier deinen Secret Key. Dieses Gerät behält seinen gespeicherten Schlüssel: Sobald der Server es wieder zulässt, entsperrt es wie zuvor.',
     deviceUntrusted: 'Dieses Gerät hat keinen gespeicherten Zugang — du brauchst hier deinen Secret Key.',
     deviceUnsupported: 'Dieser Browser kann sich kein Gerät merken; zum Entsperren brauchst du hier immer deinen Secret Key.',
     untrustConfirmTitle: 'Dieses Gerät vergessen?',

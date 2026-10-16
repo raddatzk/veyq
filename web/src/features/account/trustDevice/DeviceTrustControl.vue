@@ -31,8 +31,11 @@ import { isTrusted, untrustThisDevice, isTrustSupported } from './trustDevice'
 import { isRemembered, clearDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { account } from '../../../app/account'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
+import { useCapabilities } from '../../../shared/state/useCapabilities'
+import { CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../../platform/capabilities'
 
 const { t } = useI18n()
+const { hasCapability } = useCapabilities()
 
 // A device holds at most one convenience tier (login drops the other first): 'remembered' = the password-less
 // DEVICE_KEY wrap ("stay signed in"), 'trusted' = the password-only DEVICE wrap ("trust this device"), or 'none'
@@ -45,6 +48,15 @@ const confirmOpen = ref(false)
 const error = ref('')
 
 const hasConvenience = computed(() => state.value !== 'none')
+// The tier this device holds, switched off by the Server Owner (ADR 0088 decision 5): the server withholds its wrap
+// without deleting it, so the device keeps its key but cannot open with it until the switch is back on, and saying
+// "opens without a password" would be false. Each tier reads ONE id, as the sign-in does: the server ANDs the path.
+// The forget action stays: the key is still here, and dropping it is still the member's call.
+const heldBack = computed(() =>
+  state.value === 'remembered'
+    ? !hasCapability(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    : state.value === 'trusted' && !hasCapability(CORE_REMEMBER_DEVICE),
+)
 
 // Reflect this device's local unlock tier for the signed-in account. Remember-me (the stronger, password-less
 // tier) wins if both somehow exist. Best-effort: any read error reads as 'none' (the safe default — the forget
@@ -87,11 +99,13 @@ async function confirmUntrust() {
       <span>{{
         !supported
           ? t('sessions.deviceUnsupported')
-          : state === 'remembered'
-            ? t('sessions.deviceRemembered')
-            : state === 'trusted'
-              ? t('sessions.deviceTrusted')
-              : t('sessions.deviceUntrusted')
+          : heldBack
+            ? t('sessions.deviceHeldBack')
+            : state === 'remembered'
+              ? t('sessions.deviceRemembered')
+              : state === 'trusted'
+                ? t('sessions.deviceTrusted')
+                : t('sessions.deviceUntrusted')
       }}</span>
     </p>
 

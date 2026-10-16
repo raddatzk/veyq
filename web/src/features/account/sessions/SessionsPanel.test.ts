@@ -55,6 +55,10 @@ vi.mock('../trustDevice/trustDevice', () => ({
   isTrustSupported: vi.fn(),
 }))
 vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRemembered: vi.fn(), clearDeviceKey: vi.fn() }))
+// The instance's register as the current row reads it (ADR 0088): every id is on unless a test puts it in `switchedOff`,
+// so the cases above see the instance they were written against.
+const { switchedOff } = vi.hoisted(() => ({ switchedOff: new Set<string>() }))
+vi.mock('../../../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: (id: string) => !switchedOff.has(id) }) }))
 
 import SessionsPanel from './SessionsPanel.vue'
 import { listSessionFamilies, revokeSessionFamily, revokeOtherSessionFamilies } from './sessions'
@@ -66,6 +70,7 @@ import { deviceId, guessDeviceLabel } from '../deviceIdentity'
 import { TrustStateRefused } from '../trustMarks'
 import { isTrusted, untrustThisDevice, isTrustSupported } from '../trustDevice/trustDevice'
 import { isRemembered, clearDeviceKey } from '../rememberMe/deviceKeyWrap'
+import { CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../../platform/capabilities'
 import { vaultState } from '../../../app/vault'
 import { account } from '../../../app/account'
 import { i18n } from '../../../i18n'
@@ -125,6 +130,7 @@ const forgetButton = (w: VueWrapper) =>
 describe('SessionsPanel (uc.account.sessions, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    switchedOff.clear()
     realI18n()
     vaultState.unlocked = true
     vi.mocked(listSessionFamilies).mockResolvedValue([CURRENT, OTHER])
@@ -693,6 +699,38 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     // …and it did NOT route through the shared one. This is the half that keeps the two from quietly becoming
     // one control: a forget folded into `ask()` would lose the busy state and the inline error it needs.
     expect(confirmAsk).not.toHaveBeenCalled()
+  })
+
+  // ADR 0088 decision 5: a Server Owner's device switch withholds this device's wrap without deleting it. The row must
+  // not go on saying the device opens without the Secret Key (found in the browser pass of inbox #447), and it must
+  // not call the device bare either: it keeps its key, and the key opens it again once the switch is back on.
+  it('says a remembered device is held back while unlocking without a password is switched off, and still offers forgetting', async () => {
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    vi.mocked(isRemembered).mockResolvedValue(true)
+    const wrapper = await mountPanel()
+    const row = wrapper.findAll('.session-row')[0]
+
+    expect(row.text()).toContain(t('sessions.deviceHeldBack'))
+    expect(row.text()).not.toContain(t('sessions.deviceRemembered'))
+    expect(row.text()).not.toContain(t('sessions.deviceUntrusted'))
+    // The key is still on this device, so forgetting it is still the member's call.
+    expect(forgetButton(wrapper)).toBeDefined()
+  })
+
+  it('says a trusted device is held back while remembered devices are switched off, and not while only the password-less child is', async () => {
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    // Only the child off: a DEVICE wrap is still served, so the trusted line stays true.
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    const childOff = await mountPanel()
+    expect(childOff.findAll('.session-row')[0].text()).toContain(t('sessions.deviceTrusted'))
+    expect(childOff.findAll('.session-row')[0].text()).not.toContain(t('sessions.deviceHeldBack'))
+
+    // The parent off: both wraps are withheld (the server ANDs the path, so the child is absent from the manifest too).
+    switchedOff.add(CORE_REMEMBER_DEVICE)
+    const parentOff = await mountPanel()
+    expect(parentOff.findAll('.session-row')[0].text()).toContain(t('sessions.deviceHeldBack'))
+    expect(parentOff.findAll('.session-row')[0].text()).not.toContain(t('sessions.deviceTrusted'))
+    expect(forgetButton(parentOff)).toBeDefined()
   })
 
   it('offers the forget action ONLY on the current device\'s row', async () => {

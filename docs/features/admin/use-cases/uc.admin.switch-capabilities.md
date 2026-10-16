@@ -34,7 +34,8 @@
   password **and the Secret Key** too: a device holds one convenience wrap
   ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §9), so a password-less device has no
   `DEVICE` wrap to fall back on, only the `PASSWORD` floor. The unlock screen asks for the Secret Key at once, and
-  the field's hint line says why (`unlock.deviceHeldBack`) instead of the first-sign-in hint. The device keeps its
+  the field's hint line says why (`unlock.deviceHeldBack`) instead of the first-sign-in hint, and the device's own
+  line in Devices and sessions says it is held back (`sessions.deviceHeldBack`) instead of how it unlocks. The device keeps its
   local key and is never re-enrolled to the other tier while its wrap is withheld, so switching back on restores
   it. The `PASSWORD` wrap is always served, so nobody is locked out, and the confirmation text says so in those
   words.
