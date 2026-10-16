@@ -15,14 +15,14 @@ handling of reported shares.
 
 - ★ [First-run server setup](use-cases/uc.admin.setup-server.md) — **built (backend + admin-web)**
 - ★ [Administer only through the admin container](use-cases/uc.admin.admin-channel.md) — **built**
-- ★ [Connect and check the instance's object store](use-cases/uc.admin.configure-object-store.md) — **planned**
-  (ADR 0089): the store set and checked in the admin console instead of environment variables; a checked store
-  gates tenant creation.
   ([ADR 0065](../../decisions/0065-admin-ui-cli-separate-service.md); the backend answers every Server-Owner
   operation, first-run setup included, only on an internal listener the admin container reaches — classified by
   the socket, never by a header — and 404s it on the public origin)
+- ★ [Connect and check the instance's object store](use-cases/uc.admin.configure-object-store.md) — **built
+  (backend + admin-web)** (ADR 0089): the store set and checked in the admin console instead of environment
+  variables; a checked store gates tenant creation.
 - ★ [Switch the instance's capabilities on and off](use-cases/uc.admin.switch-capabilities.md) — **built (backend +
-  admin-web + web); the browser pass is pending** (ADR 0088 decisions 5, 12, 13;
+  admin-web + web; browser pass run 2026-10-15, inbox #447)** (ADR 0088 decisions 5, 12, 13;
   built 2026-10-15): the register in the admin console and the CLI, each entry with its
   purpose and effect-when-off, stored in the database and acting without a restart; a device switch withholds its
   wraps at once, and the web client keeps the device and asks for the password and the Secret Key.
