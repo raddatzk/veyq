@@ -147,10 +147,10 @@ const en = {
   // ADR 0075 point 5: a scope owner's switch-off of every public link in the space — the group and tenant panels
   spaceLinks: {
     title: 'Links',
-    sub: 'Public links to Memories in this space. If one may have reached the wrong hands, turn them all off at once.',
+    sub: 'Every public link in this space — to folders, files, drop boxes and Memories. If one may have reached the wrong hands, turn them all off at once.',
     revokeAll: 'Turn off every link',
     revokeAllConfirm:
-      'Turn off every public link to a Memory in this space? They stop working at once and come back only as new links — each link’s owner renews the ones still needed. Guests keep the photos they added.',
+      'Turn off every public link in this space? They stop working at once and come back only as new links — each link’s owner renews the ones still needed. Guests keep what they added.',
     revokedAll: 'No link was on. | One link turned off. | {count} links turned off.',
     revokeAllFailed: 'The links could not be turned off. Please try again.',
   },
@@ -798,7 +798,7 @@ const en = {
     quota: 'Storage limit of this space:',
     quotaHint: 'Set by whoever runs this server. Nothing more can be uploaded once it is reached; trash counts until it is emptied.',
     linkLimit: 'Limit per upload link (GiB)',
-    linkLimitHint: 'Applies to every upload link from its next upload on; nothing already stored is removed. Trash counts until it is emptied. 0 switches uploads through links off.',
+    linkLimitHint: 'Applies to every upload link from its next upload on; nothing already stored is removed. Trash counts until its items are removed for good. 0 switches uploads through links off.',
     invalidLimit: 'Enter a number of GiB, 0 or more.',
     save: 'Save storage settings',
     saved: 'Storage settings saved.',
@@ -1011,8 +1011,8 @@ const en = {
     // Deleting a level's selection (`core/node/components/DeleteNodesDialog.vue`, inbox #421): ONE question naming how many and
     // of which kinds (`{kinds}`: the kinds' `nounWithArticle`, joined), one summary naming each node that was not deleted.
     deleteMany: {
-      title: 'Delete {count} items',
-      copy: '{count} selected items move to the trash, with everything inside them. The selection includes {kinds}. You can restore them from there until they are removed for good.',
+      title: 'Delete {count} item | Delete {count} items',
+      copy: '{count} selected item moves to the trash, with everything inside it. The selection includes {kinds}. You can restore it from there until it is removed for good. | {count} selected items move to the trash, with everything inside them. The selection includes {kinds}. You can restore them from there until they are removed for good.',
       moved: '{count} item moved to the trash. | {count} items moved to the trash.',
       noneDeleted: 'Nothing was deleted.',
       notDeleted: 'Not deleted:',
@@ -1078,7 +1078,7 @@ const en = {
         kind: 'This place can’t hold it.',
       },
       many: {
-        title: 'Copy {count} items',
+        title: 'Copy {count} item | Copy {count} items',
         hint: 'Open the place the copies should go to and choose “Copy here”. Everything inside them is copied along.',
         copied: '{count} copied to “{to}”.',
         here: {
@@ -1119,7 +1119,7 @@ const en = {
       // summary says how many moved and names each one that did not, with its reason (`reason`: a sentence of `here`,
       // `nameTakenThere` or `refused`). `{names}` is a list of `quoted` names.
       many: {
-        title: 'Move {count} items',
+        title: 'Move {count} item | Move {count} items',
         empty: 'No place here can take them.',
         hint: 'Open the place they should go to and choose “Move here”. Everything inside them moves along and stays readable.',
         here: {
@@ -1783,7 +1783,7 @@ const en = {
       intro: 'Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.',
       roleContributor: 'View + contribute',
       roleViewerHint: 'Anyone with the link can look at this folder and everything in it, read-only.',
-      roleContributorHint: 'Anyone with the link can look, add folders and content, rename or move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history.',
+      roleContributorHint: 'Anyone with the link can look, add folders and content, move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history.',
       deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.',
       reissueWarning: 'This makes a new link and deletes the old one. Hand out the new link.',
       // A guest's tree operations on a folder link (core/sharing/guestTree.ts, guestTreeErrorMessageKey).
@@ -1914,9 +1914,9 @@ const de: typeof en = {
     awaitingAccess: 'Wartet auf Zugang',
     compromiseRotation: {
       stalled:
-        'Ein Mitglied hat sein Konto neu abgesichert, und dieser Raum braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann sein alter Schlüssel Neues hier noch lesen.',
+        'Ein Mitglied hat sein Konto neu abgesichert, und dieser Bereich braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann sein alter Schlüssel Neues hier noch lesen.',
       failed:
-        'Ein Mitglied hat sein Konto neu abgesichert, und das neue Schloss dieses Raums ließ sich wiederholt nicht einbauen — sein alter Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt dein Gerät.',
+        'Ein Mitglied hat sein Konto neu abgesichert, und das neue Schloss dieses Bereichs ließ sich wiederholt nicht einbauen — sein alter Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt dein Gerät.',
     },
     compromiseRotationMark: 'Braucht ein neues Schloss',
     compromiseRotationRequeue: 'Neu anstoßen',
@@ -1945,10 +1945,10 @@ const de: typeof en = {
   },
   spaceLinks: {
     title: 'Links',
-    sub: 'Öffentliche Links zu Erinnerungen in diesem Bereich. Wenn einer in falsche Hände geraten sein könnte, schalte alle auf einmal ab.',
+    sub: 'Jeder öffentliche Link in diesem Bereich — zu Ordnern, Dateien, Briefkästen und Erinnerungen. Wenn einer in falsche Hände geraten sein könnte, schalte alle auf einmal ab.',
     revokeAll: 'Alle Links abschalten',
     revokeAllConfirm:
-      'Alle öffentlichen Links zu Erinnerungen in diesem Bereich abschalten? Sie funktionieren sofort nicht mehr und kommen nur als neue Links zurück — wem ein Link gehört, erneuert die noch benötigten. Gäste behalten die Fotos, die sie hinzugefügt haben.',
+      'Alle öffentlichen Links in diesem Bereich abschalten? Sie funktionieren sofort nicht mehr und kommen nur als neue Links zurück — wem ein Link gehört, erneuert die noch benötigten. Gäste behalten, was sie hinzugefügt haben.',
     revokedAll: 'Es war kein Link aktiv. | Ein Link abgeschaltet. | {count} Links abgeschaltet.',
     revokeAllFailed: 'Die Links konnten nicht abgeschaltet werden. Bitte erneut versuchen.',
   },
@@ -2034,7 +2034,7 @@ const de: typeof en = {
     factNeedsKit:
       'Du brauchst dein Notfall-Kit. Das ist Absicht: es ist das Einzige, was die Person nicht hat, und genau das hindert sie daran, das mit dir zu machen.',
     factSharedSpaces:
-      'In geteilten Räumen muss jemand anderes bestätigen, dass du wirklich du bist — am besten, indem ihr die Sicherheitsnummer am Telefon vergleicht — bevor du wieder drin bist. In einem Raum, den nur du besitzt, mach vorher jemanden zur Besitzerin oder zum Besitzer, sonst kann dich dort niemand wieder hineinlassen.',
+      'In geteilten Bereichen muss jemand anderes bestätigen, dass du wirklich du bist — am besten, indem ihr die Sicherheitsnummer am Telefon vergleicht — bevor du wieder drin bist. In einem Bereich, den nur du besitzt, mach vorher jemanden zur besitzenden Person, sonst kann dich dort niemand wieder hineinlassen.',
     gateNotCold:
       'Dieses Gerät wurde ohne deinen Secret Key entsperrt, deshalb wird er hier abgefragt. Genau diese Prüfung hindert jemanden, der in dein Konto gekommen ist, daran, das mit dir zu tun — dein Notfall-Kit hat die Person nicht.',
     passwordLabel: 'Dein Passwort',
@@ -2043,7 +2043,7 @@ const de: typeof en = {
     action: 'Schlüssel ersetzen',
     confirmTitle: 'Schlüssel wirklich ersetzen?',
     confirmBody:
-      'Deine Räume bekommen neue Schlösser und alle anderen Geräte werden abgemeldet. Was diese Person schon gesehen hat, bleibt bei ihr. Das lässt sich nicht rückgängig machen.',
+      'Deine Bereiche bekommen neue Schlösser und alle anderen Geräte werden abgemeldet. Was diese Person schon gesehen hat, bleibt bei ihr. Das lässt sich nicht rückgängig machen.',
     errorLocked: 'Entsperre auf diesem Gerät zuerst deine Erinnerungen, dann kannst du die Schlüssel ersetzen.',
     errorCredential: 'Passwort oder Secret Key haben nicht gepasst. Es wurde nichts geändert.',
     errorNoFloor:
@@ -2058,19 +2058,19 @@ const de: typeof en = {
       failed: 'Nicht gesichert',
     },
     statusHint: {
-      secured: 'Dieser Raum hat ein neues Schloss, und nur deine neuen Schlüssel öffnen es.',
-      failed: 'Dieser Raum hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
+      secured: 'Dieser Bereich hat ein neues Schloss, und nur deine neuen Schlüssel öffnen es.',
+      failed: 'Dieser Bereich hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
     },
-    queuedTitle: 'Geteilte Räume',
+    queuedTitle: 'Geteilte Bereiche',
     queuedHint: {
       waiting:
-        'Eine andere besitzende Person dieses Raums baut das neue Schloss ein, sobald sie veyq das nächste Mal öffnet. Bis dahin kann der alte Schlüssel Neues hier noch lesen. Und jemand hier muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
+        'Eine andere besitzende Person dieses Bereichs baut das neue Schloss ein, sobald sie veyq das nächste Mal öffnet. Bis dahin kann der alte Schlüssel Neues hier noch lesen. Und jemand hier muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
       stalled:
-        'Hier kann niemand das neue Schloss einbauen: Es gibt keine andere besitzende Person mehr, die es kann. Mach jemand anderen zur besitzenden Person dieses Raums. Bis dahin kann der alte Schlüssel Neues hier noch lesen.',
+        'Hier kann niemand das neue Schloss einbauen: Es gibt keine andere besitzende Person mehr, die es kann. Mach jemand anderen zur besitzenden Person dieses Bereichs. Bis dahin kann der alte Schlüssel Neues hier noch lesen.',
       secured:
-        'Dieser Raum hat ein neues Schloss, das der alte Schlüssel nicht öffnet. Jemand hier muss noch bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
+        'Dieser Bereich hat ein neues Schloss, das der alte Schlüssel nicht öffnet. Jemand hier muss noch bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
       failed:
-        'Das neue Schloss ließ sich wiederholt nicht einbauen, deshalb hat dieser Raum noch sein altes — der alte Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt eine andere besitzende Person.',
+        'Das neue Schloss ließ sich wiederholt nicht einbauen, deshalb hat dieser Bereich noch sein altes — der alte Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt eine andere besitzende Person.',
     },
     groupNameUnavailable: 'Gruppe (Name nicht verfügbar, bis du wieder aufgenommen bist)',
     groupNameLastSeen: 'Name, wie ihn dieses Gerät zuletzt gesehen hat — er kann sich geändert haben.',
@@ -2567,7 +2567,7 @@ const de: typeof en = {
     quota: 'Speichergrenze dieses Bereichs:',
     quotaHint: 'Festgelegt von der Person, die diesen Server betreibt. Ist sie erreicht, kann nichts mehr hochgeladen werden; der Papierkorb zählt mit, bis er geleert ist.',
     linkLimit: 'Grenze pro Upload-Link (GiB)',
-    linkLimitHint: 'Gilt für jeden Upload-Link ab seinem nächsten Upload; bereits Gespeichertes wird nicht entfernt. Der Papierkorb zählt mit, bis er geleert ist. 0 schaltet Uploads über Links ab.',
+    linkLimitHint: 'Gilt für jeden Upload-Link ab seinem nächsten Upload; bereits Gespeichertes wird nicht entfernt. Der Papierkorb zählt mit, bis seine Einträge endgültig entfernt sind. 0 schaltet Uploads über Links ab.',
     invalidLimit: 'Gib eine Zahl in GiB ein, 0 oder mehr.',
     save: 'Speichereinstellungen speichern',
     saved: 'Speichereinstellungen gespeichert.',
@@ -2752,8 +2752,8 @@ const de: typeof en = {
     deleteCopy: '„{name}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.',
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
     deleteMany: {
-      title: '{count} Einträge löschen',
-      copy: '{count} ausgewählte Einträge kommen mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
+      title: '{count} Eintrag löschen | {count} Einträge löschen',
+      copy: '{count} ausgewählter Eintrag kommt mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich der Eintrag wiederherstellen, bis er endgültig entfernt wird. | {count} ausgewählte Einträge kommen mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
       moved: '{count} Eintrag liegt jetzt im Papierkorb. | {count} Einträge liegen jetzt im Papierkorb.',
       noneDeleted: 'Nichts wurde gelöscht.',
       notDeleted: 'Nicht gelöscht:',
@@ -2813,7 +2813,7 @@ const de: typeof en = {
         kind: 'Dieser Ort kann es nicht aufnehmen.',
       },
       many: {
-        title: '{count} Einträge kopieren',
+        title: '{count} Eintrag kopieren | {count} Einträge kopieren',
         hint: 'Öffne den Ort, an den die Kopien sollen, und wähle „Hierher kopieren“. Alles darin wird mitkopiert.',
         copied: '{count} nach „{to}“ kopiert.',
         here: {
@@ -2847,7 +2847,7 @@ const de: typeof en = {
       undoFailed: '„{name}“ konnte nicht zurückverschoben werden. Bitte verschiebe es selbst.',
       nameTakenThere: 'Dort gibt es schon {kind} namens „{name}“. Benenne zuerst eines davon um oder wähle einen anderen Ort.',
       many: {
-        title: '{count} Einträge verschieben',
+        title: '{count} Eintrag verschieben | {count} Einträge verschieben',
         empty: 'Hier gibt es keinen Ort, der sie aufnehmen kann.',
         hint: 'Öffne den Ort, an den sie sollen, und wähle „Hierher verschieben“. Alles darin wird mitverschoben und bleibt lesbar.',
         here: {
@@ -3442,7 +3442,7 @@ const de: typeof en = {
       intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten.',
       roleContributor: 'Ansehen + mitwirken',
       roleViewerHint: 'Wer den Link hat, kann diesen Ordner mit allem darin ansehen — schreibgeschützt.',
-      roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner und Inhalte hinzufügen, darin umbenennen oder verschieben und Dateien hochladen — auch über jede Datei, die schon darin liegt, deine eingeschlossen. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
+      roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner und Inhalte hinzufügen, darin verschieben und Dateien hochladen — auch über jede Datei, die schon darin liegt, deine eingeschlossen. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
       deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Was Gäste angelegt haben, bleibt in diesem Ordner.',
       reissueWarning: 'Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.',
       nameTaken: 'Hier gibt es schon „{name}“. Wähle einen anderen Namen.',

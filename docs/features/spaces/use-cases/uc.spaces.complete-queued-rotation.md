@@ -88,12 +88,12 @@ was removed (or the old, compromised key) can still read what's new in that spac
 owner is out, or it kept failing — owners see it on the space and can fix it: name another owner, or start it
 again.
 
-**DE —** Manchmal braucht ein geteilter Raum ein neues Schloss, und wer es ausgelöst hat, kann es nicht selbst
+**DE —** Manchmal braucht ein geteilter Bereich ein neues Schloss, und wer es ausgelöst hat, kann es nicht selbst
 einbauen: Eine Admin-Person hat jemanden aus einer Gruppe entfernt, in der sie selbst nicht ist, oder ein Mitglied
-hat sein Konto nach einem Einbruch neu abgesichert. Dann übernimmt das eine der Personen, denen der Raum gehört —
+hat sein Konto nach einem Einbruch neu abgesichert. Dann übernimmt das eine der Personen, denen der Bereich gehört —
 still im Hintergrund, beim nächsten Öffnen der App. Bis dahin kann die entfernte Person (oder der alte, kompromittierte
-Schlüssel) Neues in diesem Raum noch lesen. Klappt es nicht — niemand kann es übernehmen, oder es ist wiederholt
-gescheitert —, sehen die besitzenden Personen das am Raum und können es beheben: eine weitere besitzende Person
+Schlüssel) Neues in diesem Bereich noch lesen. Klappt es nicht — niemand kann es übernehmen, oder es ist wiederholt
+gescheitert —, sehen die besitzenden Personen das am Bereich und können es beheben: eine weitere besitzende Person
 ernennen oder es neu anstoßen.
 
 ## Related

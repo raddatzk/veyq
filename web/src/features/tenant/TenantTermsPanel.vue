@@ -184,7 +184,7 @@ async function save() {
         <Message v-if="blankLocales.length" severity="warn" :closable="false">
           {{ t('terms.blankLocaleWarning', { langs: blankLocaleNames }) }}
         </Message>
-        <small class="settings-muted">{{ t('terms.markdownHint') }}</small>
+        <small class="settings-muted">{{ t('terms.markdownHint', { contact: '{contact}' }) }}</small>
         <div class="terms-editor-actions">
           <Button :label="t('terms.save')" icon="pi pi-save" :loading="saving" @click="save" />
         </div>

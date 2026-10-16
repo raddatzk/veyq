@@ -183,16 +183,16 @@ you look, and if re-locking one failed, you can start it again.
 
 **DE —** Wenn jemand in dein Konto gekommen ist — etwa weil du einen Anmelde-Code bestätigt hast, der gar
 nicht dein neues Handy war — reicht Abmelden nicht: das Gerät hat weiterhin die Schlüssel zu deinen
-Erinnerungen. Beim Rotieren werden diese Schlüssel ersetzt. Deine Räume bekommen neue Schlösser, das alte
+Erinnerungen. Beim Rotieren werden diese Schlüssel ersetzt. Deine Bereiche bekommen neue Schlösser, das alte
 Gerät ist ab diesem Moment von allem ausgesperrt, und alle deine anderen Geräte müssen sich neu anmelden —
 mit Passwort und Notfall-Kit, denn jeder gespeicherte Schlüssel ist weg, auch der dieses Geräts.
 Zwei ehrliche Grenzen. Was diese Person schon gesehen hat, hat sie weiterhin — Rotieren stoppt, was danach
 kommt, es holt nichts zurück. Und du brauchst dafür dein Notfall-Kit, mit Absicht: es ist das Einzige, was
-die Person nicht hat, und genau das hindert *sie* daran, das mit *dir* zu machen. In geteilten Räumen muss
+die Person nicht hat, und genau das hindert *sie* daran, das mit *dir* zu machen. In geteilten Bereichen muss
 jemand anderes bestätigen, dass du wirklich du bist — am besten, indem ihr die Sicherheitsnummer am Telefon
-vergleicht — bevor du wieder drin bist. Geteilte Räume bekommen ihr neues Schloss außerdem von einer ihrer
+vergleicht — bevor du wieder drin bist. Geteilte Bereiche bekommen ihr neues Schloss außerdem von einer ihrer
 anderen besitzenden Personen, und bis dahin kann das alte Gerät dort Neues noch lesen; die Sicherheitsseite zeigt
-den Stand jedes Raums, wann immer du nachsiehst, und ist das neue Schloss für einen gescheitert, kannst du es neu
+den Stand jedes Bereichs, wann immer du nachsiehst, und ist das neue Schloss für einen gescheitert, kannst du es neu
 anstoßen.
 
 ## Related

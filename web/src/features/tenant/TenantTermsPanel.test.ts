@@ -137,6 +137,14 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
     expect(w.text()).not.toContain(t('terms.blankLocaleWarning', { langs: 'Deutsch' }))
   })
 
+  it('names the {contact} placeholder literally in the Markdown hint', async () => {
+    // The hint is a vue-i18n message with a `{contact}` slot: without the param the placeholder rendered as nothing
+    // ("Use  as a placeholder…"), so the owner never learned the token to type.
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 0, acceptedVersion: 0, terms: { de: '' } })
+    const w = await mountPanel()
+    expect(w.text()).toContain('Use {contact} as a placeholder')
+  })
+
   it('renders read-only for a member who is not the owner', async () => {
     vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 2, acceptedVersion: 2, terms: { en: '# Terms' } })
     vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't-1', role: 'MEMBER' })])
