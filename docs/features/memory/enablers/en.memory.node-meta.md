@@ -57,7 +57,10 @@
     the coordinate **and that level** so an `auto` refresh keeps the grain. `name` is mandatory **except a
     still-*pending* `auto` place**: an `auto` + `geocoded` location armed at creation with **no name/position
     yet** (the "follows your photos" opt-in), whose position and name are **materialized by the first geotagged
-    upload** (the `MemoryDetail` self-heal). Reverse-only, opt-in, veyq-blind geocoding:
+    upload** (the `MemoryDetail` self-heal). A place **without `derived`** that carries a name is a place that is a
+    **name only** — set on a server that shows no map where no photo carries GPS (inbox #458); it is valid v1 (no
+    new version: `derived` was optional from the start), every map skips it, and an `auto` one takes the medoid from
+    the first geotagged photo. Reverse-only, opt-in, veyq-blind geocoding:
     [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md).
 
 - **Threaded through the existing node CRUD — no new endpoint.** Set at `createNode`; updated by the **partial**

@@ -137,3 +137,81 @@ describe('MemoryLocationEditor (intent-first)', () => {
     expect(saved(w)).toMatchObject({ name: 'Grandmas garden', nameSource: 'manual', derived: MEDOID, derivedMode: 'auto' })
   })
 })
+
+// inbox #458 (ADR 0088 § The register): with `memories.map` off a place still works, named by hand. The editor shows
+// no map and asks for no consent; the position comes from the photos' GPS (`auto`, the medoid) or is absent (a place
+// that is a name only, which the map view skips). Without the map the name is always typed: no geocoder is asked
+// even where `memories.places` is on, because the one consent it rides on is asked only with the map.
+describe('MemoryLocationEditor without the map (memories.map off)', () => {
+  beforeEach(() => {
+    setTileUrl('')
+  })
+
+  it('sets a place from the photos’ GPS with a typed name — no map, no geocoder', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    const w = mountEditor(null)
+    await flushPromises()
+
+    expect(w.find('.map-stub').exists()).toBe(false) // no map: no tile is ever requested
+    expect(reverseGeocode).not.toHaveBeenCalled() // the geocoder is on, but a place without a map is typed
+    expect(w.find('.level-select').exists()).toBe(false)
+    expect(w.find('.memory-location-position').text()).toContain(t('memory.place.followsPhotos'))
+    await w.find('.name-input').setValue('Grandmas garden')
+    await w.find('form').trigger('submit')
+
+    expect(saved(w)).toEqual({ name: 'Grandmas garden', nameSource: 'manual', derived: MEDOID, derivedMode: 'auto', nameAnchor: undefined })
+    expect(fetchSpy).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('sets a place that is a name only where no photo carries GPS', async () => {
+    const w = mountEditor(null, null, [])
+    await flushPromises()
+
+    expect(w.find('.memory-location-position').text()).toContain(t('memory.place.nameOnly'))
+    const submit = () => w.findAll('button').find((b) => b.text() === t('common.save'))!
+    expect(submit().attributes('disabled')).toBeDefined() // a name is required (E6)
+    await w.find('.name-input').setValue('  At grandma’s  ')
+    expect(submit().attributes('disabled')).toBeUndefined()
+    await w.find('form').trigger('submit')
+
+    expect(saved(w)).toEqual({ name: 'At grandma’s', nameSource: 'manual', derived: undefined, derivedMode: 'auto', nameAnchor: undefined })
+  })
+
+  it('renaming a place pinned on a map earlier keeps its pin', async () => {
+    const pinned: MemoryLocation = {
+      name: 'Teide', nameSource: 'geocoded', derivedMode: 'fixed', derived: { lat: 28.27, lng: -16.64 },
+      nameAnchor: { lat: 28.27, lng: -16.64, level: 'city' },
+    }
+    const w = mountEditor(pinned)
+    await flushPromises()
+
+    expect(w.find('.memory-location-position').text()).toContain(t('memory.place.customPlace'))
+    expect((w.find('.name-input').element as HTMLInputElement).value).toBe('Teide')
+    await w.find('.name-input').setValue('Teide summit')
+    await w.find('form').trigger('submit')
+
+    expect(saved(w)).toEqual({ name: 'Teide summit', nameSource: 'manual', derived: { lat: 28.27, lng: -16.64 }, derivedMode: 'fixed', nameAnchor: undefined })
+  })
+
+  it('saving an unchanged geocoded name keeps it as it was', async () => {
+    const geocoded: MemoryLocation = {
+      name: 'Düsseldorf', nameSource: 'geocoded', derivedMode: 'auto', derived: MEDOID, nameAnchor: { ...MEDOID, level: 'city' },
+    }
+    const w = mountEditor(geocoded)
+    await flushPromises()
+    await w.find('form').trigger('submit')
+    expect(saved(w)).toEqual(geocoded)
+    expect(reverseGeocode).not.toHaveBeenCalled()
+  })
+
+  it('with the map consented away, the map stays off too — the editor never draws tiles without consent', async () => {
+    setTileUrl('https://tiles.example/{z}/{x}/{y}.png')
+    setMapsConsent(false)
+    const w = mountEditor(null)
+    await flushPromises()
+    expect(w.find('.map-stub').exists()).toBe(false)
+    expect(reverseGeocode).not.toHaveBeenCalled()
+  })
+})

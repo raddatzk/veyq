@@ -29,6 +29,7 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
    - **typed** → `manual` (e.g. "at grandma's"); or
    - **framed on the map**, if the reverse lookup is enabled → its centre + zoom become the `nameAnchor`, the
      provider returns a name at that resolution → `geocoded`, still editable.
+   On a server without a map the editor is the name field alone (A4).
 4. On save the client seals `{ v, …, location }` under `K_node` and PATCHes `wrappedMeta`. The Memory's detail
    header shows the named location, and it appears as a pin on the places map.
 
@@ -45,14 +46,23 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   `fixed` position are frozen; a `geocoded` name may refresh when its anchor moves.
 - **A3 — browse the map:** a **toggle in the tenant root** shows every Memory as a pin, read from each node's
   sealed `location` via `listNodes` — no media load, no locations endpoint. Clicking a pin opens the Memory.
+- **A4 — a server that shows no map** (`memories.map` off, by the Server Owner or the tenant owner; ADR 0088,
+  inbox #458): the chip opens the editor with **no map and no consent dialog** — there is nothing to consent to. The
+  name is **typed** (`manual`); no geocoder is asked, even where `memories.places` is on, since its consent is asked
+  only with the map (ADR 0018). The position is the medoid of the photos' GPS (`auto`), a pin set earlier on a map
+  (kept, `fixed`), or none: a place that is a **name only** (E3), kept `auto` so the first geotagged photo gives
+  it the medoid. Renaming a geocoded place there makes it `manual`; saving it untouched keeps its anchor.
 
 - **E1 — vault locked / Memory not open:** without the node's `K_node` the `wrappedMeta` can't be unsealed → the
   place is unavailable until unlock + open.
 - **E2 — malformed / wrong-key `wrappedMeta`:** best-effort — treated as no location; never a broken header/pin.
-- **E3 — "set location" with no photo GPS:** `derived` can't be formed. The user still types a **name**
-  (`manual`) → a valid **name-only** location: shown in the detail, but **not** on the map (no coordinate).
+- **E3 — "set location" with no photo GPS:** `derived` can't be formed. **With a map** the user moves the map to
+  set the point by hand (`fixed`). **Without one** (A4) they type a **name** (`manual`) → a valid **name-only**
+  location (`derivedMode: 'auto'`, no `derived`): shown in the detail, the profile's rows and an export, but **not**
+  on any map (no coordinate) until a geotagged photo gives it the medoid.
 - **E4 — reverse-lookup off or unreachable:** the name field falls back to **manual typing** — no external
-  request, fully blind. The map/pin still works from `derived`; only the auto-name is unavailable.
+  request, fully blind. The map/pin still works from `derived`; only the auto-name is unavailable. With the map off
+  as well, A4 holds.
 - **E5 — a member who declined geocoding opens a shared Memory:** they **see** the stored (sealed) name that
   another member resolved, with **no request from their device** — the opt-in is per-device-request, not
   per-view.

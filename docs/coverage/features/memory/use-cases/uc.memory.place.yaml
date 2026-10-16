@@ -6,7 +6,8 @@ title: Curate a Memory's place — one sealed, named location
 # set via the same partial updateNode, returned on listNodes. Deliberate set-up (never silent), a mandatory name,
 # position = the MEDOID of the media GPS, reverse-only opt-in geocoding (client-direct, Nominatim reference, ADR
 # 0016), and a per-folder-subtree "Karte" view plotting every located Memory/Chapter from listNodes without loading
-# media (cr-0071). The group consent
+# media (cr-0071). On a server without the map (memories.map off) the editor is a name field: a typed name, the
+# medoid or no position at all - a place that is a name only (inbox #458). The group consent
 # state-machine + a blind gazetteer remain prose gaps (own CRs), not unref'd criteria.
 acceptanceCriteria:
   - id: sealed-location-on-node
@@ -54,8 +55,19 @@ acceptanceCriteria:
           - src/features/memory/placeName.test.ts
           - src/shared/state/useMapConfig.test.ts
           - src/features/memory/components/MemoryLocationEditor.test.ts
+  - id: place-without-a-map
+    text: On a server that shows no map (`memories.map` off, by the instance or the tenant) a place is still set, named by hand (ADR 0088, inbox #458). The location chip opens the editor with no map and no consent dialog; the name is typed and no geocoder is asked even where `memories.places` is on, so no tile and no geocoding request leaves the device for a switched-off service. The position is the medoid of the photos' GPS (`auto`), a pin set earlier (kept), or none — a place that is a name only (`derivedMode` auto, no `derived`), valid in the sealed v1 shape, shown in the header, the profile's rows and an export/import, skipped by every map. With the map served the editor and its consent are unchanged.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/MemoryLocationEditor.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memory/memoryLocation.test.ts
+          - src/features/memory/spaceMap.test.ts
+          - src/features/memory/components/PersonMemories.test.ts
+          - src/features/memory/exportImport.test.ts
   - id: tenant-map-via-listnodes
-    text: A "Karte" browse view mode shows every located Memory/Chapter in the current folder's subtree (the whole space at the scope root) as a clickable pin, read from each node's sealed `location` via listNodes (unsealed client-side under its own K_node, no media load, no locations endpoint — a location endpoint would leak coordinates to the operator). On the map ⟺ a coordinate; a location ⟺ a name; a pending auto place (no `derived`) is not pinned; a pin click opens that Memory. Each pin shows the node's explicit `cover` (uc.memory.cover, cr-0072) cropped by the shared display formula — no cover ⇒ the placeholder (retiring the cr-0071 nearest-media stopgap). Map tiles are a separate opt-in/self-host seam (ADR 0018), reused from the editor. (cr-0071; per-folder-subtree, more contextual than always space-wide.)
+    text: A "Karte" browse view mode shows every located Memory/Chapter in the current folder's subtree (the whole space at the scope root) as a clickable pin, read from each node's sealed `location` via listNodes (unsealed client-side under its own K_node, no media load, no locations endpoint — a location endpoint would leak coordinates to the operator). On the map ⟺ a coordinate; a location ⟺ a name; a pending auto place and a place that is a name only (no `derived`) are not pinned; a pin click opens that Memory. Each pin shows the node's explicit `cover` (uc.memory.cover, cr-0072) cropped by the shared display formula — no cover ⇒ the placeholder (retiring the cr-0071 nearest-media stopgap). Map tiles are a separate opt-in/self-host seam (ADR 0018), reused from the editor. (cr-0071; per-folder-subtree, more contextual than always space-wide.)
     coverage:
       web:
         unit:

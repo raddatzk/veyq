@@ -16,9 +16,9 @@ pictures are loaded from a map provider, and, if you want a name for a place, th
 that turns it into a name. Both go straight from your device to that provider and never through the veyq server. You
 can turn this off again at any time. Choose **Enable maps** to continue, or **Cancel** to leave maps off.
 
-Which map provider and which naming service are used is decided by whoever runs your server. If it uses none, the
-space says **This server shows no maps.** and no location can be set; without a naming service you type a place's
-name yourself.
+Which map provider and which naming service are used is decided by whoever runs your server. Without a naming service
+you type a place's name yourself. Without a map provider nothing is asked: see
+[Without a map](#without-a-map).
 
 <Screenshot id="memories-maps-consent" shows="The dialog Enable maps for locations? with its text and the Cancel and Enable maps buttons" />
 
@@ -33,6 +33,14 @@ name yourself.
 4. Choose **Save**. **Remove location** takes the place away again.
 
 <Screenshot id="memories-location-dialog" shows="The Location dialog with the map, the pin, the name field and the Remove location, Cancel and Save buttons" />
+
+## Without a map
+
+If your server shows no maps, **Set location** opens a short dialog with just the name. Type the name and choose
+**Save**. If your photos were taken with location switched on, the place still follows them (**Follows your photos**)
+and appears on the map should your server show one later. If none of them were, the place is a name only (**Name only — no
+position**): you see it in the Memory's header, but it is on no map until a photo with a location is added. Nothing is
+sent to a map provider or a naming service.
 
 Once maps are enabled, the dialog for a new Memory also offers **Determine location automatically**; the place then
 follows your photos.
