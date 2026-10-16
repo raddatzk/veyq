@@ -73,8 +73,16 @@ Memory, an expense and a file side by side).
    from `ShareGuestWrites`. A move or rename is decided by the owners of the containers on **both** sides: between folders core decides
    (a `READ_WRITE` guest may), into or out of the inside of an application's container (a chapter out of a Memory)
    that application decides, and Memories declares nothing, so it is refused. **A guest may not delete a node
-   in the first cut:** nodes store no authorship, so "delete the own" cannot be checked and a contributor could remove
-   anything in the folder; it comes with stored authorship. A guest's create states the epoch it sealed with, and
+   that holds anything in the first cut:** nodes store no authorship, so "delete the own" cannot be checked and a
+   contributor could remove anything in the folder; that comes with stored authorship. **What a guest may take back is
+   an empty upload placeholder** (`abandonShareNode`, owner decision 2026-10-16): the node its upload created before
+   the link refused the bytes (a full link: the limit is checked at the upload's start, after the create) or the guest
+   gave up, erased at once — never trashed — so nothing of a refused upload is kept. Erased only where nobody could lose
+   anything: inside the guest's reach (strictly inside the subtree and outside every identity folder for `READ_WRITE`,
+   strictly inside its own identity folder for `WRITE_ONLY`), no child, no upload a member or another identity has open
+   into it, and the owner of the node's kind declares it empty (`GuestPlaceholders`: Depot's `FILE` whose slot never
+   held a blob; a kind nobody declares never is). Since authorship is not stored, any guest in reach may take back any
+   such placeholder, a member's empty file too — the only thing it can remove is a name with nothing behind it. A guest's create states the epoch it sealed with, and
    the server checks it as a member's placement off the scope root (a guest never targets the scope root): above the
    scope's current epoch it is `409 stale_epoch`, at or below it the epoch is stored as sent — the `node-name` and
    `content-key` seals bind it, so the reader opens at the stored number (owner, 2026-10-07; it replaced a server-chosen
@@ -185,8 +193,8 @@ its own reasons).
 Guests of a Memory read its chapter titles (the consequence of decision 2). The slug key is stable per parent key.
 A share covers its subtree and nothing above. Contributors may move inside the subtree. Guest nodes in a drop box
 live in one folder per identity. The recovery copy is mandatory. Tree operations for guests are core's;
-`READ_WRITE` is interpreted per application, fail closed. **A guest deletes no node in the first cut** (no stored
-authorship). **A guest's create states the epoch it sealed with**, checked as a member's placement off the root —
+`READ_WRITE` is interpreted per application, fail closed. **A guest deletes no node that holds anything in the first cut**
+(no stored authorship); it takes back only an empty upload placeholder, erased at once (`abandonShareNode`). **A guest's create states the epoch it sealed with**, checked as a member's placement off the root —
 this replaced a server-chosen current epoch, which left a name unopenable whenever it differed. **A role is
 inherited down the subtree as the share allows:** a `READ_WRITE` folder link contributes in every Memory or chapter
 below it, a `WRITE_ONLY` link writes into its root only. **A `CHAPTER` is a share root with every role.** **A Depot `FILE` is a share root with `READ` and `READ_WRITE`** (inbox #378): the file's own key goes under `K_share` (decision 1), its guest reaches that file alone and a contributor replaces its content; `WRITE_ONLY` on a file is `illegal_scope` — no key to hand out, no folder to send into ([docs/apps/depot.md](../apps/depot.md) § A single file as a share root). **The

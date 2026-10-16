@@ -48,6 +48,9 @@
   the guests' folders and their files, with the download — read-only: nothing to send, replace, share, delete or move
   (owner decision 2026-10-08, inbox #380; one view for both, inbox #401). Two folders of one name may be numbered
   differently than for a member (the link serves no creation time).
+- **E9 — a file is refused or given up** (the link's storage limit is reached, the guest cancels): the empty file its
+  create made in the guest's folder is taken back and erased (`abandonShareNode`), so nothing of it is kept; a guest
+  takes back nothing in another guest's folder, nor its folder itself, nor a file that holds content.
 
 ## Quality notes
 

@@ -53,6 +53,12 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ShareFilesSliceTest.aGuestsFilesCountAgainstTheLinkLimitToTheByte] }
       web: { unit: [src/features/depot/levelRows.guest.test.ts] }
+  - id: a-refused-upload-leaves-no-file-behind
+    text: A contributor's upload the full link refuses (or the guest gives up) leaves no node behind — the job takes back the FILE its create made (abandonShareNode), which the server erases at once, never trashed; only a FILE whose slot never held a blob, that no member or other identity is uploading into and that has no child is taken back (409 not_a_placeholder, nothing written), and only inside the guest's reach (outside 404, the root and an identity folder 422); a kind no application declares is never one; a completion and an abandon of one file decide each other under the scope lock.
+    coverage:
+      backend:
+        integration: [ShareFilesSliceTest.aFileWhoseUploadTheFullLinkRefusedIsTakenBackAndNothingOfItIsKept, ShareFilesSliceTest.onlyAnEmptyFileNobodyElseIsUploadingIntoIsTakenBack, ShareNodeAbandonRaceSliceTest.anAbandonWhileTheGuestsCompletionCommitsKeepsTheFileAndItsBlob, ShareNodeAbandonRaceSliceTest.aCompletionWhileTheAbandonCommitsAttachesNothing, ShareNodeAbandonCoreSliceTest.aContributorErasesAnEmptyPlaceholderAtOnceAndTheTreeRevisionMoves, ShareNodeAbandonCoreSliceTest.aNodeWithAChildLiveOrTrashedIsNoPlaceholder, ShareNodeAbandonCoreSliceTest.anUploadAnybodyElseHasOpenIntoTheNodeKeepsItTheGuestsOwnDoesNot, ShareNodeAbandonCoreSliceTest.aKindNobodyDeclaresIsNeverAPlaceholder, ShareNodeAbandonCoreSliceTest.aContributorErasesNothingOutsideItsReach, ShareNodeAbandonCoreSliceTest.aReadGuestErasesNothingAndTheGateRefusesAsForTheOtherGuestWrites]
+      web: { unit: [src/features/depot/shareUpload.wire.test.ts] }
   - id: a-deleted-link-keeps-the-guest-identity-its-file-names
     text: Deleting a link keeps the guest identity while a file's attachment names it (core's attachment usage).
     coverage:

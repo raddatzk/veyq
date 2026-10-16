@@ -23,6 +23,11 @@ acceptanceCriteria:
       backend:
         unit: [DepotNodeKindRulesTest.aDropBoxGuestCreatesFilesOnly, WriteOnlyGuestKindsPartitionTest.aRootKindNobodyHandlesAllowsNothing]
         integration: [DropBoxSliceTest.aDropBoxGuestCreatesOnlyFilesInItsFolder]
+  - id: a-refused-file-leaves-nothing-behind
+    text: A drop-box guest takes back the empty FILE a refused or given-up upload created in its own folder, erased at once; another guest's file is 404, its own folder 422, a file that holds content 409 not_a_placeholder, and a guest of a link above takes back nothing in a drop box (422); the page's job wrapper keeps the take-back.
+    coverage:
+      backend: { integration: [DropBoxSliceTest.aDropBoxGuestTakesBackAnEmptyFileOfItsOwnFolderOnly, ShareNodeAbandonCoreSliceTest.aWriteOnlyGuestErasesOnlyInsideItsOwnIdentityFolder] }
+      web: { unit: [src/features/depot/dropBox.wire.test.ts, src/features/depot/shareUpload.wire.test.ts] }
   - id: members-place-nothing-and-only-delete-or-move-out
     text: No member, and no READ_WRITE guest of a link above, creates, renames or moves anything into a drop box or a guest's folder; a member deletes a guest's folder or moves it out, which clears its identity so the next call of that identity makes a new folder; the web shows a level inside an identity folder read-only.
     coverage:
