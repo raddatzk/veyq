@@ -63,8 +63,9 @@ Each stage proves one thing. The table says what, what it cannot see, and its st
 
 ## How a release will be gated
 
-Designed, not built (ADR 0091). Every commit runs every stage in one pipeline. Only when all of them are green are
-its images published, as a signed snapshot on exactly the bytes that were tested, with each stack lane's result
+Every commit runs every stage in one pipeline, the image build beside the tests, and a hand-started publish waits
+for every stage to be green — built as a workflow file, never yet run, since there is no remote. The rest is designed,
+not built (ADR 0091): a green commit's images published, as a signed snapshot on exactly the bytes that were tested, with each stack lane's result
 attached as a signed attestation. A release does not build again: it gives that snapshot's bytes the release name and
 signature, after checking the attestations. So a release is always bytes every test saw, and anyone can check which
 release they run against its signature ([Verify a release](/veyq/run/verify-a-release/)).

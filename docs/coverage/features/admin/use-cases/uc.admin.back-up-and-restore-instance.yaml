@@ -122,7 +122,7 @@ acceptanceCriteria:
     # `upgrade.a-seed.e2e.test.ts` from a worktree of its ref on its own jar, restores the capture onto an instance
     # installed by the candidate's jar, and the candidate's `upgrade.b-read.e2e.test.ts` asserts configSecretState
     # OK first and then every item of the record the seeder wrote, byte for byte; its summary names the predecessor,
-    # both highest migrations and the outcome with its cause. No CI run executes it: container.yml's `upgrade-proof`
+    # both highest migrations and the outcome with its cause. No CI run executes it: ci.yml's `upgrade-proof`
     # is disabled until the first release, so the claim is the recorded run, not a build. Recorded run:
     # 2026-10-14, `--upgrade-from 0d57c3b2` (the seeder's own commit) onto candidate 0e5450ca: GREEN - both builds at
     # V202610041201 (no migration between them, so no migration ran), configSecretState OK, all 18 recorded items

@@ -3,7 +3,7 @@
 bare `docker build` of its Dockerfile builds.
 
 **What it asserts.** For every tracked `Dockerfile` (found by name through `git ls-files`, never listed), every
-`runtime-*` stage — the stages `.github/workflows/container.yml` publishes — (a) ends on a `USER` instruction
+`runtime-*` stage — the stages `.github/workflows/ci.yml` publishes — (a) ends on a `USER` instruction
 that names a non-root user (not `root`, not uid `0`), and (b) `EXPOSE`s no port below 1024. Both halves are
 stated *in the stage itself*: a base image that happens to end on a non-root user is not enough, because a base
 can be swapped or re-pinned without anyone re-reading what it ends on, and a stage that `USER root`s for its own
@@ -37,7 +37,7 @@ The stage set is `runtime-*` by name, the same convention `validate_app_volume_o
 limit of the convention rather than of this file.
 
 **Second assertion — a bare build builds what ships.** Every `(dockerfile, target)` pair in the build job's matrix
-of `.github/workflows/container.yml` (read out of the workflow, never listed) names that file's **last** stage,
+of `.github/workflows/ci.yml` (read out of the workflow, never listed) names that file's **last** stage,
 because `docker build .` with no `--target` builds the last stage. Bought on 2026-09-28 (inbox #191): the app
 `Dockerfile` ended on `runtime-native` while the release publishes `runtime-jvm`, so a bare build built the
 unshipped target — and that target did not even build (its `microdnf install curl` conflicted with the base's
@@ -62,12 +62,12 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     sys.exit(2)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github" / "workflows" / "container.yml"
+WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 BUILD_JOB = "build"
 # Any `FROM`, named or not — the last one is the stage a build without `--target` produces.
 ANY_FROM = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*(?:\s+AS\s+(\S+))?\s*$", re.IGNORECASE | re.MULTILINE)
 
-# `FROM <image> AS <stage>` — the stage name is what container.yml's build matrix targets.
+# `FROM <image> AS <stage>` — the stage name is what ci.yml's build matrix targets.
 STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 USER = re.compile(r"^\s*USER\s+(\S+)\s*$", re.IGNORECASE)
 EXPOSE = re.compile(r"^\s*EXPOSE\s+(.+?)\s*$", re.IGNORECASE)

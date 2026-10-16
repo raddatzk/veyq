@@ -116,7 +116,7 @@ gaps:
     `admin-web` (ADR 0065), and their suites (`CapabilitiesPanel.test.ts` for the tree, the three states, the
     confirmation with `whenOff` in both locales and the refusal; `cli.test.ts` for the commands, the locale from
     `--lang`, `LC_ALL` and `LANG`, and the exit codes; `AdminConsoleView.test.ts` for the nav) exist and pass
-    locally, but `admin-web`'s job (`container.yml` → `test` → "Admin surface checks") has never executed, so ADR
+    locally, but `admin-web`'s job (`ci.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR
     0040 admits none of them. They are mocked-client tests that pin the call and the rendering, never the server's
     answer. On the first run of that job they flip to refs on register-listed, switch-without-restart and
     unknown-id-refused.
