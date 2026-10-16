@@ -32,7 +32,7 @@ import { noteDigest } from './shareNote'
 
 const K_SHARE = v1.randomBytes(32)
 const FRAGMENT = b64url(K_SHARE)
-const seal = (purpose: typeof SHARE_MEMORY_NAME | typeof SHARE_NOTE, text: string) => b64std(v1.seal(purpose, K_SHARE, v1.utf8(text)))
+const seal = (purpose: typeof SHARE_MEMORY_NAME | typeof SHARE_NOTE, text: string) => b64std(v1.sealField(purpose, K_SHARE, v1.utf8(text)))
 
 function serve(over: Partial<PublicShare>) {
   const share = {

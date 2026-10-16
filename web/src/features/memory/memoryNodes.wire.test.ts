@@ -33,8 +33,8 @@ describe('createChapter on the wire (ADR 0080 Decision 2)', () => {
     expect(json.parentId).toBe(MEMORY_ID)
     const name = fromB64std(json.encryptedName as string)
     const ctx = { purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 } as const
-    expect(new TextDecoder().decode(v1.open(ctx, memoryKey, name))).toBe('Tag 1')
-    expect(() => v1.open(ctx, scopeKey, name)).toThrow(v1.OpenRefused)
+    expect(new TextDecoder().decode(v1.openField(ctx, memoryKey, name))).toBe('Tag 1')
+    expect(() => v1.openField(ctx, scopeKey, name)).toThrow(v1.OpenRefused)
     expect(json.slugToken).toBe(b64std(v1.slugToken(memoryKey, MEMORY_ID, 'tag-1')))
     expect(json.slugToken).not.toBe(b64std(v1.slugToken(scopeKey, MEMORY_ID, 'tag-1')))
   })

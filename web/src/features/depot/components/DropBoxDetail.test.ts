@@ -172,7 +172,7 @@ describe('DropBoxDetail - its cover', () => {
   const KEY = v1.randomBytes(32)
   const withCover = (): TreeNode => node(BOX.id, DROPBOX_KIND, 'Einsendungen', null, {
     metaRevision: 2,
-    wrappedMeta: b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: BOX.id }, KEY, new TextEncoder().encode(JSON.stringify({
+    wrappedMeta: b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId: BOX.id }, KEY, new TextEncoder().encode(JSON.stringify({
       v: 1, cover: uploadedCover({ blobId: 'b-1', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: BOX.id }),
     })))),
   })

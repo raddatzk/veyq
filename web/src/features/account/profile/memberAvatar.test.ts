@@ -15,7 +15,7 @@ import { ICON_EDGE } from '../../spaces/spaceIconImage'
 const KEY = new Uint8Array(32).fill(7)
 const AT = { scopeId: '5c09e000-0000-4000-8000-0000000000a1', userId: '5c09e000-0000-4000-8000-0000000000a2' }
 
-describe('member avatar (sealed under K_tenant, purpose member-avatar)', () => {
+describe('member avatar (a field under K_tenant, purpose member-avatar)', () => {
   it('seals a flat and a dense image to byte-identical length (a photo cannot be told from a drawing)', () => {
     const flat = new Uint8Array(200).fill(0xff)
     const dense = new Uint8Array(6000)
@@ -38,11 +38,12 @@ describe('member avatar (sealed under K_tenant, purpose member-avatar)', () => {
     expect(() => sealAvatar(KEY, AT, new Uint8Array(AVATAR_ENCODED_BUDGET))).not.toThrow()
   })
 
-  it('is exactly 21884 base64 characters = 16413 bytes (1 type + 12 nonce + 16384 + 16 tag)', () => {
+  it('is exactly 21908 base64 characters = 16429 bytes (1 type + 16 salt + 12 nonce + 16384 + 16 tag)', () => {
     const sealed = sealAvatar(KEY, AT, new Uint8Array([1]))
     expect(sealed.length).toBe(AVATAR_SEALED_B64_LEN)
-    expect(AVATAR_SEALED_B64_LEN).toBe(21884)
-    expect(fromB64std(sealed).length).toBe(16413)
+    expect(AVATAR_SEALED_B64_LEN).toBe(21908)
+    expect(fromB64std(sealed).length).toBe(16429)
+    expect(fromB64std(sealed)[0]).toBe(0x03)
   })
 
   it('equals the maxLength of every sealedAvatar field in the contract (a mismatch is red)', () => {
@@ -60,8 +61,8 @@ describe('member avatar (sealed under K_tenant, purpose member-avatar)', () => {
   })
 
   it('a picture sealed with the old 8 KiB pad opens to null (the letter), never as a picture', () => {
-    const old = b64std(v1.seal({ purpose: 'member-avatar', scopeId: AT.scopeId, userId: AT.userId }, KEY, padTo(new Uint8Array([1, 2, 3]), 8192)))
-    expect(old.length).toBe(10964)
+    const old = b64std(v1.sealField({ purpose: 'member-avatar', scopeId: AT.scopeId, userId: AT.userId }, KEY, padTo(new Uint8Array([1, 2, 3]), 8192)))
+    expect(old.length).toBe(10984)
     expect(openAvatar(KEY, AT, old)).toBeNull()
     expect(openAvatar(KEY, AT, sealAvatar(KEY, AT, new Uint8Array([1, 2, 3])))).not.toBeNull() // control
   })
@@ -87,6 +88,6 @@ describe('member avatar (sealed under K_tenant, purpose member-avatar)', () => {
     expect(openAvatar(KEY, AT, name)).toBeNull()
     // and the reverse, at the primitive: the avatar's ciphertext does not open under the member-name purpose
     const avatar = fromB64std(sealAvatar(KEY, AT, new Uint8Array([1])))
-    expect(() => v1.open({ purpose: 'member-name', scopeId: AT.scopeId, userId: AT.userId }, KEY, avatar)).toThrow()
+    expect(() => v1.openField({ purpose: 'member-name', scopeId: AT.scopeId, userId: AT.userId }, KEY, avatar)).toThrow()
   })
 })

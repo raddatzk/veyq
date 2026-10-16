@@ -60,7 +60,7 @@ describe('a placement write on the wire (ADR 0080 Decision 3)', () => {
     expect(() => v1.open({ purpose: 'content-key', ...at(3) }, keyA, wrap)).toThrow(v1.OpenRefused)
     expect(() => v1.open({ purpose: 'content-key', ...at(4) }, scopeKey, wrap)).toThrow(v1.OpenRefused)
     const name = fromB64std(json.encryptedName as string)
-    expect(new TextDecoder().decode(v1.open({ purpose: 'node-name', ...at(4) }, keyA, name))).toBe('Neapel')
+    expect(new TextDecoder().decode(v1.openField({ purpose: 'node-name', ...at(4) }, keyA, name))).toBe('Neapel')
     expect(json.slugToken).toBe(b64std(v1.slugToken(keyA, A, 'neapel')))
   })
 
@@ -116,9 +116,9 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
     expect(Object.keys(json).sort()).toEqual(['encryptedName', 'slugToken'])
     expect(json.slugToken).toBe(b64std(v1.slugToken(keyA, A, 'neapel')))
     const name = fromB64std(json.encryptedName as string)
-    expect(new TextDecoder().decode(v1.open({ purpose: 'node-name', ...at(3) }, keyA, name))).toBe('Neapel')
+    expect(new TextDecoder().decode(v1.openField({ purpose: 'node-name', ...at(3) }, keyA, name))).toBe('Neapel')
     for (const [key, revision] of [[keyA, 4], [keyA, 0], [keyB, 3], [scopeKey, 3]] as const) {
-      expect(() => v1.open({ purpose: 'node-name', ...at(revision) }, key, name)).toThrow(v1.OpenRefused)
+      expect(() => v1.openField({ purpose: 'node-name', ...at(revision) }, key, name)).toThrow(v1.OpenRefused)
     }
   })
 })
@@ -175,11 +175,36 @@ describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
   })
 })
 
+// ADR 0093 § 9 on the wire: a node's name leaves the client as a FIELD envelope (0x03 ‖ salt ‖ nonce ‖ aead) under a key
+// derived per write from the parent's key — never as a plain seal the parent's key opens, which is what made handing over
+// "the key of this name" hand over every sibling's name and the subtree.
+describe('a create sends its name as a field envelope (ADR 0093 § 9)', () => {
+  it('the encryptedName starts with the field type byte and does not open as a plain seal under the parent\'s key', async () => {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const json = JSON.parse(String(init?.body)) as Record<string, unknown>
+      bodies.push(json)
+      return new Response(JSON.stringify({ nodeId: json.nodeId }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA }, 'FOLDER', 'Neapel')
+
+    const name = fromB64std(bodies[0].encryptedName as string)
+    const node = { scopeId: SCOPE_ID, nodeId: bodies[0].nodeId as string, epoch: 0, placementRevision: 0 }
+    expect(name[0]).toBe(0x03)
+    // The plain seal under the parent's key — what every name was before — does not open it.
+    expect(() => v1.open({ purpose: 'node-name', ...node } as unknown as v1.SealContext, keyA, name)).toThrow()
+    // The control: the parent's key opens it as the node-name field, and only through the key derived from it.
+    expect(new TextDecoder().decode(v1.openField({ purpose: 'node-name', ...node }, keyA, name))).toBe('Neapel')
+    expect(() => v1.openFieldWith({ purpose: 'node-name', ...node }, keyA, name)).toThrow(v1.OpenRefused)
+  })
+})
+
 // The listing on the wire (ADR 0015): the server's `createdAt` reaches the TreeNode as epoch milliseconds, every digit of
 // the millisecond kept — the instant siblings are ordered by. Served as JSON at `fetch`, read through the real client.
 describe('a listing on the wire', () => {
   it('carries each node\'s server-observed createdAt to the millisecond', async () => {
-    const name = b64std(v1.seal({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId: A, epoch: 0, placementRevision: 3 }, scopeKey, v1.utf8('Reisen')))
+    const name = b64std(v1.sealField({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId: A, epoch: 0, placementRevision: 3 }, scopeKey, v1.utf8('Reisen')))
     const summary = {
       id: A, kind: 'FOLDER', encryptedName: name, slugToken: 'c2x1Zw==', orderIndex: 0, epoch: 0,
       wrappedContentKey: sealWrap(scopeKey, A, keyA), metaRevision: 0, placementRevision: 3, createdAt: '2026-10-08T10:15:30.123Z',

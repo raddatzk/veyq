@@ -57,7 +57,7 @@ import { chooseNew } from '../test/newMenu'
 import PrimeVue from 'primevue/config'
 
 const sealed = (nodeId: string, name: string) => ({
-  encryptedName: b64std(v1.seal({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, SCOPE_KEY, v1.utf8(name))),
+  encryptedName: b64std(v1.sealField({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, SCOPE_KEY, v1.utf8(name))),
   wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, SCOPE_KEY, v1.randomBytes(32))),
 })
 const FOLDER_ID = '5c09e000-0000-4000-8000-0000000000f1'

@@ -44,7 +44,7 @@ function itemWith(tier: Partial<MediaMeta> | null): MediaItem {
   base.original.ownerId = base.mediaId
   if (!tier) return base
   const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, ...tier }))
-  base.wrappedMeta = b64std(v1.seal({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: base.mediaId }, nodeKey, bytes))
+  base.wrappedMeta = b64std(v1.sealField({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: base.mediaId }, nodeKey, bytes))
   return base
 }
 

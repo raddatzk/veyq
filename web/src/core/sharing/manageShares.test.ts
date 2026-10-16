@@ -60,7 +60,7 @@ describe("the note's acceptance switch (uc.sharing.share-note)", () => {
     const req = create.mock.calls[0][0].createShareRequest
     return { ...m, req, address: { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: m.shareId } }
   }
-  const plaintextOf = (kShare: Uint8Array, sealed: string) => new TextDecoder().decode(v1.open(SHARE_NOTE, kShare, fromB64std(sealed)))
+  const plaintextOf = (kShare: Uint8Array, sealed: string) => new TextDecoder().decode(v1.openField(SHARE_NOTE, kShare, fromB64std(sealed)))
 
   it('is sealed inside the note and read back on edit; the request carries nothing else of it', async () => {
     const note = { texts: { en: 'Read me' }, mustAccept: true }
@@ -141,7 +141,7 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
     }
     return { row, kShare: minted.kShare }
   }
-  const opened = (kShare: Uint8Array, sealed: string) => new TextDecoder().decode(v1.open(SHARE_MEMORY_NAME, kShare, fromB64std(sealed)))
+  const opened = (kShare: Uint8Array, sealed: string) => new TextDecoder().decode(v1.openField(SHARE_MEMORY_NAME, kShare, fromB64std(sealed)))
 
   it('re-seals the new name under EVERY share\'s own K_share — the caller\'s and another member\'s', async () => {
     const own = await mintedRow(true)

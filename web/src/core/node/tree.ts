@@ -94,15 +94,16 @@ export function childEntryKey(scopeId: string, parent: DropParent, parentKey: Ui
   )
 }
 
-/** Seal a node's name (the `node-name` seal, ADR 0012), bound to the node, under the key its **directory entry** lives
- *  under: its parent's content key, or `K_SC` at the node's epoch for a scope-root node (ADR 0080 Decision 2). A
- *  group's name and a share's Memory name are their own purposes (`group-name`, `share-memory-name`, ADR 0072). */
+/** Seal a node's name (the `node-name` field, ADR 0012), bound to the node, under a field key of its own derived from
+ *  the key its **directory entry** lives under: its parent's content key, or `K_SC` at the node's epoch for a scope-root
+ *  node (ADR 0080 Decision 2, ADR 0093 § 9). A group's name and a share's Memory name are their own purposes
+ *  (`group-name`, `share-memory-name`, ADR 0072). */
 export function sealName(entryKey: Uint8Array, node: NodeAddress, name: string): string {
-  return b64std(v1.seal(nameContext(node), entryKey, v1.utf8(name)))
+  return b64std(v1.sealField(nameContext(node), entryKey, v1.utf8(name)))
 }
-/** Open a node's name under the key its entry lives under (the counterpart to {@link sealName}). */
+/** Open a node's name with the key its entry lives under (the counterpart to {@link sealName}). */
 export function openName(entryKey: Uint8Array, node: NodeAddress, encryptedName: string): string {
-  return decoder.decode(v1.open(nameContext(node), entryKey, fromB64std(encryptedName)))
+  return decoder.decode(v1.openField(nameContext(node), entryKey, fromB64std(encryptedName)))
 }
 /** The blinded slug token of `name` for a node of `kind` in the slot `parentSlot` (the parent's id, the scope id at the
  *  root), keyed by the key the entry lives under (ADR 0080 Decision 2): unique per parent, stable per parent key. The

@@ -47,7 +47,7 @@ const metaCtx = (scopeId: string, nodeId: string) => ({ purpose: 'node-meta', sc
 
 /** Seal an arbitrary node-meta blob under `nodeKey` as the RMW envelope would (purpose `node-meta`, bound to the node). */
 function sealMeta(blob: object, scopeId = SCOPE_ID, nodeId = NODE_ID): string {
-  return b64std(v1.seal(metaCtx(scopeId, nodeId), nodeKey, new TextEncoder().encode(JSON.stringify(blob))))
+  return b64std(v1.sealField(metaCtx(scopeId, nodeId), nodeKey, new TextEncoder().encode(JSON.stringify(blob))))
 }
 
 beforeEach(() => {
@@ -195,7 +195,7 @@ describe('setMemoryCover', () => {
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME }
     const sealed = (await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: withSiblings, metaRevision: 0 })).wrappedMeta!
 
-    const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
+    const blob = JSON.parse(new TextDecoder().decode(v1.openField(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
     expect(blob.cover).toEqual(cover)
     expect(blob.date).toEqual(date)
     expect(blob.location).toEqual(location)
@@ -210,7 +210,7 @@ describe('setMemoryCover', () => {
 
     const sealed = (await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: withCover, metaRevision: 0 })).wrappedMeta!
 
-    const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
+    const blob = JSON.parse(new TextDecoder().decode(v1.openField(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
     expect(blob.cover).toBeUndefined()
     expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toBeNull()
     expect(blob.date).toEqual(date)
@@ -230,7 +230,7 @@ describe('setMemoryCover', () => {
     const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaRevision: 1 })
 
     expect(updateNode.mock.calls[1][0].updateNodeRequest.metaRevision).toBe(2)
-    const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(state.wrappedMeta!))))
+    const blob = JSON.parse(new TextDecoder().decode(v1.openField(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(state.wrappedMeta!))))
     expect(blob.cover).toEqual(cover)
     expect(blob.location).toEqual(location)
   })

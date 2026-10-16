@@ -37,6 +37,6 @@ describe('member-name sealing', () => {
     const sealed = sealName(kTenant, KEVIN, { firstName: 'Kevin', lastName: 'Raddatz' })
     expect(unsealName(kTenant, OTHER, sealed)).toBeNull()
     const context = { purpose: 'member-name', ...OTHER } as const
-    expect(() => v1.open(context, kTenant, fromB64std(sealed))).toThrow(new v1.OpenRefused('member-name'))
+    expect(() => v1.openField(context, kTenant, fromB64std(sealed))).toThrow(new v1.OpenRefused('member-name'))
   })
 })

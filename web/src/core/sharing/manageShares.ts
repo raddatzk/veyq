@@ -58,20 +58,20 @@ export { NO_NOTE, hasLocaleText, type ShareNote } from './shareNote'
 /** Seal a curator note under `K_share`, or nothing when it has no text (`./shareNote.ts` owns the plaintext's shape:
  *  the switch rides inside the seal, so the operator cannot tell a note that asks to be accepted from one that does not). */
 function sealNote(kShare: Uint8Array, note: ShareNote): string | undefined {
-  return hasLocaleText(note.texts) ? b64std(v1.seal(SHARE_NOTE, kShare, v1.utf8(encodeShareNote(note)))) : undefined
+  return hasLocaleText(note.texts) ? b64std(v1.sealField(SHARE_NOTE, kShare, v1.utf8(encodeShareNote(note)))) : undefined
 }
 /** Seal a share's optional private name under `K_share` (opaque base64). */
 function sealShareName(kShare: Uint8Array, name: string): string {
-  return b64std(v1.seal(SHARE_NAME, kShare, v1.utf8(name)))
+  return b64std(v1.sealField(SHARE_NAME, kShare, v1.utf8(name)))
 }
 /** Seal the shared node's own name under `K_share` (`share-memory-name`, the title a guest reads with only the
  *  fragment key): at a mint, a re-issue and when a member renames the share's root ({@link resealShareNames}). */
 function sealRootName(kShare: Uint8Array, rootName: string): string {
-  return b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(rootName)))
+  return b64std(v1.sealField(SHARE_MEMORY_NAME, kShare, v1.utf8(rootName)))
 }
 /** Open a share name sealed under `K_share`. */
 function openShareName(kShare: Uint8Array, sealed: string): string {
-  return noteDecoder.decode(v1.open(SHARE_NAME, kShare, fromB64std(sealed)))
+  return noteDecoder.decode(v1.openField(SHARE_NAME, kShare, fromB64std(sealed)))
 }
 /**
  * Recover `K_share` from its recovery copy, sealed under the scope key `K_SC` at the copy's epoch — a key every scope

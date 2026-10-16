@@ -21,7 +21,7 @@ export interface MemberName {
 /** Seal a first/last name under `K_tenant` → opaque base64 blob the server stores verbatim. */
 export function sealName(kTenant: Uint8Array, address: MemberNameAddress, name: MemberName): string {
   const json = encoder.encode(JSON.stringify({ firstName: name.firstName.trim(), lastName: name.lastName.trim() }))
-  return b64std(v1.seal(context(address), kTenant, json))
+  return b64std(v1.sealField(context(address), kTenant, json))
 }
 
 /** Decrypt a sealed-name blob with `K_tenant` → the name, or null if absent/unreadable (wrong key, corrupt). */
@@ -30,7 +30,7 @@ export function unsealName(
 ): MemberName | null {
   if (!sealedName) return null
   try {
-    const obj = JSON.parse(decoder.decode(v1.open(context(address), kTenant, fromB64std(sealedName))))
+    const obj = JSON.parse(decoder.decode(v1.openField(context(address), kTenant, fromB64std(sealedName))))
     if (typeof obj?.firstName === 'string' && typeof obj?.lastName === 'string') {
       return { firstName: obj.firstName, lastName: obj.lastName }
     }

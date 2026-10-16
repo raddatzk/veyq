@@ -56,7 +56,7 @@ const EPOCHS = {} as EpochKeys // only its presence matters: the right asks "are
 
 const id = (n: number) => `d0000000-0000-4000-8000-00000000000${n}`
 const sealCover = (nodeId: string, blobId: string) =>
-  b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, KEY, new TextEncoder().encode(JSON.stringify({
+  b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, KEY, new TextEncoder().encode(JSON.stringify({
     v: 1, cover: uploadedCover({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId }),
   }))))
 const node = (n: number, kind: string, name: string, parentId: string | null, wrappedMeta: string | null = null): TreeNode =>
@@ -265,7 +265,7 @@ describe('the cover dialog, by a real click: choose, crop, Save - the derive and
 
   it('Change on a node with a cover re-crops it in place: its crop is restored and Save writes the same image with the moved crop', async () => {
     const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.5 }
-    const framed = b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: id(5) }, KEY, new TextEncoder().encode(JSON.stringify({
+    const framed = b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId: id(5) }, KEY, new TextEncoder().encode(JSON.stringify({
       v: 1, cover: uploadedCover({ blobId: 'b-5', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: id(5) }, crop),
     }))))
     TREE = [TRIPS, ROME, PLAN, BOX, node(5, FOLDER_KIND, 'Sub', TRIPS.id, framed)]
@@ -359,7 +359,7 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
     const shown = visual(w, 'Sub').find('img').attributes('src')
 
     // the write landed: the tree now holds the node's new (cover-less) meta, as `patchNodeMeta` leaves it
-    withCover.wrappedMeta = b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: id(5) }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1 }))))
+    withCover.wrappedMeta = b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId: id(5) }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1 }))))
     withCover.metaRevision = 5
     await w.setProps({ level: childrenOf([...TREE], TRIPS.id) })
     await vi.waitFor(() => expect(visual(w, 'Sub').find('img').exists()).toBe(false))

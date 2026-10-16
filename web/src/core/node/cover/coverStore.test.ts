@@ -24,7 +24,7 @@ import type { GuestAccess } from '../../access'
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const NODE = '22222222-2222-4222-8222-222222222222'
 const key = v1.randomBytes(32)
-const sealMeta = (blob: object, nodeId = NODE) => b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, key, new TextEncoder().encode(JSON.stringify(blob))))
+const sealMeta = (blob: object, nodeId = NODE) => b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, key, new TextEncoder().encode(JSON.stringify(blob))))
 const planOf = (blobId: string, nodeId = NODE) => ({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId })
 const withCover = (blobId: string, extra: object = {}) => sealMeta({ v: 1, ...extra, cover: uploadedCover(planOf(blobId)) })
 const node = (wrappedMeta: string | null, over: Partial<{ id: string; kind: string }> = {}) => ({ id: NODE, kind: FOLDER_KIND, wrappedMeta, ...over })

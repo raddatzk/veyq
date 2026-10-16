@@ -102,7 +102,7 @@ describe("the share page's one naming flow", () => {
 
     const req = api.createShareIdentity.mock.calls[0][0].createShareIdentityRequest
     const ctx = identityNameContext(SCOPE_ID, SHARE_ID, req.identityId)
-    expect(new TextDecoder().decode(v1.open(ctx, ROOT_KEY, fromB64std(req.sealedDisplayName))), "under the share root's key").toBe('Oma')
+    expect(new TextDecoder().decode(v1.openField(ctx, ROOT_KEY, fromB64std(req.sealedDisplayName))), "under the share root's key").toBe('Oma')
     expect(loadGuestSession(SHARE_ID)).toEqual({ identityId: req.identityId, contributorToken: 'tok-1', displayName: 'Oma' })
     expect(w.find('.dialog-stub .header').text(), 'named, the view goes on: the new folder').toBe(t('share.folder.newFolderTitle'))
     expect(identityLine(w).text()).toContain(t('share.guest.as', { name: 'Oma' }))

@@ -1,8 +1,8 @@
 // en.memory.node-meta (web) — the sealed `wrappedMeta` blob on a node, the single home for a node's curated
 // node-level metadata: a Memory's `date` and `location`, and any node's `cover` (inbox #411 moved this envelope from
 // Memories to core, so a folder's and a drop box's cover use the very one a Memory's does). AEAD-sealed
-// under the node's `K_node` (purpose `node-meta`, bound to (scope, node) — ADR 0072) so the blind server only ever
-// holds ciphertext it cannot move to another node (cr-0067 / cr-0069 / cr-0072).
+// under a field key derived from the node's `K_node` (purpose `node-meta`, bound to (scope, node) — ADR 0072, ADR 0093
+// § 9) so the blind server only ever holds ciphertext it cannot move to another node (cr-0067 / cr-0069 / cr-0072).
 //
 // The blob is **client-versioned** and grows without a contract change: `{ v, date?, location?, cover? }`. Because a
 // single node PATCH replaces the WHOLE `wrappedMeta`, every writer must **read-modify-write** — unseal the
@@ -38,7 +38,7 @@ export type RawNodeMeta = { v: number; cover?: unknown; [field: string]: unknown
 export function unsealNodeMeta(nodeKey: Uint8Array, node: NodeMetaAddress, wrappedMeta: string | null | undefined): RawNodeMeta {
   if (!wrappedMeta) return { v: 1 }
   try {
-    const json = new TextDecoder().decode(v1.open(metaContext(node), nodeKey, fromB64std(wrappedMeta)))
+    const json = new TextDecoder().decode(v1.openField(metaContext(node), nodeKey, fromB64std(wrappedMeta)))
     const parsed = JSON.parse(json) as unknown
     if (parsed && typeof parsed === 'object') return { ...(parsed as RawNodeMeta), v: 1 }
   } catch {
@@ -50,7 +50,7 @@ export function unsealNodeMeta(nodeKey: Uint8Array, node: NodeMetaAddress, wrapp
 /** Seal a whole node-metadata blob under `nodeKey` (`K_node`), bound to its node → opaque base64. */
 export function sealNodeMeta(nodeKey: Uint8Array, node: NodeMetaAddress, meta: RawNodeMeta): string {
   const bytes = new TextEncoder().encode(JSON.stringify({ ...meta, v: 1 }))
-  return b64std(v1.seal(metaContext(node), nodeKey, bytes))
+  return b64std(v1.sealField(metaContext(node), nodeKey, bytes))
 }
 
 /**
@@ -63,7 +63,7 @@ export function openNodeMetaForWrite(nodeKey: Uint8Array, node: NodeMetaAddress,
   if (!wrappedMeta) return { v: 1 }
   let parsed: unknown
   try {
-    parsed = JSON.parse(new TextDecoder().decode(v1.open(metaContext(node), nodeKey, fromB64std(wrappedMeta))))
+    parsed = JSON.parse(new TextDecoder().decode(v1.openField(metaContext(node), nodeKey, fromB64std(wrappedMeta))))
   } catch {
     // leaves `parsed` undefined, which the one refusal below catches — a second `throw` here would be a mutant no
     // test can tell from its removal (measured: Stryker's lone survivor in this function)

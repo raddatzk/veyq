@@ -56,12 +56,12 @@ const addressOf = (req: { shareId: string }) => ({ scopeId: SCOPE_ID, nodeId: NO
 
 /** Seal a media's listed-metadata tier under a K_node exactly as the media layer does (bound to scope + media). */
 function sealMeta(key: Uint8Array, mediaId: string, meta: object): string {
-  return b64std(v1.seal({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId }, key, v1.utf8(JSON.stringify(meta))))
+  return b64std(v1.sealField({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId }, key, v1.utf8(JSON.stringify(meta))))
 }
 
 /** A node's name sealed under the key its directory entry lives under — its parent's (ADR 0080 Decision 2). */
 function nodeName(parentKey: Uint8Array, nodeId: string, name: string): string {
-  return b64std(v1.seal({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, parentKey, v1.utf8(name)))
+  return b64std(v1.sealField({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, parentKey, v1.utf8(name)))
 }
 
 /** A create endpoint that answers as an honest server does: with the share id the client minted. */
@@ -265,8 +265,10 @@ describe('resolveShare (anonymous viewer)', () => {
     const minted = await createShare(SCOPE_ID, NODE_ID, kNode, EPOCHS, 'Trip')
     const { wrap, sealedName } = posted(create)
     const chapterKey = v1.randomBytes(32)
-    const sealedAt = (purpose: 'content-key' | 'node-name', placementRevision: number, payload: Uint8Array) =>
-      b64std(v1.seal({ purpose, scopeId: SCOPE_ID, nodeId: CHAPTER_ID, epoch: 0, placementRevision }, kNode, payload))
+    const sealedAt = (purpose: 'content-key' | 'node-name', placementRevision: number, payload: Uint8Array) => {
+      const at = { scopeId: SCOPE_ID, nodeId: CHAPTER_ID, epoch: 0, placementRevision }
+      return b64std(purpose === 'node-name' ? v1.sealField({ purpose, ...at }, kNode, payload) : v1.seal({ purpose, ...at }, kNode, payload))
+    }
     const entry = { wrappedContentKey: sealedAt('content-key', 2, chapterKey), encryptedName: sealedAt('node-name', 2, v1.utf8('Tag 2')) }
     const servedAt = async (placementRevision: number) => {
       mockGuest({
@@ -373,9 +375,9 @@ describe('createContributorIdentity (cr-0101)', () => {
     expect(req.sealedDisplayName).not.toContain('Oma')
     // and it unwraps back under K_node (proves the seal is correct + operator-blind), bound to (scope, share, identity)
     const ctx = { purpose: 'share-identity-name', scopeId: SCOPE_ID, shareId, identityId: req.identityId } as const
-    const opened = new TextDecoder().decode(v1.open(ctx, kNode, fromB64std(req.sealedDisplayName)))
+    const opened = new TextDecoder().decode(v1.openField(ctx, kNode, fromB64std(req.sealedDisplayName)))
     expect(opened).toBe('Oma')
-    expect(() => v1.open({ ...ctx, identityId: crypto.randomUUID() }, kNode, fromB64std(req.sealedDisplayName))).toThrow(v1.OpenRefused)
+    expect(() => v1.openField({ ...ctx, identityId: crypto.randomUUID() }, kNode, fromB64std(req.sealedDisplayName))).toThrow(v1.OpenRefused)
   })
 
   // ADR 0076: the share stores the hash of a token only the whole link derives — so its id alone names no guest.
@@ -715,8 +717,8 @@ describe('reissueShare (ADR 0075, W1)', () => {
     expect(minted.shareId).toBe(r.shareId)
     const dec = (b: Uint8Array) => new TextDecoder().decode(b)
     // the settings open under the NEW key
-    expect(JSON.parse(dec(v1.open({ purpose: 'share-note' }, minted.kShare, fromB64std(r.sealedNote!))))).toEqual({ en: 'note for B' })
-    expect(dec(v1.open({ purpose: 'share-name' }, minted.kShare, fromB64std(r.sealedShareName!)))).toBe('For Grandma')
+    expect(JSON.parse(dec(v1.openField({ purpose: 'share-note' }, minted.kShare, fromB64std(r.sealedNote!))))).toEqual({ en: 'note for B' })
+    expect(dec(v1.openField({ purpose: 'share-name' }, minted.kShare, fromB64std(r.sealedShareName!)))).toBe('For Grandma')
     expect(dec(v1.open({ purpose: 'share-password' }, minted.kShare, fromB64std(r.sealedPassword!)))).toBe('correct horse battery')
     expect(r.pwVerifier).toBe(b64std(v1.sha256Digest(v1.sharesPwToken('correct horse battery', fromB64std(r.pwSalt!)))))
     // the write proof is the NEW link's: its key and its id (ADR 0076)
@@ -725,14 +727,19 @@ describe('reissueShare (ADR 0075, W1)', () => {
     expect(r.sealedShareKeyEpoch).toBe(EPOCHS.current)
     const ctx = { purpose: 'share-key-recovery', scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: r.shareId, epoch: EPOCHS.current } as const
     expect(v1.open(ctx, EPOCHS.keys.get(EPOCHS.current)!, fromB64std(r.sealedShareKey))).toEqual(minted.kShare)
-    // the old K_share — what a departed member may hold — opens none of the new fields
-    const fields: [Parameters<typeof v1.open>[0], string][] = [
-      [{ purpose: 'share-note' }, r.sealedNote!], [{ purpose: 'share-name' }, r.sealedShareName!],
+    // the old K_share — what a departed member may hold — opens none of the new seals and fields
+    const seals: [Parameters<typeof v1.open>[0], string][] = [
       [{ purpose: 'share-password' }, r.sealedPassword!], [{ purpose: 'share-key' }, r.wrap!],
+    ]
+    for (const [ctx, sealed] of seals) {
+      expect(() => v1.open(ctx, oldKey, fromB64std(sealed))).toThrow(v1.OpenRefused)
+    }
+    const fields: [Parameters<typeof v1.openField>[0], string][] = [
+      [{ purpose: 'share-note' }, r.sealedNote!], [{ purpose: 'share-name' }, r.sealedShareName!],
       [{ purpose: 'share-memory-name' }, r.sealedName],
     ]
     for (const [ctx, field] of fields) {
-      expect(() => v1.open(ctx, oldKey, fromB64std(field))).toThrow(v1.OpenRefused)
+      expect(() => v1.openField(ctx, oldKey, fromB64std(field))).toThrow(v1.OpenRefused)
     }
     // positive control: a member holding the epoch keys reveals the new password through the new copy
     expect(readSharePassword(EPOCHS, addressOf(r), r, r.sealedPassword!)).toBe('correct horse battery')

@@ -68,7 +68,7 @@ describe('a folder share on the wire', () => {
     expect(() => v1.open(SHARE_KEY, k1, fromB64std(json.wrap as string)), 'the wrap is not sealed under K_SC').toThrow(v1.OpenRefused)
 
     // The folder's name, under K_share — a guest with only the fragment reads it.
-    const name = v1.open(SHARE_MEMORY_NAME, minted.kShare, fromB64std(json.sealedName as string))
+    const name = v1.openField(SHARE_MEMORY_NAME, minted.kShare, fromB64std(json.sealedName as string))
     expect(new TextDecoder().decode(name)).toBe('Archiv 2026')
     expect(JSON.stringify(json)).not.toContain('Archiv')
 

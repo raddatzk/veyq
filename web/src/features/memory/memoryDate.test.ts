@@ -38,7 +38,7 @@ const OTHER_NODE_ID = '5c09e000-0000-4000-8000-0000000000d2'
 const NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
 const metaCtx = (nodeId: string) => ({ purpose: 'node-meta', scopeId: SCOPE_ID, nodeId }) as const
 const sealMetaJson = (json: string, nodeId = NODE_ID) =>
-  b64std(v1.seal(metaCtx(nodeId), nodeKey, new TextEncoder().encode(json)))
+  b64std(v1.sealField(metaCtx(nodeId), nodeKey, new TextEncoder().encode(json)))
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -52,7 +52,7 @@ function itemWith(tier: Partial<MediaMeta> | null): MediaItem {
   base.original.ownerId = base.mediaId
   if (!tier) return base
   const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, ...tier }))
-  base.wrappedMeta = b64std(v1.seal({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: base.mediaId }, nodeKey, bytes))
+  base.wrappedMeta = b64std(v1.sealField({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: base.mediaId }, nodeKey, bytes))
   return base
 }
 
@@ -91,7 +91,7 @@ describe('sealMemoryDate / unsealMemoryDate', () => {
 const stale = (wrappedMeta: string | null, metaRevision: number) => ({
   response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta, metaRevision }), { status: 409 }),
 })
-const opened = (sealed: string) => JSON.parse(new TextDecoder().decode(v1.open(metaCtx(NODE_ID), nodeKey, fromB64std(sealed))))
+const opened = (sealed: string) => JSON.parse(new TextDecoder().decode(v1.openField(metaCtx(NODE_ID), nodeKey, fromB64std(sealed))))
 const fresh = (wrappedMeta: string | null = null, metaRevision = 0) => ({ wrappedMeta, metaRevision })
 const LISBON = { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed' }
 
@@ -169,7 +169,7 @@ describe('setMemoryDate', () => {
   it('W6: a date save over a blob that does not open makes no PATCH and throws MetaUnreadableError', async () => {
     const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
     fakeApi(contentApi, { updateNode })
-    const otherKeys = b64std(v1.seal(metaCtx(NODE_ID), v1.randomBytes(32), new TextEncoder().encode(JSON.stringify({ v: 1, location: LISBON }))))
+    const otherKeys = b64std(v1.sealField(metaCtx(NODE_ID), v1.randomBytes(32), new TextEncoder().encode(JSON.stringify({ v: 1, location: LISBON }))))
 
     const err = await setMemoryDate(SCOPE_ID, NODE_ID, nodeKey, { mode: 'auto' }, fresh(otherKeys, 1)).catch((e) => e)
 
@@ -215,7 +215,7 @@ describe('reconcileMemoryDate (the auto self-heal)', () => {
   it('W6: an unopenable blob stops the self-heal without a write', async () => {
     const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
     fakeApi(contentApi, { updateNode })
-    const otherKeys = b64std(v1.seal(metaCtx(NODE_ID), v1.randomBytes(32), new TextEncoder().encode(JSON.stringify({ v: 1, location: LISBON }))))
+    const otherKeys = b64std(v1.sealField(metaCtx(NODE_ID), v1.randomBytes(32), new TextEncoder().encode(JSON.stringify({ v: 1, location: LISBON }))))
     await expect(reconcileMemoryDate(SCOPE_ID, NODE_ID, nodeKey, dated(), fresh(otherKeys, 1))).rejects.toBeInstanceOf(MetaUnreadableError)
     expect(updateNode).not.toHaveBeenCalled()
   })
