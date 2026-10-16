@@ -1,6 +1,6 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
-- Status: Accepted 2026-10-16; built so far: the boot, first run and the Memory round trip in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `e2e/`, phases 1–3 of `changes/cr-stack-e2e.md`, run locally) — no feature scenario, no CI run
+- Status: Accepted 2026-10-16; built so far: L1 installs the candidate through `veyqctl install --unsigned-local` from its release assets (decision 1), then first run and the Memory round trip in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `e2e/`, run locally) — no feature scenario, no CI run
 - Date: 2026-10-16
 
 ## Context
@@ -30,9 +30,8 @@ What a green run proves today stops short of what a Server Owner runs:
    both images by digest, the very files a promotion publishes as the immutable GitHub Release ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §3) — through
    `veyqctl install` with `--source` pointed at a local directory in the mirror layout (§7) and `--unsigned-local`
    for images that are not yet signed. So the operator's path is the tested path, and no harness re-implements it.
-   Until `cr-veyqctl` lands its install (its phase 4 owns the switch), `scripts/run_stack_e2e.py` extracts the recipe
-   from the app image instead (ADR 0057 §3 as it still stands) and copies `garage.toml` from the checkout, saying so
-   on every run. The only file laid over the recipe is `infra/e2e/docker-compose.e2e.yml`, which adds an ACME test
+   The only file laid over the recipe is `infra/e2e/docker-compose.e2e.yml`, the instance's operator override file
+   (`compose.override.yml`, which `veyqctl` lays over the recipe on every command), which adds an ACME test
    server and the browser, and gives the instance only what the public internet gives an operator's: DNS for its own
    domain (an alias of Traefik on `edge`, so the app reaches its public origin) and a CA it trusts (the run's Pebble
    root, in the app's truststore and Traefik's ACME client). Measured in phase 2: the store check uploads through the

@@ -45,7 +45,10 @@ sealed class ReleaseFeed(protected val http: BoundedGet) {
     /** Whether [tag]'s manifest marks it an unscheduled major (ADR 0085 decision 4). */
     abstract fun unscheduled(tag: String): Boolean
 
-    /** A manifest (`release_assets.py`: `{release, date, images, unscheduled}`), held to the tag it was fetched by. */
+    /**
+     * A manifest (`release_assets.py`: `{release, date, images, unscheduled, assets}`), held to the tag it was fetched
+     * by. Only `release` and `unscheduled` are read; the rest is `veyqctl`'s.
+     */
     protected fun parseManifest(tag: String, body: ByteArray): Boolean {
         val doc = http.json(body, "manifest of $tag")
         if (!doc.isObject) throw ReleaseSourceException("the manifest of $tag is not an object")

@@ -152,16 +152,6 @@ RUN apt-get update \
     && chmod 0755 /etc/traefik/dynamic \
     && chown -R 10001:10001 /work /var/lib/veyq /etc/traefik/dynamic
 COPY --from=backend-build-jvm --chown=10001:10001 /code/backend/build/quarkus-app /work/quarkus-app
-# The deployment recipe travels INSIDE the image (ADR 0057 §3): a tool about to run a given image reads the
-# compose file and the env template out of that image instead of fetching them from a URL, so the recipe cannot
-# drift from the bits it describes and inherits the image's cosign signature rather than needing a second trust
-# path. /opt/veyq/deploy is chosen because nothing mounts it and nothing writes it — NOT /work (it holds
-# quarkus-app/, see above) and NOT /var/lib/veyq (the config-secret volume); a mount over either would hide the
-# recipe of the image actually running behind the recipe of the first one ever started. Left root-owned and
-# read-only to uid 10001: this is reference material, and the runtime never writes it.
-# Extract with: docker run --rm --entrypoint cat <image> /opt/veyq/deploy/docker-compose.prod.yml
-COPY infra/docker-compose.prod.yml /opt/veyq/deploy/docker-compose.prod.yml
-COPY infra/.env.example /opt/veyq/deploy/.env.example
 # The AGPL travels with the object code it covers (§4/§6): a pulled image is a conveyed copy. The same path in
 # both images, beside the notices of every jar in /work/quarkus-app/lib (buildSrc's ThirdPartyLicenses); the web
 # bundle's own are served by the app, at /third-party-licenses.txt. The MariaDB driver (LGPL-2.1) stays a jar of

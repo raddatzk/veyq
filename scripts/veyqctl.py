@@ -95,7 +95,9 @@ and checking that bundle here is not built yet.
 Docker, holds the resolver, the manifest parse, the template merge, `upgrade`'s order and every refusal; the live
 runs of cr-veyqctl installed, stopped and started an instance from a mirror directory with images built from the tree,
 upgraded it from one commit's release to the next with a Memory in it, and restored the upgrade's backup onto a fresh
-install.
+install; and the stack lane (`scripts/run_stack_e2e.py`, ADR 0090) installs every candidate it boots with this file's
+`install --unsigned-local`, its overlay as the override file — `install`, the override and `.env` from the template,
+on every run (`start`, `stop`, `upgrade`, `backup` and `restore` are not on that path).
 
 Its limits: it drives Compose only (Kubernetes upgrades with `helm upgrade`, decision 8); it cannot verify a mirror's
 `releases.json` or a manifest beyond its shape and the assets' sha256 — the images' signatures are what bind a

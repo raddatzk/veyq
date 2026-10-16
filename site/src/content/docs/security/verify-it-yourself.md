@@ -294,8 +294,8 @@ means "operator-blind, verified". The traffic is the wire sweep's job.
 
 ## Verifying a signed release
 
-A release is identified by its tree. The deployment recipe travels inside the image, and the publish signs the
-images and the Helm chart keylessly with cosign
+A release is identified by its tree. Its deployment recipe is the release's assets, beside a manifest that names
+both images by digest, and the publish signs the images and the Helm chart keylessly with cosign
 ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md),
 [ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)).
 The step-by-step check — resolve each tag to a digest once, verify each signature against the one workflow
@@ -304,6 +304,6 @@ identity that publishes veyq, then deploy by digest — is on
 
 **Nothing on the publish side has been observed yet.** The repository has no remote and no workflow has ever
 executed. Every statement about what a publish *does* is therefore a statement about a file, not about a run.
-What can be proven locally is the tree-side half: deriving the version, building the image, extracting the
-recipe from the built image, and checking that the extracted recipe resolves under `docker compose config`
-(ADR 0057 § Consequences).
+What can be proven locally is the tree-side half: deriving the version, building the images, producing the
+release's assets from the tree, and installing an instance from them with `veyqctl`, as the stack end-to-end run
+does (ADR 0057 § Consequences).

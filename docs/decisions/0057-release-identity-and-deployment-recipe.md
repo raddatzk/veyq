@@ -1,4 +1,4 @@
-# ADR 0057 — A release is identified by the tree, and the deployment recipe travels in the image
+# ADR 0057 — A release is identified by the tree, and the deployment recipe is its assets
 
 - Status: Accepted; built as a hand-dispatched publish that builds again for a release. §1's snapshot per green push and
   its promotion to a release, and §7's stack lanes, are decided ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md))
@@ -91,22 +91,29 @@ major ≥ 1, which the owner declares on the `release:` line of `scripts/applied
 **2. A release has exactly one git ref, `v<major>.<minor>`,** created by the promotion. One release, one name,
 one tree. A snapshot has none: it names a build, not a release.
 
-**3. The deployment recipe travels inside the image.** `infra/docker-compose.prod.yml` and
-`infra/.env.example` are copied into the runtime image, and a tool about to run a given image reads them **out
-of that image** rather than fetching them from a URL. Two things follow that no fetch-by-ref scheme provides:
+**3. The deployment recipe is the release's assets; the binding is the release, not the image.** A release carries
+its recipe as assets of an immutable GitHub Release on `v<major>.<minor>`: `infra/docker-compose.prod.yml`,
+`infra/.env.example` and every file the compose file reads beside itself (`garage.toml`), derived from the compose
+file by `scripts/release_assets.py` rather than listed, beside `veyqctl`, the backup tool and a manifest naming both
+images by `tag@digest` and every asset by its sha256 ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)
+decision 3). No image carries a recipe. Two things follow:
 
-- **The recipe cannot drift from the image it describes.** Today the operator holds a copy taken once, by hand,
-  and a version that adds a service or a required variable has no delivery path to them at all.
-- **It inherits the image's signature.** The publish signs the manifest keylessly with cosign, so a recipe
-  extracted from a verified image is verified material, with no second trust path for the files beside the
-  image. **A verification is only as narrow as the identity it pins.** The operator's documented
+- **The recipe cannot drift from the images it describes.** The manifest beside it names the two digests that
+  release deploys, and an immutable release changes neither after it is published. A release that adds a service or
+  a required variable reaches the operator with that release, and `veyqctl upgrade` refuses a required value the
+  operator's `.env` lacks before anything stops (ADR 0096 decision 5).
+- **The images' signatures bind the images; the release binds the files.** The recipe carries no signature of its
+  own: `veyqctl` checks each asset against the sha256 its manifest names, and what makes that manifest veyq's is the
+  source — the immutable GitHub Release, or a mirror the operator chose to trust (ADR 0096 decision 7). `veyqctl`
+  itself is signed with `cosign sign-blob` under the images' identity. **A verification is only as narrow as the
+  identity it pins.** The operator's documented
   `cosign verify` pins the certificate identity to `.github/workflows/ci.yml` — the workflow that publishes, and so
   signs — in `raddatzk/veyq`, on `refs/heads/main`
   or `refs/heads/release/<major>.x`, with GitHub's OIDC issuer. A regex over the repository accepts a
   signature from any workflow on any ref. The upstream is written out literally, because a placeholder
   would verify a fork just as well. The publish accepts exactly those two branch shapes, so what signs and
-  what verifies can agree. Both images are verified, and the recipe is extracted and deployed **by the
-  verified digest**, never by the tag, because a tag can move between the verify and the pull.
+  what verifies can agree. Both images are verified, and deployed **by the verified digest** the manifest names,
+  never by the tag, because a tag can move between the verify and the pull.
 
 **4. One major, and the precise release never pre-auth.** The release major in `VERSION` *is* the protocol major
 ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 1): both count the same event, a
@@ -198,14 +205,15 @@ push; the jar-level proof below retires when they gate (ADR 0091 decision 7). Un
 - **The upgrade procedure gains the two things it was missing** — a nameable rollback target, and a way to
   obtain the recipe that belongs to a version. That procedure is not decided here; this ADR only makes it
   possible for one to exist.
-- **Every deployment artifact now has two homes, and they must agree.** `infra/docker-compose.prod.yml` is both
-  a file in this tree and a file inside the image. The image's copy is authoritative for a running instance; a
-  guard holds the two to each other, in the same shape as
-  `scripts/validate_config_secret_persistence.py` holding three files to one path.
+- **The recipe has two homes, the tree and the release, and the release's is produced from the tree.** A running
+  instance's copy is its release's (`releases/<release>/` in `veyqctl`'s home); `scripts/validate_release_identity.py`
+  assertion 4 holds the producer to every file the compose file reads, so a file the recipe gains cannot be left out
+  of a release the way `garage.toml` was left out of the image.
 - **Nothing here is observed until a publish runs.** This repository has no remote and no workflow has ever
   executed, so every statement about what the publish *does* is a statement about a file rather than about a
-  run. What is locally provable is the tree-side half: the version derivation, the image building, the recipe
-  being extractable from the built image, and that extracted recipe resolving under `docker compose config`.
+  run. What is locally provable is the tree-side half: the version derivation, the image building, the release's
+  assets produced from the tree, and an instance installed from them by `veyqctl` (the stack lane,
+  [ADR 0090](0090-end-to-end-tests-boot-the-release-candidate.md)).
   The publish path stays an explicitly stated gap, in the same shape as the coverage flip that
   [ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md) leaves owed.
 - **A pin trades silent patches for explicit ones.** A tag-pinned `mariadb:11.4` picked up patch releases on
@@ -228,9 +236,12 @@ push; the jar-level proof below retires when they gate (ADR 0091 decision 7). Un
   seventh fact): a bump commit per release, and a red run for every commit in between.
 - **Rejected — publishing every push to `main` as a release.** It removes the red runs by making every commit a
   release, and with it the line between "built" and "promised"; a rollback target would be any commit at all.
-- **Rejected — fetching the recipe from a raw URL at the matching ref.** It works, but it requires the git tag
-  *and* a second trust decision about unsigned files served beside a signed image, and it fails for exactly the
-  publishes that have no tag. Extraction from the image needs neither.
+- **Rejected — fetching the recipe from a raw URL at the matching ref.** It works, but a ref can be moved by anyone
+  with write access, so the files at it are whatever the ref points at today; an immutable release's assets cannot
+  change after it is published.
+- **Rejected since — the recipe inside the image**, this decision's first form: the image carried the two files a
+  hand-kept list named and not the `garage.toml` the compose file reads, and the operator needed the repository for
+  backups regardless. [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) records why it left.
 - **Rejected — putting the release version on the pre-auth `GET /api/setup`.** It would make version disclosure
   — and therefore applicable-CVE disclosure — unauthenticated on every instance, to buy a convenience the
   Server Owner already has authenticated.
