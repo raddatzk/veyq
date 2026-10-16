@@ -73,6 +73,12 @@ handling of reported shares.
   **built (backend + admin-web, cr-release-identity)** ([ADR 0057](../../decisions/0057-release-identity-and-deployment-recipe.md); the release version is
   the operator's, the pre-auth `major`/`build` is the client's; they share the major
   ([ADR 0085](../../decisions/0085-one-major-moved-on-a-yearly-train.md), generated from `VERSION`) and the precise release never goes pre-auth)
+- ★ [Install an instance and keep it on its release line](use-cases/uc.admin.install-and-upgrade-instance.md) —
+  **planned** (`veyqctl`, [ADR 0096](../../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md); a
+  release is an immutable GitHub Release whose assets are the recipe; replaces the hand runbook below once built)
+- ★ [Learn of a new release without looking for one](use-cases/uc.admin.learn-of-new-releases.md) — **planned**
+  ([ADR 0097](../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md); a daily check,
+  console notices, and instance mail for the Server Owner only)
 - Upgrade the instance — the runbook is **written** ([Upgrade](../../../site/src/content/docs/run/upgrade.mdx), the docs site's Run area) and no longer
   blocked: the release identity above is what let its rollback target be named, and an upgrade whose rollback
   target cannot be named is advice rather than a procedure. It begins with the backup above by decision, not by
