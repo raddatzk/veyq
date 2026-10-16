@@ -77,3 +77,35 @@ kotlin {
         javaParameters = true
     }
 }
+
+// The third-party notices of what the fast-jar ships (buildSrc's ThirdPartyLicenses): every `quarkusBuild` writes them,
+// the Dockerfile's and CI's included, so an unlisted license fails the build that would ship it. The Dockerfile copies
+// the report into the image beside veyq's own LICENSE and NOTICE.
+val thirdPartyLicenses by tasks.registering(me.raddatz.veyq.buildlogic.ThirdPartyLicenses::class) {
+    dependsOn(tasks.named("quarkusBuild"))
+    libDir.set(layout.buildDirectory.dir("quarkus-app/lib"))
+    licenseTexts.set(layout.projectDirectory.dir("licenses"))
+    // What Quarkus packages, not `runtimeClasspath`: its conditional dependencies (quarkus-rest-kotlin,
+    // quarkus-vertx-kotlin) reach lib/main only through this configuration.
+    artifacts.set(
+        configurations.named("quarkusProdRuntimeClasspathConfiguration").flatMap { it.incoming.artifacts.resolvedArtifacts },
+    )
+    // A module's POM, each already pinned in gradle/verification-metadata.xml: resolving the graph read them all. Not a
+    // `g:a:v@pom` dependency: for a module that publishes Gradle module metadata that asks for the POM as an artifact,
+    // which the cache does not hold (measured: io.quarkus:quarkus-bootstrap-runner failed offline).
+    val deps = dependencies
+    pomResolver.set(
+        me.raddatz.veyq.buildlogic.PomResolver { g, a, v ->
+            deps.createArtifactResolutionQuery().forModule(g, a, v)
+                .withArtifacts(org.gradle.maven.MavenModule::class.java, org.gradle.maven.MavenPomArtifact::class.java)
+                .execute().resolvedComponents.single()
+                .getArtifacts(org.gradle.maven.MavenPomArtifact::class.java).single()
+                .let {
+                    (it as? org.gradle.api.artifacts.result.ResolvedArtifactResult)?.file
+                        ?: throw GradleException("$g:$a:$v: no POM", (it as org.gradle.api.artifacts.result.UnresolvedArtifactResult).failure)
+                }
+        },
+    )
+    report.set(layout.buildDirectory.file("third-party-licenses/THIRD-PARTY-LICENSES.txt"))
+}
+tasks.named("quarkusBuild") { finalizedBy(thirdPartyLicenses) }
