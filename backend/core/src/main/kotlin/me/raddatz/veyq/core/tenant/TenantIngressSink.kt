@@ -4,7 +4,7 @@ package me.raddatz.veyq.core.tenant
  * Where [TenantIngressProjector]'s computed set of routable tenant domains actually becomes **routing**
  * (ADR 0063). The projector owns the DB-facing half — *which* domains route; a sink owns the proxy-facing
  * half — *how* a proxy is told about them. The split exists because ADR 0064 adds a second deployment target
- * whose proxy is the Kubernetes Ingress API rather than a file on a shared volume, and the DB-facing half is
+ * whose proxy is the Kubernetes Gateway API rather than a file on a shared volume, and the DB-facing half is
  * identical for both: one predicate, one bootstrap exclusion, one sorted list.
  *
  * **[apply] never throws.** That is the contract, not a courtesy: a failed projection must not fail the tenant
@@ -17,7 +17,7 @@ package me.raddatz.veyq.core.tenant
  * routable set and must make the proxy's state equal to it — which for a sink that reconciles rather than
  * overwrites means **deleting** routing for a domain that is no longer in the list, not only adding routing
  * for one that is. A file sink gets this for free by overwriting the whole file; an API-backed sink does not,
- * and `KubernetesIngressSinkTest`'s deletion bite is where that is decided.
+ * and `KubernetesGatewaySinkTest`'s deletion bite is where that is decided.
  */
 interface TenantIngressSink {
 

@@ -1,8 +1,10 @@
 # The backend's cluster identity, and the whole of it: a namespace-local ServiceAccount + Role, never a
-# ClusterRole (ADR 0064). The backend projects tenant domains as Ingress objects into ITS OWN namespace and
-# lists them by its ownership label; these are the verbs that reconcile needs — `delete` included, because a
-# withdrawn domain's Ingress must go, not stay. Nothing here reaches Secrets or CRDs: TLS is a passthrough
-# (annotations + spec.tls the controller acts on), so no certificate object is ever the backend's to write.
+# ClusterRole (ADR 0064). The backend projects tenant domains as HTTPRoutes and, under per-domain, ListenerSets
+# into ITS OWN namespace and lists each kind by its ownership label; these are the verbs that reconcile needs —
+# `delete` included, because a withdrawn domain's route and ListenerSet must go, not stay. Nothing on `gateways`:
+# the backend can neither add nor change a listener on the chart's Gateway, so a tenant domain reaches the network
+# only through a ListenerSet that Gateway admits. Nothing here reaches Secrets or CRDs: TLS is a passthrough
+# (certificateRefs + annotations cert-manager acts on), so no certificate object is ever the backend's to write.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -17,8 +19,8 @@ metadata:
   labels:
     {{- include "veyq.labels" . | nindent 4 }}
 rules:
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes", "listenersets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

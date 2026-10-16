@@ -1,0 +1,96 @@
+# The chart's Gateway (ADR 0064): the one entry point every host of this release — and every tenant domain the
+# backend projects at runtime — is served through. The chart owns it; the operator picks the implementation by
+# naming its GatewayClass (gateway.className). The backend never writes it: its Role grants nothing on `gateways`,
+# so a tenant reaches the network only through a ListenerSet this Gateway admits (allowedListeners below).
+#
+# Listeners, by gateway.tls.mode — the names are a contract with the backend's sink (KubernetesGatewaySink's
+# HTTP_LISTENER / SHARED_HTTPS_LISTENER), held by scripts/chart_meta_check.py:
+#   always       `http`  :80, no hostname — routes under `none`, the HTTPS redirect otherwise, and every HTTP-01
+#                        challenge (cert-manager's solver routes, a ListenerSet's through the parent-ref fallback)
+#   shared       `https` :443, no hostname, the one pre-provisioned Secret every route is served under
+#   per-domain   `https-app` / `https-store` / `https-admin` :443, one per chart host, each referencing a Secret
+#                named after the host's route — exactly the shape the backend gives a tenant's ListenerSet. A
+#                listener here wins a hostname conflict against any ListenerSet (Gateway API's own precedence),
+#                so a tenant domain cannot take the bootstrap, store or admin host.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: veyq
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+  {{- with (include "veyq.gatewayAnnotations" . | fromYaml) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  gatewayClassName: {{ required "gateway.className is required — the GatewayClass of your Gateway API implementation" .Values.gateway.className | quote }}
+  # The backend's ListenerSets attach from this namespace and nothing from another one does. Gateway API's default
+  # is `None`, which would leave every tenant domain without a listener under `per-domain`.
+  allowedListeners:
+    namespaces:
+      from: Same
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- if eq .Values.gateway.tls.mode "shared" }}
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ .Values.gateway.tls.secretName | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- else if eq .Values.gateway.tls.mode "per-domain" }}
+    {{- range (include "veyq.chartHosts" . | fromYamlArray) }}
+    - name: {{ index . 0 }}
+      hostname: {{ index . 1 | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ index . 2 }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+    {{- end }}
+{{- if ne .Values.gateway.tls.mode "none" }}
+---
+# The redirect to https on the port-80 listener, under `per-domain` and `shared` — the chart's, not an
+# implementation's default. Host-less and `/`-prefixed on purpose: cert-manager's HTTP-01 solver routes name a host
+# and an exact path, which Gateway API's precedence ranks above this route, so a challenge is still answered over
+# plain HTTP. The filter is Core; its `scheme` field is Extended (HTTPRouteSchemeRedirect), so an implementation
+# that lacks that feature leaves this route unaccepted and port 80 unredirected — the HTTPS listeners still serve.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: veyq-https-redirect
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: veyq
+      sectionName: http
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+{{- end }}

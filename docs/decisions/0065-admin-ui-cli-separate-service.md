@@ -40,7 +40,7 @@ Forces:
   genuinely needed, rather than either duplicating it or excluding setup from the move.
 - **Moving the UI did not move the API** (measured 2026-09-23, the security/reuse review): the `admin`
   container's nginx proxies `/api/` to the **same** backend the public origin routes to with no path
-  restriction (the `veyq-app` Traefik router; `path: /` in the chart's app Ingress). So the first force was
+  restriction (the `veyq-app` Traefik router; the `/` prefix match in the chart's app route). So the first force was
   half-kept — every Server-Owner operation stayed reachable from the internet behind the owner's login, and
   `POST /api/setup/owner` behind nothing: it is `@PermitAll`, guarded only by "setup not yet complete", so
   whoever calls it first after `up -d` becomes Server Owner, on a domain that is in public CT logs minutes after
@@ -158,7 +158,7 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
     is an interactive ceremony that mints key material and force-confirms a saved Emergency Kit, which a
     script cannot meaningfully do.
 - **Exposure is an operator choice, not a build-time one — two modes of the same image:**
-  - **Localhost-only (the default).** No Traefik/Ingress router at all; reached via `docker compose exec`, a
+  - **Localhost-only (the default).** No Traefik router or Gateway route at all; reached via `docker compose exec`, a
     port bound to `127.0.0.1`, or an SSH tunnel. Setup moving here is a genuine sequencing improvement, not
     just a security posture: first-run setup no longer needs `VEYQ_DOMAIN`'s DNS/TLS to be live at all
     (`docker compose up` + `http://localhost:PORT` is enough), where today it does, because setup lives in
@@ -167,7 +167,8 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
     with the instance, not per-tenant, so its route comes from **configuration, never from the tenant
     table**. On compose the ingress sink renders it next to the bootstrap domain's, because that file is the
     only thing Traefik routes from ([ADR 0063](0063-database-driven-tenant-ingress.md)). On Kubernetes it is
-    the chart's own `Ingress`. Set it **after** first-run setup: this mode puts the admin channel on the
+    the chart's own `HTTPRoute` (and, under per-domain TLS, a listener of its own on the chart's `Gateway`). Set
+    it **after** first-run setup: this mode puts the admin channel on the
     internet (residual (iv) below).
 - **Trust tier: unchanged, not new.** Per [ADR 0026](0026-client-trust-tiers.md), a self-hosted operator
   running the admin container themselves is the *Self-hosted* tier — moot, operator = user — exactly as the
@@ -205,7 +206,7 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
     public origin never answers the call; the one door that does is the one the operator reaches privately.
   - **Deployment.** The listener is not `EXPOSE`d (so `docker run -P` does not publish it); compose points the
     admin container's `BACKEND_URL` — and the CLI's default — at it; the chart gives it a Service of its own, so
-    no Ingress aimed at the app Service (the chart's, a projected tenant one, or an operator's) can reach it, and
+    no route aimed at the app Service (the chart's, a projected tenant one, or an operator's) can reach it, and
     a NetworkPolicy admitting only the admin pod to that port.
   - **Residuals, named rather than discovered.** (i) Compose networks separate containers by peer, not by port
     ([ADR 0071](0071-runtime-hardening-on-both-targets.md)), so every container that shares a network with the
@@ -243,7 +244,7 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
   ships in the main image and origin, so a compromised main-app deployment (a supply-chain issue in a
   dependency, a misconfigured proxy) still exposes admin-capable code at the same reachability as the rest of
   the app — the whole point was to remove that coupling, not re-implement it as a runtime toggle.
-- **Rejected — exclude the admin paths at the edge** (a Traefik rule, an Ingress path). It holds only for the
+- **Rejected — exclude the admin paths at the edge** (a Traefik rule, a route's path match). It holds only for the
   edge this repository ships; a self-hoster's own reverse proxy loses it silently.
 - **Rejected — a channel secret the admin nginx injects as a header.** It is topology-independent, which is its
   real strength. But it is new credential material at rest in three places (`.env`, the chart Secret, the

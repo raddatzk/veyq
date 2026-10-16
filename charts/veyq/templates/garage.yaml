@@ -1,6 +1,6 @@
-# S3 on 3900 for the app AND, through the Ingress below, for browsers; RPC on 3901 so the advertised
+# S3 on 3900 for the app AND, through the HTTPRoute below, for browsers; RPC on 3901 so the advertised
 # rpc_public_addr resolves to a real listener; the admin API on 3903 for the app's provisioning — on the
-# Service, and deliberately on no Ingress.
+# Service, and deliberately on no route.
 apiVersion: v1
 kind: Service
 metadata:
@@ -145,27 +145,22 @@ spec:
 ---
 # The store's own host (ADR 0064): the browser fetches presigned URLs cross-origin from here, under the `*`
 # CORS policy the app writes. The admin port is not on it, and no path under `domain` routes here either.
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
   name: veyq-garage
   labels:
     {{- include "veyq.labels" . | nindent 4 }}
     app.kubernetes.io/component: garage
-  {{- include "veyq.ingressMetadata" . }}
 spec:
-  {{- with .Values.ingress.className }}
-  ingressClassName: {{ . }}
-  {{- end }}
-  {{- include "veyq.ingressTls" (dict "root" . "host" .Values.storeDomain "name" "veyq-garage") }}
+  {{- include "veyq.routeParent" (dict "root" . "listener" "https-store") | nindent 2 }}
+  hostnames:
+    - {{ required "storeDomain is required" .Values.storeDomain | quote }}
   rules:
-    - host: {{ required "storeDomain is required" .Values.storeDomain | quote }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: veyq-garage
-                port:
-                  number: 3900
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: veyq-garage
+          port: 3900

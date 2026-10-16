@@ -5,8 +5,8 @@
   - variable the production compose file interpolates (`${NAME…}` in `infra/docker-compose.prod.yml`, comment lines
     left out — a variable named only in a comment is no input);
   - variable `infra/.env.example` sets (`NAME=` at the start of a line) or offers commented out (`#   NAME=`);
-  - leaf of the chart's `charts/veyq/values.yaml`, as its dotted path (`ingress.tls.acme.email`); an empty map or a
-    list is a leaf of its own (`ingress.annotations`, `networkPolicy.ingressFrom`).
+  - leaf of the chart's `charts/veyq/values.yaml`, as its dotted path (`gateway.tls.acme.email`); an empty map or a
+    list is a leaf of its own (`gateway.annotations`, `networkPolicy.ingressFrom`).
 Each source must yield at least one name, so a moved or renamed file reports red instead of checking nothing.
 
 **The defect that bought it — no incident.** Built with the page (cr-run-area-content phase 4). The recipes change

@@ -23,10 +23,14 @@ domain (`/blobs/`), so the browser reaches the store on the instance's own origi
 the file, it logs that loudly and every domain, the instance's own included, stays unrouted; the admin port
 bypasses Traefik, so you keep a way in.
 
-**Kubernetes.** Your ingress controller does the routing. The chart renders an Ingress for the instance's domain,
-one for the store's host (`storeDomain`) and, if set, one for the admin surface; the application writes one Ingress
-per tenant into its own namespace, with the chart's class and annotations. It may manage Ingresses in that namespace
-and nothing else.
+**Kubernetes.** A Gateway API implementation of your choice does the routing (Traefik is the example these pages
+use, never a requirement). The chart renders one `Gateway`, `veyq`, of the `GatewayClass` you name in
+`gateway.className`, and an `HTTPRoute` for the instance's domain, one for the store's host (`storeDomain`) and, if
+set, one for the admin surface; the application writes one `HTTPRoute` per tenant into its own namespace, attached to
+that `Gateway` — and under `per-domain` TLS a `ListenerSet` beside it. It may manage routes and `ListenerSet`s in that
+namespace and nothing else; the `Gateway` is the chart's. The Gateway API CRDs (v1.5 or later, standard channel)
+and the implementation are yours to install first
+([Kubernetes](/veyq/run/kubernetes/)).
 
 ## TLS is required
 
@@ -42,24 +46,28 @@ validations, and issues at most 50 certificates per registered domain per week, 
 If Traefik's log shows `permission denied` on `/acme`, the certificate volume is not owned by Traefik's user; the
 `volume-ownership` one-shot sets that up on every `up`.
 
-**Kubernetes.** TLS is a reference the chart and the application stamp, chosen by `ingress.tls.mode`:
+**Kubernetes.** TLS is a reference the chart and the application stamp, chosen by `gateway.tls.mode`:
 
-- `none` (the default) — no TLS on any Ingress. Right only where TLS ends before your ingress controller.
-- `per-domain` — every Ingress names a Secret of its own, the shape cert-manager's ingress-shim fills. Every tenant
-  domain gets its own certificate with no chart change. When a tenant is taken offline its Ingress goes, and
-  cert-manager keeps the issued Secret unless it runs with `--enable-certificate-owner-ref`.
-- `shared` — every Ingress uses one Secret you provide (`ingress.tls.secretName`), a wildcard certificate. Tenants on
-  their own domains then route, and browsers refuse them.
+- `none` (the default) — the `Gateway` listens on plain HTTP only. Right only where TLS ends before your gateway.
+- `per-domain` — an HTTPS listener per host whose Secret is named after the host's route: the chart's own hosts on
+  the `Gateway`, each tenant in a `ListenerSet` of its own. Every tenant domain gets its own certificate with no chart
+  change — if your implementation supports `ListenerSet`, which not every released one does yet. When a tenant is
+  taken offline its route and `ListenerSet` go, and cert-manager keeps the issued Secret unless it runs with
+  `--enable-certificate-owner-ref`.
+- `shared` — one HTTPS listener on the `Gateway` with one Secret you provide (`gateway.tls.secretName`), a wildcard
+  certificate. Tenants on their own domains then route, and browsers refuse them.
 
-With `ingress.tls.acme.enabled`, the chart creates a cert-manager issuer of its own (HTTP-01, `per-domain` only) and
-stamps it on every Ingress. cert-manager must already run in the cluster, port 80 of every host must reach the
-controller, and a tenant's DNS must point here before the tenant is created. Watch the orders with
+Under `per-domain` and `shared` the chart redirects port 80 to HTTPS itself. With `gateway.tls.acme.enabled`, the
+chart creates a cert-manager issuer of its own (HTTP-01 on the `Gateway`'s port-80 listener, `per-domain` only) and
+stamps it on the `Gateway` and every tenant `ListenerSet`. cert-manager 1.21 or later must already run in the
+cluster with its Gateway API and its (alpha) `ListenerSet` support on, port 80 of every host must reach the
+`Gateway`, and a tenant's DNS must point here before the tenant is created. Watch the orders with
 `kubectl -n veyq get certificate`.
 
 ## HSTS
 
 The application and the admin surface send `Strict-Transport-Security` (180 days, no `includeSubDomains`, no
-`preload`) themselves; neither Traefik nor an Ingress adds anything. One switch, `VEYQ_HSTS_ENABLED` /
+`preload`) themselves; neither Traefik nor the chart's `Gateway` adds anything. One switch, `VEYQ_HSTS_ENABLED` /
 `hsts.enabled`, turns it off for both, and the admin container refuses to start on any value but `true` or
 `false`. Turn it off only if a hostname of the instance is also served over plain HTTP, or a proxy of yours already
 sets the header. A browser that saw it keeps it for 180 days.
@@ -92,5 +100,6 @@ one bucket.
 ## How far this is proven
 
 The hardened Compose recipe was brought up once (2026-09-28, on Docker Desktop, with the staging directory set);
-no certificate order against a public domain is recorded. On Kubernetes only the rendered chart is checked; no Ingress, certificate or NetworkPolicy has run in a
-cluster.
+no certificate order against a public domain is recorded. On Kubernetes only the rendered chart is checked; no
+`Gateway`, `ListenerSet`, certificate or NetworkPolicy has run in a cluster, and no gateway implementation has
+accepted these routes.

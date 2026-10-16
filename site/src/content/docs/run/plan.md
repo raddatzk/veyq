@@ -20,8 +20,8 @@ Both targets run the same images and the same procedures; every page in this are
 
 | | Docker Compose | Kubernetes (Helm) |
 |---|---|---|
-| What you need | One host with Docker and Compose | A cluster you already run, an ingress controller, and cert-manager if the chart should obtain certificates |
-| Proxy and TLS | The bundled Traefik, with Let's Encrypt over HTTP-01 | Your ingress controller; TLS by `ingress.tls.mode`, optionally through the chart's cert-manager issuer |
+| What you need | One host with Docker and Compose | A cluster you already run (Kubernetes 1.31 or later), the Gateway API CRDs (v1.5 or later) and an implementation of them, and cert-manager 1.21 or later if the chart should obtain certificates |
+| Proxy and TLS | The bundled Traefik, with Let's Encrypt over HTTP-01 | Your Gateway API implementation, serving the chart's `Gateway`; TLS by `gateway.tls.mode`, optionally through the chart's cert-manager issuer |
 | Object store | Same origin as the instance, under a path | A host of its own (`storeDomain`) |
 | Network isolation | Separate container networks | A NetworkPolicy set, enforced only if your CNI enforces NetworkPolicy |
 | Database | The bundled MariaDB | The bundled MariaDB, or your own (`mariadb.enabled: false`, `externalDatabase.jdbcUrl`) |

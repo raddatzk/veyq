@@ -83,17 +83,17 @@ class TenantIngressSinkProducer(
     }
 
     private fun kubernetesSink(k8s: VeyqConfig.Tenant.Ingress.Kubernetes): TenantIngressSink {
-        // Config shape first, before a client is even built: `shared` names ONE Secret every projected Ingress
-        // points at, and without it the mode has nothing to reference. Loud and disabled rather than a failed
+        // Config shape first, before a client is even built: `shared` names ONE Secret the Gateway's shared
+        // listener references, and without it the mode has nothing to reference. Loud and disabled rather than a failed
         // boot (the same contract as the namespace below), and rather than silently falling back to `none` —
         // an instance whose routing works and whose TLS quietly does not is the failure TLS-as-precondition
-        // exists to name. `KubernetesIngressTlsSharedWithoutSecretTest` decides this.
+        // exists to name. `KubernetesGatewayTlsSharedWithoutSecretTest` decides this.
         val tls = k8s.tls()
         val sharedTlsSecretName = tls.secretName().orElse(null)?.takeIf { it.isNotBlank() }
         if (tls.mode() == IngressTlsMode.SHARED && sharedTlsSecretName == null) {
             log.error(
                 "veyq.tenant.ingress.kubernetes.tls.mode=shared but veyq.tenant.ingress.kubernetes.tls.secret-name " +
-                    "is not set — there is no TLS Secret for the projected Ingress objects to reference. " +
+                    "is not set — there is no TLS Secret for the projected routes to be served under. " +
                     "Tenant domains will not be routed.",
             )
             return DisabledIngressSink
@@ -114,13 +114,13 @@ class TenantIngressSinkProducer(
             return DisabledIngressSink
         }
         log.infof(
-            "Tenant ingress projection: Kubernetes Ingress objects in namespace %s (tls.mode=%s, %d annotation(s))",
-            namespace, tls.mode(), k8s.annotations().size,
+            "Tenant ingress projection: Gateway API objects in namespace %s under Gateway %s (tls.mode=%s, %d annotation(s))",
+            namespace, k8s.gatewayName(), tls.mode(), k8s.annotations().size,
         )
-        return KubernetesIngressSink(
+        return KubernetesGatewaySink(
             client = client,
             namespace = namespace,
-            ingressClassName = k8s.ingressClassName().orElse(null),
+            gatewayName = k8s.gatewayName(),
             serviceName = k8s.serviceName(),
             servicePort = k8s.servicePort(),
             tlsMode = tls.mode(),

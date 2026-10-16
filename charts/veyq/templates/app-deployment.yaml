@@ -47,7 +47,7 @@ spec:
               containerPort: 8080
             # The admin listener (veyq.admin-channel.port, ADR 0065): the only door the Server-Owner operations
             # answer on. Reached through `veyq-app-admin` alone, and by policy from the admin pod alone
-            # (networkpolicy.yaml) — never through `veyq-app`, which every Ingress may aim at.
+            # (networkpolicy.yaml) — never through `veyq-app`, which every route may aim at.
             - name: admin
               containerPort: 8090
           env:
@@ -66,7 +66,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "veyq.secretName" . }}
                   key: mariadbPassword
-            # Behind an ingress controller the per-IP rate limiter must key on the real client.
+            # Behind the Gateway's data plane the per-IP rate limiter must key on the real client.
             - name: QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING
               value: "true"
             {{- with .Values.app.trustedProxies }}
@@ -90,7 +90,7 @@ spec:
             - name: VEYQ_BUNDLED_STORE_SIGNING_MODE
               value: store-origin
             # The app brings the bundled store from RUNNING to USABLE itself (ADR 0067) over its admin API — a
-            # different port from the S3 one, reachable on the Service and deliberately on no Ingress.
+            # different port from the S3 one, reachable on the Service and deliberately on no route.
             - name: VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT
               value: http://veyq-garage:3903
             - name: VEYQ_BUNDLED_STORE_ADMIN_TOKEN
@@ -101,8 +101,8 @@ spec:
             # The KEK, on the claim below — an ABSOLUTE path outside /work, which holds the application itself.
             - name: VEYQ_SECURITY_CONFIG_SECRET_FILE
               value: /var/lib/veyq/config-secret.key
-            # The bootstrap domain is routed by the chart's own Ingress and EXCLUDED from the projection; the
-            # Kubernetes-only half of the ingress settings is the properties file below.
+            # The bootstrap domain is routed by the chart's own HTTPRoute and EXCLUDED from the projection; the
+            # Kubernetes-only half of the routing settings is the properties file below.
             - name: VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN
               value: {{ required "domain is required" .Values.domain | quote }}
             - name: QUARKUS_CONFIG_LOCATIONS

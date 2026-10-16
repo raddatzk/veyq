@@ -82,29 +82,25 @@ spec:
 {{- if .Values.admin.domain }}
 ---
 # Own-domain exposure — opted into by setting admin.domain. The admin surface is 1:1 with the instance, not
-# per-tenant, so it is a fixed host like the bootstrap domain and needs none of the projection machinery.
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+# per-tenant, so it is a fixed host like the bootstrap domain (a listener of its own on the Gateway under
+# per-domain) and needs none of the projection machinery.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
   name: veyq-admin
   labels:
     {{- include "veyq.labels" . | nindent 4 }}
     app.kubernetes.io/component: admin
-  {{- include "veyq.ingressMetadata" . }}
 spec:
-  {{- with .Values.ingress.className }}
-  ingressClassName: {{ . }}
-  {{- end }}
-  {{- include "veyq.ingressTls" (dict "root" . "host" .Values.admin.domain "name" "veyq-admin") }}
+  {{- include "veyq.routeParent" (dict "root" . "listener" "https-admin") | nindent 2 }}
+  hostnames:
+    - {{ .Values.admin.domain | quote }}
   rules:
-    - host: {{ .Values.admin.domain | quote }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: veyq-admin
-                port:
-                  number: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: veyq-admin
+          port: 8080
 {{- end }}

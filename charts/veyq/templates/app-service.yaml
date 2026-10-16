@@ -1,4 +1,4 @@
-# `veyq-app`, literally: the backend's projected tenant Ingress objects route to this name and port by default
+# `veyq-app`, literally: the backend's projected tenant HTTPRoutes route to this name and port by default
 # (veyq.tenant.ingress.kubernetes.service-name / -port). Renaming it here means setting those too.
 apiVersion: v1
 kind: Service
@@ -17,7 +17,7 @@ spec:
       targetPort: http
 ---
 # The admin listener's own Service (ADR 0065) — deliberately NOT a second port on `veyq-app` above. That Service is
-# what the chart's Ingress, every projected tenant Ingress and any operator's own Ingress aim at, so a port on it is
+# what the chart's HTTPRoute, every projected tenant route and any operator's own route aim at, so a port on it is
 # a port behind all of them. Nothing but the admin Deployment's BACKEND_URL names this one, and
 # networkpolicy.yaml admits only the admin pod to the port behind it (scripts/chart_meta_check.py (xii)/(xiii)).
 apiVersion: v1

@@ -47,7 +47,7 @@ local.
 - **Compose:** three networks separate the peers. The proxy never joins the database network, and the database
   network has no route out.
 - **Kubernetes:** the chart renders a default-deny NetworkPolicy set and admits only the paths the stack uses. It
-  cannot guess your ingress controller, so the install fails until you set `networkPolicy.ingressFrom`. **A CNI that
+  cannot guess your gateway's data-plane pods, so the install fails until you set `networkPolicy.ingressFrom`. **A CNI that
   does not enforce NetworkPolicy renders the policies and enforces none of them.**
 
 ## Trust only a stable proxy address
@@ -85,7 +85,7 @@ It defends a leaked database backup, not a compromised host. So:
   the map tiles and the place-name lookup, [External services](/veyq/run/capabilities/#external-services)); a service
   without an address, or switched off, is not allowed at all
   ([cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md)).
-- **Test certificates against a staging directory** (`VEYQ_ACME_CASERVER` / `ingress.tls.acme.server`), and switch
+- **Test certificates against a staging directory** (`VEYQ_ACME_CASERVER` / `gateway.tls.acme.server`), and switch
   back before anyone uses the instance: staging certificates are not trusted by browsers.
 
 ## Rate limits are per instance

@@ -29,7 +29,7 @@ import java.util.logging.Logger
  * propagated, this `@QuarkusTest` could not start at all.
  *
  * **Reading that first half: do NOT trust the word PASS** — measured on this class, by making
- * `KubernetesIngressSink.apply`'s catch rethrow. The report came back as *"3 tests, 1 failure"*, and the two
+ * `KubernetesGatewaySink.apply`'s catch rethrow. The report came back as *"3 tests, 1 failure"*, and the two
  * methods that read as **passing** are the two that never ran: Gradle attributes the boot error to whichever
  * method the extension was constructing ([applyDoesNotPropagate], `t=0.001`) and writes the rest as ordinary
  * `<testcase>` elements with no failure child and `t=0.0`. The signals that distinguish are the task's exit
@@ -42,8 +42,8 @@ import java.util.logging.Logger
  * [theFailureIsLoggedLoudly] is what makes that impossible: it fails unless the sink really tried.
  */
 @QuarkusTest
-@TestProfile(KubernetesIngressSinkUnreachableTest.PointedAtAnUnreachableApiServer::class)
-class KubernetesIngressSinkUnreachableTest {
+@TestProfile(KubernetesGatewaySinkUnreachableTest.PointedAtAnUnreachableApiServer::class)
+class KubernetesGatewaySinkUnreachableTest {
 
     class PointedAtAnUnreachableApiServer : QuarkusTestProfile {
         override fun getConfigOverrides() = mapOf(
@@ -87,7 +87,7 @@ class KubernetesIngressSinkUnreachableTest {
         // Degrading silently is the same defect as throwing, one shift later: the domain does not resolve and
         // nothing says why. This is also the positive control for the whole class — it fails if the sink never
         // attempted the call, which is what a broken config binding would look like.
-        val logger = Logger.getLogger(KubernetesIngressSink::class.java.name)
+        val logger = Logger.getLogger(KubernetesGatewaySink::class.java.name)
         val captured = mutableListOf<LogRecord>()
         val handler = object : Handler() {
             override fun publish(record: LogRecord) { captured += record }

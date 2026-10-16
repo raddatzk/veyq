@@ -27,7 +27,7 @@ class AppShellTest {
 
     @Test
     fun inStoreOriginModeThePolicyAllowsTheOriginTheSignerSignsFor() {
-        // ADR 0064's Kubernetes shape: the browser is sent to an Ingress host the backend never uses itself.
+        // ADR 0064's Kubernetes shape: the browser is sent to a Gateway host the backend never uses itself.
         val store = s3Store(SigningMode.STORE_ORIGIN, publicEndpoint = "https://store.example.net:8443")
         val signed = originOf(store.presignGet(KEY, "tenant.example.com"))
 

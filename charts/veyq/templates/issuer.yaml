@@ -1,17 +1,17 @@
 {{- /*
-The ACME opt-in (ingress.tls.acme; ADR 0064 § Decision, the TLS paragraph): the one thing the compose RECIPE
+The ACME opt-in (gateway.tls.acme; ADR 0064 § Decision, the TLS paragraph): the one thing the compose RECIPE
 configures — Traefik's ACME resolver — translated as one namespaced cert-manager Issuer. The chart's half of the
-cut; the sink's half is unchanged and still only stamps references, which `veyq.ingressAnnotations` points here.
+cut; the sink's half only stamps references, which `veyq.gatewayAnnotations` points here.
 
 Namespaced on purpose, never a ClusterIssuer: nothing this chart renders reaches beyond its namespace. cert-manager
-itself is a precondition the operator meets, like the ingress controller — without its CRDs `helm install` fails
+itself is a precondition the operator meets, like the Gateway API implementation — without its CRDs `helm install` fails
 the whole release before creating anything ("ensure CRDs are installed first"), which is why there is no
 `.Capabilities.APIVersions.Has` check: `helm template` and `helm lint` cannot see a cluster and would lose their
 offline render to it.
 
 The account key Secret is cert-manager's to create and keep, never a chart value — the chart generates nothing.
 */}}
-{{- if (.Values.ingress.tls.acme | default dict).enabled }}
+{{- if (.Values.gateway.tls.acme | default dict).enabled }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -20,18 +20,20 @@ metadata:
     {{- include "veyq.labels" . | nindent 4 }}
 spec:
   acme:
-    server: {{ required "ingress.tls.acme.server is required" .Values.ingress.tls.acme.server | quote }}
-    email: {{ required "ingress.tls.acme.email is required" .Values.ingress.tls.acme.email | quote }}
+    server: {{ required "gateway.tls.acme.server is required" .Values.gateway.tls.acme.server | quote }}
+    email: {{ required "gateway.tls.acme.email is required" .Values.gateway.tls.acme.email | quote }}
     privateKeySecretRef:
       name: veyq-acme-account-key
     solvers:
       # HTTP-01 only: it works for any tenant domain with no DNS-provider credentials (a Secret this chart would
-      # have to reference), and a wildcard is already `mode: shared`. Compose's resolver is HTTP-01 only too.
+      # have to reference), and a wildcard is already `mode: shared`. Compose's resolver is HTTP-01 only too. The
+      # solver's route attaches to the Gateway's port-80 listener; a tenant ListenerSet's challenge reaches the same
+      # listener through the `http01-parentreffallback` annotation the chart stamps beside the issuer.
       - http01:
-          ingress:
-            {{- with .Values.ingress.className }}
-            ingressClassName: {{ . | quote }}
-            {{- else }}
-            {}
-            {{- end }}
+          gatewayHTTPRoute:
+            parentRefs:
+              - group: gateway.networking.k8s.io
+                kind: Gateway
+                name: veyq
+                sectionName: http
 {{- end }}

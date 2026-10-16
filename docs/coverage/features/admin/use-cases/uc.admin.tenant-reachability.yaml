@@ -18,11 +18,12 @@ acceptanceCriteria:
       # TWO sinks, one property (ADR 0063 § Decision: which domains route is the projector's, how a proxy is
       # told is a TenantIngressSink's). The TenantIngressProjector refs prove the whole criterion on the
       # docker-compose sink — including the trigger half, which is driven through HTTP and is sink-independent.
-      # The KubernetesIngressSink refs prove the SECOND half only, on the second target: the router set is
-      # regenerated in full, so a withdrawn domain stops routing. They deliberately do not restate the trigger
+      # The KubernetesGatewaySink refs prove the SECOND half only, on the second target: the route set is
+      # regenerated in full, so a withdrawn domain stops routing — its HTTPRoute and, under per-domain, its
+      # ListenerSet. They deliberately do not restate the trigger
       # or bootstrap-domain claims, which no Kubernetes test exercises and which the projector already owns.
       backend:
-        integration: [TenantIngressProjectorTest.everyRoutabilityChangingOperationReprojects, TenantIngressProjectorTest.theBootstrapDomainIsRoutedOnceFromConfiguration, TenantIngressProjectorTest.theBootstrapPairIsRenderedWithNoTenantRowAtAll, TenantIngressProjectorTest.suspendedTenantsAreExcluded, TenantIngressProjectorTest.regenerateIsAFullRewriteNotAPatch, TenantIngressProjectorTest.aCorruptedOrWipedFileHealsOnTheNextRegenerate, KubernetesIngressSinkTest.anIngressIsCreatedPerRoutableDomain, KubernetesIngressSinkTest.aDomainThatStoppedRoutingLosesItsIngress, KubernetesIngressSinkTest.anEmptyProjectionRemovesEverythingThisSinkOwns]
+        integration: [TenantIngressProjectorTest.everyRoutabilityChangingOperationReprojects, TenantIngressProjectorTest.theBootstrapDomainIsRoutedOnceFromConfiguration, TenantIngressProjectorTest.theBootstrapPairIsRenderedWithNoTenantRowAtAll, TenantIngressProjectorTest.suspendedTenantsAreExcluded, TenantIngressProjectorTest.regenerateIsAFullRewriteNotAPatch, TenantIngressProjectorTest.aCorruptedOrWipedFileHealsOnTheNextRegenerate, KubernetesGatewaySinkTest.anHttpRouteIsCreatedPerRoutableDomain, KubernetesGatewaySinkTest.aDomainThatStoppedRoutingLosesItsRoute, KubernetesGatewaySinkTest.anEmptyProjectionRemovesEverythingThisSinkOwns, KubernetesGatewayTlsPerDomainTest.aDomainThatStoppedRoutingLosesItsListenerSetToo]
       # No web surface: routing is a server-side projection with no client half to get wrong.
   - id: the-blob-route-follows-the-bucket
     # ADR 0013 §4: path-style presigning puts every object at `/<bucket>/<key>`, so the blobs route IS the bucket
@@ -61,7 +62,7 @@ acceptanceCriteria:
     # The criterion is new, the code is not: the predicate has existed since ADR 0063 and had NO test until
     # 2026-09-11 — the KDoc claim "a backtick in a domain closes the `Host(` matcher" had never once been run
     # against a backtick. A property nothing executes is a property nothing holds.
-    text: A tenant domain that does not have the shape the API boundary enforces is dropped from the projection rather than interpolated into it, so a row written past that boundary cannot close a Traefik `Host(` matcher or make an Ingress object the API server rejects.
+    text: A tenant domain that does not have the shape the API boundary enforces is dropped from the projection rather than interpolated into it, so a row written past that boundary cannot close a Traefik `Host(` matcher or make a Gateway API object the API server rejects.
     coverage:
       backend:
         unit: [TenantIngressHostnameTest.aWellFormedDomainRoutes, TenantIngressHostnameTest.aBacktickNeverReachesATraefikRule, TenantIngressHostnameTest.theShapesThatLookLikeHostnamesAndAreNot, TenantIngressHostnameTest.aNewlineCannotSmuggleASecondLine]
@@ -70,17 +71,19 @@ acceptanceCriteria:
       # second layer for rows that did not come that way.
   - id: a-tenant-domain-gets-a-certificate-by-a-named-mode
     # Main-flow step 3's promise ("for each domain that appears, obtains a certificate for it") finally having a
-    # Kubernetes half (ADR 0064, the TLS passthrough). The sink stamps a REFERENCE — spec.tls per named mode plus
-    # the operator's annotations, verbatim — and configures nothing; the certificate itself is the operator's
+    # Kubernetes half (ADR 0064, the TLS passthrough). The sink stamps a REFERENCE — per named mode the listener a
+    # route attaches to, under per-domain a ListenerSet whose certificateRefs is its own name plus the operator's
+    # annotations, verbatim — and configures nothing; the certificate itself is the operator's
     # issuer's, or the one the chart templates on opt-in (its render is held by the hand-run
     # scripts/chart_meta_check.py, which no CI executes, so it is no ref here). No test in this repository can run
-    # an issuer, so the refs prove what the backend emits and that a custom domain is not excluded from it. The mode-none and shared-without-secret refs are the negatives with
-    # their controls: none emits neither, and a shared mode that names no Secret is refused loudly rather than
-    # routing without TLS.
-    text: On Kubernetes every projected tenant Ingress carries the TLS reference and the operator's annotations the configured mode names — per-domain with the object's own name as the Secret (a custom domain included, and legal at the contract's domain cap), shared with the one pre-provisioned Secret, none with neither — and a shared mode with no Secret disables the sink loudly instead of projecting routes without TLS.
+    # an issuer or a gateway implementation, so the refs prove what the backend emits and that a custom domain is
+    # not excluded from it. The mode-none and shared-without-secret refs are the negatives with their controls:
+    # none writes no ListenerSet and stamps nothing (the per-domain case is that control), and a shared mode that
+    # names no Secret is refused loudly rather than routing without TLS.
+    text: On Kubernetes every projected tenant route is served the way the configured mode names — per-domain through a ListenerSet of its own whose HTTPS listener references the object's own name as the Secret and carries the operator's annotations (a custom domain included, and legal at the contract's domain cap), shared on the Gateway's one HTTPS listener, none on its plain-HTTP listener with no ListenerSet and nothing stamped — and a shared mode with no Secret disables the sink loudly instead of projecting routes without TLS.
     coverage:
       backend:
-        integration: [KubernetesIngressTlsPerDomainTest.perDomainEmitsOneTlsEntryPerDomainNamedAfterTheObject, KubernetesIngressTlsPerDomainTest.aDomainAtTheContractsLengthCapYieldsALegalSecretName, KubernetesIngressTlsPerDomainTest.theAnnotationMapIsStampedVerbatimAndUninterpreted, KubernetesIngressTlsSharedTest.everyProjectedIngressReferencesTheOneSharedSecret, KubernetesIngressSinkTest.inModeNoneNeitherATlsBlockNorAnnotationsAreEmitted, KubernetesIngressTlsSharedWithoutSecretTest.theSinkIsDisabledRatherThanHalfConfigured, KubernetesIngressTlsSharedWithoutSecretTest.theRefusalIsLoggedLoudlyNamingTheMissingKey]
+        integration: [KubernetesGatewayTlsPerDomainTest.perDomainWritesOneListenerSetPerDomainWhoseCertificateIsNamedAfterTheObject, KubernetesGatewayTlsPerDomainTest.aDomainAtTheContractsLengthCapYieldsALegalSecretName, KubernetesGatewayTlsPerDomainTest.theAnnotationMapIsStampedVerbatimOnTheListenerSetAndOnNoRoute, KubernetesGatewayTlsSharedTest.everyProjectedRouteAttachesToTheGatewaysSharedHttpsListener, KubernetesGatewaySinkTest.theProjectedRouteCarriesTheRuleTheChartWillServe, KubernetesGatewaySinkTest.inModeNoneNoListenerSetAndNoAnnotationsAreWritten, KubernetesGatewayTlsSharedWithoutSecretTest.theSinkIsDisabledRatherThanHalfConfigured, KubernetesGatewayTlsSharedWithoutSecretTest.theRefusalIsLoggedLoudlyNamingTheMissingKey]
       # No web surface: a certificate reference on a server-written object has no client half.
   - id: projector-no-ops-without-a-proxy
     # A1 — self-hostable by default: an instance with no reverse proxy in front of it must not need one. This
@@ -94,6 +97,6 @@ acceptanceCriteria:
 gaps:
   web: >-
     No web part. Every criterion is decided on the server — the proxy's router set projected from the tenant
-    table, the origin a presigned URL is signed for, the TLS a projected Ingress carries — and web only follows
+    table, the origin a presigned URL is signed for, the listener a projected route is served on — and web only follows
     the URL it is handed. A wrong decision shows in web as media that fails to load, which is why the criteria
     are pinned where the decision is made rather than where it is noticed.

@@ -3,7 +3,7 @@
   "title": "veyq chart values",
   "description": "The shapes the operator's values must have. Helm applies this to install, upgrade, lint AND template, naming the path and the pattern of a violation — which is why nothing here has a generated fallback: a value the chart cannot assert is a value the chart does not supply.",
   "type": "object",
-  "required": ["domain", "storeDomain", "image", "admin", "ingress", "networkPolicy", "secrets", "mariadb", "externalDatabase", "garage"],
+  "required": ["domain", "storeDomain", "image", "admin", "gateway", "networkPolicy", "secrets", "mariadb", "externalDatabase", "garage"],
   "$defs": {
     "hostname": {
       "type": "string",
@@ -41,7 +41,7 @@
     "networkPolicy": {
       "type": "object",
       "required": ["enabled"],
-      "$comment": "ingressFrom is required while enabled, and never defaulted: the ingress controller's namespace and labels are the operator's (ADR 0071 §3), so the chart refuses to guess and an install without it fails naming the key.",
+      "$comment": "ingressFrom is required while enabled, and never defaulted: the gateway data plane's namespace and labels are the operator's (ADR 0071 §3), so the chart refuses to guess and an install without it fails naming the key.",
       "properties": {
         "enabled": { "type": "boolean" },
         "ingressFrom": { "type": "array", "items": { "type": "object", "minProperties": 1 } }
@@ -62,11 +62,12 @@
         }
       }
     },
-    "ingress": {
+    "gateway": {
       "type": "object",
-      "required": ["tls"],
+      "required": ["className", "tls"],
+      "$comment": "className is required and never defaulted: a Gateway cannot omit its gatewayClassName, and which implementation serves it is the operator's choice (ADR 0064) — the chart names none.",
       "properties": {
-        "className": { "type": "string" },
+        "className": { "$ref": "#/$defs/nonEmpty" },
         "annotations": {
           "type": "object",
           "additionalProperties": { "type": "string" }

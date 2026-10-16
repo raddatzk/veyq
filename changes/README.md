@@ -1501,6 +1501,15 @@ purge, so most rows are expired when it runs and the optimizer full-scans regard
 would have cost every login a write for nothing. An index is a claim about selectivity, and selectivity is a
 property of the data at the moment the statement runs.
 
+**And an external precondition is versioned by the newest feature it combines, each measured on its own.**
+cr-helm-gateway-api's refine measured on the web that cert-manager 1.20 reads `ListenerSet`s and that a
+`http01-parentreffallback` annotation sends their challenge to the parent `Gateway` — both true — and ADR 0064 wrote
+"cert-manager 1.20 or later". The annotation first ships in 1.21.0; only reading each feature's own release (the
+source at v1.20.4 and v1.21.2) showed it. The same pass found the docs' example implementation ignoring
+`ListenerSet` in its latest release, and the redirect's `scheme` field to be *Extended*, not Core — so a
+precondition list is one claim per feature, and "version X supports the design" is the conjunction of them,
+re-measured at implement against the newest release of every project it names.
+
 ### A phase's entry condition is phrased against what the phase would CHANGE, not against the problem
 
 **"Measure first, and stop if it is no longer the felt cost" sounds rigorous and can still answer neither
