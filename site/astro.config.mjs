@@ -184,6 +184,7 @@ export default defineConfig({
             'security/cryptography',
             'security/key-hierarchy',
             'security/protocols',
+            'security/how-veyq-is-tested',
             'security/verify-it-yourself',
             'security/known-limitations',
             'security/roadmap',

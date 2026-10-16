@@ -340,6 +340,8 @@ failed this rule:
 **Nothing enters the coverage model before a CI run executes it.** The claim follows the build, never the
 intention — and "the test exists" is an intention.
 
+Published for readers outside the project, stage by stage and with what has run: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
+
 ## The verification layer — a map, not a copy
 
 The pipeline above is what we *do*; this is what **checks** it. Every item has exactly one canonical home and
