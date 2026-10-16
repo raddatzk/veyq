@@ -8,7 +8,7 @@
     logs [-f] [--tail N] [SERVICE …]                 its logs
     verify [--release SEL] [--unsigned-local]        the signatures of the selected release, and nothing else
     check [--release SEL]                            which release `upgrade` would take, and a newer major beyond it
-    upgrade --key-into FILE [--unsigned-local]       to the release VEYQ_RELEASE selects, in ADR 0096 decision 5's order
+    upgrade --key-into FILE [--unsigned-local]       toward what VEYQ_RELEASE selects, in ADR 0096 decision 5's order
     backup --key-into FILE                           the three legs, by the running release's `instance_backup.py`
     restore DIR --domain D (--key-from F | --without-key)   a capture onto this instance, which holds no data yet
     self-update                                      this file, replaced by the installed release's `veyqctl`
@@ -42,7 +42,12 @@ directory in it (`../`) is refused: a release's assets are flat names, by constr
 
 **`VEYQ_RELEASE` in `.env` selects the release** (decision 4): `<major>.<minor>` pins one, `<major>` takes the newest
 of that major, `latest` the newest of all. `install` takes it from `--set VEYQ_RELEASE=…`, else `latest`, and writes
-it into `.env`.
+it into `.env`. `upgrade` (and `check`, which says what `upgrade` would take) enters a major only from the last release
+of the one before (decision 5 step 1, `upgrade_target`): a selector beyond the running major takes the running major's
+newest release first when the running one is not it, and never more than the next major — so `latest` from 1.3, with
+1.9 the newest of major 1, goes to 1.9, and from 1.9 with 3.1 listed to the newest of major 2. A pin inside the next
+major is reached directly from its predecessor's last release; a next major with no release (only prereleases, or a
+mirror that lacks it) is refused, since going past it would cross two.
 
 **Nothing unverified is pulled or started** (ADR 0057). The manifest names both images by `tag@digest`; each is
 checked with the host's `cosign verify` against the one identity that publishes veyq — GitHub's OIDC issuer and
@@ -61,7 +66,9 @@ Written `0600`, in a home created `0700`.
 
 **`upgrade` runs only by hand, in ADR 0096 decision 5's order, and nothing stops before step 4:**
   1. resolve the release `.env`'s `VEYQ_RELEASE` selects; nothing to do when it is the running one, refused when it is
-     an older one (there is no downgrade: going back is restoring a backup, ADR 0056 §6);
+     an older one (there is no downgrade: going back is restoring a backup, ADR 0056 §6); one beyond the running
+     major is entered from its predecessor's last release, one major per run (above), and a run that stops on the way
+     ends by saying that the next `upgrade` enters the next major;
   2. verify both images (as `install` does), then fetch its assets into `releases/<release>/`;
   3. fill the new template from `.env` (`upgrade_values`): the image lines are the new release's, a key `.env` has
      keeps its value, a secret veyqctl knows how to make is made — and every other key the new template assigns, and
@@ -402,7 +409,8 @@ def open_source(spec: str | None) -> Source:
 def check_selector(selector: str) -> str:
     if not SELECTOR.match(selector or ""):
         raise Refused(f"{RELEASE_KEY}={selector!r} selects nothing: it is `<major>.<minor>` (pinned), `<major>` (the "
-                      f"newest of that major) or `latest` (the newest, crossing majors)")
+                      f"newest of that major) or `latest` (the newest; `upgrade` enters each major from the last "
+                      f"release of the one before)")
     return selector
 
 
@@ -421,6 +429,34 @@ def select(listed: list[Listed], selector: str, where: str) -> Listed:
     if not candidates:
         raise Refused(f"{RELEASE_KEY}={selector} selects no release in {where}")
     return max(candidates, key=lambda r: (r.major, r.minor))
+
+
+def newest_of(listed: list[Listed], major: int) -> Listed | None:
+    of = [r for r in listed if not r.prerelease and r.major == major]
+    return max(of, key=lambda r: (r.major, r.minor)) if of else None
+
+
+def upgrade_target(listed: list[Listed], running: tuple[int, int], chosen: Listed, where: str) -> Listed:
+    """Where an `upgrade` from `running` toward `chosen` (above it) goes in this run — ADR 0096 decision 5 step 1.
+
+    A major is entered only from the last release of the one before, the one path the lanes test (ADR 0091 decision
+    6), and no run crosses more than one major: so `chosen` itself within the running major, or in the next one when
+    the running release is the newest of its own; otherwise the stop on the way — the running major's newest release,
+    or (from that one) the next major's newest. "Newest" never counts a prerelease."""
+    major = running[0]
+    if chosen.major <= major:
+        return chosen
+    last = newest_of(listed, major)
+    if last is not None and (last.major, last.minor) > running:
+        return last
+    if chosen.major == major + 1:
+        return chosen
+    entry = newest_of(listed, major + 1)
+    if entry is None:
+        raise Refused(f"{chosen.release} lies beyond major {major + 1}, and {where} lists no release of major "
+                      f"{major + 1} to enter it from: a run never crosses more than one major (ADR 0096 decision 5). "
+                      f"Nothing was stopped.")
+    return entry
 
 
 def newer_major(listed: list[Listed], chosen: Listed) -> Listed | None:
@@ -930,6 +966,12 @@ def cmd_verify(args: argparse.Namespace, host: Host) -> int:
     return 0
 
 
+def entry_note(selector: str, chosen: Listed, target: Listed, then: str) -> str:
+    """What a run that stops short of `chosen` says: the selected release, the rule, and the major `then` enters."""
+    return (f"{RELEASE_KEY}={selector} selects {chosen.release}, and a major is entered only from the last release of "
+            f"the one before (ADR 0096 decision 5): {then} enters major {target.major + 1}")
+
+
 def cmd_check(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
     selector = selected(args, home)
@@ -943,8 +985,13 @@ def cmd_check(args: argparse.Namespace, host: Host) -> int:
     if running == chosen.release:
         say(f"{RELEASE_KEY}={selector}: release {chosen.release} runs already; `upgrade` would do nothing")
     else:
-        say(f"{RELEASE_KEY}={selector}: `upgrade` would take release {chosen.release}"
+        current = tuple(int(x) for x in running.split(".")) if running else None
+        target = (upgrade_target(listed, current, chosen, source.describe())
+                  if current and (chosen.major, chosen.minor) > current else chosen)
+        say(f"{RELEASE_KEY}={selector}: `upgrade` would take release {target.release}"
             + (f" (running: {running})" if running else ""))
+        if target != chosen:
+            say(entry_note(selector, chosen, target, "the `upgrade` after that one"))
     beyond = newer_major(listed, chosen)
     if beyond:
         say(f"a newer major exists beyond {RELEASE_KEY}={selector}: {beyond.release} — read its notes before "
@@ -1123,16 +1170,20 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
     # 1. the release VEYQ_RELEASE selects; stop if it is the running one
     spec = source_spec(args, home)
     source = open_source(spec)
-    chosen = select(source.releases(), selector, source.describe())
+    listed = source.releases()
+    selection = select(listed, selector, source.describe())
     running = tuple(int(x) for x in state.release.split("."))
-    if (chosen.major, chosen.minor) == running:
-        say(f"{RELEASE_KEY}={selector}: release {chosen.release} runs already — nothing to upgrade")
+    if (selection.major, selection.minor) == running:
+        say(f"{RELEASE_KEY}={selector}: release {selection.release} runs already — nothing to upgrade")
         return 0
-    if (chosen.major, chosen.minor) < running:
-        raise Refused(f"{RELEASE_KEY}={selector} selects {chosen.release}, older than the running {state.release}. An "
-                      f"upgrade migrates the schema and there is no downgrade: going back is restoring a backup "
+    if (selection.major, selection.minor) < running:
+        raise Refused(f"{RELEASE_KEY}={selector} selects {selection.release}, older than the running {state.release}. "
+                      f"An upgrade migrates the schema and there is no downgrade: going back is restoring a backup "
                       f"taken under that release (ADR 0056 §6). Nothing was stopped.")
-    say(f"step 1: {RELEASE_KEY}={selector} takes release {chosen.release} (running: {state.release})")
+    chosen = upgrade_target(listed, running, selection, source.describe())
+    say(f"step 1: {RELEASE_KEY}={selector} takes release {chosen.release} (running: {state.release})"
+        + (f" — {selection.release} lies in a later major, entered from the last release of the one before"
+           if chosen != selection else ""))
 
     # 2. its assets into releases/<release>/, both images verified by the manifest's digests
     manifest = fetch_manifest(source, chosen)
@@ -1184,6 +1235,8 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
                       f"release {state.release}'s recipe in {release_dir(home, state.release)}, and the backup "
                       f"{backup} with its key at {key_into} — restore it onto release {state.release}.") from None
     say(f"release {manifest.release} runs; release {state.release} stays in {release_dir(home, state.release)}")
+    if chosen != selection:
+        say(entry_note(selector, selection, chosen, "the next `upgrade`"))
     return 0
 
 
@@ -1299,7 +1352,8 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("--release", default=None, help="a selector instead of .env's VEYQ_RELEASE")
     check.set_defaults(func=cmd_check)
 
-    upgrade = sub.add_parser("upgrade", help="move to the release .env's VEYQ_RELEASE selects (ADR 0096 decision 5)")
+    upgrade = sub.add_parser("upgrade", help="move toward the release .env's VEYQ_RELEASE selects, entering a major "
+                                             "only from the last release of the one before (ADR 0096 decision 5)")
     upgrade.add_argument("--key-into", metavar="FILE", help="where the backup's leg (c) goes — required, its own medium")
     upgrade.add_argument("--unsigned-local", action="store_true",
                          help="a release produced from a local docker build: no signature is checked")
