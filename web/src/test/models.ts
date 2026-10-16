@@ -36,7 +36,7 @@ export const setupStatus = (o: Partial<SetupStatus> = {}): SetupStatus => ({
 export const memberProfile = (o: Partial<MemberProfile> = {}): MemberProfile => ({
   username: 'me',
   sealedName: null,
-  avatarVersion: 0,
+  avatarRevision: 0,
   requireGroupAddConsent: false,
   ...o,
 })
@@ -141,7 +141,7 @@ export const scopeMember = (o: Partial<ScopeMember> = {}): ScopeMember => ({
   userId: 'user-1',
   username: 'anna',
   sealedName: null,
-  avatarVersion: 0,
+  avatarRevision: 0,
   role: 'MEMBER',
   identityPublicKey: 'AAAA',
   hasGrant: true,

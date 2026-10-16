@@ -297,15 +297,15 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
   const e1 = v1.randomBytes(32)
   const keys = { A: v1.randomBytes(32), B: v1.randomBytes(32), M: v1.randomBytes(32), C: v1.randomBytes(32) }
   const at = (nodeId: string, epoch: number, placementRevision: number) => ({ scopeId: SCOPE_ID, nodeId, epoch, placementRevision })
-  const wrapAt = (kek: Uint8Array, nodeId: string, k: Uint8Array, epoch = 0, version = 0) =>
-    b64std(v1.seal({ purpose: 'content-key', ...at(nodeId, epoch, version) }, kek, k))
-  const unwrapAt = (kek: Uint8Array, nodeId: string, blob: string, epoch = 0, version = 0) =>
-    v1.open({ purpose: 'content-key', ...at(nodeId, epoch, version) }, kek, fromB64(blob))
-  const treeRow = (id: string, parentId: string | null, kind: string, name: string, under: Uint8Array, own: Uint8Array, epoch = 0, version = 0): TreeNode => treeNode({
-    id, parentId, kind, orderIndex: 0, epoch, name, wrappedContentKey: wrapAt(under, id, own, epoch, version), wrappedMeta: null,
-    metaRevision: 0, placementRevision: version,
+  const wrapAt = (kek: Uint8Array, nodeId: string, k: Uint8Array, epoch = 0, revision = 0) =>
+    b64std(v1.seal({ purpose: 'content-key', ...at(nodeId, epoch, revision) }, kek, k))
+  const unwrapAt = (kek: Uint8Array, nodeId: string, blob: string, epoch = 0, revision = 0) =>
+    v1.open({ purpose: 'content-key', ...at(nodeId, epoch, revision) }, kek, fromB64(blob))
+  const treeRow = (id: string, parentId: string | null, kind: string, name: string, under: Uint8Array, own: Uint8Array, epoch = 0, revision = 0): TreeNode => treeNode({
+    id, parentId, kind, orderIndex: 0, epoch, name, wrappedContentKey: wrapAt(under, id, own, epoch, revision), wrappedMeta: null,
+    metaRevision: 0, placementRevision: revision,
   })
-  /** Folders A and B at the root (epoch 0), the Memory M in A, its chapter C in M — every entry at version 0. */
+  /** Folders A and B at the root (epoch 0), the Memory M in A, its chapter C in M — every entry at revision 0. */
   const tree = (): TreeNode[] => [
     treeRow(A, null, 'FOLDER', 'Reisen', e0, keys.A),
     treeRow(B, null, 'FOLDER', 'Archiv', e0, keys.B),
@@ -315,7 +315,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
   const rotated = { current: 1, keys: new Map([[0, e0], [1, e1]]) }
   const sent = (update: Mock<ContentApi['updateNode']>, call = 0) => update.mock.calls[call][0].updateNodeRequest
 
-  it('a rename is a placement to the same parent: re-wrapped key, re-sealed name and slug, all at version + 1', async () => {
+  it('a rename is a placement to the same parent: re-wrapped key, re-sealed name and slug, all at revision + 1', async () => {
     const update = vi.fn<ContentApi['updateNode']>()
     mockContent({ updateNode: update })
 
@@ -376,7 +376,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     const update = vi.fn<ContentApi['updateNode']>()
       .mockRejectedValueOnce(httpError(409, 'stale_placement'))
       .mockResolvedValueOnce(undefined)
-    // what a peer's rename left: M at version 1, its name and wrap sealed there
+    // what a peer's rename left: M at revision 1, its name and wrap sealed there
     const listed = (): NodeSummary[] => tree().map((n) => ({
       id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, createdAt: new Date(n.createdAt),
       placementRevision: n.id === M ? 1 : 0,
@@ -420,7 +420,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
 
   // ADR 0080 bite test 4: the revision is part of the address a wrap or a name is opened at.
   it('a wrap or a name served at another placement revision, or on another node\'s row, does not open', () => {
-    const moved = treeRow(M, B, 'MEMORY', 'Italien', keys.B, keys.M, 0, 1) // M after a move, at version 1
+    const moved = treeRow(M, B, 'MEMORY', 'Italien', keys.B, keys.M, 0, 1) // M after a move, at revision 1
     const name = b64std(v1.seal({ purpose: 'node-name', ...at(M, 0, 1) }, keys.B, v1.utf8('Italien')))
     const base = [tree()[0], tree()[1], moved]
     expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(e0), base, M)!)).toEqual(Array.from(keys.M)) // control
@@ -441,7 +441,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
   })
 
   /** A tree row as the server lists it (names opened back from what `tree()` sealed would need the key; the listing
-   *  here re-seals each name at version 0 under the key its entry lives under). */
+   *  here re-seals each name at revision 0 under the key its entry lives under). */
   function summaryOf(n: TreeNode): NodeSummary {
     const entryKey = n.parentId === null ? e0 : n.parentId === A ? keys.A : n.parentId === B ? keys.B : keys.M
     return {

@@ -67,7 +67,7 @@
 - **Revision-checked** ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)). `listNodes`
   returns each node's `metaRevision` (born 0). An `updateNode` that carries `wrappedMeta` must also carry the
   `metaRevision` it was built from (else `400`); the server compare-and-sets it and stores `metaRevision + 1`, or
-  writes nothing — a rename in the same request included — and answers `409 stale_version` with the current blob
+  writes nothing — a rename in the same request included — and answers `409 stale_revision` with the current blob
   and revision. Only this write moves the counter.
 - **Schema** (core baseline): `veyq_node.wrapped_meta TEXT NULL` and `veyq_node.meta_revision`; the same counter
   on `veyq_media` (Memories baseline).

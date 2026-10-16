@@ -203,10 +203,10 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
     expect(back?.derived).toBeUndefined() // frozen coord dropped
   })
   /** W5 (ADR 0077): a place save from a stale tree meets a 409 whose blob holds a peer's date — the retry keeps it. */
-  it('W5: on 409 stale_version re-applies only the place on the current blob — a peer\'s date survives', async () => {
+  it('W5: on 409 stale_revision re-applies only the place on the current blob — a peer\'s date survives', async () => {
     const peers = sealNodeMeta(nodeKey, NODE, { v: 1, date })
     const updateNode = vi.fn<ContentApi['updateNode']>()
-      .mockRejectedValueOnce({ response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta: peers, metaRevision: 8 }), { status: 409 }) })
+      .mockRejectedValueOnce({ response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta: peers, metaRevision: 8 }), { status: 409 }) })
       .mockResolvedValueOnce(undefined)
     fakeApi(contentApi, { updateNode })
 

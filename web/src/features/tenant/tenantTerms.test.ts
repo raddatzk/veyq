@@ -19,9 +19,9 @@ const TENANT = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 
 function stubTerms() {
   return stubApi(tenantsApi, {
-    getTenantTerms: { termsVersion: 2, acceptedVersion: 1, terms: { de: 'DE', en: 'EN' } },
-    updateTenantTerms: { termsVersion: 3, acceptedVersion: 1, terms: { de: 'DE2', en: 'EN2' } },
-    acceptTenantTerms: { termsVersion: 3, acceptedVersion: 3, terms: { de: 'DE2', en: 'EN2' } },
+    getTenantTerms: { termsRevision: 2, acceptedRevision: 1, terms: { de: 'DE', en: 'EN' } },
+    updateTenantTerms: { termsRevision: 3, acceptedRevision: 1, terms: { de: 'DE2', en: 'EN2' } },
+    acceptTenantTerms: { termsRevision: 3, acceptedRevision: 3, terms: { de: 'DE2', en: 'EN2' } },
   })
 }
 
@@ -32,8 +32,8 @@ describe('tenant terms facade (cr-0114)', () => {
     const api = stubTerms()
     const t = await getTenantTerms(TENANT)
     expect(api.getTenantTerms).toHaveBeenCalledWith({ tenantId: TENANT })
-    expect(t.termsVersion).toBe(2)
-    expect(t.acceptedVersion).toBe(1)
+    expect(t.termsRevision).toBe(2)
+    expect(t.acceptedRevision).toBe(1)
   })
 
   it('updateTenantTerms sends the per-locale markdown map', async () => {
@@ -45,10 +45,10 @@ describe('tenant terms facade (cr-0114)', () => {
     })
   })
 
-  it('acceptTenantTerms sends the version being accepted', async () => {
+  it('acceptTenantTerms sends the revision being accepted', async () => {
     const api = stubTerms()
     await acceptTenantTerms(TENANT, 3)
-    expect(api.acceptTenantTerms).toHaveBeenCalledWith({ tenantId: TENANT, acceptTermsRequest: { version: 3 } })
+    expect(api.acceptTenantTerms).toHaveBeenCalledWith({ tenantId: TENANT, acceptTermsRequest: { revision: 3 } })
   })
 })
 
@@ -57,39 +57,39 @@ describe('member accept-gate — termsStale / markTermsAccepted (cr-0114)', () =
 
   it('fires when the tenant has terms newer than the caller accepted', () => {
     activeSpace.tenantId = TENANT
-    activeSpace.termsVersion = 2
-    activeSpace.acceptedVersion = 1
+    activeSpace.termsRevision = 2
+    activeSpace.acceptedRevision = 1
     expect(termsStale()).toBe(true)
   })
 
-  it('does not fire when no terms are set (version 0 = nothing to accept)', () => {
+  it('does not fire when no terms are set (revision 0 = nothing to accept)', () => {
     activeSpace.tenantId = TENANT
-    activeSpace.termsVersion = 0
-    activeSpace.acceptedVersion = 0
+    activeSpace.termsRevision = 0
+    activeSpace.acceptedRevision = 0
     expect(termsStale()).toBe(false)
   })
 
-  it('clears once the current version is accepted', () => {
+  it('clears once the current revision is accepted', () => {
     activeSpace.tenantId = TENANT
-    activeSpace.termsVersion = 2
-    activeSpace.acceptedVersion = 1
+    activeSpace.termsRevision = 2
+    activeSpace.acceptedRevision = 1
     markTermsAccepted(2)
-    expect(activeSpace.acceptedVersion).toBe(2)
+    expect(activeSpace.acceptedRevision).toBe(2)
     expect(termsStale()).toBe(false)
   })
 
   it('never fires outside a tenant', () => {
     activeSpace.tenantId = null
-    activeSpace.termsVersion = 2
-    activeSpace.acceptedVersion = 0
+    activeSpace.termsRevision = 2
+    activeSpace.acceptedRevision = 0
     expect(termsStale()).toBe(false)
   })
 
-  it('markTermsAccepted never lowers the recorded version', () => {
+  it('markTermsAccepted never lowers the recorded revision', () => {
     activeSpace.tenantId = TENANT
-    activeSpace.termsVersion = 5
-    activeSpace.acceptedVersion = 3
+    activeSpace.termsRevision = 5
+    activeSpace.acceptedRevision = 3
     markTermsAccepted(2)
-    expect(activeSpace.acceptedVersion).toBe(3)
+    expect(activeSpace.acceptedRevision).toBe(3)
   })
 })

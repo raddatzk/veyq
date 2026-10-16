@@ -28,7 +28,7 @@ acceptanceCriteria:
       web:
         unit: [src/core/node/cover/rights.test.ts, src/core/node/cover/cover.dom.test.ts]
   - id: one-write-no-half-state
-    text: The blob step and the sealed meta that names it are ONE transaction - a slot another writer changed is `cover_stale` (nothing attached, the upload spent and freed), a meta that moved is `stale_version` with nothing written and the upload still open; a failed new cover leaves the old cover, its blob and its meta exactly as they were; two writers racing for an empty slot leave exactly one cover.
+    text: The blob step and the sealed meta that names it are ONE transaction - a slot another writer changed is `cover_stale` (nothing attached, the upload spent and freed), a meta that moved is `stale_revision` with nothing written and the upload still open; a failed new cover leaves the old cover, its blob and its meta exactly as they were; two writers racing for an empty slot leave exactly one cover.
     coverage:
       backend:
         integration: [NodeCoverCoreSliceTest.aSlotAnotherWriterFilledIsCoverStaleAndTheLoserIsFreed, NodeCoverCoreSliceTest.aMetaThatMovedWritesNothingAndKeepsTheUploadOpenForTheRetry, NodeCoverCoreSliceTest.aRemovalWithAStaleMetaUndoesTheDetach, NodeCoverCoreSliceTest.aRemovalNamingAReplacedCoverIsRefusedAndTheReplacementKept, NodeCoverCoreSliceTest.aRemovalIsIdempotentAndHealsAMetaThatNamedAGoneBlob, NodeCoverCoreSliceTest.twoWritersRacingForAnEmptySlotLeaveExactlyOneCover]

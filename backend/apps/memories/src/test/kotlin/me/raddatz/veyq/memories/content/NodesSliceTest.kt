@@ -191,7 +191,7 @@ class NodesSliceTest {
 
         patchNode(userId, scopeId, memory, """{"wrappedMeta":"Yi12MQ==","metaRevision":0}""")
             .then().statusCode(409)
-            .body("code", equalTo("stale_version"))
+            .body("code", equalTo("stale_revision"))
             .body("wrappedMeta", equalTo("YS12MQ=="))
             .body("metaRevision", equalTo(1))
         listed(userId, scopeId, memory).body("find { it.id == '$memory' }.wrappedMeta", equalTo("YS12MQ=="))
@@ -205,10 +205,10 @@ class NodesSliceTest {
 
     /**
      * B2: `wrappedMeta` without its revision is malformed — an old client cannot slip past the check by leaving it
-     * out. A rename alone needs no version, and does not move it: only a meta write does.
+     * out. A rename alone needs no revision, and does not move it: only a meta write does.
      */
     @Test
-    fun metaWithoutVersionIs400AndARenameLeavesTheVersionUnmoved() {
+    fun metaWithoutRevisionIs400AndARenameLeavesTheRevisionUnmoved() {
         val (userId, scopeId) = seedMemberScope()
         val memory = createMemory(userId, scopeId, meta = "djA=")
 
@@ -234,7 +234,7 @@ class NodesSliceTest {
         patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaRevision":0}""").then().statusCode(204)
 
         patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","metaRevision":0}""")
-            .then().statusCode(409).body("code", equalTo("stale_version"))
+            .then().statusCode(409).body("code", equalTo("stale_revision"))
         listed(userId, scopeId, memory)
             .body("find { it.id == '$memory' }.encryptedName", equalTo("bWVt"))
             .body("find { it.id == '$memory' }.slugToken", equalTo("bWV0YS1z"))
@@ -250,14 +250,14 @@ class NodesSliceTest {
     // --- helpers ---
 
     private companion object {
-        /** The rest of a placement write at the scope root, built on a new node's version (ADR 0080 Decision 3). */
+        /** The rest of a placement write at the scope root, built on a new node's revision (ADR 0080 Decision 3). */
         const val REWRAP = """"wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":0"""
     }
 
     /** A rename of a scope-root node in place, built on placement revision 0 — the store's own input. */
     private fun rootRename(scopeId: String, name: String) = NodesStore.Placement(
         parentSlot = scopeId, encryptedName = name, slugToken = "cmVuYW1lLXNsdWc=", wrappedContentKey = "cmUtd3JhcA==",
-        epoch = null, expectedVersion = 0,
+        epoch = null, expectedRevision = 0,
     )
 
     private fun createMemory(userId: String, scopeId: String, meta: String): String = createNode(

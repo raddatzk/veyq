@@ -26,19 +26,19 @@ import { setMark, TrustStateRefused, type AccountDocument, type AccountDocumentS
 /** What a reset did: wrote the empty document, or found the served one readable again and left it alone. */
 export type ResetOutcome = 'reset' | 'alreadyReadable'
 
-/** Bounds the re-fetch/re-decide loop on a `409 stale_version`, as the documents' own writes are bounded. */
+/** Bounds the re-fetch/re-decide loop on a `409 stale_revision`, as the documents' own writes are bounded. */
 const MAX_RESET_ATTEMPTS = 5
 
 /**
  * Start `document` over on this device: the empty document, sealed under the current Master Key, written one
- * version above the served one.
+ * revision above the served one.
  *
  *  - **A served copy that opens is never wiped.** Each attempt re-fetches and re-decides; if the document opens
  *    under this device's marks now (another device fixed it, or the server stopped withholding it), nothing is
  *    written and the answer is `alreadyReadable`.
- *  - **A stale write re-decides.** `409 stale_version` means another device wrote meanwhile — maybe a readable
+ *  - **A stale write re-decides.** `409 stale_revision` means another device wrote meanwhile — maybe a readable
  *    copy — so the next attempt fetches and asks again, bounded.
- *  - **The mark is SET to the written version** ({@link resetMark}) — the one place a mark goes down.
+ *  - **The mark is SET to the written revision** ({@link resetMark}) — the one place a mark goes down.
  *
  * Requires an unlocked vault. Throws whatever the fetch or write throws past the bound.
  */
@@ -53,11 +53,11 @@ async function startOver<T>(doc: AccountDocumentStore<T>): Promise<ResetOutcome>
     try {
       const served = await doc.fetch()
       if (await opensNow(doc, mk, served)) return 'alreadyReadable'
-      const written = served.version + 1
+      const written = served.revision + 1
       try {
-        await doc.write({ blob: doc.seal(mk, doc.empty(), written), version: served.version })
+        await doc.write({ blob: doc.seal(mk, doc.empty(), written), revision: served.revision })
       } catch (e) {
-        if (attempt < MAX_RESET_ATTEMPTS && (await isCodedError(e, HttpStatus.conflict, 'stale_version'))) continue
+        if (attempt < MAX_RESET_ATTEMPTS && (await isCodedError(e, HttpStatus.conflict, 'stale_revision'))) continue
         throw e
       }
       await resetMark(mk, doc.document, written)
@@ -69,7 +69,7 @@ async function startOver<T>(doc: AccountDocumentStore<T>): Promise<ResetOutcome>
 }
 
 /** Whether the served copy opens under this device's marks — a refusal is `false`, anything else propagates. */
-async function opensNow<T>(doc: AccountDocumentStore<T>, mk: Uint8Array, served: { blob: string | null; version: number }) {
+async function opensNow<T>(doc: AccountDocumentStore<T>, mk: Uint8Array, served: { blob: string | null; revision: number }) {
   try {
     await doc.open(mk, served)
     return true
@@ -80,7 +80,7 @@ async function opensNow<T>(doc: AccountDocumentStore<T>, mk: Uint8Array, served:
 }
 
 /**
- * Set this device's mark for `document` to the version the reset just wrote — **down**, where the served copy
+ * Set this device's mark for `document` to the revision the reset just wrote — **down**, where the served copy
  * sat below the mark (a rolled-back document, e.g. after a backup restore).
  *
  * Needed because the store's compare-and-set only ever writes `served + 1`: for `trust_state_rolled_back` that is
@@ -88,6 +88,6 @@ async function opensNow<T>(doc: AccountDocumentStore<T>, mk: Uint8Array, served:
  * the mark protects this device from a SERVED older copy, and the copy it now accepts is the one it just wrote
  * itself. Not exported — the reset is the only thing that may lower a mark.
  */
-function resetMark(mk: Uint8Array, document: AccountDocument, version: number): Promise<void> {
-  return setMark(mk, document, version)
+function resetMark(mk: Uint8Array, document: AccountDocument, revision: number): Promise<void> {
+  return setMark(mk, document, revision)
 }

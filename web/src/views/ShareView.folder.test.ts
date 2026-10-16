@@ -66,7 +66,7 @@ beforeEach(() => {
   route.hash = `#k=${b64url(K_SHARE)}`
   route.query = {}
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(folderHead())
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
   stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
 })
 

@@ -156,10 +156,10 @@ describe('writeNodeCover - the blob step and the meta that names it, one request
     expect(c.updateNode.mock.calls[0][0].updateNodeRequest).toMatchObject({ metaRevision: 3 })
   })
 
-  it('a 409 stale_version re-runs on the blob the server holds: the compare is a peer\'s cover now, not the copy the write was built on', async () => {
+  it('a 409 stale_revision re-runs on the blob the server holds: the compare is a peer\'s cover now, not the copy the write was built on', async () => {
     const c = api({
       setNodeCover: vi.fn<ContentApi['setNodeCover']>()
-        .mockRejectedValueOnce(stale({ code: 'stale_version', wrappedMeta: uploadedMeta('peer-blob', { location: { name: 'Wien' } }), metaRevision: 7 }))
+        .mockRejectedValueOnce(stale({ code: 'stale_revision', wrappedMeta: uploadedMeta('peer-blob', { location: { name: 'Wien' } }), metaRevision: 7 }))
         .mockResolvedValue(undefined),
     })
     const done = await writeNodeCover({ ...base(uploadedMeta('old-blob')), cover: uploadedCover(plan('new-blob')), uploadId: 'up-1', surfaceConflict: false })
@@ -173,7 +173,7 @@ describe('writeNodeCover - the blob step and the meta that names it, one request
   })
 
   it('a cover another writer changed is surfaced to an editor, and replaced by a picker that asked for it', async () => {
-    const peers = stale({ code: 'stale_version', wrappedMeta: uploadedMeta('peer-blob'), metaRevision: 7 })
+    const peers = stale({ code: 'stale_revision', wrappedMeta: uploadedMeta('peer-blob'), metaRevision: 7 })
     api({ setNodeCover: vi.fn<ContentApi['setNodeCover']>().mockRejectedValueOnce(peers).mockResolvedValue(undefined) })
     await expect(writeNodeCover({ ...base(null), cover: uploadedCover(plan('mine')), uploadId: 'up-1' })).rejects.toBeInstanceOf(MetaConflictError)
   })

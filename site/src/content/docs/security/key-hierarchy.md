@@ -20,7 +20,7 @@ Byte formats are normative in the conformance-pinned suite
 [`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts) and its
 vectors [`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/blob/main/contracts/crypto/vectors/v1.json).
 Every wrap and seal named below also binds its purpose **and the object it is stored as** (the scope, node,
-blob, share or member, plus the epoch or version stored with it), so a ciphertext served for another object fails to
+blob, share or member, plus the epoch or revision stored with it), so a ciphertext served for another object fails to
 open. That rule is [ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md).
 The primitives are on [Cryptography](/veyq/security/cryptography/).
 :::

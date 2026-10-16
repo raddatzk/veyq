@@ -1,6 +1,8 @@
 # ADR 0084 — A member's profile picture is a sealed attribute of their per-tenant profile
 
-- Status: Accepted; built 2026-10-13 (contract, crypto, backend, web)
+- Status: Accepted; built 2026-10-13 (contract, crypto, backend, web); amended 2026-10-16 by
+  [ADR 0086](0086-one-word-per-meaning.md): the counter is a **revision** (`avatarRevision`, `avatar_revision`, was
+  `avatarVersion`, `avatar_version`).
 - Date: 2026-10-13
 
 ## Context
@@ -18,23 +20,23 @@ field on a row rather than a blob.
 Decided by the owner, 2026-10-13.
 
 **1. Storage: a sealed attribute of the profile row, not a blob.** `veyq_tenant_profile` gains `sealed_avatar TEXT`
-(null = none) and `avatar_version INT NOT NULL DEFAULT 0` (bumped on every set and clear). This is a **baseline edit**
+(null = none) and `avatar_revision INT NOT NULL DEFAULT 0` (bumped on every set and clear). This is a **baseline edit**
 (pre-release; a pin line in `scripts/applied_migrations.sha256`; dev databases are recreated). It is **not** a blob:
 blobs are addressed by scope + node, counted against quota, chunked and need the object store, and a user-owned blob
 would need a new owner kind and new erasers. It is also **not** part of `GET /api/scopes/{scopeId}/members`.
 
 **2. Contract** (contracts first, then backend, then web):
 
-- `PUT /api/account/profile/avatar` (`setMyAvatar`, body `{ sealedAvatar }`, `204`): overwrites, bumps `avatar_version`.
+- `PUT /api/account/profile/avatar` (`setMyAvatar`, body `{ sealedAvatar }`, `204`): overwrites, bumps `avatar_revision`.
 - `DELETE /api/account/profile/avatar` (`clearMyAvatar`, `204`, idempotent): clears, bumps.
 - `GET /api/tenants/{tenantId}/members/{userId}/avatar` (`getMemberAvatar`): gated on **tenant membership** like the
   directory, a non-member gets the `404` of [ADR 0042](0042-http-failure-projection.md). `200 { sealedAvatar }` with an
-  `ETag` derived from `avatar_version` and `Cache-Control: private`; `If-None-Match` matching gives `304`;
+  `ETag` derived from `avatar_revision` and `Cache-Control: private`; `If-None-Match` matching gives `304`;
   `404 avatar_not_found` when the member has none.
-- `ScopeMember` and `MemberProfile` carry only the small integer **`avatarVersion`** (`0` = none). The client fetches
-  only when it is non-zero and caches by version. Directory reads select the version only, never the bytes.
+- `ScopeMember` and `MemberProfile` carry only the small integer **`avatarRevision`** (`0` = none). The client fetches
+  only when it is non-zero and caches by revision. Directory reads select the revision only, never the bytes.
   The stored counter only ever moves up (one guarded `UPDATE`, so overlapping writes cannot lose a bump or reuse a
-  version), but the wire shows `0` whenever there is no picture, so a cleared member reads `0`, not the counter a clear
+  revision), but the wire shows `0` whenever there is no picture, so a cleared member reads `0`, not the counter a clear
   left behind; the `ETag` is the stored counter, quoted. The constant: a 16 KiB padded plaintext seals to 16413 bytes,
   **21884** base64 characters - the very number of the tenant icon's `SetScopeIconRequest.sealedIcon`, because the picture
   uses the icon's pad - which is the `maxLength` of `SetAvatarRequest.sealedAvatar`, `MemberAvatar.sealedAvatar` and
@@ -61,7 +63,7 @@ here with no residual: a guest holds no `K_tenant`).
 - Crop with `shared/ui/ImageCropper.vue` (aspect 1) in a dialog modelled on `features/spaces/SpaceIconDialog.vue`.
 - Encode with `renderSpaceIcon`, parameterised by edge and byte budget.
 - Seal and open in a new `features/account/profile/memberAvatar.ts`, mirroring `memberName.ts`.
-- Cache per user as `{ version, objectUrl }` in `core/people/directory.ts`: fetch only when the cached version differs,
+- Cache per user as `{ revision, objectUrl }` in `core/people/directory.ts`: fetch only when the cached revision differs,
   revalidating with `If-None-Match`, revoke every object URL on sign-out (`resetPeopleDirectory`).
 - `PersonAvatar.vue` shows it through its existing `image` prop and falls back to the letter (also on a blob that does
   not open, never an error).
@@ -74,17 +76,17 @@ there is no second UI.
 **7. Join.** The tenant **OWNER** path holds `K_tenant` at accept (cold birth,
 [ADR 0006](0006-cold-tenant-scope-birth.md)), so name and picture are sealed together there: an optional `sealedAvatar` in
 the accept and register-and-accept request schemas (`tenants.openapi.yaml`), written by `TenantAcceptHandler` with
-`avatarVersion` 1 (a MEMBER invite's body is not read for it: that invitee holds no key, so a picture there is dropped), and `TenantJoinView` gets the picker next to the name fields. A **member** joining holds **no
+`avatarRevision` 1 (a MEMBER invite's body is not read for it: that invitee holds no key, so a picture there is dropped), and `TenantJoinView` gets the picker next to the name fields. A **member** joining holds **no
 `K_tenant`** yet (the grant arrives later through the grant-delivery job), so it cannot seal. The picture, like the name
 today, is offered **after the first unlock with the key**: a one-time "finish your profile" prompt, plus Settings. There is
 **no local plaintext caching** of an unsealed image while waiting.
 
 **8. Removal clears the picture, keeps the handle.** A removed member's profile row outlives the removal today (reused on
-re-invite). The removal cascade (`TenantHandler.cutUnderLocks`) **clears `sealed_avatar` and bumps the version** but keeps
+re-invite). The removal cascade (`TenantHandler.cutUnderLocks`) **clears `sealed_avatar` and bumps the revision** but keeps
 the username, so old Memories fall back to the letter. A picture is **per tenant**, not account-global; "copy from another
 tenant" is a possible later feature, not decided.
 
-**9. Operator-blind residual.** The operator sees an opaque constant-size blob, a version counter, and **the fact that a
+**9. Operator-blind residual.** The operator sees an opaque constant-size blob, a revision counter, and **the fact that a
 member has or has no picture** (and how often it changed). It never sees the image, its dimensions or its content type.
 [ADR 0044](0044-field-visibility-declared-at-the-field.md) field-visibility declarations and the
 [security-model](../crosscutting/security-model.md) inventory name that residual.
@@ -94,11 +96,11 @@ self-scoped, `getMemberAvatar` tenant-gated), and the accept and register-and-ac
 ## Consequences
 
 - **Each profile read costs one integer, each first sight of a picture one small request.** The directory stays light
-  because it carries the version, not the bytes; a person's picture is fetched once per version and revalidated with a
+  because it carries the revision, not the bytes; a person's picture is fetched once per revision and revalidated with a
   `304`.
 - **The profile row becomes sealed-content-bearing in two columns.** `sealed_avatar` is a second opaque field next to the
   sealed name; the "operator sees" lists (security-model inventory, ADR 0044 declarations) are updated with it.
-- **A removed member's pictures disappear from other members' clients on the next version check**, while their Memories
+- **A removed member's pictures disappear from other members' clients on the next revision check**, while their Memories
   keep their name (ADR 0083 decision 3).
 - **No picture before the first unlock for a joining member.** That is the price of not holding an unsealed image on the
   device, and the same price the real name pays.

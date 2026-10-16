@@ -1,6 +1,6 @@
 // The ONE way to seal in veyq (ADR 0072). Every AEAD seal binds its purpose AND the identity of the object it is
 // stored as, so the operator-blind server can no longer serve one object's ciphertext in another object's slot:
-// the AAD carries the purpose, every id the opener addresses the object by, and the epoch or version the wire
+// the AAD carries the purpose, every id the opener addresses the object by, and the epoch or revision the wire
 // stores it at. The opener supplies those values from the ADDRESS it fetched the object by — the route it called,
 // the row it looked up, the scope it opened — never from fields of the response that carry the ciphertext
 // (Decision 1). Where the key is unique to one object, the key is the binding and the context names the purpose
@@ -25,7 +25,7 @@ import {
 /**
  * What a binding field is: a canonical lowercase UUID, a share id (the 43-character base64url bearer token a share
  * is addressed by — a capability, so it keeps its 256-bit form rather than becoming a UUID), an unsigned integer
- * (epoch/version), or a blob role (a bounded token). Statements (below) add five kinds a seal never binds: an id that may be absent
+ * (epoch/revision), or a blob role (a bounded token). Statements (below) add five kinds a seal never binds: an id that may be absent
  * (encoded as the empty field), a scope kind, a 32-byte SHA-256 digest, an opaque byte string bound whole, and a
  * six-digit pairing code (its ASCII digits).
  */
@@ -78,8 +78,8 @@ export const SEAL_PURPOSES = {
   'scope-epoch': [['scopeId', 'id'], ['epoch', 'uint']],
   'group-name': [['scopeId', 'id'], ['nameEpoch', 'uint']],
   'space-icon': [['scopeId', 'id'], ['iconEpoch', 'uint']],
-  'identity-pins': [['version', 'uint']],
-  'device-register': [['version', 'uint']],
+  'identity-pins': [['revision', 'uint']],
+  'device-register': [['revision', 'uint']],
   // Purpose only: sealed under the share's own K_share (ADR 0072 Decision 2).
   'share-key': [],
   'share-memory-name': [],

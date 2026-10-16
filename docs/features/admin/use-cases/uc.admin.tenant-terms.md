@@ -1,4 +1,4 @@
-# UC: Tenant terms — the operator sets their server's legal terms (versioned)
+# UC: Tenant terms — the operator sets their server's legal terms (a new revision on each change)
 
 - **ID:** uc.admin.tenant-terms
 - **Primary actor:** The **tenant owner** (the operator of this server), signed in — a session, no unlocked vault
@@ -6,16 +6,16 @@
 - **Goal:** Set and edit the tenant's **legal terms** (acceptable use, prohibited/illegal content, review &
   removal, contact, an Impressum) as **per-locale markdown**, written per language — **the languages the terms
   carry are the languages the owner added**, and a starter template can fill any one of them on request; a
-  change **bumps the version**, which re-gates members ([uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md)).
+  change **bumps the revision**, which re-gates members ([uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md)).
 - **Preconditions:** A session as the **tenant owner** (`isOwner`); the tenant is ACTIVE.
-- **Postconditions (success):** the tenant's **`terms_markdown_by_locale`** + **`terms_version`** are updated;
-  a *normalized* change bumps `terms_version` (idempotent edits don't); the higher version re-gates every member.
+- **Postconditions (success):** the tenant's **`terms_markdown_by_locale`** + **`terms_revision`** are updated;
+  a *normalized* change bumps `terms_revision` (idempotent edits don't); the higher revision re-gates every member.
 
 ## What the terms are here
 
 The operator's **public policy** — served to everyone (including **pre-auth on the login page**), **not** E2EE
 content. Each tenant carries **`terms_markdown_by_locale`** (a locale→markdown map, DE+EN) + an int
-**`terms_version`**. The owner **writes the markdown**, per language. A **starter template** is available for
+**`terms_revision`**. The owner **writes the markdown**, per language. A **starter template** is available for
 each language — the pre-E2EE 11-clause set (purpose, privacy, rights-to-content, **children**, **illegal
 content** incl. CSAM, share-links, guest-uploads, availability, **review & removal**, external services,
 **contact & deletion** with a `{contact}` placeholder) — inserted **whole**, on request, into the one language
@@ -36,8 +36,8 @@ infra ships a default.
    language the owner writes markdown freely, may ask for the **starter template** (which asks first, and names
    the replacement when there is already text to lose), and fills the `{contact}` placeholder.
 3. On **save** the server **normalizes** the markdown and, **only if it changed**, stores it and **bumps
-   `terms_version`** (an idempotent re-save doesn't bump — matching the pre-E2EE logic).
-4. A bump means every member's `accepted_terms_version` is now stale → each is re-gated on next entry
+   `terms_revision`** (an idempotent re-save doesn't bump — matching the pre-E2EE logic).
+4. A bump means every member's `accepted_terms_revision` is now stale → each is re-gated on next entry
    ([uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md)).
 
 ## Alternate / exception flows
@@ -45,13 +45,13 @@ infra ships a default.
 - **A non-owner tries to edit** → refused (owner-gated, `isOwner`); a member can only **read** the terms.
 - **No terms set yet** (a fresh tenant) → the editor lists **no languages at all** and offers to add one; it
   does not start from the template, and nothing is written until the owner asks for it. Until the owner
-  publishes, the tenant's terms are empty/`version 0` (the member gate treats "no terms" as nothing to accept —
+  publishes, the tenant's terms are empty/`revision 0` (the member gate treats "no terms" as nothing to accept —
   decided in the CR).
 - **A language added but left empty** → the server drops a blank locale on normalize, so it does not survive the
   save. The editor says so while the language sits there empty, rather than letting the row disappear
   unexplained on the next load.
 - **A language removed** → the whole map is rewritten, so the removal both deletes that language's terms and
-  **bumps the version, re-gating every member**. The editor asks first and names both consequences.
+  **bumps the revision, re-gating every member**. The editor asks first and names both consequences.
 - **Only one locale filled** → the other locale falls back to the filled one at display time (no empty ToS shown).
 
 ## User impact
@@ -63,7 +63,7 @@ after every change — before they go on.
 
 - **Feature:** [admin](../_index.md)
 - **Use-cases:** [uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md) (the member gate that
-  consumes the version), [uc.admin.create-tenant](uc.admin.create-tenant.md) (the tenant + owner this edits).
+  consumes the revision), [uc.admin.create-tenant](uc.admin.create-tenant.md) (the tenant + owner this edits).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md) (terms = public operational content;
   the T&S decryptable-on-report corollary), [cc.inclusive-language](../../../crosscutting/cc.inclusive-language.md)
   (the DE terms voice).

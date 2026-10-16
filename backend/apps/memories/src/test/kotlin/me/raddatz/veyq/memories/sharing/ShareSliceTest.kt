@@ -233,7 +233,7 @@ class ShareSliceTest {
         given().`when`().get("/api/shares/$shareId/terms")
             .then().statusCode(200)
             .body("tenantId", equalTo(tenantId))
-            .body("termsVersion", equalTo(1))
+            .body("termsRevision", equalTo(1))
             .body("terms.de", equalTo("## Nutzungsbedingungen"))
             .body("terms.en", equalTo("## Terms of use"))
 
@@ -245,15 +245,15 @@ class ShareSliceTest {
     }
 
     @Test
-    fun shareTermsVersionZeroWhenTenantPublishedNoTerms() {
-        // A tenant with no published terms → version 0 / null terms; the client then never gates.
+    fun shareTermsRevisionZeroWhenTenantPublishedNoTerms() {
+        // A tenant with no published terms → revision 0 / null terms; the client then never gates.
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory)
 
         given().`when`().get("/api/shares/$shareId/terms")
             .then().statusCode(200)
-            .body("termsVersion", equalTo(0))
+            .body("termsRevision", equalTo(0))
             .body("terms", nullValue())
     }
 
@@ -285,13 +285,13 @@ class ShareSliceTest {
 
     // --- helpers ---
 
-    /** Publish terms (version 1) on the tenant that owns [scopeId], the direct-entity seed. Returns the tenantId
+    /** Publish terms (revision 1) on the tenant that owns [scopeId], the direct-entity seed. Returns the tenantId
      *  (the value the /terms endpoint must return). `termsMarkdownByLocale` is the serialized locale→markdown map. */
     private fun seedTerms(scopeId: String, de: String, en: String): String =
         QuarkusTransaction.requiringNew().call {
             val tenant = TenantEntity.findById(ScopeEntity.findById(scopeId)!!.tenantId)!!
             tenant.termsMarkdownByLocale = """{"de":"$de","en":"$en"}"""
-            tenant.termsVersion = 1
+            tenant.termsRevision = 1
             tenant.persist()
             tenant.id
         }

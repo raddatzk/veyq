@@ -169,7 +169,7 @@ export type MediaItem = {
   derivatives: MediaDerivative[]
   /** The original's listed-metadata tier sealed under `K_node` (opaque base64); unwrap with [unsealMeta]. Absent when none. */
   wrappedMeta?: string
-  /** The version [wrappedMeta] is at — what a meta write states it was built from (ADR 0077). Absent in the
+  /** The revision [wrappedMeta] is at — what a meta write states it was built from (ADR 0077). Absent in the
    *  public-share viewer, which never writes; a write that lacks it states 0 and re-bases on the `409`. */
   metaRevision?: number
   /** When this media last changed (cr-0107) — the `(updatedAt, mediaId)` pair is the live-updates keyset cursor.
@@ -871,7 +871,7 @@ export async function loadMediaExif(scopeId: string, media: MediaRef, memoryKey:
   }
 }
 
-/** A media a meta write targets: its id + origin (which key seals it) and the tier + version it was listed at. */
+/** A media a meta write targets: its id + origin (which key seals it) and the tier + revision it was listed at. */
 export type MediaMetaTarget = MediaRef & Pick<MediaItem, 'wrappedMeta' | 'metaRevision'>
 
 /** The outcome of a media meta write: the display tier, the state the server confirmed or handed back, and
@@ -961,7 +961,7 @@ function metaHasContent(m: RawMediaMeta): boolean {
  * Re-seal a metadata tier under the media's key and PUT it with the `metaRevision` it was built from
  * (`updateMediaMeta`, ADR 0077) — the one write path behind the capturedAt edit ([setMediaMeta]) and the place
  * backfill ([backfillPlaceName]). `edit` gets the RAW tier (every field verbatim, never [unsealMeta]'s projection) and returns the next
- * one, or null for no write; on a `409 stale_version` it re-runs on the tier the conflict handed back. A present
+ * one, or null for no write; on a `409 stale_revision` it re-runs on the tier the conflict handed back. A present
  * tier that does not open is refused (`MetaUnreadableError`), never rebuilt from empty (#273). The key is the one
  * the media's origin fixes ([mediaKey]): a member editing what a WRITE_ONLY guest added re-seals under that guest's
  * key, never under `K_node`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is

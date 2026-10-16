@@ -249,7 +249,7 @@ key), and the server.
    the change re-pins it as only *pinned*, and *verified* comes back only through a new compare.
 
 The pin store lives on the client, is synced across the user's devices, and is sealed under the Master Key. Each
-device also keeps a local high-water mark of the highest pin-store version it has opened, and refuses an older,
+device also keeps a local high-water mark of the highest pin-store revision it has opened, and refuses an older,
 missing or unopenable store ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)
 Decision 7). That way, rolling back the store cannot turn a detected key change into a silent first use.
 

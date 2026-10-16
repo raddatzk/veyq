@@ -1,12 +1,12 @@
 // The sealed device register — the operator-blind naming layer over ADR 0004's deliberately unnamed session
 // families (en.account.device-register).
 //
-// ONE blob sealed under the Master Key (`seal({ purpose: "device-register", version }, masterKey, blob)`), synced with the account:
-// the server relays one opaque ciphertext + a monotonic `version` for optimistic concurrency, and learns no
+// ONE blob sealed under the Master Key (`seal({ purpose: "device-register", revision }, masterKey, blob)`), synced with the account:
+// the server relays one opaque ciphertext + a monotonic `revision` for optimistic concurrency, and learns no
 // device name, no device count, and above all no device<->family and no device<->wrap link — the links the
 // unnamed families and the anonymous wraps exist to withhold. The sealed plaintext is
 // `{ devices: { <deviceId>: { label, lastSeenAt } }, families: { <familyId>: <deviceId> },
-//    wraps: { <wrapId>: <deviceId> } }`; `version` is the cleartext wire counter, NOT part of the plaintext.
+//    wraps: { <wrapId>: <deviceId> } }`; `revision` is the cleartext wire counter, NOT part of the plaintext.
 //
 // Three maps rather than one because they decay at completely different rates: a family dies at every logout,
 // expiry and revoke; a wrap dies at every re-enrolment, including re-enrolling at the SAME tier (ADR 0005 §9);
@@ -32,9 +32,9 @@ import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey } from '../../app/vault'
 import { openAccountDocument, raiseMarks, type AccountDocumentStore } from './trustMarks'
 
-/** The register's seal context at a stored `version` (ADR 0072, vector `seal.sym.device-register`, domain-separate
- *  from the pins): bound to the version the server stores it at, so a blob served under another does not open. */
-const registerContext = (version: number) => ({ purpose: 'device-register', version }) as const
+/** The register's seal context at a stored `revision` (ADR 0072, vector `seal.sym.device-register`, domain-separate
+ *  from the pins): bound to the revision the server stores it at, so a blob served under another does not open. */
+const registerContext = (revision: number) => ({ purpose: 'device-register', revision }) as const
 
 export interface DeviceEntry {
   label: string
@@ -73,13 +73,13 @@ export interface SavedKeyDevice {
 }
 
 interface OpenedRegister extends RegisterPlain {
-  version: number
+  revision: number
 }
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-/** Bounds the re-read/merge/retry loop on a `409 stale_version` — a real conflict is a concurrent device write. */
+/** Bounds the re-read/merge/retry loop on a `409 stale_revision` — a real conflict is a concurrent device write. */
 const MAX_WRITE_ATTEMPTS = 5
 
 /**
@@ -104,8 +104,8 @@ const mapOr = (value: unknown): Record<string, string> =>
 
 /** Decrypt the register from a sealed blob. Throws when it does not open; the caller refuses it as unreadable
  *  (ADR 0028 Decision 7). A map missing from a register that did open reads as empty — an older writer's shape. */
-function unsealRegister(mk: Uint8Array, blobB64: string, version: number): RegisterPlain {
-  const parsed = JSON.parse(decoder.decode(v1.open(registerContext(version), mk, fromB64std(blobB64)))) as Partial<RegisterPlain>
+function unsealRegister(mk: Uint8Array, blobB64: string, revision: number): RegisterPlain {
+  const parsed = JSON.parse(decoder.decode(v1.open(registerContext(revision), mk, fromB64std(blobB64)))) as Partial<RegisterPlain>
   if (!parsed || typeof parsed !== 'object') throw new Error('device_register_unreadable')
   return {
     devices: parsed.devices && typeof parsed.devices === 'object' ? parsed.devices : {},
@@ -116,32 +116,32 @@ function unsealRegister(mk: Uint8Array, blobB64: string, version: number): Regis
 
 /** Open a served register through this device's marks — refused if rolled back, missing after a mark, or
  *  unreadable. uc.account.sessions §E4 still holds above it: the sessions view renders rows unnamed. */
-function openRegister(mk: Uint8Array, served: { blob: string | null; version: number }): Promise<RegisterPlain> {
-  return openAccountDocument('register', mk, served, (blob) => unsealRegister(mk, blob, served.version), empty)
+function openRegister(mk: Uint8Array, served: { blob: string | null; revision: number }): Promise<RegisterPlain> {
+  return openAccountDocument('register', mk, served, (blob) => unsealRegister(mk, blob, served.revision), empty)
 }
 
-/** Seal a register under the Master Key for the version it will be stored at — the PUT's `version + 1`, since the
- *  server bumps the version it accepts by one → the opaque base64 blob to PUT. */
-function sealRegister(mk: Uint8Array, reg: RegisterPlain, storedVersion: number): string {
+/** Seal a register under the Master Key for the revision it will be stored at — the PUT's `revision + 1`, since the
+ *  server bumps the revision it accepts by one → the opaque base64 blob to PUT. */
+function sealRegister(mk: Uint8Array, reg: RegisterPlain, storedRevision: number): string {
   const json = encoder.encode(JSON.stringify({ devices: reg.devices, families: reg.families, wraps: reg.wraps }))
-  return b64std(v1.seal(registerContext(storedVersion), mk, json))
+  return b64std(v1.seal(registerContext(storedRevision), mk, json))
 }
 
-/** Fetch + open the caller's register (born-empty → version 0). Requires an unlocked vault. Throws
+/** Fetch + open the caller's register (born-empty → revision 0). Requires an unlocked vault. Throws
  *  `TrustStateRefused` for a register this device must not accept. */
 async function loadRegister(): Promise<OpenedRegister> {
   const mk = masterKey()
   if (!mk) throw new Error('device register requires an unlocked vault')
   try {
     const res = await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())
-    return { version: res.version, ...(await openRegister(mk, res)) }
+    return { revision: res.revision, ...(await openRegister(mk, res)) }
   } finally {
     mk.fill(0)
   }
 }
 
-function isStaleVersion(e: unknown): Promise<boolean> {
-  return isCodedError(e, HttpStatus.conflict, 'stale_version')
+function isStaleRevision(e: unknown): Promise<boolean> {
+  return isCodedError(e, HttpStatus.conflict, 'stale_revision')
 }
 
 /**
@@ -167,7 +167,7 @@ function evict(reg: RegisterPlain): void {
 }
 
 /**
- * Apply a change and store it, version-guarded. On a `409 stale_version` (another device wrote first) re-read the
+ * Apply a change and store it, revision-guarded. On a `409 stale_revision` (another device wrote first) re-read the
  * server's current register, **re-apply the same change on top of it**, and retry.
  *
  * This is where the register's correctness lives, and the rule is not the pin store's. A union-merge would
@@ -208,14 +208,14 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
     const mk = masterKey()
     if (!mk) throw new Error('device register requires an unlocked vault')
     try {
-      const blob = sealRegister(mk, next, current.version + 1)
+      const blob = sealRegister(mk, next, current.revision + 1)
       await withRefresh(() =>
-        accountDeviceRegisterApi().putDeviceRegister({ deviceRegisterUpdate: { blob, version: current.version } }),
+        accountDeviceRegisterApi().putDeviceRegister({ deviceRegisterUpdate: { blob, revision: current.revision } }),
       )
-      await raiseMarks(mk, { register: current.version + 1 })
+      await raiseMarks(mk, { register: current.revision + 1 })
       return
     } catch (e) {
-      if (attempt + 1 < MAX_WRITE_ATTEMPTS && (await isStaleVersion(e))) {
+      if (attempt + 1 < MAX_WRITE_ATTEMPTS && (await isStaleRevision(e))) {
         current = await loadRegister() // re-base on the server's current register, then re-apply + retry
         continue
       }

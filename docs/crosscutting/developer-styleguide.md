@@ -72,12 +72,12 @@
 - **The OpenAPI spec under `contracts/api/` is the contract.** The build generates JAX-RS interfaces +
   Kotlin/TS models; resources implement the interfaces directly. Never hand-write a DTO that duplicates a
   generated model. The API is internal and may change with its consumers.
-- **Every edit operation declares how it meets a second writer** — `x-veyq-concurrency` with `mode: version` (a
-  list of `fields`: each version field the request carries, the fields that require it, and the conflict code its
+- **Every edit operation declares how it meets a second writer** — `x-veyq-concurrency` with `mode: revision` (a
+  list of `fields`: each revision field the request carries, the fields that require it, and the conflict code its
   stale `409` answers) or `mode: last-writer-wins` with its reason
   ([ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md); `scripts/validate_write_concurrency.py`
   holds it). A write that more than one account makes **and** that re-sends fields its writer did not edit is
-  `version`; the client re-applies only its own change on the conflict body, and never seals a blob it could not
+  `revision`; the client re-applies only its own change on the conflict body, and never seals a blob it could not
   open.
 - **A dev seeder or script that calls the API is a client like any other**: it goes through the generated client
   and is typechecked with the app (`web/scripts/`, `tsconfig.scripts.json`), and it never reaches past the API into

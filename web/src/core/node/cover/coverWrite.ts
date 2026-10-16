@@ -11,7 +11,7 @@
 // One writer for every kind. A cover is `{ source, crop }` (`coverModel.ts`); an application that has another source
 // (Memories: one of its own photos) passes its own `cover` value, and the writer decides the blob step from the meta it is
 // replacing: the old cover's uploaded blob, if any, is the compare value (`expectedBlobId` / the removal's `blobId`), read
-// again from the blob a `409 stale_version` hands back, so a retry is judged against what the server holds now.
+// again from the blob a `409 stale_revision` hands back, so a retry is judged against what the server holds now.
 import { contentApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
@@ -119,7 +119,7 @@ export type WriteNodeCoverArgs = {
   scopeId: string
   nodeId: string
   nodeKey: Uint8Array
-  /** The node's sealed meta as the writer last saw it (the tree's); a `409 stale_version` re-bases it. */
+  /** The node's sealed meta as the writer last saw it (the tree's); a `409 stale_revision` re-bases it. */
   current: SealedMetaState
   /** The node's new `cover` field value (null: none), built by the caller. */
   cover: unknown | null

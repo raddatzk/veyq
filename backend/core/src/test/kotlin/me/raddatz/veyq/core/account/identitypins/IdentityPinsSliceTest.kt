@@ -13,8 +13,8 @@ import java.util.UUID
 
 /**
  * Slice tests for the operator-blind identity-pin store (en.account.identity-pinning, cr-0098, ADR 0028). The
- * server stores + serves one opaque sealed blob + a version: a born-empty account reads `{ blob: null, version: 0 }`;
- * a version-guarded PUT round-trips and bumps the version; a stale version is a `409 stale_version`; and the store
+ * server stores + serves one opaque sealed blob + a revision: a born-empty account reads `{ blob: null, revision: 0 }`;
+ * a revision-guarded PUT round-trips and bumps the revision; a stale revision is a `409 stale_revision`; and the store
  * is keyed off the caller's own token (no cross-account read). Each test seeds a UUID-unique account so the
  * JVM-lived H2 mem DB (shared across test classes) can't bleed a written pin row between tests.
  */
@@ -25,52 +25,52 @@ class IdentityPinsSliceTest {
     lateinit var sessions: SessionService
 
     @Test
-    fun bornEmptyStoreReadsNullBlobVersionZero() {
+    fun bornEmptyStoreReadsNullBlobRevisionZero() {
         get(issueToken(seedUser()))
             .then().statusCode(200)
             .body("blob", nullValue())
-            .body("version", equalTo(0))
+            .body("revision", equalTo(0))
     }
 
     @Test
-    fun firstWriteRoundTripsAndBumpsToVersionOne() {
+    fun firstWriteRoundTripsAndBumpsToRevisionOne() {
         val token = issueToken(seedUser())
         put(token, BLOB_1, 0)
             .then().statusCode(200)
             .body("blob", equalTo(BLOB_1))
-            .body("version", equalTo(1))
+            .body("revision", equalTo(1))
         get(token)
             .then().statusCode(200)
             .body("blob", equalTo(BLOB_1))
-            .body("version", equalTo(1))
+            .body("revision", equalTo(1))
     }
 
     @Test
-    fun subsequentWriteAtCurrentVersionBumpsAgain() {
+    fun subsequentWriteAtCurrentRevisionBumpsAgain() {
         val token = issueToken(seedUser())
-        put(token, BLOB_1, 0).then().statusCode(200).body("version", equalTo(1))
+        put(token, BLOB_1, 0).then().statusCode(200).body("revision", equalTo(1))
         put(token, BLOB_2, 1)
             .then().statusCode(200)
             .body("blob", equalTo(BLOB_2))
-            .body("version", equalTo(2))
+            .body("revision", equalTo(2))
     }
 
     @Test
-    fun staleVersionOnFirstWriteIsConflict() {
-        // A born-empty store only accepts a first write against version 0 — a non-zero expected version is stale.
+    fun staleRevisionOnFirstWriteIsConflict() {
+        // A born-empty store only accepts a first write against revision 0 — a non-zero expected revision is stale.
         put(issueToken(seedUser()), BLOB_1, 5)
-            .then().statusCode(409).body("code", equalTo("stale_version"))
+            .then().statusCode(409).body("code", equalTo("stale_revision"))
     }
 
     @Test
-    fun staleVersionAfterAWriteIsConflict() {
+    fun staleRevisionAfterAWriteIsConflict() {
         val token = issueToken(seedUser())
-        put(token, BLOB_1, 0).then().statusCode(200).body("version", equalTo(1))
-        // Another device already moved the store to version 1; a second write still based on version 0 is stale.
+        put(token, BLOB_1, 0).then().statusCode(200).body("revision", equalTo(1))
+        // Another device already moved the store to revision 1; a second write still based on revision 0 is stale.
         put(token, BLOB_2, 0)
-            .then().statusCode(409).body("code", equalTo("stale_version"))
+            .then().statusCode(409).body("code", equalTo("stale_revision"))
         // The store is untouched by the rejected write.
-        get(token).then().statusCode(200).body("blob", equalTo(BLOB_1)).body("version", equalTo(1))
+        get(token).then().statusCode(200).body("blob", equalTo(BLOB_1)).body("revision", equalTo(1))
     }
 
     @Test
@@ -80,19 +80,19 @@ class IdentityPinsSliceTest {
         get(issueToken(seedUser()))
             .then().statusCode(200)
             .body("blob", nullValue())
-            .body("version", equalTo(0))
+            .body("revision", equalTo(0))
     }
 
     @Test
-    fun aWriteWithoutItsVersionIs400AndStoresNothing() {
-        // A missing `version` must not bind to 0 — on a born-empty store 0 is exactly the version that wins, so an
+    fun aWriteWithoutItsRevisionIs400AndStoresNothing() {
+        // A missing `revision` must not bind to 0 — on a born-empty store 0 is exactly the revision that wins, so an
         // old client would write unchecked.
         val token = issueToken(seedUser())
         given().header("Authorization", "Bearer $token").contentType(ContentType.JSON)
             .body("""{"blob":"$BLOB_1"}""")
             .`when`().put(PATH)
             .then().statusCode(400)
-        get(token).then().statusCode(200).body("blob", nullValue()).body("version", equalTo(0))
+        get(token).then().statusCode(200).body("blob", nullValue()).body("revision", equalTo(0))
     }
 
     @Test
@@ -108,10 +108,10 @@ class IdentityPinsSliceTest {
     private fun get(token: String) =
         given().header("Authorization", "Bearer $token").`when`().get(PATH)
 
-    private fun put(token: String, blob: String, version: Long) =
+    private fun put(token: String, blob: String, revision: Long) =
         given().header("Authorization", "Bearer $token")
             .contentType(ContentType.JSON)
-            .body("""{"blob":"$blob","version":$version}""")
+            .body("""{"blob":"$blob","revision":$revision}""")
             .`when`().put(PATH)
 
     companion object {

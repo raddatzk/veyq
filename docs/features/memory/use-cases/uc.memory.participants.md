@@ -8,7 +8,7 @@
 - **Preconditions:** The Memory's `K_node` is held and its `wrappedMeta` exists
   ([en.memory.node-meta](../enablers/en.memory.node-meta.md)); the Memory lives in a tenant or group scope (a personal
   scope has no participants); the scope's member directory is readable (`listScopeMembers`).
-- **Postconditions (success):** The Memory's sealed `wrappedMeta.participants` holds the chosen user ids, one version
+- **Postconditions (success):** The Memory's sealed `wrappedMeta.participants` holds the chosen user ids, one revision
   later; the header shows them; a profile page lists the Memories its person is on. The server stored one opaque blob and
   nothing else ([ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)).
 
@@ -38,7 +38,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 1. A member creating a Memory in a tenant or group scope sees **"I was there"** in the create dialog, ticked by
    default (owner decision 2026-10-14). Ticked, the Memory's first `wrappedMeta` already carries
-   `participants: { userIds: [<own id>] }`: no second write, no version bump. Unticked, it carries no participants.
+   `participants: { userIds: [<own id>] }`: no second write, no revision bump. Unticked, it carries no participants.
 2. It is offered only where the participants are: not in a personal scope (no participants there), never to a share
    guest (no user id to record, and the right is false for every share role). It means "who was there", like
    every participant — not "who created it" — which is why it is a choice and not automatic.
@@ -68,7 +68,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 - **A1 — a participant left the scope:** the id stays and renders greyed as "former member", no link, no auto-prune. A
   member may remove it by hand in the dialog.
-- **A2 — a concurrent meta write landed first** (`409 stale_version`): the client re-reads the blob and **merges** (the union
+- **A2 — a concurrent meta write landed first** (`409 stale_revision`): the client re-reads the blob and **merges** (the union
   of both lists; an id the editing person removed stays removed) through its own edit function, not the same-field
   conflict of date and place ([uc.memory.concurrent-curation](uc.memory.concurrent-curation.md)).
 - **A3 — the meta does not open:** the participants are not shown and the blob is never rebuilt from empty.
@@ -133,9 +133,9 @@ together with whom.
 - Feature: [Memory](../_index.md)
 - End-user view (docs site): [People in your Memories](../../../../site/src/content/docs/memories/people-in-your-memories.md)
 - Enablers: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta`)
-- Use-cases: [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md) (the versioned meta write),
+- Use-cases: [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md) (the revision-checked meta write),
   [uc.memory.buckets](uc.memory.buckets.md) (the uploader axis), [uc.memory.gallery](uc.memory.gallery.md) (the lightbox)
 - Applications: [docs/apps/memories.md](../../../apps/memories.md) (the rights matrix)
 - Decisions: [ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md),
-  [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) (the versioned write),
+  [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) (the revision-checked write),
   [ADR 0081](../../../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md) (revalidated tree reads)

@@ -43,7 +43,7 @@ describe('TermsAcceptView — declining signs out (uc.account.sign-out)', () => 
     vi.clearAllMocks()
     vi.mocked(signOut).mockResolvedValue(undefined)
     vi.mocked(getTenantTerms).mockResolvedValue({
-      termsVersion: 3,
+      termsRevision: 3,
       terms: { en: 'Be kind.', de: 'Sei nett.' },
     } as Awaited<ReturnType<typeof getTenantTerms>>)
   })
@@ -63,7 +63,7 @@ describe('TermsAcceptView — declining signs out (uc.account.sign-out)', () => 
 
   it('does not sign out when the member accepts instead', async () => {
     // The control for the one above: the same screen, the other button.
-    vi.mocked(acceptTenantTerms).mockResolvedValue({ acceptedVersion: 3 } as Awaited<ReturnType<typeof acceptTenantTerms>>)
+    vi.mocked(acceptTenantTerms).mockResolvedValue({ acceptedRevision: 3 } as Awaited<ReturnType<typeof acceptTenantTerms>>)
     const wrapper = await mountReady()
     const accept = wrapper.findAll('button').find((b) => b.text() === t('terms.accept'))!
 

@@ -5,7 +5,7 @@
 //
 // The write is a read-modify-write through `writeNodeMeta` (ADR 0077) with its OWN edit function, not `editField`: the
 // list is a set two members may extend at once, and `editField` answers "the same field moved" with a conflict the editor
-// must re-open on — which would drop a peer's addition or make the editor redo its pick. Here a `409 stale_version`
+// must re-open on — which would drop a peer's addition or make the editor redo its pick. Here a `409 stale_revision`
 // re-reads the blob and MERGES: the union of what is stored and what the editor wants, except that an id the editor
 // REMOVED stays removed ({@link mergeParticipants}).
 import { editParticipantsOf, unsealNodeMeta } from '../../core/node/nodeMeta'

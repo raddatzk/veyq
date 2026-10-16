@@ -29,7 +29,7 @@ export function updateMyProfile(update: {
 }
 
 /** Set the caller's profile picture in the Host tenant (ADR 0084): the picture already sealed under `K_tenant`
- *  ({@link sealAvatar}); the server stores it verbatim and bumps `avatarVersion`. */
+ *  ({@link sealAvatar}); the server stores it verbatim and bumps `avatarRevision`. */
 export function setMyAvatar(sealedAvatar: string): Promise<void> {
   return withRefresh(() => accountProfileApi().setMyAvatar({ setAvatarRequest: { sealedAvatar } }))
 }

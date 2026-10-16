@@ -1,6 +1,7 @@
 # ADR 0028 — Identity authenticity: TOFU pinning + safety-number verification
 
-- Status: Accepted
+- Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the pin store's and the device
+  register's counter is a **revision** (`revision`, was `version`).
 - Date: 2026-07-07
 
 ## Context
@@ -108,8 +109,8 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
 
 7. **A device never accepts older trust state than it has held, and a store that does not open is an error,
    not an empty store.** The pin store lives on the server, so the server decides which copy a device reads.
-   Binding the store's version into its seal ([ADR 0072](0072-a-seal-binds-its-object.md)) makes that version
-   authentic, not fresh. So each device keeps a **local high-water mark** — the highest pin-store version it has
+   Binding the store's revision into its seal ([ADR 0072](0072-a-seal-binds-its-object.md)) makes that revision
+   authentic, not fresh. So each device keeps a **local high-water mark** — the highest pin-store revision it has
    opened — and refuses a served store below it, on every read **and before every write**, because a write
    re-seals what it read and would otherwise make the rollback its own. It refuses a missing store once it has
    held one, and it refuses a store that fails to open instead of reading it as empty: an empty store is exactly
@@ -129,12 +130,12 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
      without marks when it uses the password and Secret Key (the no-mark case below), or with its linker's when
      it is linked again.
    - **A refused document has one way back: the user starts it over on a device, knowingly, through one
-     confirmed action.** That write is the only thing that lowers a mark — to the version it just wrote itself,
+     confirmed action.** That write is the only thing that lowers a mark — to the revision it just wrote itself,
      which is the one copy the mark cannot be protecting the device from — and no server response reaches it.
      It writes the empty document, so it costs what an empty store costs (every contact first-seen again, every
      verification gone; every device unnamed), and the confirmation says so. The server can therefore withhold
      a document until the user resets it: a downgrade that is now consented, not silent. Another device heals
-     by reading where its mark sits at or below the reset's version; one whose mark sits above it (after a
+     by reading where its mark sits at or below the reset's revision; one whose mark sits above it (after a
      backup restore) refuses it as rolled back and is offered the same reset, because a device cannot tell a
      restore from an attack.
    - **What it cannot see:** a device with no mark — one that signed in with the password and Secret Key, or

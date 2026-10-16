@@ -551,16 +551,16 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     })
   })
 
-  /** A `409 stale_version` carrying the server's current node blob (ADR 0077), as the generated client throws it. */
+  /** A `409 stale_revision` carrying the server's current node blob (ADR 0077), as the generated client throws it. */
   const staleNode = (wrappedMeta: string, metaRevision: number) => ({
-    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaRevision }), { status: 409 }),
+    response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta, metaRevision }), { status: 409 }),
   })
 
   /**
    * The CR's own scenario (uc.memory.concurrent-curation E2, the worst writer): B's tree was loaded before A set the
    * place. B merely OPENS the Memory, the auto-date self-heal re-seals — from the stale tree — and meets a 409 whose
    * blob holds A's place. The retry re-runs only the date on it, so the place survives and the tree learns both.
-   * Before the version existed, that open-time PATCH landed and A's place was gone.
+   * Before the revision existed, that open-time PATCH landed and A's place was gone.
    */
   it('the open-time date self-heal from a stale tree keeps a place a peer set meanwhile', async () => {
     const memoryKey = v1.randomBytes(32)
@@ -573,7 +573,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const peers = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { ...GEOCODED, derivedMode: 'fixed' } })
     updateNode.mockRejectedValueOnce(staleNode(peers, 1))
 
-    const wrapper = mountWithLocationStub(memoryKey, null) // B's tree: no meta at all, version 0
+    const wrapper = mountWithLocationStub(memoryKey, null) // B's tree: no meta at all, revision 0
     await flushPromises()
     await flushPromises()
 

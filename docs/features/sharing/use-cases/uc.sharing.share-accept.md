@@ -6,22 +6,22 @@
   the *member* half of the same gate).
 - **Goal:** Before the visitor can **view** a share (or **contribute** to it), they must **accept the operator's
   current terms** for the tenant that serves the share — the anonymous, client-side half of the two-tier terms
-  gate ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) §3). A hard gate, **re-accept on a version
+  gate ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) §3). A hard gate, **re-accept on a revision
   bump**.
 - **Preconditions:** A resolvable share (existing, enabled, unexpired). The tenant that owns the share has
-  **published terms** (`termsVersion > 0`); a tenant with no terms (version 0) never gates. If the share is
+  **published terms** (`termsRevision > 0`); a tenant with no terms (revision 0) never gates. If the share is
   password-protected ([uc.sharing.share-password](uc.sharing.share-password.md)) the visitor has already unlocked
   it — the terms gate sits **after** the password shell.
 - **Postconditions (success):** the visitor's acceptance is recorded **client-side only** (localStorage, keyed by
-  the tenant + version); the gate clears and the visitor proceeds to the content — or, for a WRITE_ONLY share, to
+  the tenant + revision); the gate clears and the visitor proceeds to the content — or, for a WRITE_ONLY share, to
   the display-name pre-screen ([uc.sharing.share-uploader](uc.sharing.share-uploader.md)); a READ_WRITE visitor is
   asked its name at its first contribution ([uc.sharing.share-contributor](uc.sharing.share-contributor.md)). **The server records nothing** about the accountless
   visitor — anonymity is preserved.
 
 ## The mechanism here
 
-The terms are the **operator's public policy** — the same versioned per-locale markdown a *member* accepts
-([uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md), [ADR 0035](../../../decisions/0035-server-terms-of-service.md)),
+The terms are the **operator's public policy** — the same per-locale markdown, at the same revision, a *member*
+accepts ([uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md), [ADR 0035](../../../decisions/0035-server-terms-of-service.md)),
 including the CSAM / illegal-content and review-and-removal clauses that govern a reported public share (the T&S
 "decryptable-on-report" corollary in the [security model](../../../crosscutting/security-model.md)). They are
 **public operational content, never E2EE** — so serving them to an accountless visitor costs no blindness.
@@ -33,16 +33,16 @@ slice."* A public share is also **Host-independent** — `shareId` is a global k
 tenant **cannot** be inferred from the request Host. The terms must therefore come from the **share** itself, via
 a dedicated **guest** endpoint keyed on the (already non-enumerable) `shareId`:
 
-- **`GET /api/shares/{shareId}/terms`** (no auth) → `{ tenantId, termsVersion, terms }`. It reuses the share's
+- **`GET /api/shares/{shareId}/terms`** (no auth) → `{ tenantId, termsRevision, terms }`. It reuses the share's
   existing `activeShare()` gate, so an unknown / disabled / expired share is the **same non-enumerable 404** as
   `resolveShare` — there is **no `tenantId` existence oracle** (the caller never passes a `tenantId`; the opaque
   `tenantId` is only *returned*, and only to a caller already holding a valid `shareId`). It serves only public
   terms content, independent of the share password.
 
-**Acceptance is client-only.** On accept, the client writes the accepted `termsVersion` to **localStorage keyed by
+**Acceptance is client-only.** On accept, the client writes the accepted `termsRevision` to **localStorage keyed by
 `tenantId`** — so accepting on one share of a tenant clears the gate on **every** share of that tenant (you accept
 the *operator's* terms, not the link). The returned `tenantId` is the localStorage key; the endpoint's `shareId`
-keying is what removes the oracle. When the operator bumps `termsVersion`, the stored value is now below current →
+keying is what removes the oracle. When the operator bumps `termsRevision`, the stored value is now below current →
 the gate re-fires (re-accept).
 
 **Honest about its limits — this is an operational gate, not enforcement.** A client-side localStorage gate is
@@ -59,24 +59,24 @@ blip is worse than none, and it is not enforcement anyway) — mirroring the mem
 ## Main flow
 
 1. A visitor opens `/s/{shareId}#k=…`. The share resolves (past the password shell, if any).
-2. The client fetches `GET /api/shares/{shareId}/terms`. If `termsVersion > 0` **and** the locally-stored accepted
-   version for that `tenantId` is lower, the **terms gate** shows: the operator's terms (viewer's locale, rendered
+2. The client fetches `GET /api/shares/{shareId}/terms`. If `termsRevision > 0` **and** the locally-stored accepted
+   revision for that `tenantId` is lower, the **terms gate** shows: the operator's terms (viewer's locale, rendered
    with the safe markdown renderer reused from member terms + share notes) and an **Accept** button.
-3. The visitor accepts → the client writes `termsVersion` to `localStorage[tenant]` → the gate clears.
+3. The visitor accepts → the client writes `termsRevision` to `localStorage[tenant]` → the gate clears.
 4. The visitor proceeds: straight to the content (READ, READ_WRITE — a contributor names itself at its first
    contribution), or to the mandatory display-name pre-screen (WRITE_ONLY) and then contributing.
 
 ## Alternate / exception flows
 
-- **Tenant has no terms** (`termsVersion == 0`) → no gate; step 2 falls straight through to the content / name
+- **Tenant has no terms** (`termsRevision == 0`) → no gate; step 2 falls straight through to the content / name
   pre-screen.
-- **Already accepted this version** → the stored version equals current, so the gate does not fire (a reload does
+- **Already accepted this revision** → the stored revision equals current, so the gate does not fire (a reload does
   not re-prompt).
-- **Operator bumped the version** → stored `<` current → the gate re-fires; the visitor re-reads and re-accepts.
+- **Operator bumped the revision** → stored `<` current → the gate re-fires; the visitor re-reads and re-accepts.
 - **Password-protected share** → the password shell ([uc.sharing.share-password](uc.sharing.share-password.md))
   comes **first**; the terms gate only appears once the share is unlocked. Order: **password → terms → note → name →
   content**, the note's gate only where the curator asked for it ([uc.sharing.share-note](uc.sharing.share-note.md)).
-- **Transient terms-fetch error** → **fail open**: treat as no gate (version 0) and let the visitor view; a later
+- **Transient terms-fetch error** → **fail open**: treat as no gate (revision 0) and let the visitor view; a later
   reload retries.
 - **Revoked / expired / unknown share** → `GET …/terms` is the same non-enumerable `404` as `resolveShare`; there
   is nothing to gate.

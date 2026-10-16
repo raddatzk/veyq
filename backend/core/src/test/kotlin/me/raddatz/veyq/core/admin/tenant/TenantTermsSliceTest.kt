@@ -20,8 +20,8 @@ import java.util.UUID
 
 /**
  * Slice tests for server terms of service (uc.admin.tenant-terms + uc.account.accept-terms, cr-0114 / ADR 0035),
- * over the full HTTP layer: the **owner** sets per-locale terms (a normalized change bumps `terms_version`, an
- * idempotent re-save does not); a **non-owner** is refused; a **member** accepts the current version and is
+ * over the full HTTP layer: the **owner** sets per-locale terms (a normalized change bumps `terms_revision`, an
+ * idempotent re-save does not); a **non-owner** is refused; a **member** accepts the current revision and is
  * **re-staled** by a bump; a stale accept is 409; a non-member read/accept is 404. Distinct domains/emails so
  * the JVM-lived H2 mem DB can't bleed state.
  */
@@ -42,16 +42,16 @@ class TenantTermsSliceTest {
     private fun quote(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
 
     @Test
-    fun ownerSetsTermsBumpsVersionAndIdempotentReSaveDoesNot() {
+    fun ownerSetsTermsBumpsRevisionAndIdempotentReSaveDoesNot() {
         val (tenantId, owner) = seedActiveTenant("terms-set.example.com", "owner@terms-set.example.com")
 
-        // First publish → version 1, echoed back.
+        // First publish → revision 1, echoed back.
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(termsBody("## Regeln\nSei nett.", "## Rules\nBe kind."))
             .`when`().put("/api/tenants/$tenantId/terms")
             .then().statusCode(200)
-            .body("termsVersion", equalTo(1))
-            .body("acceptedVersion", equalTo(0))
+            .body("termsRevision", equalTo(1))
+            .body("acceptedRevision", equalTo(0))
             .body("terms.de", equalTo("## Regeln\nSei nett."))
             .body("terms.en", equalTo("## Rules\nBe kind."))
 
@@ -59,13 +59,13 @@ class TenantTermsSliceTest {
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(termsBody("  ## Regeln\nSei nett.  ", "## Rules\nBe kind.\n"))
             .`when`().put("/api/tenants/$tenantId/terms")
-            .then().statusCode(200).body("termsVersion", equalTo(1))
+            .then().statusCode(200).body("termsRevision", equalTo(1))
 
         // A real change → bump to 2.
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(termsBody("## Regeln v2", "## Rules v2"))
             .`when`().put("/api/tenants/$tenantId/terms")
-            .then().statusCode(200).body("termsVersion", equalTo(2))
+            .then().statusCode(200).body("termsRevision", equalTo(2))
     }
 
     @Test
@@ -94,35 +94,35 @@ class TenantTermsSliceTest {
         // Member sees a stale acceptance (0 < 1) then accepts v1.
         given().header("Authorization", bearer(member))
             .`when`().get("/api/tenants/$tenantId/terms")
-            .then().statusCode(200).body("termsVersion", equalTo(1)).body("acceptedVersion", equalTo(0))
+            .then().statusCode(200).body("termsRevision", equalTo(1)).body("acceptedRevision", equalTo(0))
 
-        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body("""{"version":1}""")
+        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body("""{"revision":1}""")
             .`when`().post("/api/tenants/$tenantId/terms/accept")
-            .then().statusCode(200).body("termsVersion", equalTo(1)).body("acceptedVersion", equalTo(1))
+            .then().statusCode(200).body("termsRevision", equalTo(1)).body("acceptedRevision", equalTo(1))
 
         // Owner bumps to v2 → the member is re-staled.
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(termsBody("Regeln v2", "Rules v2"))
-            .`when`().put("/api/tenants/$tenantId/terms").then().statusCode(200).body("termsVersion", equalTo(2))
+            .`when`().put("/api/tenants/$tenantId/terms").then().statusCode(200).body("termsRevision", equalTo(2))
 
         given().header("Authorization", bearer(member))
             .`when`().get("/api/tenants/$tenantId/terms")
-            .then().statusCode(200).body("termsVersion", equalTo(2)).body("acceptedVersion", equalTo(1))
+            .then().statusCode(200).body("termsRevision", equalTo(2)).body("acceptedRevision", equalTo(1))
 
-        // Accepting the now-stale version 1 is refused; accepting the current 2 clears the gate.
-        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body("""{"version":1}""")
+        // Accepting the now-stale revision 1 is refused; accepting the current 2 clears the gate.
+        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body("""{"revision":1}""")
             .`when`().post("/api/tenants/$tenantId/terms/accept")
-            .then().statusCode(409).body("code", equalTo("terms_version_changed"))
+            .then().statusCode(409).body("code", equalTo("terms_revision_changed"))
 
-        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body("""{"version":2}""")
+        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body("""{"revision":2}""")
             .`when`().post("/api/tenants/$tenantId/terms/accept")
-            .then().statusCode(200).body("acceptedVersion", equalTo(2))
+            .then().statusCode(200).body("acceptedRevision", equalTo(2))
     }
 
     @Test
-    fun eachAcceptedVersionKeepsItsOwnRowAndFirstTime() {
-        // Acceptance is evidence of WHEN which version was accepted (ADR 0035 §4, inbox #402): one row per version,
-        // the server's own clock, written once — a re-acceptance must not move it, a newer version must not erase
+    fun eachAcceptedRevisionKeepsItsOwnRowAndFirstTime() {
+        // Acceptance is evidence of WHEN which revision was accepted (ADR 0035 §4, inbox #402): one row per revision,
+        // the server's own clock, written once — a re-acceptance must not move it, a newer revision must not erase
         // the older one's row.
         val (tenantId, owner) = seedActiveTenant("terms-time.example.com", "owner@terms-time.example.com")
         val member = seedUser(email = "member@terms-time.example.com")
@@ -138,7 +138,7 @@ class TenantTermsSliceTest {
         val past = Instant.parse("2020-01-01T00:00:00Z")
         setStoredAcceptedAt(member, tenantId, 1, past)
         accept(member, tenantId, 1)
-        assertEquals(mapOf(1 to past), storedAcceptances(member, tenantId), "a re-acceptance of the same version moved the time")
+        assertEquals(mapOf(1 to past), storedAcceptances(member, tenantId), "a re-acceptance of the same revision moved the time")
 
         publish(owner, tenantId, "Regeln v2", "Rules v2")
         val beforeBump = Instant.now().truncatedTo(ChronoUnit.SECONDS)
@@ -148,14 +148,14 @@ class TenantTermsSliceTest {
         assertEquals(past, rows.getValue(1), "accepting v2 moved v1's time")
         assertTrue(!rows.getValue(2).isBefore(beforeBump), "v2's time ${rows.getValue(2)} is not the server's now")
 
-        // A stale re-read of the gate: the current version's acceptance is what clears it, the history aside.
+        // A stale re-read of the gate: the current revision's acceptance is what clears it, the history aside.
         given().header("Authorization", bearer(member))
             .`when`().get("/api/tenants/$tenantId/terms")
-            .then().statusCode(200).body("termsVersion", equalTo(2)).body("acceptedVersion", equalTo(2))
+            .then().statusCode(200).body("termsRevision", equalTo(2)).body("acceptedRevision", equalTo(2))
     }
 
     @Test
-    fun anOlderAcceptanceDoesNotClearTheGateForTheCurrentVersion() {
+    fun anOlderAcceptanceDoesNotClearTheGateForTheCurrentRevision() {
         // The history holds v1 after a bump to v2; the gate must still report the member as stale until v2 is accepted.
         val (tenantId, owner) = seedActiveTenant("terms-gate.example.com", "owner@terms-gate.example.com")
         val member = seedUser(email = "member@terms-gate.example.com")
@@ -169,7 +169,7 @@ class TenantTermsSliceTest {
 
         given().header("Authorization", bearer(member))
             .`when`().get("/api/tenants/$tenantId/terms")
-            .then().statusCode(200).body("termsVersion", equalTo(4)).body("acceptedVersion", equalTo(3))
+            .then().statusCode(200).body("termsRevision", equalTo(4)).body("acceptedRevision", equalTo(3))
         assertEquals(setOf(1, 3), storedAcceptances(member, tenantId).keys)
     }
 
@@ -182,7 +182,7 @@ class TenantTermsSliceTest {
             for (v in 1..3) {
                 TenantTermsAcceptanceEntity().apply {
                     id = UUID.randomUUID().toString(); userId = member; this.tenantId = tenantId
-                    acceptedVersion = v; acceptedAt = Instant.now()
+                    acceptedRevision = v; acceptedAt = Instant.now()
                 }.persist()
             }
         }
@@ -193,7 +193,7 @@ class TenantTermsSliceTest {
 
     @Test
     fun aClientSentAcceptanceTimeHasNoEffect() {
-        // The contract carries only `version`; a time smuggled into the body is never bound, the server stamps its own.
+        // The contract carries only `revision`; a time smuggled into the body is never bound, the server stamps its own.
         val (tenantId, owner) = seedActiveTenant("terms-clienttime.example.com", "owner@terms-clienttime.example.com")
         val member = seedUser(email = "member@terms-clienttime.example.com")
         seedMembership(tenantId, member, MembershipEntity.MEMBER)
@@ -201,16 +201,16 @@ class TenantTermsSliceTest {
 
         val before = Instant.now().truncatedTo(ChronoUnit.SECONDS)
         given().header("Authorization", bearer(member)).contentType(ContentType.JSON)
-            .body("""{"version":1,"acceptedAt":"2000-01-01T00:00:00Z","accepted_at":"2000-01-01T00:00:00Z"}""")
+            .body("""{"revision":1,"acceptedAt":"2000-01-01T00:00:00Z","accepted_at":"2000-01-01T00:00:00Z"}""")
             .`when`().post("/api/tenants/$tenantId/terms/accept")
-            .then().statusCode(200).body("acceptedVersion", equalTo(1))
+            .then().statusCode(200).body("acceptedRevision", equalTo(1))
         val stored = storedAcceptances(member, tenantId).getValue(1)
         assertTrue(!stored.isBefore(before), "accepted_at $stored came from the client, not the server")
     }
 
     @Test
-    fun anAcceptWithoutItsVersionIs400() {
-        // A missing `version` binds the primitive to 0, which `minimum: 1` refuses — the refusal is the bound's, so
+    fun anAcceptWithoutItsRevisionIs400() {
+        // A missing `revision` binds the primitive to 0, which `minimum: 1` refuses — the refusal is the bound's, so
         // lowering that bound to 0 would let an unversioned accept through.
         val (tenantId, _) = seedActiveTenant("terms-noversion.example.com", "owner@terms-noversion.example.com")
         val member = seedUser(email = "member@terms-noversion.example.com")
@@ -232,7 +232,7 @@ class TenantTermsSliceTest {
             .`when`().get("/api/tenants/$tenantId/terms")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
 
-        given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON).body("""{"version":1}""")
+        given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON).body("""{"revision":1}""")
             .`when`().post("/api/tenants/$tenantId/terms/accept")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
@@ -245,23 +245,23 @@ class TenantTermsSliceTest {
             .`when`().put("/api/tenants/$tenantId/terms").then().statusCode(200)
     }
 
-    private fun accept(member: String, tenantId: String, version: Int) {
-        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body("""{"version":$version}""")
+    private fun accept(member: String, tenantId: String, revision: Int) {
+        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body("""{"revision":$revision}""")
             .`when`().post("/api/tenants/$tenantId/terms/accept")
-            .then().statusCode(200).body("acceptedVersion", equalTo(version))
+            .then().statusCode(200).body("acceptedRevision", equalTo(revision))
     }
 
-    /** Every stored acceptance of [userId] for [tenantId], version → server time. */
+    /** Every stored acceptance of [userId] for [tenantId], revision → server time. */
     private fun storedAcceptances(userId: String, tenantId: String): Map<Int, Instant> =
         QuarkusTransaction.requiringNew().call {
             TenantTermsAcceptanceEntity.list("userId = ?1 and tenantId = ?2", userId, tenantId)
-                .associate { it.acceptedVersion to it.acceptedAt }
+                .associate { it.acceptedRevision to it.acceptedAt }
         }
 
-    private fun setStoredAcceptedAt(userId: String, tenantId: String, version: Int, at: Instant) =
+    private fun setStoredAcceptedAt(userId: String, tenantId: String, revision: Int, at: Instant) =
         QuarkusTransaction.requiringNew().run {
             TenantTermsAcceptanceEntity
-                .find("userId = ?1 and tenantId = ?2 and acceptedVersion = ?3", userId, tenantId, version)
+                .find("userId = ?1 and tenantId = ?2 and acceptedRevision = ?3", userId, tenantId, revision)
                 .firstResult()!!.acceptedAt = at
         }
 
