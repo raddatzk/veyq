@@ -244,13 +244,22 @@ describe('PersonMemories', () => {
         memory({ id: 'c', name: 'Camping', scopeToken: '@grp', location: placed('Lake', 47.5, 9.7) }),
         memory({ id: 'n', name: 'No place' }),
         memory({ id: 'p', name: 'Pending place', location: pending }),
+        memory({ id: 'g', name: 'Granny', location: { name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' }, placeName: 'At grandma’s' }),
         memory({ id: 'b', name: 'Ben\'s trip', location: placed('Oslo', 59.9, 10.7), userIds: [BEN] }),
       ]))
       const { w } = await mountSection()
-      expect(pinNames(w).sort()).toEqual(['Camping', 'Rome'])
+      expect(pinNames(w).sort()).toEqual(['Camping', 'Rome']) // a place that is a name only (#458) has no pin
       const rome = (w.findComponent(SpaceMapStub).props('pins') as LocatedPin[]).find((p) => p.node.name === 'Rome')!
       expect(rome.location.derived).toEqual({ lat: 41.9, lng: 12.5 })
       expect(rome.date?.from).toBe('2025-05-01')
+    })
+
+    it('lists a place that is a name only (#458) in its row, though the map has no pin for it', async () => {
+      load.mockResolvedValue(indexOf([
+        memory({ id: 'g', name: 'Granny', location: { name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' }, placeName: 'At grandma’s' }),
+      ]))
+      const { w } = await mountSection()
+      expect(w.text()).toContain('At grandma’s')
     })
 
     it('a pin opens its Memory in its own scope, as its row does', async () => {

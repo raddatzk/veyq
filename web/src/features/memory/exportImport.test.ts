@@ -167,6 +167,27 @@ describe('exportMemoryContent', () => {
   })
 })
 
+describe('a place that is a name only (inbox #458)', () => {
+  it('exports without a coordinate, passes the download\'s contract and is sealed again on import', async () => {
+    const nameOnly = { name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' }
+    const c = (await exportMemoryContent(exportCtx({ location: nameOnly }).ctx))!
+    expect(c.location).toEqual({ ...nameOnly, derived: undefined, nameAnchor: undefined })
+    const wire = JSON.parse(JSON.stringify(c)) as ManifestNode['content'] & object // what the archive's manifest holds
+    expect(validateMemoryContent(wire)).toBeNull()
+
+    const nodeKey = v1.randomBytes(32)
+    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey })
+    vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3 } as unknown as TreeNode])
+    const n = { id: 'n4', kind: MEMORY_KIND, name: 'Granny', content: { ...wire, media: [], cover: undefined } } as unknown as ManifestNode
+    const made = await importMemoryContent(MEMORY_KIND)({
+      scopeId: SCOPE, epochs: {} as EpochKeys, parent: null, name: 'Granny', node: n, cache: new Map(), payload: vi.fn(),
+    } as unknown as ImportNodeContext)
+    const sealer = vi.mocked(createContentNode).mock.calls[0][5]!
+    const raw = unsealNodeMeta(made.nodeKey, { scopeId: SCOPE, nodeId: NEW }, sealer(made.nodeKey, { scopeId: SCOPE, nodeId: NEW, epoch: 1, placementRevision: 0 }))
+    expect(raw.location).toEqual({ name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' })
+  })
+})
+
 describe('importMemoryContent', () => {
   const file = (name: string, lastModified: number) => new File(['x'], name, { type: 'image/jpeg', lastModified })
   const node = (over: Record<string, unknown> = {}): ManifestNode => ({
