@@ -1,6 +1,6 @@
 # ADR 0097 — An instance looks for new releases by default and mails its Server Owner
 
-- Status: Proposed 2026-10-16 (owner's direction; the open questions below need answers before a CR)
+- Status: Accepted 2026-10-16; nothing of it is built
 - Date: 2026-10-16
 
 ## Context
@@ -57,6 +57,16 @@ an attached `.ics` event, so a mail client offers it as a reminder rather than h
 notice is mailed twice. Without instance mail, admin-web shows them and that is all. The mail carries no user data
 ([ADR 0049](0049-email-delivery-boundary.md)).
 
+**5. The address is confirmed by the first mail.** Saving the instance mail settings sends a test mail to the Server
+Owner's address with a confirmation link; notices are mailed only after it was followed. One mail proves both that
+the SMTP settings work and that setup's address — collected there, never confirmed — reaches its owner. A changed
+address or changed settings ask again.
+
+**6. The channel is built for instance notices, and carries release notices only.** Nothing in decisions 3–5 is
+specific to releases, so another kind of notice (a certificate about to expire, a failed backup) is one decision
+away — but each needs its own, because each is a new thing the instance watches. The first tenant owner's invite is
+not an instance notice and stays ADR 0048 §5's copy-link (inbox #465).
+
 ## Consequences
 
 - **The instance makes an outbound call by default.** It is the first one to a service the Server Owner did not
@@ -76,11 +86,3 @@ notice is mailed twice. Without instance mail, admin-web shows them and that is 
   major was unscheduled, and `veyqctl` reads the releases anyway.
 - **Rejected — reuse a tenant's SMTP for the Server Owner.** There may be no tenant, and it would send instance notices
   under a tenant's identity.
-
-### Open questions — answer before the CR
-
-1. **Should instance mail also carry the first tenant owner's invite**, the one copy-link ADR 0048 §5 keeps because
-   there was no server-level mailer? Possible now; not decided here.
-2. **Is the Server Owner's address confirmed before mail goes to it?** Setup collects it but does not confirm it.
-3. **What else counts as an instance notice** (a failed backup `veyqctl` reports, a certificate about to expire) — or
-   is this channel for releases only.
