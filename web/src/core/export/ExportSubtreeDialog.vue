@@ -18,7 +18,7 @@ import { SaveTooLarge, isSaveCancelled, openSaveTarget } from '../../shared/save
 import { useToast } from '../../shared/state/useToast'
 import { prepareExport, type PreparedExport } from './exportSubtree'
 import { archiveName } from './archiveName'
-import { ExportError } from './manifest'
+import { ExportError, MANIFEST_APP_VERSION } from './manifest'
 
 const props = defineProps<{ node: TreeNode; access: Access; tree: TreeSource<TreeNode>; displayName: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -44,7 +44,7 @@ onMounted(async () => {
       access: props.access,
       tree: props.tree,
       rootId: props.node.id,
-      appVersion: __APP_VERSION__,
+      appVersion: MANIFEST_APP_VERSION,
       signal: control.signal,
     })
     step.value = 'ready'
