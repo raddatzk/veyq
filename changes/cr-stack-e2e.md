@@ -212,8 +212,12 @@ trust-chain green. Each phase names its bites — the case that must make the ne
       24 suites green with every run-level sweep green** (10.5 min, load 25–35). The three groups that restore —
       `restore`, `legthree`, `upgrade` — are **red on `main` without this change**: `6cbf9065` seeds
       `veyq_external_service` in a migration, and `instance_backup.py restore` reads those three rows as a populated
-      target (A5). Measured with `HEAD`'s own `run_web_e2e.py` on the `legthree` group: the same refusal. Not this CR's;
-      a follow-up.
+      target (A5). Measured with `HEAD`'s own `run_web_e2e.py` on the `legthree` group: the same refusal. Not this CR's.
+      **Fixed on `main` by `004c9568`** (`veyq_external_service` joins `NOT_DATA`), merged into this branch the same day
+      with `main`'s Kubernetes Gateway changes: after a rebuilt fast-jar the three groups are **6 of 6 green, every
+      run-level sweep green** (4 min, load 12–28) — with the 21 above, all 27 suites; one L1 run on images rebuilt from
+      the merged tree (`e2e-p3b`, admin 23 s, app 3:46 min) **green in 65.6 s** (up 21.2, browser 27.7, sweep 1.9, load
+      23–29); the guard glob 57 of 57 green and `validate_guard_gaps.py --force` 79 cases holding.
       What it changed against the plan:
       - **The bucket is reached the way the browser reaches it** for the store sentinel (Traefik, `https://veyq.test/blobs/…`),
         not a published store port — the recipe publishes none.
