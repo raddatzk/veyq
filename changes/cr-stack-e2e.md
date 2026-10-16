@@ -166,12 +166,63 @@ trust-chain green. Each phase names its bites — the case that must make the ne
       first navigation**, `page.goto: net::ERR_CERT_AUTHORITY_INVALID at https://veyq.test/`, Traefik's log naming the
       ACME failure. The trace of a green run: `.e2e-stack-out/<stamp>/playwright/*/trace.zip`, one per test
       (`npx playwright show-trace`), and the HTML report under `report/`.
-- [ ] 3 **The Memory round trip, swept.** The sweeps move into `scripts/e2e_sweeps.py`, parameterised by compose
+- [x] 3 **The Memory round trip, swept.** The sweeps move into `scripts/e2e_sweeps.py`, parameterised by compose
       project, imported by both orchestrators; `run_web_e2e.py`'s own run is unchanged (its CI job's steps, run locally,
       green). `memory-roundtrip.spec.ts` with real web/ locators; every typed value through `recordTyped`; the run
       refuses a green with zero executed tests (junit.xml). Every scenario carries its criterion tag
       (`@uc.<feature>.<use-case>:<criterion-id>`, ADR 0091 decision 3). Bites: a canary written into a container log by
       hand → red naming canary and log; a selection that executes no test → red, not green.
+      **Done 2026-10-16**, against `veyq:e2e-p3` and `veyq-admin:e2e-p3` built from this tree (admin 26 s, app 4:55 min).
+      Green, log read, **48.0–53.4 s end to end** over three green runs under a load average of 17–30 — up 16.5–16.7,
+      **browser 26.0–29.2** (ten tests; the round trip's five 0.5–3.8 s each), **sweep 1.3–1.5**, teardown 1.5–1.9 s.
+      What was built:
+      - `scripts/e2e_sweeps.py`: every sensor `run_web_e2e.py` had, moved whole, and a `Stack` (the compose command that
+        addresses the project, the root credential, the store's service, internal endpoint, admin token and network, the
+        backend origins, the mailbox) as their first argument. `run_web_e2e.py` builds its `DEV` stack from its own
+        constants and keeps every old entry point as a wrapper with its old signature (the guards import them by path);
+        the boot-log naming rule (`BOOT_LOG`) stays there, handed to `sweep_logs` as a function. Three additions, each
+        defaulting to off, so the dev run is unchanged: `sweep(present=…)` and `sweep_statements(written=…)` — a
+        declared-plaintext value the run wrote (the owner's email) must be FOUND, the control a run without an HTTP
+        recording has in place of the token hash control and the `Connect` entries (the app's pool connects at `up`,
+        before the window) — and `sweep_containers(controls=…)`, a per-service control (L1: the app's log names its
+        database).
+      - `e2e/tests/scenarios/memory-roundtrip.spec.ts`, its own Playwright project after `setup`: accept on the tenant
+        domain with password and Secret Key (`activate-by-signin`), a Memory with the photo web/'s EXIF tests use
+        (`create-folder-and-memory`, `seal-and-upload-operator-blind`), a read-only link (`create-public-share`), a
+        second context signing in with the two secrets and decoding the thumbnail (`unlock-opens-master-key`,
+        `thumbnail-grid`), an anonymous context on the link with no Upload (`anonymous-resolve-decrypt`,
+        `guest-sees-the-member-view`). Locators from web/'s i18n catalog.
+      - `recordTyped` (`e2e/src/canaries.ts`), one `canaries-<spec>.json` per spec file; the setup records the password
+        too. The collision rule moved to `@veyq/crypto/canaryRule`, which web/'s `recordCanaries` re-exports and e2e/
+        imports — the one package both may import (ADR 0090 decision 4), so there is one rule and no copy. Nine canaries
+        per run: password, Secret Key, the owner's real name (two), the Memory's name, the photo's file name and two
+        strings of its EXIF/XMP text, the share's label.
+      - `run_stack_e2e.py`: a **window** stage before the browser (the statement log on, a sentinel at each end; the
+        store sentinel sent through Traefik on the public origin to `/blobs/…`), a **sweep** stage after it (database
+        with the email control, bucket, every container log of the project, statement log), refused when a spec file
+        that executed tests recorded no canary; the browser stage red on zero executed tests; arguments after `--` go to
+        `playwright test`.
+      Bites, each red once and restored by snapshot-and-restore: (1) `echo 'bite: <the Memory's name>' > /proc/1/fd/1`
+      in the mariadb container before the sweep → **red at sweep**, `container mariadb:73 [raw] 'Sommer am Ufer der Ahr
+      2678b4'` and the line; (2) `-- --grep @no-such-criterion --pass-with-no-tests` (no edit) → Playwright exited 0,
+      **red at browser**, "executed no test (0 in the JUnit report) — refusing a green that proves nothing"; (3) the
+      share's label inserted into a new table of the instance's database after the window closed → **red at sweep**,
+      `e2e_bite <- 'Für Oma und Opa 230850'`, the statement log 0 hits (outside its window, as designed).
+      `run_web_e2e.py`, its CI job's steps run locally (quarkusBuild, `npm ci` through the gate, both selftests): **21 of
+      24 suites green with every run-level sweep green** (10.5 min, load 25–35). The three groups that restore —
+      `restore`, `legthree`, `upgrade` — are **red on `main` without this change**: `6cbf9065` seeds
+      `veyq_external_service` in a migration, and `instance_backup.py restore` reads those three rows as a populated
+      target (A5). Measured with `HEAD`'s own `run_web_e2e.py` on the `legthree` group: the same refusal. Not this CR's.
+      **Fixed on `main` by `004c9568`** (`veyq_external_service` joins `NOT_DATA`), merged into this branch the same day
+      with `main`'s Kubernetes Gateway changes: after a rebuilt fast-jar the three groups are **6 of 6 green, every
+      run-level sweep green** (4 min, load 12–28) — with the 21 above, all 27 suites; one L1 run on images rebuilt from
+      the merged tree (`e2e-p3b`, admin 23 s, app 3:46 min) **green in 65.6 s** (up 21.2, browser 27.7, sweep 1.9, load
+      23–29); the guard glob 57 of 57 green and `validate_guard_gaps.py --force` 79 cases holding.
+      What it changed against the plan:
+      - **The bucket is reached the way the browser reaches it** for the store sentinel (Traefik, `https://veyq.test/blobs/…`),
+        not a published store port — the recipe publishes none.
+      - **No HTTP sweep and no capability tokens on the lane**: the browser records no traffic. The API suites keep
+        both; the concern's § Lane L1 says what the lane does not sweep.
 - [ ] 4 **L1 in the pipeline.** The lane job per architecture after the build (a pull request: amd64, built and tested
       in the same job, nothing pushed; a push: both architectures, `build-<sha>-<arch>` pulled by digest), and the
       snapshot publish needs it with `success`; the gate promoted to a guard — `validate_release_identity.py` asserts the

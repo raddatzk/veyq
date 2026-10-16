@@ -1,7 +1,7 @@
 ---
 id: cr-veyqctl
 title: veyqctl — install and upgrade a Compose instance from immutable releases; the recipe leaves the image
-status: planned
+status: in-progress
 satisfies: ["uc.admin.install-and-upgrade-instance"]
 adrs: ["0096", "0057", "0090", "0091", "0056", "0086"]
 invariants:
@@ -21,7 +21,7 @@ them; and the end of the recipe inside the image (ADR 0057 §3), which closes th
 (inbox #26). The stack lane of [ADR 0090](../docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md) then
 boots the candidate through `veyqctl install`, so the operator's path is the tested one.
 
-Implementation waits for the owner's go on this CR.
+The owner's go covers every phase, landing on `main` included (2026-10-16).
 
 ## Context & constraints
 
@@ -32,9 +32,11 @@ Implementation waits for the owner's go on this CR.
   reads it; the immutable-releases repository setting is the owner's, once the remote exists (inbox #26 item 1).
   Every other phase is proven by local runs: images built with `docker build`, assets produced into a directory,
   `veyqctl --source <dir>`.
-- **No pipeline CR exists** for ADR 0091 (`ls changes/` → no `cr-one-pipeline-*`); the publish is still the
-  dispatch-only `publish` job of `.github/workflows/container.yml` (`grep -n "name: Publish the release" .github/workflows/container.yml`).
-  Phase 5 wires the release into that job; ADR 0091's promotion inherits it when that CR is written.
+- **The publish is the dispatch-only `publish` job of `.github/workflows/ci.yml`** (`grep -n "^  publish:" .github/workflows/ci.yml`):
+  cr-one-pipeline-per-commit (in progress) folded `container.yml` into `ci.yml` (its phase 2, landed); that CR's
+  open phases touch budgets, guard gaps in CI and a local runner, and it leaves the release as a promotion (inbox
+  #460) to a later CR. Phase 5 wires the release into the `publish` job; that promotion inherits it when it is
+  written.
 - **`cr-stack-e2e` is live and writes `scripts/run_stack_e2e.py` too** (its phases 2–5; a session is on phase 2 at
   refine time). Two CRs, one file: this CR owns the recipe-and-`.env` half (`extract()`, `write_env()`), cr-stack-e2e
   everything after `up`. Phase 4 here re-reads that file on `main` before editing, and its hand-off names the change
@@ -73,14 +75,14 @@ Implementation waits for the owner's go on this CR.
 | The in-image recipe and everything that reads it | `git grep -n -e "opt/veyq/deploy" -e "docker cp veyq-recipe" -e "RECIPE" -- ':!docs/decisions/0096*' ':!changes/'` |
 | Files the production compose file reads beside itself (the recipe set the producer must carry) | `grep -n '\./' infra/docker-compose.prod.yml` and `docker compose -f infra/docker-compose.prod.yml config --no-interpolate --format json` (bind sources) — two angles, compare |
 | Guards reading the recipe files | `grep -l -e "env.example" -e "docker-compose.prod.yml" scripts/validate_*.py` |
-| The publish job's steps (refuse, sign, chart, tag) | `grep -n -e "- name:" .github/workflows/container.yml \| sed -n '/Publish the release/,$p'` |
+| The publish job's steps (refuse, sign, chart, tag) | `sed -n '/^  publish:/,$p' .github/workflows/ci.yml \| grep -n -e "- name:"` (the job is the file's last) |
 | Run pages with Compose procedures | `git grep -c -e "docker compose" -e "instance_backup" -e "infra/" -- site/src/content/docs/run` |
 | `.env` keys and the reference page | `python3 scripts/validate_run_config_reference.py` (names the page lines it reads) |
 | `run_stack_e2e.py`'s recipe half | `grep -n -e "^def extract" -e "^def write_env" -e "^def copy_out" -e "RECIPE" scripts/run_stack_e2e.py` |
 
 ## Phases
 
-- [ ] **1 The release, as files: the producer and its guard.** `scripts/release_assets.py <out> --app <ref> --admin <ref> [--unscheduled]`
+- [x] **1 The release, as files: the producer and its guard.** `scripts/release_assets.py <out> --app <ref> --admin <ref> [--unscheduled]`
   writes one release in the mirror layout: the recipe set, `veyqctl`, `instance_backup.py`, and `manifest.json`
   (release, date, both images, `unscheduled`). The **recipe set is derived**, never listed: `.env.example` plus the
   production compose file plus every file it reads relative to itself — enumerate the spellings
@@ -106,7 +108,8 @@ Implementation waits for the owner's go on this CR.
   asked or given with `--set KEY=VALUE`, mode 0600), the override file, `--unsigned-local`.
   `scripts/veyqctl_selftest.py` — no Docker: the resolver against a mirror directory it writes, the template merge,
   the refusals (`--unsigned-local` with a registry ref; a prerelease; `../` in an asset name), and the manifest parse.
-  Added to `ci.yml` beside the backup self-test.
+  Added to `ci.yml` beside the backup self-test. `release_assets.py`'s `TOOLS` gains `veyqctl` (phase 1 carries
+  `instance_backup.py` alone: `veyqctl` did not exist yet).
   - **Live:** build both images locally; `release_assets.py` into `<tmp>/src`; with the stack lane's Pebble overlay
     copied to `<tmp>/home/compose.override.yml`, `veyqctl --home <tmp>/home --source <tmp>/src install --unsigned-local`;
     `veyqctl status` lists every service healthy; `stop`, `start`, healthy again; tear down by project name.
@@ -141,7 +144,8 @@ Implementation waits for the owner's go on this CR.
     green; the hand-off to cr-stack-e2e written; committed.
 
 - [ ] **5 The publish creates the release.** In the `publish` job, release kind only, after the images and the chart
-  are signed and the `v<major>.<minor>` ref exists: `release_assets.py` with the digests the job already resolved,
+  are signed and the `v<major>.<minor>` ref exists: `release_assets.py` with the digests the job already resolved (it imports PyYAML, which the job installs as `guards`
+  does),
   `cosign sign-blob` for `veyqctl` (the bundle is an asset), and `gh release create "v${VERSION}" --verify-tag` with
   every asset in the one call (an immutable release takes no asset after it is published), not a draft, not a
   prerelease. A workflow input `unscheduled_major` (boolean, default false) reaches the producer, refused unless the
@@ -177,3 +181,19 @@ of phase 6. **Baseline** — run on a detached worktree of `HEAD` before the fir
 switch on immutable releases before the first release (ADR 0096 Consequences).
 
 ## Retrospective
+
+**Phase 1.** Decided in the build, where the CR was silent — each is in `release_assets.py`'s docstring:
+- *A recipe path with a directory in it is refused*, beside `../`: a GitHub Release asset is a flat name, so the
+  mirror layout's `<tag>/<asset>` cannot carry `./conf/x.yml` under the name the compose file reads.
+- *The producer counts the release number itself*, as `ci.yml`'s version step does (the CR's signature has no
+  `--release`), and `validate_release_identity.py` assertion 2 holds the two counts to each other on its throwaway
+  history (bitten: one commit more → red, the shallow refusal dropped → red).
+- *An image reference is a digest or a local build's bare `name:tag`*; a release already in `<out>` is refused;
+  `--unscheduled` is refused when an earlier `v<major>.*` is a git tag or listed in `<out>/releases.json`.
+- *`releases.json` is `{"releases": [{tag, date, prerelease, manifest: "<tag>/manifest.json"}]}`*, `date` the UTC day
+  of production, `prerelease` always false (nothing produces a prerelease yet). Phase 2's resolver reads exactly this.
+
+The spelling bites (long-form bind, `env_file`) can only be red while the file they name is absent: the guard and
+the producer share one derivation, so with the file present it is carried and green. Each was run both ways — red
+on the derivation's message naming the spelling and its location, green with the file present and the OK line
+listing it (the positive control). The guard's docstring states the shared derivation as its limit.

@@ -89,9 +89,9 @@ Four documented gaps sit **outside** that guard, on purpose:
   ([ADR 0057](../../../docs/decisions/0057-release-identity-and-deployment-recipe.md)).
   `validate_release_identity.py` goes further than the rest of the glob — it *executes* `ci.yml`'s
   version step offline and asserts what a publish would stamp — and still stops at two places no file-forging
-  meta-guard can reach. It cannot inspect a **built image**, because the chain is buildless, so it proves the
-  `Dockerfile` *declares* the deployment-recipe copy and never that the file is in the image (that is proven
-  by building it and reading the file back out). And it cannot prove a **publish ran**: this repository has no
+  meta-guard can reach. It holds the release producer (`release_assets.py`) to **its own derivation** of the
+  files the recipe reads, so a way of reading a file that derivation does not know is missed by both — the
+  spellings it knows are listed in the guard's docstring. And it cannot prove a **publish ran**: this repository has no
   remote and no workflow has ever executed, so the refusal-to-republish and the `v<major>.<minor>` ref stay
   statements about a file — an explicitly stated ADR 0040 gap, in the same shape as the coverage flip that ADR
   still leaves owed.
