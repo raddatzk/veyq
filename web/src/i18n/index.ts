@@ -724,7 +724,7 @@ const en = {
   terms: {
     navTitle: 'Terms',
     editorSub: 'The terms members of this space agree to. Set them per language; a change asks everyone to agree again.',
-    version: 'Version {version}',
+    revision: 'Revision {revision}',
     loading: 'Loading terms…',
     loadFailed: 'Couldn’t load the terms.',
     readonlyNote: 'Only the space owner can edit these terms.',
@@ -738,7 +738,7 @@ const en = {
     preview: 'Preview',
     noneSet: 'No terms have been set yet.',
     save: 'Save terms',
-    saved: 'Saved — now version {version}.',
+    saved: 'Saved — now revision {revision}.',
     saveFailed: 'Couldn’t save the terms.',
     notOwner: 'Only the space owner can edit the terms.',
     gateTitle: 'Please review the terms',
@@ -746,7 +746,7 @@ const en = {
     accept: 'I agree',
     accepted: 'Thanks — you’re all set.',
     acceptFailed: 'Couldn’t record your agreement. Please try again.',
-    versionChanged: 'The terms just changed — please review the updated version and agree again.',
+    revisionChanged: 'The terms just changed — please review the updated revision and agree again.',
     signOut: 'Sign out',
   },
   mail: {
@@ -2493,7 +2493,7 @@ const de: typeof en = {
   terms: {
     navTitle: 'Nutzungsbedingungen',
     editorSub: 'Die Bedingungen, denen Mitglieder dieses Bereichs zustimmen. Lege sie je Sprache fest; bei einer Änderung wird erneut um Zustimmung gebeten.',
-    version: 'Version {version}',
+    revision: 'Fassung {revision}',
     loading: 'Bedingungen werden geladen…',
     loadFailed: 'Bedingungen konnten nicht geladen werden.',
     readonlyNote: 'Nur die Besitzperson des Bereichs kann diese Bedingungen bearbeiten.',
@@ -2507,7 +2507,7 @@ const de: typeof en = {
     preview: 'Vorschau',
     noneSet: 'Es wurden noch keine Bedingungen festgelegt.',
     save: 'Bedingungen speichern',
-    saved: 'Gespeichert — jetzt Version {version}.',
+    saved: 'Gespeichert — jetzt Fassung {revision}.',
     saveFailed: 'Bedingungen konnten nicht gespeichert werden.',
     notOwner: 'Nur die Besitzperson des Bereichs kann die Bedingungen bearbeiten.',
     gateTitle: 'Bitte sieh dir die Bedingungen an',
@@ -2515,7 +2515,7 @@ const de: typeof en = {
     accept: 'Ich stimme zu',
     accepted: 'Danke — alles erledigt.',
     acceptFailed: 'Deine Zustimmung konnte nicht gespeichert werden. Bitte versuch es erneut.',
-    versionChanged: 'Die Bedingungen haben sich gerade geändert — bitte sieh dir die aktualisierte Fassung an und stimme erneut zu.',
+    revisionChanged: 'Die Bedingungen haben sich gerade geändert — bitte sieh dir die aktualisierte Fassung an und stimme erneut zu.',
     signOut: 'Abmelden',
   },
   mail: {

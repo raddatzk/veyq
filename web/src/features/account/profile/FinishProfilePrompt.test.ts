@@ -51,7 +51,7 @@ describe('FinishProfilePrompt', () => {
     expect(prompt(await mountPrompt()).exists()).toBe(false)
 
     account.userId = `user-${++user}`
-    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ avatarVersion: 2 }))
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ avatarRevision: 2 }))
     expect(prompt(await mountPrompt()).exists()).toBe(false)
 
     account.userId = `user-${++user}`

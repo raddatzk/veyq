@@ -42,7 +42,7 @@ beforeEach(() => {
 describe('useNameAndPicture', () => {
   it('loads the name from the sealed profile and knows whether the server holds a picture', async () => {
     const m = model()
-    await m.load(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'Anna', lastName: 'Meyer' }), avatarVersion: 4 }))
+    await m.load(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'Anna', lastName: 'Meyer' }), avatarRevision: 4 }))
     expect([m.firstName, m.lastName, m.hasKey, m.hasPicture, m.meId]).toEqual(['Anna', 'Meyer', true, true, ADDRESS.userId])
   })
 
@@ -64,7 +64,7 @@ describe('useNameAndPicture', () => {
 
   it('a removed picture is DELETEd, not PUT; the draft draws the letter meanwhile', async () => {
     const m = model()
-    await m.load(memberProfile({ avatarVersion: 2 }))
+    await m.load(memberProfile({ avatarRevision: 2 }))
     vi.mocked(avatarUrlOf).mockReturnValue('blob:held')
     expect(m.pictureUrl).toBe('blob:held')
     m.remove()
@@ -77,7 +77,7 @@ describe('useNameAndPicture', () => {
 
   it('an untouched picture sends nothing at all', async () => {
     const m = model()
-    await m.load(memberProfile({ avatarVersion: 2 }))
+    await m.load(memberProfile({ avatarRevision: 2 }))
     await m.savePicture()
     expect(setMyAvatar).not.toHaveBeenCalled()
     expect(clearMyAvatar).not.toHaveBeenCalled()

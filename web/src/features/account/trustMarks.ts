@@ -1,6 +1,6 @@
 // This device's trust-state marks (ADR 0028 Decision 7, ADR 0024 Decision 6's floor): the highest pin-store
-// version, device-register version and per-scope epoch it has held, so a server cannot hand it an older copy of
-// state it keeps on the account's behalf. The server decides which copy a device reads; binding the version into
+// revision, device-register revision and per-scope epoch it has held, so a server cannot hand it an older copy of
+// state it keeps on the account's behalf. The server decides which copy a device reads; binding the revision into
 // the seal (ADR 0072) makes it authentic, and only a local memory of what was already held makes it fresh.
 //
 // **Local, never synced.** A synced mark would be one more thing the server can roll back. The one way a mark
@@ -23,7 +23,7 @@
 // server and never locks anything. The refusals are the other half: they are decided here, and never degrade.
 //
 // **Marks only rise, with one exception, and it is a person's.** A refused document's way back is the reset the
-// user confirms (ADR 0028 Decision 7): it writes the empty document and SETS the mark to the version it wrote
+// user confirms (ADR 0028 Decision 7): it writes the empty document and SETS the mark to the revision it wrote
 // ({@link setMark}). No other path lowers a mark, and no server response reaches that one.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
@@ -34,7 +34,7 @@ const DB = 'veyq-trust-marks'
 const STORE = 'marks'
 const SLOT_INFO = v1.utf8('veyq/v1/trust-marks-slot')
 
-/** The two sealed account documents a mark versions. */
+/** The two sealed account documents a mark tracks. */
 export type AccountDocument = 'pins' | 'register'
 
 /** Everything this device remembers for one account. `epochs` is keyed by scope id. */
@@ -45,7 +45,7 @@ export type MarksRaise = { pins?: number; register?: number; epochs?: Record<str
 
 /**
  * Why a sealed account document was refused (ADR 0028 Decision 7):
- *   - `trust_state_rolled_back`: served below the version this device has held — or missing after it held one;
+ *   - `trust_state_rolled_back`: served below the revision this device has held — or missing after it held one;
  *   - `trust_state_unreadable`: it does not open. Never read as the empty store: an empty store is exactly what
  *     turns a detected key change back into a silent first use.
  */
@@ -127,23 +127,23 @@ export async function raiseMarks(mk: Uint8Array, raise: MarksRaise): Promise<voi
 }
 
 /**
- * Set one document's mark to exactly `version` — the only operation here that can LOWER a mark.
+ * Set one document's mark to exactly `revision` — the only operation here that can LOWER a mark.
  *
  * It exists for one caller: the user-confirmed reset (`trustReset/trustReset.ts`, ADR 0028 Decision 7's way back),
- * which writes the empty document at `served + 1` and must then accept that copy even where the served version
+ * which writes the empty document at `served + 1` and must then accept that copy even where the served revision
  * sat below the mark (a rolled-back store) — a reset that merely raised would refuse its own write. Lowering is
  * sound only there: the mark protects this device from a SERVED older copy, and the copy it accepts is the one it
  * just wrote itself. `eslint.config.js` (`veyq/trust-reset-one-door`) refuses this import everywhere else.
  * Best-effort like {@link raiseMarks}; the read and the write share one transaction.
  */
-export async function setMark(mk: Uint8Array, document: AccountDocument, version: number): Promise<void> {
-  if (!hasStore() || !isMark(version)) return
+export async function setMark(mk: Uint8Array, document: AccountDocument, revision: number): Promise<void> {
+  if (!hasStore() || !isMark(revision)) return
   const slot = slotOf(mk)
   try {
     await idbRun(DB, STORE, 'readwrite', (s) => {
       const req = s.get(slot)
       req.addEventListener('success', () => {
-        s.put({ ...normalize(req.result), [document]: version }, slot)
+        s.put({ ...normalize(req.result), [document]: revision }, slot)
       })
       return req
     })
@@ -160,11 +160,11 @@ export async function carryMarks(fromMk: Uint8Array, toMk: Uint8Array): Promise<
 
 /**
  * The one read rule for a sealed account document (ADR 0028 Decision 7), before a read AND before every write,
- * since a write re-seals what it read. Refuses a served version below the mark, a missing store once a mark
- * exists, and a blob that does not `open`; on a successful open the mark rises to the served version. On a device
+ * since a write re-seals what it read. Refuses a served revision below the mark, a missing store once a mark
+ * exists, and a blob that does not `open`; on a successful open the mark rises to the served revision. On a device
  * with no mark a missing store is the empty store, and legitimate — the named no-mark case.
  *
- * A stored blob always sits at version ≥ 1 (the server bumps the version it accepts), so `mark > 0` is exactly
+ * A stored blob always sits at revision ≥ 1 (the server bumps the revision it accepts), so `mark > 0` is exactly
  * "this device has held a store".
  */
 export async function openAccountDocument<T>(
@@ -175,7 +175,7 @@ export async function openAccountDocument<T>(
   empty: () => T,
 ): Promise<T> {
   const mark = (await readMarks(mk))[document]
-  if (served.version < mark || (served.blob === null && mark > 0)) {
+  if (served.revision < mark || (served.blob === null && mark > 0)) {
     throw new TrustStateRefused('trust_state_rolled_back', document)
   }
   if (served.blob === null) return empty()
@@ -185,12 +185,12 @@ export async function openAccountDocument<T>(
   } catch {
     throw new TrustStateRefused('trust_state_unreadable', document)
   }
-  await raiseMarks(mk, { [document]: served.version })
+  await raiseMarks(mk, { [document]: served.revision })
   return value
 }
 
-/** A served copy of a sealed account document: the opaque blob (null when never written) and its version. */
-export type ServedDocument = { blob: string | null; version: number }
+/** A served copy of a sealed account document: the opaque blob (null when never written) and its revision. */
+export type ServedDocument = { blob: string | null; revision: number }
 
 /**
  * One sealed account document as the two operations that act on it WHOLE need it — the rotation's re-seal under
@@ -204,11 +204,11 @@ export interface AccountDocumentStore<T> {
   readonly document: AccountDocument
   fetch(): Promise<ServedDocument>
   open(mk: Uint8Array, served: ServedDocument): Promise<T>
-  /** Seal `value` under `mk` for the version it will be STORED at — the write's `version + 1`. */
-  seal(mk: Uint8Array, value: T, storedVersion: number): string
+  /** Seal `value` under `mk` for the revision it will be STORED at — the write's `revision + 1`. */
+  seal(mk: Uint8Array, value: T, storedRevision: number): string
   empty(): T
-  /** The document's own version-guarded PUT; `409 stale_version` when `version` is no longer the stored one. */
-  write(update: { blob: string; version: number }): Promise<void>
+  /** The document's own revision-guarded PUT; `409 stale_revision` when `revision` is no longer the stored one. */
+  write(update: { blob: string; revision: number }): Promise<void>
 }
 
 /** The vault's Master Key, used for one call and zeroed. Null when locked: then there is no account to key by. */

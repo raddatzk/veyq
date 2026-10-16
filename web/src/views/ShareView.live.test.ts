@@ -112,7 +112,7 @@ beforeEach(() => {
   vi.mocked(pollPublicShare).mockReset().mockImplementation(async (_id, _key, _pw, ifNoneMatch) =>
     ifNoneMatch === servedTag ? null : { head: served, etag: servedTag },
   )
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
 })
 afterEach(() => {
   vi.useRealTimers()

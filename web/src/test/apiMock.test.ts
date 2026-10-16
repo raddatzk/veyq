@@ -36,7 +36,7 @@ describe('stubApi', () => {
 
 describe('fakeApi', () => {
   it('runs each implementation, and keeps a typed vi.fn the test already holds', async () => {
-    const terms = vi.fn<SharingApi['getShareTerms']>().mockResolvedValue({ tenantId: 't', termsVersion: 1 })
+    const terms = vi.fn<SharingApi['getShareTerms']>().mockResolvedValue({ tenantId: 't', termsRevision: 1 })
     const api = fakeApi(publicSharesApi, {
       resolveShare: async ({ shareId }) => ({ ...SHARE, nodeId: shareId }),
       getShareTerms: terms,

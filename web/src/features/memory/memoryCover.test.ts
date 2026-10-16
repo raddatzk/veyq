@@ -217,11 +217,11 @@ describe('setMemoryCover', () => {
     expect(blob.location).toEqual(location)
   })
   const staleWith = (wrappedMeta: string, metaRevision: number) => ({
-    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaRevision }), { status: 409 }),
+    response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta, metaRevision }), { status: 409 }),
   })
 
   /** W5 (ADR 0077): a cover save from a stale tree meets a 409 whose blob holds a peer's place — the retry keeps it. */
-  it('W5: on 409 stale_version re-applies only the cover on the current blob — a peer\'s place survives', async () => {
+  it('W5: on 409 stale_revision re-applies only the cover on the current blob — a peer\'s place survives', async () => {
     const location = { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed' }
     const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(staleWith(sealMeta({ v: 1, location }), 2)).mockResolvedValueOnce(undefined)
     fakeApi(contentApi, { updateNode })
