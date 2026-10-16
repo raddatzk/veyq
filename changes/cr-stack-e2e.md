@@ -281,13 +281,48 @@ trust-chain green. Each phase names its bites — the case that must make the ne
       - The tag guard holds two more things than the plan named: every test carries a tag (bitten: the first test's
         `tag` removed → red, "carries no tag"), and every use-case a tag names says something on `stack` (its first run
         on the untouched tree, above).
-- [ ] 5 **Capability off states — inbox #447's hand pass, automated.** `capability-off-states.spec.ts` for the four ids,
+- [x] 5 **Capability off states — inbox #447's hand pass, automated.** `capability-off-states.spec.ts` for the four ids,
       through admin-web's Server → Capabilities and back, asserting what #447's row recorded: the affordances gone
       ("New drop box" and its tab, "Sign in with a QR code", "Add a device", "Stay signed in"), a trusted and a
       remembered device asking for password + Secret Key with the `unlock.deviceHeldBack` hint once the email is
       entered (the lookup is keyed on it, inbox #450), no DELETE/POST on `/api/account/wraps`, everything restored when
       switched on. Its coverage ref lands in `uc.admin.switch-capabilities.yaml` under `stack.e2e`; the
       `off-state-in-a-browser` gap's "does not run in CI (inbox #448)" then names this spec, until `stack` is admitted.
+      **Done 2026-10-16**, against `veyq:e2e-p45` and `veyq-admin:e2e-p45` built from this branch (admin and app from a
+      warm cache; nothing under `web/`, `admin-web/` or `backend/` changed after). `e2e/tests/features/
+      capability-off-states.spec.ts`, five tests in a `features` project after `scenarios` (it needs the tenant owner the
+      round trip activates): a baseline with every entry on — the control for every absence after it: "New drop box" in
+      the New menu and the "Drop boxes" tab, "Sign in with a QR code" and "Stay signed in" on a new device's sign-in
+      screen, "Add a device" in Settings, a trusted device (signed in without "Stay signed in", its POST to
+      `/api/account/wraps` seen — the wrap sensor's control) asking for the password alone and a remembered one (with it)
+      opening without a prompt; then each entry off and on again in admin-web, the confirmation showing the catalog's
+      `whenOff` word for word and `GET /api/setup` read from the page: drop boxes, adding a device from another one (its
+      address leads back to Settings), unlocking without a password (the remembered device asks for both secrets with the
+      held-back hint, its email filled in before anything is typed, and unlocks with them; the trusted one still asks for
+      the password alone), remembered devices (both devices so, the child "Off through “Remembered devices”"); no POST or
+      DELETE to `/api/account/wraps` from either device while a device switch is off; switched on, the remembered device
+      opens without a prompt and the trusted one unlocks with the password alone, through the wraps the server only held
+      back. `npm run check` in `e2e/` green (15 tests listed). Two green lane runs, logs read: **91.3 s and 73.6 s** end to
+      end, browser 52.3/51.4 s (setup 8.7/9.6, scenarios 9.7/9.1, **features 23.0/22.7**), sweep green on all four
+      sensors over nine canaries from three spec files, eight `PUT /api/instance/capabilities` lines in `compose.log`,
+      nothing there at error level but Garage's provisioning answers, the host's containers and volumes unchanged, the dev stack untouched (load 4–6).
+      Coverage: `switch-capabilities` names the spec in a use-case `stack` gap (three criteria: `off-state-in-a-browser`,
+      `switch-without-restart`, `device-switch-acts-at-once`), and the two web gaps that said "does not run in CI (inbox
+      #448)" now name it.
+      Bites, by snapshot-and-restore of the spec, each one lane run, red at the expectation named: (1) the drop-box
+      switch-off left out → red at `advertised(page)` not containing `core.public-shares.drop-box`; (1b) the switch-off
+      and the manifest check left out → red at `getByRole('menuitem', { name: 'New drop box' })`, expected 0, received 1;
+      (2) the remembered-devices switch-off, the child's badge and the new device's screen checks left out → red at
+      `#unlock-secret-key` not visible on the trusted device. Each restore byte-identical.
+      What it changed against the plan:
+      - **The ref does not land under `stack.e2e`**: `stack` is unadmitted, so `validate_coverage.py` rejects any ref
+        there; the spec waits under the use-case's `stack` gap, as phase 4 put the others.
+      - **Tags are literals**: the tag guard reads them without running the suite, so the first draft's `tag: [OFF_STATE,
+        …]` constants were red there ("carries no tag") — the guard's stated limit, met on its first new spec.
+      - **The trusted device is not signed in while unlocking without a password is off**: it is not that switch's, and a
+        sign-in there re-trusts — `trustThisDevice` replaces its wrap by design (DELETE + POST) — so it would put a
+        legitimate write into the window that must have none. Its sign-in screen is read instead.
+      - **A browser restart is not covered**, as in #447: a new context is a new device to this suite.
 
 ## Definition of done
 

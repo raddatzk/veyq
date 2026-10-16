@@ -62,8 +62,9 @@ acceptanceCriteria:
           kept their local records and stayed listed in Devices and sessions; switched back on, the trusted device
           unlocked with the password alone through the same DEVICE wrap and the remembered one opened without a
           prompt in a new tab. Not covered: a real browser restart after a sign-in made while the switch was off (the
-          browser pane cannot restart its browser; the restart is the test's cookie jar), and none of it runs in CI
-          (inbox #448).
+          browser pane cannot restart its browser; the restart is the test's cookie jar). Lane L1 now runs that pass
+          in Chromium against the candidate image (`e2e/tests/features/capability-off-states.spec.ts`, the use-case's
+          `stack` gap below), green locally; it waits there until a CI run admits `stack`.
   - id: share-switch-acts-at-once
     text: While core.public-shares, .contribute or .drop-box is effectively off, every guest endpoint in core, Memories and Depot answers an existing link of the role it reaches exactly as an unknown link (the same 404 and body, before the password is asked), the links of the roles it does not reach stay served, and switching back on serves every link again because nothing was written onto it; changing a READ link into a READ_WRITE one while .contribute is off is refused with 422 capability_disabled.
     coverage:
@@ -108,8 +109,10 @@ acceptanceCriteria:
           in"; a trusted and a remembered device each asked for the password and the Secret Key with the
           `unlock.deviceHeldBack` hint once the email was entered (before that, the first-sign-in hint: the lookup
           was keyed on an email field that started empty; since inbox #450 the field is filled in from the device's
-          record, which `LoginView.test.ts` pins and no browser has re-run); a child switched on under a parent
-          still off showed "off through" it. Switched on again, every affordance returned. It does not run in CI (inbox #448).
+          record, which `LoginView.test.ts` pins); a child switched on under a parent still off showed "off through"
+          it. Switched on again, every affordance returned. That pass is now lane L1's
+          `e2e/tests/features/capability-off-states.spec.ts` (the email prefilled and the hint shown before anything
+          is typed included); it waits under the use-case's `stack` gap until a CI run admits `stack`.
 gaps:
   admin-web: >-
     The console's Server → Capabilities panel and `veyq-admin capabilities list | off <id> | on <id>` live in
@@ -120,3 +123,17 @@ gaps:
     0040 admits none of them. They are mocked-client tests that pin the call and the rendering, never the server's
     answer. On the first run of that job they flip to refs on register-listed, switch-without-restart and
     unknown-id-refused.
+  stack: >-
+    Lane L1's browser suite (`e2e/tests/features/capability-off-states.spec.ts`) drives `off-state-in-a-browser`,
+    `switch-without-restart` and `device-switch-acts-at-once` in Chromium against the release candidate's two images,
+    installed through `veyqctl` (ADR 0090): the Server Owner switches drop boxes, adding a device from another one,
+    unlocking without a password and remembered devices off one at a time in admin-web's Server → Capabilities, each
+    confirmation showing the served `whenOff`; the web client then offers no "New drop box" and no drop-box tab, no
+    "Sign in with a QR code", no "Add a device" (its address leads back to Settings) and no "Stay signed in"; a
+    trusted and a remembered device ask for the password and the Secret Key with the held-back hint, the email filled
+    in, and unlock with them, sending no POST or DELETE to `/api/account/wraps` while the switch is off; the child is
+    "off through" its parent; switched back on, every affordance returns, the remembered device opens without a
+    prompt and the trusted one unlocks with the password alone. Green only in local runs of `scripts/run_stack_e2e.py`:
+    the lane's CI job (`ci.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only
+    once a run's log shows the suite executed. On that run the file becomes a ref on those three criteria, and this
+    gap goes. Not covered there: a browser restart (a new context would be a new device to this suite).
