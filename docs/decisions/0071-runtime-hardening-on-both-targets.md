@@ -27,8 +27,10 @@ Forces:
     default. But it **skips its ACME resolver silently**
     (`unable to get ACME account: open /acme/acme.json: permission denied`). The container stays up and no
     certificate is ever issued.
-- **The ingress controller is the operator's.** Its namespace and labels are unknowable to the chart
-  (ADR 0064), and cert-manager's HTTP-01 solver pods run in the release namespace.
+- **The gateway implementation is the operator's.** The namespace and labels of its data-plane pods are
+  unknowable to the chart (ADR 0064) — some implementations run one shared data plane in their own namespace,
+  others a proxy per `Gateway` in the `Gateway`'s namespace — and cert-manager's HTTP-01 solver pods run in the
+  release namespace.
 
 ## Decision
 
@@ -56,29 +58,30 @@ Forces:
    - **Compose: separate networks.** The proxy shares one with the app and the store; the database shares one
      with the app alone; the admin container shares one with the app and the proxy, which routes to it when
      `ADMIN_DOMAIN` is set. The internet-facing process cannot open a connection to the database.
-   - **Helm: a NetworkPolicy set.** Ingress is denied to every pod the chart deploys, then allowed:
-     - the app's public port from the ingress controller alone, and its admin listener from the admin pod
+   - **Helm: a NetworkPolicy set.** Inbound traffic is denied to every pod the chart deploys, then allowed:
+     - the app's public port from the gateway's data plane alone, and its admin listener from the admin pod
        alone ([ADR 0065](0065-admin-ui-cli-separate-service.md) § admin channel, which introduced that
        second rule);
-     - the store's S3 port from the ingress controller and the app;
+     - the store's S3 port from the gateway's data plane and the app;
      - its admin port from the app alone;
      - the database from the app alone;
-     - the admin pod from the ingress controller, only when `admin.domain` is set;
-     - cert-manager's solver pods from the ingress controller. Without that rule a default-deny fails every
+     - the admin pod from the gateway's data plane, only when `admin.domain` is set;
+     - cert-manager's solver pods from the gateway's data plane. Without that rule a default-deny fails every
        ACME challenge.
 
      Egress is narrowed where it is knowable: the database and the store get only what they use, and the
      admin pod reaches only the app's admin listener. The app's egress stays open, because it sends SMTP to hosts the operator
      chooses and talks to an API server whose address is cluster-specific.
-   - **The operator names the ingress controller.** `networkPolicy.enabled` defaults to `true`, and while it
-     is, the schema requires `networkPolicy.ingressFrom` (a list of NetworkPolicy peers). An install without
+   - **The operator names the gateway's data plane.** `networkPolicy.enabled` defaults to `true`, and while it
+     is, the schema requires `networkPolicy.ingressFrom` (a list of NetworkPolicy peers; "ingress" there is the
+     NetworkPolicy direction, not the Kubernetes kind). An install without
      it fails and says why; the chart never guesses a namespace. An operator whose CNI does not enforce
      policy, or who writes their own, sets `enabled: false` explicitly.
 4. **`quarkus.http.proxy.trusted-proxies` is an optional chart value with no default, and compose does not
-   set it.** A default would have to name the controller's address. On a typical cluster that is an ephemeral
+   set it.** A default would have to name the gateway data plane's address. On a typical cluster that is an ephemeral
    pod IP inside the same CIDR as every other pod, so any range wide enough to survive a restart trusts every
    pod, which is the finding again. The selector-based policy is what confines who can send a forwarded header.
-   The value is for topologies with a stable proxy address: a host-network controller or an external load
+   The value is for topologies with a stable proxy address: a host-network data plane or an external load
    balancer. On compose, decision 3 leaves the app's public port reachable only from its network peers. Of
    those, the proxy is the one that forwards a client's address. The admin container talks to the admin
    listener, not to the public port.
@@ -118,8 +121,8 @@ Forces:
 
 - [ADR 0063](0063-database-driven-tenant-ingress.md) (the file-provider-only proxy this builds on).
 - [ADR 0064](0064-kubernetes-helm-deployment-target.md) (the `restricted` posture the chart already holds).
-- [Kubernetes](../../site/src/content/docs/run/kubernetes.md) (the docs site's Run area: naming the ingress
-  controller, and what a CNI without NetworkPolicy enforcement leaves open).
+- [Kubernetes](../../site/src/content/docs/run/kubernetes.md) (the docs site's Run area: naming the gateway's
+  data plane, and what a CNI without NetworkPolicy enforcement leaves open).
 - [ADR 0065](0065-admin-ui-cli-separate-service.md) (the admin container, a second proxy in front of the app).
 - [cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md) (the forwarded-address trust this narrows).
 - Run area of the docs site: [Hardening](../../site/src/content/docs/run/hardening.md)

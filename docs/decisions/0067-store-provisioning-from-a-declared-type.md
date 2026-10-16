@@ -131,7 +131,7 @@ Forces:
    for the compose same-origin path route ([ADR 0063](0063-database-driven-tenant-ingress.md)) and wrong for
    any store reached at an origin of its own. Two things need the same mode and neither is a special case of
    the other: [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s Kubernetes branch, where Garage gets its
-   own Ingress host, and a SaaS tenant on their own `s3.amazonaws.com` bucket. It is therefore one mechanism
+   own host on the chart's `Gateway`, and a SaaS tenant on their own `s3.amazonaws.com` bucket. It is therefore one mechanism
    with two callers, decided here rather than inside either of them.
 
 **Not decided here: whether a store connection may belong to a tenant, and on what terms.** V1 is self-hosted

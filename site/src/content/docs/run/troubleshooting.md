@@ -32,10 +32,13 @@ save it, and run **Check store**; the step that failed is named
   both; a tenant's DNS must be in place before the tenant is created.
 - **Let's Encrypt's limits:** five failed validations lock a hostname out for an hour, and a registered domain gets at
   most 50 certificates a week. Test against the staging directory (`VEYQ_ACME_CASERVER` /
-  `ingress.tls.acme.server`).
+  `gateway.tls.acme.server`).
 - **Docker Compose:** `permission denied` in Traefik's log means the certificate volume is not owned by Traefik's
   user; `docker compose -f infra/docker-compose.prod.yml up -d` runs the `volume-ownership` step that fixes it.
-- **Kubernetes:** cert-manager must be installed, with its CRDs; `kubectl -n veyq get certificate` shows each order.
+- **Kubernetes:** cert-manager 1.21 or later must be installed, with its CRDs and with its Gateway API and
+  `ListenerSet` support on; `kubectl -n veyq get certificate` shows each order. A tenant with no certificate while the
+  instance's own host has one usually means the gateway implementation does not serve `ListenerSet`s:
+  `kubectl -n veyq get listenersets` shows whether the `Gateway` accepted each one.
 
 ## The config-secret key reads ABSENT or MISMATCH
 
@@ -71,8 +74,9 @@ affected ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key
 - **DNS does not point at the instance.** From outside, this looks exactly like a route that was never written; check
   DNS first.
 - **The tenant is offline** (taken offline in the console). It does not route, by design.
-- **The route was not written.** The application logs when it cannot write the routing file (Compose) or an Ingress
-  (Kubernetes); on Kubernetes `shared` TLS without `ingress.tls.secretName` disables tenant routing, and says so.
+- **The route was not written.** The application logs when it cannot write the routing file (Compose) or a route
+  (Kubernetes); on Kubernetes `shared` TLS without `gateway.tls.secretName` disables tenant routing, and says so.
+  Written but not served: `kubectl -n veyq get httproutes` shows whether the `Gateway` accepted it.
 - **The certificate is not there yet** — see above.
 
 ## Mail is refused

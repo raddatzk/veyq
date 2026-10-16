@@ -91,7 +91,7 @@ stateDiagram-v2
   enough to create the first account while the instance's domain resolves nowhere. The property is the same on
   both targets and the mechanism differs: compose binds the surface to `127.0.0.1:<port>` of the host; the Helm
   chart ([ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)) gives it a `ClusterIP`
-  `Service` and **no** `Ingress` by default, reached with `kubectl port-forward` — in a namespace under the
+  `Service` and **no** route by default, reached with `kubectl port-forward` — in a namespace under the
   `restricted` PodSecurity standard, because every image the instance runs, this surface's included, runs
   unprivileged. Exposing it on a hostname of its own is the operator's opt-in on either target.
 - **No personal scope at first-run.** Personal scopes are **per-tenant**, created when a user joins a

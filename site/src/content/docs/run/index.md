@@ -37,10 +37,10 @@ The [Security](/veyq/security/start-here/) area explains the model, its threat m
 | | Docker Compose | Kubernetes (Helm) |
 |---|---|---|
 | **Application** | `app`: serves the web client and the API; reaches the database and the store; a second, internal listener (8090) answers only Server-Owner operations | Deployment `veyq-app`, one replica, Service `veyq-app` (8080) and Service `veyq-app-admin` (8090) |
-| **Admin surface** | `admin`: the Server-Owner console and the `veyq-admin` CLI, published on `127.0.0.1` only | Deployment `veyq-admin`, a ClusterIP Service, no Ingress unless you set `admin.domain` |
+| **Admin surface** | `admin`: the Server-Owner console and the `veyq-admin` CLI, published on `127.0.0.1` only | Deployment `veyq-admin`, a ClusterIP Service, no route unless you set `admin.domain` |
 | **Database** | `mariadb`, on a network with no route out | StatefulSet `veyq-mariadb`, or your own database |
-| **Object store** | `garage` (Garage, S3-compatible); browsers upload and download straight to it through presigned links | StatefulSet `veyq-garage`, with an Ingress on its own host |
-| **Proxy and TLS** | `traefik`, the only container with public ports (80, 443); it routes what the application writes into its one routing file | Your ingress controller; the application writes one Ingress per tenant into its own namespace |
+| **Object store** | `garage` (Garage, S3-compatible); browsers upload and download straight to it through presigned links | StatefulSet `veyq-garage`, with an `HTTPRoute` on its own host |
+| **Proxy and TLS** | `traefik`, the only container with public ports (80, 443); it routes what the application writes into its one routing file | A Gateway API implementation of your choice serving the chart's `Gateway`; the application writes one `HTTPRoute` (and under per-domain TLS a `ListenerSet`) per tenant into its own namespace |
 | **One-shot** | `volume-ownership` hands the Garage and certificate volumes to their non-root writers and exits | — |
 
 The application provisions the store itself on first start (bucket, access key, layout, CORS), and routes every

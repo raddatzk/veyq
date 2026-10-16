@@ -8,7 +8,7 @@
   origin — as a **consequence of the `tenant` table**, with no deployment-time edit between creating a tenant
   and being able to reach it.
 - **Preconditions:** The instance is set up and reached through a reverse proxy the backend can project into
-  (the docker-compose stack wires Traefik's file provider, the Helm chart wires the Kubernetes `Ingress` API;
+  (the docker-compose stack wires Traefik's file provider, the Helm chart wires the Kubernetes Gateway API;
   an instance with neither has no routing to project and is covered by A1); the domain's DNS points at this
   host.
 - **Postconditions (success):** Every non-`SUSPENDED` tenant's domain routes to the app **and** to the blob
@@ -28,8 +28,10 @@
    ([ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)).
 3. The reverse proxy picks the new description up without restarting and, for each domain that appears,
    obtains a certificate for it — on compose through Traefik's ACME resolver, on Kubernetes through the
-   operator's issuer — or the one the chart templates on opt-in — which acts on the annotation and TLS reference
-   every projected `Ingress` carries **by a named mode** (`none`, `per-domain`, `shared`; [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)).
+   operator's issuer — or the one the chart templates on opt-in — which acts on the annotations and the
+   certificate reference the projection carries **by a named mode** (`none`, `per-domain`, `shared`; [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)):
+   under `per-domain` each domain's own `ListenerSet` beside its `HTTPRoute`, under `shared` the chart's one
+   HTTPS listener every route attaches to.
    A custom domain that is nobody's subdomain gets its certificate the same way; only the operator's own
    choice of a shared wildcard certificate excludes it, knowingly. On compose each domain gets the **same
    pair** of routes the bootstrap domain has: the app, and the configured bucket's path on that same origin with
@@ -86,7 +88,7 @@ flowchart LR
     signed. `signing-mode=internal-endpoint`, which is also where a blank `public-endpoint` lands, since
     nothing else is left to sign against.
   - **The store is reachable at an address of its own that the backend does *not* use** — Garage on its own
-    Ingress host ([ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)), where the backend
+    host on the chart's `Gateway` ([ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)), where the backend
     reaches it in-cluster; a tenant on their own bucket. The client-reachable address is signed **verbatim**,
     the same one for every tenant. `signing-mode=store-origin`.
 
@@ -103,7 +105,7 @@ flowchart LR
   new one is a certificate order. Point the ACME client at a staging directory while testing a deployment —
   the docs site's [Set up a new instance](../../../../site/src/content/docs/run/new-instance.mdx) and
   [Kubernetes](../../../../site/src/content/docs/run/kubernetes.md) carry the setting for both targets: `VEYQ_ACME_CASERVER` on
-  compose, the chart's `ingress.tls.acme.server` on Kubernetes (or, with an issuer of the operator's own, a
+  compose, the chart's `gateway.tls.acme.server` on Kubernetes (or, with an issuer of the operator's own, a
   staging issuer named through the same annotation the production one is). What production limits is an hour's
   lockout of a hostname after repeated failed validations and a weekly cap on issued certificates per
   registered domain; staging certificates are not browser-trusted.
@@ -122,9 +124,9 @@ flowchart LR
   where it was.
 - **The bootstrap domain is routed from configuration, not from a row.** That is how it is reachable before
   any row exists to project. It is routed **once**: on compose the sink renders it and skips a tenant row that
-  carries the same domain, and on Kubernetes the chart's own `Ingress` routes it and the sink leaves it out.
+  carries the same domain, and on Kubernetes the chart's own `HTTPRoute` routes it and the sink leaves it out.
   Two routers claiming one `Host` make the proxy drop both.
-- **The same projection serves Kubernetes, and that is why it is a projection.** ADR 0064's `Ingress` objects
+- **The same projection serves Kubernetes, and that is why it is a projection.** ADR 0064's Gateway API objects
   are a second sink for the identical table-derived description, and the chart that deploys it lives in
   `charts/veyq`; the wildcard-subdomain shortcut that would have avoided all of this was rejected precisely
   because it could not be extended to it ([ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)

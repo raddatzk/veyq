@@ -171,8 +171,8 @@ reserved-name list and none is needed. Once an instance is installed the name is
 **Two same-origin strategies, chosen per deployment target.** The bundled-store-behind-Traefik path route
 above is the **docker-compose** answer, and depends on that specific proxy's prefix/Host-preservation
 behavior. The **Kubernetes** target ([ADR 0064](0064-kubernetes-helm-deployment-target.md)) cannot assume an
-operator-chosen ingress controller preserves it, so it defaults to the CORS-policy branch instead — Garage
-gets its own Ingress host there, not a path route.
+operator-chosen gateway implementation preserves it, so it defaults to the CORS-policy branch instead — Garage
+gets its own host there (an `HTTPRoute` of its own on the chart's `Gateway`), not a path route.
 
 **What "a bucket CORS policy" can actually express on the bundled store — measured against the pinned Garage
 v2.0.0, not inferred from the S3 API it implements.** `PutBucketCors` and `GetBucketCors` work, and a real

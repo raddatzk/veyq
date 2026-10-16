@@ -44,7 +44,7 @@ Then open `http://localhost:8081`.
   </TabItem>
   <TabItem label="Kubernetes">
 
-The admin surface has a `ClusterIP` Service and no Ingress by default:
+The admin surface has a `ClusterIP` Service and no route by default:
 
 ```sh
 kubectl -n veyq port-forward svc/veyq-admin 8081:8080

@@ -36,7 +36,8 @@ Forces:
   but the first.
 - **This has to generalize to Kubernetes.** A Helm-based deployment
   ([ADR 0064](0064-kubernetes-helm-deployment-target.md)) needs the identical tenant↔domain mapping,
-  projected as Ingress objects instead of a Traefik file — the same principle, a different sink.
+  projected as Gateway API objects (an `HTTPRoute` per domain, a `ListenerSet` under per-domain TLS) instead
+  of a Traefik file — the same principle, a different sink.
 
 ## Decision
 
@@ -72,20 +73,21 @@ startup regenerate.
 - **`VEYQ_DOMAIN` is routed from configuration, not from the table.** The sink renders its pair from
   `veyq.tenant.ingress.bootstrap-domain` on every regenerate, the startup one included, so it is present
   before any tenant row exists. A tenant row that carries the same domain is **not rendered a second time**,
-  because two routers claiming one `Host` make Traefik drop both. On Kubernetes the chart's own `Ingress`
-  routes the bootstrap domain, so that sink keeps leaving it out.
+  because two routers claiming one `Host` make Traefik drop both. On Kubernetes the chart's own `HTTPRoute`
+  (and, under per-domain TLS, the chart's own listener on its `Gateway`) routes the bootstrap domain, so that
+  sink keeps leaving it out.
 - **Presigning becomes per-request, not per-instance.** `S3BlobStore` signs against the **resolved tenant's
   own domain** (the request's `Host`), not a single `veyq.blob-store.public-endpoint` value — the config
   value remains the bootstrap-domain default, used only until a tenant row supplies its own.
 - **Kubernetes sink** (detailed in [ADR 0064](0064-kubernetes-helm-deployment-target.md)) implements the same
-  `TenantIngressSink` against the K8s Ingress API instead of a file, and full-regenerate costs it two things a
+  `TenantIngressSink` against the Kubernetes Gateway API instead of a file, and full-regenerate costs it two things a
   file sink gets for free. **It must delete.** Overwriting a file makes *"the proxy matches the table"* true in
   one call; a reconciling sink has to diff and remove, or the argument above ("permanently wrong, with nothing
   that ever notices") lands as a route to a suspended tenant that outlives the tenant. **And it must know what
   is its.** A file sink cannot destroy a stranger's file by being wrong about which lines are its content; a
-  reconcile-by-list sink can destroy a stranger's `Ingress` by being wrong about which objects are its — so
+  reconcile-by-list sink can destroy a stranger's `HTTPRoute` by being wrong about which objects are its — so
   every projected object carries `app.kubernetes.io/managed-by: veyq-tenant-ingress`, and that label is the
-  **selector the diff is taken over**, not a check applied afterwards. An unlabelled object is never a
+  **selector the diff is taken over** (for each kind it writes), not a check applied afterwards. An unlabelled object is never a
   candidate.
 
 ## Consequences

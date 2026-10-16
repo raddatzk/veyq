@@ -167,7 +167,7 @@ every header of the admin origin.
 
   nginx sends the header, not the proxy in front of it. ADR 0069 rejects headers at the proxy for the app, and the
   same reason holds here: the admin surface has two public exposures, compose's `ADMIN_DOMAIN` router and the
-  chart's `admin.domain` Ingress, and nginx is the only component they share. The default exposure (localhost-only,
+  chart's `admin.domain` route, and nginx is the only component they share. The default exposure (localhost-only,
   or a port-forward) is plain HTTP, where a browser ignores the header.
 
   Without `preload`, HSTS never protects the first visit. It keeps every later visit on HTTPS for its `max-age`.
@@ -215,7 +215,7 @@ every header of the admin origin.
     it booted to was "not set up" rather than sign-in.
 - **Not verified:** video playback through the Service Worker under its policy. The worker registered on none of
   the screens reached, so only its script's response headers were checked. The Kubernetes path itself (a real
-  Ingress and a store on its own host) is shown only through the jar in `store-origin` mode, never on a cluster.
+  Gateway and a store on its own host) is shown only through the jar in `store-origin` mode, never on a cluster.
 - [`admin-web/src/shared/security/csp.test.ts`](../../admin-web/src/shared/security/csp.test.ts) pins admin-web's
   policy the same way: same-origin scripts, `connect-src` exactly `'self'` + the HIBP origin, no other
   third-party origin anywhere, no `frame-ancestors`.
