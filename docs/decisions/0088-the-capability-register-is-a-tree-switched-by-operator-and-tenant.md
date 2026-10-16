@@ -2,7 +2,7 @@
 
 - Status: Accepted 2026-10-15; the instance level and the tenant level are built, share switches reaching existing
   links included (inbox #442, #439 step 2), and so are four requirements (#439 step 3) and the three external
-  services (#439 step 4) (§ Consequences). It replaces
+  services (#439 step 4); a member's share list says why a link serves no guest (#457) (§ Consequences). It replaces
   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
   [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match.
 - Date: 2026-10-15
@@ -206,8 +206,20 @@ both off a place still works, named by hand. The user's own consent to the two
   added alone, a direct add whose key is still on its way included, because the server holds no sealed name key to turn
   it into a request and removing it would delete a membership. What the gates read is what the server already held: that
   a link has a password verifier, its dates, a session family's start. Not built: the verified-identities requirement
-  and `offline-cache` (above), and a member's share list saying that a link serves no guest while a requirement or a
-  switch stops it (inbox #457).
+  and `offline-cache` (above).
+- **A member's share list says why a link serves no guest** (decisions 5 and 8, inbox #457, measured:
+  `ShareGuestGate.guestStops`, `ShareSummary.guestStops`, `web/src/core/sharing/ShareGuestStops.vue`). The guest gate's
+  one predicate now returns its reasons, and `activeShare` is that list being empty: revoked, expired, a space paused or
+  being deleted, each switch along the role's path at each level (`CapabilityRegistry.offSwitches`, whose emptiness is
+  `isActive`), each requirement missed (`LinkRequirements.missed`, whose first is the refusal a write meets). The share
+  list serves the same list on every row, as codes the client words in its own languages, so the list cannot call a link
+  on that a guest gets as unknown. Only a member who may list the link reads it; a guest's `404` is unchanged, byte for
+  byte. Memories', the folder's and the drop box's panel draw it with one component. A missed requirement is fixed on
+  the same link, address and key kept (owner, 2026-10-16): its owner gives it the password or the end date from the row,
+  and the edit is judged as it leaves the link, so a write toward a requirement is never refused by it; a link older
+  than the lifetime is renewed as a new link, and the row says that it gets a new address. A switch names who can switch
+  it back on. The client names the three share entries itself, since a member's set carries no catalog words; an entry
+  it does not know is named plainly.
 - **The external services are entries** (decision 7, measured: `ExternalServicesHandler`, `ExternalServiceOrigins`,
   `AppShellRoutes.cspNow`): `memories.map` and `memories.places` (`*+`) and `core.breached-password` (`*`, because the
   join and recover screens check before sign-in, decision 12). Source `external-service`: an entry is active only while
@@ -219,9 +231,8 @@ both off a place still works, named by hand. The user's own consent to the two
   the first application root of the tree. Not built: a place named by hand with no map at all (the location editor
   needs the tiles, so without `memories.map` no place is set; inbox #458), and admin-web's own policy, a static `<meta>`, which
   keeps the default HIBP origin.
-- **Not built:** configuration as code (#444); a member's share list saying
-  that a link serves no guest while its switch is off (the list shows it as on, and the share dialogs only hide what
-  the switch refuses, or ask for what a requirement needs). The off states have not yet been seen in a real browser.
+- **Not built:** configuration as code (#444). The off states have not yet been seen in a real browser, nor has a
+  share list's row of a stopped link.
 - **The two enforcement gaps of the flat ids are closed.** The server gated `core.group-space` only at group creation
   although the catalog names five use-cases - decided a doc fault, since a feature switch refuses only what is new
   (decision 5), so group creation is the one gate. Depot let a member create a drop box while uploader links were off,

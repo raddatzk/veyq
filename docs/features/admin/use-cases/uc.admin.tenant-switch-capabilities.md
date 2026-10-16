@@ -22,7 +22,8 @@
 4. The server stores the switch and answers with the entry's new state. From then on the entry is missing from every
    member's effective set (`GET /api/tenants/{tenantId}/capabilities`), and every gate acting on the tenant's content
    refuses with `422 capability_disabled`. A share switch also reaches the tenant's existing links at once: a guest
-   gets the same `404` as for an unknown link (ADR 0088 decision 5).
+   gets the same `404` as for an unknown link (ADR 0088 decision 5), and the members' share lists mark every such link
+   as switched off in this space (inbox #457).
 5. Switching the entry back **on** restores it, as far as the Server Owner allows: the effective state is the AND of
    both levels along the path, so a tenant can only narrow, never widen.
 
