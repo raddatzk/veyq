@@ -71,7 +71,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 
 | Value | Default | Meaning |
 |---|---|---|
-| `app.trustedProxies` | — | Addresses whose forwarded header is trusted; set it only for a proxy with a stable address ([Hardening](/veyq/run/hardening/#trust-only-a-stable-proxy-address)) |
+| `app.trustedProxies` | — | The hops in front of the gateway, such as a load balancer: IP addresses and CIDR ranges, comma-separated; renders `VEYQ_HTTP_TRUSTED_PROXIES` ([Hardening](/veyq/run/hardening/#list-only-the-hops-in-front-of-the-gateway)) |
 | `app.resources.limits.memory` | `1Gi` | The memory limit; the JVM heap is 60 % of it |
 | `app.resources.requests.cpu` | `250m` | |
 | `app.resources.requests.memory` | `512Mi` | |

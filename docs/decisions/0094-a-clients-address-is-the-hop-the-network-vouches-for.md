@@ -1,6 +1,7 @@
 # ADR 0094 — A client's address is the hop the network vouches for
 
-- Status: Accepted 2026-10-16; nothing of it is built
+- Status: Accepted 2026-10-16; built except the guest-write record (the moderation CR's) and the port sources
+  beyond the stop entry (inbox #472)
 - Date: 2026-10-16
 
 ## Context
@@ -11,12 +12,11 @@ Two consumers need the address of the client that sent a request:
   for an abuse report. A forged address there can name an innocent third party. Behind carrier-grade NAT many
   subscribers share one public IPv4 address, and only the address with its **source port** and an exact time names
   one of them (M8).
-- **The per-IP rate limiter** (`RateLimitFilters.kt:80`, `request.remoteAddress()`) keys its bucket on it. A forged
-  address there opens a fresh bucket per request.
+- **The per-IP rate limiter** keys its bucket on it. A forged address there opens a fresh bucket per request.
 
-Today the address comes from Quarkus. With `proxy-address-forwarding` on and no `trusted-proxies`, Quarkus honours
-`X-Forwarded-For` from any peer and takes its **leftmost** entry (M1), which is the one a client writes itself. Both
-targets turn forwarding on (M2). How far that is forgeable depends on the proxy in front of the app, which veyq
+Before this ADR the address came from Quarkus (`request.remoteAddress()`). With `proxy-address-forwarding` on and no
+`trusted-proxies`, Quarkus honours `X-Forwarded-For` from any peer and takes its **leftmost** entry (M1), which is the
+one a client writes itself. Both targets turned forwarding on (M2). How far that is forgeable depends on the proxy in front of the app, which veyq
 cannot choose on Kubernetes:
 
 - A proxy that **replaces** the header from an untrusted peer leaves one entry, the real client. Traefik, as shipped
@@ -28,7 +28,7 @@ cannot choose on Kubernetes:
   separate networks and the chart's NetworkPolicy ([ADR 0071](0071-runtime-hardening-on-both-targets.md)).
 
 Nothing in the backend's main code reads the forwarded scheme, host or URI through Quarkus. `TenantHostResolver`
-reads `X-Forwarded-Host` itself and `AdminChannel` reads the socket (M5). Quarkus's forwarding feeds only
+reads `X-Forwarded-Host` itself and `AdminChannel` reads the socket (M5). Quarkus's forwarding fed only
 `remoteAddress()`, and through it only the rate limiter.
 
 ## Decision
@@ -145,49 +145,21 @@ a third party. Where a port is unknown, it is because no hop wrote one, never be
   loopback with an empty trust list, so their single entry is the rightmost. They keep working without turning on
   Quarkus forwarding.
 
-## Inventory for the CR (not built)
+## For the moderation CR
 
-This CR touches `app-deployment.yaml`, `values.yaml`, `NOTES.txt`, `networking.md` and `kubernetes.md`, and so does
-`cr-helm-gateway-api`. The two run one after the other, never side by side.
+The resolver, its setting, the rate limiter on it and forwarding off on both targets are built
+(`backend/core/.../http/ClientAddress.kt`, its accessor `clientAddress()`, `cc.security.rate-limit` § Verified by).
+The guest-write record is the moderation CR's, and it reads the same accessor. Its slice sends
+`198.51.100.66, 203.0.113.77` and asserts that `203.0.113.77` is recorded (the control) and that `198.51.100.66` is in
+no record and no log. A stop entry `203.0.113.77:51234` records port `51234`; `198.51.100.66:4711, 203.0.113.77`
+records no port, and `4711` is in no record and no log. When the resolver yields no address, nothing is recorded;
+when it yields no port, the address is recorded alone. This replaces ADR 0092's single-address slice.
 
-- **Resolver**: `backend/core/.../http/ClientAddress.kt`. A pure function of (socket peer, `X-Forwarded-For`
-  lines, trust list) returning an address with its port (or the port unknown), or none, plus a request-scoped accessor over the socket peer
-  (`request.connection().remoteAddress()`, as `AdminChannel.kt:25` does). IPv4-mapped IPv6 is normalised.
-- **Config**: `veyq.http.trusted-proxies`, a list of IPs and CIDRs validated at startup. The comment at
-  `application.properties:131-137` is rewritten.
-- **Rate limiter**: `RateLimitFilters.kt:80` keys on the resolver. Its class doc (`:52-56`) is rewritten.
-- **Tests**:
-  - `ClientAddressTest` (unit): every row of the table above, the no-header case, a non-IP entry at the stop, an
-    entry before a listed hop, and startup refusal of a hostname. The port forms: `[2001:db8::1]:443` parsed, a
-    bare IPv6 never split, a port left of the stop never read, and the limiter's key unchanged by a port.
-  - The rate-limit slice (the bite): with a limit of 3, three requests carrying `198.51.100.66, 203.0.113.77`,
-    then one carrying `198.51.100.99, 203.0.113.77`, must get **429**, because a new forged leftmost entry opens no
-    bucket. The positive control: `198.51.100.66, 203.0.113.78` gets **200**, so the key is not one global bucket.
-  - Bite-proof both: resolve to the leftmost entry and the 429 fails; resolve to the peer and the control fails.
-  - One profile with `trusted-proxies=10.0.0.5` sends `198.51.100.66, 203.0.113.77, 10.0.0.5` and is keyed on
-    `203.0.113.77`.
-  - `AuthRateLimitTest`, `AuthRateLimitRefillTest`: drop `proxy-address-forwarding`.
-    `AdminChannelForgedHeadersSliceTest` keeps it on, because it proves the admin channel ignores forwarding.
-- **For the moderation CR, not this one**: the guest-write slice sends `198.51.100.66, 203.0.113.77`. It asserts
-  that `203.0.113.77` is recorded (the control) and that `198.51.100.66` is in no record and no log. A stop entry
-  `203.0.113.77:51234` records port `51234`; `198.51.100.66:4711, 203.0.113.77` records no port, and `4711` is in no
-  record and no log. When the resolver yields no address, nothing is recorded; when it yields no port, the address
-  is recorded alone. This replaces ADR 0092's single-address slice.
-- **Compose**: drop `QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING` (`infra/docker-compose.prod.yml:129-130`). No new
-  variable.
-- **Helm**:
-  - `app-deployment.yaml:69-76`: drop forwarding and render `VEYQ_HTTP_TRUSTED_PROXIES`.
-  - `values.yaml:50-54`: the comment says the value names the hops in front of the gateway, never its pod range.
-  - `NOTES.txt`: a line when `networkPolicy.enabled=false`.
-- **Run docs**:
-  - `networking.md` § The client address and the rate limits: the rule, the topology table, the shared-bucket
-    consequence, and keeping the client's source address in front of the gateway (R3).
-  - `hardening.md` § Trust only a stable proxy address (`:53-57`): name the hops in front of the gateway.
-  - `kubernetes.md:19` and `configuration.md:74`: the value's new meaning.
-- **State docs**:
-  - `cc.security.rate-limit.md`: the "Trusts the client IP" bullet, the deferred "address-based `trusted-proxies`
-    default" (`:164`) resolved, and § Verified by (`:171`).
-  - ADR 0071 decision 4 and its Context, edited in place.
+## Published
+
+- Run area of the docs site: [Networking and TLS](../../site/src/content/docs/run/networking.md) (the rule, the
+  topology table, the source port) and [Hardening](../../site/src/content/docs/run/hardening.md) (what
+  `app.trustedProxies` lists).
 
 ## Measurement ledger
 

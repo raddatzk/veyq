@@ -222,8 +222,8 @@ range and its no-extension rule (§ 2 there).
   port worthless, because the port soon belongs to someone else.
   Nothing a member writes or anyone reads is recorded.
 - **The record never takes an address a client can choose.** A forged address in evidence names an innocent third
-  party. Quarkus takes the leftmost `X-Forwarded-For` entry and, without trusted proxies, believes any peer, so
-  where the address comes from is decided apart from this ADR (owner 2026-10-16), in
+  party. Quarkus's forwarding takes the leftmost `X-Forwarded-For` entry, the one a client writes, so where the
+  address comes from is decided apart from this ADR (owner 2026-10-16), in
   [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md): the record takes the address of
   veyq's one core resolver, the rightmost `X-Forwarded-For` entry that is not a trusted proxy. When the resolver
   yields no address, nothing is recorded; when it yields no port, the address is recorded alone. On Compose the address is strong by construction; on Helm it is only as
