@@ -250,7 +250,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
 - **Backup/restore stays explicitly out of this ADR's scope.** [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
   gap statement is accurate and stays accurate; a Kubernetes-native backup story (a `CronJob` running
   `scripts/instance_backup.py`, or a StatefulSet snapshot strategy) is deferred to its own future decision,
-  not folded into this one.
+  not folded into this one — drafted as [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) (proposed).
 
 ## Consequences
 
