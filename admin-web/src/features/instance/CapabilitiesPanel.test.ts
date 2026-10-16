@@ -14,19 +14,29 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 
 vi.mock('./capabilities', async () => {
   const actual = await vi.importActual<typeof import('./capabilities')>('./capabilities')
-  return { ...actual, listInstanceCapabilities: vi.fn(), setInstanceCapability: vi.fn() }
+  return {
+    ...actual, listInstanceCapabilities: vi.fn(), setInstanceCapability: vi.fn(),
+    setInstanceCapabilityRequirement: vi.fn(), clearInstanceCapabilityRequirement: vi.fn(),
+  }
 })
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import CapabilitiesPanel from './CapabilitiesPanel.vue'
-import { listInstanceCapabilities, setInstanceCapability } from './capabilities'
+import {
+  clearInstanceCapabilityRequirement, listInstanceCapabilities, setInstanceCapability, setInstanceCapabilityRequirement,
+} from './capabilities'
 import type { InstanceCapability } from './capabilities'
 import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
+  InputText: {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   Button: {
     props: ['label', 'disabled'],
     emits: ['click'],
@@ -42,6 +52,8 @@ function entry(id: string, name: string, off: boolean, effective: boolean): Inst
     whenOff: { en: `Without ${name}, new ones are refused.`, de: `Ohne ${name} wird Neues abgelehnt.` },
     off,
     effective,
+    tenantSwitchable: false,
+    requirements: [],
   }
 }
 
@@ -77,6 +89,44 @@ describe('CapabilitiesPanel (ADR 0088, admin-web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     i18n.global.locale.value = 'en'
+  })
+
+  it('sets a requirement after showing what it does to what exists, refuses days out of range, and clears without asking', async () => {
+    const withReq = (value: number | null) => ({
+      ...entry('core.x', 'Ex', false, true),
+      requirements: [{ name: 'linkMaxDays', kind: 'days' as const, value, title: { en: 'Links end', de: 'Links enden' }, whenSet: { en: 'Old links stop.', de: 'Alte Links stoppen.' } }],
+    }) as InstanceCapability
+    vi.mocked(setInstanceCapabilityRequirement).mockResolvedValue(withReq(7))
+    vi.mocked(clearInstanceCapabilityRequirement).mockResolvedValue(withReq(null))
+    const w = await mountPanel([withReq(null)])
+    const req = () => w.find('[data-requirement="linkMaxDays"]')
+    expect(req().text()).toContain(t('capabilities.requirementNone'))
+
+    await req().find('input').setValue('0')
+    await req().find('.requirement__set').trigger('click')
+    await flushPromises()
+    expect(setInstanceCapabilityRequirement).not.toHaveBeenCalled()
+    expect(w.text()).toContain(t('capabilities.requirementInvalidDays'))
+
+    await req().find('input').setValue('7')
+    confirmAsk.mockResolvedValueOnce(true)
+    await req().find('.requirement__set').trigger('click')
+    await flushPromises()
+    expect(confirmAsk).toHaveBeenCalledWith(expect.objectContaining({ message: 'Old links stop.' }))
+    expect(setInstanceCapabilityRequirement).toHaveBeenCalledWith('core.x', 'linkMaxDays', 7)
+    expect(req().text()).toContain(t('capabilities.requirementDays', { days: 7 }))
+
+    confirmAsk.mockClear()
+    await req().find('.requirement__clear').trigger('click')
+    await flushPromises()
+    expect(confirmAsk).not.toHaveBeenCalled()
+    expect(clearInstanceCapabilityRequirement).toHaveBeenCalledWith('core.x', 'linkMaxDays')
+  })
+
+  it('says which entries a tenant owner can narrow further, and only those', async () => {
+    const w = await mountPanel([{ ...entry('core.x', 'Ex', false, true), tenantSwitchable: true }, entry('core.y', 'Why', false, true)])
+    expect(row(w, 'core.x').find('.capability__tenant').text()).toBe(t('capabilities.tenantSwitchable'))
+    expect(row(w, 'core.y').find('.capability__tenant').exists()).toBe(false)
   })
 
   it('shows the register as a tree, in served order, with each entry’s title, purpose and state', async () => {

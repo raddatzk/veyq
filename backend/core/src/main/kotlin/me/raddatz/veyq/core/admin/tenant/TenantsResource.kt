@@ -16,6 +16,13 @@ import me.raddatz.veyq.core.generated.model.PendingMemberInvite
 import me.raddatz.veyq.core.generated.model.ReassignOwnerRequest
 import me.raddatz.veyq.core.generated.model.InvitePreview
 import me.raddatz.veyq.core.generated.model.RegisterAndAcceptRequest
+import me.raddatz.veyq.core.generated.model.TenantCapabilityRequirement
+import me.raddatz.veyq.core.generated.model.TenantCapabilityRequirementUpdate
+import me.raddatz.veyq.core.platform.capabilities.capabilityWire
+import me.raddatz.veyq.core.generated.model.CapabilityText
+import me.raddatz.veyq.core.generated.model.TenantCapabilities
+import me.raddatz.veyq.core.generated.model.TenantCapabilitySwitch
+import me.raddatz.veyq.core.generated.model.TenantCapabilitySwitchUpdate
 import me.raddatz.veyq.core.generated.model.TenantMailSettings
 import me.raddatz.veyq.core.generated.model.TenantMailSettingsUpdate
 import me.raddatz.veyq.core.generated.model.TenantActivated
@@ -73,6 +80,7 @@ class TenantsResource(
     private val mailSettingsHandler: TenantMailSettingsHandler,
     private val storageHandler: TenantStorageHandler,
     private val avatarHandler: TenantMemberAvatarHandler,
+    private val capabilitiesHandler: TenantCapabilitySwitchHandler,
     private val identity: SecurityIdentity,
 ) : TenantsApi {
 
@@ -292,6 +300,67 @@ class TenantsResource(
         }
 
     private fun TermsContent.toDto() = LocalizedMarkdown(de, en)
+
+    // --- The tenant level of the capability register (ADR 0088 decisions 2, 3, 12). @Authenticated (not Server-Owner):
+    // the effective set is every member's; the switches are tenant-owner-gated in the handler (403 not_tenant_owner;
+    // a non-member 404). ---
+    @Authenticated
+    override fun getTenantCapabilities(tenantId: UUID): Response =
+        when (val o = capabilitiesHandler.effective(identity.principal.name, tenantId.toString())) {
+            is TenantCapabilitiesOutcome.Ok -> Response.ok(TenantCapabilities(o.ids.map { capabilityWire(it, o.requirements, o.services) })).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @Authenticated
+    override fun listTenantCapabilitySwitches(tenantId: UUID): Response =
+        when (val o = capabilitiesHandler.list(identity.principal.name, tenantId.toString())) {
+            is TenantCapabilitySwitchesOutcome.Ok -> Response.ok(o.entries.map { it.toDto() }).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @Authenticated
+    override fun setTenantCapabilitySwitch(
+        tenantId: UUID, capabilityId: String, tenantCapabilitySwitchUpdate: TenantCapabilitySwitchUpdate,
+    ): Response =
+        when (val o = capabilitiesHandler.set(
+            identity.principal.name, tenantId.toString(), capabilityId, tenantCapabilitySwitchUpdate.off.validated(),
+        )) {
+            is TenantCapabilitySetOutcome.Stored -> Response.ok(o.view.toDto()).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @Authenticated
+    override fun setTenantCapabilityRequirement(
+        tenantId: UUID, capabilityId: String, requirement: String, tenantCapabilityRequirementUpdate: TenantCapabilityRequirementUpdate,
+    ): Response = requirementAnswer(
+        capabilitiesHandler.setRequirement(
+            identity.principal.name, tenantId.toString(), capabilityId, requirement, tenantCapabilityRequirementUpdate.value,
+        ),
+    )
+
+    @Authenticated
+    override fun clearTenantCapabilityRequirement(tenantId: UUID, capabilityId: String, requirement: String): Response =
+        requirementAnswer(capabilitiesHandler.setRequirement(identity.principal.name, tenantId.toString(), capabilityId, requirement, null))
+
+    private fun requirementAnswer(o: TenantCapabilitySetOutcome): Response = when (o) {
+        is TenantCapabilitySetOutcome.Stored -> Response.ok(o.view.toDto()).build()
+        is HttpFailure -> httpError(o)
+    }
+
+    private fun TenantCapabilityView.toDto() = TenantCapabilitySwitch(
+        id = state.id,
+        title = texts.title.toDto(), purpose = texts.purpose.toDto(), whenOff = texts.whenOff.toDto(),
+        off = state.off, serverOff = state.serverOff, effective = state.effective,
+        requirements = requirements.map {
+            TenantCapabilityRequirement(
+                name = it.def.name, kind = TenantCapabilityRequirement.Kind.valueOf(it.def.kind.name.lowercase()),
+                title = it.def.title.toDto(), whenSet = it.def.whenSet.toDto(),
+                value = it.value, serverValue = it.serverValue, effective = it.effective,
+            )
+        },
+    )
+
+    private fun me.raddatz.veyq.core.platform.capabilities.CapabilityText.toDto() = CapabilityText(en = en, de = de)
 
     // --- Mail settings (cr-email-smtp-transport, ADR 0048/0049/0050). @Authenticated (not Server-Owner): both
     // owner-gated in the handler (403 not_tenant_owner; a non-member 404). The SMTP password is write-only —

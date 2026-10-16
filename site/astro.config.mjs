@@ -130,6 +130,7 @@ export default defineConfig({
                 'space-owners/terms',
                 'space-owners/email',
                 'space-owners/storage',
+                'space-owners/capabilities',
               ],
             },
             {

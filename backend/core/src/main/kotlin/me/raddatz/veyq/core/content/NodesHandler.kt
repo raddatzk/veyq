@@ -187,7 +187,7 @@ class NodesHandler(
         // ADR 0088: a kind whose creation needs a switched-off capability is refused here, on the member's and the
         // guest's create alike (both reach this) — after the placement rule, so a misplaced node answers as it always
         // did. Only creation: a node of the kind that exists is moved and renamed as before (decision 5).
-        NodeKindRules.capabilityToCreate(kindRules, kind)?.let { if (!capabilities.isActive(it)) return CreateNodeOutcome.CapabilityDisabled }
+        NodeKindRules.capabilityToCreate(kindRules, kind)?.let { if (!capabilities.isActiveInScope(it, scopeId)) return CreateNodeOutcome.CapabilityDisabled }
         store.identityFolderOwner(scopeId, slot)?.let { owner -> if (owner != identityWriter) return CreateNodeOutcome.IllegalStructure }
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
         // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is

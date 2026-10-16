@@ -332,7 +332,7 @@ describe('RecoverView', () => {
     await pw[0].trigger('blur')
     await flushPromises()
     expect(pwnedCount).toHaveBeenCalledOnce()
-    expect(pwnedCount).toHaveBeenCalledWith('a brand new password')
+    expect(pwnedCount).toHaveBeenCalledWith('a brand new password', 'https://api.pwnedpasswords.com/range/')
   })
 
   it('a hit blocks the submit until "Use it anyway" — pressing submit again is not the acceptance', async () => {

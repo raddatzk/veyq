@@ -49,6 +49,8 @@ import {
 import { NO_NOTE, type ShareNote } from './shareNote'
 import ShareNoteAcceptField from './ShareNoteAcceptField.vue'
 import { buildShareLink, recoverShareLink } from './shareLink'
+import { lastExpiryDay, linkRules } from './linkRules'
+import { decodeHttpError } from '../../shared/httpError'
 import { ShareRole } from '../../api/generated/sharing'
 import type { NodeShareDialogProps } from '../applications/registry'
 import type { ShareDialogCopy } from './shareDialogCopy'
@@ -228,6 +230,26 @@ const revealPw = ref(false)
 const expiryEnabled = ref(false)
 const expiresAt = ref<Date | null>(null)
 const minExpiry = new Date()
+// The space's link requirements (ADR 0088 decision 8), as the Memory dialog reads them: a required password or end date
+// turns its card on and locks it, and the picker ends at the last day the link may run, counted from its own start.
+const rules = linkRules()
+const maxExpiry = computed(() => lastExpiryDay(rules.maxDays, editing.value?.createdAt ?? new Date()))
+const expiryMissing = computed(() => rules.maxDays !== null && !expiresAt.value)
+/** The server refused the link for a requirement (a rule set while the dialog was open). */
+const requirementRefused = ref(false)
+/** Turn on and fill what the requirements ask for: a password card, an end date within the limit. */
+function applyLinkRules() {
+  if (rules.passwordRequired) passwordEnabled.value = true
+  if (rules.maxDays !== null) {
+    expiryEnabled.value = true
+    const last = maxExpiry.value
+    if (last && (!expiresAt.value || expiresAt.value > last)) expiresAt.value = last
+  }
+}
+async function noteRequirementRefusal(e: unknown) {
+  const { code } = await decodeHttpError(e)
+  requirementRefused.value = code === 'link_password_required' || code === 'link_expiry_required'
+}
 const createError = ref(false)
 const link = ref('')
 /** The copied-state id of the freshly-minted link (a share id is 43 base64url characters, so it never collides). */
@@ -280,6 +302,7 @@ function openEdit(s: ManagedShare) {
   expiresAt.value = s.expiresAt
   editError.value = false
   editing.value = s
+  applyLinkRules()
   view.value = 'edit'
 }
 
@@ -300,12 +323,18 @@ const { run: runSave, pending: saving } = useAsyncAction(
     view.value = 'list'
     await loadShares()
   },
-  { onError: () => void (editError.value = true) },
+  {
+    onError: async (e) => {
+      await noteRequirementRefusal(e)
+      editError.value = true
+    },
+  },
 )
 
 async function onSave() {
-  if (passwordTooShort.value) return
+  if (passwordTooShort.value || expiryMissing.value) return
   editError.value = false
+  requirementRefused.value = false
   await runSave()
 }
 
@@ -330,6 +359,7 @@ function openCreate() {
   expiryEnabled.value = false
   expiresAt.value = null
   createError.value = false
+  applyLinkRules()
   view.value = 'create'
 }
 
@@ -351,12 +381,18 @@ const { run: runCreate, pending: minting } = useAsyncAction(
     view.value = 'link'
     await loadShares()
   },
-  { onError: () => void (createError.value = true) },
+  {
+    onError: async (e) => {
+      await noteRequirementRefusal(e)
+      createError.value = true
+    },
+  },
 )
 
 async function onCreate() {
-  if (passwordTooShort.value) return
+  if (passwordTooShort.value || expiryMissing.value) return
   createError.value = false
+  requirementRefused.value = false
   await runCreate()
 }
 /** A create or an edit is in flight: the form and the dialog's close wait for it. */
@@ -460,8 +496,9 @@ function onDialogVisible(visible: boolean) {
             <strong>{{ t('share.passwordSection') }}</strong>
             <span class="veyq-form-copy folder-share-hint">{{ t('share.passwordSectionHint', { min: MIN_PW }) }}</span>
           </span>
-          <ToggleSwitch v-model="passwordEnabled" :aria-label="t('share.passwordSection')" :disabled="creating" />
+          <ToggleSwitch v-model="passwordEnabled" :aria-label="t('share.passwordSection')" :disabled="creating || rules.passwordRequired" />
         </div>
+        <span v-if="rules.passwordRequired" class="veyq-form-copy folder-share-hint">{{ t('share.passwordRequiredByRule') }}</span>
         <template v-if="passwordEnabled">
           <label for="folder-share-password">{{ t('share.passwordLabel') }}</label>
           <div class="folder-share-link-row">
@@ -497,14 +534,16 @@ function onDialogVisible(visible: boolean) {
             <strong>{{ t('share.expirySection') }}</strong>
             <span class="veyq-form-copy folder-share-hint">{{ t('share.expirySectionHint') }}</span>
           </span>
-          <ToggleSwitch v-model="expiryEnabled" :aria-label="t('share.expirySection')" :disabled="creating" />
+          <ToggleSwitch v-model="expiryEnabled" :aria-label="t('share.expirySection')" :disabled="creating || rules.maxDays !== null" />
         </div>
+        <span v-if="rules.maxDays !== null" class="veyq-form-copy folder-share-hint">{{ t('share.expiryRequiredByRule', { days: rules.maxDays }) }}</span>
         <template v-if="expiryEnabled">
           <label for="folder-share-expiry">{{ t('share.expiryLabel') }}</label>
           <DatePicker
             id="folder-share-expiry"
             v-model="expiresAt"
             :min-date="minExpiry"
+            :max-date="maxExpiry ?? undefined"
             date-format="yy-mm-dd"
             show-icon
             icon-display="input"
@@ -514,8 +553,9 @@ function onDialogVisible(visible: boolean) {
         </template>
       </div>
 
-      <p v-if="view === 'create' && createError" class="veyq-form-error">{{ t('share.createFailed') }}</p>
-      <p v-if="view === 'edit' && editError" class="veyq-form-error">{{ t('share.editFailed') }}</p>
+      <p v-if="(createError || editError) && requirementRefused" class="veyq-form-error">{{ t('share.requirementRefused') }}</p>
+      <p v-else-if="view === 'create' && createError" class="veyq-form-error">{{ t('share.createFailed') }}</p>
+      <p v-else-if="view === 'edit' && editError" class="veyq-form-error">{{ t('share.editFailed') }}</p>
       <div class="veyq-dialog-action-row">
         <Button
           type="button"
@@ -532,7 +572,7 @@ function onDialogVisible(visible: boolean) {
           :label="saving ? t('share.noteSaving') : t('common.save')"
           icon="pi pi-check"
           :loading="saving"
-          :disabled="creating || passwordTooShort"
+          :disabled="creating || passwordTooShort || expiryMissing"
           @click="onSave"
         />
         <Button
@@ -541,7 +581,7 @@ function onDialogVisible(visible: boolean) {
           :label="creating ? t('share.creating') : t('share.create')"
           icon="pi pi-link"
           :loading="creating"
-          :disabled="creating || passwordTooShort"
+          :disabled="creating || passwordTooShort || expiryMissing"
           @click="onCreate"
         />
       </div>

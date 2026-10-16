@@ -27,3 +27,14 @@ export const CORE_REMEMBER_DEVICE_PASSWORDLESS = 'core.remember-device.passwordl
 
 /** Linking a device from one already unlocked, every /api/pairing/* endpoint (uc.account.onboard-device, ADR 0059). */
 export const CORE_DEVICE_LINKING = 'core.device-linking'
+
+/** The breached-password check of a chosen password, an outside service (ADR 0088 decision 7): active only while the
+ *  Server Owner configured its address, which the entry carries as `serviceUrl`. */
+export const CORE_BREACHED_PASSWORD = 'core.breached-password'
+
+/** Place names from a geocoder, an outside service; its address is the entry's `serviceUrl` (ADR 0016). */
+export const MEMORIES_PLACES = 'memories.places'
+
+/** Map tiles, an outside service; its URL template and attribution are the entry's `serviceUrl` and
+ *  `serviceAttribution` (ADR 0018). */
+export const MEMORIES_MAP = 'memories.map'

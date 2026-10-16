@@ -200,8 +200,9 @@ every link are part of this and not built either.
 | `core.group-space` | built | creating a group space |
 | `core.remember-device`, with `.passwordless` | built | a device wrap, or a device-key wrap |
 | `core.device-linking` | built | the pairing endpoints |
-| `core.personal-space`, `core.member-invites`, `core.breached-password` | planned | a scope kind; the invite endpoint; a call to an external service |
-| `memories.chapters`, `.places`, `.map`, `.download-originals` and the application's own share entries | planned | a node kind; external services; a blob role |
+| `core.breached-password`, `memories.places`, `memories.map` | built | an external service's origin in the served CSP, and its configured address |
+| `core.personal-space`, `core.member-invites` | planned | a scope kind; the invite endpoint |
+| `memories.chapters`, `.download-originals` and the application's own share entries | planned | a node kind; a blob role |
 | `depot.*` share entries | planned | the application's node kind and blob role |
 | `memories.journal`, `memories.gpx` | planned | a node kind or blob role the server would then see |
 | `core.self-registration`, `memories.faces` | idea | a new endpoint; a role for a face index |

@@ -19,6 +19,14 @@ acceptanceCriteria:
         integration: [CapabilityManifestSliceTest.theDefaultProfileWiresTheProductionSwitchesAndServesEveryAdvertisedId, CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller]
       web:
         unit: [src/shared/state/useCapabilities.test.ts]
+  - id: tenant-set-after-sign-in
+    text: After sign-in, on entering a space, the client reads its tenant's effective set (GET /api/tenants/{tenantId}/capabilities, every member, the instance level ANDed with the tenant's along the path) and hasCapability reads it instead of the pre-auth manifest; a failed read leaves the pre-auth manifest standing, and signing out forgets the tenant's set. The pre-auth manifest stays the instance level alone.
+    coverage:
+      backend:
+        integration: [TenantCapabilitySwitchesSliceTest.theOwnerSwitchesAnEntryOffAndEveryMemberReadsTheNarrowedSet, TenantCapabilitySwitchesSliceTest.theServerOwnersSwitchWinsAndTheTenantsOwnSwitchSurvivesIt]
+        unit: [CapabilityRegistryTest.aTenantSwitchNarrowsThatTenantAlongThePathAndNoOtherTenant]
+      web:
+        unit: [src/shared/state/useCapabilities.test.ts, src/app/activeSpace.test.ts]
   - id: one-major
     text: The advertised version.major is the platform's one major (ADR 0085 decision 1) - the repository's VERSION when the server was built, generated into PlatformMajor and never configured; 0 before V1 is advertised as 0. The web client's compiled major is read from the same file, so a server and the web client built from one tree cannot disagree. Nothing more precise than the major is advertised pre-auth.
     coverage:

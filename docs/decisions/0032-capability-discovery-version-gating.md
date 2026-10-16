@@ -64,8 +64,8 @@ response and a client-side gate that reads them.
 - **Two deliveries.** The pre-auth `/api/setup` advertises the **instance** level, for what matters before login.
   After login the server delivers the **effective** set for the tenant. The client only reads it and never
   computes it (ADR 0088 decision 3).
-- **Wire shape** `[{ id }]` today. It grows to `[{ id, …values }]` for requirements (ADR 0088 decision 8), which is
-  additive and costs no major. The deprecation lifecycle (`state`, `sunsetAt`, `supersededBy`) stays deferred: a
+- **Wire shape** `[{ id, …values }]`: each entry carries the requirement values in effect on it (ADR 0088 decision
+  8), one optional property per requirement of the catalog, which was additive and cost no major. The deprecation lifecycle (`state`, `sunsetAt`, `supersededBy`) stays deferred: a
   removal under [ADR 0085](0085-one-major-moved-on-a-yearly-train.md) is marked `deprecated: true` in its contract
   and needs no manifest state.
 
@@ -99,9 +99,10 @@ disabled capability is then:
 
 Both are required: the manifest alone is only UX; the endpoint gate alone gives a broken-looking UI. Together
 they are honest and safe. A device switch also acts on what exists: the key material withholds the switched-off wraps
-without deleting them (ADR 0088 decision 5). A tenant owner is to switch a `+` entry off for their tenant the same way,
-from the tenant settings in `web/`, with the same gate answering `422` (ADR 0088 decisions 2, 5 and 12); that level is
-not built (inbox #439).
+without deleting them (ADR 0088 decision 5). A tenant owner switches a `+` entry off for their tenant the same way,
+from the tenant settings in `web/`, with the same gate answering `422` for that tenant's content (ADR 0088 decisions 2,
+5 and 12): the entry leaves the tenant's set every member reads after sign-in, and the pre-auth manifest stays the
+instance level.
 
 ### 5. The built entries
 

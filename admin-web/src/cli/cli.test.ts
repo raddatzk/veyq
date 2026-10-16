@@ -34,6 +34,11 @@ vi.mock('../features/instance/capabilities', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/instance/capabilities')>()),
   listInstanceCapabilities: vi.fn(),
   setInstanceCapability: vi.fn(),
+  setInstanceCapabilityRequirement: vi.fn(),
+  clearInstanceCapabilityRequirement: vi.fn(),
+}))
+vi.mock('../features/instance/externalServices', () => ({
+  listExternalServices: vi.fn(), setExternalService: vi.fn(), clearExternalService: vi.fn(),
 }))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
@@ -44,7 +49,9 @@ import { getInstanceRelease } from '../features/instance/release'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import { checkInstanceStore, discardPendingInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
 import type { InstanceStore, InstanceStoreCheck } from '../features/instance/store'
-import { listInstanceCapabilities, setInstanceCapability } from '../features/instance/capabilities'
+import {
+  clearInstanceCapabilityRequirement, listInstanceCapabilities, setInstanceCapability, setInstanceCapabilityRequirement,
+} from '../features/instance/capabilities'
 import type { InstanceCapability } from '../features/instance/capabilities'
 import { httpError } from '../test/httpError'
 import type { TenantCreated, TenantInviteState, TenantSummary } from '../features/tenants/tenants'
@@ -96,6 +103,8 @@ function capability(id: string, name: string, off: boolean, effective: boolean):
     whenOff: { en: `Without ${name}, new ones are refused.`, de: `Ohne ${name} wird Neues abgelehnt.` },
     off,
     effective,
+    tenantSwitchable: false,
+    requirements: [],
   }
 }
 const register: InstanceCapability[] = [
@@ -372,6 +381,46 @@ describe('veyq-admin — the capability switches (uc.admin.switch-capabilities)'
     expect(setInstanceCapability).not.toHaveBeenCalled()
   })
 
+  it('capabilities require sets a requirement, prints what it does to what exists, and off clears it', async () => {
+    const req = (value: number | null) => ({
+      ...capability('core.x', 'Ex', false, true),
+      requirements: [{
+        name: 'linkMaxDays', kind: 'days' as const, value,
+        title: { en: 'Links end EN', de: 'Links enden DE' }, whenSet: { en: 'Old links stop EN', de: 'Alte Links stoppen DE' },
+      }],
+    })
+    vi.mocked(setInstanceCapabilityRequirement).mockResolvedValueOnce(req(30) as InstanceCapability)
+    const r = await invoke(['capabilities', 'require', 'core.x', '--requirement', 'linkMaxDays', '--value', '30'])
+    expect(r.code).toBe(0)
+    expect(setInstanceCapabilityRequirement).toHaveBeenCalledWith('core.x', 'linkMaxDays', 30)
+    expect(r.out.split('\n')[0]).toBe('Old links stop EN')
+    expect(r.out).toContain('core.x  requirement linkMaxDays: 30 days  Links end EN')
+
+    vi.mocked(clearInstanceCapabilityRequirement).mockResolvedValueOnce(req(null) as InstanceCapability)
+    const off = await invoke(['capabilities', 'require', 'core.x', '--requirement', 'linkMaxDays', '--value', 'off'])
+    expect(clearInstanceCapabilityRequirement).toHaveBeenCalledWith('core.x', 'linkMaxDays')
+    expect(off.out).toBe('core.x  requirement linkMaxDays: not set  Links end EN')
+
+    vi.mocked(listInstanceCapabilities).mockResolvedValueOnce([req(14) as InstanceCapability])
+    expect((await invoke(['capabilities', 'list'])).out).toContain('requirement linkMaxDays: 14 days  Links end EN')
+  })
+
+  it('services list / set / unset print each service with its address or not configured', async () => {
+    const svc = (url: string | null, attribution: string | null = null) => ({
+      id: 'memories.map', title: { en: 'Maps', de: 'Karten' }, url, attribution, takesAttribution: true,
+    })
+    const { listExternalServices, setExternalService, clearExternalService } = await import('../features/instance/externalServices')
+    vi.mocked(listExternalServices).mockResolvedValueOnce([svc('https://t.example/{z}/{x}/{y}.png', '© T'), { ...svc(null), id: 'memories.places', takesAttribution: false }])
+    expect((await invoke(['services', 'list'])).out).toBe('memories.map  https://t.example/{z}/{x}/{y}.png  (© T)\nmemories.places  not configured')
+    vi.mocked(setExternalService).mockResolvedValueOnce(svc('https://u.example/{z}/{x}/{y}.png'))
+    const set = await invoke(['services', 'set', 'memories.map', '--url', 'https://u.example/{z}/{x}/{y}.png'])
+    expect(setExternalService).toHaveBeenCalledWith('memories.map', 'https://u.example/{z}/{x}/{y}.png', null)
+    expect(set.out).toBe('memories.map  https://u.example/{z}/{x}/{y}.png')
+    vi.mocked(clearExternalService).mockResolvedValueOnce(svc(null))
+    expect((await invoke(['services', 'unset', 'memories.map'])).out).toBe('memories.map  not configured')
+    expect(clearExternalService).toHaveBeenCalledWith('memories.map')
+  })
+
   it('list takes no id: a stray word is still an unknown command', async () => {
     const r = await invoke(['capabilities', 'list', 'core.x'])
     expect(r.code).toBe(1)
@@ -383,7 +432,7 @@ describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

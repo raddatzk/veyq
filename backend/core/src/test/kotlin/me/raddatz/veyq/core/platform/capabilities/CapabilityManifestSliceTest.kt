@@ -65,12 +65,21 @@ class CapabilityManifestSliceTest {
         val anon = given().`when`().get("/api/setup").then().statusCode(200)
             .extract().`as`(Map::class.java) as Map<String, Any>
 
-        // No per-user data on the wire: no identity/user key at the root, and each capability entry is { id }.
+        // No per-user data on the wire: no identity/user key at the root, and each capability entry is { id } plus the
+        // requirement values the catalog declares (ADR 0088 decision 8), which are instance configuration and null
+        // while none is set.
         assertFalse(anon.containsKey("userId"), "the pre-auth manifest must carry no identity")
         assertFalse(anon.containsKey("identity"), "the pre-auth manifest must carry no identity")
         @Suppress("UNCHECKED_CAST")
         val caps = anon["capabilities"] as List<Map<String, Any>>
-        caps.forEach { assertEquals(setOf("id"), it.keys, "a manifest capability is { id } only — no metadata/identity") }
+        val requirementNames = CapabilityRequirements.ALL.map { it.name }.toSet()
+        val serviceKeys = setOf("serviceUrl", "serviceAttribution")
+        caps.forEach { cap ->
+            assertEquals(setOf("id"), cap.keys - requirementNames - serviceKeys, "a manifest capability is { id, …values } only")
+            assertEquals(emptyList<Any>(), requirementNames.mapNotNull { cap[it] }, "no requirement is set, so none carries a value")
+            // An external service's address (ADR 0088 decision 7) rides on its own entry only.
+            if (cap["id"] !in CapabilityIds.EXTERNAL_SERVICES) assertEquals(null, cap["serviceUrl"], "${cap["id"]} carries no address")
+        }
 
         // Identical whether or not the caller authenticates (the manifest is instance-wide, not per-user).
         val bearer = bearer(seedUser())

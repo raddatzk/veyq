@@ -6,7 +6,8 @@ vi.mock('../geocode', async (orig) => ({ ...(await orig<typeof import('../geocod
 import { mount, flushPromises } from '@vue/test-utils'
 import MemoryLocationEditor from './MemoryLocationEditor.vue'
 import { reverseGeocode, type GeoLevel } from '../geocode'
-import { setMapsConsent, setTileUrl, setGeocoderUrl } from '../../../shared/state/useMapConfig'
+import { setMapsConsent } from '../../../shared/state/useMapConfig'
+import { setTileUrl, setGeocoderUrl } from '../../../test/services'
 import type { LatLng, MemoryLocation } from '../memoryLocation'
 import { realI18n, t } from '../../../test/i18n'
 

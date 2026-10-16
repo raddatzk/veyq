@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useMapConfig, setMapsConsent, setTileUrl, setGeocoderUrl } from './useMapConfig'
+import { useMapConfig, setMapsConsent } from './useMapConfig'
+import { setTileUrl, setGeocoderUrl } from '../../test/services'
 
 beforeEach(() => {
   // reset the singleton to a known baseline (consent off, both providers configured)
@@ -44,5 +45,15 @@ describe('useMapConfig — the coupled two-stage map/geocoding opt-in (ADR 0016/
     expect(useMapConfig().mapsConsent.value).toBe(true)
     setMapsConsent(false)
     expect(useMapConfig().mapsConsent.value).toBe(false)
+  })
+
+  it('reads the addresses the server carries on its capabilities, and offers no map where it serves none (ADR 0088 decision 7)', () => {
+    const c = useMapConfig()
+    setTileUrl('https://tiles.other.example/{z}/{x}/{y}.png', '© Other')
+    expect(c.tileUrl.value).toBe('https://tiles.other.example/{z}/{x}/{y}.png')
+    expect(c.tileAttribution.value).toBe('© Other')
+    expect(c.mapsOffered.value).toBe(true)
+    setTileUrl('') // `memories.map` not served: unconfigured, or switched off by the server or the space
+    expect(c.mapsOffered.value).toBe(false)
   })
 })

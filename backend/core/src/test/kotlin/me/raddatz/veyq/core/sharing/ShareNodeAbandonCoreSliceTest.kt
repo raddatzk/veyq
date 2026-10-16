@@ -3,12 +3,14 @@ package me.raddatz.veyq.core.sharing
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.content.NodeCover
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.GuestTreeShare.Link
 import me.raddatz.veyq.core.sharing.GuestTreeShare.abandon
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedAttachment
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -27,8 +29,8 @@ import org.junit.jupiter.api.Test
  * A guest takes back an empty upload placeholder (`abandonShareNode`, ADR 0080 decision 6), with core alone: what core
  * checks itself before it erases — the guest's reach (strictly inside the subtree, never an identity folder for a
  * `READ_WRITE` guest; strictly inside its own identity folder for a `WRITE_ONLY` one), no child, no upload a member or
- * another identity opened for the node — and that a kind nobody declares is never one. Which nodes an application calls
- * empty is held open by [CoreTestGuestPlaceholders] (every node of its kind); Depot's own answer and the full-link upload
+ * another identity opened for the node — core's own `FOLDER` answer ([FolderGuestPlaceholders]), and that a kind nobody
+ * declares is never one. Which nodes an application calls empty is held open by [CoreTestGuestPlaceholders] (every node of its kind); Depot's own answer and the full-link upload
  * this exists for are `ShareFilesSliceTest` / `DropBoxSliceTest`. Each refusal beside its control; a refusal writes
  * nothing.
  *
@@ -113,13 +115,35 @@ class ShareNodeAbandonCoreSliceTest {
         abandon(link, byItself).statusCode(204)
     }
 
-    /** Fail closed: a kind no application declares (a `FOLDER`, core's own) is never a placeholder, empty or not. */
+    /** Core's own kind ([FolderGuestPlaceholders]): an empty `FOLDER` is a placeholder — the folders a guest's
+     *  folder-tree upload made before every file of it was refused. One with an attachment (a cover) or sealed metadata
+     *  holds something. Nodes store no authorship, so a member's empty folder goes too (ADR 0080 decision 6). */
+    @Test
+    fun anEmptyFolderIsAPlaceholderOneWithACoverOrMetadataIsNot() {
+        val t = tree()
+        val link = GuestTreeShare.seed(t.userId, t.scopeId, t.root, ShareEntity.READ_WRITE)
+        val covered = seedNode(t.scopeId, NodeEntity.FOLDER, parentId = t.a, wrappedContentKey = CONTENT_KEY)
+        seedAttachment(t.scopeId, covered, NodeCover.SLOT, uploaderUserId = t.userId)
+        abandon(link, covered).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        val described = seedNode(t.scopeId, NodeEntity.FOLDER, parentId = t.a, wrappedContentKey = CONTENT_KEY)
+        QuarkusTransaction.requiringNew().run { NodeEntity.findById(described)!!.wrappedMeta = "bWV0YQ==" }
+        abandon(link, described).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        for (id in listOf(covered, described)) assertNotNull(node(id), "a refusal writes nothing")
+
+        // Control: an empty folder goes, here a member's own.
+        val empty = seedNode(t.scopeId, NodeEntity.FOLDER, parentId = t.a, wrappedContentKey = CONTENT_KEY)
+        abandon(link, empty).statusCode(204)
+        assertNull(node(empty))
+    }
+
+    /** Fail closed: a kind no implementation declares is never a placeholder, empty or not. */
     @Test
     fun aKindNobodyDeclaresIsNeverAPlaceholder() {
         val t = tree()
         val link = GuestTreeShare.seed(t.userId, t.scopeId, t.root, ShareEntity.READ_WRITE)
-        abandon(link, t.a).statusCode(409).body("code", equalTo("not_a_placeholder"))
-        assertNotNull(node(t.a))
+        val undeclared = seedNode(t.scopeId, "NOT_A_KIND", parentId = t.a, wrappedContentKey = CONTENT_KEY)
+        abandon(link, undeclared).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        assertNotNull(node(undeclared))
     }
 
     @Test

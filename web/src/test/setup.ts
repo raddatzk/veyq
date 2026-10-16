@@ -31,6 +31,14 @@ beforeAll(async () => {
 // refs those timers read, so they return without touching the DOM. Proven by `autoUnmount.test.ts`.
 enableAutoUnmount(afterEach)
 
+// A new instance's outside services (uc.admin.configure-external-services): the map tiles, the geocoder and the breach
+// check, as the backend's migration seeds them and the manifest carries them. A test about a server without one clears
+// it (`test/services.ts`); before each test the defaults stand again.
+beforeEach(async () => {
+  const { defaultServices } = await import('./services')
+  defaultServices()
+})
+
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 // The network net (inbox #149).
 //

@@ -41,6 +41,7 @@ vi.mock('../features/tenants/TenantDetailPanel.vue', () => ({
 }))
 vi.mock('../features/instance/ReleaseVersionPanel.vue', () => ({ default: { template: '<div class="stub-release" />' } }))
 vi.mock('../features/instance/CapabilitiesPanel.vue', () => ({ default: { template: '<div class="stub-capabilities" />' } }))
+vi.mock('../features/instance/ExternalServicesPanel.vue', () => ({ default: { template: '<div class="stub-services" />' } }))
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
@@ -65,6 +66,7 @@ const i18n = createI18n({
       tenant: { create: 'Create' },
       release: { navTitle: 'Release' },
       capabilities: { navTitle: 'Capabilities' },
+      services: { navTitle: 'External services' },
     },
   },
 })
@@ -171,6 +173,16 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     await flushPromises()
     expect(w.find('.stub-capabilities').exists()).toBe(true)
     expect(w.find('.stub-detail').exists()).toBe(false)
+  })
+
+  it('opens Server → External services from the nav, one rubric at a time (uc.admin.configure-external-services)', async () => {
+    vi.mocked(listTenants).mockResolvedValue([])
+    const { w } = await mountConsole()
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Capabilities'))!.trigger('click')
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('External services'))!.trigger('click')
+    await flushPromises()
+    expect(w.find('.stub-services').exists()).toBe(true)
+    expect(w.find('.stub-capabilities').exists()).toBe(false)
   })
 })
 

@@ -49,10 +49,13 @@ inert lives in the signer for the same reason ([ADR 0013](0013-blob-storage-pres
 2. **The CSP is a response header, with no `<meta>` in production.**
    [`csp.ts`](../../web/src/shared/security/csp.ts) remains the one source of the policy:
    - The web build emits the policy as a file inside `dist`.
-   - The backend reads that file at startup and appends one thing to `connect-src`: the origin a browser
-     fetches store objects from. That origin comes from the signer's own endpoint resolution, so the policy
-     cannot disagree with the URLs the backend signs. The rules per signing mode are in
-     [cc.security.csp](../crosscutting/cc.security.csp.md).
+   - The backend reads that file at startup and appends, per response, the origin a browser fetches store objects
+     from to `connect-src`. That origin comes from the signer's own endpoint resolution, so the policy cannot
+     disagree with the URLs the backend signs. The rules per signing mode are in
+     [cc.security.csp](../crosscutting/cc.security.csp.md). It appends the origins of the outside services in use
+     too (the map tiles to `img-src`, the geocoder and the breached-password check to `connect-src`), which are the
+     Server Owner's settings since [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+     decision 7 was built: the built policy names none of them.
    - The header goes on every response the shell serves, including `sw.js`. A worker takes its policy from its
      own script's response, so the playback Service Worker gets a policy for the first time. That worker is the
      part of the client that fetches store bytes and holds decrypted media.

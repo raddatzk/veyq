@@ -19,6 +19,7 @@ import TenantMembersPanel from '../features/spaces/TenantMembersPanel.vue'
 import TenantTermsPanel from '../features/tenant/TenantTermsPanel.vue'
 import TenantMailSettingsPanel from '../features/tenant/TenantMailSettingsPanel.vue'
 import TenantStoragePanel from '../features/tenant/TenantStoragePanel.vue'
+import TenantCapabilitiesPanel from '../features/tenant/TenantCapabilitiesPanel.vue'
 import GroupMembersPanel from '../features/spaces/GroupMembersPanel.vue'
 import CreateGroupDialog from '../features/spaces/CreateGroupDialog.vue'
 import TrustResetPanel from '../features/account/trustReset/TrustResetPanel.vue'
@@ -131,12 +132,13 @@ const categories = computed<NavCategory[]>(() => {
     cats.push({ key: 'tenant', label: t('settings.tenant'), collapsible: false, items: [
       { id: 'tenant-members', label: t('members.title'), icon: 'pi pi-users' },
       { id: 'terms', label: t('terms.navTitle'), icon: 'pi pi-file-edit' },
-      // Mail settings and storage are owner-only (their reads are owner-gated): only an owner's rail lists them, so a member is
+      // Mail settings, storage and capabilities are owner-only (their reads are owner-gated): only an owner's rail lists them, so a member is
       // never taken to a page that says it could not load. The panels still gate - the server refuses a member either way.
       ...(isTenantOwner.value
         ? [
             { id: 'mail', label: t('mail.navTitle'), icon: 'pi pi-envelope' },
             { id: 'storage', label: t('storage.navTitle'), icon: 'pi pi-database' },
+            { id: 'capabilities', label: t('tenantCapabilities.navTitle'), icon: 'pi pi-sliders-h' },
           ]
         : []),
     ] })
@@ -174,9 +176,9 @@ const hasSection = computed(() => Boolean(route.params.section))
 
 // A section the caller may not see is not offered in the rail, and its address does not open it either: it leads back to
 // /settings (which, on a wide screen, opens the default section). Judged only once the answers are in: the owner-only pages
-// (mail, storage) need the tenant role, a trust reset needs a refused document, a group page needs the group to be the caller's;
+// (mail, storage, capabilities) need the tenant role, a trust reset needs a refused document, a group page needs the group to be the caller's;
 // adding a device needs the instance's `core.device-linking`, known at mount.
-const OWNER_ONLY = new Set(['mail', 'storage'])
+const OWNER_ONLY = new Set(['mail', 'storage', 'capabilities'])
 const isHidden = (id: string): boolean =>
   id === 'pairing'
     ? !deviceLinking
@@ -216,6 +218,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'terms') return { component: TenantTermsPanel, props: {} }
   if (id === 'mail') return { component: TenantMailSettingsPanel, props: {} }
   if (id === 'storage') return { component: TenantStoragePanel, props: {} }
+  if (id === 'capabilities') return { component: TenantCapabilitiesPanel, props: {} }
   if (id.startsWith('group-')) {
     const scopeId = id.slice('group-'.length)
     return { component: GroupMembersPanel, props: { scopeId, name: ownedGroups.value.find((g) => g.scopeId === scopeId)?.name ?? '' } }

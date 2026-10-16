@@ -38,7 +38,7 @@ export interface MemoryLocationContext {
 
 export function useMemoryLocation(ctx: MemoryLocationContext) {
   const { t, locale } = useI18n()
-  const { mapsAvailable, geocoderUrl, geocodingAvailable } = useMapConfig()
+  const { mapsOffered, mapsAvailable, geocoderUrl, geocodingAvailable } = useMapConfig()
 
   const locationEditorOpen = ref(false)
   const { editorFailed, selfHealFailed } = useMetaWriteFeedback(ctx.onMetaUpdated)
@@ -68,6 +68,8 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
   /** Open the location editor — but first gate on the personal maps opt-in (no consent ⇒ ask, no external calls). */
   function openLocationEditor() {
     if (!ctx.memoryKey()) return
+    // No map service on this server (`memories.map`, ADR 0088 decision 7): nothing to consent to, no editor to open.
+    if (!mapsOffered.value) return
     if (mapsAvailable.value) locationEditorOpen.value = true
     else consentDialogOpen.value = true
   }
