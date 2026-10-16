@@ -14,8 +14,8 @@ invariants:
 
 Lane L1 of [ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md): a job
 that installs the two candidate images the way a Server Owner does — `veyqctl install` from the candidate's
-release assets ([ADR 0096](../docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md); until
-`cr-veyqctl` phase 4 lands, the recipe is extracted from the app image as phase 1 built it) — gets a real ACME
+release assets ([ADR 0096](../docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md); since
+`cr-veyqctl` phase 4, `release_assets.py` writes them and the run installs them with `veyqctl install --unsigned-local`) — gets a real ACME
 certificate from a Pebble, drives admin-web and web in Chromium through first run, a Memory round trip and the
 feature scenarios, sweeps the stack for every typed value, and gates the snapshot on the exact `build-<sha>-<arch>`
 bytes it is published on.
@@ -27,10 +27,15 @@ rejected alternatives and the four refine answers; this CR orders the work. Inbo
 ## Context & constraints
 
 - **ADR 0096 (accepted 2026-10-16) moves the recipe out of the image** into the release's assets and puts
-  `veyqctl` in front of every lane (ADR 0090 decision 1, ADR 0091 decision 3). `cr-veyqctl` owns the switch: its
-  phase 4 replaces `run_stack_e2e.py`'s recipe-and-`.env` half (`extract()`, `write_env()`) with `veyqctl install
-  --source <dir> --unsigned-local`, and hands the change to this CR's owner. Everything after `up` — Pebble, the
-  certificate, the browser, the sweeps — stays this CR's, so no phase here changes for it; a phase that edits
+  `veyqctl` in front of every lane (ADR 0090 decision 1, ADR 0091 decision 3); `cr-veyqctl` phase 4 made the switch.
+  `run_stack_e2e.py` extracts nothing any more: its stages before `certificate` are **`assets`**
+  (`release_assets.py` writes the candidate's release into `<run>/src`), **`pebble`** (Pebble alone, from the release's
+  recipe and the run's values, its minica root copied out of the Pebble image) and **`install`** (`veyqctl install
+  --unsigned-local` into `<run>/home`). Everything after addresses the instance through `Installed.compose` —
+  `docker compose -p <project> -f home/releases/<release>/docker-compose.prod.yml -f home/compose.override.yml
+  --env-file home/.env` — and the sweeps read `home/.env`. `--app`/`--admin` must be local `name:tag` builds
+  (`veyqctl --unsigned-local` refuses a registry reference), so a CI lane that pulls `build-<sha>-<arch>` by digest
+  re-tags it to a local name first. `VEYQ_STACK_WAIT_SECS` reaches `veyqctl` as `VEYQ_WAIT_SECS`. A phase that edits
   `run_stack_e2e.py` re-reads it on `main` first.
 - **ADR 0091 (accepted 2026-10-16) sets the frame:** one pipeline per commit, every stage budgeted, the gate on every
   push, a release that promotes. This CR builds lane L1 only. **It needs the pipeline CR first** (ADR 0091
@@ -224,7 +229,8 @@ trust-chain green. Each phase names its bites — the case that must make the ne
       - **No HTTP sweep and no capability tokens on the lane**: the browser records no traffic. The API suites keep
         both; the concern's § Lane L1 says what the lane does not sweep.
 - [ ] 4 **L1 in the pipeline.** The lane job per architecture after the build (a pull request: amd64, built and tested
-      in the same job, nothing pushed; a push: both architectures, `build-<sha>-<arch>` pulled by digest), and the
+      in the same job, nothing pushed; a push: both architectures, `build-<sha>-<arch>` pulled by digest and re-tagged
+      to a local name, since the lane installs through `veyqctl install --unsigned-local`), and the
       snapshot publish needs it with `success`; the gate promoted to a guard — `validate_release_identity.py` asserts the
       snapshot waits on L1 (bite: drop the `needs` → red). The criterion-tag guard: every tag names a criterion, every
       `stack` ref names a tagged test (bites: a tag with a typo → red; a ref to an untagged test → red). Coverage: `stack`
