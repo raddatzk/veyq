@@ -1,7 +1,10 @@
 package me.raddatz.veyq.core.config
 
 import io.smallrye.config.ConfigMapping
+import io.smallrye.config.WithConverter
 import io.smallrye.config.WithDefault
+import me.raddatz.veyq.core.http.ClientAddress
+import me.raddatz.veyq.core.http.TrustedProxiesConverter
 import java.time.Duration
 import java.util.Optional
 
@@ -737,9 +740,20 @@ interface VeyqConfig {
         fun configSecretFile(): String
     }
 
-    /** `veyq.http.*` — response headers the app shell sends on every response (ADR 0069 Decision 4). */
+    /** `veyq.http.*` — response headers the app shell sends on every response (ADR 0069 Decision 4), and whom the
+     *  app believes about a client's address (ADR 0094). */
     interface Http {
         fun hsts(): Hsts
+
+        /**
+         * `veyq.http.trusted-proxies` (`VEYQ_HTTP_TRUSTED_PROXIES`), ADR 0094 decisions 3 and 5: the hops **in front
+         * of** the gateway, such as a load balancer, as comma-separated IP addresses and CIDR ranges. Never the
+         * gateway's own pod range: the gateway is the socket peer, vouched for by the network. Unset, the default on
+         * both targets, means the gateway is the only hop. A hostname, a bad prefix or an empty element fails the
+         * conversion, so the app does not start. Read by [ClientAddress] through its request accessor only.
+         */
+        @WithConverter(TrustedProxiesConverter::class)
+        fun trustedProxies(): Optional<ClientAddress.TrustList>
 
         /**
          * `Strict-Transport-Security` (cc.security.csp § *The other response headers*). On by default; the one

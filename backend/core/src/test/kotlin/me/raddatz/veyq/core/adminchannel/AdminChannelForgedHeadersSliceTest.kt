@@ -15,9 +15,10 @@ import org.junit.jupiter.api.Test
  * uc.admin.admin-channel A2 / `the-socket-decides-not-the-headers`: every forwarding header a client can write,
  * naming the admin listener and a private client address, leaves the public port's refusal unchanged.
  *
- * **The profile is the point.** Both shipped targets run with proxy-address forwarding on, and this profile turns
- * on every forwarding source Quarkus has — `Forwarded` and `X-Forwarded-*`, host included — so the forwarding layer
- * really does rewrite `host()` and `remoteAddress()` from these headers. Without it nothing is rewritten and a
+ * **The profile is the point.** No shipped target turns Quarkus's forwarding on (ADR 0094 decision 4); this profile
+ * turns on every forwarding source Quarkus has — `Forwarded` and `X-Forwarded-*`, host included — as the worst case
+ * a setting turned back on would make, so the forwarding layer really does rewrite `host()` and `remoteAddress()`
+ * from these headers. Without it nothing is rewritten and a
  * predicate that read those values would pass here for the wrong reason (measured: that is the bite that reddens
  * this class — reading `remoteAddress()` and `host()` instead of the socket).
  */
