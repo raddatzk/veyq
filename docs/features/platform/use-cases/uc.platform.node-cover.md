@@ -17,7 +17,7 @@
 
 1. In the row's **⋯** menu (or the node's header) the member chooses **Cover** — labelled **Set cover** where the node has none,
    **Change cover** where it has one. It is **ONE action** (one id `cover`, the image icon, in the header and in the row menu
-   beside the favorite heart) gated by `coverCapabilities` (fail closed); there is **no separate Remove entry** — removal lives
+   beside the favorite heart) gated by `coverRights` (fail closed); there is **no separate Remove entry** — removal lives
    in the dialog.
 2. Core's **cover dialog** (`core/node/cover/components/CoverDialog.vue`) opens — the same one for a folder, a drop box and a
    Memory. It offers **Choose an image** (a hidden `image/*` input: an image, not empty, up to **40 MB**, otherwise a clear
@@ -61,7 +61,7 @@
 - **E4 — a cover that fails to load or has no reader:** the node shows its kind's **icon**, silently.
 - **E5 — a share guest:** sees the covers of the nodes in its shared subtree (the node's `wrappedMeta` it already gets, the
   attachment through the share's gated blob route) and gets **no action**: no guest role sets a cover in this step, the server has
-  no guest operation for it, and the capability says so first. **Share view = member view**, with the function removed.
+  no guest operation for it, and the right says so first. **Share view = member view**, with the function removed.
 - **E6 — a pending deletion, locked keys, a guest's identity folder, a kind that did not opt in:** no action is offered; the
   server refuses the rest (`scope_deleting`, `illegal_target`).
 

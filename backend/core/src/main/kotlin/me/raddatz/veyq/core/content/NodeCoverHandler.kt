@@ -39,7 +39,7 @@ sealed interface NodeCoverOutcome {
     data class CoverStale(val currentBlobId: String?) : NodeCoverOutcome, HttpFailure by httpFailure("cover_stale", CONFLICT)
 
     /** The node's `wrappedMeta` moved past the stated version; NOTHING was written, the upload is still open (ADR 0077). */
-    data class StaleMeta(val wrappedMeta: String?, val metaVersion: Long) : NodeCoverOutcome, HttpFailure by Failures.staleVersion
+    data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : NodeCoverOutcome, HttpFailure by Failures.staleVersion
 }
 
 /**
@@ -59,12 +59,12 @@ class NodeCoverHandler(
 ) {
     /**
      * Make [uploadId] the cover of [nodeId], replacing [expectedBlobId] (null: an empty slot), and write the node's
-     * re-sealed [wrappedMeta] at [metaVersion] - all or nothing ([NodeCoverStore.set]). The upload is the caller's own
+     * re-sealed [wrappedMeta] at [metaRevision] - all or nothing ([NodeCoverStore.set]). The upload is the caller's own
      * (a session another member opened is not found), verified against its declaration before anything is attached.
      */
     fun set(
         userId: String, scopeId: String, nodeId: String, uploadId: String, expectedBlobId: String?,
-        wrappedMeta: String, metaVersion: Long,
+        wrappedMeta: String, metaRevision: Long,
     ): NodeCoverOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(NodeCoverOutcome.NotFound, NodeCoverOutcome.Suspended, NodeCoverOutcome.ScopeDeleting)?.let { return it }
@@ -79,14 +79,14 @@ class NodeCoverHandler(
                 return NodeCoverOutcome.Budget
             }
         }
-        return store.set(scopeId, node.id, node.kind, session, manifest, expectedBlobId, wrappedMeta, metaVersion)
+        return store.set(scopeId, node.id, node.kind, session, manifest, expectedBlobId, wrappedMeta, metaRevision)
     }
 
     /** Empty [nodeId]'s cover slot (only while it holds [blobId]) and write the node's [wrappedMeta] without the cover. */
-    fun remove(userId: String, scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaVersion: Long): NodeCoverOutcome {
+    fun remove(userId: String, scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaRevision: Long): NodeCoverOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(NodeCoverOutcome.NotFound, NodeCoverOutcome.Suspended, NodeCoverOutcome.ScopeDeleting)?.let { return it }
         if (nodes.findInScope(scopeId, nodeId) == null) return NodeCoverOutcome.NotFound
-        return store.remove(scopeId, nodeId, blobId, wrappedMeta, metaVersion)
+        return store.remove(scopeId, nodeId, blobId, wrappedMeta, metaRevision)
     }
 }

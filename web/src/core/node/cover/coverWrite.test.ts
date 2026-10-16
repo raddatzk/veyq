@@ -83,7 +83,7 @@ const openMeta = (wrappedMeta: string) => unsealNodeMeta(key, { scopeId: SCOPE, 
 const plan = (blobId: string) => ({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: NODE })
 const uploadedMeta = (blobId: string, extra: object = {}) => sealMeta({ v: 1, ...extra, cover: uploadedCover(plan(blobId)) })
 const stale = (body: object) => ({ response: new Response(JSON.stringify(body), { status: 409 }) })
-const base = (wrappedMeta: string | null, metaVersion = 3) => ({ scopeId: SCOPE, nodeId: NODE, nodeKey: key, current: { wrappedMeta, metaVersion } })
+const base = (wrappedMeta: string | null, metaRevision = 3) => ({ scopeId: SCOPE, nodeId: NODE, nodeKey: key, current: { wrappedMeta, metaRevision } })
 
 type Doors = { setNodeCover: Mock<ContentApi['setNodeCover']>; removeNodeCover: Mock<ContentApi['removeNodeCover']>; updateNode: Mock<ContentApi['updateNode']> }
 function api(over: Partial<Doors> = {}): Doors {
@@ -98,7 +98,7 @@ function api(over: Partial<Doors> = {}): Doors {
 }
 
 describe('writeNodeCover - the blob step and the meta that names it, one request', () => {
-  it('an uploaded cover onto a node with none: ONE setNodeCover - the open upload, no blob to replace, the sealed meta at its version', async () => {
+  it('an uploaded cover onto a node with none: ONE setNodeCover - the open upload, no blob to replace, the sealed meta at its revision', async () => {
     const c = api()
     const cover = uploadedCover(plan('new-blob'))
     const done = await writeNodeCover({ ...base(sealMeta({ v: 1, date: { mode: 'single' } })), cover, uploadId: 'up-1' })
@@ -107,12 +107,12 @@ describe('writeNodeCover - the blob step and the meta that names it, one request
     expect(c.removeNodeCover).not.toHaveBeenCalled()
     const req = c.setNodeCover.mock.calls[0][0]
     expect(req).toMatchObject({ scopeId: SCOPE, nodeId: NODE })
-    expect(req.setNodeCoverRequest).toMatchObject({ uploadId: 'up-1', expectedBlobId: null, metaVersion: 3 })
+    expect(req.setNodeCoverRequest).toMatchObject({ uploadId: 'up-1', expectedBlobId: null, metaRevision: 3 })
     // the meta it carries names exactly the blob that was uploaded, and keeps the sibling a Memory sealed beside it
     const sent = openMeta(req.setNodeCoverRequest.wrappedMeta)
     expect(sent.cover).toEqual(cover)
     expect(sent.date).toEqual({ mode: 'single' })
-    expect(done).toMatchObject({ metaVersion: 4, replaced: null })
+    expect(done).toMatchObject({ metaRevision: 4, replaced: null })
     expect(done.wrappedMeta).toBe(req.setNodeCoverRequest.wrappedMeta)
   })
 
@@ -129,11 +129,11 @@ describe('writeNodeCover - the blob step and the meta that names it, one request
     expect(c.setNodeCover).not.toHaveBeenCalled()
     expect(c.updateNode).not.toHaveBeenCalled()
     const req = c.removeNodeCover.mock.calls[0][0].removeNodeCoverRequest
-    expect(req).toMatchObject({ blobId: 'old-blob', metaVersion: 3 })
+    expect(req).toMatchObject({ blobId: 'old-blob', metaRevision: 3 })
     const sent = openMeta(req.wrappedMeta)
     expect('cover' in sent).toBe(false)
     expect(sent.location).toEqual({ name: 'Rom' }) // a sibling survives
-    expect(done.metaVersion).toBe(4)
+    expect(done.metaRevision).toBe(4)
   })
 
   it('a switch from an uploaded cover to another source (a Memory\'s photo) frees the blob in the same request', async () => {
@@ -153,27 +153,27 @@ describe('writeNodeCover - the blob step and the meta that names it, one request
     expect(c.updateNode).toHaveBeenCalledTimes(3)
     expect(c.setNodeCover).not.toHaveBeenCalled()
     expect(c.removeNodeCover).not.toHaveBeenCalled()
-    expect(c.updateNode.mock.calls[0][0].updateNodeRequest).toMatchObject({ metaVersion: 3 })
+    expect(c.updateNode.mock.calls[0][0].updateNodeRequest).toMatchObject({ metaRevision: 3 })
   })
 
   it('a 409 stale_version re-runs on the blob the server holds: the compare is a peer\'s cover now, not the copy the write was built on', async () => {
     const c = api({
       setNodeCover: vi.fn<ContentApi['setNodeCover']>()
-        .mockRejectedValueOnce(stale({ code: 'stale_version', wrappedMeta: uploadedMeta('peer-blob', { location: { name: 'Wien' } }), metaVersion: 7 }))
+        .mockRejectedValueOnce(stale({ code: 'stale_version', wrappedMeta: uploadedMeta('peer-blob', { location: { name: 'Wien' } }), metaRevision: 7 }))
         .mockResolvedValue(undefined),
     })
     const done = await writeNodeCover({ ...base(uploadedMeta('old-blob')), cover: uploadedCover(plan('new-blob')), uploadId: 'up-1', surfaceConflict: false })
 
     expect(c.setNodeCover).toHaveBeenCalledTimes(2)
     const [first, second] = c.setNodeCover.mock.calls.map((x) => x[0].setNodeCoverRequest)
-    expect(first).toMatchObject({ expectedBlobId: 'old-blob', metaVersion: 3, uploadId: 'up-1' })
-    expect(second).toMatchObject({ expectedBlobId: 'peer-blob', metaVersion: 7, uploadId: 'up-1' }) // the SAME upload, re-based
+    expect(first).toMatchObject({ expectedBlobId: 'old-blob', metaRevision: 3, uploadId: 'up-1' })
+    expect(second).toMatchObject({ expectedBlobId: 'peer-blob', metaRevision: 7, uploadId: 'up-1' }) // the SAME upload, re-based
     expect(openMeta(second.wrappedMeta).location).toEqual({ name: 'Wien' }) // the peer's place survives
     expect(uploadBlobOf(done.replaced)).toBe('peer-blob')
   })
 
   it('a cover another writer changed is surfaced to an editor, and replaced by a picker that asked for it', async () => {
-    const peers = stale({ code: 'stale_version', wrappedMeta: uploadedMeta('peer-blob'), metaVersion: 7 })
+    const peers = stale({ code: 'stale_version', wrappedMeta: uploadedMeta('peer-blob'), metaRevision: 7 })
     api({ setNodeCover: vi.fn<ContentApi['setNodeCover']>().mockRejectedValueOnce(peers).mockResolvedValue(undefined) })
     await expect(writeNodeCover({ ...base(null), cover: uploadedCover(plan('mine')), uploadId: 'up-1' })).rejects.toBeInstanceOf(MetaConflictError)
   })

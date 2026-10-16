@@ -43,7 +43,7 @@ const { t, locale } = useI18n()
 const toast = useToast()
 // Every read and write of the organizer goes through the Memory detail's data source (`../source.ts`, inbox #401 S4):
 // its buckets door — the scope's buckets and members, the tree's ancestor keys. A member's only; the detail mounts this
-// where the capabilities AND the source say so, and outside a detail, or on a source without the door, it throws rather
+// where the rights AND the source say so, and outside a detail, or on a source without the door, it throws rather
 // than reach for the member's API itself.
 const buckets = (() => {
   const door = useMemoryView().source.buckets

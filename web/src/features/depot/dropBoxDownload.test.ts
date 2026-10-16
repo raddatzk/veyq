@@ -41,7 +41,7 @@ if (!registry.kind(DROPBOX_KIND).supported) registerDepot(registry)
 const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
 const access = memberAccessOf({ scopeId: 's', epochs })
 const node = (id: string, parentId: string | null, kind: string, name: string, createdAt = 0, over: Partial<TreeNode> = {}): TreeNode =>
-  ({ id, parentId, kind, name, orderIndex: 0, epoch: 1, placementVersion: 0, wrappedContentKey: '', wrappedMeta: null, metaVersion: 0, createdAt, ...over }) as unknown as TreeNode
+  ({ id, parentId, kind, name, orderIndex: 0, epoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt, ...over }) as unknown as TreeNode
 // A drop box in a folder; two guests named Anna (the second sent later), each with a file.
 const NODES = [
   node('box', null, DROPBOX_KIND, 'Postfach'),

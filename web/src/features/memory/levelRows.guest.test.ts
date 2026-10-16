@@ -52,9 +52,9 @@ const keys = { root: v1.randomBytes(32), sub: v1.randomBytes(32), old: v1.random
 const UPLOAD_REF = { blobId: 'cover-blob', chunkCount: 1, byteSize: 3, wrappedBlobKey: 'eA==' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string, meta?: object): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }
+  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
   return {
-    id, parentId, kind, epoch: 0, placementVersion: 0,
+    id, parentId, kind, epoch: 0, placementRevision: 0,
     encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key),
     wrappedMeta: meta ? sealNodeMeta(key, { scopeId: SCOPE_ID, nodeId: id }, { v: 1, ...meta }) : null,
   }

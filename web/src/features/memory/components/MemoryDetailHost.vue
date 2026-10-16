@@ -2,13 +2,13 @@
 // The Memories application's adapter between the host's generic node-detail context (core/applications/registry:
 // `NodeDetailProps`) and the props/events `MemoryDetail` takes (ADR 0079): everything Memories-shaped — the pin
 // state, the item-mark key, the personal-scope flag, the chapters bucket, the meta patch — is resolved here,
-// inside the application, and so are the CAPABILITIES (inbox #401): Memories' own fail-closed matrix over the host's
-// `access` and the opened node (`../capabilities.ts`), which `MemoryDetail` narrows to its data source's doors.
+// inside the application, and so are the RIGHTS (inbox #401): Memories' own fail-closed matrix over the host's
+// `access` and the opened node (`../rights.ts`), which `MemoryDetail` narrows to its data source's doors.
 //
 // **The data source is picked here, once** (inbox #401 S4, `../source.ts`): the member's over the unlocked scope, or a
 // share guest's over its link — by `access.mode`, which does not change while the detail is mounted (a page mounts it
 // per node and session). For a guest nothing of the member's world is read: no `activeSpace` (the item-mark key, the
-// scope kind), no pin store, no `treeStore` patch — the guest's capabilities grant none of them, and the guest's source
+// scope kind), no pin store, no `treeStore` patch — the guest's rights grant none of them, and the guest's source
 // carries no door to them. A guest gets it from core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and
 // chapter of a `READ` or `READ_WRITE` link, the link's root included (inbox #401 S5).
 import { computed } from 'vue'
@@ -24,7 +24,7 @@ import { FULL_FRAME } from '../../../core/node/cover/coverModel'
 import { useI18n } from 'vue-i18n'
 import { patchNodeMeta } from '../../../core/node/treeStore'
 import { keyAt } from '../../spaces/epochs'
-import { memoryCapabilities } from '../capabilities'
+import { memoryRights } from '../rights'
 import { targetOf } from '../../../core/access'
 import { guestMemorySource, memberMemorySource } from '../source'
 import MemoryDetail from './MemoryDetail.vue'
@@ -33,7 +33,7 @@ const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 
 const chapters = computed(() => props.children.byKind.get(CHAPTER_KIND) ?? [])
-const caps = computed(() => memoryCapabilities(props.access, targetOf(props.tree, props.node)))
+const rights = computed(() => memoryRights(props.access, targetOf(props.tree, props.node)))
 
 // Who looks is fixed for this mount (see the header).
 const guest = props.access.mode === 'guest' ? props.access : null
@@ -71,8 +71,8 @@ function onCoverFromPhoto(p: { mediaId: string; src: string | null }) {
   else cover.save(props.node, { kind: 'media', mediaId: p.mediaId, crop: { ...FULL_FRAME } })
 }
 
-function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVersion: number }) {
-  if (!guest) patchNodeMeta(e.nodeId, e.wrappedMeta, e.metaVersion)
+function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevision: number }) {
+  if (!guest) patchNodeMeta(e.nodeId, e.wrappedMeta, e.metaRevision)
 }
 </script>
 
@@ -86,7 +86,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVers
     :core-actions="coreActions"
     :cover-editing="cover.editor.value !== null"
     :chapters="chapters"
-    :caps="caps"
+    :rights="rights"
     :source="source"
     @rename="emit('rename')"
     @move="emit('move', node)"

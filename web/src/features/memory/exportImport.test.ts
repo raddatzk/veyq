@@ -195,9 +195,9 @@ describe('importMemoryContent', () => {
     vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey })
     let n = 0
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
-    vi.mocked(listMedia).mockResolvedValue(['m1', 'm2', 'm3'].map((id) => ({ ...item(id), wrappedMeta: 'w', metaVersion: 1 })))
-    vi.mocked(setMediaMeta).mockResolvedValue({ tier: null, wrappedMeta: 'w2', metaVersion: 2, wrote: true })
-    vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaVersion: 3 } as unknown as TreeNode])
+    vi.mocked(listMedia).mockResolvedValue(['m1', 'm2', 'm3'].map((id) => ({ ...item(id), wrappedMeta: 'w', metaRevision: 1 })))
+    vi.mocked(setMediaMeta).mockResolvedValue({ tier: null, wrappedMeta: 'w2', metaRevision: 2, wrote: true })
+    vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3 } as unknown as TreeNode])
   })
 
   it('creates the Memory with its date and place sealed at birth, adds the originals through the upload and sets the cover', async () => {
@@ -206,7 +206,7 @@ describe('importMemoryContent', () => {
     expect(made.nodeId).toBe(NEW)
     const [, , parent, kind, name, sealer] = vi.mocked(createContentNode).mock.calls[0]
     expect([parent, kind, name]).toEqual([null, MEMORY_KIND, 'Lisbon (2)'])
-    const sealed = sealer!(made.nodeKey, { scopeId: SCOPE, nodeId: NEW, epoch: 1, placementVersion: 0 })
+    const sealed = sealer!(made.nodeKey, { scopeId: SCOPE, nodeId: NEW, epoch: 1, placementRevision: 0 })
     const raw = unsealNodeMeta(made.nodeKey, { scopeId: SCOPE, nodeId: NEW }, sealed)
     expect(raw.date).toEqual({ mode: 'single', from: '2025-09-14' })
     expect(raw.location).toMatchObject({ name: 'Lisbon' })

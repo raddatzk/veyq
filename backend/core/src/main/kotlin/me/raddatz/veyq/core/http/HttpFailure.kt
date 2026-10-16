@@ -67,7 +67,7 @@ fun httpError(failure: HttpFailure): Response =
  * re-GET — the body IS the re-read. Ciphertext the caller can already list, so nothing new crosses. The status
  * still comes from the failure's bucket, never from the call site.
  */
-fun httpStaleSealedMeta(failure: HttpFailure, wrappedMeta: String?, metaVersion: Long): Response =
+fun httpStaleSealedMeta(failure: HttpFailure, wrappedMeta: String?, metaRevision: Long): Response =
     Response.status(failure.status.httpStatus)
-        .entity(StaleSealedMeta(code = failure.code, wrappedMeta = wrappedMeta, metaVersion = metaVersion))
+        .entity(StaleSealedMeta(code = failure.code, wrappedMeta = wrappedMeta, metaRevision = metaRevision))
         .build()

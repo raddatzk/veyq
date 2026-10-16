@@ -53,13 +53,13 @@ object GuestTreeShare {
             .`when`().post("/api/shares/${link.shareId}/nodes").then()
 
     fun place(
-        link: Link, nodeId: String, parentId: String, placementVersion: Long = 0, slugToken: String = slug(),
+        link: Link, nodeId: String, parentId: String, placementRevision: Long = 0, slugToken: String = slug(),
         encryptedName: String = "cGxhY2Vk", wrappedContentKey: String = "cmUtd3JhcHBlZA==",
     ): ValidatableResponse =
         given().contentType(ContentType.JSON).header("X-Contributor-Token", link.token)
             .body(
                 """{"parentId":"$parentId","encryptedName":"$encryptedName","slugToken":"$slugToken",""" +
-                    """"wrappedContentKey":"$wrappedContentKey","placementVersion":$placementVersion}""",
+                    """"wrappedContentKey":"$wrappedContentKey","placementRevision":$placementRevision}""",
             )
             .`when`().patch("/api/shares/${link.shareId}/nodes/$nodeId").then()
 }

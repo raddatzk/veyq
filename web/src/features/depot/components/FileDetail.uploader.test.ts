@@ -145,7 +145,7 @@ const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_6'
 const OTHER_SHARE = 'Oth3rIdOth3rIdOth3rIdOth3rIdOth3rIdOth3r-_6'
 const OTHER_IDENTITY = 'bbbbbbbb-0000-4000-8000-000000000003'
 const F = '5c09e000-0000-4000-8000-0000000000f0'
-const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 })
+const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 })
 
 /** `Docs` at the scope root holding `Report.txt`, every key really wrapped - the chain a member's tree opens. */
 function folderWorld() {

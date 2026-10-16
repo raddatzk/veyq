@@ -11,7 +11,7 @@
 //
 // A file's type, uploaded name and modified time are its BLOB's sealed meta (`wrappedBlobMeta` under `K_blob`, declared
 // with the upload — inbox #397): the suite reads them back from the listed blob, sees the replace bring its own, and
-// asserts the node's own payload is never written (`metaVersion` stays 0).
+// asserts the node's own payload is never written (`metaRevision` stays 0).
 //
 // The raw-wire check is two-fold, as in the neighbouring suites: every plaintext this flow sealed (the file's name, its
 // MIME type, its meta) is handed to `recordCanaries`, which the orchestrator sweeps for in the database, the bucket and
@@ -82,7 +82,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     // sealed meta says what the file is and whose sealed size says how big
     tree = await listTree(scopeId, epochs)
     const fileNode = tree.find((n) => n.id === nodeId)!
-    expect(fileNode).toMatchObject({ kind: FILE_KIND, parentId: folderId, name: NAME, metaVersion: 0 })
+    expect(fileNode).toMatchObject({ kind: FILE_KIND, parentId: folderId, name: NAME, metaRevision: 0 })
     expect(fileNode.wrappedMeta ?? null, 'no node-meta write').toBeNull()
     const nodeKey = nodeContentKey(scopeId, epochs, tree, nodeId)!
     const listed = (await filesApi().listFiles({ scopeId, parentId: folderId })).items
@@ -127,7 +127,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     expect(fileFacts(scopeId, nodeKey, nodeId, blob2)).toEqual({
       size: second.length, meta: { v: 1, type: `${MIME}-2`, name: 'ersetzt-e2e.bin', modifiedAt: 1_700_000_100_000 },
     })
-    expect((await listTree(scopeId, epochs)).find((n) => n.id === nodeId)).toMatchObject({ name: NAME, metaVersion: 0 })
+    expect((await listTree(scopeId, epochs)).find((n) => n.id === nodeId)).toMatchObject({ name: NAME, metaRevision: 0 })
     expect(await contentOf(await fetchFileContent(scopeId, nodeKey, nodeId, blob2))).toEqual(Array.from(second))
 
     // a replace that still expects the OLD blob: 409 stale_file naming the current one, and nothing changes

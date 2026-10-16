@@ -609,7 +609,7 @@ components:
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         encryptedName:
           type: string
-          description: The folder's name (the guest's display name) sealed under `K_up` (seal purpose `node-name`, bound to scope, node, `epoch` and placement version 0; opaque base64).
+          description: The folder's name (the guest's display name) sealed under `K_up` (seal purpose `node-name`, bound to scope, node, `epoch` and placement revision 0; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -631,7 +631,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         wrappedContentKey:
           type: string
-          description: The folder's fresh random content key wrapped under `K_up` (seal purpose `content-key`, bound to scope, node, `epoch` and placement version 0; opaque base64).
+          description: The folder's fresh random content key wrapped under `K_up` (seal purpose `content-key`, bound to scope, node, `epoch` and placement revision 0; opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
@@ -642,14 +642,14 @@ components:
       description: >
         A drop-box guest's own folder as stored: what the guest opens its key from (under `K_up`) and creates its files
         under. Ids, numbers and the guest's own ciphertext only.
-      required: [nodeId, epoch, placementVersion, wrappedContentKey, created]
+      required: [nodeId, epoch, placementRevision, wrappedContentKey, created]
       properties:
         nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         epoch:
           x-veyq-visibility: structure
           type: integer
           example: 0
-        placementVersion:
+        placementRevision:
           x-veyq-visibility: structure
           type: integer
           format: int64

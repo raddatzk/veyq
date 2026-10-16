@@ -169,13 +169,13 @@ acceptanceCriteria:
     text: >-
       A READ_WRITE folder link's guest creates folders (and, through Depot, files) inside the shared subtree and moves or renames
       a node between folders of it, as one placement write re-wrapped under the destination's key and stated against
-      the node's placementVersion (409 stale_placement, nothing written). A create states the epoch the guest sealed
+      the node's placementRevision (409 stale_placement, nothing written). A create states the epoch the guest sealed
       with: above the scope's current one is 409 stale_epoch, at or below it is stored as sent. Never the share root,
       never out of the subtree, never into a cycle; a taken slug is 409 on create and on move; a trashed root takes
       no tree operation. Each is decided under the scope lock, then the share row's.
     coverage:
       backend:
-        integration: [ShareNodesCoreSliceTest.aGuestCreatesAFolderAndANestedNodeAndAMemberListsThem, ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aStalePlacementVersionIsAConflictAndWritesNothing, ShareNodesCoreSliceTest.anEpochAboveTheCurrentIsStaleAndStoresNothing, ShareNodesCoreSliceTest.anEpochBelowTheCurrentIsStoredAsSentWithNoPayload, ShareNodesCoreSliceTest.aTakenSlugIsAConflictOnCreateAndOnMove, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, ShareNodesCoreSliceTest.aGuestCreatesNothingOutsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverRenamesTheShareRoot, ShareNodesCoreSliceTest.aTrashedShareRootTakesNoTreeOperation, ShareNodesSliceTest.aGuestMovesAndRenamesAMemoryBetweenTwoSubfoldersOfASharedFolder, ShareNodeRaceCoreSliceTest.aGuestMoveIntoAFolderAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aGuestCreateUnderAParentAMemberTrashesMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aRevokedOrDeletedLinkNeverAcceptsAGuestWriteMeanwhile, ShareNodeRaceCoreSliceTest.aGuestWriteAndAReactivationOfTheLinkBothLandWithoutADeadlock]
+        integration: [ShareNodesCoreSliceTest.aGuestCreatesAFolderAndANestedNodeAndAMemberListsThem, ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aStalePlacementRevisionIsAConflictAndWritesNothing, ShareNodesCoreSliceTest.anEpochAboveTheCurrentIsStaleAndStoresNothing, ShareNodesCoreSliceTest.anEpochBelowTheCurrentIsStoredAsSentWithNoPayload, ShareNodesCoreSliceTest.aTakenSlugIsAConflictOnCreateAndOnMove, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, ShareNodesCoreSliceTest.aGuestCreatesNothingOutsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverRenamesTheShareRoot, ShareNodesCoreSliceTest.aTrashedShareRootTakesNoTreeOperation, ShareNodesSliceTest.aGuestMovesAndRenamesAMemoryBetweenTwoSubfoldersOfASharedFolder, ShareNodeRaceCoreSliceTest.aGuestMoveIntoAFolderAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aGuestCreateUnderAParentAMemberTrashesMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aRevokedOrDeletedLinkNeverAcceptsAGuestWriteMeanwhile, ShareNodeRaceCoreSliceTest.aGuestWriteAndAReactivationOfTheLinkBothLandWithoutADeadlock]
       web:
         unit: [src/core/sharing/guestTree.wire.test.ts, src/core/sharing/ShareTreePage.test.ts, src/views/ShareView.naming.test.ts, src/features/memory/levelRows.guest.test.ts]
         e2e: [src/features/memory/folderShareGuest.e2e.test.ts]
@@ -183,7 +183,7 @@ acceptanceCriteria:
       - surface: web
         reason: >-
           The guest page offers "New folder" and "Upload files" in the level toolbar's "New" menu (each entry only where
-          its capability function grants it, inbox #401 S2, #406; no "New Memory" or "New drop box" for any guest,
+          its rights function grants it, inbox #401 S2, #406; no "New Memory" or "New drop box" for any guest,
           LevelNewMenu.entries.test.ts), and core's move dialog (inbox #358, uc.memory.move-node, ShareTreePage.move.test.ts); no rename
           control exists, so a guest's rename is proven through placeShareNodeAsGuest by the wire test and the e2e, not
           through a screen.
@@ -203,5 +203,5 @@ acceptanceCriteria:
         integration: [ShareNodesSliceTest.insideAMemoryAGuestWritesNothingAndReadsEverything, ShareNodesSliceTest.aGuestCannotMoveAChapterOutOfAMemory, ShareNodesSliceTest.aMemoryRootedLinkGainsNoTreeOperation, ShareNodesSliceTest.aGuestCreatesNoMemoryInAFolder, ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox, ChapterShareSliceTest.aChapterGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused, CoreAloneSliceTest.aFolderGuestCreatesFoldersOnly, ModuleCompositionTest.aFolderGuestCreatesFoldersAndTheDeclaredKindsOnly, ShareNodesCoreSliceTest.aWriteOnlyOrAReadGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.theGateRefusesAsTheOtherGuestWritesDo]
         unit: [GuestNodeRulesPartitionTest.inAFolderAGuestCreatesAFolderOrADeclaredKindAndMovesAnyKind, GuestCreatableKindsTest.twoDeclarationsOfOneKindFailStartupNamingTheKindAndBoth, DepotNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
       web:
-        unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memory/capabilities.test.ts]
+        unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memory/rights.test.ts]
         e2e: [src/features/memory/folderShareGuest.e2e.test.ts]

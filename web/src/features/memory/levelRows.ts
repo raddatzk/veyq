@@ -15,7 +15,7 @@
 //   device from the `wrappedMeta` the tree already holds (operator-blind - there is no locations API), a guest's from the
 //   opened subtree. Only Memories offers it.
 //
-// What a row offers is Memories' capability matrix for the node (`./capabilities.ts`, inbox #401), fail closed: a share guest
+// What a row offers is Memories' rights matrix for the node (`./rights.ts`, inbox #401), fail closed: a share guest
 // gets the same row with the member-only functions removed. A row's primary click OPENS the Memory (its detail).
 import { computed, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -26,7 +26,7 @@ import { treeStore } from '../../core/node/treeStore'
 import { activeSpace } from '../../app/activeSpace'
 import { targetOf, type TreeSource } from '../../core/access'
 import { collectLocatedPins, collectLocatedPinsBy } from './spaceMap'
-import { memoryCapabilities } from './capabilities'
+import { memoryRights } from './rights'
 import { memoryDetails, NO_FACTS, unsealRowFacts, type MemoryRowFacts } from './memoryRowDetails'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import MemoryRowCover from './components/MemoryRowCover.vue'
@@ -96,7 +96,7 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
   function memoryRow(node: TreeNode): LevelRow {
     // The matrix for THIS node: the rename and the move are about the Memory the row stands for. (The heart is core's
     // row action, `core/favorites`: one for every kind.)
-    const c = memoryCapabilities(ctx.value.access, targetOf(ctx.value.tree, node))
+    const c = memoryRights(ctx.value.access, targetOf(ctx.value.tree, node))
     const cover = coverMap.value.get(node.id)
     const actions: LevelRowAction[] = [
       { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', shown: c.rename, onClick: () => host.rename(node) },

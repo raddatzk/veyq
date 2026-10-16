@@ -34,7 +34,7 @@ import { rowOf } from '../../test/levelRows'
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
 const MK = new Uint8Array(32).fill(9)
 const node = (id: string, kind: string, name: string, parentId: string | null = null): TreeNode =>
-  treeNode({ id, kind, name, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+  treeNode({ id, kind, name, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 
 const TRIPS = node('d0000000-0000-4000-8000-000000000001', FOLDER_KIND, 'Trips')
 const ROME = node('d0000000-0000-4000-8000-000000000002', MEMORY_KIND, 'Rome', TRIPS.id)

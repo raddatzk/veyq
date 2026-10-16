@@ -6,7 +6,7 @@ import type { PublicShare } from '../../api/generated/sharing'
 export function shareTreeFingerprint(share: PublicShare): string {
   const nodes = (share.nodes ?? [])
     .map((n) =>
-      [n.id, n.parentId ?? '', n.kind, n.orderIndex ?? '', n.epoch, n.placementVersion ?? '', n.encryptedName ?? '', n.wrappedContentKey ?? '', n.wrappedMeta ?? '', n.shareIdentityId ?? ''].join('|'),
+      [n.id, n.parentId ?? '', n.kind, n.orderIndex ?? '', n.epoch, n.placementRevision ?? '', n.encryptedName ?? '', n.wrappedContentKey ?? '', n.wrappedMeta ?? '', n.shareIdentityId ?? ''].join('|'),
     )
     .sort()
     .join('\n')

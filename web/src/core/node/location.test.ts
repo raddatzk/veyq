@@ -27,7 +27,7 @@ import { treeNode } from '../../test/models'
 const PERSONAL_SCOPE = '~me'
 
 const node = (id: string, name: string, parentId: string | null, kind: NodeKind = FOLDER_KIND, createdAt = 0): TreeNode => treeNode({
-  id, name, parentId, kind, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, createdAt,
+  id, name, parentId, kind, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, createdAt,
 })
 
 // Reisen 2026 / Rom (a tree that lives in whichever scope is active)

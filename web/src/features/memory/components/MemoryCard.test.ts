@@ -9,7 +9,7 @@ import { realI18n, t } from '../../../test/i18n'
 import { treeNode } from '../../../test/models'
 
 
-const memory: TreeNode = treeNode({ id: 'm1', kind: MEMORY_KIND, name: 'Rom', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+const memory: TreeNode = treeNode({ id: 'm1', kind: MEMORY_KIND, name: 'Rom', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 
 const mountCard = () => mount(MemoryCard, { props: { memory }, global: { plugins: [realI18n()] } })
 

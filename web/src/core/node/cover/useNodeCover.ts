@@ -4,7 +4,7 @@
 // way the favorite heart is (`core/favorites/favoriteActions.ts`), with no change to any application.
 //
 // Called in a view's SETUP (it uses the i18n, toast and watch contexts) with the view's access, tree source and the nodes it
-// draws. ONE action, `cover`, labelled `Set cover` / `Change cover` by whether the node has one, gated by `coverCapabilities`
+// draws. ONE action, `cover`, labelled `Set cover` / `Change cover` by whether the node has one, gated by `coverRights`
 // (member, writable, keys loaded, a kind that opted in; a guest none); it sits in the row's "more" menu, not as a `first`
 // button. It OPENS THE DIALOG (`components/CoverDialog.vue`, mounted by the view through `CoverEditor.vue` from `editor`): the
 // one place a cover is chosen, cropped, re-cropped and REMOVED - there is no separate remove action.
@@ -25,7 +25,7 @@ import type { TreeNode } from '../tree'
 import { patchNodeMeta, treeStore } from '../treeStore'
 import { useToast } from '../../../shared/state/useToast'
 import { MetaConflictError, MetaUnreadableError, staleMetaOf } from '../sealedMetaWrite'
-import { coverCapabilities } from './capabilities'
+import { coverRights } from './rights'
 import { normalizeCoverCrop, uploadedCover, type CoverCrop, type CoverSaveIntent, type LoadedCover } from './coverModel'
 import { useCovers } from './coverStore'
 import { COVER_UNREADABLE, CoverStaleError, uploadCoverImage, writeNodeCover } from './coverWrite'
@@ -59,11 +59,11 @@ export interface UseNodeCover {
   rowActions(node: TreeNode | null): CoreRowAction[]
   /** The dialog's state while it is open (mounted by `CoverEditor.vue`), else null. */
   editor: Ref<CoverEditorState | null>
-  /** Open the dialog on `node` (a no-op where the capability says no). `source` is the application's own photo to crop first. */
+  /** Open the dialog on `node` (a no-op where the right says no). `source` is the application's own photo to crop first. */
   open(node: TreeNode, opts?: { source?: { id: string; src: string } }): void
   /** Close the dialog without saving. */
   close(): void
-  /** Apply what the dialog emitted for `node` (a no-op where the capability says no). */
+  /** Apply what the dialog emitted for `node` (a no-op where the right says no). */
   save(node: TreeNode, intent: CoverSaveIntent): void
 }
 
@@ -88,7 +88,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
   const sync = (): void => store.ensure(nodes(), (id) => tree().keyOf(id))
   watch(() => nodes().map((n) => `${n.id}:${n.kind}:${n.wrappedMeta ?? ''}`).join('|'), sync, { immediate: true })
 
-  const canSet = (node: TreeNode): boolean => coverCapabilities(access(), targetOf(tree(), node)).setCover
+  const canSet = (node: TreeNode): boolean => coverRights(access(), targetOf(tree(), node)).setCover
 
   /** The freshest copy of the node: the tree's, which every cover write patches. */
   const latest = (node: TreeNode): TreeNode => treeStore.nodes.find((n) => n.id === node.id) ?? node
@@ -140,7 +140,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
   async function writeFailed(node: TreeNode, e: unknown): Promise<void> {
     if (e instanceof MetaConflictError) {
       // A peer changed the cover field itself: take what the server holds, re-open the dialog on it and say so.
-      patchNodeMeta(node.id, e.current.wrappedMeta, e.current.metaVersion)
+      patchNodeMeta(node.id, e.current.wrappedMeta, e.current.metaRevision)
       open(node)
       report('cover_stale')
       return
@@ -149,7 +149,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
     else if (e instanceof MetaUnreadableError) report('meta_unreadable')
     else {
       const fresh = await staleMetaOf(e)
-      if (fresh) patchNodeMeta(node.id, fresh.wrappedMeta, fresh.metaVersion)
+      if (fresh) patchNodeMeta(node.id, fresh.wrappedMeta, fresh.metaRevision)
       report('failed')
     }
   }
@@ -173,7 +173,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
               scopeId, nodeId: node.id, nodeKey: key, current: nodeMetaState(latest(node)),
               cover: uploadedCover(up.plan, crop), uploadId: up.uploadId, surfaceConflict: false,
             })
-            patchNodeMeta(node.id, state.wrappedMeta, state.metaVersion)
+            patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
             onProgress(1)
           },
         },
@@ -191,7 +191,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
   async function writeSealed(node: TreeNode, key: Uint8Array, scopeId: string, cover: unknown | null, surfaceConflict: boolean): Promise<void> {
     try {
       const state = await writeNodeCover({ scopeId, nodeId: node.id, nodeKey: key, current: nodeMetaState(latest(node)), cover, surfaceConflict })
-      patchNodeMeta(node.id, state.wrappedMeta, state.metaVersion)
+      patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
     } catch (e) {
       await writeFailed(node, e)
     }

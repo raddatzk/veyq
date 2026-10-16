@@ -222,7 +222,7 @@ describe('AppSidebar tenant switcher', () => {
 describe('AppSidebar favorites — every kind of pinned node, with its kind icon', () => {
   const at = (id: string, kind: string, name: string, parentId: string | null = null): TreeNode =>
     treeNode({
-      id, name, kind, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'k', wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+      id, name, kind, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'k', wrappedMeta: null, metaRevision: 0, placementRevision: 0,
     })
 
   beforeEach(() => {
@@ -293,7 +293,7 @@ describe('AppSidebar favorites — the cover of a pinned node', () => {
       v: 1, cover: uploadedCover({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId }, { x: 0, y: 0, width: 0.5, height: 1 }),
     }))))
   const at = (id: string, kind: string, name: string, wrappedMeta: string | null): TreeNode =>
-    treeNode({ id, name, kind, parentId: null, wrappedMeta, metaVersion: wrappedMeta ? 2 : 0 })
+    treeNode({ id, name, kind, parentId: null, wrappedMeta, metaRevision: wrappedMeta ? 2 : 0 })
 
   beforeEach(() => {
     let n = 0

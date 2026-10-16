@@ -70,16 +70,16 @@ export function walkSubtree(scopeId: string, nodes: ShareNode[], rootKey: Uint8A
     const parentKey = keys.get(parentId)
     if (!parentKey) continue
     for (const child of byParent.get(parentId) ?? []) {
-      if (!child.wrappedContentKey || !child.encryptedName || child.placementVersion == null) continue
+      if (!child.wrappedContentKey || !child.encryptedName || child.placementRevision == null) continue
       try {
-        // Both bound to (scope, this node, its epoch, the placement version served with them) — the node they are
+        // Both bound to (scope, this node, its epoch, the placement revision served with them) — the node they are
         // listed for (ADR 0072, ADR 0080 Decision 3) — and both under the parent's key: the node's directory entry
         // (ADR 0080 Decision 2).
-        const node = { scopeId, nodeId: child.id, epoch: child.epoch, placementVersion: child.placementVersion }
+        const node = { scopeId, nodeId: child.id, epoch: child.epoch, placementRevision: child.placementRevision }
         // a guest's identity folder lives under its guest's K_up, through the parent's drop key (ADR 0080 decision 11)
         const entryKey = childEntryKey(scopeId, opened.get(parentId)!, parentKey, child)
         const key = openContentKey(scopeId, entryKey, {
-          id: child.id, epoch: child.epoch, placementVersion: child.placementVersion, wrappedContentKey: child.wrappedContentKey,
+          id: child.id, epoch: child.epoch, placementRevision: child.placementRevision, wrappedContentKey: child.wrappedContentKey,
         })
         const name = openName(entryKey, node, child.encryptedName)
         keys.set(child.id, key)

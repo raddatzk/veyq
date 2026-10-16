@@ -2,7 +2,7 @@
 // a node go, the one door it moves through for whoever looks, and the refusals it explains by name. Core's, like the
 // placement write itself (`core/node/tree.ts` `moveNode`, `core/sharing/guestTree.ts` `placeShareNodeAsGuest`): a move
 // carries no application semantics — the node's own content key is unchanged, only its wrap, name and slug token are
-// re-sealed under the destination's key at the next placement version (ADR 0080 decision 3), so everything below it keeps
+// re-sealed under the destination's key at the next placement revision (ADR 0080 decision 3), so everything below it keeps
 // opening.
 //
 // **The browser (owner decision 2026-10-14, replacing #358's list of every destination).** It opens at the moved nodes'
@@ -214,7 +214,7 @@ function memberMover(access: () => MemberAccess): NodeMover {
     async move(nodeId, to) {
       const { scopeId, epochs } = access()
       if (!scopeId || !epochs) throw new Error('scope_locked')
-      // The loaded tree: the node's key, the destination's, its placement version (re-read once on a lost race).
+      // The loaded tree: the node's key, the destination's, its placement revision (re-read once on a lost race).
       await moveNode(scopeId, epochs, treeStore.nodes, nodeId, to)
       await loadTree()
     },

@@ -121,7 +121,7 @@ class TreeRevisionCoreSliceTest {
     @Test
     fun aMetaWriteMovesIt() {
         val t = tree()
-        assertEquals(1L, moved(t.scopeId) { patch(t, t.child, """{"wrappedMeta":"bWV0YQ==","metaVersion":0}""").statusCode(204) })
+        assertEquals(1L, moved(t.scopeId) { patch(t, t.child, """{"wrappedMeta":"bWV0YQ==","metaRevision":0}""").statusCode(204) })
     }
 
     @Test
@@ -168,7 +168,7 @@ class TreeRevisionCoreSliceTest {
         val t = guestTree()
         val created = UUID.randomUUID().toString()
         assertEquals(1L, moved(t.scopeId) { GuestTreeShare.create(t.link, t.root, NodeEntity.FOLDER, nodeId = created).statusCode(201) })
-        assertEquals(1L, moved(t.scopeId) { GuestTreeShare.place(t.link, created, t.root, placementVersion = 0).statusCode(204) })
+        assertEquals(1L, moved(t.scopeId) { GuestTreeShare.place(t.link, created, t.root, placementRevision = 0).statusCode(204) })
     }
 
     // --- what changes nothing moves nothing ---
@@ -177,14 +177,14 @@ class TreeRevisionCoreSliceTest {
     fun aRefusedWriteMovesNothing() {
         val t = tree()
         val taken = GuestTreeShare.slug()
-        place(t, t.child, to = t.a, version = 0, slugToken = taken).statusCode(204) // placement version 1; `taken` lives under `a`
-        patch(t, t.child, """{"wrappedMeta":"bWV0YQ==","metaVersion":0}""").statusCode(204) // meta version 1
+        place(t, t.child, to = t.a, version = 0, slugToken = taken).statusCode(204) // placement revision 1; `taken` lives under `a`
+        patch(t, t.child, """{"wrappedMeta":"bWV0YQ==","metaRevision":0}""").statusCode(204) // meta revision 1
         val atRoot = GuestTreeShare.slug()
         createWithSlug(t.userId, t.scopeId, atRoot, parent = null).statusCode(201)
         assertEquals(0L, moved(t.scopeId) {
             place(t, t.child, to = t.a, version = 0).statusCode(409) // a stale placement
             place(t, t.b, to = t.a, version = 0, slugToken = taken).statusCode(409) // a slug taken under the destination
-            patch(t, t.child, """{"wrappedMeta":"c3RhbGU=","metaVersion":0}""").statusCode(409) // a stale meta write
+            patch(t, t.child, """{"wrappedMeta":"c3RhbGU=","metaRevision":0}""").statusCode(409) // a stale meta write
             patch(t, UUID.randomUUID().toString(), """{"orderIndex":1}""").statusCode(404) // no such node
             createWithSlug(t.userId, t.scopeId, atRoot, parent = null).statusCode(409) // a slug taken at the root
             restore(t, t.b).statusCode(404) // a live node is no trash root
@@ -320,7 +320,7 @@ class TreeRevisionCoreSliceTest {
         val parent = to?.let { "\"parentId\":\"$it\"," } ?: ""
         return patch(
             t, node,
-            """{$parent"encryptedName":"cGxhY2Vk","slugToken":"$slugToken","wrappedContentKey":"cmUtd3JhcHBlZA==","epoch":0,"placementVersion":$version}""",
+            """{$parent"encryptedName":"cGxhY2Vk","slugToken":"$slugToken","wrappedContentKey":"cmUtd3JhcHBlZA==","epoch":0,"placementRevision":$version}""",
         )
     }
 

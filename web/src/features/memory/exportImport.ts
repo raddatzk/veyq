@@ -324,7 +324,7 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
       added.push({ mediaId, medium })
     }
 
-    // Second pass: what the upload cannot derive from the file. One listing gives the rows (wrappedMeta, metaVersion). A copy
+    // Second pass: what the upload cannot derive from the file. One listing gives the rows (wrappedMeta, metaRevision). A copy
     // sealed every fact at birth and needs none.
     const fixes = copying ? [] : added.filter(({ medium }) => medium.capturedAtCorrected || medium.location?.place)
     if (fixes.length > 0) {
@@ -336,7 +336,7 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
         const at = isoToMs(medium.capturedAt)
         if (medium.capturedAtCorrected && at !== undefined) {
           const w = await setMediaMeta(ctx.scopeId, target, nodeKey, at)
-          target = { ...target, wrappedMeta: w.wrappedMeta ?? undefined, metaVersion: w.metaVersion }
+          target = { ...target, wrappedMeta: w.wrappedMeta ?? undefined, metaRevision: w.metaRevision }
         }
         if (medium.location?.place) await backfillPlaceName(ctx.scopeId, target, nodeKey, medium.location.place)
       }

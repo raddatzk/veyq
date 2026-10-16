@@ -41,9 +41,9 @@ const subRow = (sealedName: string, bucketId = BUCKET) =>
 describe('openBucketName — a guest named under an ancestor\'s key', () => {
   const FOLDER = '5c09e000-0000-4000-8000-0000000000f1'
   const node = (id: string, parentId: string | null, kind: string, wrappedContentKey: string): TreeNode =>
-    treeNode({ id, parentId, kind, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+    treeNode({ id, parentId, kind, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
   const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
-    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 }, kek, k))
 
   it('a Memory below a shared folder: the member reads the folder guest\'s name through the chain', () => {
     const scopeKey = v1.randomBytes(32)

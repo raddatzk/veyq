@@ -55,7 +55,7 @@ export function unsealMemoryDate(
 
 /**
  * The date EDITOR's save: **read-modify-write** the node-meta blob — swap in only the `date`, re-seal, PATCH with
- * the `metaVersion` it was built from (cr-0067 / cr-0069, ADR 0077). A sibling `location`/`cover` is preserved,
+ * the `metaRevision` it was built from (cr-0067 / cr-0069, ADR 0077). A sibling `location`/`cover` is preserved,
  * including one a peer wrote meanwhile (the `409` re-run). If the peer changed the DATE itself, the save throws
  * `MetaConflictError` carrying the current state, and the editor re-opens on it; a blob that does not open throws
  * `MetaUnreadableError`. Returns the state the server confirmed, for the caller's tree.

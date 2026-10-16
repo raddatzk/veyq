@@ -103,13 +103,13 @@ describe('openNodeMetaForWrite — only an ABSENT blob is fresh (ADR 0077 point 
 })
 
 describe('nodeMetaState', () => {
-  it('is the blob and the version the tree holds, nothing else', () => {
-    expect(nodeMetaState(treeNode({ wrappedMeta: 'YQ==', metaVersion: 7, id: 'n' }))).toEqual({ wrappedMeta: 'YQ==', metaVersion: 7 })
+  it('is the blob and the revision the tree holds, nothing else', () => {
+    expect(nodeMetaState(treeNode({ wrappedMeta: 'YQ==', metaRevision: 7, id: 'n' }))).toEqual({ wrappedMeta: 'YQ==', metaRevision: 7 })
   })
 })
 
 describe('editField — an editor re-applies only its own field, and refuses when THAT field moved (ADR 0077 point 3)', () => {
-  const state = { wrappedMeta: 'c3RhdGU=', metaVersion: 3 }
+  const state = { wrappedMeta: 'c3RhdGU=', metaRevision: 3 }
   const first = { retry: false, state }
   const again = { retry: true, state }
 

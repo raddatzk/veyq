@@ -25,7 +25,7 @@
 //   there is (replace anyway after a peer's replace).
 // - **Download and delete** (the delete into the scope's trash with the undo, inbox #385 (c)).
 //
-// What a row offers is Depot's capability matrix for the level (`./capabilities.ts`, inbox #401) narrowed to the doors the
+// What a row offers is Depot's rights matrix for the level (`./rights.ts`, inbox #401) narrowed to the doors the
 // session's source carries (`./source.ts`): a member and a share guest get the same rows, a guest fewer actions. Every action
 // is `shown` by that answer - fail closed. A row's primary click OPENS the node (a file's own page `FileDetail`, a drop box's
 // `DropBoxDetail`); the file's download is its one first-class action.
@@ -49,12 +49,12 @@ import { deliveredSince, FileUploadError, type FileJobExtra, type FileUploadResu
 import { fileFacts } from './download'
 import { plaintextTotal } from '../../sw/range'
 import { isSaveCancelled, SaveTooLarge } from '../../shared/saveStream'
-import { canUploadFolder, depotCapabilities } from './capabilities'
+import { canUploadFolder, depotRights } from './rights'
 import { targetOf, type GuestAccess, type TreeSource } from '../../core/access'
 import { pickedDirectory, type DirectoryInput } from '../../core/export/importSource'
 import { tenantStorageFits } from '../tenant/tenantStorage'
 import { createFolders, planFolderUpload } from './uploadFolder'
-import { guestDepotSource, memberDepotSource, sourceCapabilities, type FileUploadEntry, type DepotSource } from './source'
+import { guestDepotSource, memberDepotSource, sourceRights, type FileUploadEntry, type DepotSource } from './source'
 
 /** The id of Depot's "Upload files" level action (`register.ts` declares the menu entry under it). */
 export const UPLOAD_ACTION = 'depot.upload'
@@ -92,7 +92,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
   const fileNodes = computed(() => ctx.value.nodes.filter((n) => n.kind === FILE_KIND))
   const boxNodes = computed(() => ctx.value.nodes.filter((n) => n.kind === DROPBOX_KIND))
   /** What the matrix says for the level on screen, narrowed to the doors this session's source carries. */
-  const caps = computed(() => sourceCapabilities(depotCapabilities(ctx.value.access, targetOf(ctx.value.tree, ctx.value.folder)), source))
+  const rights = computed(() => sourceRights(depotRights(ctx.value.access, targetOf(ctx.value.tree, ctx.value.folder)), source))
   /** The session can write now (a member's epoch keys are unlocked). */
   const writeReady = computed(() => source.upload?.ready() ?? false)
   const keyOf = (node: TreeNode): Uint8Array | null => ctx.value.tree.keyOf(node.id)
@@ -204,7 +204,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
    */
   async function startUploads(files: File[], replaceNode?: TreeNode, confirmed = false): Promise<void> {
     const upload = source.upload
-    if (!upload || !upload.ready() || !(replaceNode ? caps.value.replace : caps.value.upload) || files.length === 0) return
+    if (!upload || !upload.ready() || !(replaceNode ? rights.value.replace : rights.value.upload) || files.length === 0) return
     const batch = upload.begin(ctx.value.folder)
     if (!batch) return
     const entries: FileUploadEntry[] = []
@@ -216,7 +216,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
         refusals.value = [...refusals.value, { key: `refused-${++refusalSeq}`, text: takenBy(file.name, other) }]
         continue
       }
-      const existing = replaceNode ?? (caps.value.replace ? siblingFile(file.name) : undefined)
+      const existing = replaceNode ?? (rights.value.replace ? siblingFile(file.name) : undefined)
       if (existing && !confirmed && !isEmpty(existing)) {
         const accepted = await ask({
           header: t('depot.replaceTitle'),
@@ -260,7 +260,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
   // the same entry: both exist for as long as the level does, whichever tab is shown. A drop is only ever as enabled as the
   // menu entry (core asks `enabled()` first).
   host.registerAction(UPLOAD_ACTION, {
-    enabled: () => caps.value.upload && writeReady.value,
+    enabled: () => rights.value.upload && writeReady.value,
     run: () => picker.click(),
     drop: (files) => void startUploads(files),
   })
@@ -365,7 +365,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
         const code = item.error && KNOWN_ERRORS.has(item.error) ? item.error : 'failed'
         return [{
           key: item.id, severity: 'error', text: noticeText(code, item.name),
-          actions: code === FileUploadError.staleFile && caps.value.replace
+          actions: code === FileUploadError.staleFile && rights.value.replace
             ? [{ id: 'replace-anyway', label: t('depot.replaceAnyway'), onClick: () => void replaceAnyway(item) }]
             : [],
           dismiss: () => removeFile(item.id),
@@ -419,7 +419,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     const key = keyOf(node)
     const blob = blobs.value.get(node.id) ?? null
     const name = node.name
-    const c = caps.value
+    const c = rights.value
     const actions: LevelRowAction[] = [
       // The one first-class action: a file's purpose is to be taken.
       {
@@ -452,7 +452,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
   function boxRow(node: TreeNode): LevelRow {
     const name = node.name
     // The matrix for THIS drop box (`deleteNode`, `moveNode` are about the node on screen).
-    const c = sourceCapabilities(depotCapabilities(ctx.value.access, targetOf(ctx.value.tree, node)), source)
+    const c = sourceRights(depotRights(ctx.value.access, targetOf(ctx.value.tree, node)), source)
     const guests = ctx.value.tree.children(node.id).length
     return {
       icon: 'pi pi-inbox',

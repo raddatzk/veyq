@@ -44,7 +44,7 @@ class ShareFilesResource(
         ) {
             is DropFolderOutcome.Folder -> Response.ok(
                 DropFolder(
-                    nodeId = UUID.fromString(o.folder.nodeId), epoch = o.folder.epoch, placementVersion = o.folder.placementVersion,
+                    nodeId = UUID.fromString(o.folder.nodeId), epoch = o.folder.epoch, placementRevision = o.folder.placementRevision,
                     wrappedContentKey = o.folder.wrappedContentKey, created = o.folder.created,
                 ),
             ).build()

@@ -54,10 +54,10 @@ const upload = (nodeId: string, blobId: string, c: CoverCrop = FULL) =>
   uploadedCover({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId }, c)
 const photo = (mediaId: string, c: CoverCrop = FULL) => ({ source: { kind: 'media', mediaId }, crop: c })
 
-const FOLDER = treeNode({ id: 'f0000000-0000-4000-8000-000000000001', kind: FOLDER_KIND, name: 'Trips', parentId: null, metaVersion: 0 })
-const MEMORY = treeNode({ id: 'f0000000-0000-4000-8000-000000000002', kind: MEMORY_KIND, name: 'Rome', parentId: null, metaVersion: 0 })
-const FILE = treeNode({ id: 'f0000000-0000-4000-8000-000000000003', kind: FILE_KIND, name: 'Plan.pdf', parentId: null, metaVersion: 0 })
-const withMeta = (n: TreeNode, meta: object, version = 3): TreeNode => ({ ...n, wrappedMeta: sealed(n.id, meta), metaVersion: version })
+const FOLDER = treeNode({ id: 'f0000000-0000-4000-8000-000000000001', kind: FOLDER_KIND, name: 'Trips', parentId: null, metaRevision: 0 })
+const MEMORY = treeNode({ id: 'f0000000-0000-4000-8000-000000000002', kind: MEMORY_KIND, name: 'Rome', parentId: null, metaRevision: 0 })
+const FILE = treeNode({ id: 'f0000000-0000-4000-8000-000000000003', kind: FILE_KIND, name: 'Plan.pdf', parentId: null, metaRevision: 0 })
+const withMeta = (n: TreeNode, meta: object, version = 3): TreeNode => ({ ...n, wrappedMeta: sealed(n.id, meta), metaRevision: version })
 
 function harness(nodes: TreeNode[], access: Access = memberAccessOf({ scopeId: SCOPE, epochs: EPOCHS })) {
   nodes = nodes.map((n) => ({ ...n })) // a write patches the tree's copy in place: never the shared constants
@@ -81,7 +81,7 @@ beforeEach(() => {
   clearUploads()
   loaded = new Map()
   declaredIds = new Set()
-  vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaVersion: 9, replaced: null })
+  vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaRevision: 9, replaced: null })
   vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'up-1', plan: { blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: FOLDER.id } })
 })
 
@@ -187,12 +187,12 @@ describe('what each intent writes', () => {
     const api = harness([FOLDER])
     vi.mocked(uploadCoverImage).mockImplementation(async () => {
       treeStore.nodes[0].wrappedMeta = 'cGVlcg=='
-      treeStore.nodes[0].metaVersion = 7
+      treeStore.nodes[0].metaRevision = 7
       return { uploadId: 'up-1', plan: { blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: FOLDER.id } }
     })
     api.save(FOLDER, { kind: 'upload', file, crop })
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
-    expect(lastWrite().current).toEqual({ wrappedMeta: 'cGVlcg==', metaVersion: 7 })
+    expect(lastWrite().current).toEqual({ wrappedMeta: 'cGVlcg==', metaRevision: 7 })
   })
 
   it('upload: a file that is no image is refused before any upload (a dialog never emits one; the door is shut anyway)', () => {
@@ -207,7 +207,7 @@ describe('what each intent writes', () => {
     const api = harness([node])
     api.save(node, { kind: 'remove' })
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
-    expect(lastWrite()).toMatchObject({ nodeId: node.id, cover: null, surfaceConflict: false, current: { metaVersion: 3 } })
+    expect(lastWrite()).toMatchObject({ nodeId: node.id, cover: null, surfaceConflict: false, current: { metaRevision: 3 } })
     expect(uploadCoverImage).not.toHaveBeenCalled()
   })
 
@@ -238,7 +238,7 @@ describe('what each intent writes', () => {
   })
 
   it('keep on a meta that does not open has no cover to keep and writes nothing', async () => {
-    const node = { ...FOLDER, wrappedMeta: 'bm90IHNlYWxlZA==', metaVersion: 2 }
+    const node = { ...FOLDER, wrappedMeta: 'bm90IHNlYWxlZA==', metaRevision: 2 }
     const api = harness([node])
     api.save(node, { kind: 'keep', crop })
     await flushPromises()
@@ -279,10 +279,10 @@ describe('when a write does not land', () => {
     const node = withMeta(FOLDER, { cover: upload(FOLDER.id, 'b-1') })
     declaredIds.add(node.id)
     const api = harness([node])
-    vi.mocked(writeNodeCover).mockRejectedValue(new MetaConflictError({ wrappedMeta: 'cGVlcg==', metaVersion: 6 }))
+    vi.mocked(writeNodeCover).mockRejectedValue(new MetaConflictError({ wrappedMeta: 'cGVlcg==', metaRevision: 6 }))
     api.save(node, { kind: 'keep', crop })
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith(t('node.cover.stale')))
-    expect(treeStore.nodes[0]).toMatchObject({ wrappedMeta: 'cGVlcg==', metaVersion: 6 })
+    expect(treeStore.nodes[0]).toMatchObject({ wrappedMeta: 'cGVlcg==', metaRevision: 6 })
     expect(api.editor.value?.node.id).toBe(node.id)
   })
 
@@ -291,7 +291,7 @@ describe('when a write does not land', () => {
     vi.mocked(writeNodeCover).mockRejectedValue(new CoverStaleError())
     api.save(FOLDER, { kind: 'remove' })
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith(t('node.cover.stale')))
-    expect(treeStore.nodes[0].metaVersion).toBe(0)
+    expect(treeStore.nodes[0].metaRevision).toBe(0)
   })
 
   it('a details blob that does not open says it cannot be changed', async () => {

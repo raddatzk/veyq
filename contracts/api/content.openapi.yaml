@@ -16,7 +16,7 @@ info:
     A node's directory entry lives under that same parent key (ADR 0080 Decision 2): the client encrypts the name
     under it and computes the blinded slug token (a keyed MAC under it), so whoever holds a node's key reads every
     name below it.
-    Each node may hold one sealed, versioned payload (`wrappedMeta`, `metaVersion`) whose format is its kind's
+    Each node may hold one sealed payload with its revision (`wrappedMeta`, `metaRevision`) whose format is its kind's
     application's. The server enforces structure only: a caller must hold a grant for the scope, slug
     uniqueness per parent (`UNIQUE(parentId, slugToken)`), the placement rule of the node's kind (core's for
     FOLDER, the kind's application's otherwise), no cycle, no cross-scope move. Authorization is enforced by
@@ -98,7 +98,7 @@ paths:
       summary: List the scope's tree (opaque rows).
       description: >
         Returns every node in the scope with its opaque id, parent, kind, ordering, ciphertext name, slug
-        token, sealed payload (`wrappedMeta` + `metaVersion`), and the `wrappedContentKey`. The client assembles the tree top-down, opening each
+        token, sealed payload (`wrappedMeta` + `metaRevision`), and the `wrappedContentKey`. The client assembles the tree top-down, opening each
         name under its parent's content key (`K_SC` at the node's epoch for a scope-root node, ADR 0080 Decision 2); the operator sees only the shape.
 
         **Conditional GET (ADR 0081):** the scope carries one monotonic **tree revision**, bumped in the same transaction as
@@ -149,11 +149,11 @@ paths:
       tags: [content]
       operationId: updateNode
       x-veyq-concurrency:
-        mode: version
+        mode: revision
         fields:
-          - field: metaVersion
+          - field: metaRevision
             requiredWith: [wrappedMeta]
-          - field: placementVersion
+          - field: placementRevision
             requiredWith: [encryptedName, parentId, wrappedContentKey, slugToken]
             conflictCode: stale_placement
       summary: Move / rename (one placement write), reorder, or re-seal a node's payload.
@@ -165,11 +165,11 @@ paths:
         3). It carries all of: the destination `parentId` (null/absent = the scope root; a rename sends the
         current parent), the node's content key re-wrapped under the destination parent's key
         (`wrappedContentKey`), the name re-sealed under that key (`encryptedName`), the slug token recomputed under
-        it (`slugToken`), the `epoch` the entry was sealed at, and the `placementVersion` it was built on. Sending
+        it (`slugToken`), the `epoch` the entry was sealed at, and the `placementRevision` it was built on. Sending
         any of `encryptedName`, `slugToken`, `wrappedContentKey` or a `parentId` without the rest is `400
-        invalid_request`. The wrap and the name are sealed bound to the version the server will store,
-        `placementVersion + 1` (ADR 0072), so a wrap or a name served at another version or on another node's row
-        does not open. The server compare-and-sets the node's placement version and applies every field at once,
+        invalid_request`. The wrap and the name are sealed bound to the revision the server will store,
+        `placementRevision + 1` (ADR 0072), so a wrap or a name served at another revision or on another node's row
+        does not open. The server compare-and-sets the node's placement revision and applies every field at once,
         or writes **nothing** and answers `409 stale_placement` (the client re-reads the node and rebuilds, ADR
         0077). Structure only: the destination is the root or a live node of the same scope, the kind's placement
         rule admits it there, it is neither the node nor inside the node's subtree (else `422
@@ -179,12 +179,12 @@ paths:
         `epoch`; a placement between two non-root parents keeps the node's stored epoch. At any destination an
         `epoch` above the scope's current one is `409 stale_epoch` (no such epoch exists yet).
 
-        **Reorder** = `orderIndex`, unversioned.
+        **Reorder** = `orderIndex`, with no revision.
 
-        **Meta** = a re-sealed `wrappedMeta` with the `metaVersion` it was built from — required whenever
+        **Meta** = a re-sealed `wrappedMeta` with the `metaRevision` it was built from — required whenever
         `wrappedMeta` is sent (else `400 invalid_request`); the server compare-and-sets it and stores
-        `metaVersion + 1`, or writes **nothing** (a placement in the same request included) and answers `409
-        stale_version` carrying the current blob and version (ADR 0077).
+        `metaRevision + 1`, or writes **nothing** (a placement in the same request included) and answers `409
+        stale_version` carrying the current blob and revision (ADR 0077).
       security:
         - bearerAuth: []
       parameters:
@@ -201,12 +201,12 @@ paths:
               slugToken: bmV3LXNsdWc=
               wrappedContentKey: cmUtd3JhcHBlZC1rLW1lbQ==
               epoch: 0
-              placementVersion: 2
+              placementRevision: 2
       responses:
         "204":
           description: The node was updated.
         "400":
-          description: Malformed request, or an incomplete placement write (a name, slug, wrap or parent without the rest of it, or without its `placementVersion` and `epoch`).
+          description: Malformed request, or an incomplete placement write (a name, slug, wrap or parent without the rest of it, or without its `placementRevision` and `epoch`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -222,14 +222,14 @@ paths:
           description: >
             A sibling at the destination already has that slug (`slug_taken`); the space is being deleted and
             read-only (`scope_deleting`, uc.spaces.delete-group A4); the node was moved or renamed since the stated
-            `placementVersion` (`stale_placement` — nothing was written; the client re-reads the node and rebuilds
+            `placementRevision` (`stale_placement` — nothing was written; the client re-reads the node and rebuilds
             the placement against it, ADR 0080 Decision 3); a placement at the scope root stated an `epoch` that is
             not the scope's current one, or any placement one above it (`stale_epoch` — nothing was written, ADR 0080
             Decision 4); or the node's
-            `wrappedMeta` moved since the stated `metaVersion` (`stale_version`, with the current blob and version —
+            `wrappedMeta` moved since the stated `metaRevision` (`stale_version`, with the current blob and revision —
             nothing was written, ADR 0077). Every code but `stale_version` carries `code` alone.
           content:
-            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: d3JhcHBlZC1tZXRh, metaVersion: 4 } }
+            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: d3JhcHBlZC1tZXRh, metaRevision: 4 } }
         "422":
           description: Illegal structure (the node's kind may not live under the destination, the destination is missing, trashed or in another scope, or the move would create a cycle — the destination is the node itself or inside its subtree).
           content:
@@ -276,9 +276,9 @@ paths:
       tags: [content]
       operationId: setNodeCover
       x-veyq-concurrency:
-        mode: version
+        mode: revision
         fields:
-          - field: metaVersion
+          - field: metaRevision
             required: true
       summary: Make an uploaded image the node's cover - the blob and the sealed meta naming it, in one write (inbox #411).
       description: >
@@ -293,9 +293,9 @@ paths:
         node and role, ADR 0072) and re-sealed the node's `wrappedMeta` with the cover ref it now names. The server
         verifies the upload (declare-then-verify), attaches it to the slot - replacing, and freeing in the same
         transaction, the blob the client states it replaces (`expectedBlobId`, null for an empty slot) - and
-        compare-and-sets the node's `wrappedMeta` at `metaVersion` (ADR 0077). Either both land or neither does: a
+        compare-and-sets the node's `wrappedMeta` at `metaRevision` (ADR 0077). Either both land or neither does: a
         slot another writer changed since the client read it is `409 cover_stale` (the upload is spent and its blob
-        freed, as a Files replace is), a meta that moved is `409 stale_version` with the current blob and version and
+        freed, as a Files replace is), a meta that moved is `409 stale_version` with the current blob and revision and
         **nothing written, the upload still open** - the client re-applies its change and sends the same upload
         again. So a cover and the meta that names it can never part. The compare is the write's own predicate.
 
@@ -319,10 +319,10 @@ paths:
               uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
               expectedBlobId: null
               wrappedMeta: d3JhcHBlZC1tZXRh
-              metaVersion: 3
+              metaRevision: 3
       responses:
         "204":
-          description: The upload is the node's cover, the node's `wrappedMeta` is the one sent (at `metaVersion + 1`), and any replaced cover blob is freed.
+          description: The upload is the node's cover, the node's `wrappedMeta` is the one sent (at `metaRevision + 1`), and any replaced cover blob is freed.
         "400":
           description: Malformed request, or the upload failed declare-then-verify (`budget_exceeded`).
           content:
@@ -347,14 +347,14 @@ paths:
       tags: [content]
       operationId: removeNodeCover
       x-veyq-concurrency:
-        mode: version
+        mode: revision
         fields:
-          - field: metaVersion
+          - field: metaRevision
             required: true
       summary: Remove the node's cover - the blob and the sealed meta that named it, in one write (inbox #411).
       description: >
         The cover blob goes (its row, and its store objects on the reclaim list, in the same transaction) and the
-        node's `wrappedMeta` is re-sealed without the cover, compare-and-set at `metaVersion`; nothing is written
+        node's `wrappedMeta` is re-sealed without the cover, compare-and-set at `metaRevision`; nothing is written
         unless both can be. The request names the blob it expects in the slot (`blobId`, what the client read in the
         sealed meta): a slot that holds another blob is `409 cover_stale` and nothing is written. A slot already empty
         (a replay, or a cover whose source was never an upload) still writes the meta, so the removal is
@@ -374,10 +374,10 @@ paths:
             example:
               blobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
               wrappedMeta: d3JhcHBlZC1tZXRh
-              metaVersion: 4
+              metaRevision: 4
       responses:
         "204":
-          description: The slot is empty, the blob freed, and the node's `wrappedMeta` is the one sent (at `metaVersion + 1`).
+          description: The slot is empty, the blob freed, and the node's `wrappedMeta` is the one sent (at `metaRevision + 1`).
         "400":
           description: Malformed request.
           content:
@@ -496,8 +496,8 @@ components:
   responses:
     CoverConflict:
       description: >
-        The node's `wrappedMeta` moved since the stated `metaVersion` (`stale_version`, with the current blob and
-        version - nothing was written and the upload is still open, ADR 0077); the cover slot holds another blob than
+        The node's `wrappedMeta` moved since the stated `metaRevision` (`stale_version`, with the current blob and
+        revision - nothing was written and the upload is still open, ADR 0077); the cover slot holds another blob than
         the one stated (`cover_stale`, with `currentBlobId` - nothing was attached, the upload was spent); or the
         space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
       content:
@@ -533,7 +533,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under its parent's content key — `K_SC` at the node's epoch for a scope-root node (ADR 0080 Decision 2) — bound to scope, node, epoch and placement version 0 (a new node's; ADR 0072; opaque base64).
+          description: The node name, AEAD-sealed under its parent's content key — `K_SC` at the node's epoch for a scope-root node (ADR 0080 Decision 2) — bound to scope, node, epoch and placement revision 0 (a new node's; ADR 0072; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -567,14 +567,14 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         wrappedContentKey:
           type: string
-          description: The node's content key — a fresh random key wrapped under its parent's content key (`K_SC` at the node's epoch for a scope-root node, the parent node's content key below it; opaque base64), bound to scope, node, epoch and placement version 0. Every kind carries one, FOLDER included (ADR 0080 Decision 1); a create without it is `400`.
+          description: The node's content key — a fresh random key wrapped under its parent's content key (`K_SC` at the node's epoch for a scope-root node, the parent node's content key below it; opaque base64), bound to scope, node, epoch and placement revision 0. Every kind carries one, FOLDER included (ADR 0080 Decision 1); a create without it is `400`.
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedMeta:
           type: [string, "null"]
-          description: The node's versioned sealed payload — AEAD-sealed under this node's content key (seal purpose `node-meta`, bound to scope + node; opaque base64). Its plaintext format is the kind's application's, versioned by that application; absent = the node has none yet. The server never inspects it.
+          description: The node's sealed payload, with its own revision — AEAD-sealed under this node's content key (seal purpose `node-meta`, bound to scope + node; opaque base64). Its plaintext format is the kind's application's, versioned by that application; absent = the node has none yet. The server never inspects it.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -584,14 +584,14 @@ components:
       type: object
       description: >
         Partial update — a placement write (move or rename: `parentId`, `wrappedContentKey`, `encryptedName`,
-        `slugToken`, `epoch`, `placementVersion`, all together), a reorder (`orderIndex`), a payload re-seal
-        (`wrappedMeta` + `metaVersion`). Omitted fields are unchanged.
+        `slugToken`, `epoch`, `placementRevision`, all together), a reorder (`orderIndex`), a payload re-seal
+        (`wrappedMeta` + `metaRevision`). Omitted fields are unchanged.
       properties:
         encryptedName:
           type: string
           description: >
             Placement write: the name re-sealed under the destination parent's content key (`K_SC` at `epoch` at
-            the scope root), seal purpose `node-name` bound to scope, node, `epoch` and `placementVersion + 1` (ADR
+            the scope root), seal purpose `node-name` bound to scope, node, `epoch` and `placementRevision + 1` (ADR
             0072, ADR 0080 Decision 3; opaque base64).
           contentEncoding: base64
           maxLength: 4096
@@ -615,8 +615,8 @@ components:
           description: >
             Placement write — the node's own content key (unchanged) re-wrapped under the destination parent's
             content key (`K_SC` at `epoch` at the scope root), seal purpose `content-key` bound to scope, node,
-            `epoch` and `placementVersion + 1` (ADR 0080 Decision 3; opaque base64). A rename re-wraps too: the old
-            wrap is bound to the old version.
+            `epoch` and `placementRevision + 1` (ADR 0080 Decision 3; opaque base64). A rename re-wraps too: the old
+            wrap is bound to the old revision.
           contentEncoding: base64
           maxLength: 256
           example: cmUtd3JhcHBlZC1rLW1lbQ==
@@ -632,13 +632,13 @@ components:
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
-        placementVersion:
+        placementRevision:
           x-veyq-visibility: structure
           type: [integer, "null"]
           format: int64
           description: >
-            Placement write — the `NodeSummary.placementVersion` the placement was built on. The server
-            compare-and-sets it and stores `placementVersion + 1`, the version the sent wrap and name are sealed
+            Placement write — the `NodeSummary.placementRevision` the placement was built on. The server
+            compare-and-sets it and stores `placementRevision + 1`, the revision the sent wrap and name are sealed
             at; a mismatch is `409 stale_placement` with nothing written (ADR 0080 Decision 3, ADR 0077).
           minimum: 0
           example: 2
@@ -655,13 +655,13 @@ components:
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        metaVersion:
+        metaRevision:
           x-veyq-visibility: structure
           type: integer
           format: int64
           description: >
-            The `NodeSummary.metaVersion` the sent `wrappedMeta` was built from. Required with `wrappedMeta`,
-            ignored without it — a reorder needs no version, a placement states its own `placementVersion` (ADR
+            The `NodeSummary.metaRevision` the sent `wrappedMeta` was built from. Required with `wrappedMeta`,
+            ignored without it — a reorder needs no revision, a placement states its own `placementRevision` (ADR
             0077).
           example: 3
 
@@ -670,7 +670,7 @@ components:
       description: >
         Make one upload session the node's cover, and re-seal the node's `wrappedMeta` with the cover that names it
         (see `setNodeCover`).
-      required: [uploadId, wrappedMeta, metaVersion]
+      required: [uploadId, wrappedMeta, metaRevision]
       properties:
         uploadId:
           x-veyq-visibility: id
@@ -694,11 +694,11 @@ components:
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        metaVersion:
+        metaRevision:
           x-veyq-visibility: structure
           type: [integer, "null"]
           format: int64
-          description: The `NodeSummary.metaVersion` the sent `wrappedMeta` was built from (ADR 0077).
+          description: The `NodeSummary.metaRevision` the sent `wrappedMeta` was built from (ADR 0077).
           minimum: 0
           example: 3
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -706,7 +706,7 @@ components:
     RemoveNodeCoverRequest:
       type: object
       description: Empty the node's cover slot and re-seal the node's `wrappedMeta` without the cover (see `removeNodeCover`).
-      required: [blobId, wrappedMeta, metaVersion]
+      required: [blobId, wrappedMeta, metaRevision]
       properties:
         blobId:
           x-veyq-visibility: id
@@ -722,11 +722,11 @@ components:
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        metaVersion:
+        metaRevision:
           x-veyq-visibility: structure
           type: [integer, "null"]
           format: int64
-          description: The `NodeSummary.metaVersion` the sent `wrappedMeta` was built from (ADR 0077).
+          description: The `NodeSummary.metaRevision` the sent `wrappedMeta` was built from (ADR 0077).
           minimum: 0
           example: 4
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -734,8 +734,8 @@ components:
     NodeCoverConflict:
       type: object
       description: >
-        A refused cover write. `stale_version`: the node's `wrappedMeta` moved since `metaVersion` - nothing was
-        written, the upload is still open, and the body carries the current blob and version to re-apply the change on
+        A refused cover write. `stale_version`: the node's `wrappedMeta` moved since `metaRevision` - nothing was
+        written, the upload is still open, and the body carries the current blob and revision to re-apply the change on
         (ADR 0077). `cover_stale`: the cover slot holds another blob than the one stated (`currentBlobId`, null:
         empty) - nothing was attached, the upload was spent. `scope_deleting` carries `code` alone.
       required: [code]
@@ -756,11 +756,11 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
-        metaVersion:
+        metaRevision:
           x-veyq-visibility: structure
           type: [integer, "null"]
           format: int64
-          description: With `stale_version`, the version the current `wrappedMeta` is at.
+          description: With `stale_version`, the revision the current `wrappedMeta` is at.
           example: 4
         currentBlobId:
           x-veyq-visibility: id
@@ -781,7 +781,7 @@ components:
 
     NodeSummary:
       type: object
-      required: [id, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, metaVersion, placementVersion, createdAt]
+      required: [id, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, metaRevision, placementRevision, createdAt]
       properties:
         createdAt:
           x-veyq-visibility: time
@@ -793,14 +793,14 @@ components:
             are ordered by it, then by id, wherever equal names must be told apart (the URL segments `anna`,
             `anna-2`; ADR 0015).
           example: "2026-08-17T10:15:30.123Z"
-        placementVersion:
+        placementRevision:
           x-veyq-visibility: structure
           type: integer
           format: int64
           description: >
-            How many times the node was moved or renamed (0 at birth): the version its `encryptedName` and
+            How many times the node was moved or renamed (0 at birth): the revision its `encryptedName` and
             `wrappedContentKey` are sealed at (seal purposes `node-name` and `content-key` bind it, ADR 0072), and
-            the version a placement write states it was built on (ADR 0080 Decision 3). Nothing else moves it.
+            the revision a placement write states it was built on (ADR 0080 Decision 3). Nothing else moves it.
           minimum: 0
           example: 2
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
@@ -843,9 +843,9 @@ components:
           type: [string, "null"]
           contentEncoding: base64
           maxLength: 8192
-          description: The node's versioned sealed payload, sealed under this node's content key (AAD context `node-meta`); null when unset. Its plaintext format is the kind's application's. Listed with the tree so a client can show and sort nodes by it without a second read. Opaque to the server.
+          description: The node's sealed payload, with its own revision, sealed under this node's content key (AAD context `node-meta`); null when unset. Its plaintext format is the kind's application's. Listed with the tree so a client can show and sort nodes by it without a second read. Opaque to the server.
           example: d3JhcHBlZC1tZXRh
-        metaVersion:
+        metaRevision:
           x-veyq-visibility: structure
           type: integer
           format: int64
@@ -910,7 +910,7 @@ components:
             name does not produce, and a failure in between leaves it that way. Absent = the stored name is
             untouched (the ordinary restore). Sealed under the key the entry lives under (the live parent's
             content key, `K_SC` at the node's epoch at the scope root), bound to the node's epoch and its current
-            `placementVersion` — a restore does not move the version (opaque base64).
+            `placementRevision` — a restore does not move the revision (opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: cmVzdG9yZWQtbmFtZQ==
@@ -922,7 +922,7 @@ components:
         One soft-deleted subtree **root** in the space's trash. `parentId` is the slot the client recomputes the
         restore's slug token against, and it always names a live parent (or the scope root) — a node whose own
         parent is trashed went down with that parent and is not a root.
-      required: [id, kind, encryptedName, epoch, placementVersion, deletedAt, purgeAfter, attached]
+      required: [id, kind, encryptedName, epoch, placementRevision, deletedAt, purgeAfter, attached]
       properties:
         attached:
           x-veyq-visibility: flag
@@ -941,11 +941,11 @@ components:
           contentEncoding: base64
           maxLength: 2048
           example: null
-        placementVersion:
+        placementRevision:
           x-veyq-visibility: structure
           type: integer
           format: int64
-          description: The placement version the node's `encryptedName` is sealed at (as `NodeSummary.placementVersion`); a trash does not move it, nor does a restore.
+          description: The placement revision the node's `encryptedName` is sealed at (as `NodeSummary.placementRevision`); a trash does not move it, nor does a restore.
           minimum: 0
           example: 2
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }

@@ -89,7 +89,7 @@ class MediaCreateRaceSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         repeat(RACE_ROUNDS) { round ->
             val uploadId = startCover(userId, scopeId, memory)
-            // both commits state the slot and the meta version they read before the race: one wins, one meets a spent session
+            // both commits state the slot and the meta revision they read before the race: one wins, one meets a spent session
             val expected = CoverKit.slot(memory)
             val version = CoverKit.meta(memory).second
             val answers = race(
@@ -181,7 +181,7 @@ class MediaCreateRaceSliceTest {
             .then().statusCode(200).extract().path("results[0].uploadId")
 
     private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String, expected: String?, version: Long): Pair<Int, String?> =
-        CoverKit.set(userId, scopeId, nodeId, uploadId, expected, metaVersion = version).extract().answer()
+        CoverKit.set(userId, scopeId, nodeId, uploadId, expected, metaRevision = version).extract().answer()
 
     private fun createBucket(userId: String, scopeId: String, nodeId: String, bucketId: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)

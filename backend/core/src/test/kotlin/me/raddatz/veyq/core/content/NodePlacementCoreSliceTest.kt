@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * Move and rename are one placement write (ADR 0080 Decision 3): the destination, the content key re-wrapped under its
- * key, the re-sealed name and slug, the epoch and the `placementVersion` the write was built on. The server
+ * key, the re-sealed name and slug, the epoch and the `placementRevision` the write was built on. The server
  * compare-and-sets the version (`409 stale_placement`), checks the epoch for equality at the scope root and for "not
  * above the current" everywhere (Decision 4), and
  * refuses a destination that is missing, trashed or inside the node's own subtree (`422 illegal_structure`). Every
@@ -54,11 +54,11 @@ class NodePlacementCoreSliceTest {
     fun aRenameWithoutItsRewrapOrItsVersionIs400AndAStaleOneIs409() {
         val t = tree()
         for (body in listOf(
-            """{"encryptedName":"bmV3","slugToken":"${slug()}","parentId":"${t.a}","epoch":0,"placementVersion":0}""",
+            """{"encryptedName":"bmV3","slugToken":"${slug()}","parentId":"${t.a}","epoch":0,"placementRevision":0}""",
             """{"encryptedName":"bmV3","slugToken":"${slug()}","parentId":"${t.a}","wrappedContentKey":"cmV3","epoch":0}""",
-            """{"encryptedName":"bmV3","slugToken":"${slug()}","parentId":"${t.a}","wrappedContentKey":"cmV3","placementVersion":0}""",
+            """{"encryptedName":"bmV3","slugToken":"${slug()}","parentId":"${t.a}","wrappedContentKey":"cmV3","placementRevision":0}""",
             """{"parentId":"${t.b}"}""",
-            """{"wrappedContentKey":"cmV3","placementVersion":0,"epoch":0}""",
+            """{"wrappedContentKey":"cmV3","placementRevision":0,"epoch":0}""",
         )) {
             patch(t, t.child, body).statusCode(400).body("code", equalTo("invalid_request"))
         }
@@ -136,7 +136,7 @@ class NodePlacementCoreSliceTest {
         assertRow(t.a, parent = t.b, name = "b3V0", wrap = "b3V0LXdyYXA=", version = 1, epoch = 1)
     }
 
-    /** Bite test 11: a cycle-forming move → `illegal_structure`, the placement version unchanged. */
+    /** Bite test 11: a cycle-forming move → `illegal_structure`, the placement revision unchanged. */
     @Test
     fun aCycleFormingMoveIs422AndLeavesTheVersion() {
         val t = tree()
@@ -181,10 +181,10 @@ class NodePlacementCoreSliceTest {
 
     /** The listing serves the version every reader binds the name and the wrap to; a reorder or a meta write leaves it. */
     @Test
-    fun theListingServesThePlacementVersionAndOnlyAPlacementMovesIt() {
+    fun theListingServesThePlacementRevisionAndOnlyAPlacementMovesIt() {
         val t = tree()
         patch(t, t.child, """{"orderIndex":4}""").statusCode(204)
-        patch(t, t.child, """{"wrappedMeta":"bWV0YQ==","metaVersion":0}""").statusCode(204)
+        patch(t, t.child, """{"wrappedMeta":"bWV0YQ==","metaRevision":0}""").statusCode(204)
         listedVersion(t, t.child, 0)
         place(t, t.child, to = t.a, version = 0, name = "bmV3", wrap = "cmV3").statusCode(204)
         listedVersion(t, t.child, 1)
@@ -209,7 +209,7 @@ class NodePlacementCoreSliceTest {
         val parent = to?.let { "\"parentId\":\"$it\"," } ?: ""
         return patch(
             t, node,
-            """{$parent"encryptedName":"$name","slugToken":"$slugToken","wrappedContentKey":"$wrap","epoch":$epoch,"placementVersion":$version}""",
+            """{$parent"encryptedName":"$name","slugToken":"$slugToken","wrappedContentKey":"$wrap","epoch":$epoch,"placementRevision":$version}""",
         )
     }
 
@@ -219,12 +219,12 @@ class NodePlacementCoreSliceTest {
 
     private fun listedVersion(t: Tree, node: String, expect: Int) {
         given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/nodes")
-            .then().statusCode(200).body("find { it.id == '$node' }.placementVersion", equalTo(expect))
+            .then().statusCode(200).body("find { it.id == '$node' }.placementRevision", equalTo(expect))
     }
 
     private fun assertRow(node: String, parent: String, name: String, wrap: String, version: Long, epoch: Int? = null) {
         val row = QuarkusTransaction.requiringNew().call { NodeEntity.findById(node)!! }
-        assertEquals(listOf(parent, name, wrap, version), listOf(row.parentId, row.encryptedName, row.wrappedContentKey, row.placementVersion))
+        assertEquals(listOf(parent, name, wrap, version), listOf(row.parentId, row.encryptedName, row.wrappedContentKey, row.placementRevision))
         epoch?.let { assertEquals(it, row.epoch, "epoch") }
     }
 

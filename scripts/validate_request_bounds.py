@@ -29,7 +29,7 @@ beside the `$ref`, or else the target's own `x-field-extra-annotation`, which th
      primitive, which Jackson fills with 0/false when the field is missing — so a missing field passes as that
      default unless something refuses it. Either its `minimum` already excludes the default (a missing
      `chunkCount` is 0 < `@Min(1)`), or it is typed nullable (`[integer, "null"]`) and annotated `@NotNull`.
-     Measured twice before this rule: `updateMediaMeta` without `metaVersion`, then `putIdentityPins` /
+     Measured twice before this rule: `updateMediaMeta` without `metaRevision`, then `putIdentityPins` /
      `putDeviceRegister` without `version`, `updateTenantStorage` without its limit (0 = link uploads off) and
      `updateTenantMailSettings` without `tls` (false = STARTTLS off) — every one answered 200, not 400.
      There is no exception: a null that would itself mean something cannot be told from absence once Jackson

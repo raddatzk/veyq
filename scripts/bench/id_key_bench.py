@@ -146,7 +146,7 @@ CREATE TABLE node (
   encrypted_name TEXT NOT NULL, slug_token VARCHAR(128) NOT NULL, order_index INT NOT NULL,
   wrapped_content_key TEXT NOT NULL, created_at TIMESTAMP(3) NOT NULL, wrapped_meta TEXT NULL,
   epoch INT NOT NULL DEFAULT 0, deleted_at TIMESTAMP NULL, sealed_drop_private_key TEXT NULL,
-  meta_version BIGINT NOT NULL DEFAULT 0, placement_version BIGINT NOT NULL DEFAULT 0,
+  meta_revision BIGINT NOT NULL DEFAULT 0, placement_revision BIGINT NOT NULL DEFAULT 0,
   share_identity_id {t} NULL,
   UNIQUE KEY ux_node_parent_slug (parent_id, slug_token),
   KEY ix_node_scope (scope_id),

@@ -313,7 +313,7 @@ paths:
         mode: last-writer-wins
         reason: >-
           The value is always the share root's current name, re-sealed by whichever member renamed it last; a
-          later write carries a later name, so no version guards it (ADR 0080 decision 14).
+          later write carries a later name, so no revision guards it (ADR 0080 decision 14).
       summary: Store a share's root name re-sealed under `K_share` (any member with write access).
       description: >
         Replaces the share's `sealedName` — the shared root's name re-sealed under `K_share` (seal purpose
@@ -777,7 +777,7 @@ paths:
         guest-creatable — `GuestCreatableKinds`, Files' `FILE` — and never a Memory, a drop box or another application's
         node; a container kind no owner declares allows nothing — either refusal is `422 illegal_scope`); the
         slug is free under the parent (`409 slug_taken`). **Epoch:** the request carries the epoch the guest sealed
-        with (ADR 0080 Decision 6) — the name and the wrap are bound to scope, node, that epoch and placement version
+        with (ADR 0080 Decision 6) — the name and the wrap are bound to scope, node, that epoch and placement revision
         0, so the server stores it as sent; a guest never writes at the scope root, so the server checks it as a
         member's placement off the root: at or below the scope's current epoch, else `409 stale_epoch`. No `wrappedMeta`:
         a node's payload is its application's content, never a core tree operation's.
@@ -842,9 +842,9 @@ paths:
       tags: [sharing]
       operationId: updateShareNode
       x-veyq-concurrency:
-        mode: version
+        mode: revision
         fields:
-          - field: placementVersion
+          - field: placementRevision
             conflictCode: stale_placement
       summary: Move or rename a node inside a shared subtree (unauthenticated) — one placement write.
       description: >
@@ -853,8 +853,8 @@ paths:
         parent, as in `updateNode`. Behind core's guest gate like `createShareNode`, without spending the upload
         budget; only a **READ_WRITE** link takes it. The request carries the destination `parentId`, the node's
         content key re-wrapped under the destination's key (`wrappedContentKey`), the name and the slug token
-        re-sealed under it, and the `placementVersion` it was built on; the wrap and the name are bound to scope,
-        node, the node's stored epoch and `placementVersion + 1`. **No `epoch`:** a guest's node never moves into or
+        re-sealed under it, and the `placementRevision` it was built on; the wrap and the name are bound to scope,
+        node, the node's stored epoch and `placementRevision + 1`. **No `epoch`:** a guest's node never moves into or
         out of the scope root, so it keeps its stored epoch. **Structure only:** the node lies strictly inside the
         share's subtree — the root is never moved or renamed by a guest, nor is a guest's identity folder in a drop box
         or anything inside one: only a member moves out of a drop box (ADR 0080 Decision 11; `422 illegal_structure`,
@@ -863,7 +863,7 @@ paths:
         (else `422 illegal_structure`); the owners of the containers on both sides allow it (`GuestNodeRules`: a
         move needs the source parent's owner to let a READ_WRITE guest move that kind out and the destination's to
         let it move in, a rename the parent's to let it rename — `422 illegal_scope` otherwise); the slug is free
-        there (`409 slug_taken`). The server compare-and-sets the placement version and writes everything at once,
+        there (`409 slug_taken`). The server compare-and-sets the placement revision and writes everything at once,
         or nothing (`409 stale_placement`). No guest delete: nodes store no authorship.
         **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
         token → `403 share_password_incorrect`.
@@ -882,7 +882,7 @@ paths:
               encryptedName: cmVuYW1lZA==
               slugToken: bmV3LXNsdWc=
               wrappedContentKey: cmUtd3JhcHBlZC1rLW1lbQ==
-              placementVersion: 2
+              placementRevision: 2
       responses:
         "204":
           description: The node was moved or renamed.
@@ -901,7 +901,7 @@ paths:
         "409":
           description: >
             A sibling at the destination already has that slug (`slug_taken`), or the node was moved or renamed since
-            the stated `placementVersion` (`stale_placement` — nothing was written; the client re-reads the share and
+            the stated `placementRevision` (`stale_placement` — nothing was written; the client re-reads the share and
             rebuilds the placement, ADR 0080 Decision 3).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_placement } }
@@ -1621,16 +1621,16 @@ components:
           description: The content-key epoch the node was sealed at (as `NodeSummary.epoch`) — a descendant's `wrappedContentKey` and `encryptedName` are bound to it (ADR 0072).
           minimum: 0
           example: 0
-        placementVersion:
+        placementRevision:
           x-veyq-visibility: structure
           type: integer
           format: int64
           # Omitted, not `null`, at the root, like `encryptedName`: the root's placement is above the share.
           x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
           description: >
-            A descendant's placement version (as `NodeSummary.placementVersion`): its `wrappedContentKey` and
+            A descendant's placement revision (as `NodeSummary.placementRevision`): its `wrappedContentKey` and
             `encryptedName` are bound to it (ADR 0072, ADR 0080 Decision 3), so the viewer opens them at the
-            version served with them. Omitted at the root, whose entry is not served (ADR 0080 Decision 9).
+            revision served with them. Omitted at the root, whose entry is not served (ADR 0080 Decision 9).
           minimum: 0
           example: 0
         encryptedName:
@@ -1640,7 +1640,7 @@ components:
           x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
           description: >
             A descendant's name, AEAD-sealed under its **parent's** content key (seal purpose `node-name`, bound to
-            scope, node, epoch and placement version; opaque base64) — the same value as `NodeSummary.encryptedName`, which the viewer
+            scope, node, epoch and placement revision; opaque base64) — the same value as `NodeSummary.encryptedName`, which the viewer
             opens with the key chain it derives from the root. Omitted at the root: its name is sealed under a key
             above the share (ADR 0080 Decision 9); the root's title is the share's `sealedName`.
           contentEncoding: base64
@@ -1654,7 +1654,7 @@ components:
           example: d3JhcHBlZC1rLW1lbQ==
         wrappedMeta:
           type: [string, "null"]
-          description: The node's versioned sealed payload, sealed under its content key (AAD `node-meta`; opaque base64); its format is the kind's application's. Null when unset.
+          description: The node's sealed payload, with its own revision, sealed under its content key (AAD `node-meta`; opaque base64); its format is the kind's application's. Null when unset.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -1717,7 +1717,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under the parent's content key (seal purpose `node-name`), bound to scope, node, `epoch` and placement version 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
+          description: The node name, AEAD-sealed under the parent's content key (seal purpose `node-name`), bound to scope, node, `epoch` and placement revision 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -1749,7 +1749,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         wrappedContentKey:
           type: string
-          description: The node's content key — a fresh random key the guest mints, wrapped under the parent's content key (seal purpose `content-key`), bound to scope, node, `epoch` and placement version 0 (ADR 0080 Decision 1; opaque base64).
+          description: The node's content key — a fresh random key the guest mints, wrapped under the parent's content key (seal purpose `content-key`), bound to scope, node, `epoch` and placement revision 0 (ADR 0080 Decision 1; opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
@@ -1767,7 +1767,7 @@ components:
 
     UpdateShareNodeRequest:
       type: object
-      required: [parentId, encryptedName, slugToken, wrappedContentKey, placementVersion]
+      required: [parentId, encryptedName, slugToken, wrappedContentKey, placementRevision]
       description: >
         A READ_WRITE guest's placement write (`updateShareNode`) — every field of the node's directory entry and key
         wrap at once, as the placement half of the member's `UpdateNodeRequest`, without `epoch` (the node keeps its
@@ -1781,7 +1781,7 @@ components:
           example: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
         encryptedName:
           type: string
-          description: The name re-sealed under the destination parent's content key (seal purpose `node-name`), bound to scope, node, the node's stored epoch and `placementVersion + 1` (ADR 0072, ADR 0080 Decision 3; opaque base64).
+          description: The name re-sealed under the destination parent's content key (seal purpose `node-name`), bound to scope, node, the node's stored epoch and `placementRevision + 1` (ADR 0072, ADR 0080 Decision 3; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: cmVuYW1lZA==
@@ -1795,19 +1795,19 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedContentKey:
           type: string
-          description: The node's own content key (unchanged) re-wrapped under the destination parent's content key (seal purpose `content-key`), bound to scope, node, the node's stored epoch and `placementVersion + 1` (opaque base64). A rename re-wraps too.
+          description: The node's own content key (unchanged) re-wrapped under the destination parent's content key (seal purpose `content-key`), bound to scope, node, the node's stored epoch and `placementRevision + 1` (opaque base64). A rename re-wraps too.
           contentEncoding: base64
           maxLength: 256
           example: cmUtd3JhcHBlZC1rLW1lbQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        placementVersion:
+        placementRevision:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0 (backend/CLAUDE.md)
           type: [integer, "null"]
           format: int64
           description: >
-            The `ShareNode.placementVersion` the placement was built on. The server compare-and-sets it and stores
-            `placementVersion + 1`; a mismatch is `409 stale_placement` with nothing written (ADR 0080 Decision 3).
+            The `ShareNode.placementRevision` the placement was built on. The server compare-and-sets it and stores
+            `placementRevision + 1`; a mismatch is `409 stale_placement` with nothing written (ADR 0080 Decision 3).
           minimum: 0
           example: 2
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'

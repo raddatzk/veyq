@@ -2,7 +2,7 @@
 // ONE item of the unified level list (inbox #407), drawn by core for every kind - a folder, a Memory, a file, a drop box,
 // a kind this client cannot show - as a ROW (list mode) or a TILE (grid mode) from the same `LevelRow`
 // (`../levelRow.ts`): a leading visual (the kind's icon, or the application's cover component), the name, one meta line,
-// a primary click and the actions. The application supplies the data and its capability answers; core owns the look, the
+// a primary click and the actions. The application supplies the data and its rights answers; core owns the look, the
 // keyboard (every control is a real, labelled `<button>`), the dark mode (tokens) and the split of the actions: at most two
 // FIRST-CLASS buttons on the item, every other shown action in ONE "more" menu (a PrimeVue `Menu`, a real menu: arrow
 // keys, Escape). Core's own actions (the future favourite heart, inbox #409) plug in as `coreActions`, merged around the

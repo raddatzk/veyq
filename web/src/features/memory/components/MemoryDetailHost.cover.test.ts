@@ -56,7 +56,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', store.fetchStub)
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 0, top: 0, left: 0, right: 960, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
-  vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaVersion: 4, replaced: null })
+  vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaRevision: 4, replaced: null })
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -64,7 +64,7 @@ afterEach(() => {
 })
 
 async function mountHost(access: NodeDetailProps['access'], wrappedMeta: string | null = null) {
-  const node = treeNode({ id: ID, kind: MEMORY_KIND, name: 'Rom 2026', parentId: null, wrappedMeta, metaVersion: wrappedMeta ? 3 : 0 })
+  const node = treeNode({ id: ID, kind: MEMORY_KIND, name: 'Rom 2026', parentId: null, wrappedMeta, metaRevision: wrappedMeta ? 3 : 0 })
   const tree = { ...memberTreeOf(() => [node], { scopeId: SCOPE }), keyOf: () => KEY }
   const w = mount(MemoryDetailHost, {
     props: { node, scopeId: SCOPE, epochs: null, contentKey: KEY, children: { folders: [], byKind: new Map() }, access, tree } as unknown as NodeDetailProps,
@@ -123,7 +123,7 @@ describe('the Memory page\'s cover action opens core\'s dialog', () => {
     await vi.waitFor(() => expect(dialog()).not.toBeNull())
     dialogButton(t('node.cover.remove'))!.click()
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
-    expect(vi.mocked(writeNodeCover).mock.calls[0][0]).toMatchObject({ scopeId: SCOPE, nodeId: ID, cover: null, current: { metaVersion: 3 } })
+    expect(vi.mocked(writeNodeCover).mock.calls[0][0]).toMatchObject({ scopeId: SCOPE, nodeId: ID, cover: null, current: { metaRevision: 3 } })
     await vi.waitFor(() => expect(dialog()).toBeNull())
   })
 

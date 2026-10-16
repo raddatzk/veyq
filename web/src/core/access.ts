@@ -5,15 +5,15 @@
 // - `Access` says who is looking and what that session may do in principle: a MEMBER of an unlocked scope (its epoch
 //   keys, whether the scope is pending deletion, the instance's sharing capabilities) or a GUEST of a public link (its
 //   role, the resolved head, the password token, the naming flow). It carries no position: what is possible HERE is a
-//   capability function's answer for a node (below).
+//   rights function's answer for a node (below).
 // - `TreeSource` is the tree as that session reads it: the member's decrypted scope tree (`treeStore`) or the guest's
 //   opened subtree (`core/sharing/guestAccess.ts`, over `walkSubtree`). Navigation always goes through `linkTo`, so a guest's link keeps its `#k=`
 //   fragment (web/CLAUDE.md, the breadcrumb trap) and a member's stays a slug path in the fragment.
 //
-// **Capabilities are the applications'**, pure and FAIL-CLOSED: `memoryCapabilities` (features/memory/capabilities.ts),
-// `depotCapabilities` (features/depot/capabilities.ts), and core's own `folderCapabilities` here for the one kind core
+// **Rights are the applications'**, pure and FAIL-CLOSED: `memoryRights` (features/memory/rights.ts),
+// `depotRights` (features/depot/rights.ts), and core's own `folderRights` here for the one kind core
 // owns. Every right defaults to false; an unknown mode, role or kind grants nothing. The role matrix each one encodes is
-// written down in its `docs/apps/<application>.md` (ADR 0080 decision 6). A capability is the matrix's half; the other
+// written down in its `docs/apps/<application>.md` (ADR 0080 decision 6). A right is the matrix's half; the other
 // half — that the data source implements the operation at all — is the application's source (Depot's `source.ts` since
 // inbox #401 S3, Memories' `source.ts` since S4): a control is shown only where both say yes.
 //
@@ -36,14 +36,14 @@ export interface MemberAccess {
   /** The scope every read and write addresses. */
   readonly scopeId: string
   /** The scope's epoch key set (ADR 0024): reads open each node under its own epoch, writes seal under the current one.
-   *  Null while the scope is not unlocked — every write capability that needs a key is then the view's to disable. */
+   *  Null while the scope is not unlocked — every write right that needs a key is then the view's to disable. */
   readonly epochs: EpochKeys | null
   /** The scope is pending deletion (cr-0090, uc.spaces.scope-access): the server refuses every write during the grace
    *  window, so no write is offered. Reads, downloads, pins and the listing of links stay. */
   readonly readonly: boolean
   /** The instance offers READ public links (`core.public-shares`, ADR 0032, ADR 0088). One boolean per register leaf,
    *  each filled from ONE manifest id by the host: the server computes the AND along the path (a child whose parent is
-   *  off is absent from the manifest, ADR 0088 decision 2), so no capability function ANDs two of these. */
+   *  off is absent from the manifest, ADR 0088 decision 2), so no rights function ANDs two of these. */
   readonly publicShares: boolean
   /** The instance offers READ_WRITE (contribute) public links (`core.public-shares.contribute`). */
   readonly publicSharesContribute: boolean
@@ -81,15 +81,15 @@ export interface GuestAccess {
 
 export type Access = MemberAccess | GuestAccess
 
-/** What a capability function is asked about: the node on screen as core knows it — an opened node, or the folder a level
+/** What a rights function is asked about: the node on screen as core knows it — an opened node, or the folder a level
  *  shows. Built by {@link targetOf}; a test may spell one out. */
-export interface CapabilityTarget {
+export interface RightsTarget {
   /** The node's kind; null at a member's scope root (a guest is never there). */
   readonly kind: NodeKind | null
   /** It is a guest's identity folder in a drop box or lies below one (ADR 0080 decision 11: nothing is placed there but
    *  by that folder's own guest). */
   readonly inIdentityFolder: boolean
-  /** Its kind's descriptor says it is shareable AND brings a share dialog (the registry's answer): a share capability
+  /** Its kind's descriptor says it is shareable AND brings a share dialog (the registry's answer): a share right
    *  needs it, so no view shows a share button whose dialog the host cannot mount. False at the scope root. */
   readonly shareable: boolean
   /** The kind of its parent as the session reads it (inbox #358: a guest moves only what a `FOLDER` lets out, core's
@@ -98,7 +98,7 @@ export interface CapabilityTarget {
   readonly parentKind?: NodeKind | null
 }
 
-/** A node as a tree source serves it: enough to navigate, bucket by kind and ask a capability. */
+/** A node as a tree source serves it: enough to navigate, bucket by kind and ask a right. */
 export interface SourceNode {
   readonly id: string
   readonly parentId: string | null
@@ -126,8 +126,8 @@ export interface TreeSource<N extends SourceNode = SourceNode> {
   linkTo(id: string | null): RouteLocationRaw
 }
 
-/** The capability target of `node` (null: the scope root) as `tree` reads it, its shareability asked of the registry. */
-export function targetOf(tree: TreeSource, node: { id: string; kind: NodeKind } | null): CapabilityTarget {
+/** The rights target of `node` (null: the scope root) as `tree` reads it, its shareability asked of the registry. */
+export function targetOf(tree: TreeSource, node: { id: string; kind: NodeKind } | null): RightsTarget {
   if (!node) return { kind: null, inIdentityFolder: false, shareable: false }
   const info = registry.kind(node.kind)
   const parentId = tree.node(node.id)?.parentId ?? null
@@ -182,7 +182,7 @@ export function memberTreeSource(from: {
 
 /** What a level of core's own kind offers (core's `LevelView`: its toolbar, the folder's overview card, the folders
  *  section). Every field false unless granted. */
-export interface FolderCapabilities {
+export interface FolderRights {
   /** Open a sub-folder. */
   navigate: boolean
   /** Create a folder at this level. */
@@ -202,7 +202,7 @@ export interface FolderCapabilities {
   move: boolean
 }
 
-const NO_FOLDER_CAPABILITIES: FolderCapabilities = Object.freeze({
+const NO_FOLDER_RIGHTS: FolderRights = Object.freeze({
   navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, shareContribute: false, nodeTrash: false,
   move: false,
 })
@@ -224,14 +224,14 @@ const NO_FOLDER_CAPABILITIES: FolderCapabilities = Object.freeze({
  *   nowhere yet; a guest deletes no node (ADR 0080 decision 6). **`WRITE_ONLY`:** nothing — no folder is a
  *   `WRITE_ONLY` root (`ShareRoots`).
  */
-export function folderCapabilities(access: Access, at: CapabilityTarget): FolderCapabilities {
-  if (at.kind !== FOLDER_KIND && !(at.kind === null && access.mode === 'member')) return NO_FOLDER_CAPABILITIES
+export function folderRights(access: Access, at: RightsTarget): FolderRights {
+  if (at.kind !== FOLDER_KIND && !(at.kind === null && access.mode === 'member')) return NO_FOLDER_RIGHTS
   if (access.mode === 'member') {
     const write = !access.readonly && !at.inIdentityFolder
     const folder = at.kind === FOLDER_KIND
     const shareableFolder = at.shareable && folder && !at.inIdentityFolder
     return {
-      ...NO_FOLDER_CAPABILITIES,
+      ...NO_FOLDER_RIGHTS,
       navigate: true,
       createFolder: write,
       rename: write && folder,
@@ -245,17 +245,17 @@ export function folderCapabilities(access: Access, at: CapabilityTarget): Folder
   if (access.mode === 'guest') {
     switch (access.role) {
       case 'READ':
-        return { ...NO_FOLDER_CAPABILITIES, navigate: true }
+        return { ...NO_FOLDER_RIGHTS, navigate: true }
       case 'READ_WRITE':
         return {
-          ...NO_FOLDER_CAPABILITIES,
+          ...NO_FOLDER_RIGHTS,
           navigate: true,
           createFolder: !at.inIdentityFolder,
           move: at.kind === FOLDER_KIND && !at.inIdentityFolder && at.parentKind === FOLDER_KIND,
         }
       default:
-        return NO_FOLDER_CAPABILITIES
+        return NO_FOLDER_RIGHTS
     }
   }
-  return NO_FOLDER_CAPABILITIES
+  return NO_FOLDER_RIGHTS
 }

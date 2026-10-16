@@ -88,11 +88,11 @@ describe('sealMemoryDate / unsealMemoryDate', () => {
 })
 
 /** A thrown generated-client failure carrying `409 stale_version` with the server's current blob (ADR 0077). */
-const stale = (wrappedMeta: string | null, metaVersion: number) => ({
-  response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaVersion }), { status: 409 }),
+const stale = (wrappedMeta: string | null, metaRevision: number) => ({
+  response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaRevision }), { status: 409 }),
 })
 const opened = (sealed: string) => JSON.parse(new TextDecoder().decode(v1.open(metaCtx(NODE_ID), nodeKey, fromB64std(sealed))))
-const fresh = (wrappedMeta: string | null = null, metaVersion = 0) => ({ wrappedMeta, metaVersion })
+const fresh = (wrappedMeta: string | null = null, metaRevision = 0) => ({ wrappedMeta, metaRevision })
 const LISBON = { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed' }
 
 describe('setMemoryDate', () => {
@@ -106,8 +106,8 @@ describe('setMemoryDate', () => {
     expect(req.scopeId).toBe(SCOPE_ID)
     expect(req.nodeId).toBe(NODE_ID)
     expect(req.updateNodeRequest.wrappedMeta).toBe(state.wrappedMeta)
-    expect(req.updateNodeRequest.metaVersion).toBe(3)
-    expect(state.metaVersion).toBe(4) // the server stores version + 1, so the client derives it
+    expect(req.updateNodeRequest.metaRevision).toBe(3)
+    expect(state.metaRevision).toBe(4) // the server stores version + 1, so the client derives it
     // what we sealed opens back to the date under K_node (operator-blind round-trip), bound to the patched node
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(date)
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: OTHER_NODE_ID, wrappedMeta: state.wrappedMeta })).toBeNull()
@@ -143,11 +143,11 @@ describe('setMemoryDate', () => {
     const state = await setMemoryDate(SCOPE_ID, NODE_ID, nodeKey, date, fresh(null, 4))
 
     expect(updateNode).toHaveBeenCalledTimes(2)
-    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaVersion).toBe(5)
+    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaRevision).toBe(5)
     const retried = opened(updateNode.mock.calls[1][0].updateNodeRequest.wrappedMeta!)
     expect(retried.date).toEqual(date)
     expect(retried.location).toEqual(LISBON)
-    expect(state).toEqual({ wrappedMeta: updateNodeRequestOf(updateNode, 1).wrappedMeta, metaVersion: 6 })
+    expect(state).toEqual({ wrappedMeta: updateNodeRequestOf(updateNode, 1).wrappedMeta, metaRevision: 6 })
   })
 
   /** W3 (Q5): a peer changed the DATE itself — no retry; the save refuses with the current state to re-open on. */
@@ -160,7 +160,7 @@ describe('setMemoryDate', () => {
     const err = await setMemoryDate(SCOPE_ID, NODE_ID, nodeKey, { mode: 'auto' }, fresh(opener, 1)).catch((e) => e)
 
     expect(err).toBeInstanceOf(MetaConflictError)
-    expect((err as MetaConflictError).current).toEqual({ wrappedMeta: peers, metaVersion: 2 })
+    expect((err as MetaConflictError).current).toEqual({ wrappedMeta: peers, metaRevision: 2 })
     expect(updateNode).toHaveBeenCalledTimes(1)
   })
 
@@ -199,7 +199,7 @@ describe('reconcileMemoryDate (the auto self-heal)', () => {
 
     expect(updateNode).toHaveBeenCalledTimes(1)
     expect(wrote).toBe(false)
-    expect(state).toEqual({ wrappedMeta: peers, metaVersion: 3 }) // the tree learns the peer's blob anyway
+    expect(state).toEqual({ wrappedMeta: peers, metaRevision: 3 }) // the tree learns the peer's blob anyway
   })
 
   it('writes the materialized range from an auto blob, stating its version', async () => {
@@ -207,7 +207,7 @@ describe('reconcileMemoryDate (the auto self-heal)', () => {
     fakeApi(contentApi, { updateNode })
     const { wrote } = await reconcileMemoryDate(SCOPE_ID, NODE_ID, nodeKey, dated(), fresh(null, 7))
     expect(wrote).toBe(true)
-    expect(updateNode.mock.calls[0][0].updateNodeRequest.metaVersion).toBe(7)
+    expect(updateNode.mock.calls[0][0].updateNodeRequest.metaRevision).toBe(7)
     expect(opened(updateNode.mock.calls[0][0].updateNodeRequest.wrappedMeta!).date).toEqual({ mode: 'auto', from: '2026-03-02', to: '2026-03-02' })
   })
 
@@ -269,7 +269,7 @@ describe('unsealNodeDate / sortNodesByDate (browse card grid, cr-0067)', () => {
   function memoryNode(label: string, date: MemoryDate | null): TreeNode {
     const id = crypto.randomUUID()
     const memKey = v1.randomBytes(32)
-    const wrappedContentKey = b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }, scopeKey, memKey))
+    const wrappedContentKey = b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }, scopeKey, memKey))
     return treeNode({
       id,
       parentId: null,
@@ -279,7 +279,7 @@ describe('unsealNodeDate / sortNodesByDate (browse card grid, cr-0067)', () => {
       name: label,
       wrappedContentKey,
       wrappedMeta: date ? sealMemoryDate(memKey, { scopeId: SCOPE_ID, nodeId: id }, date) : null,
-      metaVersion: 0, placementVersion: 0,
+      metaRevision: 0, placementRevision: 0,
     })
   }
 

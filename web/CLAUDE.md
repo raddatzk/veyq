@@ -150,7 +150,7 @@ here; the server is blind.
   **People and participants (ADR 0083, `uc.memory.participants`).** A Memory lists who was there as OPAQUE USER IDS in its sealed meta
   (`participants: { userIds }`, `features/memory/memoryParticipants.ts`; cap 100 - `wrappedMeta` is limited to 8192 chars). The id list is the only
   thing stored: **never a name or a snapshot of one** - a share serves the node's meta unchanged and its guest holds `K_node`, so the
-  guest exclusion is the interface's (`memoryCapabilities().participants` is false for every share role, fail-closed) and the ids are what keep the
+  guest exclusion is the interface's (`memoryRights().participants` is false for every share role, fail-closed) and the ids are what keep the
   residual harmless; if participants ever carry names, ADR 0083 decision 4 is open again. The write merges on `409` through
   `editParticipantsOf` (`core/node/nodeMeta.ts`), not `editField`. Names come from `core/people/directory.ts` (real name, else username, from the
   TENANT's member list). A person's profile is the fragment `#people/<userId>` (`parseHash().person` / `personHash` in `location.ts`, the one door;
@@ -169,11 +169,11 @@ here; the server is blind.
   Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button), the title (`level` 1 on a
   node's own page), an optional `subtitle` and `meta` slot, and the actions on the right. The application only feeds data: its action list
   (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown`,
-  `disabled`, `pressed`), each `shown` by its capability function — fail closed, a share guest gets this very header with fewer actions
+  `disabled`, `pressed`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions
   (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four. Core owns the look, the wrap
   (the title row wraps, so every action is visible at every width), the keyboard (real labelled buttons) and the dark mode (tokens). Core's
   own actions (the favorite heart of every node, `core/favorites`) plug in as `coreActions` (`CoreHeaderAction`, `placement` before|after,
-  merged by `mergeHeaderActions`), gated by a core capability function, with no change to any application.
+  merged by `mergeHeaderActions`), gated by a core rights function, with no change to any application.
 
   **One list for the level (inbox #407).** The folder level (`core/node/LevelView.vue`) is ONE list - or one set of tiles - of
   everything at the level: the folders, the Memories, the files, the drop boxes, every kind, with no section headers. **Core
@@ -189,10 +189,10 @@ here; the server is blind.
   the node) and the actions. An action is the header's model (`NodeHeaderAction`: id, label = aria-label, icon, onClick,
   severity, shown, disabled, pressed) plus `first` and `loading`: AT MOST TWO actions marked `first` are real buttons on the
   row (Depot: download, every kind: core's heart), every other shown action sits in ONE "more" menu (a PrimeVue `Menu`, entries
-  `veyq-row-action-<id>`), `shown` by the application's fail-closed capability function - a share guest gets this very row with
+  `veyq-row-action-<id>`), `shown` by the application's fail-closed rights function - a share guest gets this very row with
   fewer actions, never a guest-only one. Core's own actions (the favorite heart of inbox #409) plug in as the
   level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
-  A row's `selection` (`LevelRowSelection` `{ move, delete, remove? }`, inbox #421) is the application's capability answer
+  A row's `selection` (`LevelRowSelection` `{ move, delete, remove? }`, inbox #421) is the application's rights answer
   for the level's Select mode (core's `selection.ts`, the bar in `LevelView`): omitted, the node allows nothing; `remove` is
   the kind's own delete door without its tree re-read (Depot's file), else core's `deleteNode`. Several nodes move through
   `core/node/MoveNodesDialog.vue` (`NodeMover.moveMany`: N single writes, one re-read) and are deleted through
@@ -217,7 +217,7 @@ here; the server is blind.
   `removeNodeCover` or a plain `updateNode`, chosen from the cover being replaced as the server hands it back on a `409`), `coverStore.ts` the
   decrypted covers (a member's singleton cleared by `activeSpace`, a guest page's own through the link's gated presign, keyed on the sealed
   meta so a replaced or removed cover drops its object URL at once; a source core cannot open - Memories' photo - is the kind's
-  `cover.load`), `capabilities.ts` the fail-closed `coverCapabilities` (a writer on a scope that is not pending deletion, keys loaded, an opted-in
+  `cover.load`), `rights.ts` the fail-closed `coverRights` (a writer on a scope that is not pending deletion, keys loaded, an opted-in
   kind, not a guest's identity folder; no guest role), and `useNodeCover` the view's door: the covers it draws and ONE core action `cover`
   (Set / Change, `pi-image`) for `NodeHeader`'s `coreActions` and the level's `coreRowActions` (the row's menu) - there is no remove action;
   it opens THE dialog, `components/CoverDialog.vue` (choose an image, the shared 16:9 `ImageCropper`, re-crop of the current cover with its
@@ -235,7 +235,7 @@ here; the server is blind.
   **Favorites are core's (inbox #409, [ADR 0068](../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose
   `favorites` under the Master Key, the generated `favoritesApi()` of `api/client.ts`), `favoritesStore.ts` (the reactive set, optimistic
-  toggle, refused until loaded), `capabilities.ts` (`favoriteCapabilities(access, node)`: member only, fail closed, no scope root, no
+  toggle, refused until loaded), `rights.ts` (`favoriteRights(access, node)`: member only, fail closed, no scope root, no
   unsupported kind; kept during a pending deletion), `favoriteActions.ts` (the heart as a `CoreHeaderAction` / `CoreRowAction`, `first`,
   placed before the application's own) and `PinnedNodes.vue` (the sidebar section: every kind's pinned node with its registry icon and
   name, opened by `hashForNode`; an id that does not resolve or a kind this client cannot draw is skipped). `LevelView` contributes the
@@ -274,7 +274,7 @@ here; the server is blind.
   same `rows` function share one row source and must agree on `views` (else `registerKind` throws). A kind registered
   without a `list`, or not registered at all, is an unsupported row. For the level's "New" menu (inbox #406) a kind brings
   `createEntry` (`{ label, icon, order, allowed(ctx), enabled?(ctx) }`: the kind's menu entry, its label an i18n key of the
-  application's own namespace, `allowed` its fail-closed capability function, and it needs a `createDialog`, which
+  application's own namespace, `allowed` its fail-closed rights function, and it needs a `createDialog`, which
   `registerKind` checks) and `levelActions` (entries that are no create dialog - Depot's "Upload files" and "Upload folder…";
   ids write-once, `create:` reserved; `acceptsDrop` makes the level hand it what is dropped onto it). The factory registers
   the action's handler with `host.registerAction(id, { enabled, run, drop?, dropDirectory? })` (`core/node/levelActions.ts`)
@@ -283,7 +283,7 @@ here; the server is blind.
   never more than the menu entry). There is no import entry: core recognises a download in what an upload picks or drops
   (`host.screenUpload`, `host.screenDirectory`) and offers the member its import. The level's toolbar is core's: the "New" menu
   (`registry.levelMenu()` plus core's own folder entry, one PrimeVue button + popup `Menu`, each entry only where its own
-  capability function says yes, so a READ guest has none; a create entry emits `create(kind)` and the host mounts the
+  rights function says yes, so a READ guest has none; a create entry emits `create(kind)` and the host mounts the
   `createDialog`), the space's trash, and the view switch over the union of the presentations on screen - core's grid and
   list for every row, plus the shown kinds' `views` (`core/node/levelViews.ts`, inbox #370); the level shows the stored mode
   only where that union offers it, else the grid, without rewriting the stored preference, and hands that mode to every
@@ -301,7 +301,7 @@ here; the server is blind.
   unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's
   header (core's `NodeHeader`, which every node page opens with too - see above). Its `createDialog` - props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the shell when the "New" menu or a detail `createChild` emits that KIND; and its
-  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?}` (`contribute`: offer READ_WRITE for a new link — the capability function's `shareContribute`, carried by the detail's `share` emit as a `NodeShareOffer`, never read by the dialog); a
+  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?}` (`contribute`: offer READ_WRITE for a new link — the rights function's `shareContribute`, carried by the detail's `share` emit as a `NodeShareOffer`, never read by the dialog); a
   kind without one offers no share. There is no guest-only list or detail: core's page of a `READ`/`READ_WRITE` public
   share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node -
   the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
@@ -330,31 +330,31 @@ here; the server is blind.
   Master Key (Memories' item marks; the node pins are core's, re-sealed by `rotateKeys` itself) is otherwise unverifiable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
   `detail` (`NodeDetailProps`) and a row factory (`LevelRowsContext`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
-  (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's three share leaves `publicShares`/`publicSharesContribute`/`publicSharesDropBox`, one boolean per register id the host fills from ONE `hasCapability` each — the server ANDs the path, a capability function never does, ADR 0088) or a share guest
+  (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's three share leaves `publicShares`/`publicSharesContribute`/`publicSharesDropBox`, one boolean per register id the host fills from ONE `hasCapability` each — the server ANDs the path, a rights function never does, ADR 0088) or a share guest
   (`shareId`, `role`, `head`, `pwToken`, `fragmentKey`, `requestGuest`, `reload` — `guestAccess`, built by
   `views/ShareView.vue`, which owns the re-resolve after a guest's write and the page's one naming flow, core's `core/sharing/GuestNaming.vue` with its "Not you?"; every naming place uses that one
   component) — and `tree`, a `TreeSource` (`node`,
   `children`, `keyOf`, `nameOf`, `inIdentityFolder`, `linkTo`: every navigation goes through it, so a guest's link keeps
   `#k=`); the member's come from `memberAccess`/`memberTreeSource`, built by the host, the guest's tree from
   `guestTreeSource` (`core/sharing/guestAccess.ts`: a served `ShareNode` as a `TreeNode` — `createdAt` 0, so equal
-  names number by node id; `metaVersion` 0; `wrappedMeta` as served). A row factory built for a guest reads nothing of
+  names number by node id; `metaRevision` 0; `wrappedMeta` as served). A row factory built for a guest reads nothing of
   the member's world (`treeStore`, `activeSpace`, the cover and pin stores) — Memories' rows read their dates, covers
   and map from the guest's tree (the covers are core's, `core/node/cover/`, resolved by the level), Depot's rows read and write through Depot's data
   source (`features/depot/source.ts`: the member's or the guest's, fixed at mount; a write is offered where the matrix
-  grants it AND the source carries it — `sourceCapabilities` — and the guest's source has no delete, no rename), and so
+  grants it AND the source carries it — `sourceRights` — and the guest's source has no delete, no rename), and so
   does Memories' detail (`features/memory/source.ts`, picked by `MemoryDetailHost`: the detail, its composables, the
   lightbox's loaders and — by injection, `useMemoryView`, which throws outside a detail — the organizer touch no API but
   through it; the guest's has no trash, node meta, cover, marks, buckets, live poll or EXIF, and its delete is a purge of
   its own). A drop page (`ShareBodyProps`) is handed the
   guest's `access` too and names its uploader on the page (the identity key is its application's). What a view offers is its
-  application's pure, fail-closed capability function over `access` and `targetOf(tree, node)` — `memoryCapabilities`
-  (`features/memory/capabilities.ts`), `depotCapabilities` (`features/depot/capabilities.ts`), core's
-  `folderCapabilities` for the level view; each matrix is its `docs/apps/<app>.md` table — never a `readonly`,
+  application's pure, fail-closed rights function over `access` and `targetOf(tree, node)` — `memoryRights`
+  (`features/memory/rights.ts`), `depotRights` (`features/depot/rights.ts`), core's
+  `folderRights` for the level view; each matrix is its `docs/apps/<app>.md` table — never a `readonly`,
   `shareable` or `hasCapability` read inline; `targetOf` carries the kind's descriptor (`shareable` AND a `shareDialog`),
   so no share button appears whose dialog the host cannot mount.
-  **A share view is the member view with a source and capabilities — never add a guest-only UI** (owner principle
+  **A share view is the member view with a source and rights — never add a guest-only UI** (owner principle
   2026-10-09, inbox #401). A guest's function goes into the member's component as a door of the application's data
-  source and a right of its capability function; a member-only function must not leak into share mode (no door on the
+  source and a right of its rights function; a member-only function must not leak into share mode (no door on the
   guest's source, false in the guest's column, and the guest-mode mount test of that view records it). The guest-only
   exceptions are exactly the ones with no member equivalent: the shell's gates (password, terms, a note that asks to be accepted — decided on each full resolve, never by a
   live poll, so it cannot yank a page mid-visit), core's one naming

@@ -31,12 +31,12 @@ Memory, an expense and a file side by side).
    below the root; at the scope root it is `K_SC` at the entry's epoch (`tree.ts:87,97`), so uniqueness there holds
    within an epoch, exactly as today (stated, not fixed).
 3. **Move is O(1).** One request: new parent, the key re-wrapped under the new parent's key, the name re-sealed,
-   a new slug token. Each node carries a `placement_version`; move and rename state the version they were built
+   a new slug token. Each node carries a `placement_revision`; move and rename state the revision they were built
    on and the server compares-and-sets it (`409 stale_placement`, the [ADR 0077](0077-a-write-carries-the-version-it-read.md)
    shape), so a rename sealed for the old parent cannot land after a move. Because the `content-key` seal binds the placement
-   version, **a rename re-wraps the key too**: rename and move are the same request shape (a rename is a move to the
+   revision, **a rename re-wraps the key too**: rename and move are the same request shape (a rename is a move to the
    same parent). Seals bind
-   (scope, node, epoch, placement version) ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 1); parents stay
+   (scope, node, epoch, placement revision) ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 1); parents stay
    unbound (Decision 4) — the new parent's key is the binding.
 4. **No per-node epochs, no root rotation.** A keyed folder, like `K_node`, never re-keys
    ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) Context). Revocation stays layer 1:
@@ -135,19 +135,19 @@ Memory, an expense and a file side by side).
    its fields wholesale, so it cannot carry this write. The name is last-writer-wins: it is always the root's current
    name, so the shown name never goes stale.
 
-**What the server stores and learns.** One more opaque wrap per folder and an integer `placement_version`.
+**What the server stores and learns.** One more opaque wrap per folder and an integer `placement_revision`.
 It already sees the tree, kinds, moves and timestamps; it holds no new key.
 
 **Migration.** Edit the core baseline `V202610041200__core_baseline.sql` (`wrapped_content_key NOT NULL`,
-`placement_version BIGINT NOT NULL DEFAULT 0`) with its pin line in `scripts/applied_migrations.sha256` in the
+`placement_revision BIGINT NOT NULL DEFAULT 0`) with its pin line in `scripts/applied_migrations.sha256` in the
 same commit (`release: none`). `V202610041201__memories_baseline.sql` holds no node-key column. Development
 instances are reset; no data migration.
 
-**Contracts.** `content.openapi.yaml` (create: wrap required; update: `wrappedContentKey`, `placementVersion`,
-`epoch`; `NodeSummary.placementVersion`), `sharing.openapi.yaml` (`ShareNode` gains `encryptedName` and
-`placementVersion`; the guest tree operations `createShareNode` and `updateShareNode`; `setShareSealedName`; the
+**Contracts.** `content.openapi.yaml` (create: wrap required; update: `wrappedContentKey`, `placementRevision`,
+`epoch`; `NodeSummary.placementRevision`), `sharing.openapi.yaml` (`ShareNode` gains `encryptedName` and
+`placementRevision`; the guest tree operations `createShareNode` and `updateShareNode`; `setShareSealedName`; the
 recovery copy required on create), a guest upload's optional target `nodeId` (core's share blob-upload requests,
-Memories' `ShareMediaBatchRequest`), and the `node-name` and `content-key` seals binding the placement version, with
+Memories' `ShareMediaBatchRequest`), and the `node-name` and `content-key` seals binding the placement revision, with
 their vectors in `contracts/crypto/vectors/v1.json`.
 
 **Superseded or edited.** ADR 0012's "folders carry no key" and its `K_SC` naming rule; ADR 0079's "folders
@@ -160,14 +160,14 @@ its own reasons).
   Serving descendant names is a product change; the owner decides it, and the share view must render or drop
   them.
 - **A core `FOLDER` can be shared** with the `READ` and `READ_WRITE` roles (`ShareRoots`); the drop-box role belongs to Depot's own drop-box node (decision 11), not to a plain folder.
-- **Rename and move cost a version compare**, and a client may retry on `409 stale_placement`; both re-wrap the key.
+- **Rename and move cost a revision compare**, and a client may retry on `409 stale_placement`; both re-wrap the key.
 - **Reading is limited by position in the tree, never by kind.** Whoever holds a folder's key opens everything
   below it. A filter by kind exists only for writes (a drop-style share, or an application's policy), so a
   Memory that must stay hidden from a folder's guests is not placed under that folder. A per-kind read filter would
   need the share-time fan-out wrap rejected below.
 - **Each application documents a role matrix** for `READ_WRITE` in its `docs/apps/<app>.md`; Memories first.
-- **One guard changes its rule:** `validate_write_concurrency.py` accepts one version-shaped field per operation
-  (`:153-171`); `updateNode` now has two (`metaVersion`, `placementVersion`), so `x-veyq-concurrency` becomes a list
+- **One guard changes its rule:** `validate_write_concurrency.py` accepts one counter-shaped field per operation
+  (`:153-171`); `updateNode` now has two (`metaRevision`, `placementRevision`), so `x-veyq-concurrency` becomes a list
   of declarations with a conflict code each.
 
 ## Alternatives rejected
@@ -241,19 +241,19 @@ there — the placement rule above refuses it, and the web offers no control.
 
 1. Create a `FOLDER` without `wrappedContentKey` → `400`.
 2. A folder share's guest opens a grandchild's name and key; a sibling folder's do not open.
-3. Rename built on `placement_version` *n* after a move to *n+1* → `409`, name unchanged.
-4. A wrap served on another node's row, or at another placement version, fails to open.
+3. Rename built on `placement_revision` *n* after a move to *n+1* → `409`, name unchanged.
+4. A wrap served on another node's row, or at another placement revision, fails to open.
 5. A scope-root rename at a stale epoch → `409 stale_epoch`.
 6. Move into a trashed parent → `illegal_structure`.
 7. Purge a trashed folder whose child was trashed earlier: no child row survives.
 8. Restore a child whose parent is trashed → `404`.
 9. A WRITE_ONLY guest's resolve carries no content key and no name.
 10. A Memory shared alone and through its folder opens the same key from both wraps.
-11. A cycle-forming move → `illegal_structure`, `placement_version` unchanged.
+11. A cycle-forming move → `illegal_structure`, `placement_revision` unchanged.
 12. A chapter guest opens neither the Memory's key, nor its name, nor a sibling chapter; resolve serves nothing above the root.
 13. A guest moves a node out of its subtree, or its root → refused; a WRITE_ONLY guest moves anything → refused.
 14. A share created without `sealedShareKey` → `400`.
-15. A rename without a re-wrapped key → `400`; a rename built on a stale `placement_version` → `409 stale_placement`.
+15. A rename without a re-wrapped key → `400`; a rename built on a stale `placement_revision` → `409 stale_placement`.
 16. A move to the scope root at a stale epoch → `409 stale_epoch`; a move between non-root parents keeps the stored
     epoch; an epoch above the current one → `409 stale_epoch` at any destination.
 17. A `READ_WRITE` guest creates a kind `NodeKindRules` does not admit under the folder → refused.

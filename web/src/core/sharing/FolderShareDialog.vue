@@ -60,7 +60,7 @@ const MIN_PW = 10
 // folder's scope (every link's recovery copy of `K_share` is bound to it, ADR 0072), the folder's own content key as
 // the key chain opens it (`nodeKey`, ADR 0080 decision 1 — what a link wraps; key material) and its name (`nodeName`,
 // re-sealed under `K_share` so a guest sees it without the scope key). `nodeKind` is always FOLDER here; `uploader` is
-// never set for a folder (no WRITE_ONLY link on a folder) and would be ignored. `contribute` (the capability function's
+// never set for a folder (no WRITE_ONLY link on a folder) and would be ignored. `contribute` (the rights function's
 // `shareContribute`, handed on by the host) lets the form offer READ_WRITE for a new link.
 const props = defineProps<NodeShareDialogProps & { words?: ShareDialogCopy }>()
 const emit = defineEmits<{ close: [] }>()
@@ -234,7 +234,7 @@ const link = ref('')
 const NEW_LINK = 'new'
 
 // READ and READ_WRITE only: a WRITE_ONLY link on a folder is refused by the backend. READ_WRITE only where the host
-// handed `contribute` (the capability function's `shareContribute`, `core.public-shares.contribute`) — or on the edit of a
+// handed `contribute` (the rights function's `shareContribute`, `core.public-shares.contribute`) — or on the edit of a
 // link that already is one: a feature switch refuses only what is new (ADR 0088 decision 5), so an existing contributor
 // link keeps its role on screen instead of showing no selection.
 const roleOptions = computed(() => [

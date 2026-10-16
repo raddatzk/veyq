@@ -26,7 +26,7 @@
 // Memories, files, drop boxes - that CORE draws. An application no longer draws a section of its own: a kind brings, with its
 // descriptor, a `list` - `rows`, a factory (`core/node/levelRow.ts`) the level calls once per view with its reactive context and
 // a host, answering for each node of the kind a `LevelRow` (leading icon or cover, title, meta line, primary click, actions;
-// each action `shown` by the application's fail-closed capability function) plus the notices and presentation only the
+// each action `shown` by the application's fail-closed rights function) plus the notices and presentation only the
 // application can supply - and `tabLabel` (the i18n key of its tab; kinds sharing a label share a tab, the tab a pure FILTER with
 // the folders in every tab), `views` (the presentations beyond core's grid and list that its factory draws: Memories' map) and
 // `emptyText` (what its tab says when it has nothing). Several kinds may name the SAME factory (Memories: MEMORY and CHAPTER; Depot:
@@ -36,7 +36,7 @@
 // shows the explicit unsupported row, never an empty area.
 //
 // **Who looks (`core/access.ts`).** A `detail` and a row factory are handed `access` (a member, or a share guest)
-// and `tree` (the tree as that session reads it), and offer what their application's fail-closed capability function
+// and `tree` (the tree as that session reads it), and offer what their application's fail-closed rights function
 // answers for them — one view per kind in both modes, never a flag the host decides. The guest's page of a public share
 // (`core/sharing/ShareTreePage.vue`, inbox #401) is core's level view at a folder and the kind's `detail` at any other
 // node, whatever the link's root kind, so a kind's rows and `detail` serve it as they serve a member; no guest-only
@@ -76,7 +76,7 @@
 //
 // **The level view's "New" menu (inbox #406).** The creation entries leave the sections' headers and tiles for ONE menu in
 // core's level toolbar, derived from here: a kind's `createEntry` (label key of its own namespace, icon, order, the
-// capability function that decides whether it shows) opens that kind's `createDialog`; a kind's `levelActions` are entries
+// rights function that decides whether it shows) opens that kind's `createDialog`; a kind's `levelActions` are entries
 // that are no create dialog (Depot's "Upload files"), run through a handler the application's row factory registers with the
 // level (`core/node/levelActions.ts`) for the level's whole life, whichever tab is shown - and an entry declaring `acceptsDrop`
 // also takes what is dropped onto the level (files, or a directory). `levelMenu()` lists them (each with the kind that
@@ -143,7 +143,7 @@ export interface KindDescriptor {
    *  upload never finished (inbox #391). Its restore stays offered, the row says what comes back. Omitted: no note (a
    *  kind whose content lives elsewhere, e.g. a Memory, holds no attachment and is not empty for it). */
   emptyInTrash?: string
-  /** Whether a public share can be created for a node of this kind (the capability check still applies). */
+  /** Whether a public share can be created for a node of this kind (the rights check still applies). */
   shareable: boolean
   /** How a name of this kind folds before it is HMAC'd into its blinded slug token (inbox #350; read through
    *  {@link Registry.slugFor}). Omitted: `slugify`, the container folding that is also the URL segment. A kind that is
@@ -163,7 +163,7 @@ export interface KindDescriptor {
    *  create of the kind opens nothing. FOLDER has none: its create is core's `FolderNameDialog`. */
   createDialog?: Component
   /** The entry this kind adds to the level view's "New" menu (`core/node/LevelView.vue`, inbox #406): its label (an i18n
-   *  key of its own application namespace), icon and order, and `allowed` - the application's fail-closed capability
+   *  key of its own application namespace), icon and order, and `allowed` - the application's fail-closed rights
    *  answer for the level on screen, so a menu entry shows exactly where the old section button did. Choosing it asks the
    *  host for this kind's `createDialog` (which therefore must exist: `registerKind` throws without). Omitted: the kind
    *  is not created from a level (a chapter is created inside its Memory). */
@@ -267,7 +267,7 @@ export interface LevelActionContext {
   epochs: EpochKeys | null
 }
 
-/** One entry of the "New" menu, declared by an application on its kind. `allowed` is the capability answer (fail closed:
+/** One entry of the "New" menu, declared by an application on its kind. `allowed` is the rights answer (fail closed:
  *  an entry whose function says no is not drawn); `enabled` (default: always) greys an allowed entry out while something
  *  else is not ready (the member's epoch keys for a create). Entries sort by `order` ascending. */
 export interface LevelMenuEntry {
@@ -309,7 +309,7 @@ export interface KindList {
   /** The presentations beyond core's grid and list that the factory's `presentation(mode)` draws (Memories: the map). The
    *  factory's kinds must agree: one function renders one way. */
   views?: readonly LevelViewOption[]
-  /** The i18n key of the plain text an application tab shows when it has nothing, per the viewer's capabilities
+  /** The i18n key of the plain text an application tab shows when it has nothing, per the viewer's rights
    *  (a writer is pointed at "New", a reader is not). Omitted: the neutral `node.tabEmpty`. */
   emptyText?: (ctx: LevelActionContext) => string
 }
@@ -334,7 +334,7 @@ export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: f
 
 /** The generic context the host hands the `detail` component of an opened node (event names below). The
  *  application's own host component maps it to whatever its detail view takes. What the detail offers is its
- *  application's capability function over `access` and the node (`core/access.ts`), never a flag the host decides. */
+ *  application's rights function over `access` and the node (`core/access.ts`), never a flag the host decides. */
 export interface NodeDetailProps {
   node: TreeNode
   scopeId: string
@@ -354,7 +354,7 @@ export interface NodeDetailProps {
 /** Events a `detail` component emits to the host: `rename` (core's `FolderNameDialog`, any kind), `delete`,
  *  `createChild` (the KIND of the child to create: the host mounts that kind's `createDialog` under the opened node),
  *  `openNode` (a child), `share` and `shareUpload` (the opened kind's `shareDialog`, the second with `uploader`). `share`
- *  carries the {@link NodeShareOffer} of the capability function that showed the button, which the host hands on. */
+ *  carries the {@link NodeShareOffer} of the rights function that showed the button, which the host hands on. */
 export interface NodeDetailEmits {
   rename: []
   delete: []
@@ -372,7 +372,7 @@ export interface NodeDetailEmits {
 }
 
 /** What a `share` emit hands the host for the dialog it mounts: the share rights beyond "may share at all" that the
- *  application's capability function answered for the node (`contribute`: offer the READ_WRITE role for a new link,
+ *  application's rights function answered for the node (`contribute`: offer the READ_WRITE role for a new link,
  *  `core.public-shares.contribute`). The host passes them on as `NodeShareDialogProps`, so a dialog never reads a
  *  capability itself (web/CLAUDE.md: never a `hasCapability` read inline). */
 export interface NodeShareOffer {

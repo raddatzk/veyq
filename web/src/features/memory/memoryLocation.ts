@@ -103,7 +103,7 @@ export function unsealMemoryLocation(
 
 /**
  * The location EDITOR's save: **read-modify-write** the node-meta blob — set (or, for `null`, **remove**) only the
- * `location`, re-seal, PATCH with the `metaVersion` it was built from. **Preserves the sibling `date`/`cover`** in
+ * `location`, re-seal, PATCH with the `metaRevision` it was built from. **Preserves the sibling `date`/`cover`** in
  * every case (cr-0069), including ones a peer wrote meanwhile (ADR 0077); a peer's change to the PLACE itself
  * throws `MetaConflictError` so the editor re-opens on it. Returns the state the server confirmed.
  */

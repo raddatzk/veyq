@@ -9,8 +9,8 @@
 // **A door exists only where the session has it.** Every write and every member-only read is an OPTIONAL member of the
 // source: the guest's has no media trash, no node meta (date, place, cover), no buckets, no item marks, no live poll, no
 // heavy EXIF, no media-meta writes, and its delete reaches only its own media (an irreversible purge, never the member's
-// trash with undo). A view offers an operation where `memoryCapabilities` grants it AND the source carries it
-// (`sourceCapabilities`), so a forgotten guard cannot fall through to a member call — there is no member call to fall to.
+// trash with undo). A view offers an operation where `memoryRights` grants it AND the source carries it
+// (`sourceRights`), so a forgotten guard cannot fall through to a member call — there is no member call to fall to.
 // A `WRITE_ONLY` guest holds no key to read anything: its page is the drop (`MemoryShareBody`), never this source's, so
 // the guest source uploads and deletes for a `READ_WRITE` link only.
 //
@@ -79,7 +79,7 @@ import {
 } from './share'
 import { forgetOwnShareMedia, loadOwnShareMedia, rememberOwnShareMedia } from './ownShareMedia'
 import type { UploadTarget } from './uploadQueue'
-import type { MemoryCapabilities } from './capabilities'
+import type { MemoryRights } from './rights'
 
 /** A node's media as a source lists it: the live media and, where the session polls, the revisions a live poll
  *  continues from (`null`: this source has no live poll). */
@@ -201,26 +201,26 @@ export interface MemorySource {
   readonly buckets?: BucketsDoor
 }
 
-/** The capabilities a view shows: the matrix's answer, narrowed to the doors `source` carries. A delete keeps its reach
+/** The rights a view shows: the matrix's answer, narrowed to the doors `source` carries. A delete keeps its reach
  *  only where the source's delete has that same reach (a member's trash for `any`, a guest's purge for `own`). */
-export function sourceCapabilities(caps: MemoryCapabilities, source: MemorySource): MemoryCapabilities {
+export function sourceRights(rights: MemoryRights, source: MemorySource): MemoryRights {
   return {
-    ...caps,
-    upload: caps.upload && !!source.upload,
-    deleteMedia: caps.deleteMedia !== 'none' && source.deleteMedia?.reach === caps.deleteMedia ? caps.deleteMedia : 'none',
-    editMeta: caps.editMeta && !!source.nodeMeta,
+    ...rights,
+    upload: rights.upload && !!source.upload,
+    deleteMedia: rights.deleteMedia !== 'none' && source.deleteMedia?.reach === rights.deleteMedia ? rights.deleteMedia : 'none',
+    editMeta: rights.editMeta && !!source.nodeMeta,
     // shown only by a source that can read the node's meta as a member: the guest's source carries no `nodeMeta` door
-    participants: caps.participants && !!source.nodeMeta,
-    mark: caps.mark && !!source.marks,
-    mediaTrash: caps.mediaTrash && !!source.trash,
-    buckets: caps.buckets && !!source.buckets,
+    participants: rights.participants && !!source.nodeMeta,
+    mark: rights.mark && !!source.marks,
+    mediaTrash: rights.mediaTrash && !!source.trash,
+    buckets: rights.buckets && !!source.buckets,
   }
 }
 
-/** What `MemoryDetail` hands its deep children (the organizer, …): the source and the capabilities it shows. */
+/** What `MemoryDetail` hands its deep children (the organizer, …): the source and the rights it shows. */
 export interface MemoryView {
   readonly source: MemorySource
-  readonly caps: ComputedRef<MemoryCapabilities>
+  readonly rights: ComputedRef<MemoryRights>
 }
 /** The injection key of {@link MemoryView} — exported for a test that mounts a child on its own (`global.provide`). */
 export const MEMORY_VIEW: InjectionKey<MemoryView> = Symbol('memories.view')

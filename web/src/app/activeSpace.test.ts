@@ -164,7 +164,7 @@ describe('enterScope — re-entry resets per-scope state', () => {
     // Seed stale per-scope state as if a previous scope was loaded.
     const stale: TreeNode = treeNode({
       id: 'stale', name: 'Stale', parentId: null, kind: FOLDER_KIND, orderIndex: 0, epoch: 0,
-      wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+      wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0,
     })
     treeStore.nodes = [stale]
     treeStore.loaded = true

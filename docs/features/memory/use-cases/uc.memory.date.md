@@ -55,7 +55,7 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
   ([uc.memory.concurrent-curation](uc.memory.concurrent-curation.md) E5).
 - **E4 — invalid manual range (`to` < `from`):** rejected in the editor before sealing.
 - **E5 — concurrent members (groups/tenant):** another member may write the same `wrappedMeta` meanwhile — a
-  date, a place, a cover, or the `auto` range from their own open. Every write states the `metaVersion` it was
+  date, a place, a cover, or the `auto` range from their own open. Every write states the `metaRevision` it was
   built from and re-applies only its own change on a conflict; the self-heal re-checks *"a manual date is never
   overwritten"* on the fresh blob, and a date editor whose date changed underneath it re-opens on the current
   value. The property and its failure modes are
@@ -70,9 +70,9 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
 - **`auto` reuses the capture-time tier** the gallery already lists (cr-0064/0066); it is materialized into
   `wrappedMeta` by a full-list reconcile at settle points (a small extra `updateNode` PATCH) so the browse grid
   can show + sort by the range without ever loading a Memory's media.
-- **Version-checked, not last-writer-wins.** The blob also holds the place and the cover, which never self-heal,
+- **Revision-checked, not last-writer-wins.** The blob also holds the place and the cover, which never self-heal,
   so a stale re-seal of the derived range would erase them; every write is a compare-and-set on the node's own
-  `metaVersion` ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md),
+  `metaRevision` ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md),
   [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md)). Materialize the range only **after an
   upload finishes**, never mid-upload.
 - **Reuse the existing UI/UX — never invent.** The date picker + ISO formatting are existing components

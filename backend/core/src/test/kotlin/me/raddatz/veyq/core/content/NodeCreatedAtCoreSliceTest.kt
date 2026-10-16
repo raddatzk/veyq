@@ -96,7 +96,7 @@ class NodeCreatedAtCoreSliceTest {
 
     private fun place(parent: String?, version: Long): String {
         val to = parent?.let { "\"parentId\":\"$it\"," } ?: ""
-        return """{$to"encryptedName":"cmVuYW1lZA==","slugToken":"${slug()}","wrappedContentKey":"cmV3cmFw","epoch":0,"placementVersion":$version}"""
+        return """{$to"encryptedName":"cmVuYW1lZA==","slugToken":"${slug()}","wrappedContentKey":"cmV3cmFw","epoch":0,"placementRevision":$version}"""
     }
 
     private fun patch(userId: String, scopeId: String, node: String, body: String) {

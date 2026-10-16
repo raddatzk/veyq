@@ -60,7 +60,7 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
       await createFolder(props.scopeId, props.epochs, trimmed, createParent())
     } else if (props.node) {
       // A rename is a placement to the same parent (ADR 0080 Decision 3): the key re-wraps and the name re-seals under
-      // the parent's key, resolved from the loaded tree, at the next placement version.
+      // the parent's key, resolved from the loaded tree, at the next placement revision.
       await renameNode(props.scopeId, props.epochs, treeStore.nodes, props.node.id, trimmed)
       await resealAfterRename(props.node.id, trimmed)
     }

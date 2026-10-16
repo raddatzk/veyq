@@ -5,7 +5,7 @@
 //
 // **A write exists only where the session has its door.** The guest's source has no `deleteFile` and no `rename` (a
 // guest deletes nothing — nodes store no authorship, ADR 0080 decision 6 — and no guest page offers a rename yet), and a
-// `move` only for a `READ_WRITE` link (core's move dialog, the host's, inbox #358); a view offers a write where `depotCapabilities` grants it AND the source carries it (`sourceCapabilities`), so
+// `move` only for a `READ_WRITE` link (core's move dialog, the host's, inbox #358); a view offers a write where `depotRights` grants it AND the source carries it (`sourceRights`), so
 // a forgotten guard cannot fall through to a member call — there is no member call to fall to.
 //
 // Operator-blind as the views: every name, size and date is opened by the view under keys the tree holds; the sources
@@ -27,7 +27,7 @@ import { filesApi, publicShareFilesApi } from './api'
 import { downloadFile, fileChunkProvider } from './download'
 import { FileUploadError, fileUploadJob, type FileJobExtra, type FileReplace, type FileUploadResult } from './uploadFile'
 import { guestFileUploadJob } from './shareUpload'
-import type { DepotCapabilities } from './capabilities'
+import type { DepotRights } from './rights'
 
 /** One file to upload: into a new FILE node under the level's folder, or into `replace` (its key from the tree). */
 export type FileUploadEntry = { file: File; replace?: FileReplace }
@@ -114,16 +114,16 @@ export interface DepotSource {
   readonly move?: (node: TreeNode) => void
 }
 
-/** The capabilities a view shows: the matrix's answer, narrowed to the writes `source` carries. */
-export function sourceCapabilities(caps: DepotCapabilities, source: DepotSource): DepotCapabilities {
+/** The rights a view shows: the matrix's answer, narrowed to the writes `source` carries. */
+export function sourceRights(rights: DepotRights, source: DepotSource): DepotRights {
   return {
-    ...caps,
-    upload: caps.upload && !!source.upload,
-    replace: caps.replace && !!source.upload,
-    rename: caps.rename && !!source.rename,
-    deleteFile: caps.deleteFile && !!source.deleteFile,
-    moveFile: caps.moveFile && !!source.move,
-    moveNode: caps.moveNode && !!source.move,
+    ...rights,
+    upload: rights.upload && !!source.upload,
+    replace: rights.replace && !!source.upload,
+    rename: rights.rename && !!source.rename,
+    deleteFile: rights.deleteFile && !!source.deleteFile,
+    moveFile: rights.moveFile && !!source.move,
+    moveNode: rights.moveNode && !!source.move,
   }
 }
 
@@ -245,7 +245,7 @@ function memberBatch(scopeId: string, epochs: EpochKeys, parent: NodeParent): Fi
 }
 
 /** A share guest's source over its link (`access`): reads for every role; the upload and move doors only for a
- *  `READ_WRITE` link (the capability matrix decides where), naming the guest first through the page's one flow — `move`
+ *  `READ_WRITE` link (the rights matrix decides where), naming the guest first through the page's one flow — `move`
  *  is the host's move dialog, which moves through core's guest placement. A `WRITE_ONLY` guest holds no key to read
  *  anything: its page is the drop box's own (`DropBoxGuestForm`), never this source's. */
 export function guestDepotSource(access: () => GuestAccess, host: { move?: (node: TreeNode) => void } = {}): DepotSource {

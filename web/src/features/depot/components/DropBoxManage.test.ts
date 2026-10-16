@@ -49,7 +49,7 @@ describe('the drop box create dialog', () => {
 })
 
 describe('the drop boxes in the unified level list', () => {
-  const box: TreeNode = treeNode({ id: 'b1', kind: DROPBOX_KIND, name: 'Einsendungen', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+  const box: TreeNode = treeNode({ id: 'b1', kind: DROPBOX_KIND, name: 'Einsendungen', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
   const ctx = (nodes: TreeNode[]) => ({
     folder: null, nodes, epochs: EPOCHS, viewMode: 'grid' as const, liveTick: undefined,
     access: memberAccessOf({ scopeId: SCOPE, epochs: EPOCHS }), tree: memberTreeOf(() => nodes, { scopeId: SCOPE, epochs: EPOCHS }),
