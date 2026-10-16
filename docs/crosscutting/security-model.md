@@ -145,7 +145,7 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
   node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
-  space); the tenant's **terms text + `terms_revision`** (the operator's *public* policy,
+  space); the tenant's **terms text + `terms_revision`** (the space owner's *public* policy,
   served to everyone incl. pre-auth) and a member's **accepted terms revisions** and **when they accepted each**
   (one row per revision, never overwritten; `accepted_at`, the server's own clock, written once per revision — audit
   evidence for a dispute, also about a superseded revision; restored by owner decision 2026-10-09 after #318 had
@@ -363,7 +363,7 @@ server-blind token makes this work without the server ever seeing a name:
   documented future upgrade.
 - **The accountless-visitor terms acceptance is client-only** ([ADR 0035](../decisions/0035-server-terms-of-service.md)
   §3, [uc.sharing.share-accept](../features/sharing/use-cases/uc.sharing.share-accept.md)): before viewing, an
-  account-less share visitor accepts the operator's tenant terms, but the acceptance lives in **localStorage** (per
+  account-less share visitor accepts the space's terms, but the acceptance lives in **localStorage** (per
   tenant + revision) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
   terms are **public operational content** (no blindness cost), served from the *share* via a guest
   `GET /api/shares/{shareId}/terms` keyed on the non-enumerable `shareId` (no `tenantId` existence oracle). It is an

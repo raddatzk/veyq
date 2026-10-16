@@ -128,7 +128,7 @@ that address.
 
 ### Terms acceptance
 
-The tenant's **terms text and revision** are the operator's public policy, served to everyone. A member's
+The tenant's **terms text and revision** are the space owner's public policy, served to everyone. A member's
 **accepted terms revisions and when they accepted each** are kept as a history, one row per revision, never
 overwritten: audit evidence for a dispute, served by no API.
 
