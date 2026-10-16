@@ -14,7 +14,7 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import {
   changeTenantDomain,
-  GIB,
+  formatQuotaGib,
   listTenants,
   parseQuotaGib,
   reactivateTenant,
@@ -59,6 +59,9 @@ const inviteUrl = ref('')
 const copied = ref(false)
 // The quota as typed, in GiB — prefilled with the current one (empty when none is set).
 const quotaGib = ref('')
+// The quota as loaded: a field nobody edited saves these bytes, never the rounded GiB it shows — otherwise saving it
+// unchanged moves the quota, and one under 0.01 GiB, shown as "0", stopped every upload into the tenant.
+const loadedQuota = ref<{ text: string; bytes: number } | null>(null)
 
 const isPending = computed(() => tenant.value?.status === 'PENDING')
 // ADR 0066 — the third status. Availability only: SUSPENDED says nothing about the tenant's content, which is
@@ -77,7 +80,8 @@ const { pending: loading, error: loadErr, reload } = useAsyncData(async () => {
   if (found) {
     email.value = found.ownerEmail
     domain.value = found.domain
-    quotaGib.value = found.storageQuotaBytes == null ? '' : String(Math.round((found.storageQuotaBytes / GIB) * 100) / 100)
+    quotaGib.value = found.storageQuotaBytes == null ? '' : formatQuotaGib(found.storageQuotaBytes)
+    loadedQuota.value = found.storageQuotaBytes == null ? null : { text: quotaGib.value, bytes: found.storageQuotaBytes }
   }
   return found
 }, { onError: on401 })
@@ -173,7 +177,8 @@ const storageQuota = computed(() =>
   tenant.value?.storageQuotaBytes == null ? t('tenant.quotaNone') : formatBytes(tenant.value.storageQuotaBytes, locale.value),
 )
 async function saveQuota(clear: boolean) {
-  const bytes = clear ? null : parseQuotaGib(quotaGib.value)
+  const unchanged = loadedQuota.value !== null && quotaGib.value.trim() === loadedQuota.value.text
+  const bytes = clear ? null : unchanged ? loadedQuota.value!.bytes : parseQuotaGib(quotaGib.value)
   actionError.value = ''
   if (bytes === undefined) {
     actionError.value = t('tenant.quotaInvalid')

@@ -13,10 +13,11 @@ const push = vi.fn()
 const replace = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push, replace }) }))
 
-// The real `GIB` and `parseQuotaGib`: the conversion is what the quota cases assert, so it must not be stubbed away.
+// The real `GIB`, `parseQuotaGib` and `formatQuotaGib`: the conversion is what the quota cases assert, so it must not be stubbed away.
 vi.mock('./tenants', async (importOriginal) => ({
   GIB: (await importOriginal<typeof import('./tenants')>()).GIB,
   parseQuotaGib: (await importOriginal<typeof import('./tenants')>()).parseQuotaGib,
+  formatQuotaGib: (await importOriginal<typeof import('./tenants')>()).formatQuotaGib,
   setTenantStorageQuota: vi.fn(),
   listTenants: vi.fn(),
   resendInvite: vi.fn(),
@@ -301,6 +302,28 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await btn(w, 'Remove quota').trigger('click')
     await flushPromises()
     expect(setTenantStorageQuota).toHaveBeenCalledWith('t-3', null)
+  })
+
+  it('shows a quota under 0.01 GiB as non-zero, and saves it unchanged as the stored bytes, not as 0', async () => {
+    // 107 374 B rounded to two decimals was "0" — and 0 is a real quota: an unchanged save stopped every upload.
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageQuotaBytes: 107_374 }])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    expect((quotaInput(w).element as HTMLInputElement).value).toBe('0.0001')
+    await submitQuota(w)
+    await flushPromises()
+    expect(setTenantStorageQuota).toHaveBeenCalledWith('t-2', 107_374)
+  })
+
+  it('saves a quota the display rounds unchanged as the stored bytes, so an untouched field never drifts', async () => {
+    const stored = Math.round(1.234 * GiB)
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageQuotaBytes: stored }])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    expect((quotaInput(w).element as HTMLInputElement).value).toBe('1.23')
+    await submitQuota(w)
+    await flushPromises()
+    expect(setTenantStorageQuota).toHaveBeenCalledWith('t-2', stored)
   })
 
   it('refuses a quota that is not a number of GiB without calling', async () => {
