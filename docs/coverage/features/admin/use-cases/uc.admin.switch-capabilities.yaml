@@ -44,22 +44,26 @@ acceptanceCriteria:
       backend:
         integration: [InstanceCapabilitiesSliceTest.aDeviceSwitchWithholdsItsWrapsFromTheNextKeyMaterialReadAndSwitchingOnRestoresThem, AccountKeyMaterialSliceTest.rememberDeviceOffWithholdsBothDeviceWrapsAndServesThePasswordWrap, AccountKeyMaterialSliceTest.passwordlessOffWithholdsOnlyTheDeviceKeyWrap]
       web:
-        unit: [src/views/LoginView.test.ts, src/features/account/rememberMe/deviceKeyWrap.test.ts, src/features/account/unlock/unlock.device.test.ts, src/features/account/trustDevice/trustDevice.test.ts, src/features/account/sessions/SessionsPanel.test.ts]
+        unit: [src/views/LoginView.test.ts, src/views/LoginView.deviceSwitch.test.ts, src/features/account/rememberMe/deviceKeyWrap.test.ts, src/features/account/unlock/unlock.device.test.ts, src/features/account/trustDevice/trustDevice.test.ts, src/features/account/sessions/SessionsPanel.test.ts]
     gaps:
       - surface: web
         reason: >-
           The web suites run over mocked key material: a withheld wrap keeps the device's record and key, the
           sign-in asks for the password and the Secret Key with the `unlock.deviceHeldBack` hint, the device is not
           re-enrolled to the other tier, its line in Devices and sessions says it is held back instead of how it
-          unlocks, and the same wrap served again opens it with no new enrolment. A real browser ran it once by hand
+          unlocks, and the same wrap served again opens it with no new enrolment. A remembered device that signs in
+          while passwordless is off keeps the persistent cookie scope (a device without the record still gets the
+          session one), and `LoginView.deviceSwitch.test.ts` follows that sign-in through a switch-on and a browser
+          restart, over the real remember-me record and a fake server and cookie jar, to a device that opens
+          directly (inbox #450). A real browser ran it once by hand
           on 2026-10-15 (inbox #447) against a fresh instance: with each device switch off, a trusted and a
           remembered device unlocked with the password and the Secret Key, sent no DELETE or POST to
           `/api/account/wraps` (a fetch hook and Resource Timing; the database's four wraps stayed byte-identical),
           kept their local records and stayed listed in Devices and sessions; switched back on, the trusted device
           unlocked with the password alone through the same DEVICE wrap and the remembered one opened without a
-          prompt in a new tab. Not covered: a browser restart after a sign-in made while the switch was off, which
-          leaves a remembered device only a session cookie (inbox #450, read from the code); and none of it runs in
-          CI (inbox #448).
+          prompt in a new tab. Not covered: a real browser restart after a sign-in made while the switch was off (the
+          browser pane cannot restart its browser; the restart is the test's cookie jar), and none of it runs in CI
+          (inbox #448).
   - id: share-switch-acts-at-once
     text: While core.public-shares, .contribute or .drop-box is effectively off, every guest endpoint in core, Memories and Depot answers an existing link of the role it reaches exactly as an unknown link (the same 404 and body, before the password is asked), the links of the roles it does not reach stay served, and switching back on serves every link again because nothing was written onto it; changing a READ link into a READ_WRITE one while .contribute is off is refused with 422 capability_disabled.
     coverage:
@@ -95,8 +99,9 @@ acceptanceCriteria:
           "Sign in with a QR code" and no "Add a device" (its address led back to Settings), and no "Stay signed
           in"; a trusted and a remembered device each asked for the password and the Secret Key with the
           `unlock.deviceHeldBack` hint once the email was entered (before that, the first-sign-in hint: the lookup
-          is keyed on the entered email, inbox #450); a child switched on under a parent still off showed "off
-          through" it. Switched on again, every affordance returned. It does not run in CI (inbox #448).
+          was keyed on an email field that started empty; since inbox #450 the field is filled in from the device's
+          record, which `LoginView.test.ts` pins and no browser has re-run); a child switched on under a parent
+          still off showed "off through" it. Switched on again, every affordance returned. It does not run in CI (inbox #448).
 gaps:
   admin-web: >-
     The console's Server → Capabilities panel and `veyq-admin capabilities list | off <id> | on <id>` live in

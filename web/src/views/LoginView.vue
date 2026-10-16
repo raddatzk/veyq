@@ -12,8 +12,14 @@ import { login } from '../features/account/login/login'
 import { signOut, takeSignOutNotice, type SignOutNotice } from '../features/account/login/signOut'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
-import { trustThisDevice, untrustThisDevice, isTrusted } from '../features/account/trustDevice/trustDevice'
-import { enrolDeviceKey, clearDeviceKey, isRememberSupported, rememberedWrapId } from '../features/account/rememberMe/deviceKeyWrap'
+import { trustThisDevice, untrustThisDevice, isTrusted, trustedEmails } from '../features/account/trustDevice/trustDevice'
+import {
+  enrolDeviceKey,
+  clearDeviceKey,
+  isRememberSupported,
+  rememberedWrapId,
+  rememberedEmail,
+} from '../features/account/rememberMe/deviceKeyWrap'
 import { cacheSessionVault, clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
@@ -120,6 +126,30 @@ async function rememberedWhileOff(): Promise<boolean> {
   return !!email.value && !rememberSupported && (await rememberedWrapId(email.value).catch(() => null)) !== null
 }
 
+/** The email of this device's one local record, or null (inbox #450). Both convenience tiers keep the email in
+ *  plaintext on the device (the remember-me record names it, a trust record is keyed by it), so filling it in shows
+ *  nothing the device does not already hold, and the field no longer reads "first time on this device" on a device
+ *  that has a record. Records of two accounts are no answer: the screen does not pick an account for the member. */
+async function deviceEmail(): Promise<string | null> {
+  if (!isRememberSupported()) return null
+  const emails = new Set(await trustedEmails().catch(() => []))
+  const remembered = await rememberedEmail().catch(() => null)
+  if (remembered) emails.add(remembered)
+  return emails.size === 1 ? [...emails][0] : null
+}
+
+// The address this screen filled in itself. It is not a different account, so it keeps a session a boot restored
+// (see the watcher below); only an address the member types or a kit brings drops it.
+let prefilled: string | null = null
+
+/** Prefill the email from the device's record, unless the member has typed one in the meantime. */
+async function prefillEmail() {
+  const known = await deviceEmail()
+  if (!known || email.value) return
+  prefilled = known
+  email.value = known
+}
+
 /** Write moment 2 of the device register (en.account.device-register): record the device↔wrap join at the ONE
  *  moment the new wrap id exists — every enrolment mints a fresh one (ADR 0005 §9). Best-effort and silent: a
  *  join that does not land leaves the device un-escalatable in the sessions view (§E4) and is re-asserted from
@@ -173,7 +203,18 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
     if (!sessionReady.value) {
       // Web is cookie-based: the toggle picks the refresh-cookie lifetime — persistent ("remember me") vs a
       // session cookie (survives reloads, gone on browser close, §22).
-      const scope = remember.value
+      //
+      // A device that keeps its DEVICE_KEY record while `passwordless` is off keeps the persistent scope it chose
+      // with the toggle, which is hidden now (inbox #450). A session cookie here would replace the device's
+      // persistent one, so after a switch-on and a browser restart the device would meet its restored wrap with no
+      // session and land on this screen, where the toggle left off makes it a trusted device and drops the wrap:
+      // ADR 0088 decision 5's "switching back on restores every remembered device" would hold only until the
+      // browser closes. This widens nothing a switched-off instance forbids. The cookie lifetime is a session
+      // matter (ADR 0004), which the server grants any web login and no switch gates; the switch's subject is the
+      // wrap, which the server keeps withholding, so the persistent session opens no vault: after a restart the
+      // device still lands here and needs the password and the Secret Key until the switch is on again. A device
+      // without such a record never chose "stay signed in", so it still gets the session scope.
+      const scope = remember.value || (await rememberedWhileOff())
         ? LoginVerifyRequestSessionScopeEnum.Persistent
         : LoginVerifyRequestSessionScopeEnum.Session
       await login(email.value, password.value, scope)
@@ -340,8 +381,8 @@ function onEmailChange() {
   void resolveDeviceState()
 }
 
-watch(email, () => {
-  sessionReady.value = false
+watch(email, (now) => {
+  if (now !== prefilled) sessionReady.value = false
   scheduleResolve()
 })
 
@@ -349,6 +390,7 @@ onBeforeUnmount(() => clearTimeout(resolveTimer))
 
 onMounted(async () => {
   showSignOutNotice(takeSignOutNotice())
+  await prefillEmail().catch(() => {}) // a convenience: a record that cannot be read leaves the field empty
   await resolveDeviceState()
 })
 </script>

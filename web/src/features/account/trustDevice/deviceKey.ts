@@ -44,6 +44,11 @@ export async function loadTrust(email: string): Promise<TrustRecord | null> {
   return (await run<TrustRecord | undefined>('readonly', (s) => s.get(accountKey(email)))) ?? null
 }
 
+/** The accounts this device holds a trust record for: the store's keys, which are the normalised emails. */
+export async function listTrustedEmails(): Promise<string[]> {
+  return (await run<IDBValidKey[]>('readonly', (s) => s.getAllKeys())).map(String)
+}
+
 export function clearTrust(email: string): Promise<void> {
   return run('readwrite', (s) => s.delete(accountKey(email))).then(() => undefined)
 }
