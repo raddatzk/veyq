@@ -333,3 +333,9 @@ gaps:
     job runs, no admitted ref proves that clause: `src/features/memory/itemFavoritesStore.test.ts` mocks the sealing module,
     and the backend relays ciphertext it cannot open. On the first run whose log shows packages/crypto's suites
     executed, the suite goes back under that criterion and this gap goes.
+  stack: >-
+    Lane L1's browser suite (`e2e/tests/scenarios/memory-roundtrip.spec.ts`) drives `thumbnail-grid` in Chromium
+    against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its
+    criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits
+    the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed.
+    On that run each file becomes a ref on the criteria its tests are tagged with, and this gap goes.

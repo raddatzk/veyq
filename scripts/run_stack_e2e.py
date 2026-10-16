@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Install the release candidate as a Server Owner would, through `veyqctl install`, and drive it in a browser (ADR 0090, lane L1 of ADR 0091).
 
-**What it does — phases 1–3 of `changes/cr-stack-e2e.md`: a boot, first run and a Memory round trip in a browser,
-and the stack swept for every value the browser typed.** Takes the two candidate images (`--app`,
+**What it does: lane L1 — a boot, first run, a Memory round trip and the feature scenarios in a browser, and the
+stack swept for every value the browser typed.** `ci.yml`'s `stack` job runs it per architecture. Takes the two candidate images (`--app`,
 `--admin`: a local build's bare `name:tag` — `veyqctl --unsigned-local` refuses anything else) and from there
 installs it the way the Run area does, through the release's own `veyqctl`, never through this repository's copy of
 the recipe:
 
+  0. **preflight** — ports 80, 443 and the admin port free, the Playwright library the image's version, the host's
+     containers and volumes recorded; then **browser image** — the Playwright image the overlay pins, pulled by its
+     digest when the host does not hold it yet, timed on its own (a fresh CI runner always pulls it).
   1. **assets** — the candidate becomes a release: `scripts/release_assets.py` (the publish's producer) writes it into
      the run's mirror directory `src/` — the recipe set it derives from the compose file (`garage.toml` included),
      `veyqctl`, `instance_backup.py` and the manifest naming both images. What is installed is what a release ships.
@@ -56,8 +59,10 @@ the recipe:
   11. **host** — the run touched nothing that is not its own: every container that existed before it still exists
      with the same state and start time, every volume still exists, and nothing of the run's project is left.
 
-The summary prints each stage's wall time — the budget ADR 0091 decision 1 holds the lane to —, the release and the
-assets `veyqctl` installed, and the verdict.
+The summary prints each stage's wall time — the budget ADR 0091 decision 1 holds the lane to (15 min, the job's
+`timeout-minutes`) — and under `browser` each spec file's, i.e. each Playwright project's; then the release and the
+assets `veyqctl` installed, and the verdict. Building or pulling the two candidate images happens before this script,
+in the job's own steps, which the CI log times.
 
 **The run directory survives the run** (`.e2e-stack-out/<stamp>/`, gitignored): the release (`src/`, `assets.log`),
 the instance's home (`home/`: `.env` with every secret of an instance that no longer exists, `state.json`, the
@@ -266,6 +271,17 @@ def browser_pins() -> None:
     if len(set(versions.values())) != 1:
         raise Red(f"Playwright versions disagree: {versions} — the library must be exactly the image's browser's")
     print(f"browser: Playwright {installed} (library and image agree)", flush=True)
+
+
+def browser_image() -> None:
+    """The pinned Playwright image, pulled by its digest when this host does not hold it yet — its own stage, so the
+    summary shows what the browser costs before a test runs (in CI, on every run: a fresh runner holds no image)."""
+    image = overlay_image("browser")
+    if run("docker", "image", "inspect", image, check=False).returncode == 0:
+        print(f"browser image: {image} is already on this host", flush=True)
+        return
+    run("docker", "pull", image, capture=False)
+    print(f"browser image: pulled {image}", flush=True)
 
 
 class Release(NamedTuple):
@@ -520,6 +536,8 @@ def browser(compose: list[str], workdir: Path, selection: list[str]) -> None:
     tests = junit(workdir / "junit.xml")
     for name, secs, verdict in tests:
         print(f"browser: {secs:6.1f}s  {verdict:<7} {name}", flush=True)
+    for name, secs, ran in junit_times(workdir / "junit.xml"):
+        print(f"browser: {secs:6.1f}s  {ran} test(s) in {name}", flush=True)
     if status != 0:
         failed = [name for name, _, verdict in tests if verdict == "failed"]
         raise Red(f"Playwright exited {status}" + (f"; failed: {'; '.join(failed)}" if failed else "")
@@ -544,6 +562,18 @@ def junit_files(path: Path) -> dict[str, int]:
         ran = sum(1 for case in suite.iter("testcase") if case.find("skipped") is None)
         files[suite.get("name", "?")] = files.get(suite.get("name", "?"), 0) + ran
     return files
+
+
+def junit_times(path: Path) -> list[tuple[str, float, int]]:
+    """Per spec file — one per Playwright project here (`setup`, `scenarios`) — its wall time and executed tests."""
+    if not path.is_file():
+        return []
+    times: dict[str, list] = {}
+    for suite in ElementTree.parse(path).getroot().iter("testsuite"):
+        entry = times.setdefault(suite.get("name", "?"), [0.0, 0])
+        entry[0] += float(suite.get("time", "0"))
+        entry[1] += sum(1 for case in suite.iter("testcase") if case.find("skipped") is None)
+    return [(name, secs, ran) for name, (secs, ran) in times.items()]
 
 
 def junit(path: Path) -> list[tuple[str, float, str]]:
@@ -707,6 +737,7 @@ def main() -> int:
             return None
 
     before = stage("preflight", lambda: (ports_free(), browser_pins(), host_snapshot())[2])
+    stage("browser image", browser_image)
     release = stage("assets", assets, args.app, args.admin, workdir)
     values = run_values(project, workdir)
     started = False
@@ -736,8 +767,11 @@ def main() -> int:
 
     print(f"\n== summary — {project}, run directory {workdir.relative_to(ROOT)}")
     for name, secs, verdict in stages:
-        print(f"  {name:<12} {secs:7.1f}s  {verdict}")
-    print(f"  {'total':<12} {sum(s for _, s, _ in stages):7.1f}s")
+        print(f"  {name:<13} {secs:7.1f}s  {verdict}")
+        if name == "browser":
+            for spec, spec_secs, ran in junit_times(workdir / "junit.xml"):
+                print(f"    {spec_secs:7.1f}s  {ran} test(s) in {spec}")
+    print(f"  {'total':<13} {sum(s for _, s, _ in stages):7.1f}s")
     if installed:
         print(f"installed by veyqctl --unsigned-local (NOTHING VERIFIED): release {installed.release} into "
               f"{installed.home.relative_to(ROOT)}, assets {', '.join(installed.assets)}")

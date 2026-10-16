@@ -1614,6 +1614,13 @@ carries the same marker (*"until `cr-…` lands"*). `cr-queued-rotation-owners-o
 dependence on the granter lock over an inventory, a caveat, an owner answer and a planned exception; the sibling
 removed the lock one commit before implementation began, and only the brief's warning found all four.
 
+**An accepted ADR's decision that nothing has built is a plan too.** `cr-stack-e2e` phase 4 told the stack lane to
+pull `build-<sha>-<arch>` by digest "on a push" — ADR 0091 decision 5's snapshot-per-push, decided and not built: the
+workflow pushed images on a dispatch only, so on a push there was nothing to pull, and the implementer re-cut the job
+(pull on the dispatch, build in the job on a push). A phase that wires into the pipeline measures what the workflow
+does today, per event (`grep -n "push:" .github/workflows/ci.yml`), and says which half of its sentence waits on
+which unbuilt decision.
+
 
 ### Two CRs that write the same page name each other, and split it by section
 

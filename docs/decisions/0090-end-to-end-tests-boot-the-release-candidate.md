@@ -1,6 +1,6 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
-- Status: Accepted 2026-10-16; built so far: L1 installs the candidate through `veyqctl install --unsigned-local` from its release assets (decision 1), then first run and the Memory round trip in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `e2e/`, run locally) — no feature scenario, no CI run
+- Status: Accepted 2026-10-16; built so far: L1 installs the candidate through `veyqctl install --unsigned-local` from its release assets (decision 1), then first run, the Memory round trip and the first feature scenario (the capability off states, decision 7) in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `e2e/`), and lane L1's job in `ci.yml` (`stack`, per architecture after the build; the publish waits on it, decision 2 — it pulls `build-<sha>-<arch>` by digest where a run pushed it, today the dispatch, and builds in its own job where none did, until a push publishes the snapshot (ADR 0091 decision 5)) — run locally, step by step; no CI run, which awaits the remote
 - Date: 2026-10-16
 
 ## Context
@@ -128,8 +128,10 @@ What a green run proves today stops short of what a Server Owner runs:
   min. Estimated at refine, not measured: ~6–10 min for the first scenarios. What it rests on: the image is
   built once by `build` and only pulled (dispatch) or rebuilt from its cache (dry run); one instance per run, not per
   file; a cold birth is a few Argon2id derivations at `t=3, m=32 MiB` (`packages/crypto/src/v1.ts`); the fast-jar
-  started in 2–6 s in a local `run_web_e2e.py` run on 2026-10-15. The first CI run's per-stage times replace this
-  paragraph. Speed is never bought by weakening what ships.
+  started in 2–6 s in a local `run_web_e2e.py` run on 2026-10-15. Measured locally on 2026-10-16 (arm64 Mac, images
+  from cache, load 4–6): the job's steps 91 s; the lane itself 48.5 s with ten tests and 73.6–91.3 s with fifteen,
+  every stage timed in its summary — a runner's cold build and image pulls are not in those. The first CI run's
+  per-stage times replace this paragraph. Speed is never bought by weakening what ships.
 - **Published** for security researchers on the docs site, with every other stage: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 - **The Run pages become checkable.** first-run.setup.ts uses admin-web's own labels in the order first-run.mdx gives
   them; a renamed button or a reordered step is a red run.

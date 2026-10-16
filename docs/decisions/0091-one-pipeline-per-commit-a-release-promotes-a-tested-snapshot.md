@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4) and the local run of the pipeline; the rest is not (§ Consequences)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4), the local run of the pipeline, and lane L1 with its job and the publish waiting on it (decision 3, ADR 0090; run locally only); the rest is not (§ Consequences)
 - Date: 2026-10-16
 
 ## Context
@@ -150,7 +150,9 @@ Three structural costs sit on top of those numbers:
   (decision 7). **ADR 0090** follows: its Decision 2 (the gate is the push, the release verifies), 7 (no tiers; the
   lanes of decision 3) and its rejected "testing the published snapshot".
 - **Work, in this order**, each its own CR: the pipeline (decision 2, the guard-gap filter and its parallel cases);
-  `cr-stack-e2e` (L1), re-cut to this ADR; promotion and attestations (decision 5); L2 (inbox #453); the archive and
+  `cr-stack-e2e` (L1, built 2026-10-16: `ci.yml`'s `stack` job, per architecture after the build — a dispatch pulls the
+  staged images by the digests the build hands over, a push or a pull request builds them in the job until a push
+  publishes the snapshot); promotion and attestations (decision 5); L2 (inbox #453); the archive and
   L3 (decision 6). None is provable in CI before the repository has a remote.
 - **The local skip of `validate_guard_gaps.py`** is the first piece built (2026-10-16): a green full run stamps the
   hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does.

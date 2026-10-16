@@ -2,7 +2,7 @@
 """Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
-**What it asserts.** Nine things, in the order a release happens:
+**What it asserts.** Ten things, in the order a release happens:
 
   1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
      identity (ADR 0057 §1): the minor is the number of commits since `VERSION` last changed, so a checkout
@@ -38,6 +38,10 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      `failure()`, `cancelled()`) — which lets it run past a failed or skipped need — the condition requires
      `needs.<job>.result == 'success'` of every need, the one exception a job that is literally `if: false`, whose
      `skipped` it may accept alongside `success` (the disabled upgrade proof).
+ 10. **The snapshot waits on lane L1** (ADR 0090 decision 2). Assertion 9 holds the publish to the jobs the file
+     has, and cannot see one that is gone; so the job that runs `scripts/run_stack_e2e.py` — found by what it runs,
+     never by its name — must exist, need `build`, run on every architecture the build matrix publishes, and be in
+     the publish's `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms.
   8. **The chart is the release's third artifact** (ADR 0064). The refuse step names every published image (the
      build matrix) AND `charts/<name>` (`Chart.yaml`'s `name`), so a release with any of the three already out
      is refused; the step that runs `helm package` sets `--version` and `--app-version` from the tree-derived
@@ -126,6 +130,9 @@ moved behind a dispatch, and the minor into the history; this guard holds both.
 Assertion 9 came with folding `container.yml` into `ci.yml` (cr-one-pipeline-per-commit, 2026-10-16), no incident:
 the build stopped needing the tests, and from then on the publish's `needs:` is the only thing between a red stage
 and a published image — a stage added to the file and forgotten there would be one a release never waited for.
+Assertion 10 came with lane L1's job (cr-stack-e2e phase 4), no incident: assertion 9 reads the jobs the file has, so
+deleting the lane — or renaming its job and dropping it from the publish's `needs:` in the same edit — was green there.
+Its limit is assertion 9's: it reads the file, and proves no run ever waited.
 
 Assertion 8 came with the chart's OCI release (same CR): no incident, the chart had never been published. Each of
 its halves was bitten by injection before it counted, and the measurement that shaped it is in ADR 0064 — `helm
@@ -221,6 +228,8 @@ VERSION_JOB, VERSION_STEP = "version", "veyq-version"
 PUBLISH_JOB = "publish"
 REFUSE_STEP, TAG_STEP = "assert-release-unpublished", "release-tag"
 BUILD_JOB = "build"
+# Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
+LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
 CHART_DIR = ROOT / "charts/veyq"
 
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
@@ -770,6 +779,39 @@ if workflow_doc:
                     f"publish would go ahead on a red `{need}` (ADR 0091 decision 2). Only a job that is literally "
                     f"`if: false` may be accepted as `skipped` too."
                 )
+
+    # ---- 10. the snapshot waits on lane L1 ----------------------------------------------------------------------
+    # Assertion 9 holds the publish to every job the file HAS; it cannot see a job that is gone. Lane L1 is the one
+    # stage that installs the candidate as a Server Owner does (ADR 0090 decision 2), so its job is found by what it
+    # runs — the orchestrator — never by its name, and must exist, follow the build, cover every architecture the
+    # build publishes, and be waited on with `success`.
+    lane_jobs = sorted(
+        str(name) for name, job in jobs.items()
+        if isinstance(job, dict) and any(LANE_ORCHESTRATOR in str(s.get("run") or "") for s in job_steps(workflow_doc, name))
+    )
+    if not lane_jobs:
+        fail(
+            f"no job of {WORKFLOW.relative_to(ROOT)} runs `{LANE_ORCHESTRATOR}` — lane L1 is gone, and the `{PUBLISH_JOB}` "
+            f"job would publish images no stack ever booted from their own release (ADR 0090 decision 2)"
+        )
+    build_archs = {str(a) for a in (((jobs.get(BUILD_JOB) or {}).get("strategy") or {}).get("matrix") or {}).get("arch") or []}
+    for lane in lane_jobs:
+        lane_job = jobs[lane]
+        raw = lane_job.get("needs") or []
+        lane_needs = [raw] if isinstance(raw, str) else [str(n) for n in raw]
+        if BUILD_JOB not in lane_needs:
+            fail(f"lane L1's job `{lane}` does not need `{BUILD_JOB}` — on a dispatch it installs the images that job "
+                 f"pushed, so it must run after it (ADR 0090 decision 2)")
+        if lane not in publish_needs or f"needs.{lane}.result == 'success'" not in {
+                " ".join(t.split()) for t in publish_if.split("&&")}:
+            fail(f"the `{PUBLISH_JOB}` job does not wait on lane L1 (`{lane}`) with `needs.{lane}.result == 'success'` "
+                 f"— the snapshot would be published on bytes the lane never installed (ADR 0090 decision 2)")
+        lane_archs = {str(a) for a in (((lane_job.get("strategy") or {}).get("matrix") or {}).get("arch") or [])}
+        if not build_archs:
+            fail(f"the `{BUILD_JOB}` job's matrix names no `arch` — lane L1's architectures cannot be held to it")
+        elif not build_archs <= lane_archs:
+            fail(f"lane L1's job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes {sorted(build_archs)} "
+                 f"— what is published for an architecture must have passed on it (ADR 0091 decision 4)")
 
 
 # ---- 4. the release carries every file its recipe reads; written-down tags name a shape the pipeline emits --

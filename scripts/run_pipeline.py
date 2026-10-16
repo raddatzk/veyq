@@ -51,7 +51,11 @@ Node or Java major other than the workflow's is run and named in the job's notes
 `shell:` other than bash, sh or python is not run. Budgets are wall time on this machine, under whatever load it
 carries — the summary prints the load average, and a job over budget under a load of 90 says more about the load
 than about the job. The expression evaluator covers what the repository's workflows use; an expression it cannot
-read makes that step or job not run, never green.
+read makes that step or job not run, never green. A job that `needs:` a matrix job is `not run` when that job has
+a leg of another architecture, because GitHub waits for every leg and this host never runs that one: `ci.yml`'s
+`stack` legs are such jobs on any one host, so their steps are run by hand (cr-stack-e2e phase 4 did). A matrix
+value given as an expression (`stack`'s `exclude`, which drops arm64 on a pull request) is not evaluated: the leg it
+would drop is kept.
 
 Usage (from anywhere; paths resolve against this checkout):
 

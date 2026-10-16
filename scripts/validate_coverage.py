@@ -11,6 +11,9 @@ gaps), and that every referenced test actually exists, so dead refs fail early:
     web     -> a file path (relative to web/) that both exists AND is a test file (*.test|*.spec)
     crypto  -> the same rule, rooted at packages/crypto/ (the shared crypto workspace package, ADR 0065)
     admin-web -> the same rule, rooted at admin-web/ (the Server-Owner administration surface, ADR 0065)
+    stack   -> the same rule, rooted at e2e/ (lane L1's browser suite against the candidate image, ADR 0090), where a
+               Playwright setup file (*.setup.ts) is a test file too; which criterion its test carries is
+               `validate_stack_criterion_tags.py`'s
 
 `http` is NOT a coverage surface (ADR 0040): the `.http` files remain IntelliJ dev tooling but run in
 no CI job, so they make no coverage claim — the same behaviour is proven by the backend slice tests.
@@ -88,8 +91,9 @@ Keys are closed at both levels, so a misspelling (`gap:`) is an error rather tha
   ref orphans the note and turns red. Its limit: whether the reason is true is prose, and stays unread.
 
 Every use-case OWES `backend` and `web` (`OWED`): each is covered on some criterion or named under the use-case
-`gaps` with a reason — never silent. `crypto` and `admin-web` are opt-in: a ref or a gap on them is checked like
-any other, and silence is legal.
+`gaps` with a reason — never silent. `crypto`, `admin-web` and `stack` are opt-in: a ref or a gap on them is checked
+like any other, and silence is legal (a use-case a lane L1 test is tagged with must still address `stack` —
+`validate_stack_criterion_tags.py`).
   The defect that bought it. The coverage README and the comment on `SURFACES` both said a surface with no ref is
   "never left silent", and nothing read it. Measured 2026-09-23: six use-cases were silent on backend or web, and
   one silence hid a real surface — `uc.admin.create-tenant`'s invite acceptance lives in web (`TenantJoinView`),
@@ -144,12 +148,13 @@ COVERAGE = ROOT / "docs" / "coverage" / "features"
 WEB = ROOT / "web"
 CRYPTO = ROOT / "packages" / "crypto"
 ADMIN_WEB = ROOT / "admin-web"
+E2E = ROOT / "e2e"
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 # The surface set, and the whole of it: every surface a CI job is written to run. Adding one permits gaps on it
 # at once and refs only once a run has admitted it (ADMITTED), so a new surface is one line plus its resolution
 # rule — owing it is a separate decision (OWED).
-SURFACES = {"backend", "web", "crypto", "admin-web"}
+SURFACES = {"backend", "web", "crypto", "admin-web", "stack"}
 
 # The surfaces every use-case OWES — covered, or under `gaps` with a reason, never silent: the two user-facing
 # surfaces every use-case crosses. `crypto` is a library proven beneath web and `admin-web` the Server-Owner
@@ -174,7 +179,7 @@ UNADMITTED_BASELINE: set[tuple[str, str, str, str]] = set()
 
 # Surfaces resolved as "a test-file path relative to this root". They differ only in the root they hang off,
 # so the rule is a table rather than a branch per surface — adding the next one is one entry, not a branch.
-FILE_ROOTS = {"web": WEB, "crypto": CRYPTO, "admin-web": ADMIN_WEB}
+FILE_ROOTS = {"web": WEB, "crypto": CRYPTO, "admin-web": ADMIN_WEB, "stack": E2E}
 KNOWN_LEVELS = {"unit", "integration", "e2e"}
 USECASE_KEYS = {"useCase", "feature", "title", "status", "acceptanceCriteria", "gaps"}
 CRITERION_KEYS = {"id", "text", "coverage", "gaps"}
@@ -604,6 +609,9 @@ def rel(p: pathlib.Path) -> str:
 
 
 WEB_TEST_RE = re.compile(r"\.(test|spec)\.(ts|tsx|js|jsx)$")
+# Lane L1's Playwright projects: the scenarios (*.spec.ts) and the setup project's file (*.setup.ts), which is a test
+# like any other there — first run is the scenario, not a fixture (ADR 0090 answer 4).
+TEST_FILE_RE = {"stack": re.compile(r"\.(spec|setup)\.ts$")}
 
 
 def _check_class_method(area: str, ref: str, classes: dict[str, TestClass], where: str) -> None:
@@ -639,9 +647,9 @@ def check_ref(area: str, ref: str, where: str) -> None:
         root = FILE_ROOTS[area]
         if not (root / ref).exists():
             errors.append(f"{where}: {area} test file not found: {ref}")
-        elif not WEB_TEST_RE.search(ref):
+        elif not TEST_FILE_RE.get(area, WEB_TEST_RE).search(ref):
             errors.append(f"{where}: {area} ref is not a test file "
-                          f"(expected *.test|*.spec .ts/.tsx/.js/.jsx): {ref}")
+                          f"(expected {TEST_FILE_RE.get(area, WEB_TEST_RE).pattern}): {ref}")
 
 
 baseline_matched: set[tuple[str, str, str, str]] = set()
