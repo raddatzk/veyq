@@ -1,6 +1,7 @@
 {
   "name": "veyq-admin-web",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "//": "The Server-Owner administration surface as its own deployable (ADR 0065). A pure client of the existing backend Admin API \u2014 no DB, no KEK, no new backend surface. It shares exactly ONE thing with `web/`: @veyq/crypto, because first-run setup performs a real cold account birth and a second copy of that would be a security defect. Everything else (router, state, UI, generated client) is this package's own, on purpose.",
   "scripts": {

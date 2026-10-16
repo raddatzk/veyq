@@ -82,6 +82,9 @@ COPY --from=build /src/admin-web/dist /usr/share/nginx/html
 COPY admin-web/nginx.conf.template /etc/nginx/veyq.conf.template
 COPY admin-web/docker-entrypoint.d/30-veyq-backend-url.sh /docker-entrypoint.d/30-veyq-backend-url.sh
 RUN chmod +x /docker-entrypoint.d/30-veyq-backend-url.sh
+# The AGPL travels with the object code it covers (§4/§6), at the app image's path; the bundle's third-party
+# notices are dist/third-party-licenses.txt, served with the rest of the UI.
+COPY LICENSE NOTICE /usr/share/licenses/veyq/
 
 # The CLI: one self-contained ESM bundle plus the two lines that make it a command. `type: module` is
 # stated rather than inferred — modern Node would sniff the ESM syntax and be right, but a shipped

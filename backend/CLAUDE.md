@@ -101,7 +101,14 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   enough here. The only trust rules are
   for what an IntelliJ sync fetches and nothing runs: the `-sources`/`-javadoc` jars and the Gradle
   distribution's `-src` zip. `scripts/validate_build_input_pins.py` holds all of this, plus the one generator
-  version the three surfaces run. **The build logic is `buildSrc`** (the convention plugins `veyq.module` and
+  version the three surfaces run. **Every `quarkusBuild` also writes the image's third-party notices**
+  (`buildSrc`'s `ThirdPartyLicenses`, finalizing it; `build/third-party-licenses/THIRD-PARTY-LICENSES.txt`, which the
+  Dockerfile copies to `/usr/share/licenses/veyq/`): each jar in `quarkus-app/lib`, its license from its POM (or the
+  nearest parent's), the license files it carries, and the texts under `licenses/`. It fails on a jar no resolved module
+  explains, on a license name its `KNOWN` table lacks and on a license with no text — so a bump that brings a new license
+  is red at the build that would ship it. Admitting one is a decision beside AGPL-3.0-only code: its `KNOWN` entry and its
+  SPDX text (`licenses/README.md`) together. The POMs it reads are pinned like every other artifact, so a bump's
+  metadata write above covers them. **The build logic is `buildSrc`** (the convention plugins `veyq.module` and
   `veyq.openapi`): it is verified against the same metadata file, and every version it and the build choose — Kotlin,
   Quarkus (plugin and BOM), the OpenAPI generator — is declared once, in `gradle/libs.versions.toml`.
 
