@@ -65,7 +65,7 @@ tasks.withType<Test>().configureEach {
 
 // The Quarkus plugin is applied to a module only so its own `@QuarkusTest`s can boot (a library `@QuarkusTest`
 // fails without it). Its application tasks belong to the root alone: `./gradlew quarkusBuild` and `quarkusDev`,
-// run from `backend/` as the Dockerfile, CI and the IntelliJ `Run Backend` configuration do, select the task in
+// run from `backend/` as the Dockerfile, CI and the root launcher's `backend:run` do, select the task in
 // every project that has it — so a module's would build a second `quarkus-app` or start a second dev server. A
 // disabled task's dependencies still run, so the chain below `quarkusBuild` is cut too (measured: the module's
 // `quarkusAppPartsBuild` ran, and failed, under a disabled `quarkusBuild`).
