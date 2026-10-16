@@ -61,3 +61,10 @@ Server → Object store, choose "Use the bundled store" or a store of your own, 
 Tenants can be created only after a passed check. For the bundled Garage the same page shows how its background
 provisioning went — the public origin answers no Server-Owner operation, so this is the place to read it;
 `veyq-admin store check` provisions it again and prints every step.
+{{- if not .Values.networkPolicy.enabled }}
+
+networkPolicy.enabled is false: nothing confines who reaches the app's port. Any pod in the cluster can then write
+the whole X-Forwarded-For header, and no setting in veyq can tell it apart from your Gateway, so the per-IP rate
+limit (and, once it is built, the record of a guest's writes) can carry a forged address (ADR 0094 decision 6). The
+same holds with a CNI that enforces no NetworkPolicy.
+{{- end }}

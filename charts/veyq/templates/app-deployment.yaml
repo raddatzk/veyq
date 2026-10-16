@@ -66,12 +66,9 @@ spec:
                 secretKeyRef:
                   name: {{ include "veyq.secretName" . }}
                   key: mariadbPassword
-            # Behind the Gateway's data plane the per-IP rate limiter must key on the real client.
-            - name: QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING
-              value: "true"
             {{- with .Values.app.trustedProxies }}
-            # Only when set, and with no default (ADR 0071 §4) — see app.trustedProxies in values.yaml.
-            - name: QUARKUS_HTTP_PROXY_TRUSTED_PROXIES
+            # The hops in front of the Gateway (ADR 0094), only when set — see app.trustedProxies in values.yaml.
+            - name: VEYQ_HTTP_TRUSTED_PROXIES
               value: {{ . | quote }}
             {{- end }}
             # HSTS on the app's responses (ADR 0069) — the deployment's switch, `hsts.enabled` in values.yaml.
