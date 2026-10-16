@@ -39,14 +39,25 @@ export async function buildCreateServerOwnerRequest(
   return { request, emergencyKit }
 }
 
-export async function registerServerOwner(
+/**
+ * Mint the Server Owner's account on this device and send NOTHING yet (uc.admin.setup-server E1): the kit is shown
+ * and confirmed first, and only then [createServerOwner] posts the request. Posting first locked setup with an
+ * owner whose Secret Key nobody had saved if the tab closed on the kit screen — the member flow already ran in this
+ * order (web's TenantJoinView: `registerAndAccept` waits for the confirmed kit).
+ */
+export async function prepareServerOwner(
   email: string,
   password: string,
-): Promise<{ userId: string; emergencyKit: EmergencyKit }> {
+): Promise<{ request: CreateServerOwnerRequest; emergencyKit: EmergencyKit }> {
   // The auth keypair is derived with the instance-wide salt the server serves on GET /api/setup, so setup
   // and login derive identically (ADR 0003).
   const instanceSalt = fromB64std((await setupApi().getSetupStatus()).instanceSalt)
-  const { request, emergencyKit } = await buildCreateServerOwnerRequest(email, password, instanceSalt)
+  return buildCreateServerOwnerRequest(email, password, instanceSalt)
+}
+
+/** Create the Server Owner from a [prepareServerOwner] request — after its kit was confirmed. This closes setup
+ *  (single-owner lock); 409 `setup_already_complete` when someone else finished it first. */
+export async function createServerOwner(request: CreateServerOwnerRequest): Promise<{ userId: string }> {
   const result = await setupApi().createServerOwner({ createServerOwnerRequest: request })
-  return { userId: result.userId, emergencyKit }
+  return { userId: result.userId }
 }

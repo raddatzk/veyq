@@ -11,7 +11,9 @@ import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
-import { registerServerOwner } from '../features/setup/setupServer'
+import { createServerOwner, prepareServerOwner } from '../features/setup/setupServer'
+import type { CreateServerOwnerRequest } from '../api/generated'
+import { decodeHttpError } from '../shared/httpError'
 import EmergencyKitSave from '../features/setup/EmergencyKitSave.vue'
 import { useBreachCheck } from '../features/account/passwordWarning'
 import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
@@ -30,15 +32,17 @@ const error = ref('')
 const secretKey = ref<string | null>(null)
 const kitReady = ref(false)
 let kitEmail = ''
+// The account as minted on this device, not yet sent: it is posted only once the kit is confirmed (E1).
+let prepared: CreateServerOwnerRequest | null = null
 
 const { run: runSubmit, pending: busy } = useAsyncAction(
   async () => {
     if (!(await breachCheckPasses())) return
-    const { emergencyKit } = await registerServerOwner(email.value, password.value)
+    const { request, emergencyKit } = await prepareServerOwner(email.value, password.value)
+    prepared = request
     kitEmail = email.value
     secretKey.value = emergencyKit.secretKey
     kitReady.value = false
-    setSetupCompleted(true)
   },
   { onError: () => { error.value = t('setup.failed') } },
 )
@@ -49,8 +53,29 @@ async function submit() {
   await runSubmit()
 }
 
+// uc.admin.setup-server E1: the owner is created only now, with the kit confirmed — so a tab closed on the kit
+// screen leaves setup open, not an owner nobody can unlock. A failed post keeps the kit: it is still this account's.
+const { run: runCreate, pending: creating } = useAsyncAction(
+  async () => {
+    await createServerOwner(prepared!)
+    setSetupCompleted(true)
+    finish()
+  },
+  {
+    onError: async (e) => {
+      const { code } = await decodeHttpError(e)
+      error.value = t(code === 'setup_already_complete' ? 'setup.alreadyComplete' : 'setup.createFailed')
+    },
+  },
+)
+
 async function proceed() {
-  if (!kitReady.value) return
+  if (!kitReady.value || !prepared) return
+  error.value = ''
+  await runCreate()
+}
+
+function finish() {
   // web/'s version cleared this browser's device-trust and device-key wraps here, because there the setup page
   // shares an origin with an app a PREVIOUS account may have used. This origin serves nothing but the admin
   // surface and has never held a wrap of any kind — there is nothing stale to drop, so the clear is gone
@@ -104,9 +129,10 @@ async function proceed() {
         </EmergencyKitSave>
         <Button
           type="button"
-          :label="t('setup.kitProceed')"
+          :label="creating ? t('setup.creating') : t('setup.kitProceed')"
           icon="pi pi-arrow-right"
-          :disabled="!kitReady"
+          :loading="creating"
+          :disabled="!kitReady || creating"
           @click="proceed"
         />
       </template>

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest'
 
-// Mock the contracts client so registerServerOwner's network call is controllable. The build path
+// Mock the contracts client so createServerOwner's network call is controllable. The build path
 // (buildCreateServerOwnerRequest) is pure and untouched by this mock.
 vi.mock('../../api/client', () => ({ setupApi: vi.fn() }))
 
-import { buildCreateServerOwnerRequest, registerServerOwner } from './setupServer'
+import { buildCreateServerOwnerRequest, createServerOwner, prepareServerOwner } from './setupServer'
 import { setupApi } from '../../api/client'
-import type { SetupStatus } from '../../api/generated'
+import type { SetupApi, SetupStatus } from '../../api/generated'
 import { fakeApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
 import { TEST_ARGON, PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
@@ -85,18 +85,29 @@ describe('Model B auth derivation (ADR 0003)', () => {
   })
 })
 
-describe('registerServerOwner — API error propagation', () => {
-  it('rejects when the server rejects the registration (drives the setup-failed UX)', async () => {
+describe('prepareServerOwner / createServerOwner — mint first, send after the kit (uc.admin.setup-server E1)', () => {
+  it('mints the account against the served salt and sends nothing', async () => {
+    const create = vi.fn<SetupApi['createServerOwner']>()
     fakeApi(setupApi, {
       getSetupStatus: async (): Promise<SetupStatus> => ({
         setupRequired: true, version: { major: 1, build: 0 }, capabilities: [], suites: ['v1'], instanceSalt: 'AAAAAAAAAAAAAAAAAAAAAA==',
       }),
-      createServerOwner: () => Promise.reject(new Error('setup_already_complete')),
+      createServerOwner: create,
     })
-    await expect(
-      registerServerOwner('owner@example.com', 'correct horse battery'),
-    ).rejects.toThrow('setup_already_complete')
-    // registerServerOwner mints the whole account, so it pays three production-params Argon2id derivations
-    // before it ever reaches the rejecting call — inherent cost, not a hang. See packages/crypto/src/testArgon.ts.
+    const { request, emergencyKit } = await prepareServerOwner('owner@example.com', 'correct horse battery')
+    expect(request.email).toBe('owner@example.com')
+    expect(emergencyKit.secretKey).toBeTruthy()
+    expect(create).not.toHaveBeenCalled()
+    // prepareServerOwner mints the whole account, so it pays three production-params Argon2id derivations —
+    // inherent cost, not a hang. See packages/crypto/src/testArgon.ts.
   }, PRODUCTION_ARGON_TIMEOUT_MS)
+
+  it('rejects when the server rejects the registration (drives the setup-failed UX)', async () => {
+    fakeApi(setupApi, { createServerOwner: () => Promise.reject(new Error('setup_already_complete')) })
+    await expect(createServerOwner(request0())).rejects.toThrow('setup_already_complete')
+  })
 })
+
+function request0() {
+  return { email: 'owner@example.com' } as Parameters<typeof createServerOwner>[0]
+}

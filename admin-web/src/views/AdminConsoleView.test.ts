@@ -36,7 +36,9 @@ vi.mock('../features/instance/store', async (importOriginal) => ({
   getInstanceStore: vi.fn(),
 }))
 vi.mock('../features/instance/StorePanel.vue', () => ({ default: { template: '<div class="stub-store" />' } }))
-vi.mock('../features/tenants/TenantDetailPanel.vue', () => ({ default: { template: '<div class="stub-detail" />' } }))
+vi.mock('../features/tenants/TenantDetailPanel.vue', () => ({
+  default: { emits: ['revoked'], template: '<button class="stub-detail" @click="$emit(\'revoked\', \'tn-7\')" />' },
+}))
 vi.mock('../features/instance/ReleaseVersionPanel.vue', () => ({ default: { template: '<div class="stub-release" />' } }))
 vi.mock('../features/instance/CapabilitiesPanel.vue', () => ({ default: { template: '<div class="stub-capabilities" />' } }))
 
@@ -85,7 +87,7 @@ async function mountConsole() {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(logout).mockResolvedValue(undefined)
-  vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: false, blobsStored: false, setting: null, lastCheck: { passed: true, checkedAt: new Date(), steps: [] } })
+  vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: false, blobsStored: false, setting: null, lastCheck: { passed: true, checkedAt: new Date(), steps: [] }, pending: null })
   resetServerRole()
 })
 
@@ -146,6 +148,19 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     expect(w.find('.stub-detail').exists()).toBe(true)
   })
 
+  it('closes a revoked tenant’s panel and reads the list again', async () => {
+    const acme = { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING' as const, storageUsedBytes: 0, storageQuotaBytes: null }
+    vi.mocked(listTenants).mockResolvedValue([acme])
+    const { w } = await mountConsole()
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!.trigger('click')
+    await flushPromises()
+    vi.mocked(listTenants).mockResolvedValue([])
+    await w.find('.stub-detail').trigger('click') // the panel reports the revoke
+    await flushPromises()
+    expect(w.find('.stub-detail').exists()).toBe(false)
+    expect(w.text()).not.toContain('Acme')
+  })
+
   it('opens Server → Capabilities from the nav in place of the open tenant (uc.admin.switch-capabilities)', async () => {
     vi.mocked(listTenants).mockResolvedValue([
       { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null },
@@ -187,13 +202,13 @@ describe('AdminConsoleView — a tenant waits for a checked store (ADR 0089 deci
 
   it('closes tenant creation while the store has not passed its check, and opens it once it has', async () => {
     vi.mocked(listTenants).mockResolvedValue([])
-    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null })
+    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null })
     const blocked = await mountConsole()
     expect(dialog(blocked.w).props('storeBlocked')).toBe(true)
 
     // the paired case, same predicate: a passed check is the one thing that opens it
     resetServerRole()
-    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: { passed: true, checkedAt: new Date(), steps: [] } })
+    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: { passed: true, checkedAt: new Date(), steps: [] }, pending: null })
     const open = await mountConsole()
     expect(dialog(open.w).props('storeBlocked')).toBe(false)
   })
@@ -207,7 +222,7 @@ describe('AdminConsoleView — a tenant waits for a checked store (ADR 0089 deci
 
   it('takes the owner to the store page when the dialog asks for it', async () => {
     vi.mocked(listTenants).mockResolvedValue([])
-    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null })
+    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null })
     const { w } = await mountConsole()
     await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Create'))!.trigger('click')
     dialog(w).vm.$emit('openStore')

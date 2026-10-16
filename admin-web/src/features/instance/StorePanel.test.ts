@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
-// ADR 0089 — the Server → Store page. Each case is one observable the owner depends on:
+// ADR 0089 — the Server → Object store page. Each case is one observable the owner depends on:
 //   - a fresh bundled recipe starts on the bundled store and saves exactly `{ bundled: true }`;
 //   - an own store sends the whole setting, and a secret left empty is OMITTED (keep), not sent empty;
 //   - a secret that cannot be opened is asked for again, and Save stays closed until it is typed;
 //   - the check shows EVERY step, so a wrong bucket reads as that step failing, not as "failed";
 //   - an unchecked setting says tenants are closed; a passed one says they are open;
+//   - a saved change waits as PENDING beside the store in use (decision 5): the page says so, the form edits it, a
+//     failed check of it says the store in use is unchanged, and it can be discarded;
 //   - once blobs exist the type, endpoint and bucket cannot be edited.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -12,13 +14,19 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 
 vi.mock('./store', async () => {
   const actual = await vi.importActual<typeof import('./store')>('./store')
-  return { ...actual, getInstanceStore: vi.fn(), setInstanceStore: vi.fn(), checkInstanceStore: vi.fn() }
+  return {
+    ...actual,
+    getInstanceStore: vi.fn(),
+    setInstanceStore: vi.fn(),
+    checkInstanceStore: vi.fn(),
+    discardPendingInstanceStore: vi.fn(),
+  }
 })
 vi.mock('./StoreProvisioningPanel.vue', () => ({ default: { template: '<div class="provisioning" />' } }))
 vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn() }) }))
 
 import StorePanel from './StorePanel.vue'
-import { checkInstanceStore, getInstanceStore, setInstanceStore } from './store'
+import { checkInstanceStore, discardPendingInstanceStore, getInstanceStore, setInstanceStore } from './store'
 import type { InstanceStore, InstanceStoreCheck, InstanceStoreSetting } from './store'
 import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
@@ -32,6 +40,7 @@ const stubs = {
   },
   Button: {
     props: ['type', 'label', 'disabled'],
+    emits: ['click'], // declared, or the listener also falls through to the native button and fires twice
     template: '<button :type="type || \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>',
   },
   InputText: {
@@ -46,7 +55,7 @@ const own: InstanceStoreSetting = {
   garageAdminEndpoint: null, secretKeySet: true, garageAdminTokenSet: false, unreadable: [],
 }
 const read = (over: Partial<InstanceStore> = {}): InstanceStore => ({
-  bundledAvailable: false, blobsStored: false, setting: null, lastCheck: null, ...over,
+  bundledAvailable: false, blobsStored: false, setting: null, lastCheck: null, pending: null, ...over,
 })
 const check = (passed: boolean): InstanceStoreCheck => ({
   passed,
@@ -134,6 +143,7 @@ describe('StorePanel (ADR 0089, admin-web)', () => {
   it('shows every check step, naming the failed one with the server\'s detail, and the later ones as skipped', async () => {
     vi.mocked(checkInstanceStore).mockResolvedValue(check(false))
     const w = await mountPanel(read({ setting: own }))
+    vi.mocked(getInstanceStore).mockResolvedValue(read({ setting: own, lastCheck: check(false) })) // the read after the check
     expect(w.find('.store-unchecked').exists()).toBe(true) // never checked: tenants closed, said so
     await w.find('.store-check').trigger('click')
     await flushPromises()
@@ -147,12 +157,61 @@ describe('StorePanel (ADR 0089, admin-web)', () => {
   it('reports a passed check as opening tenant creation, and tells the console on every change', async () => {
     vi.mocked(checkInstanceStore).mockResolvedValue(check(true))
     const w = await mountPanel(read({ setting: own }))
+    vi.mocked(getInstanceStore).mockResolvedValue(read({ setting: own, lastCheck: check(true) }))
     await w.find('.store-check').trigger('click')
     await flushPromises()
     expect(w.find('.store-verdict').attributes('data-severity')).toBe('success')
     expect(w.find('.store-verdict').text()).toBe(t('store.checkPassed'))
     const changed = w.emitted('changed')!
     expect((changed[changed.length - 1][0] as InstanceStore).lastCheck?.passed).toBe(true)
+  })
+
+  it('says a saved change is not in use yet, and edits it rather than the store in use', async () => {
+    const changed = { ...own, endpoint: 'https://typo.example.com' }
+    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: null } }))
+    expect(w.find('.store-pending').text()).toBe(t('store.pendingNote'))
+    expect((w.find('input[name=endpoint]').element as HTMLInputElement).value).toBe('https://typo.example.com')
+    expect(w.find('.store-unchecked').text()).toBe(t('store.pendingUnchecked'))
+  })
+
+  it('reads a failed check of the saved change as leaving the store in use unchanged', async () => {
+    const changed = { ...own, endpoint: 'https://typo.example.com' }
+    vi.mocked(checkInstanceStore).mockResolvedValue(check(false))
+    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: null } }))
+    vi.mocked(getInstanceStore).mockResolvedValue(
+      read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: check(false) } }),
+    )
+    await w.find('.store-check').trigger('click')
+    await flushPromises()
+    expect(w.find('.store-verdict').attributes('data-severity')).toBe('error')
+    expect(w.find('.store-verdict').text()).toBe(t('store.pendingCheckFailedAt'))
+    expect(w.find('[data-step=BUCKET]').classes()).toContain('store-step--failed')
+    // the console's tenant gate reads the store in use, which still passed
+    const emitted = w.emitted('changed')!
+    expect((emitted[emitted.length - 1][0] as InstanceStore).lastCheck?.passed).toBe(true)
+  })
+
+  it('shows the store in use once a passing check put the saved change in use', async () => {
+    const changed = { ...own, endpoint: 'https://new.example.com' }
+    vi.mocked(checkInstanceStore).mockResolvedValue(check(true))
+    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: null } }))
+    vi.mocked(getInstanceStore).mockResolvedValue(read({ setting: changed, lastCheck: check(true) }))
+    await w.find('.store-check').trigger('click')
+    await flushPromises()
+    expect(w.find('.store-pending').exists()).toBe(false)
+    expect(w.find('.store-verdict').text()).toBe(t('store.checkPassed'))
+  })
+
+  it('discards a saved change and shows the store in use again', async () => {
+    const changed = { ...own, endpoint: 'https://typo.example.com' }
+    vi.mocked(discardPendingInstanceStore).mockResolvedValue(read({ setting: own, lastCheck: check(true) }))
+    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: null } }))
+    await w.find('.store-discard').trigger('click')
+    await flushPromises()
+    expect(discardPendingInstanceStore).toHaveBeenCalledOnce()
+    expect(w.find('.store-pending').exists()).toBe(false)
+    expect(w.find('.store-discard').exists()).toBe(false)
+    expect((w.find('input[name=endpoint]').element as HTMLInputElement).value).toBe('https://s3.example.com')
   })
 
   it('fixes type, endpoint and bucket once blobs exist, but leaves credentials editable', async () => {

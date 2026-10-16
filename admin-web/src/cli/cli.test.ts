@@ -27,6 +27,7 @@ vi.mock('../features/instance/store', async (importOriginal) => ({
   getInstanceStore: vi.fn(),
   setInstanceStore: vi.fn(),
   checkInstanceStore: vi.fn(),
+  discardPendingInstanceStore: vi.fn(),
 }))
 vi.mock('../features/instance/capabilities', async (importOriginal) => ({
   // the tree and the text choice stay real: what the commands print is what is asserted on
@@ -41,7 +42,7 @@ import { signIn } from './adminSession'
 import * as tenants from '../features/tenants/tenants'
 import { getInstanceRelease } from '../features/instance/release'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
-import { checkInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
+import { checkInstanceStore, discardPendingInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
 import type { InstanceStore, InstanceStoreCheck } from '../features/instance/store'
 import { listInstanceCapabilities, setInstanceCapability } from '../features/instance/capabilities'
 import type { InstanceCapability } from '../features/instance/capabilities'
@@ -76,7 +77,7 @@ const invite = (ownerEmail: string): TenantInviteState => ({
   ownerEmail, inviteStatus: 'ACTIVE', inviteExpiresAt: EXPIRES, bootstrapSecret: 'boot-2', delivery: 'FALLBACK_COPYLINK',
 })
 
-const storeRead: InstanceStore = { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null }
+const storeRead: InstanceStore = { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null }
 const failedCheck: InstanceStoreCheck = {
   passed: false,
   checkedAt: EXPIRES,
@@ -208,6 +209,14 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
 describe('veyq-admin — the object store (uc.admin.configure-object-store)', () => {
   it('store show prints the setting and the last check', async () => {
     const r = await invoke(['store', 'show'])
+    expect(JSON.parse(r.out)).toEqual(storeRead)
+    expect(r.code).toBe(0)
+  })
+
+  it('store discard drops the pending setting and prints the store as it now stands', async () => {
+    vi.mocked(discardPendingInstanceStore).mockResolvedValue(storeRead)
+    const r = await invoke(['store', 'discard'])
+    expect(discardPendingInstanceStore).toHaveBeenCalledOnce()
     expect(JSON.parse(r.out)).toEqual(storeRead)
     expect(r.code).toBe(0)
   })
@@ -374,7 +383,7 @@ describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

@@ -29,6 +29,7 @@ import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import {
   BUNDLED_STORE_UPDATE,
   checkInstanceStore,
+  discardPendingInstanceStore,
   getInstanceStore,
   InstanceStoreType,
   ownStoreUpdate,
@@ -193,7 +194,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'store show': {
     usage: 'store show',
-    summary: 'Print the object-store setting, whether a bundled store is offered, and the last check. Secrets are never printed.',
+    summary:
+      'Print the object-store setting in use and its last check, a saved change still waiting for its check (pending), and whether a bundled store is offered. Secrets are never printed.',
     flags: {},
     run: () => getInstanceStore(),
   },
@@ -201,7 +203,7 @@ export const COMMANDS: Record<string, Command> = {
     usage:
       'store set --bundled | --endpoint <url> --bucket <bucket> --region <region> --access-key <id> [--type S3|GARAGE] [--public-endpoint <url>] [--garage-admin-endpoint <url>]',
     summary:
-      'Set the object store and apply it at once: the bundled one, or one of your own. Secrets come from VEYQ_STORE_SECRET_KEY and VEYQ_STORE_GARAGE_ADMIN_TOKEN (never flags); unset keeps the stored one. Run `store check` next.',
+      'Save an object-store setting as pending: the bundled one, or one of your own. Nothing changes for the media until `store check` passes, which puts it in use. Secrets come from VEYQ_STORE_SECRET_KEY and VEYQ_STORE_GARAGE_ADMIN_TOKEN (never flags); unset keeps the stored one.',
     flags: {
       bundled: { describe: 'use the store the deployment brings; no other flag may be given', required: false, switch: true },
       type: { describe: 'S3 (default) or GARAGE', required: false },
@@ -242,10 +244,17 @@ export const COMMANDS: Record<string, Command> = {
   },
   'store check': {
     usage: 'store check',
-    summary: 'Check the saved object store step by step; prints every step and exits 1 when the check failed. Tenants can be created only after a passed check.',
+    summary:
+      'Check the pending object store (else the one in use) step by step; a pending one that passes is put in use. Prints every step and exits 1 when the check failed. Tenants can be created only after a passed check.',
     flags: {},
     run: () => checkInstanceStore(),
     exitCode: (r) => ((r as { passed?: boolean }).passed === true ? 0 : 1),
+  },
+  'store discard': {
+    usage: 'store discard',
+    summary: 'Discard the pending object-store setting; the one in use stays. Changes nothing when none is pending.',
+    flags: {},
+    run: () => discardPendingInstanceStore(),
   },
   'capabilities list': {
     usage: 'capabilities list [--lang en|de]',
