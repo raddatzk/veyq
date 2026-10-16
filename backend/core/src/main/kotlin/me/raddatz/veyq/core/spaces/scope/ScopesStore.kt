@@ -452,6 +452,8 @@ class ScopesStore(
             if (id in plan.dropped) m.admit(null) else plan.retags[id]?.let { m.admit(Admission(id, plan.newEpoch, it)) }
             m.persist()
         }
+        // A re-tagged admission is a new one to judge: the `admission_unverified` declines its old tag earned go with it.
+        tasks.liftAdmissionDeclines(rows.filter { it.admissionId != null && it.admissionId in plan.retags }.map { it.id })
         tenants.carryInvites(invites, plan.newEpoch, plan.retags, plan.dropped)
         tasks.markRotated(scopeId, granterId, plan.newEpoch)
         return decision
