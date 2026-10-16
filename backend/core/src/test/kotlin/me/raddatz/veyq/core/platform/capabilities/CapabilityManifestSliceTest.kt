@@ -73,9 +73,12 @@ class CapabilityManifestSliceTest {
         @Suppress("UNCHECKED_CAST")
         val caps = anon["capabilities"] as List<Map<String, Any>>
         val requirementNames = CapabilityRequirements.ALL.map { it.name }.toSet()
+        val serviceKeys = setOf("serviceUrl", "serviceAttribution")
         caps.forEach { cap ->
-            assertEquals(setOf("id"), cap.keys - requirementNames, "a manifest capability is { id, …requirement values } only")
-            assertEquals(emptyList<Any>(), (cap - "id").values.filterNotNull(), "no requirement is set, so none carries a value")
+            assertEquals(setOf("id"), cap.keys - requirementNames - serviceKeys, "a manifest capability is { id, …values } only")
+            assertEquals(emptyList<Any>(), requirementNames.mapNotNull { cap[it] }, "no requirement is set, so none carries a value")
+            // An external service's address (ADR 0088 decision 7) rides on its own entry only.
+            if (cap["id"] !in CapabilityIds.EXTERNAL_SERVICES) assertEquals(null, cap["serviceUrl"], "${cap["id"]} carries no address")
         }
 
         // Identical whether or not the caller authenticates (the manifest is instance-wide, not per-user).

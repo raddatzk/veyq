@@ -8,6 +8,8 @@ import me.raddatz.veyq.core.generated.model.InstanceCapabilityRequirement
 import me.raddatz.veyq.core.generated.model.InstanceCapabilityRequirementUpdate
 import me.raddatz.veyq.core.generated.model.InstanceCapabilityText
 import me.raddatz.veyq.core.generated.model.InstanceCapabilityUpdate
+import me.raddatz.veyq.core.generated.model.InstanceExternalService
+import me.raddatz.veyq.core.generated.model.InstanceExternalServiceUpdate
 import me.raddatz.veyq.core.generated.model.InstanceConfigSecret
 import me.raddatz.veyq.core.generated.model.InstanceRelease
 import me.raddatz.veyq.core.generated.model.InstanceStore
@@ -62,6 +64,7 @@ class InstanceResource(
     private val configSecret: ConfigSecretKeyGuard,
     private val store: StoreHandler,
     private val capabilities: CapabilitySwitchHandler,
+    private val services: ExternalServicesHandler,
 ) : InstanceApi {
 
     override fun getInstanceRelease(): Response =
@@ -96,6 +99,24 @@ class InstanceResource(
             is StoreCheckRun.Done -> Response.ok(outcome.result.toWire()).build()
             is HttpFailure -> httpError(outcome)
         }
+
+    override fun listInstanceExternalServices(): Response =
+        Response.ok(services.list().map { it.toWire() }).build()
+
+    override fun setInstanceExternalService(capabilityId: String, instanceExternalServiceUpdate: InstanceExternalServiceUpdate): Response =
+        serviceAnswer(services.set(capabilityId, instanceExternalServiceUpdate.url, instanceExternalServiceUpdate.attribution))
+
+    override fun clearInstanceExternalService(capabilityId: String): Response = serviceAnswer(services.clear(capabilityId))
+
+    private fun serviceAnswer(outcome: ExternalServiceOutcome): Response = when (outcome) {
+        is ExternalServiceOutcome.Stored -> Response.ok(outcome.view.toWire()).build()
+        is HttpFailure -> httpError(outcome)
+    }
+
+    private fun ExternalServiceView.toWire() = InstanceExternalService(
+        id = id, title = texts.title.toWire(), url = address?.url, attribution = address?.attribution,
+        takesAttribution = takesAttribution,
+    )
 
     override fun listInstanceCapabilities(): Response = Response.ok(capabilities.list().map { it.toWire() }).build()
 
@@ -146,6 +167,7 @@ class InstanceResource(
         title = texts.title.toWire(), purpose = texts.purpose.toWire(), whenOff = texts.whenOff.toWire(),
         off = state.off, effective = state.effective,
         tenantSwitchable = state.id in CapabilityIds.TENANT_SWITCHABLE,
+        serviceConfigured = serviceConfigured,
         requirements = requirements.map {
             InstanceCapabilityRequirement(
                 name = it.def.name, kind = InstanceCapabilityRequirement.Kind.valueOf(it.def.kind.name.lowercase()),

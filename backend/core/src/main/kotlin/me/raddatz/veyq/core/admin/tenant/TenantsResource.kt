@@ -307,7 +307,7 @@ class TenantsResource(
     @Authenticated
     override fun getTenantCapabilities(tenantId: UUID): Response =
         when (val o = capabilitiesHandler.effective(identity.principal.name, tenantId.toString())) {
-            is TenantCapabilitiesOutcome.Ok -> Response.ok(TenantCapabilities(o.ids.map { capabilityWire(it, o.requirements) })).build()
+            is TenantCapabilitiesOutcome.Ok -> Response.ok(TenantCapabilities(o.ids.map { capabilityWire(it, o.requirements, o.services) })).build()
             is HttpFailure -> httpError(o)
         }
 

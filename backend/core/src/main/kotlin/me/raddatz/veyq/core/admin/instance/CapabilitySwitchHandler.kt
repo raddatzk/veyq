@@ -3,6 +3,8 @@ package me.raddatz.veyq.core.admin.instance
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirementStore
+import me.raddatz.veyq.core.platform.capabilities.ExternalServiceAddresses
+import me.raddatz.veyq.core.platform.capabilities.ExternalServiceOrigins
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirements
 import me.raddatz.veyq.core.platform.capabilities.RequirementState
 import me.raddatz.veyq.core.platform.capabilities.StoredCapabilityRequirementValues
@@ -21,7 +23,11 @@ import jakarta.enterprise.context.ApplicationScoped
 
 /** A register entry as the Server Owner reads it: its words from the catalog, its own switch, its effective state, and
  *  its requirements with the instance's values. */
-data class CapabilityView(val state: CapabilityState, val texts: CapabilityEntryTexts, val requirements: List<RequirementState>)
+data class CapabilityView(
+    val state: CapabilityState, val texts: CapabilityEntryTexts, val requirements: List<RequirementState>,
+    /** For an external service, whether its address is configured; null for every other entry. */
+    val serviceConfigured: Boolean?,
+)
 
 sealed interface CapabilitySetOutcome {
     data class Stored(val view: CapabilityView) : CapabilitySetOutcome
@@ -47,6 +53,8 @@ class CapabilitySwitchHandler(
     private val registry: CapabilityRegistry,
     private val requirementStore: CapabilityRequirementStore,
     private val requirementValues: StoredCapabilityRequirementValues,
+    private val origins: ExternalServiceOrigins,
+    private val services: ExternalServiceAddresses,
 ) {
     fun list(): List<CapabilityView> = registry.register().map { it.view() }
 
@@ -54,6 +62,7 @@ class CapabilitySwitchHandler(
         if (id !in CapabilityIds.ADVERTISED) return CapabilitySetOutcome.NotFound
         QuarkusTransaction.requiringNew().run { store.set(id, off) }
         switches.invalidate()
+        origins.refresh() // an external service's switch changes what the served policy may name
         return CapabilitySetOutcome.Stored(registry.register().single { it.id == id }.view())
     }
 
@@ -70,6 +79,8 @@ class CapabilitySwitchHandler(
         return CapabilitySetOutcome.Stored(registry.register().single { it.id == capabilityId }.view())
     }
 
-    private fun CapabilityState.view() =
-        CapabilityView(this, CapabilityTexts.BY_ID.getValue(id), registry.instanceRequirements(id))
+    private fun CapabilityState.view() = CapabilityView(
+        this, CapabilityTexts.BY_ID.getValue(id), registry.instanceRequirements(id),
+        if (id in CapabilityIds.EXTERNAL_SERVICES) id in services.configured() else null,
+    )
 }

@@ -123,8 +123,10 @@ class TenantCapabilitySwitchesSliceTest {
         val register = given().header("Authorization", bearer(t.owner)).`when`().get("/api/tenants/${t.id}/capability-switches")
             .then().statusCode(200).extract().jsonPath()
         assertEquals(CapabilityIds.ADVERTISED.filter { it in CapabilityIds.TENANT_SWITCHABLE }, register.getList<String>("id"))
-        assertEquals(listOf(true, false, false, false), register.getList<Boolean>("off"))
-        assertEquals(listOf(false, false, false, true), register.getList<Boolean>("effective"))
+        val ids = register.getList<String>("id")
+        // Only the switched entry is off; it and its two children are not effective, every other entry is.
+        assertEquals(ids.map { it == PUBLIC_SHARES }, register.getList<Boolean>("off"))
+        assertEquals(ids.map { !it.startsWith(PUBLIC_SHARES) }, register.getList<Boolean>("effective"))
 
         setSwitch(t.owner, t.id, PUBLIC_SHARES, false).then().statusCode(200).body("effective", equalTo(true))
         setSwitch(t.owner, t.id, PUBLIC_SHARES, false).then().statusCode(200) // the state it has: no change, same answer

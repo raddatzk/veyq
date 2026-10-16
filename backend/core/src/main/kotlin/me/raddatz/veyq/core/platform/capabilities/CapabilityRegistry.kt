@@ -32,6 +32,7 @@ class CapabilityRegistry(
     private val switches: CapabilitySwitches,
     private val tenantSwitches: TenantCapabilitySwitches,
     private val requirementValues: CapabilityRequirementValues,
+    private val services: ExternalServiceAddresses,
 ) {
     /** The instance's active capability ids, in [CapabilityIds.ADVERTISED] order — the pre-auth manifest. */
     val active: List<String>
@@ -56,8 +57,11 @@ class CapabilityRegistry(
      * [switches] — the register as the Server Owner reads it. A child of a switched-off parent is `off = false`,
      * `effective = false`: its own switch survives the parent's.
      */
-    fun register(): List<CapabilityState> =
-        switches.switchedOff().let { off -> CapabilityIds.ADVERTISED.map { CapabilityState(it, it in off, isActive(it, off, emptySet())) } }
+    fun register(): List<CapabilityState> {
+        val own = switches.switchedOff()
+        val off = offSets(null).first
+        return CapabilityIds.ADVERTISED.map { CapabilityState(it, it in own, isActive(it, off, emptySet())) }
+    }
 
     /**
      * The entries a tenant owner may switch ([CapabilityIds.TENANT_SWITCHABLE]), in catalog order, as [tenantId]'s owner
@@ -116,8 +120,13 @@ class CapabilityRegistry(
         else -> minOf(a, b)
     }
 
-    private fun offSets(tenantId: String?): Pair<Set<String>, Set<String>> =
-        switches.switchedOff() to (tenantId?.let { tenantSwitches.switchedOff(it) } ?: emptySet())
+    /** The switched-off sets of both levels; an external service with no configured address counts as switched off at
+     *  the instance level (ADR 0088 decision 7): it is not served, and nothing a switch does brings it back. */
+    private fun offSets(tenantId: String?): Pair<Set<String>, Set<String>> {
+        val configured = services.configured().keys
+        val unconfigured = CapabilityIds.EXTERNAL_SERVICES - configured
+        return (switches.switchedOff() + unconfigured) to (tenantId?.let { tenantSwitches.switchedOff(it) } ?: emptySet())
+    }
 
     private fun isActive(id: String, off: Set<String>, tenantOff: Set<String>): Boolean =
         id in CapabilityIds.ADVERTISED &&

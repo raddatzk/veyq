@@ -27,11 +27,11 @@ class CapabilityRegistryTest {
 
     private val catalogIds: List<String> = catalog.fieldNames().asSequence().toList()
 
-    private fun registry(vararg off: String) = CapabilityRegistry({ off.toSet() }, { emptySet() }, CapabilityRequirementValues.NONE)
+    private fun registry(vararg off: String) = CapabilityRegistry({ off.toSet() }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL)
 
     /** A registry with nothing off at the instance level and [tenantOff] off in tenant `t1` only. */
     private fun tenantRegistry(instanceOff: Set<String>, vararg tenantOff: String) =
-        CapabilityRegistry({ instanceOff }, { tenant -> if (tenant == "t1") tenantOff.toSet() else emptySet() }, CapabilityRequirementValues.NONE)
+        CapabilityRegistry({ instanceOff }, { tenant -> if (tenant == "t1") tenantOff.toSet() else emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL)
 
     @Test
     fun theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords() {
@@ -73,7 +73,7 @@ class CapabilityRegistryTest {
         assertFalse(registry.isActive(PUBLIC_SHARES_DROP_BOX, null), "a child needs its parent")
         assertTrue(registry.isActive(GROUP_SPACE, null), "a sibling entry stays active")
         assertEquals(
-            listOf(GROUP_SPACE, REMEMBER_DEVICE, REMEMBER_DEVICE_PASSWORDLESS, DEVICE_LINKING),
+            CapabilityIds.ADVERTISED - setOf(PUBLIC_SHARES, PUBLIC_SHARES_CONTRIBUTE, PUBLIC_SHARES_DROP_BOX),
             registry.active,
             "active keeps the advertised order, minus the switched-off entry and everything below it",
         )
@@ -96,7 +96,7 @@ class CapabilityRegistryTest {
     @Test
     fun theSwitchesAreAskedOnEveryCall() {
         var off = emptySet<String>()
-        val registry = CapabilityRegistry({ off }, { emptySet() }, CapabilityRequirementValues.NONE)
+        val registry = CapabilityRegistry({ off }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL)
         assertTrue(registry.isActive(DEVICE_LINKING, null))
         off = setOf(DEVICE_LINKING)
         assertFalse(registry.isActive(DEVICE_LINKING, null), "a switch acts without a new registry, so without a restart")
@@ -112,7 +112,7 @@ class CapabilityRegistryTest {
         // Controls: the same switch reaches neither another tenant nor the instance level.
         assertTrue(registry.isActive(PUBLIC_SHARES_DROP_BOX, "t2"), "another tenant is untouched")
         assertTrue(registry.isActive(PUBLIC_SHARES_DROP_BOX, null), "the instance level is untouched")
-        assertEquals(listOf(GROUP_SPACE, REMEMBER_DEVICE, REMEMBER_DEVICE_PASSWORDLESS, DEVICE_LINKING), registry.active("t1"))
+        assertEquals(CapabilityIds.ADVERTISED - setOf(PUBLIC_SHARES, PUBLIC_SHARES_CONTRIBUTE, PUBLIC_SHARES_DROP_BOX), registry.active("t1"))
         assertEquals(CapabilityIds.ADVERTISED, registry.active)
     }
 
@@ -149,6 +149,7 @@ class CapabilityRegistryTest {
             override fun instance() = instance
             override fun tenant(tenantId: String) = if (tenantId == "t1") t1 else emptyMap()
         },
+        ExternalServiceAddresses.ALL,
     )
 
     @Test
@@ -180,5 +181,25 @@ class CapabilityRegistryTest {
             assertEquals(catalog.path(r.capabilityId).path("requirements").path(r.name).path("whenSet").path("de").asText(), r.whenSet.de)
             assertEquals(catalog.path(r.capabilityId).path("requirements").path(r.name).path("kind").asText().uppercase(), r.kind.name)
         }
+    }
+
+    @Test
+    fun anExternalServiceWithoutAnAddressIsNotActiveAndItsSwitchCannotBringItBack() {
+        val noMap = ExternalServiceAddresses {
+            (CapabilityIds.EXTERNAL_SERVICES - CapabilityIds.MEMORIES_MAP).associateWith { ServiceAddress("https://x.example/", null) }
+        }
+        val registry = CapabilityRegistry({ emptySet() }, { emptySet() }, CapabilityRequirementValues.NONE, noMap)
+        assertFalse(registry.isActive(CapabilityIds.MEMORIES_MAP, null))
+        assertTrue(registry.isActive(CapabilityIds.MEMORIES_PLACES, null), "control: a configured service is active")
+        assertEquals(CapabilityState(CapabilityIds.MEMORIES_MAP, off = false, effective = false), registry.register().single { it.id == CapabilityIds.MEMORIES_MAP })
+        assertTrue(registry.tenantRegister("t1").single { it.id == CapabilityIds.MEMORIES_MAP }.serverOff, "the server has it off for every tenant")
+    }
+
+    @Test
+    fun theOriginOfAServiceAddressIsItsSchemeHostAndPort() {
+        assertEquals("https://tile.openstreetmap.org", ExternalServiceOrigins.origin("https://tile.openstreetmap.org/{z}/{x}/{y}.png"))
+        assertEquals("http://tiles.local:8080", ExternalServiceOrigins.origin("http://tiles.local:8080/{z}/{x}/{y}.png"))
+        assertEquals(null, ExternalServiceOrigins.origin("ftp://geo.example.com"))
+        assertEquals(null, ExternalServiceOrigins.origin("/relative/{z}"))
     }
 }

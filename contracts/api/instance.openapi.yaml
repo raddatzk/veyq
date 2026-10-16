@@ -1278,6 +1278,14 @@ components:
             ADR 0088 decision 12). Such a tenant only narrows: an entry on here may still be off in a tenant, never
             the other way round. Entries offered before sign-in are the Server Owner's alone.
           example: true
+        serviceConfigured:
+          x-veyq-visibility: flag
+          type: [boolean, "null"]
+          description: >
+            For an external-service entry (ADR 0088 decision 7): whether its address is configured
+            (`listInstanceExternalServices`); while it is not, the entry is not `effective` whatever its switch says.
+            Null for every other entry.
+          example: null
         requirements:
           type: array
           description: >

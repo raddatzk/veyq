@@ -9,7 +9,9 @@ import me.raddatz.veyq.core.generated.model.Capability
  * (`scripts/validate_capabilities.py` holds that) and its line here (`CapabilityWireTest` is red on a requirement this
  * function drops).
  */
-fun capabilityWire(id: String, requirements: Map<String, Int>): Capability {
+fun capabilityWire(id: String, requirements: Map<String, Int>, services: Map<String, ServiceAddress> = emptyMap()): Capability {
+    // An external service's address (ADR 0088 decision 7) rides only on its own entry, which is in a set only while active.
+    val service = services[id]?.takeIf { id in CapabilityIds.EXTERNAL_SERVICES }
     val mine = CapabilityRequirements.ALL.filter { it.capabilityId == id }.mapNotNull { def -> requirements[def.name]?.let { def.name to it } }.toMap()
     return Capability(
         id = id,
@@ -17,5 +19,7 @@ fun capabilityWire(id: String, requirements: Map<String, Int>): Capability {
         linkMaxDays = mine[CapabilityRequirements.LINK_MAX_DAYS],
         addConsent = mine[CapabilityRequirements.ADD_CONSENT]?.let { true },
         passwordMaxDays = mine[CapabilityRequirements.PASSWORD_MAX_DAYS],
+        serviceUrl = service?.url,
+        serviceAttribution = service?.attribution,
     )
 }

@@ -40,7 +40,7 @@ class SetupResource(private val handler: SetupHandler) : SetupApi {
                 suites = state.suites,
                 instanceSalt = state.instanceSalt,
                 version = Version(major = state.versionMajor, build = state.versionBuild),
-                capabilities = state.capabilities.map { capabilityWire(it, state.requirements) },
+                capabilities = state.capabilities.map { capabilityWire(it, state.requirements, state.services) },
             ),
         ).build()
     }

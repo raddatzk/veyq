@@ -10,6 +10,8 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.platform.capabilities.CapabilityEntryTexts
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirementStore
+import me.raddatz.veyq.core.platform.capabilities.ExternalServiceAddresses
+import me.raddatz.veyq.core.platform.capabilities.ServiceAddress
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirements
 import me.raddatz.veyq.core.platform.capabilities.StoredCapabilityRequirementValues
 import me.raddatz.veyq.core.platform.capabilities.TenantRequirementState
@@ -29,7 +31,9 @@ data class TenantCapabilityView(
 )
 
 sealed interface TenantCapabilitiesOutcome {
-    data class Ok(val ids: List<String>, val requirements: Map<String, Int>) : TenantCapabilitiesOutcome
+    data class Ok(
+        val ids: List<String>, val requirements: Map<String, Int>, val services: Map<String, ServiceAddress>,
+    ) : TenantCapabilitiesOutcome
     data object Suspended : TenantCapabilitiesOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : TenantCapabilitiesOutcome, HttpFailure by Failures.tenantNotFound
 }
@@ -71,13 +75,14 @@ class TenantCapabilitySwitchHandler(
     private val switches: StoredTenantCapabilitySwitches,
     private val requirementStore: CapabilityRequirementStore,
     private val requirementValues: StoredCapabilityRequirementValues,
+    private val services: ExternalServiceAddresses,
 ) {
     /** The tenant's effective set, for every member (decision 3). */
     fun effective(callerId: String, tenantId: String): TenantCapabilitiesOutcome {
         access.check(callerId, tenantId, READ)
             .refusal(TenantCapabilitiesOutcome.NotFound, TenantCapabilitiesOutcome.Suspended)?.let { return it }
         if (store.findTenant(tenantId) == null) return TenantCapabilitiesOutcome.NotFound
-        return TenantCapabilitiesOutcome.Ok(registry.active(tenantId), registry.requirements(tenantId))
+        return TenantCapabilitiesOutcome.Ok(registry.active(tenantId), registry.requirements(tenantId), services.configured())
     }
 
     fun list(callerId: String, tenantId: String): TenantCapabilitySwitchesOutcome {
