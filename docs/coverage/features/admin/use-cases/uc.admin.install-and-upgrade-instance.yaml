@@ -14,7 +14,7 @@ acceptanceCriteria:
   - id: the-release-line-picks-what-upgrade-takes
     text: >-
       `VEYQ_RELEASE` decides: an exact release is never left, a major takes its newest release, `latest` crosses
-      majors; a snapshot is never taken.
+      majors one per run, each entered only from the last release of the one before; a snapshot is never taken.
   - id: a-missing-value-is-refused-before-anything-stops
     text: >-
       When the new release's template requires a variable `.env` lacks, the upgrade names it and stops before any

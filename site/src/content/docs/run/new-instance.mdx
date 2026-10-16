@@ -1,16 +1,20 @@
 ---
 title: Set up a new instance
-description: Bring up the production recipe or the Helm chart, pinned to the release you verified.
+description: Install a release with veyqctl on Docker Compose, or the Helm chart on Kubernetes, pinned to what you verified.
 sources:
   - docs/decisions/0057-release-identity-and-deployment-recipe.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
+  - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 :::note[How far this is proven]
-No published release has been installed on either target yet. What is checked is the files: the production compose
-recipe's hardening by `scripts/validate_compose_posture.py`, and the rendered chart by `scripts/chart_meta_check.py`.
+No published release has been installed on either target yet. On Compose, every run of the stack lane
+(`scripts/run_stack_e2e.py`) installs its candidate exactly as below, from a release produced from the tree with images
+built on the host, with `--unsigned-local` in place of the signature check; it has run on a developer machine only (the
+repository has no remote). The recipe's hardening is checked by `scripts/validate_compose_posture.py`, and the rendered
+chart by `scripts/chart_meta_check.py`.
 :::
 
 ## Install
@@ -18,19 +22,59 @@ recipe's hardening by `scripts/validate_compose_posture.py`, and the rendered ch
 <Tabs syncKey="target">
   <TabItem label="Docker Compose">
 
-`infra/docker-compose.prod.yml` is the deployment artifact: the app, its administration surface, MariaDB,
-Garage, and a Traefik that terminates TLS in front of them. It is **standalone**, not an override of the dev
-file — that file has no app service at all, publishes `3306`/`19000`/`18080`, and ships `change-me` passwords.
+`veyqctl` installs the instance from a release ([ADR 0096](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)):
+the app, its administration surface, MariaDB, Garage, and a Traefik that terminates TLS in front of them. Fetch and
+verify `veyqctl` first ([Verify a release](/veyq/run/verify-a-release/#veyqctl-the-first-time)), then:
 
 ```sh
-# first: Verify a release — it leaves the recipe in ./recipe-<version>/ and prints two image lines
-cp ./recipe-<version>/docker-compose.prod.yml ./recipe-<version>/.env.example infra/
-cp infra/.env.example infra/.env          # then fill in every value (it is gitignored), and the two image lines
-docker compose -f infra/docker-compose.prod.yml up -d
+cd /opt/veyq
+./veyqctl install --set VEYQ_RELEASE=<major> \
+  --set VEYQ_DOMAIN=veyq.example.org --set VEYQ_ACME_EMAIL=you@example.org
 ```
 
-**Every secret is required and has no default.** A missing variable fails the `up` with the name of the variable,
-rather than starting an instance on a password that is printed in this repository.
+`VEYQ_RELEASE` is the release line the instance stays on: a major (`1`, its newest release), an exact release
+(`1.4`, pinned) or `latest` (the default); [Upgrade](/veyq/run/upgrade/#which-release-upgrade-takes) says what each
+means later. A value you do not pass is asked for at a terminal, and refused by name without one. An optional
+variable ([Configuration](/veyq/run/configuration/)) is passed the same way, `--set ADMIN_DOMAIN=…`.
+
+`install` refuses a home that already holds an instance, and then, in order:
+
+1. **Resolves the release** `VEYQ_RELEASE` selects among the GitHub Releases of `raddatzk/veyq`, never a prerelease or
+   a snapshot. `--source <directory or URL>` reads a mirror in the same layout instead; trusting it is your decision.
+2. **Verifies both images** by the digests the release's `manifest.json` names, before anything is pulled, and
+   **fetches the release's files** into `releases/<release>/`, each checked against its sha256 — both exactly as
+   [Verify a release](/veyq/run/verify-a-release/) shows by hand.
+3. **Writes `.env`** (mode `0600`) from the release's template, `env.example`: the four secrets generated, the two
+   image lines from the manifest, your values filled in. Every secret is required and has no default in the recipe,
+   so an `up` with one missing fails with its name instead of starting on a password printed in this repository.
+4. **Brings the stack up** and waits until every service is healthy:
+   `docker compose -f releases/<release>/docker-compose.prod.yml --env-file .env up -d --wait`, plus
+   `-f compose.override.yml` when that file exists. It ends by naming the admin console's address.
+
+The instance lives in `/opt/veyq` (`--home` names another):
+
+| Path | What it is |
+|---|---|
+| `.env` | The instance's values, `0600` |
+| `compose.override.yml` | Optional, yours: a Compose overlay laid over the recipe on every command (a port, a network, a CA), kept across upgrades |
+| `state.json` | The running release, the Compose project, the source |
+| `releases/<release>/` | That release's files, as published; an upgrade adds the next one beside it |
+| `backups/` | The captures `backup` and `upgrade` take |
+
+`start`, `stop`, `status` and `logs [-f] [service]` address the stack by its project; `status` exits non-zero unless
+every service is healthy.
+
+**By hand**, without `veyqctl`: verify the release and fetch its files into `releases/<release>/` as
+[Verify a release](/veyq/run/verify-a-release/) shows, then
+
+```sh
+cd /opt/veyq
+(umask 077; cp "releases/${release}/env.example" .env)    # fill in every value; the two image lines are the manifest's
+docker compose -f "releases/${release}/docker-compose.prod.yml" --env-file .env up -d --wait
+```
+
+The recipe names its project (`name: veyq`), so nothing else has to be passed. An instance set up by hand has no
+`state.json`, so `veyqctl` does not manage it; run it by hand from then on, as each page here shows.
 
 **Every container runs unprivileged, and the proxy cannot reach the database**
 ([ADR 0071](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0071-runtime-hardening-on-both-targets.md)). Each service drops every capability,
@@ -54,7 +98,7 @@ tenant domains as `HTTPRoute`s (and `ListenerSet`s) into its own namespace and l
 would reconcile each other's routing away.
 
 ```sh
-# Verify a release first: it leaves ${version}, ${app_digest}, ${admin_digest} and ${chart_digest}
+# Verify a release first: it leaves ${release}, ${app_digest}, ${admin_digest} and ${chart_digest}
 chart="oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}"
 helm show values "$chart" > my-values.yaml        # fill in: domain, storeDomain, every key under secrets,
                                                   # gateway.className, the gateway.tls block, and
@@ -77,7 +121,7 @@ the version has two parts, and Helm's tag listing skips every tag that is not th
 without a version, or with a range, finds nothing (measured with Helm 4.0.1, ADR 0064).
 
 **From a checkout** the chart is `./charts/veyq`, and its in-tree version is a placeholder (`0.0-dev`) no publish
-uses, so name the release yourself: add `--set image.tag="${version}" --set admin.image.tag="${version}"` to the
+uses, so name the release yourself: add `--set image.tag="${release}" --set admin.image.tag="${release}"` to the
 same `helm install`, with `./charts/veyq` in place of `"$chart"`.
 
 The rest of what is specific to this target is on [Kubernetes](/veyq/run/kubernetes/).
@@ -102,15 +146,10 @@ and why it must persist are on [Storage and email](/veyq/run/storage-and-email/#
   the reason it is not one line is that the schema migrates at boot with no gate and no downgrade path.
 - **There are two images per release, and they are pinned together.** `VEYQ_IMAGE` and `VEYQ_ADMIN_IMAGE` are
   built, versioned and cosign-signed by the same publish ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md)),
-  so pin the same `<major>.<minor>` on both, each by the digest [Verify a release](/veyq/run/verify-a-release/) resolved. A mismatched pair is two versions of one instance, and only one of
-  them migrated the schema.
-- **The compose file and the env template ride inside the image.** Every published image carries the recipe it
-  was built with at `/opt/veyq/deploy/`, so the file you deploy a version with cannot drift from the bits it
-  describes, and it inherits the image's cosign signature instead of needing a second trust decision — which
-  holds only for a recipe read out of the digest you verified, so [Verify a release](/veyq/run/verify-a-release/) extracts it from
-  exactly that digest, never from a tag.
-
-  (Note the current limit: the recipe is those two files, so the store's `garage.toml` still comes from this
-  repository — the Helm chart carries its own copy as a `ConfigMap`, so the file has a second, self-sufficient
-  home there, but the compose recipe still reads it from the repository's `infra/`. It used to be two files — ADR 0067 deleted
-  `garage-init.sh` along with the image that ran it.)
+  and one release's manifest names both by digest, which is where `veyqctl` writes them from. A mismatched pair is two
+  versions of one instance, and only one of them migrated the schema.
+- **The recipe is the release's files.** The compose file, its `.env` template and `garage.toml` are assets of an
+  immutable GitHub Release, beside the manifest that names the images it was published with, so the recipe you run a
+  release with cannot drift from the images it describes, and nothing in a published release can change
+  ([ADR 0096](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)).
+  No image carries a recipe, and no repository checkout is needed.

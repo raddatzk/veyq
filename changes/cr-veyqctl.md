@@ -1,7 +1,7 @@
 ---
 id: cr-veyqctl
 title: veyqctl — install and upgrade a Compose instance from immutable releases; the recipe leaves the image
-status: in-progress
+status: done
 satisfies: ["uc.admin.install-and-upgrade-instance"]
 adrs: ["0096", "0057", "0090", "0091", "0056", "0086"]
 invariants:
@@ -170,7 +170,7 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
   - **Done when:** the four bites read; guards green, `validate_guard_gaps.py --force` included (this phase changes a
     guard); committed. Not provable further without a remote — say so in the Run pages' "how far this is proven".
 
-- [ ] **6 The Run area, the reference and the state docs.** `infra/.env.example` gains `VEYQ_RELEASE` (and
+- [x] **6 The Run area, the reference and the state docs.** `infra/.env.example` gains `VEYQ_RELEASE` (and
   `run/configuration.md` its row — `validate_run_config_reference.py` is red until it does); the Compose half of
   `run/new-instance.mdx` (§ Install, § Worth knowing's in-image bullet), `run/upgrade.mdx` (the Compose tab's seven
   steps, § Rollback), `run/verify-a-release.md` (`veyqctl verify`, plus the manual commands it runs and the
@@ -365,6 +365,22 @@ listing it (the positive control). The guard's docstring states the shared deriv
 - *Not done — owner question*: `self-update` still checks the installed `veyqctl` against its manifest only (above).
 - **For phase 6**: `run/new-instance.mdx` and `run/upgrade.mdx` still copy `.env.example` from an extracted recipe
   directory; under `veyqctl` the release's template is `env.example`, and a by-hand step names that.
+
+**Phase 6.** Taken over from a stopped run's unreviewed `wip:` save (21 files), reviewed against `veyqctl.py`
+and kept almost whole: the Run pages around `veyqctl`, each with the commands it runs; `VEYQ_RELEASE` in the template
+and its row; `validate_release_identity.py` assertion 7 extended to `cosign verify-blob` on `veyqctl` (bitten by
+snapshot-and-restore: the block removed, the identity loosened, another issuer, the blob renamed — each red, the tree
+green after; `validate_guard_gaps.py --force` green). Changed: the rollback creates its home first (`/opt` is root's),
+*Verify a release* says `self-update` does not check the bundle (owner, option A; #469 the follow-up) and states what
+was measured here — the cosign floor against GHSA-fx35-mq7g-6g98 (fixed in v2.6.5 / v3.1.3), the `verify-blob` form
+against cosign's reference and the `--help` of 3.1.3, a key-made bundle verified and a one-byte change refused, the
+page's keyless command refusing that bundle, and the by-hand file check run against a produced release over
+`file://`. ADR 0098's "waits for cr-veyqctl phase 6" made true; the hand-off below is moot (cr-stack-e2e is done).
+- *What went wrong*: the done-when's "each page command traced to a live run's log" could not be met as written — the
+  phase 2–4 logs stayed in their sessions, uncommitted, and this run had no Docker; the pages say per section what ran
+  and what is derived instead. The takeover's `git merge main` onto uncommitted changes could not run; the `wip:`
+  commit was re-applied onto `main` as a cherry-pick instead. **Next time:** a done-when that needs a log names where
+  the log is kept (committed under the run's output, or quoted into the retrospective), so a successor can trace it.
 
 **Hand-off to cr-stack-e2e** (its owner session; this CR does not edit its file): `run_stack_e2e.py` no longer
 extracts anything. `extract()`, `write_env()`, `up()`, `compose_cmd()` and the `extract`/`env`/`up` stages are gone;

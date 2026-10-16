@@ -4,13 +4,16 @@ description: Capture an instance's three legs cold, check the capture, and resto
 sources:
   - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
   - docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md
+  - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
 ---
 
 The use-case owns the goal and the failure modes
 ([uc.admin.back-up-and-restore-instance](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md));
 [ADR 0056](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) owns the decisions. This
-page owns the **commands**, and `scripts/instance_backup.py` is what they call — its module docstring carries
-the tool's own reference.
+page owns the **commands**. On Docker Compose they are `veyqctl backup` and `veyqctl restore`, which run the running
+release's own `instance_backup.py` — an asset of the release, checked against its manifest before it runs, whose
+module docstring carries the tool's reference. Each block below also shows what `veyqctl` runs, so it can be done by
+hand.
 
 **An instance's durable state is exactly three legs:** (a) the database, (b) the object store's *contents*,
 (c) the **config-secret key file**. Two legs produce an instance that boots, serves content, and refuses member
@@ -20,36 +23,53 @@ looks like health.
 **The capture is cold, and *cold* means the writer is stopped — not the stores.** Stop the application; leave
 MariaDB and Garage running, because the capture reads through their own interfaces. That single act is the whole
 consistency argument: with the app down the database gains no rows, so a row whose object was never captured is
-structurally impossible and there is no ordering to remember. The tool cannot check this for you and does not
-pretend to.
+structurally impossible and there is no ordering to remember. `instance_backup.py` cannot check this and does not
+pretend to; `veyqctl` stops the application itself, so a step by hand is the only place it can be forgotten.
 
 ### Capture
 
-On the production recipe, from the directory that holds `infra/`:
+```sh
+cd /opt/veyq
+./veyqctl backup --key-into /media/usb-stick/veyq-<stamp>.key
+```
+
+It stops the application, captures legs (a) and (b) into `backups/<UTC stamp>/` and leg (c) to the file
+`--key-into` names, checks the capture, and starts the application again — also when the capture failed. The
+downtime is the capture, and nothing else. `upgrade` takes the same capture first. By hand, what it runs:
 
 ```sh
-# 1. STOP the application, and only it. MariaDB and Garage keep running.
-docker compose -f infra/docker-compose.prod.yml stop app
+cd /opt/veyq
+release=<running release>               # state.json's "release"
+recipe="releases/${release}/docker-compose.prod.yml"   # add -f compose.override.yml below if you have one
 
-# 2. Credentials, under the names the tool reads: the passwords come from infra/.env.
-#    The endpoint is the one the rclone container sees on the store's network, not a published port.
-#    The bundled store: its admin token; the tool derives the S3 key pair from it, so nothing else is typed.
+# 1. STOP the application, and only it. MariaDB and Garage keep running.
+docker compose -f "$recipe" --env-file .env stop app
+
+# 2. Credentials, under the names the tool reads: the two values come from .env. The endpoint is the one the
+#    rclone container sees on the store's network, not a published port. The bundled store: its admin token; the
+#    tool derives the S3 key pair from it, so nothing else is typed. COMPOSE_ENV_FILES hands the tool's own
+#    `docker compose exec` this instance's .env.
 read -rs VEYQ_BACKUP_DB_PASSWORD && export VEYQ_BACKUP_DB_PASSWORD              # = MARIADB_ROOT_PASSWORD
 read -rs VEYQ_BUNDLED_STORE_ADMIN_TOKEN && export VEYQ_BUNDLED_STORE_ADMIN_TOKEN  # = GARAGE_ADMIN_TOKEN
 export VEYQ_BUNDLED_STORE_ENDPOINT=http://garage:3900
+export COMPOSE_ENV_FILES=/opt/veyq/.env
 
-# 3. Capture legs (a) and (b) into infra/backups/<UTC-ISO8601>/, and leg (c) to a medium of its own.
-sudo -E python3 scripts/instance_backup.py capture \
-    --compose-file infra/docker-compose.prod.yml \
-    --docker-network veyq_edge \
-    --config-secret-file "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key" \
-    --key-into /media/usb-stick/veyq-<stamp>.key
+# 3. Leg (c) out of the stopped app container, into a directory only you can read.
+(umask 077; mkdir .key)
+docker cp "$(docker compose -f "$recipe" --env-file .env ps -aq app)":/var/lib/veyq/config-secret.key \
+  .key/config-secret.key
 
-# 4. CHECK both — the store leg is captured logically precisely so this is possible at all.
-sudo python3 scripts/instance_backup.py verify infra/backups/<stamp> --key-from /media/usb-stick/veyq-<stamp>.key
+# 4. Capture legs (a) and (b) into backups/<stamp>/, and leg (c) to a medium of its own; then drop the copy.
+python3 "releases/${release}/instance_backup.py" capture --compose-file "$recipe" \
+    --docker-network veyq_edge --config-secret-file .key/config-secret.key \
+    --key-into /media/usb-stick/veyq-<stamp>.key --into backups/<stamp>
+rm -r .key
 
-# 5. Start the application again. The downtime was the capture, and nothing else.
-docker compose -f infra/docker-compose.prod.yml start app
+# 5. CHECK both — the store leg is captured logically precisely so this is possible at all.
+python3 "releases/${release}/instance_backup.py" verify backups/<stamp> --key-from /media/usb-stick/veyq-<stamp>.key
+
+# 6. Start the application again.
+docker compose -f "$recipe" --env-file .env start app
 ```
 
 **A store of your own.** The store is a setting in the admin console, not an environment variable, and the capture is
@@ -61,21 +81,16 @@ bundled pair, plus `VEYQ_BACKUP_STORE_BUCKET` and `VEYQ_BACKUP_STORE_REGION` whe
 credentials again.
 
 The network is `veyq_edge`, the one the store is on: the production compose file declares `name: veyq`, so that is
-the project, and nothing has to be passed on the command line to make it so. Leg (c) lives on a **volume**, not on
-your filesystem, so it is addressed there, and it is copied to a destination of its own, never into the capture.
+the project. Leg (c) lives on a **volume**, under Docker's data root, which a host cannot always read (Docker Desktop
+keeps it in a VM) and which only root can read where it can; `docker cp` takes it out of the stopped container
+instead, so **no step needs root** — a user who may use Docker runs all of it. The key is copied to a destination of
+its own, never into the capture.
 
-**Capture and verify run as root.** The key is the application's (uid `10001`, mode `0600`, on a volume under
-Docker's data root), so no other user can read it, and a capture without root cannot take leg (c). `-E` keeps the
-credential variables (a `sudoers` that resets the environment needs them passed explicitly). What a root capture
-writes is root's, owner-only: the capture directory and the key file. So `verify` runs as root too, and so does
-the encryption below, or hand both to yourself first:
-`sudo chown -R "$(id -u):$(id -g)" infra/backups/<stamp> /media/usb-stick/veyq-<stamp>.key`.
-
-**How far this is proven.** Every `scripts/run_web_e2e.py` run captures a live instance, destroys it, restores it
-and runs a suite against the result, and holds the production capture to resolving the production project rather
-than whatever else runs out of `infra/`. That rehearsal captures a key file it owns, not the production volume. A
-root capture from that volume ran once, for the restore rehearsal below, as root in a container that mounted the
-volume. The `sudo -E` form above is derived, not rehearsed.
+**How far this is proven.** `veyqctl upgrade` ran this capture once, live, on an instance it had installed from a
+release produced from the tree — three legs, the key apart — and the capture was restored onto a fresh install.
+`veyqctl backup` is the same capture with the application started again after it; it has not run on its own. Every
+`scripts/run_web_e2e.py` run captures a live instance, destroys it, restores it and runs a suite against the result,
+and holds the production capture to resolving the production project rather than whatever else runs.
 
 **Leg (c) never goes beside the dump.** The dump plus the key opens every tenant's SMTP password, so a capture
 directory holding both is exactly the leaked backup the key exists to defend against (ADR 0056 §1). `capture`
@@ -87,7 +102,7 @@ and `verify` checks it.
 **Before a capture leaves this host, encrypt it, and keep the key on another medium.** The tool encrypts nothing:
 the dump holds the members' emails and the password wraps an attacker can grind offline even without the key.
 Pack the capture directory and encrypt the archive for a recipient whose private key is not on this host — for
-example `tar -C infra/backups -c <stamp> | age -r <recipient> > veyq-<stamp>.tar.age` — and carry the
+example `tar -C /opt/veyq/backups -c <stamp> | age -r <recipient> > veyq-<stamp>.tar.age` — and carry the
 `--key-into` file on a different medium from that archive.
 
 `--docker-network` is the network the pinned `rclone` container joins, and it must be one the store is on; list
@@ -127,54 +142,61 @@ and the application migrates the data up at its next start, the same forward mig
 "install the backup's release, restore, upgrade" is "restore, start". When the backup is older the restore says
 so, because that is an upgrade — and if you meant a rollback, it is not one ([Upgrade](/veyq/run/upgrade/)).
 
-**Watch the log line, not `GET /api/instance/store-provisioning`.** That endpoint answers the Server Owner only.
+**Watch the log line, not `GET /api/instance/store-provisioning`:** `./veyqctl logs app` shows
+`Object store provisioned` once the store is usable. The endpoint answers the Server Owner only.
 A restore target has no Server Owner, and it must not get one: setup writes rows, and the emptiness gate then
 refuses the target.
 
-*Empty* means **holding no data**, not holding nothing. The target is a **normally installed instance**: bring
-the stack up and let the app start once, which migrates the schema and provisions the store. There is no
-shorter path and there is no manual `CREATE DATABASE` step — since ADR 0067 the app is the only thing that can
-make the store usable, and the same start migrates the schema, so the two go together by construction.
+*Empty* means **holding no data**, not holding nothing. The target is a **normally installed instance** —
+`veyqctl install` of the release the capture came from (or a newer one), with no first-run setup: it brings the
+stack up and waits until the app is healthy, and that one start migrates the schema and provisions the store. There is
+no shorter path and there is no manual `CREATE DATABASE` step — since ADR 0067 the app is the only thing that can make
+the store usable, and the same start migrates the schema, so the two go together by construction.
 
 ```sh
-# 1. A freshly installed instance: start the stack and let the app run once, then STOP the app.
-#    That one start migrates the schema AND provisions the store (layout, bucket, key, grant, CORS).
-docker compose -f infra/docker-compose.prod.yml up -d
-docker compose -f infra/docker-compose.prod.yml logs -f app     # until it logs `Object store provisioned`
-docker compose -f infra/docker-compose.prod.yml stop app
+cd /opt/veyq
+./veyqctl restore /media/restore/<stamp> --domain <the tenant's domain> --key-from /media/usb-stick/veyq-<stamp>.key
+```
 
-# 2. Load all three legs, with the credentials exported as for the capture — leg (c) from wherever you kept it.
-sudo -E python3 scripts/instance_backup.py restore infra/backups/<stamp> \
-    --domain <your domain> \
-    --compose-file infra/docker-compose.prod.yml \
-    --docker-network veyq_edge \
-    --config-secret-file "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key" \
-    --key-from /media/usb-stick/veyq-<stamp>.key
-sudo stat -c '%u:%g %a' "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key"
-#    → 10001:10001 600
+It stops the application, loads all three legs with the running release's tool, puts leg (c) into the app's volume as
+the application's own user, and starts the application again. `--domain` is required and never defaulted: the
+capture holds its **tenants'** domains, and `.env`'s `VEYQ_DOMAIN` is the instance's bootstrap domain, not one of
+them. A restore the tool refuses at its gates wrote nothing, and the application stays stopped until `veyqctl start`.
+By hand, after the capture's steps 2 and the `recipe` line above:
 
-# 3. Start the application, then VERIFY — this is the step that separates a restore from a hope.
-docker compose -f infra/docker-compose.prod.yml start app
+```sh
+# 1. STOP the application of the freshly installed instance.
+docker compose -f "$recipe" --env-file .env stop app
+
+# 2. Load all three legs; the tool writes leg (c) to a file you own.
+(umask 077; mkdir .key)
+python3 "releases/${release}/instance_backup.py" restore /media/restore/<stamp> \
+    --domain <the tenant's domain> --compose-file "$recipe" --docker-network veyq_edge \
+    --config-secret-file .key/config-secret.key --key-from /media/usb-stick/veyq-<stamp>.key
+
+# 3. Leg (c) into the app's volume, written by the image's own user, the key on stdin; then drop the copy.
+docker compose -f "$recipe" --env-file .env run --rm --no-deps -T --entrypoint /bin/sh app \
+  -c 'umask 077 && cat > "$1.veyqctl" && mv -f "$1.veyqctl" "$1"' place-key /var/lib/veyq/config-secret.key \
+  < .key/config-secret.key
+rm -r .key
+
+# 4. Start the application, then VERIFY — this is the step that separates a restore from a hope.
+docker compose -f "$recipe" --env-file .env up -d --wait
 ```
 
 The restore takes the key from where the capture's manifest says it went. A capture that kept it apart is
 **refused** without `--key-from`, before anything is written: restoring without leg (c) is A2 — an instance that
 boots and refuses invites and password resets — and it happens only when you pass `--without-key` on purpose.
 
-**The key must end up readable by the application, which runs as uid 10001** (the image's `USER`). The tool gives
-the key the owner of the directory it lands in, and refuses — before anything is written — a run that cannot: a
-key born `root:root 0600` in the app's volume is one the app cannot read, so it reports `ABSENT` and refuses
-invites and resets with the key right there. On the production recipe leg (c) lives on the `veyq-config-secret`
-volume, which Docker created owned by `10001`, so the restore runs as root, addressed the way the
-[capture](#capture) addresses it; the `stat` above checks the result. Run without root against that path, the tool
-refuses and says why. **This was rehearsed once, in containers rather than with `sudo` on a Linux host**
-(cr-restore-places-the-key-as-the-runtime-user, 2026-10-15). The stack was this recipe on Docker Desktop's
-Linux VM. The tool ran as root inside a container that mounted the docker socket and the `veyq-config-secret`
-volume, and `--config-secret-file` pointed into that mount. A capture taken the same way was restored onto a
-fresh install with no key yet. The key came out `10001:10001 600`, and the instance read `configSecretState: OK`.
-The tool from before the fix, run the same way, gave `0:0 600` and `ABSENT`. The `sudo -E` form above has the same
-owner on the same directory, so the tool takes the same branch, but that exact invocation is still derived. The
-tool's owner rule is held by `scripts/instance_backup_selftest.py`, without Docker or root.
+**The key must end up readable by the application, which runs as uid 10001** (the image's `USER`). A key born
+`root:root 0600` in the app's volume is one the app cannot read, so it reports `ABSENT` and refuses invites and
+resets with the key right there. Step 3 writes it through a one-off container of the `app` service, which runs as the
+image's own user, so the key is born `10001:10001 0600` without root and without a path into Docker's data root. (The
+tool, given a `--config-secret-file` inside the volume itself, gives the key the owner of the directory it lands in
+and refuses a run that cannot — the route for an operator who mounts the volume as root.) **How far this is proven:**
+`veyqctl restore` ran once, live, putting an upgrade's capture onto a fresh install: 46 tables dropped, the dump and
+4 objects loaded, the key in the app's volume as `10001:10001 600`, and a Memory opened there. The tool's owner rule
+is held by `scripts/instance_backup_selftest.py`, without Docker or root.
 
 The store's **setting** now travels with the database: it is a row (`veyq_store_setting`, a table the
 emptiness gate ignores), its secrets sealed under the config-secret key, so with leg (c) restored they open again.
@@ -199,8 +221,8 @@ of *"it looked fine"*.
 
 The mirror of the capture above: the tool reaches MariaDB and Garage through port-forwards and cannot reach the
 app's claim, so it writes leg (c) to a local file of your own, and `kubectl cp` puts it in the pod. `kubectl cp`
-unpacks as the container's user, uid 10001, so the key is born the app's — the property the compose restore gets
-from running as root. Onto a **freshly installed** release, exactly as [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires:
+unpacks as the container's user, uid 10001, so the key is born the app's — the property the Compose restore gets
+from its one-off container of the `app` service. Onto a **freshly installed** release, exactly as [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires:
 
 ```sh
 kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application
@@ -234,7 +256,7 @@ the backup to one store's on-disk format and version.
 Garage can snapshot its metadata database consistently while running:
 
 ```sh
-docker compose -f infra/docker-compose.prod.yml exec garage /garage meta snapshot
+docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env exec garage /garage meta snapshot
 ```
 
 There is **no** equivalent for its data blocks (`garage block --help` offers `info | list-errors | purge |
