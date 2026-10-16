@@ -93,6 +93,23 @@ create-gate (scope) and a member-removal hook are new.
   longer a member of the scope — a co-member's parked link is theirs, note and password copy included. The server
   serves its verdict on every row (`deletable`) from the predicate the delete runs. Erasing a Memory deletes its
   links (`uc.memory.delete-node` E4); erasing a whole space removes its links and **retires** their ids.
+- **A8 — a link no guest is served.** A link can be on and still serve no guest: its end date passed, its space is
+  paused or being deleted, the Server Owner or the space's owner switched its kind of link off, or it misses a
+  requirement in effect (a password, an end date within N days of when it was made). Every guest then gets the `404` an
+  unknown link gets ([ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+  decision 5), and the manage panel says so on the row, with every reason: the server serves them on every row
+  (`guestStops`, inbox #457) from the one predicate every guest path passes, so the row and the guest's answer cannot
+  disagree. Only a member who may list the link reads the reasons; a guest is told none of them. Memories', the
+  folder's (and a file's) and the drop box's panel say it alike.
+  **A missed requirement is fixed on the same link** (owner, 2026-10-16): the link's owner gives it a password, or an end
+  date within the days counted from when it was made, right from the row, and the link keeps its address and key; its
+  guests then meet the password prompt, or the link, instead of the `404`. The server judges the link as the edit leaves
+  it, so a write toward the requirement is never refused by it, and one that still misses a requirement is
+  (`422 link_password_required` / `link_expiry_required`, nothing written). Switching a link back on is not refused by a
+  requirement either: it comes back on and says what it still lacks. A link older than the lifetime has no end date
+  that fits, so the row says only a renewed link helps, a new link with a new address (ADR 0075); Memories' and the
+  folder's panel offer that renew, the drop box's makes a new link from its form. A switch is no member's to fix: the
+  row names who can switch it back on, whoever runs the server or the space's owner.
 - **E1 — non-member / lost grant:** a caller who is not a member of the scope (or cannot open `K_node`) cannot
   create a share there — the same 404/authorization path as any non-member scope access (no reveal).
 

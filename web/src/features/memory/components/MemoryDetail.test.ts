@@ -26,7 +26,8 @@ import { sealMemoryDate, unsealMemoryDate, type MemoryDate } from '../memoryDate
 import { unsealMemoryLocation, type MemoryLocation } from '../memoryLocation'
 import { sealNodeMeta } from '../../../core/node/nodeMeta'
 import { setMapsConsent } from '../../../shared/state/useMapConfig'
-import { setGeocoderUrl } from '../../../test/services'
+import { setGeocoderUrl, setTileUrl } from '../../../test/services'
+import MemoryMap from './MemoryMap.vue'
 import { reverseGeocode } from '../geocode'
 import { epochMsToIsoDate } from '../../../shared/isoDate'
 import { blobApi, contentApi } from '../../../api/client'
@@ -674,6 +675,84 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     await flushPromises()
     expect(wrapper.find('.loc-editor').exists()).toBe(false) // no editor
     expect(wrapper.find('.dlg').text()).toContain(t('memory.place.consentBody')) // the consent dialog body
+  })
+})
+
+// inbox #458 (ADR 0088 § The register): with `memories.map` and `memories.places` off a place still works, named by
+// hand. The real editor is mounted, so the whole path is under test: the chip opens it without a consent dialog (there
+// is no map to consent to), it draws no map, and nothing is fetched from a service the instance switched off.
+describe('MemoryDetail (a place on a server without a map, #458)', () => {
+  const TILE_HOST = 'tiles.switched-off.example'
+  const GEOCODER_HOST = 'geocoder.switched-off.example'
+  const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dlg"><slot /></div>' }
+  let requested: string[]
+  function servicesOff(): ReturnType<typeof galleryFakeStore> {
+    setTileUrl('')
+    setGeocoderUrl('')
+    setMapsConsent(true) // a consent given earlier must not bring a switched-off service back
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    requested = []
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input)
+      requested.push(url)
+      return store.fetchStub(url, init)
+    })
+    return store
+  }
+  function mountReal(memoryKey: Uint8Array, wrappedMeta: string | null = null) {
+    return mount(MemoryDetail, {
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
+      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { Dialog: DialogStub } },
+    })
+  }
+  async function nameAndSave(wrapper: ReturnType<typeof mountReal>, name: string) {
+    await wrapper.find('.memory-location-chip').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.memory-location-editor').exists()).toBe(true) // the editor, not the consent dialog
+    expect(wrapper.text()).not.toContain(t('memory.place.consentBody'))
+    expect(wrapper.findComponent(MemoryMap).exists()).toBe(false)
+    await wrapper.find('.memory-location-editor input').setValue(name)
+    await wrapper.find('.memory-location-editor form, form.memory-location-editor').trigger('submit')
+    await flushPromises()
+  }
+  const offHosts = () => requested.filter((u) => u.includes(TILE_HOST) || u.includes(GEOCODER_HOST) || /openstreetmap|nominatim/.test(u))
+
+  it('sets a place from the photos’ GPS with a typed name', async () => {
+    servicesOff()
+    const memoryKey = v1.randomBytes(32)
+    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
+    const wrapper = mountReal(memoryKey)
+    await flushPromises()
+    await flushPromises()
+
+    await nameAndSave(wrapper, 'Paris trip')
+
+    expect(lastPatchedLocation(memoryKey)).toEqual({
+      name: 'Paris trip', nameSource: 'manual', derivedMode: 'auto', derived: { lat: 48.85, lng: 2.35 }, nameAnchor: undefined,
+    })
+    expect(reverseGeocode).not.toHaveBeenCalled()
+    expect(offHosts()).toEqual([])
+  })
+
+  it('sets a place that is a name only where no photo carries GPS, and the header shows it', async () => {
+    servicesOff()
+    const memoryKey = v1.randomBytes(32)
+    const wrapper = mountReal(memoryKey)
+    await flushPromises()
+
+    await nameAndSave(wrapper, 'At grandma’s')
+
+    const saved = lastPatchedLocation(memoryKey)
+    expect(saved).toEqual({ name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto', derived: undefined, nameAnchor: undefined })
+    const wrappedMeta = updateNode.mock.calls.at(-1)![0].updateNodeRequest.wrappedMeta as string
+    const reopened = mountReal(memoryKey, wrappedMeta)
+    await flushPromises()
+    expect(reopened.find('.memory-location-chip').text()).toContain('At grandma’s')
+    expect(reverseGeocode).not.toHaveBeenCalled()
+    expect(offHosts()).toEqual([])
   })
 })
 

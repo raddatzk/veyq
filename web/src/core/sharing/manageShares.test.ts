@@ -136,7 +136,7 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
     const row: ShareSummary = {
       shareId: minted.shareId, nodeId: NODE_ID, scopeId: SCOPE_ID, role: ShareRole.Read, sealedName: req.sealedName,
       sealedShareKey: req.sealedShareKey, sealedShareKeyEpoch: req.sealedShareKeyEpoch, enabled: true, mine,
-      reissueRequired: false, deletable: mine, newGuestsRefused: false, writeVerifierMissing: false,
+      reissueRequired: false, deletable: mine, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
       createdAt: new Date(Date.UTC(2026, 9, 1) - 1000 * age++),
     }
     return { row, kShare: minted.kShare }

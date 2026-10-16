@@ -42,6 +42,7 @@ const share = (over: Record<string, unknown>) => ({
   deletable: true,
   newGuestsRefused: false,
   writeVerifierMissing: false,
+  guestStops: [],
   ...over,
 })
 
@@ -288,5 +289,43 @@ describe('ShareDialog — delete a link (ADR 0029 §7, W1)', () => {
 
     expect(w.findAll('.share-list-item')).toHaveLength(1) // the row is there, so the absence below is real
     expect(button(w, t('share.delete')).exists()).toBe(false)
+  })
+})
+
+// inbox #457: a link the server says serves no guest says why on its row, and a fixable requirement opens the edit or
+// the renew this dialog already has.
+describe('ShareDialog — a link that serves no guest says why (#457)', () => {
+  it('names the reasons on a live row and its "Add a password" opens the edit of that link', async () => {
+    listSharesFor.mockResolvedValue([
+      share({ shareId: 'stopped', guestStops: [{ reason: 'tenantSwitch', capabilityId: 'core.public-shares' }, { reason: 'linkPassword' }] }),
+      share({ shareId: 'served' }),
+    ])
+    const w = mountList()
+    await flushPromises()
+
+    const rows = w.findAll('.share-list-item')
+    expect(rows[0]!.find('.share-guest-stops-badge').text()).toBe(t('share.guestStops.badge'))
+    expect(rows[0]!.findAll('.share-guest-stop').map((s) => s.text())).toEqual([
+      t('share.guestStops.tenantSwitch', { what: t('share.guestStops.entry.publicShares') }),
+      t('share.guestStops.linkPassword'),
+    ])
+    expect(rows[1]!.find('.share-guest-stops').exists()).toBe(false) // control: a served link says nothing
+
+    await rows[0]!.find('.share-guest-stops-edit').trigger('click')
+    expect(w.findComponent({ name: 'ShareCreateDialog' }).props('editShare')).toMatchObject({ shareId: 'stopped' })
+  })
+
+  it('a link older than the lifetime offers the renew, and a co-member\'s link no edit', async () => {
+    const old = new Date(Date.now() - 40 * 24 * 3600 * 1000)
+    listSharesFor.mockResolvedValue([
+      share({ shareId: 'old', createdAt: old, guestStops: [{ reason: 'linkMaxDays', maxDays: 30 }] }),
+      share({ shareId: 'theirs', mine: false, guestStops: [{ reason: 'linkPassword' }] }),
+    ])
+    const w = mountList()
+    await flushPromises()
+    const rows = w.findAll('.share-list-item')
+    expect(rows[1]!.find('.share-guest-stops-fix').exists()).toBe(false)
+    await rows[0]!.find('.share-guest-stops-renew').trigger('click')
+    expect(w.findComponent({ name: 'ShareCreateDialog' }).props('reissueFrom')).toMatchObject({ shareId: 'old' })
   })
 })

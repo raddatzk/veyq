@@ -31,6 +31,7 @@ import { recoverShareLink } from './shareLink'
 import { ShareRole } from '../../api/generated/sharing'
 import { confirmRequest, settleConfirm } from '../../shared/state/useConfirm'
 import { realI18n, t } from '../../test/i18n'
+import { setTenantCapabilities } from '../../shared/state/useCapabilities'
 
 const updateShare = vi.mocked(manage.updateShare)
 const listSharesFor = vi.mocked(manage.listSharesFor)
@@ -44,7 +45,7 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
   shareId: 's-own', scopeId: SCOPE_ID, nodeId: FOLDER_ID, role: ShareRole.Read, enabled: true, mine: true,
   createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null, sealedNote: null, sealedShareName: 'sealed',
   sealedShareKey: 'k', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
-  reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false,
+  reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
   ...over,
 })
 
@@ -269,5 +270,42 @@ describe("FolderShareDialog — the note's acceptance switch", () => {
     click(byText(w, t('share.create'))!.element)
     await flushPromises()
     expect(vi.mocked(manage.mintShare).mock.calls[0][7]).toEqual({ texts: { en: 'Read me first' }, mustAccept: true })
+  })
+})
+
+// inbox #457 (owner, 2026-10-16): a link a password requirement stopped is given one from its row and stays the SAME
+// link: the row's fix opens this dialog's edit with the password locked on, and the save sets it with updateShare on
+// that link — never a new one.
+describe('FolderShareDialog — a stopped link gets its password back on the same link (#457)', () => {
+  it('"Add a password" opens the edit, which waits for a password and then sets it on that link', async () => {
+    setTenantCapabilities([{ id: 'core.public-shares', linkPassword: true }])
+    try {
+      listSharesFor.mockResolvedValue([row({ shareId: 's-stopped', createdAt: new Date(), guestStops: [{ reason: 'linkPassword' }] })])
+      const w = mountDialog()
+      await flushPromises()
+      const fix = w.find('.share-guest-stops-edit')
+      expect(fix.text()).toBe(t('share.guestStops.linkPasswordFix'))
+      click(fix.element)
+      await flushPromises()
+      expect(w.find('.header').text()).toBe(t('share.editTitle'))
+      const pw = toggle(w, t('share.passwordSection')).element as HTMLInputElement
+      expect(pw.checked, 'the password is on').toBe(true)
+      expect(pw.disabled, 'and cannot be switched off').toBe(true)
+      expect(byText(w, t('common.save'))!.attributes('disabled'), 'no save without a password').toBeDefined()
+
+      await w.find('#folder-share-password').setValue('a long new password')
+      click(byText(w, t('common.save'))!.element)
+      await flushPromises()
+      expect(updateShare).toHaveBeenCalledTimes(1)
+      const [address, , copy, , , , , passwordChange] = updateShare.mock.calls[0]
+      expect(address.shareId, 'the same link').toBe('s-stopped')
+      expect(copy).toMatchObject({ shareId: 's-stopped' })
+      expect(passwordChange).toEqual({ set: 'a long new password' })
+      expect(manage.mintShare).not.toHaveBeenCalled()
+      expect(manage.remintShare).not.toHaveBeenCalled()
+      w.unmount()
+    } finally {
+      setTenantCapabilities(null)
+    }
   })
 })

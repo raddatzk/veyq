@@ -6,6 +6,11 @@
 // "wieder folgen" back to `auto`. The **name** comes from the reverse-geocoded **address hierarchy** (ADR 0016) —
 // you pick the granularity (Straße…Land) or type your own; position and name are separate levers. A quiet
 // "Ort entfernen" clears it. Crypto/consent live in the parent; this is presentation + the geocode call.
+//
+// **Without the map** (`memories.map` off, or its consent not given — inbox #458, ADR 0088 § The register) the
+// editor is a name field only: no map, no pin, no geocoder. The position is the medoid of the photos' GPS (`auto`), a
+// pin set earlier on a map (kept as it is), or absent — a place that is a name only, which the map views skip. The
+// name is always typed here, even where the geocoder is on: the one consent it rides on is asked only with the map.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -25,18 +30,23 @@ const props = defineProps<{
 const emit = defineEmits<{ save: [MemoryLocation | null]; close: [] }>()
 
 const { t, locale } = useI18n()
-const { tileUrl, tileAttribution, tileMaxZoom, geocoderUrl, geocodingAvailable } = useMapConfig()
+const { tileUrl, tileAttribution, tileMaxZoom, geocoderUrl, geocodingAvailable, mapsAvailable } = useMapConfig()
 const mapRef = ref<{ fitPoints: (p: LatLng[]) => void; setView: (c: LatLng, z: number) => void } | null>(null)
 
 const DEFAULT_ZOOM = 13
 const WORLD: LatLng = { lat: 20, lng: 0 }
 
 const hasMedoid = computed(() => Boolean(props.medoid))
-// A Memory with photo GPS defaults to `auto` (follows photos); one without can only place a `fixed` point.
-const derivedMode = ref<'auto' | 'fixed'>(props.location?.derivedMode ?? (hasMedoid.value ? 'auto' : 'fixed'))
+// The map is drawn only where the server serves one and the user consented (the parent opens no editor otherwise,
+// except on a server without the map): no tile and no geocoder request leaves the device without both.
+const withMap = computed(() => mapsAvailable.value)
+const canGeocode = computed(() => withMap.value && geocodingAvailable.value)
+// A Memory with photo GPS defaults to `auto` (follows photos); one without can only place a `fixed` point on the
+// map — or, without a map, has no position yet and stays `auto`, so the first geotagged photo gives it one.
+const derivedMode = ref<'auto' | 'fixed'>(props.location?.derivedMode ?? (hasMedoid.value || !withMap.value ? 'auto' : 'fixed'))
 const derived = ref<LatLng | null>(props.location?.derived ?? (derivedMode.value === 'auto' ? props.medoid : null))
 const name = ref(props.location?.name ?? '')
-const nameSource = ref<'geocoded' | 'manual'>(props.location?.nameSource ?? (geocodingAvailable.value ? 'geocoded' : 'manual'))
+const nameSource = ref<'geocoded' | 'manual'>(props.location?.nameSource ?? (canGeocode.value ? 'geocoded' : 'manual'))
 const levels = ref<GeoLevel[]>([])
 const chosenLevel = ref<GeoLevel['key'] | null>(props.location?.nameAnchor?.level ?? null)
 
@@ -44,15 +54,20 @@ const initialCenter = computed<LatLng>(() => derived.value ?? props.medoid ?? WO
 const initialZoom = computed(() => (derived.value || props.medoid ? DEFAULT_ZOOM : 2))
 const levelOptions = computed(() => levels.value.map((l) => ({ label: l.name, value: l.key })))
 // The point a geocoded name resolves at (the current place): the medoid in `auto`, the framed centre in `fixed`.
-const anchorPoint = computed<LatLng | null>(() => (derivedMode.value === 'auto' ? props.medoid : derived.value))
-const canSave = computed(() => Boolean(name.value.trim()) && Boolean(anchorPoint.value))
+// Without the map an `auto` place keeps its stored position until the photos' medoid is known (the media may still
+// be loading), so a rename never drops a position by accident.
+const anchorPoint = computed<LatLng | null>(() =>
+  derivedMode.value === 'fixed' ? derived.value : withMap.value ? props.medoid : (props.medoid ?? derived.value),
+)
+// With the map a place needs its point; without it a name is enough (a place that is a name only, uc.memory.place E3).
+const canSave = computed(() => Boolean(name.value.trim()) && (!withMap.value || Boolean(anchorPoint.value)))
 
 let geocodeTimer: ReturnType<typeof setTimeout> | null = null
 
 /** Reverse-geocode a point into the level hierarchy and (unless the name is typed) fill the name at the chosen
  *  or default level — the picker's options come from here too. */
 async function resolveLevels(lat: number, lng: number) {
-  if (!geocodingAvailable.value) return
+  if (!canGeocode.value) return
   const result = await reverseGeocode(geocoderUrl.value, lat, lng, locale.value)
   if (!result) return
   levels.value = result
@@ -117,12 +132,16 @@ function toggleNameMode() {
 function save() {
   if (!canSave.value) return
   const p = anchorPoint.value
+  // Without the map nothing is resolved here: an untouched geocoded name keeps the anchor it was resolved at.
+  const anchor = !withMap.value
+    ? (nameSource.value === 'geocoded' ? props.location?.nameAnchor : undefined)
+    : nameSource.value === 'geocoded' && chosenLevel.value && p ? { lat: p.lat, lng: p.lng, level: chosenLevel.value } : undefined
   emit('save', {
     name: name.value.trim(),
     nameSource: nameSource.value,
     derived: p ?? undefined,
     derivedMode: derivedMode.value,
-    nameAnchor: nameSource.value === 'geocoded' && chosenLevel.value && p ? { lat: p.lat, lng: p.lng, level: chosenLevel.value } : undefined,
+    nameAnchor: anchor,
   })
   emit('close')
 }
@@ -132,6 +151,7 @@ function remove() {
 }
 
 onMounted(() => {
+  if (!withMap.value) return // no map: no framing, no name to resolve
   if (derivedMode.value === 'auto' && props.medoid) {
     if (props.points && props.points.length > 1) mapRef.value?.fitPoints(props.points) // frame the whole spread
     void resolveLevels(props.medoid.lat, props.medoid.lng)
@@ -147,7 +167,7 @@ onBeforeUnmount(() => {
 <template>
   <Dialog :visible="true" :header="t('memory.place.title')" modal @update:visible="emit('close')">
     <form class="veyq-form memory-location-editor" @submit.prevent="save">
-      <div class="memory-location-mapwrap">
+      <div v-if="withMap" class="memory-location-mapwrap">
         <MemoryMap
           ref="mapRef"
           :tile-url="tileUrl"
@@ -170,6 +190,18 @@ onBeforeUnmount(() => {
           </template>
         </div>
       </div>
+
+      <p v-else class="memory-location-position">
+        <template v-if="anchorPoint && derivedMode === 'auto'">
+          <span class="pi pi-images" aria-hidden="true" /> {{ t('memory.place.followsPhotos') }}
+        </template>
+        <template v-else-if="anchorPoint">
+          <span class="pi pi-map-marker" aria-hidden="true" /> {{ t('memory.place.customPlace') }}
+        </template>
+        <template v-else>
+          <span class="pi pi-tag" aria-hidden="true" /> {{ t('memory.place.nameOnly') }}
+        </template>
+      </p>
 
       <div class="memory-location-name">
         <Select
@@ -240,6 +272,14 @@ onBeforeUnmount(() => {
   font-size: 0.82rem;
   padding: 0;
   text-decoration: underline;
+}
+.memory-location-position {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 0.86rem;
 }
 .memory-location-name {
   display: flex;

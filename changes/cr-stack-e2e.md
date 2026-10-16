@@ -1,7 +1,7 @@
 ---
 id: cr-stack-e2e
 title: Lane L1 — the candidate booted from its own recipe and driven in a real browser, gating the snapshot
-status: planned
+status: in-progress
 satisfies: ["uc.admin.setup-server", "uc.admin.configure-object-store", "uc.admin.switch-capabilities", "cc.security.wire-assertion"]
 adrs: ["0090", "0091", "0057", "0053", "0040", "0071", "0065"]
 invariants:
@@ -20,7 +20,7 @@ bytes it is published on.
 [ADR 0090](../docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md) holds every decision, its
 rejected alternatives and the four refine answers; this CR orders the work. Inbox #448; phase 5 automates the browser pass inbox #447 ran by hand on 2026-10-15.
 
-**Entry condition met:** ADR 0090 was accepted on 2026-10-16. Implementation still waits for the owner's go on this CR.
+**Entry condition met:** ADR 0090 was accepted on 2026-10-16. The owner gave the go for phase 1 only on 2026-10-16; each later phase waits for its own go.
 
 ## Context & constraints
 
@@ -43,10 +43,13 @@ rejected alternatives and the four refine answers; this CR orders the work. Inbo
 - Guards that anchor on what this CR touches — `changes/README.md` § *before reshaping a symbol, grep `scripts/`*:
   `validate_release_identity.py` (registry writes only on a dispatch: an unpinned `push:` on a build step is read as a
   push — measured on the draft, fixed with `push: false`), `validate_image_pins.py` (Pebble's digest; it scans only
-  **tracked** files, so the draft's `@sha256:TODO` is green until committed), `validate_npm_installs_gated.py` (the
+  **tracked** files — Pebble is pinned since phase 1 — and it reads every module-level `<NAME>IMAGE = "…"` Python
+  constant as an image, so a path constant in an orchestrator is not named `…IMAGE`), `validate_npm_installs_gated.py` (the
   new workspace member installs through `npm_ci_no_deprecated.py`), `validate_action_pins.py`,
-  `validate_compose_posture.py` (production file only; the overlay keeps the posture by hand — phase 1 decides whether
-  the guard reads it too), `validate_coverage.py` (`SURFACES`, `FILE_ROOTS`, `ADMITTED`).
+  `validate_compose_posture.py` (production file only, **decided in phase 1**: the overlay never runs on an operator's
+  host, so it keeps the posture by hand and says so in its header; the property worth a guard there is a different
+  one — that the overlay changes no operator service beyond the ACME trust — and is not built), `validate_coverage.py`
+  (`SURFACES`, `FILE_ROOTS`, `ADMITTED`).
 - *Machine hints, for the CR's planned shape:* a local run needs host ports 80 and 443 free (the recipe publishes
   Traefik there); its admin port is 18081, never the developer's 8081; its compose project is `veyq-e2e-<stamp>`, so
   it cannot recreate a dev or production container. Re-derive these against what is built.
@@ -67,12 +70,41 @@ rejected alternatives and the four refine answers; this CR orders the work. Inbo
 Done when, per phase: the phase's local run is green and its log read; the guards in § Context green; the
 trust-chain green. Each phase names its bites — the case that must make the new check fail.
 
-- [ ] 1 **A bare boot.** `run_stack_e2e.py` extracts the recipe from a locally built image, writes the `.env` from
+- [x] 1 **A bare boot.** `run_stack_e2e.py` extracts the recipe from a locally built image, writes the `.env` from
       the image's template, lays the Pebble overlay over it (Pebble pinned by digest), brings it up with
-      `--wait`, installs Pebble's root into an NSS db, asserts the certificate served on `https://veyq.test` chains to
-      it, writes `compose.log`, tears down with `down -v`. No browser yet. Bites: `/acme` mounted read-only (Traefik's
+      `--wait`, asserts the certificate served on `https://veyq.test` chains to Pebble's root (Python `ssl`, that root
+      the only CA), writes `compose.log`, tears down with `down -v`. No browser yet. Bites: `/acme` mounted read-only (Traefik's
       silent failure) → red at the certificate assertion; a variable added to `.env.example` and not filled → red at
       `up` naming it; the run's project never touches a container of another project (`docker ps` before and after).
+      **Done 2026-10-16**, against `veyq:e2e-local` and `veyq-admin:e2e-local` built from this tree (app 5:28 min,
+      admin 0:30 min, a warm cache). Green, log read (all seven services; Pebble issued for `veyq.test`; Traefik logged
+      no error; the app started in 3.7 s and provisioned the store): **21–28 s end to end** over three green runs —
+      preflight 0.2–0.8, extract 0.4–0.8, env 0.0, **up to `--wait` 18–22**, certificate 0.2–1.4, evidence 0.2–1.2,
+      teardown 1.7–2.4, host 0.2 s. Every stage is timed in the summary. Bites, each red once:
+      (1) an app image whose recipe mounts `veyq-acme:/acme:ro` (built `FROM` the candidate with only the recipe
+      replaced, so the defect ships in the image as it would) → `up` green, **red at certificate** after 120 s, `:443
+      serves CN=TRAEFIK DEFAULT CERT`, Traefik's log `open /acme/acme.json: read-only file system`; (2) the same with
+      `VEYQ_BITE_SECRET=` in `.env.example` and `${VEYQ_BITE_SECRET:?…}` in the recipe → **red at up**, `required
+      variable VEYQ_BITE_SECRET has no value`; (3) a decoy project `veyq-e2e-decoy` running, the run's project name
+      forced onto it (snapshot-and-restore of the script) → **red at host**, `container veyq-e2e-decoy-mariadb-1
+      (project veyq-e2e-decoy) is gone`. The host check is permanent, not a one-shot: every run compares every
+      container's state and start time and every volume before and after, and asserts nothing of its project is left.
+      What it changed against the plan:
+      - **The NSS db moves to phase 2**, where the browser that reads it is; phase 1 asserts with Python `ssl` alone.
+        Phase 2 has a question to answer there: `certutil` (libnss3-tools) is not on macOS, and Chromium on macOS does
+        not read an NSS db, so a local run on a Mac needs another way to trust the root than CI's Linux one.
+      - **Teardown and evidence address the project by name** (`docker compose -p <project> down -v`, from its
+        labels), never through the files: bite 2's first run showed `down` refuses the same `${VAR:?…}` `up` did, so
+        a recipe `up` half-applied would have been left running. The host stage proves the name-only `down` leaves
+        nothing.
+      - **The extracted recipe is not self-sufficient**: the image carries `docker-compose.prod.yml` and
+        `.env.example` but the recipe mounts `./garage.toml`, which still comes from the checkout — the limit
+        `run/new-instance.mdx` states for every operator. The run copies it in and says so on every run; closing it
+        (the file into the image) is not this CR's.
+      - Pebble is **2.10.1** (the draft named 2.8.0; 2.10.1 is current), run non-root (`65532`), read-only, no
+        capabilities — measured — with its management port on an ephemeral loopback port.
+      - `PEBBLE_VA_ALWAYS_VALID` means Traefik's HTTP-01 router on :80 is not exercised; the overlay and the
+        orchestrator's limits say so.
 - [ ] 2 **First run in a browser.** `e2e/` joins the npm workspace (its own `npm run check`), Playwright pinned;
       `first-run.setup.ts` through to a created tenant and its invite link; `confineToInstance` on every context;
       the Secret Key read back from the kit. Bites: a renamed admin-web label → red naming the locator; a page

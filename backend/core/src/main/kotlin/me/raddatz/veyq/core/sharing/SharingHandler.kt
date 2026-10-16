@@ -214,9 +214,11 @@ sealed interface ReissueShareOutcome {
 
 /** A share as the manage list serves it: the row plus [ReissuePolicy]'s answer for it (ADR 0075 point 4), whether
  *  the caller may delete it — the gate's own answer (ADR 0029 §7) — and whether naming a new guest on it is refused
- *  for want of a write verifier (ADR 0076 point 5). */
+ *  for want of a write verifier (ADR 0076 point 5), and why a guest is not served it. */
 data class ListedShare(
     val share: ShareEntity, val reissueRequired: Boolean, val deletable: Boolean, val newGuestsRefused: Boolean,
+    /** Why a guest is not served it now — the guest gate's own answer ([ShareGuestGate.guestStops], inbox #457). */
+    val guestStops: List<GuestStop>,
 )
 
 /** The shares on one node (cr-0104) — `[]` for a non-member or an unknown node, a refusal only for a member. */
@@ -499,6 +501,7 @@ class SharingHandler(
         return rows.map { s ->
             ListedShare(
                 s, scopesById[s.scopeId]?.let { reissueRequired(s, it) } ?: true, deletable(userId, s), refusesNewGuests(s),
+                gate.guestStops(s),
             )
         }
     }

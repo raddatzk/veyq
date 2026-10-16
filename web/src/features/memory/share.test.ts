@@ -403,11 +403,11 @@ describe('createContributorIdentity (cr-0101)', () => {
 })
 
 describe('shared-scope management (cr-0104)', () => {
-  it('listSharesFor scopes by nodeId server-side and threads each row’s `mine`, `reissueRequired`, `deletable`, `newGuestsRefused` and `writeVerifierMissing` flags', async () => {
+  it('listSharesFor scopes by nodeId server-side and threads each row’s `mine`, `reissueRequired`, `deletable`, `newGuestsRefused` and `writeVerifierMissing` flags and its `guestStops`', async () => {
     const { listShares: list } = stubApi(sharesApi, {
       listShares: [
-        { shareId: 's1', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'READ', sealedName: 'x', enabled: true, mine: true, reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, createdAt: new Date('2026-07-07T12:00:00Z'), expiresAt: null },
-        { shareId: 's2', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'READ', sealedName: 'x', enabled: false, mine: false, reissueRequired: true, deletable: false, newGuestsRefused: true, writeVerifierMissing: true, createdAt: new Date('2026-07-06T12:00:00Z'), expiresAt: null },
+        { shareId: 's1', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'READ', sealedName: 'x', enabled: true, mine: true, reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [], createdAt: new Date('2026-07-07T12:00:00Z'), expiresAt: null },
+        { shareId: 's2', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'READ', sealedName: 'x', enabled: false, mine: false, reissueRequired: true, deletable: false, newGuestsRefused: true, writeVerifierMissing: true, guestStops: [{ reason: 'revoked' }, { reason: 'tenantSwitch', capabilityId: 'core.public-shares' }], createdAt: new Date('2026-07-06T12:00:00Z'), expiresAt: null },
       ],
     })
 
@@ -420,6 +420,8 @@ describe('shared-scope management (cr-0104)', () => {
       ['s2', false, false, true, false, true, true], // the server's verdicts (ADR 0075, ADR 0029 §7, ADR 0076), carried as they came
     ])
     expect(rows.every((r) => r.scopeId === SCOPE_ID)).toBe(true) // the recovery copy binds it — carried per row
+    // inbox #457: the guest gate's stops, carried as they came
+    expect(rows.map((r) => r.guestStops)).toEqual([[], [{ reason: 'revoked' }, { reason: 'tenantSwitch', capabilityId: 'core.public-shares' }]])
   })
 
   it('reactivateShare adopts a disabled share via the member-gated endpoint', async () => {
