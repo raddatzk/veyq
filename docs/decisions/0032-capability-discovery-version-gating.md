@@ -99,9 +99,10 @@ disabled capability is then:
 
 Both are required: the manifest alone is only UX; the endpoint gate alone gives a broken-looking UI. Together
 they are honest and safe. A device switch also acts on what exists: the key material withholds the switched-off wraps
-without deleting them (ADR 0088 decision 5). A tenant owner is to switch a `+` entry off for their tenant the same way,
-from the tenant settings in `web/`, with the same gate answering `422` (ADR 0088 decisions 2, 5 and 12); that level is
-not built (inbox #439).
+without deleting them (ADR 0088 decision 5). A tenant owner switches a `+` entry off for their tenant the same way,
+from the tenant settings in `web/`, with the same gate answering `422` for that tenant's content (ADR 0088 decisions 2,
+5 and 12): the entry leaves the tenant's set every member reads after sign-in, and the pre-auth manifest stays the
+instance level.
 
 ### 5. The built entries
 

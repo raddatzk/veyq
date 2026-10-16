@@ -23,6 +23,12 @@
 3. The client keeps the `capabilities` set and exposes `hasCapability(id)`.
 4. Each feature that is **optional per instance** gates its entry points on its capability: present → offered,
    absent → **hidden** (A3), never invoked.
+5. After sign-in, on every entry into a space, the client reads the **tenant's effective set**
+   (`GET /api/tenants/{tenantId}/capabilities`, every member): the instance level ANDed with what the tenant owner
+   switched off ([uc.admin.tenant-switch-capabilities](../../admin/use-cases/uc.admin.tenant-switch-capabilities.md),
+   [ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 3).
+   From then on `hasCapability` reads that set, a subset of the pre-auth one; when it cannot be read, the pre-auth set
+   stands, and the server's gates refuse per tenant either way. Signing out forgets it.
 
 ## Alternate / exception flows
 
@@ -36,12 +42,14 @@
 
 ## Quality notes
 
-- **A capability is not a permission.** It is instance-wide and pre-auth; it says what this *server* offers, not
+- **A capability is not a permission.** It is instance-wide before sign-in and per tenant after it; it says what this
+  *server* and this *tenant* offer, not
   what *you* may do. A feature is offered only when **(capability present) AND (policy permits here)** — e.g.
   `core.public-shares` present **and** the node is one the caller may share. Conflating the two
   is the modelling error this use-case exists to prevent ([ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) §6).
 - **Operator-blind-safe.** The response is identical for every caller and carries no per-user state, so a
-  pre-auth manifest leaks nothing — that is what lets it sit outside the auth boundary.
+  pre-auth manifest leaks nothing — that is what lets it sit outside the auth boundary. The tenant's set is the same
+  for every member of the tenant, and only members read it.
 - **The catalog is a coarser projection over use-cases, not a 1:1 rename.** Each entry in
   `contracts/platform/capabilities.json` declares a `serves: [uc.…]` back-ref (catalog-only, never on the wire);
   `scripts/validate_capabilities.py` enforces that every `serves` resolves to a real use-case, so the catalog
@@ -50,8 +58,9 @@
 - **Seeded with seven operator-policy capabilities**, all under `core` and arranged as a tree (ADR 0088), sharing being
   the worked end-to-end proof; each is advertised, soft-gated by `hasCapability` and refused with `422` at its
   create/enable path. The authoritative list is the catalog file, not this page. The Server Owner turns one off for
-  the instance in admin-web or its CLI ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md));
-  no tenant level is built.
+  the instance in admin-web or its CLI ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md)),
+  and a tenant owner turns a `tenant`-level one off for their tenant in the web client's tenant settings
+  ([uc.admin.tenant-switch-capabilities](../../admin/use-cases/uc.admin.tenant-switch-capabilities.md)).
 
 ## User impact
 

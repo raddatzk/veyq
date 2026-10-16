@@ -5,6 +5,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.switch-capabilities.md
   - docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md
   - docs/decisions/0032-capability-discovery-version-gating.md
+  - docs/features/admin/use-cases/uc.admin.tenant-switch-capabilities.md
   - contracts/platform/capabilities.json
 ---
 
@@ -17,7 +18,8 @@ export const entries = Object.entries(catalog.capabilities).map(([id, entry]) =>
 }));
 
 A capability is a switch over what this instance offers at all: public links, groups, devices that unlock without the
-Secret Key. You decide it once, for every tenant and every member
+Secret Key. You decide it for every tenant and every member, and a tenant owner can switch some of them off further for
+their own tenant
 ([ADR 0088](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)).
 
 ## What a capability is
@@ -33,9 +35,14 @@ path, and no client works it out itself. Switching a parent off therefore switch
 its own switch while that happens: a child you switched off yourself stays off when its parent comes back on, and a
 child you left on comes back with it.
 
-**There are two levels.** You switch for the whole instance; that is built. A tenant owner is meant to switch for
-their own tenant as well, in the tenant settings of the web client, and can then only narrow what you allow, never
-widen it. That level is designed and not built (inbox #439).
+**There are two levels.** You switch for the whole instance. A tenant owner switches for their own tenant as well, in
+the tenant settings of the web client (**Settings → Capabilities**), and can only narrow what you allow, never widen it:
+an entry is on in a tenant only when it is on for you and for them, along the whole path. Which entries a tenant owner
+may switch is the catalog's `levels`, marked below and in the console. Entries the web client offers on the sign-in
+screen (remembered devices, unlocking without a password, adding a device from another one) are yours alone, because
+the sign-in screen reads your list before any tenant is known. The list before sign-in (`GET /api/setup`) is your level;
+after sign-in each member's client reads their tenant's (`GET /api/tenants/{tenantId}/capabilities`), and the gates
+refuse per tenant.
 
 **Switching off never deletes stored data.** What a switch does to what already exists is
 [below](#what-acts-at-once-and-what-only-on-new-data).
@@ -90,6 +97,7 @@ so it says what the console and the CLI say. Children are indented under their p
             <strong>{e.title.en}</strong>
             <br />
             <code>{e.id}</code>
+            {e.levels.includes('tenant') && <><br /><em>tenant owners too</em></>}
           </div>
         </td>
         <td>
@@ -163,8 +171,6 @@ browser blocks it. Its address would become your configuration instead of a buil
 
 **Beyond the entries.**
 
-- **The tenant level** (inbox #439): a tenant owner switches within what you allow, and a member's client receives
-  the effective set for their tenant after sign-in.
 - **Requirements**, values on an entry where the strictest wins: a link needs a password, a link expires within N
   days, joining a group needs the member's consent, a remembered device asks for the password again after N days.
 - **Configuration as code** (inbox #444): declaring switches in the compose file or the Helm values instead of

@@ -1,7 +1,7 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
-- Status: Accepted 2026-10-15; the instance level is built, share switches reaching existing links included (inbox
-  #442), the tenant level is not (§ Consequences; inbox #439). It replaces
+- Status: Accepted 2026-10-15; the instance level and the tenant level are built, share switches reaching existing
+  links included (inbox #442, #439 step 2); requirements and external services are not (§ Consequences; inbox #439). It replaces
   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
   [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match.
 - Date: 2026-10-15
@@ -78,6 +78,12 @@ instance and tenant layers.
 12. **Where each level switches** (owner, 2026-10-15).
     - **A tenant owner** switches in the tenant settings in `web/`, beside terms and mail. The tenant owner is an
       ordinary member, and ADR 0065 keeps what a member can reach out of `admin-web`.
+    - **An entry a client offers before sign-in is the Server Owner's alone** (`*`, never `+`): `remember-device`,
+      `passwordless` and `device-linking`. The sign-in screen offers "stay signed in" and "sign in with code" from the
+      pre-auth manifest, which carries the instance level only (decision 3), so a tenant's switch there would be a
+      button that fails after the click. The key material is the account's, not a tenant's, and the pairing channel
+      carries no tenant either. A tenant that wants these off asks the Server Owner (cr-tenant-capability-switches,
+      2026-10-16).
     - **The Server Owner** switches in `admin-web` and its CLI, through the Admin API. The state lives in the
       database and takes effect without a restart. It is not a configuration property: the
       `veyq.capabilities.disabled` list retires, and with it any question of what an unknown id in it means.
@@ -93,9 +99,9 @@ instance and tenant layers.
 
 ```
 core/
-  *+  remember-device              → DEVICE wrap (password only; the device key stands in for the Secret Key)
-    *+  passwordless               → DEVICE_KEY wrap (no password)
-  *+  device-linking               → /api/pairing/*   (built; independent of remember-device, decision 11)
+  *   remember-device              → DEVICE wrap (password only; the device key stands in for the Secret Key)
+    *   passwordless               → DEVICE_KEY wrap (no password)
+  *   device-linking               → /api/pairing/*   (built; independent of remember-device, decision 11)
   *+  group-space                  → group scope creation
   *+  personal-space               → scope kind PERSONAL; "off" = no new content, the scope stays (keys, favorites)
   *+  member-invites               → /member-invites
@@ -176,7 +182,18 @@ both off a place still works, named by hand. The user's own consent to the two
   The one predicate every guest path already passed is where it sits, so no application handles it. Nothing is
   written onto the link, so switching back on serves it again. Presigned URLs already handed out run to their TTL, as
   after a revoke. Changing a READ link into a READ_WRITE one (`updateShare`) is refused like creating one.
-- **Not built:** the tenant level and the post-auth tenant set (#439); requirements (decision 8); configuration as
+- **The tenant level is built** (decisions 2, 3 and 12, measured: `TenantCapabilitySwitchHandler`,
+  `StoredTenantCapabilitySwitches`, `web/src/features/tenant/TenantCapabilitiesPanel.vue`). The catalog's `levels` names
+  who may switch an entry (`instance`, and `tenant` for `core.public-shares` with its two children and
+  `core.group-space`), generated into `CapabilityIds.TENANT_SWITCHABLE`. A tenant owner switches in the web client's
+  tenant settings (`GET /api/tenants/{tenantId}/capability-switches`, `PUT …/{capabilityId}`), one row per entry in
+  `veyq_tenant_capability_switch`, read through a per-tenant cache that a write invalidates after commit. Every member
+  reads the effective set after sign-in (`GET /api/tenants/{tenantId}/capabilities`), and the web client soft-gates on
+  it from its first scope entry on. `CapabilityRegistry.isActive(id, tenantId)` takes the tenant at every gate: the
+  share gates and the guest gate ask the share's scope's tenant, group creation the request's, node creation the
+  scope's; the key material and pairing ask none (the instance-only entries above). The Server Owner's console marks
+  the entries a tenant may narrow further (`tenantSwitchable`).
+- **Not built:** requirements (decision 8); external services as entries (decision 7); configuration as
   code (#444); a member's share list saying that a link serves no guest while its switch is off (the list shows it as
   on, and the share dialogs only hide what the switch refuses). The off states have not yet been seen in a real
   browser.
