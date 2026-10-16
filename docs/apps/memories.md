@@ -72,7 +72,7 @@ What the cells rest on:
 - **A `CHAPTER` link is a smaller `MEMORY` link.** The chapter has its own `K_node`, its media's `K_blob` hang under
   it, and the resolve, the media list and the blob GET all read the subtree under the share's root
   (`SharingStore.subtree`, `ShareGuestGate.viewGate`, `SharingStore.authorizedBlob`): a chapter guest is served the
-  chapter (without its own entry, which is sealed under the Memory's key) and nothing of the Memory or a sibling
+  chapter (without its own entry, which lives under the Memory's key) and nothing of the Memory or a sibling
   chapter (`ChapterShareSliceTest`, bite test 21). `NodeKindRules` puts a chapter only directly inside a Memory, so a
   chapter link has no node below its root.
 - **A role applies to every node below the root as Memories allows it** (ADR 0080 decision 6, owner 2026-10-07;
@@ -96,7 +96,7 @@ What the cells rest on:
   what opens it. A guest's name reaches members only, and is shown to them marked as a guest's — "Ben (guest)" in the
   lightbox's uploader and the contributor's bucket (core's `guestDisplayName`, inbox #433); a guest read serves a `WRITE_ONLY` identity's wrapped key and
   never a `READ_WRITE` identity ([ADR 0030](../decisions/0030-contributor-public-share.md) point 8).
-- **A `READ_WRITE` guest's name is sealed under the link ROOT's key**, whichever node it writes in (core's
+- **A `READ_WRITE` guest's name is sealed under a field key derived from the link ROOT's key**, whichever node it writes in (core's
   `createGuestIdentity`, one identity per link). A folder link's guest who uploads into a Memory below, or a Memory
   link's into a chapter, therefore names itself under a key ABOVE the node its bucket is on: a member opens it with
   the node's key or an ancestor's, through the chain (`openBucketName`'s `ancestorKeys`, `contentKeyChain`; web,
@@ -161,7 +161,7 @@ upload or delete, and sees another guest's upload on its next open; a `WRITE_ONL
 drop page, never this source.
 
 **A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`web/src/features/memory/levelRows.ts`), handed a guest's access and tree,
-gives core's list the Memories of a shared folder as rows and tiles (a cover tile in the grid), each date and place unsealed under the node's key the link's
+gives core's list the Memories of a shared folder as rows and tiles (a cover tile in the grid), each date and place unsealed with the node's key the link's
 chain opened, each cover through the link's own reads (core's cover store, `core/node/cover/coverStore.ts`: an uploaded cover blob through
 `resolveShareBlob`, which serves a node's cover blob below the share; a chosen photo's thumbnail by Memories' `cover.load`,
 `coverLoad.ts`, from `listShareMedia`, read once and only when a cover needs it), the map over the opened subtree. A Memory or a chapter — below a shared

@@ -78,7 +78,7 @@ const metaCtx = (mediaId: string) => ({ purpose: 'media-meta', scopeId: SCOPE_ID
 const exifCtx = (mediaId: string) => ({ purpose: 'media-exif', scopeId: SCOPE_ID, mediaId }) as const
 /** A listed tier sealed as the upload would — the base a meta write re-reads (ADR 0077). */
 const sealTier = (mediaId: string, key: Uint8Array, tier: object) =>
-  b64std(v1.seal(metaCtx(mediaId), key, new TextEncoder().encode(JSON.stringify(tier))))
+  b64std(v1.sealField(metaCtx(mediaId), key, new TextEncoder().encode(JSON.stringify(tier))))
 /** A media a write targets: its listed tier (or none) at a revision. */
 const target = (mediaId: string, key: Uint8Array, tier: object | null, metaRevision = 0) =>
   ({ mediaId, wrappedMeta: tier ? sealTier(mediaId, key, tier) : undefined, metaRevision })
@@ -86,8 +86,8 @@ const target = (mediaId: string, key: Uint8Array, tier: object | null, metaRevis
 const staleTier = (wrappedMeta: string | null, metaRevision: number) => ({
   response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta, metaRevision }), { status: 409 }),
 })
-const openJson = (ctx: v1.SealContext, key: Uint8Array, sealed: string) =>
-  JSON.parse(new TextDecoder().decode(v1.open(ctx, key, fromB64std(sealed))))
+const openJson = (ctx: v1.FieldContext, key: Uint8Array, sealed: string) =>
+  JSON.parse(new TextDecoder().decode(v1.openField(ctx, key, fromB64std(sealed))))
 
 /**
  * A tiny in-process object store that handles **several blobs per add-media** (original + derivatives). Each

@@ -71,7 +71,7 @@ uploads and a token-gated **delete-own**. **v1: role WRITE_ONLY, personal scope,
    states it too.
 
 6. **Everything else inherits ADR 0030.** Mandatory display name → an anonymous share identity (sealed under
-   the identity's own key, point 7); the share-scoped, token-gated upload path; direct-append to the shared root
+   a field key derived from the identity's own key, point 7); the share-scoped, token-gated upload path; direct-append to the shared root
    (the curator sees the contributions in *their* gallery); the byte budget, the per-link storage limit
    ([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)) + per-share rate limit; the
    client-integrity trust-tier honesty (footer link, [ADR 0026](0026-client-trust-tiers.md)); personal-scope-only;

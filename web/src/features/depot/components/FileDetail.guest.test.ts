@@ -211,7 +211,7 @@ describe.each([ShareRole.Read, ShareRole.ReadWrite])('a %s guest of a single-fil
   // file's key, which this guest holds, so it would open - the guest's page still reads none: its source has no such door.
   it('a link listing that carried an uploader and a sealed name still names nobody', async () => {
     const identityId = 'cccccccc-0000-4000-8000-000000000004'
-    const name = b64std(v1.seal(identityNameContext(SCOPE, SHARE, identityId), fileKey, v1.utf8('Ben Gast')))
+    const name = b64std(v1.sealField(identityNameContext(SCOPE, SHARE, identityId), fileKey, v1.utf8('Ben Gast')))
     listShareFiles = stubApi(publicShareFilesApi, {
       listShareFiles: {
         items: [{ nodeId: FILE, fileBlob: BLOB, uploaderKey: `share:${identityId}`, uploaderName: { sealedName: name, shareId: SHARE } }],

@@ -45,7 +45,7 @@
   `application/octet-stream`), its file name and modified time; a THUMBNAIL/PREVIEW tier and a derived cover declare
   `{type: image/jpeg}`. Lives in a scope.
 - **media** — the link record attaching a blob to a **node** (a Memory or a Chapter), carrying any per-use
-  metadata under `K_node` — capture time, GPS and the resolved place name in the listed tier (written whole by
+  metadata under field keys derived from `K_node` (purposes `media-meta`, `media-exif`) — capture time, GPS and the resolved place name in the listed tier (written whole by
   any member, so every write carries the tier's `metaRevision` and a stale one answers `409 stale_revision` —
   [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)), and the camera/editor bundle in the
   lazy EXIF tier. The original's **filename and media type** are not in either tier: they are the original's blob
@@ -58,7 +58,7 @@
   metadata reference the members already see, not content dedup. Each media record also carries its **bucket
   linkage** — a **`bucket_id`** (nullable; `null` = the uploader's primary) and a denormalized **`created_by`** =
   the uploader's opaque **`owner_key`** (`user:{id}` / `share:{id}`), the operator-visible attribution the
-  [buckets](../use-cases/uc.memory.buckets.md) grouping reads. The bucket data model + the `K_node`-sealed names
+  [buckets](../use-cases/uc.memory.buckets.md) grouping reads. The bucket data model + the sealed names
   live in [en.memory.buckets](en.memory.buckets.md)
   ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md)).
 

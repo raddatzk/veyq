@@ -2,7 +2,7 @@ useCase: uc.memory.place
 feature: memory
 title: Curate a Memory's place — one sealed, named location
 # Web-complete. Place reuses the node's `wrappedMeta` blob (shipped for the date, cr-0067) and adds a `location`
-# sub-object `{ name, nameSource, derived (medoid), derivedMode, nameAnchor{lat,lng,level} }` — sealed under K_node,
+# sub-object `{ name, nameSource, derived (medoid), derivedMode, nameAnchor{lat,lng,level} }` — sealed under a field key derived from K_node,
 # set via the same partial updateNode, returned on listNodes. Deliberate set-up (never silent), a mandatory name,
 # position = the MEDOID of the media GPS, reverse-only opt-in geocoding (client-direct, Nominatim reference, ADR
 # 0016), and a per-folder-subtree "Karte" view plotting every located Memory/Chapter from listNodes without loading
@@ -11,7 +11,7 @@ title: Curate a Memory's place — one sealed, named location
 # state-machine + a blind gazetteer remain prose gaps (own CRs), not unref'd criteria.
 acceptanceCriteria:
   - id: sealed-location-on-node
-    text: A MEMORY/CHAPTER node's `wrappedMeta.location` carries ONE named place — name (mandatory, except a pending auto place) + nameSource (geocoded|manual) + derived {lat,lng} + derivedMode (fixed|auto) + nameAnchor {lat,lng,level} — sealed under K_node in the same client-versioned blob as the date (no contract change), set via the partial updateNode and returned on listNodes. The operator-blind server never sees a coordinate or a place name.
+    text: A MEMORY/CHAPTER node's `wrappedMeta.location` carries ONE named place — name (mandatory, except a pending auto place) + nameSource (geocoded|manual) + derived {lat,lng} + derivedMode (fixed|auto) + nameAnchor {lat,lng,level} — sealed under a field key derived from K_node in the same client-versioned blob as the date (no contract change), set via the partial updateNode and returned on listNodes. The operator-blind server never sees a coordinate or a place name.
     coverage:
       backend: { integration: [NodesSliceTest.wrappedMetaRoundTripsAndPartialUpdateLeavesItUnchanged] }
       web:
@@ -67,7 +67,7 @@ acceptanceCriteria:
           - src/features/memory/components/PersonMemories.test.ts
           - src/features/memory/exportImport.test.ts
   - id: tenant-map-via-listnodes
-    text: A "Karte" browse view mode shows every located Memory/Chapter in the current folder's subtree (the whole space at the scope root) as a clickable pin, read from each node's sealed `location` via listNodes (unsealed client-side under its own K_node, no media load, no locations endpoint — a location endpoint would leak coordinates to the operator). On the map ⟺ a coordinate; a location ⟺ a name; a pending auto place and a place that is a name only (no `derived`) are not pinned; a pin click opens that Memory. Each pin shows the node's explicit `cover` (uc.memory.cover, cr-0072) cropped by the shared display formula — no cover ⇒ the placeholder (retiring the cr-0071 nearest-media stopgap). Map tiles are a separate opt-in/self-host seam (ADR 0018), reused from the editor. (cr-0071; per-folder-subtree, more contextual than always space-wide.)
+    text: A "Karte" browse view mode shows every located Memory/Chapter in the current folder's subtree (the whole space at the scope root) as a clickable pin, read from each node's sealed `location` via listNodes (unsealed client-side with its own K_node, no media load, no locations endpoint — a location endpoint would leak coordinates to the operator). On the map ⟺ a coordinate; a location ⟺ a name; a pending auto place and a place that is a name only (no `derived`) are not pinned; a pin click opens that Memory. Each pin shows the node's explicit `cover` (uc.memory.cover, cr-0072) cropped by the shared display formula — no cover ⇒ the placeholder (retiring the cr-0071 nearest-media stopgap). Map tiles are a separate opt-in/self-host seam (ADR 0018), reused from the editor. (cr-0071; per-folder-subtree, more contextual than always space-wide.)
     coverage:
       web:
         unit:

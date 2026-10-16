@@ -41,7 +41,7 @@ keys after they are opened, so there veyq holds against a passive operator only
 | Primitive | Used for |
 |---|---|
 | **X-Wing** (X25519 + ML-KEM-768) | Wrapping a key to a public key: scope grants to a member's identity, an uploader's key to a Memory's drop key, the device-linking envelope to the new device's single-use transport key |
-| **HKDF-SHA256** | Turning a KEM shared secret into a wrap key; deriving sub-keys from a parent key (for example the slug-token key, the admission-tag key, the share write token) |
+| **HKDF-SHA256** | Turning a KEM shared secret into a wrap key; deriving sub-keys from a parent key (for example the slug-token key, the admission-tag key, the share write token, and a field's own key, `veyq/v1/field/<purpose>` with a fresh salt per write) |
 | **AES-256-GCM** | All symmetric encryption: content frames, sealed metadata, key wraps |
 | **Argon2id** | Deriving an unlock key from a password (with the Secret Key or a device factor), and the login auth key |
 | **Ed25519** | Login challenge signatures, the identity signing key that signs every grant, the Secret-Key proof key |
@@ -128,10 +128,20 @@ media, blob, bucket, share or member it belongs to, plus the epoch or revision t
 ([ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md)). The
 opener supplies those values from the address it fetched the object by, never from the ciphertext, so a
 ciphertext the server moves to another object or another purpose fails to open. Where a key is unique to one
-object (a frame under its `K_blob`, a share's fields under its `K_share`), the key itself is the binding.
+object (a frame under its `K_blob`, a share's fields under keys derived from its `K_share`), the key itself is the
+binding.
 
-The typed seal is the only way to write one. `@veyq/crypto` exports a `seal`/`open` pair whose context is a
-typed union, one variant per purpose with exactly its binding fields; the raw AEAD and wrap primitives are not
+A **field** (a node's name and meta, a medium's metadata, a bucket's, a guest's or a share's name, a share's note, a
+member's name and picture) seals under a key of its own, `K_field = HKDF-SHA256(K_parent, salt,
+"veyq/v1/field/" + purpose)`, where `K_parent` is the key the field belongs under and the 16-byte salt is fresh on
+every write. Its envelope is `0x03 ‖ salt ‖ nonce ‖ ciphertext`, a type byte of its own that sits in the
+authenticated data, so a field never opens as a plain seal or a wrap. One revision's `K_field` opens that revision
+of that field and nothing else, which is the key a report of a field will hand over
+([ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+§ 9).
+
+The typed seal is the only way to write one. `@veyq/crypto` exports a `seal`/`open` pair, and a field seal beside it, whose
+context is a typed union, one variant per purpose with exactly its binding fields; the raw AEAD and wrap primitives are not
 exported, so an unbound seal cannot be written from the web client at all. Every purpose has exactly one vector,
 and a test compares the purposes in code with the vector set in both directions.
 

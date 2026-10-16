@@ -28,13 +28,13 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
 
 1. **Create.** The curator opens one of their Memories → **Share** → *create public link*. The client generates a
    fresh 32-byte `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_node)`, re-seals the **Memory
-   name under `K_share`**, and `POST`s the share record `{ shareId, nodeId, role: READ, wrap, sealedName,
+   name under a field key derived from `K_share`**, and `POST`s the share record `{ shareId, nodeId, role: READ, wrap, sealedName,
    expiresAt? }`. The server stores the record opaquely under that id (a taken id is `409 id_taken`).
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` lives in
    the **fragment** — never sent to the server. The curator passes it out-of-band (message, QR, wherever).
 3. **Open (anonymous).** A visitor opens the link. The client `GET`s `/api/shares/{shareId}` (**no auth**) → the
-   record **plus the sealed subtree** (the Memory node + its chapters: each chapter's key and title sealed under its
-   parent's key, nothing of the Memory's own entry above it — ADR 0080 Decisions 2 and 9), then `GET`s
+   record **plus the sealed subtree** (the Memory node + its chapters: each chapter's key wrapped under its parent's key and its title sealed
+   under a field key derived from it, nothing of the Memory's own entry above it — ADR 0080 Decisions 2 and 9), then `GET`s
    `/api/shares/{shareId}/media` → the Memory's media metadata and the wrapped keys of the uploader identities
    whose media it holds (Memories' `listShareMedia`). Both pass the same password gate; without a token the
    resolve answers the locked challenge and the media read a `404`.
@@ -67,7 +67,7 @@ sequenceDiagram
   V->>S: GET /api/shares/{shareId}   (no auth)
   S-->>V: record + sealed subtree (under K_node)
   V->>S: GET /api/shares/{shareId}/media   (no auth, same gate)
-  S-->>V: media metadata (under K_node) + uploader identities' wrapped keys
+  S-->>V: media metadata (field keys from K_node) + uploader identities' wrapped keys
   V->>V: K_node = unwrap(wrap, K_share from fragment) → decrypt locally
   V->>S: GET share blob (gated: attached under nodeId?)
   S-->>V: presigned store URL

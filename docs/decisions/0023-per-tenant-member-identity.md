@@ -55,7 +55,7 @@ a tenant.**
   (`[a-z0-9_.-]`-ish, no whitespace). **Chosen at every tenant join** (both the cold-birth register-and-accept and
   the existing-account accept), uniqueness checked within the target tenant (`409 username_taken`); **changeable**
   later with a re-check in that tenant.
-- **`firstName` / `lastName` — per-(user, tenant), sealed under `K_tenant`.** They live on the **same
+- **`firstName` / `lastName` — per-(user, tenant), sealed under a field key derived from `K_tenant`.** They live on the **same
   tenant-profile row** as the username. The real name is content, not operational metadata: it is **ciphertext**
   the server never decrypts. Every tenant member holds `K_tenant`, so each can decrypt any member's sealed name
   **locally** — which is where directory **search/sort over names** happens (client-side), so the server needs no

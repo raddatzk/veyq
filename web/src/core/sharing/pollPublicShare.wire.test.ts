@@ -36,7 +36,7 @@ const unlocked = (etag: string | null) =>
   new Response(
     JSON.stringify({
       role: 'READ', passwordRequired: false, scopeId: '22222222-2222-4222-8222-222222222222', rootKind: 'FOLDER',
-      sealedName: b64std(v1.seal(SHARE_MEMORY_NAME, K_SHARE, v1.utf8('Fotos'))), nodes: [],
+      sealedName: b64std(v1.sealField(SHARE_MEMORY_NAME, K_SHARE, v1.utf8('Fotos'))), nodes: [],
     }),
     { status: 200, headers: { 'content-type': 'application/json', ...(etag ? { ETag: etag } : {}) } },
   )

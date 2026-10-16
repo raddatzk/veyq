@@ -5,13 +5,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { stubApi } from '../../test/apiMock'
 
 vi.mock('./api', () => ({ mediaApi: vi.fn(), bucketsApi: vi.fn() }))
+vi.mock('../../api/client', async (original) => ({ ...(await original<object>()), publicSharesApi: vi.fn() }))
 
 import { listBuckets, createBucket, moveBucketMedia, openBucketName } from './media'
 import { bucketsApi } from './api'
 import * as v1 from '@veyq/crypto/v1'
-import { b64std } from '@veyq/crypto/base64'
+import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
+import { publicSharesApi } from '../../api/client'
 import { contentKeyChain, type TreeNode } from '../../core/node/tree'
-import { identityNameContext } from '../../core/sharing/guestIdentity'
+import { createGuestIdentity, identityNameContext } from '../../core/sharing/guestIdentity'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { treeNode } from '../../test/models'
 
@@ -23,8 +25,8 @@ const IDENTITY = '5c09e000-0000-4000-8000-0000000000b7'
 const BUCKET = '5c09e000-0000-4000-8000-0000000000b8'
 
 /** Seal a name under K_node with a given seal context, exactly as the sealing sites do. */
-function sealName(key: Uint8Array, name: string, ctx: v1.SealContext): string {
-  return b64std(v1.seal(ctx, key, v1.utf8(name)))
+function sealName(key: Uint8Array, name: string, ctx: v1.FieldContext): string {
+  return b64std(v1.sealField(ctx, key, v1.utf8(name)))
 }
 const identityNameCtx = { purpose: 'share-identity-name', scopeId: SCOPE, shareId: SHARE, identityId: IDENTITY } as const
 const bucketNameCtx = (bucketId = BUCKET) => ({ purpose: 'bucket-name', scopeId: SCOPE, nodeId: NODE, bucketId }) as const
@@ -62,6 +64,22 @@ describe('openBucketName — a guest named under an ancestor\'s key', () => {
   it('only a guest\'s name climbs: a sub-bucket sealed under an ancestor\'s key stays closed', () => {
     const folderKey = v1.randomBytes(32)
     expect(openBucketName(SCOPE, NODE, v1.randomBytes(32), subRow(sealName(folderKey, 'Urlaub', bucketNameCtx())), [folderKey])).toBeNull()
+  })
+})
+
+// ADR 0093 § 9, B9: the server copies a guest's `sealedDisplayName` VERBATIM onto its primary bucket's `sealedName`
+// (`MediaStore.primarySealedNameFor`). The field envelope carries its own salt, so that copy opens as the identity's name
+// with nothing else moved — a salt in a column of its own would have had to travel with it, and this is where it would not.
+describe('a guest\'s primary bucket name is the identity name the server copied verbatim', () => {
+  it('the envelope createGuestIdentity sends opens through openBucketName as the contributor primary\'s name', async () => {
+    const { createShareIdentity } = stubApi(publicSharesApi, { createShareIdentity: { identityId: 'ignored', contributorToken: 'tok' } })
+    const key = v1.randomBytes(32)
+    const identity = await createGuestIdentity({ shareId: SHARE, scopeId: SCOPE }, key, { name: 'Oma', fragmentKey: b64url(v1.randomBytes(32)) })
+    const sent = createShareIdentity.mock.calls[0][0].createShareIdentityRequest.sealedDisplayName
+    const row = { ...contributorRow(sent), ownerKey: `share:${identity.identityId}` }
+    expect(fromB64std(sent)[0]).toBe(0x03)
+    expect(openBucketName(SCOPE, NODE, key, row)).toBe('Oma')
+    expect(openBucketName(SCOPE, NODE, v1.randomBytes(32), row)).toBeNull() // control: only the key it was sealed under
   })
 })
 

@@ -1,7 +1,7 @@
 # ADR 0093 — A report opens one window for the moderator, and a hold copies, never blocks
 
-- Status: Accepted 2026-10-16; § 8 is built (the last editor per field group, and the take-back it tightens), the
-  rest is not. It is on the V1 line (owner 2026-10-16,
+- Status: Accepted 2026-10-16; § 8 is built (the last editor per field group, and the take-back it tightens), and
+  so is § 9 (every field purpose seals under its own `K_field`), the rest is not. It is on the V1 line (owner 2026-10-16,
   [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
@@ -42,10 +42,11 @@ Five facts shape the design:
   [ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decision 8), a guest's identity
   folder (`veyq_node.share_identity_id`) and a share's creator (`veyq_share.owner_account`). It records nobody for
   a node's name or meta, a share's note or name, a bucket's name, or a space's name and icon (M, both baselines).
-- **A seal opens with its object's key, and that key opens more.** `seal` is AES-GCM directly under the object's
-  key ([`seal.ts`](../../packages/crypto/src/seal.ts), M): a node's name under its parent's key, a node's meta and
-  a bucket's name under `K_node`, a share's note and names under `K_share`. Only a group's name and a space's icon
-  use keys derived for that field alone (`group-name-key`, `K_icon`). A media is not a node: its `K_blob`s are
+- **A seal opens with its object's key, and that key opens more.** Before § 9 a field was sealed with AES-GCM
+  directly under its object's key ([`seal.ts`](../../packages/crypto/src/seal.ts), M): a node's name with its
+  parent's key, a node's meta and a bucket's name with `K_node`, a share's note and names with `K_share`. Only a
+  group's name and a space's icon used keys derived for that field alone (`group-name-key`, `K_icon`), and those per
+  epoch. A media is not a node: its `K_blob`s are
   wrapped under its direct parent's `K_node` ([en.memory.media](../features/memory/enablers/en.memory.media.md),
   M); a chapter has a `K_node` of its own ([uc.memory.chapters](../features/memory/use-cases/uc.memory.chapters.md),
   M); a guest's upload opens through the drop key → identity key → `K_blob`
@@ -74,7 +75,7 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
     `K_node`. A guest-uploaded medium is reached through the drop key and the identity key; the drop private key
     never leaves the client, and the identity key goes only when the reporter chooses "everything by this
     uploader";
-  - a **text field**: the field key of § 9.
+  - a **text or icon field**: that revision's `K_field` (§ 9).
 - **Anyone who can see it can report it.** A member, and a guest of a `READ` or `READ_WRITE` link, whose client
   reaches `K_node` through `symWrap(K_share, K_node)`; the server checks that every reported id lies inside what the
   reporter's grant or link reaches. A guest of an upload link (`WRITE_ONLY`) sees only their own uploads, so they
@@ -199,14 +200,21 @@ on. The editor is the authenticated caller of the write, never a request field, 
 
 ### 9. A text or icon field seals under a key of its own
 
-`node-name`, `node-meta`, `bucket-name`, `share-note`, `share-name`, `share-memory-name`, `share-identity-name`,
-`member-name` and `member-avatar` seal under `K_field = HKDF(K_parent, salt, "veyq/v1/field/<purpose>")`, the salt
-drawn fresh **per write** and stored beside the ciphertext. A report hands over `K_field`: it opens that one
-revision of that one field, and the operator verifies by opening the held ciphertext, whose AAD binds the object
-([ADR 0072](0072-a-seal-binds-its-object.md)). `group-name` and `space-icon` already work this way; a medium's
-`blob-meta` is covered by its `K_blob`. veyq is not live, so this is a stored-format change with a reset, not a
-suite v2. AES-GCM is not key-committing: only a field's own writer could craft a ciphertext that opens differently
-under two keys, and § 8 attributes it to them.
+`node-name`, `node-meta`, `media-meta`, `media-exif`, `bucket-name`, `share-note`, `share-name`, `share-memory-name`,
+`share-identity-name`, `member-name` and `member-avatar` seal under `K_field = HKDF(K_parent, salt,
+"veyq/v1/field/<purpose>")`, the 16-byte salt drawn fresh **per write** and carried inside the field's own envelope
+(`0x03 ‖ salt ‖ nonce ‖ aead`). A report hands over `K_field`: it opens that one revision of that one field, and the
+operator verifies by opening the held ciphertext, whose AAD binds the object or whose key is unique to it
+([ADR 0072](0072-a-seal-binds-its-object.md) Decisions 1 and 2; the three share fields bind only their purpose, and
+`K_share` is one share's). `media-meta` and `media-exif` are fields although § 1 hands a medium over by its
+`K_blob`s: they belong under the Memory's key, so without a key of their own a moderator would see a picture
+without its date or place; which keys a medium report carries is the report's own decision. `group-name` and
+`space-icon` are not fields: they derive their key per (scope, epoch), so a key opens every revision of that epoch,
+and they stay so because a pending invitee is handed `K_name`, only the scope's members read either, and a group's
+name is not on § 1's list. A medium's `blob-meta` is covered by its `K_blob`. veyq is not live, so this is a
+stored-format change with a reset, not a suite v2. AES-GCM is not key-committing: only a field's own writer could
+craft a ciphertext that opens differently under two keys, and § 8 attributes it to them. The model, the envelope and
+the tests are [en.platform.field-key](../features/platform/enablers/en.platform.field-key.md).
 
 ### 10. The guest-write record
 
@@ -321,7 +329,7 @@ range and its no-extension rule (§ 2 there).
   reported. Unreported content stays unreadable; the T&S target in the security model becomes buildable as written.
 - Costs: a new share kind (medium-scoped and field-scoped), hold tables and the sweep's skip, a moderation mode in
   the share viewer, admin-web's queue and the CLI's moderation commands, an editor column per field group (built), per-field
-  keys in the crypto suite with new vectors, the guest-write record, the moderation log. `EveryStoredTimeHasAReaderTest`
+  keys in the crypto suite with new vectors (built), the guest-write record, the moderation log. `EveryStoredTimeHasAReaderTest`
   needs a reader for each new time: the purge for records, holds and the log (each hold's and each case's own end).
 - Further costs from the operator premise: the order path in admin-web and the CLI with a hold that has no report
   and an end the order sets (§ 12); per-trigger hold ends and logged extensions (§ 4); the deferral switch (§ 7);

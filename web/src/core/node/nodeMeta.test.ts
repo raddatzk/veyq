@@ -13,7 +13,7 @@ const KEY = new Uint8Array(32).fill(5)
 const NODE = { scopeId: '5c09e000-0000-4000-8000-00000000000a', nodeId: '5c09e000-0000-4000-8000-00000000000b' }
 const OTHER_NODE = { ...NODE, nodeId: '5c09e000-0000-4000-8000-00000000000c' }
 const seal = (meta: unknown) =>
-  b64std(v1.seal({ purpose: 'node-meta', ...NODE }, KEY, new TextEncoder().encode(JSON.stringify(meta))))
+  b64std(v1.sealField({ purpose: 'node-meta', ...NODE }, KEY, new TextEncoder().encode(JSON.stringify(meta))))
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -24,10 +24,10 @@ describe('nodeMeta seal/unseal envelope (cr-0177, ADR 0045)', () => {
     // unsealNodeMeta would be blind (it shares the mutated context AND swallows the failure into { v: 1 }).
     const sealed = sealNodeMeta(KEY, NODE, { v: 1, date: { on: '2026-07-20' } })
     const ctx = { purpose: 'node-meta', scopeId: NODE.scopeId, nodeId: NODE.nodeId } as const
-    const json = new TextDecoder().decode(v1.open(ctx, KEY, fromB64std(sealed)))
+    const json = new TextDecoder().decode(v1.openField(ctx, KEY, fromB64std(sealed)))
     expect(JSON.parse(json)).toEqual({ v: 1, date: { on: '2026-07-20' } })
     // ...and the node is part of it: the same blob addressed as another node is refused
-    expect(() => v1.open({ ...ctx, nodeId: OTHER_NODE.nodeId }, KEY, fromB64std(sealed))).toThrow(v1.OpenRefused)
+    expect(() => v1.openField({ ...ctx, nodeId: OTHER_NODE.nodeId }, KEY, fromB64std(sealed))).toThrow(v1.OpenRefused)
   })
 
   it('E3: a blob sealed for another node reads as { v: 1 } (a server moving wrappedMeta gains nothing)', () => {

@@ -52,7 +52,7 @@ const PARENT = '5c09e000-0000-4000-8000-000000000f09'
 const kNodeCtx = (nodeId: string, epoch = 0) => ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch, placementRevision: 0 }) as const
 const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array, epoch = 0) => b64std(v1.seal(kNodeCtx(nodeId, epoch), kek, k))
 const opened = (key: Uint8Array, nodeId: string, blob: string, epoch = 0) =>
-  new TextDecoder().decode(v1.open(nameCtx(nodeId, epoch), key, fromB64(blob)))
+  new TextDecoder().decode(v1.openField(nameCtx(nodeId, epoch), key, fromB64(blob)))
 
 describe('nodeContentKey — resolve a chapter key down the chain', () => {
   const FOLD = '5c09e000-0000-4000-8000-000000000f01'
@@ -380,7 +380,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     const listed = (): NodeSummary[] => tree().map((n) => ({
       id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, createdAt: new Date(n.createdAt),
       placementRevision: n.id === M ? 1 : 0,
-      encryptedName: b64std(v1.seal(
+      encryptedName: b64std(v1.sealField(
         { purpose: 'node-name', ...at(n.id, 0, n.id === M ? 1 : 0) }, n.parentId === null ? e0 : n.parentId === A ? keys.A : keys.M,
         v1.utf8(n.id === M ? 'Rom' : n.name),
       )),
@@ -421,7 +421,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
   // ADR 0080 bite test 4: the revision is part of the address a wrap or a name is opened at.
   it('a wrap or a name served at another placement revision, or on another node\'s row, does not open', () => {
     const moved = treeRow(M, B, 'MEMORY', 'Italien', keys.B, keys.M, 0, 1) // M after a move, at revision 1
-    const name = b64std(v1.seal({ purpose: 'node-name', ...at(M, 0, 1) }, keys.B, v1.utf8('Italien')))
+    const name = b64std(v1.sealField({ purpose: 'node-name', ...at(M, 0, 1) }, keys.B, v1.utf8('Italien')))
     const base = [tree()[0], tree()[1], moved]
     expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(e0), base, M)!)).toEqual(Array.from(keys.M)) // control
     expect(openName(keys.B, at(M, 0, 1), name)).toBe('Italien') // control
@@ -447,14 +447,15 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     return {
       id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, createdAt: new Date(n.createdAt),
       placementRevision: n.placementRevision, wrappedContentKey: n.wrappedContentKey,
-      encryptedName: b64std(v1.seal({ purpose: 'node-name', ...at(n.id, n.epoch, n.placementRevision) }, entryKey, v1.utf8(n.name))),
+      encryptedName: b64std(v1.sealField({ purpose: 'node-name', ...at(n.id, n.epoch, n.placementRevision) }, entryKey, v1.utf8(n.name))),
     }
   }
 })
 
-// The `directory_entry` vector (ADR 0080 Decision 2): the node-name seal and the slug token are unchanged — only the
-// key moved to the parent's — so the vector chains the existing `content-key` vector's node (the parent) to a child
-// whose entry is under that node's key, and this suite opens it through the tree's own functions.
+// The `directory_entry` vector (ADR 0080 Decision 2, ADR 0093 § 9): the slug token is keyed by the parent's key and the
+// name is a node-name field under a field key derived from it, so the vector chains the existing `content-key` vector's
+// node (the parent) to a child whose entry is under that node's key, and this suite opens it through the tree's own
+// functions.
 describe('directory_entry conformance vector', () => {
   const vectors = JSON.parse(readFileSync(resolve(__dirname, '../../../../contracts/crypto/vectors/v1.json'), 'utf8'))
   const d = vectors.directory_entry
@@ -464,7 +465,7 @@ describe('directory_entry conformance vector', () => {
     scopeId: d.child.context.scopeId, nodeId: d.child.context.nodeId, epoch: d.child.context.epoch,
     placementRevision: d.child.context.placementRevision,
   }
-  const blob = b64std(unhex(d.child.blob))
+  const blob = b64std(unhex(d.child.envelope))
 
   it('chains the content-key vector: its plaintext is the parent\'s content key, its kek the scope key', () => {
     const ck = vectors.seal.sym['content-key']
@@ -478,6 +479,11 @@ describe('directory_entry conformance vector', () => {
     expect(() => openName(unhex(d.scopeKey), child, blob)).toThrow(v1.OpenRefused)
   })
 
+  it('the child\'s field key is the vector\'s, derived from the parent\'s content key and the envelope\'s salt', () => {
+    const key = v1.fieldKeyOf({ purpose: 'node-name', ...child }, parentContentKey, unhex(d.child.envelope))
+    expect(Array.from(key)).toEqual(Array.from(unhex(d.child.field_key)))
+  })
+
   it('the child\'s slug token is keyed by the parent\'s content key, and differs from the K_SC-keyed one', () => {
     const hex = (b64: string) => Array.from(fromB64(b64), (x) => x.toString(16).padStart(2, '0')).join('')
     expect(hex(slugTokenFor(parentContentKey, d.parentNodeId, FOLDER_KIND, d.slug))).toBe(d.token)
@@ -487,5 +493,5 @@ describe('directory_entry conformance vector', () => {
 })
 
 function sealUnder(key: Uint8Array, nodeId: string, epoch: number, name: string): string {
-  return b64std(v1.seal(nameCtx(nodeId, epoch), key, v1.utf8(name)))
+  return b64std(v1.sealField(nameCtx(nodeId, epoch), key, v1.utf8(name)))
 }

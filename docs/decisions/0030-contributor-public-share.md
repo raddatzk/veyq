@@ -39,9 +39,9 @@ direct-append, personal scope.**
    decided separately in [ADR 0031](0031-uploader-public-share.md) (it builds on this identity + upload path).
 
 2. **A mandatory, sealed display name → an anonymous share identity.** Before contributing, the visitor must
-   enter a **display name**. The client **seals it under `K_node`** (which it holds) and creates an anonymous
+   enter a **display name**. The client **seals it under a field key derived from `K_node`** (which it holds) and creates an anonymous
    **share identity**: the server stores a `veyq_share_identity` row — an opaque `identityId`, the shared
-   `shareId`, the **`K_node`-sealed display name** (ciphertext), and the hash of an unguessable **contributor
+   `shareId`, the **sealed display name** (ciphertext), and the hash of an unguessable **contributor
    token** returned to the client. The server **never** sees the name, and serves it back only to the Memory's
    members (point 8). Naming yourself proves the visitor holds the link's key — a token derived from `K_share`,
    checked against a stored hash ([ADR 0076](0076-a-guest-write-proves-it-holds-the-links-key.md)) — so the share
@@ -56,7 +56,7 @@ direct-append, personal scope.**
    **exist + be `enabled` + have role READ_WRITE**, and a **valid contributor token** (the blind upload-capability)
    — checked on every request, so a revoked link stops an upload in flight at its next window — and a session acts
    only for the identity that opened it. The contributor
-   seals the blob's `K_blob`, its derivatives, and the listed metadata **under `K_node`** — byte-for-byte the
+   seals the blob's `K_blob`, its derivatives, and the listed metadata **under field keys derived from `K_node`** — byte-for-byte the
    curator's upload, only the transport is share-gated.
 
 4. **Direct-append to the shared Memory root.** Contributed media attaches to the **shared node** (`share.nodeId`)
@@ -93,8 +93,8 @@ direct-append, personal scope.**
      identity is served at all, not even the reading link's own, which a READ link keeps after a
      READ_WRITE→READ change. The served identity has **no name field**, so no guest-side code can be written
      to read one.
-   - **The residual, accepted:** the names stay sealed as they are — a contributor's under `K_node`, an uploader's
-     under its own key, which a link opens through the drop private key. So a READ or READ_WRITE link **plus
+   - **The residual, accepted:** the names stay sealed as they are — a contributor's under a field key derived from
+     `K_node`, an uploader's from its own key, which a link opens through the drop private key. So a READ or READ_WRITE link **plus
      a database dump** reads every guest's name; in practice, that is an operator holding a link. That holder
      already decrypts every medium of the Memory, and a name is less than the photos it is attached to. A key
      only members hold — a name keypair whose private half sits under `K_SC` — would close it, and was rejected
@@ -132,7 +132,7 @@ direct-append, personal scope.**
 ## Alternatives considered
 
 - **Cleartext display name (the pre-E2EE design source).** Rejected — it breaks operator-blindness. The name is
-  **sealed under `K_node`**; the server relays ciphertext, exactly like the Memory name.
+  **sealed under a field key derived from `K_node`**; the server relays ciphertext, exactly like the Memory name.
 - **No identity — seal the name onto each media.** Rejected: it loses the per-contributor grouping the buckets
   slice needs and gives no upload capability token. A single **share identity** per contributor-session is the
   forward-compatible hook (name → identity → bucket) and the natural home for the blind upload-capability.

@@ -18,7 +18,7 @@ const KEY = v1.randomBytes(32)
 const REF = { blobId: 'b-1', chunkCount: 1, byteSize: 9, wrappedBlobKey: 'd3JhcA==', ownerId: NODE, role: 'COVER' }
 const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }
 const sealed = (cover: object | null) =>
-  b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: NODE }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1, ...(cover ? { cover } : {}) }))))
+  b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId: NODE }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1, ...(cover ? { cover } : {}) }))))
 
 const coverBlob = vi.fn()
 

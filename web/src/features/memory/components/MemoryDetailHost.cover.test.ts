@@ -41,7 +41,7 @@ const deriver: MediaDeriver = {
   deriveVideoPoster: vi.fn(async () => new Uint8Array([0xff, 0xd8, 3, 4])),
 }
 const sealedMeta = (cover: object) =>
-  b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: ID }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1, cover }))))
+  b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId: ID }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1, cover }))))
 const uploadCover = (crop = { x: 0, y: 0, width: 1, height: 1 }) =>
   sealedMeta(uploadedCover({ blobId: 'b-1', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: ID }, crop))
 

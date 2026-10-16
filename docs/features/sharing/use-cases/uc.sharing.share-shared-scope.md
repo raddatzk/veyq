@@ -22,7 +22,7 @@ create-gate (scope) and a member-removal hook are new.
 ## Main flow
 
 1. **Create (any member).** A member opens a group/tenant Memory → **Share** → picks a role. The client mints
-   `K_share`, computes `symWrap(K_share, K_node)`, seals the name under `K_share`, and `POST`s the share record.
+   `K_share`, computes `symWrap(K_share, K_node)`, seals the name under a field key derived from `K_share`, and `POST`s the share record.
    The create-gate is now **"a MEMORY in a scope the caller is a member of"** (not "personal-scope MEMORY the caller
    owns") — `AND`-ed with the role's instance capability. **Any member may publish**, not only an owner: shared
    content belongs to all members, and a member could already reach an outsider by other means.

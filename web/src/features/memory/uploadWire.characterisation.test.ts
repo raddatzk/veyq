@@ -22,6 +22,9 @@
 // meta nonce after its wrap, so the ORIGINAL's and PREVIEW's `K_blob` wraps and every PUT digest changed, while the
 // THUMBNAIL's and the cover's wraps came out byte-identical (the stream realigns behind the ORIGINAL; the cover had no
 // EXIF to lose). No length of anything else, no path, header, order or count moved.)
+// (Re-blessed for ADR 0093 § 9: `wrappedMeta` is a field envelope now — type 0x03 and a 16-byte salt in front of the
+// nonce, 144 → 168 base64 — and its salt draw shifts the pinned stream, so later `K_blob` wraps, blob metas and PUT
+// digests changed. No path, header, order, count or other length moved.)
 // Every scenario runs twice and must record the same thing both times — the guard against a recording that depends on
 // scheduling rather than on the code.
 //

@@ -19,7 +19,7 @@ tokens; it never sees a name or a content key.
 `scope key (grant) → K_SC` (per scope: the scope-root entries' names + slugs, dedup) `→ K_node` (per Memory, random:
 chapter/journal/media + sensitive metadata + the names and slugs of the nodes directly below it; **the share grain**)
 `→ K_blob` (per media blob). A folder carries a random key of its own too, and a Memory inside it wraps its key and
-seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)).
+seals its name under a field key derived from the folder's key instead of from `K_SC` ([ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)).
 
 ## Enablers
 
@@ -41,12 +41,12 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
   [ADR 0013](../../decisions/0013-blob-storage-presigned-direct-to-store.md)'s deferred thumbnails/previews land)
 - ★ [en.memory.node-meta](enablers/en.memory.node-meta.md) — **built** (the sealed, client-versioned
   `wrappedMeta` blob on a content node — one opaque envelope for a Memory's node-level metadata, sealed under
-  `K_node`, threaded through `createNode` / partial `updateNode` / `listNodes`, materialized so a card/map reads
+  a field key derived from `K_node`, threaded through `createNode` / partial `updateNode` / `listNodes`, materialized so a card/map reads
   it without loading media. The envelope + `date` shipped with cr-0067, then `location` (cr-0069), `cover` (cr-0072) and
   `participants` (ADR 0083); the envelope itself now lives in core, `web/src/core/node/nodeMeta.ts`, inbox #411)
 - ★ [en.memory.buckets](enablers/en.memory.buckets.md) — **built (web + backend)** (the bucket data layer: a per-uploader
   container within a Memory, a real `owner_key`-keyed `veyq_bucket` table — `user:{id}` / `share:{id}` — with a
-  lazy virtual primary + one-level sub-buckets, names sealed under `K_node`, media linked via a nullable `bucket_id`
+  lazy virtual primary + one-level sub-buckets, names sealed under a field key derived from `K_node`, media linked via a nullable `bucket_id`
   + denormalized `created_by`; reparent-on-delete + member-gated sub-bucket authz (cr-0123);
   [ADR 0034](../../decisions/0034-media-uploader-buckets.md))
 
@@ -109,7 +109,7 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
   member-gated by cr-0123) ([ADR 0034](../../decisions/0034-media-uploader-buckets.md),
   on [en.memory.buckets](enablers/en.memory.buckets.md)): group a Memory's media by **who contributed it** — the
   attribution axis, orthogonal to Chapters; a real **`owner_key`-keyed bucket table** (lazy virtual primary +
-  one-level sub-buckets, `K_node`-sealed names, reparent-on-delete, member-gated sub-bucket authz).
+  one-level sub-buckets, names sealed under a field key derived from `K_node`, reparent-on-delete, member-gated sub-bucket authz).
   **cr-0113** shipped the full data layer + backend + the primary-grouping **"Beiträge"** tab (reusing the
   gallery grid); **cr-0122** the sub-bucket management UI (create / rename / delete, and a Move / Delete selection
   bar); a camera filter is not built

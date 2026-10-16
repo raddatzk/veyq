@@ -15,7 +15,7 @@ const key = v1.randomBytes(32)
 // The legacy cover exactly as `memoryCover.ts` sealed it before #411 (cr-0073): one `JSON.stringify` of this literal.
 const LEGACY_REF = { blobId: 'b-1', chunkCount: 2, byteSize: 262_300, wrappedBlobKey: 'd3JhcA==', ownerId: NODE, role: 'COVER' }
 const LEGACY_COVER = { source: { kind: 'upload', ref: LEGACY_REF }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28 } }
-const sealMeta = (blob: object, nodeId = NODE) => b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, key, new TextEncoder().encode(JSON.stringify(blob))))
+const sealMeta = (blob: object, nodeId = NODE) => b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, key, new TextEncoder().encode(JSON.stringify(blob))))
 
 describe('a Memory cover stored before the cover became core\'s', () => {
   it('opens, from the meta a Memory sealed, as the node\'s uploaded cover with its crop', () => {

@@ -59,7 +59,7 @@ export function openBucketName(
       return openIdentityName(scopeId, guest.shareId, guest.identityId, sealed, keys)
     }
     const context = bucketNameContext(scopeId, nodeId, bucket.bucketId)
-    return new TextDecoder().decode(v1.open(context, mediaKey(scopeId, memoryKey, bucket), fromB64std(sealed)))
+    return new TextDecoder().decode(v1.openField(context, mediaKey(scopeId, memoryKey, bucket), fromB64std(sealed)))
   } catch {
     return null // not under this node's key (an uploader's K_up that does not open included): the neutral fallback label
   }
@@ -97,13 +97,13 @@ export async function listBuckets(scopeId: string, nodeId: string): Promise<Buck
  *  it under that root (a contributor's, to curate contributions — cr-0123); omitted ⇒ the caller's own primary. */
 export async function createBucket(scopeId: string, nodeId: string, memoryKey: Uint8Array, name: string, parentBucketId?: string): Promise<BucketItem> {
   const bucketId = crypto.randomUUID() // client-minted: the name is sealed bound to it (ADR 0072)
-  const sealedName = b64std(v1.seal(bucketNameContext(scopeId, nodeId, bucketId), memoryKey, v1.utf8(name)))
+  const sealedName = b64std(v1.sealField(bucketNameContext(scopeId, nodeId, bucketId), memoryKey, v1.utf8(name)))
   return toBucket(await withRefresh(() => bucketsApi().createBucket({ scopeId, nodeId, createBucketRequest: { bucketId, sealedName, parentBucketId } })), nodeId, null)
 }
 
 /** Rename one of the caller's own sub-buckets — re-seal the name under K_node (a later slice's UI). */
 export async function renameBucket(scopeId: string, nodeId: string, memoryKey: Uint8Array, bucketId: string, name: string): Promise<BucketItem> {
-  const sealedName = b64std(v1.seal(bucketNameContext(scopeId, nodeId, bucketId), memoryKey, v1.utf8(name)))
+  const sealedName = b64std(v1.sealField(bucketNameContext(scopeId, nodeId, bucketId), memoryKey, v1.utf8(name)))
   return toBucket(await withRefresh(() => bucketsApi().renameBucket({ scopeId, nodeId, bucketId, renameBucketRequest: { sealedName } })), nodeId, null)
 }
 

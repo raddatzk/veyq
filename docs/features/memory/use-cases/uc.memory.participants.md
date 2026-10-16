@@ -27,7 +27,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
    Memory — from `listScopeMembers`, each by display name (real name when it opens, else username).
 3. The member ticks and unticks; the client accepts only ids the directory returned (the server cannot check: the list
    is sealed).
-4. On save the client writes the `participants` sub-object (user ids only) into the Memory's `wrappedMeta` under `K_node`
+4. On save the client writes the `participants` sub-object (user ids only) into the Memory's `wrappedMeta` (under a field key derived from `K_node`)
    with the node-meta compare-and-set, stating the `metaRevision` it read.
 5. The line under the title shows the participants as overlapping avatars; **with no participant it shows nothing** —
    no "nobody yet" text, the action button is the way in. The header re-renders with the participants as overlapping avatars (the member's profile picture, else the letter): up to three, and past three the third slot is a "+N" (two avatars and "+2" for four people). Hovering the

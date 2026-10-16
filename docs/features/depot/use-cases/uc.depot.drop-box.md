@@ -19,7 +19,7 @@
    name, and the page says whose session it is ("Sending as …").
 2. With the first file, the client asks for the guest's folder (`ensureShareDropFolder`) — a guest that names itself
    and sends nothing leaves no folder: the first call creates it from the guest's
-   ciphertext (name and key sealed under the guest's identity key), every later call — a reload, a second tab, a
+   ciphertext (the key wrapped under the guest's identity key, the name under a field key derived from it), every later call — a reload, a second tab, a
    concurrent first upload — answers the same folder.
 3. Per file the client creates a `FILE` inside that folder, uploads its blob and completes it, as a contributor does
    ([uc.depot.share-folder-files](uc.depot.share-folder-files.md) steps 3–4).

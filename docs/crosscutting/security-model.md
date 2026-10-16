@@ -59,8 +59,8 @@ operator's view:
   reverse lookup on the first geotagged media of an auto-location) — enabling it *is* the consent to those
   requests; it **never** fires without opt-in. A blind, request-free alternative stays available (e.g. typing a
   place name).
-- **Results are sealed content.** Anything fetched (e.g. a resolved place name) is sealed under `K_node` like any
-  other content — so it is shareable to other members **without their device making a request**, and the veyq
+- **Results are sealed content.** Anything fetched (e.g. a resolved place name) is sealed into the node's meta, under
+  a field key derived from `K_node` like any other field — so it is shareable to other members **without their device making a request**, and the veyq
   operator still sees only ciphertext.
 
 **The breached-password check is the second instance, and the one exception to opt-in.** The four dialogs that
@@ -141,7 +141,7 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   item's **trash state** (a trashed flag + who trashed it + when, until the scheduled purge); a media item's
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
-  bucket/uploader **names stay sealed** under `K_node` — a WRITE_ONLY guest's under its own key, [ADR 0034](../decisions/0034-media-uploader-buckets.md),
+  bucket/uploader **names stay sealed** under a field key derived from `K_node` — a WRITE_ONLY guest's from its own key, [ADR 0034](../decisions/0034-media-uploader-buckets.md),
   [ADR 0031](../decisions/0031-uploader-public-share.md) point 7); a Depot file's **uploader attribution** (the member
   or guest identity that uploaded its current content, on its attachment - served to members only, as `uploaderKey`
   `user:{id}` / `share:{id}`; [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Decision 8);
@@ -256,6 +256,15 @@ flowchart TB
   back (a documented limitation). The concrete per-Memory key model — `K_SC` (scope), `K_node` (per Memory, the
   random, many-wrapped **share grain**), `K_blob` (per blob) — is pinned in
   [ADR 0012](../decisions/0012-content-key-hierarchy.md).
+- **A field seals under a key of its own.** Every text or icon field — a node's name and meta, a medium's two
+  metadata tiers, a bucket's name, a guest's display name, a share's note, name and label, a member's name and
+  picture — seals under `K_field = HKDF(K_parent, salt, "veyq/v1/field/<purpose>")`, where `K_parent` is the key the
+  field belongs under (the parent's `K_node` for a name, the node's own for its meta, `K_share`, `K_tenant`) and the
+  16-byte salt is fresh per write and travels in the field's envelope (all the server learns: one random salt per
+  write, nothing about a key). One revision's `K_field` opens that revision
+  of that field and nothing else, which is what a report of a field will hand over
+  ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 9,
+  [en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - The identity private key is protected by the **Master Key**, itself wrapped **separately by each
   unlock method**. Adding or removing a method changes one wrap, never the content.
 
@@ -322,7 +331,9 @@ server-blind token makes this work without the server ever seeing a name:
   preserve evidence and act. The same intake serves takedown requests. **Built today: neither half.** There is
   no report intake, and the operator has no action on a single share — revoking one is its creator's alone
   (`SharingHandler.revoke`); the operator's only lever is suspending the whole tenant, every link in it
-  ([uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)).
+  ([uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)). Built is the key a report
+  of one text or icon field will carry: each field revision seals under a `K_field` of its own, which opens nothing
+  else ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are
   decryptable-on-report — notice-and-takedown works exactly where content is distributed.
 - **A link's id alone opens no write.** The share id is stored raw (members rebuild links from it, seals bind it,
@@ -341,8 +352,8 @@ server-blind token makes this work without the server ever seeing a name:
   ([ADR 0029](../decisions/0029-public-viewer-share.md) — the public share resource + anonymous access path; a
   Memory of any scope the curator belongs to, §6).
 - **An editable curator note (+ private name)** rides the same blind path: an optional **per-locale** message the
-  sharer attaches (sealed under `K_share`, rendered on the share page in the viewer's locale) and an optional
-  **private name** (sealed under `K_share`, a **management-only** label the viewer never receives). To make them
+  sharer attaches (sealed under a field key derived from `K_share`, rendered on the share page in the viewer's
+  locale) and an optional **private name** (the same, a **management-only** label the viewer never receives). To make them
   editable **in place**, the share also stores `sealed_share_key` — a recoverable copy of the per-share key sealed
   under the scope key **`K_SC` at the scope's current epoch** (stored with that epoch), openable **only with `K_SC`**,
   which neither the operator nor any share link holds, so `K_share` never enters the operator's reach. The
@@ -509,7 +520,8 @@ operator lacks can.
   read the old share's later password, label or note edits, and the Memory's content under `K_node` stays readable
   whatever the link does (the ADR 0012 class);
 - the names a Memory's guests gave, to an operator holding a viewer or contributor link of it. No link is served
-  a guest's name, but the names stay sealed under `K_node` (a contributor's) or an uploader's own key, which the
+  a guest's name, but the names stay sealed under field keys derived from `K_node` (a contributor's) or from an
+  uploader's own key, which the
   link opens through the drop key — and the operator holds that ciphertext. Accepted: that link already decrypts
   every medium of the Memory ([ADR 0030](../decisions/0030-contributor-public-share.md) point 8).
 

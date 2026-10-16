@@ -93,7 +93,7 @@ describe('a member\'s move between folders', () => {
     const at4 = { purpose: 'content-key', scopeId: SCOPE, nodeId: M, epoch: 0, placementRevision: 4 } as const
     same(v1.open(at4, keys.b, fromB64std(json.wrappedContentKey as string)), keys.m)
     expect(() => v1.open(at4, keys.a, fromB64std(json.wrappedContentKey as string)), 'never the old parent\'s key').toThrow(v1.OpenRefused)
-    expect(new TextDecoder().decode(v1.open({ ...at4, purpose: 'node-name' }, keys.b, fromB64std(json.encryptedName as string)))).toBe('Italien')
+    expect(new TextDecoder().decode(v1.openField({ ...at4, purpose: 'node-name' }, keys.b, fromB64std(json.encryptedName as string)))).toBe('Italien')
     expect(json.slugToken).toBe(b64std(v1.slugToken(keys.b, B, 'italien')))
     // The subtree as the server then stores it: the node at B under its new wrap, its child untouched — both open.
     const after = nodes.map((x) => (x.id === M ? applied(x, json) : x))
@@ -212,7 +212,7 @@ describe('a member moves a drop-box guest\'s folder out (ADR 0080 decision 11)',
     const at1 = { purpose: 'content-key', scopeId: SCOPE, nodeId: FOLDER, epoch: 0, placementRevision: 1 } as const
     same(v1.open(at1, keys.dest, fromB64std(json.wrappedContentKey as string)), keys.folder)
     expect(() => v1.open(at1, identityKey, fromB64std(json.wrappedContentKey as string)), 'no longer under the guest\'s K_up').toThrow(v1.OpenRefused)
-    expect(new TextDecoder().decode(v1.open({ ...at1, purpose: 'node-name' }, keys.dest, fromB64std(json.encryptedName as string)))).toBe('Adelgunde')
+    expect(new TextDecoder().decode(v1.openField({ ...at1, purpose: 'node-name' }, keys.dest, fromB64std(json.encryptedName as string)))).toBe('Adelgunde')
     // The server ends the identity with the move: the folder is an ordinary one under DEST, its file below it.
     const after = nodes.map((x) => (x.id === FOLDER ? applied(x, json) : x))
     expect(after.find((x) => x.id === FOLDER)!.shareIdentityId).toBeNull()

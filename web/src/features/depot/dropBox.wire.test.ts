@@ -76,7 +76,7 @@ describe('a drop-box guest on the wire', () => {
     const sent = requests.find((r) => r.path.endsWith('/identities'))!.json!
     const kUp = openIdentityKey(SCOPE, BOX, openDropKey(SCOPE, BOX, boxKey, drop.sealedDropPrivateKey!), String(sent.identityId), String(sent.wrappedIdentityKey))
     expect(b64std(kUp)).toBe(session.identityKey)
-    expect(new TextDecoder().decode(v1.open(identityNameContext(SCOPE, SHARE, String(sent.identityId)), kUp, fromB64std(String(sent.sealedDisplayName))))).toBe('Adelgunde')
+    expect(new TextDecoder().decode(v1.openField(identityNameContext(SCOPE, SHARE, String(sent.identityId)), kUp, fromB64std(String(sent.sealedDisplayName))))).toBe('Adelgunde')
     // the name stays on the device for the page ("Sending as …", the folder's name at the first file) — never on the wire
     expect(session.displayName).toBe('Adelgunde')
     expect(requests.map((r) => JSON.stringify(r.json ?? {})).join('')).not.toContain('Adelgunde')

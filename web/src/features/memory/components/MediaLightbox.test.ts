@@ -966,7 +966,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     const memoryKey = v1.randomBytes(32)
     const { store, items } = await seedOne(memoryKey, { DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) })
     const PEER = Date.UTC(2020, 1, 2, 3, 4, 0)
-    const peers = b64std(v1.seal(
+    const peers = b64std(v1.sealField(
       { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: items[0].mediaId }, memoryKey,
       new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt: Date.UTC(2021, 4, 1, 10, 0, 0), capturedAtOverride: PEER })),
     ))

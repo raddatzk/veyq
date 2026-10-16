@@ -289,7 +289,7 @@ describe('AppSidebar favorites — the cover of a pinned node', () => {
   const SCOPE = '5c09e000-0000-4000-8000-0000000000dd'
   const KEY = v1.randomBytes(32)
   const sealed = (nodeId: string, blobId: string) =>
-    b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, KEY, new TextEncoder().encode(JSON.stringify({
+    b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, KEY, new TextEncoder().encode(JSON.stringify({
       v: 1, cover: uploadedCover({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId }, { x: 0, y: 0, width: 0.5, height: 1 }),
     }))))
   const at = (id: string, kind: string, name: string, wrappedMeta: string | null): TreeNode =>

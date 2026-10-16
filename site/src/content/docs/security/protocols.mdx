@@ -316,7 +316,7 @@ the link.
 **Steps (public viewer link).**
 
 1. The curator's client draws a random `K_share` and a random 256-bit share id. It wraps the node's `K_node` under
-   `K_share` and seals the node's name under `K_share`.
+   `K_share` and seals the node's name under a field key derived from `K_share`.
 2. It also writes a **recovery copy** of `K_share`, sealed under the scope key at the scope's current epoch
    ([ADR 0036](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0036-editable-share-note-recoverable-share-key.md)
    point 4). This lets any member of the scope reveal, edit or re-copy the link later. It is deliberately not sealed
@@ -336,7 +336,7 @@ sequenceDiagram
   participant S as Server
   participant O as Object store
   actor V as Guest
-  C->>C: K_share and shareId random<br>wrap K_node under K_share, seal name under K_share
+  C->>C: K_share and shareId random<br>wrap K_node under K_share, seal name under a field key from K_share
   C->>C: recovery copy: K_share sealed under scope key (current epoch)<br>write verifier = SHA-256 of token derived from K_share
   C->>S: create share: id, node, role, wrap, sealed name,<br>recovery copy, write verifier
   C-->>V: link with K_share in the URL fragment (out of band)
@@ -357,13 +357,13 @@ sequenceDiagram
 - **Contributor link (READ_WRITE)**
   ([ADR 0030](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0030-contributor-public-share.md)). The guest
   can view and add media. Naming yourself presents the write token, which the server checks against the stored hash,
-  and returns a contributor token that gates every later upload. The guest seals uploads and their display name under
-  `K_node`, exactly as a member would.
+  and returns a contributor token that gates every later upload. The guest seals uploads under `K_node` and their
+  display name under a field key derived from it, exactly as a member would.
 - **Uploader link (WRITE_ONLY)**
   ([ADR 0031](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0031-uploader-public-share.md) point 7). The
   link carries **no** wrap of `K_node`. It carries only the Memory's **drop public key** (a hybrid post-quantum
   keypair whose private half is sealed under `K_node`), sealed under `K_share`. Each guest draws an identity key of
-  its own, wraps it to the drop key, and seals its uploads and name under it. Members open those uploads through the
+  its own, wraps it to the drop key, and seals its uploads under it and its name under a field key derived from it. Members open those uploads through the
   drop private key; the guest sees nothing but what it added in the current session.
 - **Password-protected link**
   ([ADR 0037](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0037-password-protected-shares.md)). This is

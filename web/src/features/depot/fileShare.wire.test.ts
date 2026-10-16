@@ -68,7 +68,7 @@ describe('a single-file share on the wire', () => {
     const wrapped = v1.open(SHARE_KEY, minted.kShare, fromB64std(json.wrap as string))
     expect(Array.from(wrapped)).toEqual(Array.from(keyFile))
     for (const other of [k0, keyTop, keyOther]) expect(Array.from(wrapped)).not.toEqual(Array.from(other))
-    const name = v1.open(SHARE_MEMORY_NAME, minted.kShare, fromB64std(json.sealedName as string))
+    const name = v1.openField(SHARE_MEMORY_NAME, minted.kShare, fromB64std(json.sealedName as string))
     expect(new TextDecoder().decode(name)).toBe('Ticket.pdf')
     expect(JSON.stringify(json)).not.toContain('Ticket')
 

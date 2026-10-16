@@ -49,7 +49,7 @@ let loaded = new Map<string, LoadedCover>()
 let declaredIds = new Set<string>()
 
 const sealed = (nodeId: string, meta: object) =>
-  b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1, ...meta }))))
+  b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1, ...meta }))))
 const upload = (nodeId: string, blobId: string, c: CoverCrop = FULL) =>
   uploadedCover({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId }, c)
 const photo = (mediaId: string, c: CoverCrop = FULL) => ({ source: { kind: 'media', mediaId }, crop: c })

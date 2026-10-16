@@ -99,7 +99,7 @@ export async function nameDropGuest(
   const kShare = head.kShare
   const identityId = crypto.randomUUID() // client-minted: the name and the key wrap are sealed bound to it (ADR 0072)
   const minted = mintIdentityKey(scopeId, dropBoxId, identityId, openDropPublicKey(kShare, sealedDropPublicKey))
-  const sealedDisplayName = b64std(v1.seal(identityNameContext(scopeId, shareId, identityId), minted.identityKey, v1.utf8(name)))
+  const sealedDisplayName = b64std(v1.sealField(identityNameContext(scopeId, shareId, identityId), minted.identityKey, v1.utf8(name)))
   const { contributorToken } = await publicSharesApi().createShareIdentity({
     shareId,
     createShareIdentityRequest: { identityId, sealedDisplayName, wrappedIdentityKey: minted.wrappedIdentityKey },

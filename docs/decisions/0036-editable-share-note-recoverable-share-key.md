@@ -38,8 +38,9 @@ parts.
    anytime** and thereby read or re-seal **any `K_share`-sealed field** of a minted share. The server stores only
    this ciphertext; it never sees `K_share` in the clear (it lacks `K_SC`). Why `K_SC` and not `K_node`: point 4.
 
-2. **The curator note.** Add **`sealed_note`** to the share — the note text sealed under **`K_share`** with a
-   dedicated AAD context **`share-note`** (mirrors `sealName`/`openName` byte-for-byte, just a distinct context).
+2. **The curator note.** Add **`sealed_note`** to the share — the note text sealed under a field key derived from
+   **`K_share`** ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 9)
+   with a dedicated AAD context **`share-note`** (the same field seal as the share's `sealedName`, a distinct purpose).
    It is **optional** (a share with no note shows no banner), set at `createShare`, and returned by the anonymous
    `resolveShare` (the share page unwraps it with the fragment `K_share`). It is **rendered as markdown** on the
    share page — reusing the safe escape-first renderer added for tenant terms (`web/src/shared/markdown.ts`,

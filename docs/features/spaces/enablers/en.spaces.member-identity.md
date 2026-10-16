@@ -7,7 +7,7 @@
   the group member-add search, editing your own identity in [uc.spaces.edit-profile](../use-cases/uc.spaces.edit-profile.md),
   and (later) the person/profile view it feeds.
 - **Provides:** a member's **identity within a tenant** — a per-tenant **`username`** (unique in the tenant,
-  plaintext, a pseudonymous handle decoupled from login) plus **`firstName` / `lastName` sealed under `K_tenant`**
+  plaintext, a pseudonymous handle decoupled from login) plus **`firstName` / `lastName` sealed under a field key derived from `K_tenant`**
   (operator-blind real name), and the **directory visibility rule** (every member sees username + names; only a
   tenant `OWNER` sees `email`). Instance-wide uniqueness stays with **`email`** alone
   ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)).
@@ -18,12 +18,13 @@
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
 - **Depends on:** [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) +
   [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md) (the tenant-join flows where a username is chosen),
-  `uc.account.unlock` (the identity that seals the name under `K_tenant`),
-  [en.spaces.tenant-scope](en.spaces.tenant-scope.md) (the `K_tenant` the name seals under).
+  `uc.account.unlock` (the identity that seals the name),
+  [en.spaces.tenant-scope](en.spaces.tenant-scope.md) (the `K_tenant` the name's field key derives from).
 - **Preconditions:** An **authenticated** caller joining or belonging to a tenant. Sealing the real name
   additionally needs an **unlocked, granted** member (holds `K_tenant`).
 - **Postconditions (success):** The caller's per-`(user, tenant)` profile row carries a tenant-unique `username`
-  (plaintext) and, once they hold `K_tenant`, a `firstName`/`lastName` blob **sealed under `K_tenant`**. The
+  (plaintext) and, once they hold `K_tenant`, a `firstName`/`lastName` blob **sealed under a field key derived from `K_tenant`** (`member-name`,
+  [en.platform.field-key](../../platform/enablers/en.platform.field-key.md)). The
   directory returns username + (locally decrypted) names to every member and `email` only to an owner. The server
   never saw the real name.
 
@@ -38,7 +39,8 @@ member's own group rows) and splits it by sensitivity:
    constrained (`[a-z0-9_.-]`-ish, no whitespace), **not a login credential** (email is). Chosen at **every**
    tenant join (register-and-accept *and* existing-account accept), uniqueness checked in the target tenant
    (`409 username_taken`); changeable later with a re-check.
-2. **`firstName` / `lastName` — per-(user, tenant), sealed under `K_tenant`** (same profile row). Real names are
+2. **`firstName` / `lastName` — per-(user, tenant), sealed under a field key derived from `K_tenant`** (same profile
+   row, a fresh salt per write). Real names are
    content, not operational metadata — ciphertext the server never decrypts. Every tenant member holds
    `K_tenant`, so each decrypts any member's name **locally**; directory **search/sort over names is
    client-side**.

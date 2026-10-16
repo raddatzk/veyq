@@ -133,7 +133,7 @@ describe('node meta sealed at one node, served for another', () => {
     expect(unsealNodeMeta(kNode, { scopeId: SCOPE, nodeId: MEMORY_X }, sealedAtS)).toEqual({ v: 1 })
     // …and underneath the best-effort reader it is the specific refusal, not a parse error.
     expectRefused(
-      () => v1.open({ purpose: 'node-meta', scopeId: SCOPE, nodeId: MEMORY_X }, kNode, fromB64std(sealedAtS)),
+      () => v1.openField({ purpose: 'node-meta', scopeId: SCOPE, nodeId: MEMORY_X }, kNode, fromB64std(sealedAtS)),
       'node-meta',
     )
   })

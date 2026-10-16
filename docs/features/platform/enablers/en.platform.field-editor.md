@@ -51,7 +51,7 @@ editor as a required parameter, so a new node writer states it or does not compi
 1. **The editor is the authenticated caller of the write**, never a field of the request: a member's session
    principal, a guest's identity from its contributor token.
 2. **Every write of the ciphertext records its caller** — a new text, a re-seal by a move (a placement re-seals the
-   name under the new parent's key, ADR 0080 decision 2) and a restore's re-seal alike. The server cannot tell a
+   name under a field key derived from the new parent's key, ADR 0080 decision 2) and a restore's re-seal alike. The server cannot tell a
    re-seal from a new text, so "last editor" means the last writer of the ciphertext (owner 2026-10-16).
 3. **Clearing a field clears its editor:** a removed meta, a cleared icon, a deleted share's tombstone. A field
    without a value has no editor; a node's name always has one.

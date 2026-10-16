@@ -13,7 +13,7 @@ uploader gets one automatic **primary bucket** (name = their display name) plus 
 alike.
 
 The **data hook already exists**: [ADR 0030](0030-contributor-public-share.md) captured each contributed medium's
-uploader as an opaque `share_identity_id` + a `K_node`-sealed display name, and **deferred the buckets UI** to a
+uploader as an opaque `share_identity_id` + a sealed display name, and **deferred the buckets UI** to a
 later slice. This ADR decides that slice — widened from contributors to **every** uploader.
 
 The refine (with the user) settled the shape: a **real bucket table** keyed by a single opaque **`owner_key`** —
@@ -49,11 +49,11 @@ the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buc
    (cr-0101) is **left untouched** — mildly redundant with `created_by` for contributors, cleaned when the
    sharing surface is next worked, **not** in this CR.
 
-4. **Virtual-until-upload primary; names sealed under `K_node`.** A primary bucket materializes **lazily** (a
+4. **Virtual-until-upload primary; names sealed under a field key derived from `K_node`.** A primary bucket materializes **lazily** (a
    find-or-create on `(node, owner_key)` on the first upload / first sub-bucket); uploaders with no media have no
    row. Its **derived** name (member = username, contributor = the identity's sealed name) is itself **sealed
-   under `K_node`** so the view is uniform + operator-blind, and it is **not renameable**. Sub-bucket names are
-   **`K_node`-sealed** user text; because they are ciphertext there is **no server-side name uniqueness** — the
+   the same way** so the view is uniform + operator-blind, and it is **not renameable**. Sub-bucket names are
+   **sealed** user text; because they are ciphertext there is **no server-side name uniqueness** — the
    only uniqueness this model wants is the content-blind **one primary per `(node, owner_key)`**.
 
    **The node row's lock holds it.** Every find-or-create of a primary (`MediaStore.ensurePrimaryBucket`, which an
@@ -98,7 +98,7 @@ the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buc
 - **ADR 0030's forward-compat is spent as intended.** Contributor grouping falls out of `share:{shareIdentityId}`
   with **no migration** on the sharing half; the sealed contributor name becomes the primary's sealed name.
 - **We diverge deliberately from how buckets worked before E2EE.** Cascade-delete → **reparent-to-primary**; no
-  bucket ownership → **`owner_key`-structured, member-gated sub-bucket authz** (cr-0123); cleartext names + server-side uniqueness → **`K_node`-sealed names +
+  bucket ownership → **`owner_key`-structured, member-gated sub-bucket authz** (cr-0123); cleartext names + server-side uniqueness → **sealed names +
   primary-only uniqueness**. These are behavior/blindness changes, not just crypto.
 - **One redundant column, deliberately.** `media.share_identity_id` (cr-0101) overlaps `created_by` for
   contributors; kept to avoid churning the shipped sharing feature in this CR, flagged for cleanup when sharing is
@@ -120,7 +120,7 @@ the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buc
 - **Cascade-delete a bucket's media** (the pre-E2EE code). Rejected — **reparent-to-primary** never loses media;
   destructive delete belongs to the explicit media delete/trash path (cr-0110/0111), not to tidying a folder.
 - **Cleartext names + server-side name uniqueness** (the pre-E2EE code). Rejected — breaks operator-blindness;
-  names are **`K_node`-sealed**, sub-bucket names carry **no** uniqueness (ciphertext), only the content-blind
+  names are **sealed**, sub-bucket names carry **no** uniqueness (ciphertext), only the content-blind
   primary uniqueness remains.
 - **Fully-sealed `created_by`** (hide attribution from the operator). Rejected — inconsistent with the already-
   visible `share_identity_id`, and it would force client-side-only grouping/authz. `owner_key` is operator-
