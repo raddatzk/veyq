@@ -131,21 +131,10 @@ flowchart LR
   § Consequences), and the wildcard *certificate* is offered on that target only as the operator's own choice,
   never as the default, for the same reason.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Each space has its own web address, and it simply works: as soon as it is created — or moved to a
-different address — that address opens it, without anyone having to reconfigure the server. On the standard
-setup photos and videos come from that same address too, which is what keeps them loading quickly and without
-browser warnings; where the operator keeps storage on a separate address, they come from that one instead. If the
-operator takes a space offline, its address stops answering as well. None of this involves your content: the
-server routes traffic by address, and what is inside stays encrypted for it either way.
-
-**DE —** Jeder Bereich hat seine eigene Web-Adresse, und die funktioniert einfach: sobald er angelegt — oder auf
-eine andere Adresse umgezogen — ist, öffnet diese Adresse ihn, ohne dass jemand den Server umkonfigurieren muss.
-Im Standard-Setup kommen Fotos und Videos von derselben Adresse, was sie schnell und ohne Browser-Warnungen
-laden lässt; liegt der Speicher beim Betreiber auf einer eigenen Adresse, kommen sie von dieser. Nimmt der
-Betreiber einen Bereich offline, antwortet auch seine Adresse nicht mehr. Mit deinen Inhalten hat das nichts zu
-tun: der Server leitet nur nach Adresse weiter, und was darin liegt, bleibt für ihn so oder so verschlüsselt.
+Each space opens at its own web address as soon as it is created or moved, with its photos and videos loading from
+there too, without anyone reconfiguring the server.
 
 ## Related
 

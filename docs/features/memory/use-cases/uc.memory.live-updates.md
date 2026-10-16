@@ -66,17 +66,9 @@
   a **subtree** (Memory + chapters) aggregated revision (the gallery is own-node); a keyset delta is add/edit-only
   by design, deletes ride the id-set.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you're looking at a shared memory and someone else adds photos — or removes theirs — you **see it
-happen**, no refresh needed. Re-opening a memory that hasn't changed is instant, because your device just asks
-"anything new?" and hears "no". As always, it's all sealed with the memory's own key on your device; the server
-only ever moves scrambled data around.
-
-**DE —** Wenn du eine geteilte Erinnerung offen hast und jemand anderes Fotos hinzufügt — oder eigene entfernt —
-**siehst du das live**, ganz ohne Neuladen. Eine unveränderte Erinnerung erneut zu öffnen geht sofort, weil dein
-Gerät nur kurz fragt „gibt's was Neues?" und ein „nein" hört. Wie immer ist alles mit dem eigenen Schlüssel der
-Erinnerung auf deinem Gerät verschlüsselt; der Server bewegt nur verschlüsselte Daten.
+When others add or remove photos in a shared Memory you have open, you see it happen without reloading.
 
 ## Related
 

@@ -40,7 +40,7 @@ docs/
 
 **Use-case (`uc.*`)** — *what the user does.*
 - **Belongs:** actor + goal, main flow, alternate/exception flows (user-observable steps), pre/postconditions,
-  quality notes, the bilingual "What this means for you" section.
+  quality notes, the one-line English `## User impact` (the user's own text lives on the docs site's Use pages).
 - **Does NOT belong:** storage/wire format, key wrapping, crypto formulas, endpoint threading, or a decision +
   its rejected alternatives. State a feature's *concept* only as far as the flow needs it. Nor a **delivery
   roadmap / slice plan** (which CRs ship what, in what order) — that is *planning*: it lives in

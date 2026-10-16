@@ -57,19 +57,10 @@
 - **A guest who loses its device data** cannot reach its folder again and starts a new one.
 - Where the build differs from ADR 0080 decision 11 is inbox #377, for the owner to review.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** A drop box is a place where others can hand you files without seeing anything else. Send someone the link:
-they type a name, pick their files, done — no account. Each person gets their own folder, so nobody sees what others
-sent, and you and the other members of your space see everything in one place. The files are encrypted in the sender's
-browser; the person running the server can't read them or their names. Switching the link off keeps everything that
-already arrived.
-
-**DE —** Ein Briefkasten ist ein Ort, an dem dir andere Dateien geben können, ohne sonst etwas zu sehen. Schick jemandem
-den Link: Name eintippen, Dateien auswählen, fertig — ohne Konto. Jede Person bekommt einen eigenen Ordner, niemand sieht,
-was andere geschickt haben, und du und die anderen Mitglieder deines Bereichs seht alles an einem Ort. Die Dateien werden
-im Browser der sendenden Person verschlüsselt; wer den Server betreibt, kann weder sie noch ihre Namen lesen. Schaltest du
-den Link ab, bleibt alles erhalten, was schon angekommen ist.
+People without an account can hand you files through a link, each into a folder of their own, without seeing anything
+else in your space.
 
 ## Related
 

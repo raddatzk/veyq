@@ -63,17 +63,10 @@
   name and key wrap they seal are bound to it, so one sealed for the old parent must never land after a move
   ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 3).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Several of you can work on the same memory at the same time. If someone sets the place while you are
-looking at the memory, the place stays — opening the memory or adding a date never erases it. If two of you
-change the very same thing, the app shows you what the other person chose and lets you decide again, instead of
-silently overwriting it.
-
-**DE —** Mehrere von euch können gleichzeitig an derselben Erinnerung arbeiten. Setzt jemand den Ort, während
-du die Erinnerung ansiehst, bleibt der Ort erhalten — das Öffnen der Erinnerung oder ein neues Datum löscht ihn
-nie. Ändert ihr beide genau dasselbe, zeigt dir die App, was die andere Person gewählt hat, und du entscheidest
-neu, statt es stillschweigend zu überschreiben.
+Several members can curate the same Memory at once without silently erasing or overwriting each other's date, place,
+cover or corrected photo times.
 
 ## Related
 
@@ -84,3 +77,4 @@ neu, statt es stillschweigend zu überschreiben.
 - Use-cases: [uc.memory.date](uc.memory.date.md), [uc.memory.place](uc.memory.place.md),
   [uc.memory.cover](uc.memory.cover.md), [uc.memory.gallery](uc.memory.gallery.md) (the lightbox writers)
 - Decisions: [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)
+- End-user view (docs site): [Memories](../../../../site/src/content/docs/memories/index.mdx)

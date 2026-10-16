@@ -61,17 +61,10 @@
   overwritten by every check and never deleted, so object deletion keeps its one arm.
 - **The secrets are write-only** on every surface, like a tenant's SMTP password.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Nothing here changes what the server can see of your memories: the store only ever holds ciphertext.
-What changes is that whoever runs your instance connects its storage in the admin console and checks it before
-anyone uploads, so a misconfigured store shows up on their screen instead of as a photo of yours that never
-arrives.
-
-**DE —** Hieran ändert sich nichts daran, was der Server von deinen Erinnerungen sehen kann: Im Speicher liegt
-immer nur Geheimtext. Neu ist, dass die Person, die deine Instanz betreibt, den Speicher in der Admin-Konsole
-verbindet und prüft, bevor jemand etwas hochlädt — ein falsch eingerichteter Speicher fällt dann bei ihr auf und
-nicht erst an einem Foto von dir, das nie ankommt.
+A misconfigured store shows up on the operator's screen before anyone uploads, instead of as a photo of yours that
+never arrives — and the store only ever holds encrypted data.
 
 ## Related
 

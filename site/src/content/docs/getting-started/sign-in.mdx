@@ -4,6 +4,7 @@ sources:
   - docs/features/account/use-cases/uc.account.login.md
   - docs/features/account/use-cases/uc.account.unlock.md
   - docs/features/account/use-cases/uc.account.remember-this-device.md
+  - docs/features/platform/use-cases/uc.platform.capability-discovery.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -56,10 +57,18 @@ another member's device hands it over.
 ## If it does not work
 
 - **Sign-in failed. Check your email and password.** The email or the password is wrong.
+  veyq does not say which of the two: a wrong password and an email with no account look exactly the same, so nobody
+  can use the sign-in page to find out who has an account here.
 - **Unlock failed. Check your password and Secret Key.** The Secret Key does not belong to this account, or has a
   typo.
 - **Couldn't read that kit.** The file is not your Emergency Kit, or the QR code is not readable in it. Try the PDF
   itself, or type the Secret Key.
+- **This app and this server don't match.** veyq checks this before you sign in, so nothing fails halfway through. If
+  your app is older, update it; if the server is older, the person who runs it has to update it. Your account and your
+  data are fine.
 
 Your password and your Secret Key never leave this device. The server never gets anything it could use to open what
 you keep: [Is my data safe?](/veyq/privacy/is-my-data-safe/)
+
+Signing in works with a one-time signature that your device makes from your password. The server only checks it, and
+keeps nothing it could reuse to sign in as you.

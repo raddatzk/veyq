@@ -177,23 +177,10 @@ act is where the scope key work lands:
   the first invite-gated account registration in the codebase. Delivered on contracts → backend → http →
   web (the `PENDING → ACTIVE` lifecycle is now real).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** As the operator of a veyq server, you can set up a separate, isolated space — a *tenant* — for
-a family, a group of friends, or a club, each on its own web address. You don't become a member of it
-and you can't read what's inside: you just enter a name, the web address, and the email of the person
-who should own it. You get an invite link and pass it on to them yourself — veyq sends no mail for this;
-they open it, sign in (or create their account), and from that moment **they** hold the keys to that
-space — not you. A space only comes alive once its owner has accepted; until then
-it's just a reserved address.
-
-**DE —** Als Betreiber eines veyq-Servers kannst du einen eigenen, abgeschotteten Bereich — einen
-*Tenant* — für eine Familie, einen Freundeskreis oder einen Verein anlegen, jeweils unter einer eigenen
-Web-Adresse. Du wirst **nicht** Mitglied und kannst die Inhalte nicht lesen: Du gibst nur einen Namen,
-die Web-Adresse und die E-Mail der Person ein, der der Bereich gehören soll. Du bekommst einen
-Einladungslink und gibst ihn selbst an diese Person weiter — veyq verschickt dafür keine Mail. Sie öffnet ihn,
-meldet sich an (oder legt ihr Konto an) — und ab dann hält **sie** die Schlüssel zu diesem Bereich, nicht du. Ein Bereich wird erst lebendig, wenn sein Owner angenommen hat; bis dahin ist es nur
-eine reservierte Adresse.
+A family, friends or a club gets its own isolated space at its own web address, whose owner holds its keys from the
+moment they accept — the person running the server never can read it.
 
 ## Related
 

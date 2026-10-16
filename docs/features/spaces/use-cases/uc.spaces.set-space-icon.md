@@ -199,20 +199,10 @@ sequenceDiagram
   client. The rule and its full reasoning live once, in
   [en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Give a space a **face**. As the owner of a family space or a group you pick a photo or a logo, frame
-it, and it becomes that space's avatar for everyone in it — so the space you want is the one you *recognise*,
-not the one you stop and read. The picture is locked on your device with the space's own key before it ever
-leaves: the server stores a scrambled block, always the same size, so it cannot even tell a plain logo from a
-family photo. A space without an icon simply shows its initial — nothing is ever picked for you.
-
-**DE —** Gib einem Bereich ein **Gesicht**. Als Owner eines Familienbereichs oder einer Gruppe wählst du ein
-Foto oder ein Logo, schneidest es zu — und es wird für alle darin zum Avatar dieses Bereichs. So *erkennst* du
-den Bereich, den du suchst, statt ihn zu lesen. Das Bild wird noch auf deinem Gerät mit dem eigenen Schlüssel
-des Bereichs verschlossen, bevor es überhaupt losgeht: Der Server speichert einen verwürfelten Block, immer
-gleich groß — er kann nicht einmal ein schlichtes Logo von einem Familienfoto unterscheiden. Ein Bereich ohne
-Icon zeigt einfach seinen Anfangsbuchstaben; ausgewählt wird nie etwas für dich.
+As an owner you can give your shared space or a group a picture, so everyone recognises it at a glance, while the
+server never sees the image.
 
 ## Related
 

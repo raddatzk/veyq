@@ -2,6 +2,7 @@
 title: "Deine Schlüssel ersetzen"
 sources:
   - docs/features/account/use-cases/uc.account.rotate-keys.md
+  - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -41,6 +42,12 @@ hineinlassen muss: **Wartet auf jemand anderen** heißt, eine andere besitzende 
 nächste Mal öffnet; **Niemand kann es tun** heißt, es gibt keine andere besitzende Person mehr — mach jemand anderen
 zur besitzenden Person dieses Bereichs. Bis das neue Schloss eingebaut ist, kann der alte Schlüssel Neues dort noch
 lesen.
+
+Besitzt du einen geteilten Bereich oder eine Gruppe und ein anderes Mitglied hat die eigenen Schlüssel ersetzt, baut
+das Gerät einer besitzenden Person, vielleicht deins, das neue Schloss von selbst ein. Klappt das nicht, steht beim
+Bereich in der Seitenleiste **Braucht ein neues Schloss**, und seine Mitgliederliste sagt, warum. Entweder gibt es
+keine besitzende Person mehr, die es einbauen kann: Dann mach jemand anderen zur besitzenden Person. Oder das Einbauen
+ist wiederholt gescheitert: Dann wähle **Neu anstoßen**, und dein Gerät übernimmt es.
 
 Dein Notfall-Kit funktioniert danach weiter: Dein Secret Key bleibt gleich, nur was er öffnet, ändert sich.
 

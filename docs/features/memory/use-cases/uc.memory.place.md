@@ -102,22 +102,10 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md) § *Request discipline*) that the
   medoid path never needed because it never asked per item.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Give a memory a **where**. You pick "set location": your photos' own GPS drop a pin at a real spot you
-visited, and you give it a name — type one ("at grandma's"), or, if you switch it on, let a map service turn the
-pin into a name ("Tenerife"). A map shows your memories as pins. It's all locked with the memory's own
-key on your device, so **veyq's server** never learns the place or the coordinates. The only thing that ever
-leaves your device is — if *you* turn it on — a bare coordinate sent straight to the map service to fetch a name;
-veyq never sees it.
-
-**DE —** Gib einer Erinnerung ein **Wo**. Du wählst „Ort festlegen": das GPS deiner Fotos setzt einen Pin an einen
-echten Ort, an dem du warst, und du gibst ihm einen Namen — tippst ihn selbst („bei Oma") oder lässt, wenn du es
-einschaltest, einen Kartendienst aus dem Pin einen Namen machen („Teneriffa"). Eine Karte zeigt deine Erinnerungen als
-Pins. Alles wird mit dem eigenen Schlüssel der Erinnerung auf deinem Gerät verschlüsselt;
-**veyqs Server** erfährt weder den Ort noch die Koordinaten. Das Einzige, was je dein Gerät verlässt, ist —
-*wenn du es einschaltest* — eine nackte Koordinate, direkt an den Kartendienst geschickt, um einen Namen zu holen;
-veyq sieht sie nie.
+A Memory shows where it happened and appears as a pin on your map, while veyq's server never learns the place or its
+coordinates.
 
 ## Related
 

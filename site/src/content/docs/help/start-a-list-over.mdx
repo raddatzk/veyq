@@ -3,12 +3,15 @@ title: "Start a list over"
 sources:
   - docs/features/account/enablers/en.account.device-register.md
   - docs/features/account/enablers/en.account.identity-pinning.md
+  - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
 ---
 
 Your device keeps two lists for your account: **the keys you trust** and **your device names**. Both are locked and kept
 on the server, and your device checks every copy it gets back. If the server returns an older copy than your device
 has already seen, or one that cannot be opened, your device refuses it. Then you see a warning, for example that device
 names are unavailable, with a link **Start this list over**.
+While your device refuses the list of the keys you trust, it shares nothing with a key it cannot check, until the list
+is back.
 
 ## Wait first
 

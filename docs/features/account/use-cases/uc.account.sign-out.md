@@ -105,18 +105,10 @@ Only what cannot open content on its own, or does not belong to the account:
 - **Another browser or device is out of reach here** — ending a session there is
   [uc.account.sessions](uc.account.sessions.md).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you sign out, veyq closes everything it had opened: your keys and everything it decrypted are
-gone from the page, and every other veyq tab in the same browser signs out with it. The same happens when
-your session is ended from another device. What your browser keeps cannot open your memories on its own —
-at most a saved key that still needs your password, if you chose to trust this device.
-
-**DE —** Wenn du dich abmeldest, schließt veyq alles, was es geöffnet hatte: deine Schlüssel und alles
-Entschlüsselte verschwinden aus der Seite, und jeder andere veyq-Tab im selben Browser meldet sich mit ab.
-Dasselbe passiert, wenn deine Sitzung von einem anderen Gerät aus beendet wird. Was dein Browser behält,
-kann deine Erinnerungen nicht allein öffnen — höchstens einen gespeicherten Schlüssel, der weiterhin dein
-Passwort braucht, falls du diesem Gerät vertraust.
+When you sign out, nothing that could open your space is left behind on this device beyond what you chose to keep for
+it.
 
 ## Related
 

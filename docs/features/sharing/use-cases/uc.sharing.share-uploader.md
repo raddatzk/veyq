@@ -123,23 +123,10 @@ sequenceDiagram
   scope-rotation ≠ share-revoke. cr-0102's personal-scope-only restriction is lifted for group/tenant by
   [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) (cr-0104).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can turn one memory into a "drop-box" link: friends can **add their photos** to it, but they **can’t
-see** what’s already in it or what anyone else added — perfect for collecting event photos privately. They open it,
-type their name once (which other visitors of a link never see), and drop in pictures — no account, nothing installed. **Important, and we say it clearly on
-the page:** an uploader sees the photos they just added **only in that browser tab** — if they reload or come back
-later, those won’t be shown again (they’re safely delivered to you, and they can still add more). So it’s for
-*handing photos in*, not for managing a gallery. You, the curator, see every contribution in your own memory and
-can remove anything.
-
-**DE —** Du kannst eine Erinnerung in einen „Briefkasten"-Link verwandeln: Freunde können **ihre Fotos beisteuern**,
-aber **nicht sehen**, was schon drin ist oder was andere hinzugefügt haben — ideal, um Event-Fotos privat
-einzusammeln. Sie öffnen ihn, tippen einmal ihren Namen ein (den andere, die einen Link öffnen, nie sehen) und laden Bilder hoch — ohne Konto, ohne Installation.
-**Wichtig, und wir sagen es deutlich auf der Seite:** wer hochlädt, sieht die gerade hinzugefügten Fotos **nur in
-diesem Browser-Tab** — nach einem Neuladen oder späteren Besuch werden sie hier nicht mehr angezeigt (bei dir kommen
-sie sicher an, und man kann weiter hinzufügen). Es geht also ums *Abgeben* von Fotos, nicht ums Verwalten einer
-Galerie. Du als Kurator:in siehst jeden Beitrag in deiner eigenen Erinnerung und kannst alles entfernen.
+You can collect photos from event guests through a drop-box link, without an account, while they see neither what is
+in the Memory nor what others added.
 
 ## Related
 

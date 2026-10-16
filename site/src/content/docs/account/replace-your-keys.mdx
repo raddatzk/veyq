@@ -2,6 +2,7 @@
 title: "Replace your keys"
 sources:
   - docs/features/account/use-cases/uc.account.rotate-keys.md
+  - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -37,6 +38,11 @@ Under **Shared spaces** you see the spaces where someone else has to fit the new
 **Waiting for someone else** means another owner does it the next time they open veyq; **Nobody can do it** means no
 other owner is left — make someone else an owner of that space. Until the new lock is in, the old key can still read
 what is new there.
+
+If you own a shared space or a group and another member replaced their keys, one owner's device, perhaps yours, fits
+the new lock by itself. If that cannot happen, the space shows **Needs a new lock** in the sidebar, and its member
+list says why. Either no owner is left who can fit it, so make someone else an owner. Or fitting it kept failing: then
+choose **Start again**, and your device takes it on.
 
 Your Emergency Kit keeps working afterwards: your Secret Key stays the same, only what it opens changes.
 

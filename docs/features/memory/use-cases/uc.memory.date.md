@@ -79,16 +79,10 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
   (`IsoDateField` / `memoryDateRange`); the 4-mode switch realizes the approved
   mockup (the pre-E2EE design carried only a flat start/end range).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Give a memory a **when**. The date can just **figure itself out** from your photos (earliest to latest),
-or you can set a single day, a span, or an open-ended "since…". It's all locked with the memory's own key on your
-device, so the server only ever stores scrambled data — it never learns the day you were there.
-
-**DE —** Gib einer Erinnerung ein **Wann**. Das Datum kann sich **automatisch** aus deinen Fotos ergeben
-(frühestes bis spätestes), oder du setzt einen einzelnen Tag, einen Zeitraum oder ein offenes „seit…". Alles wird
-mit dem eigenen Schlüssel der Erinnerung auf deinem Gerät verschlüsselt; der Server speichert nur verschlüsselte
-Daten und erfährt nie den Tag, an dem du dort warst.
+A Memory shows when it happened — worked out from its photos, or set by you as a day, a span or an open-ended start —
+without the server ever learning the date.
 
 ## Related
 

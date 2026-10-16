@@ -97,22 +97,10 @@ sequenceDiagram
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator on
   operator-served web.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you share memories with someone, your app quietly remembers their security key the first time —
-no action needed. If it ever changes, you'll be told, because a changed key can mean someone is trying to
-impersonate them. You then decide: does this look right (maybe they got a new phone), or does it look wrong?
-If your device ever can't read that list of remembered keys, it stops sharing with anyone it can't check and tells
-you. You can start the list over in the settings — but only you can, and it costs something real: everyone is
-new to you again, every number you compared is forgotten, and a key that changed in the meantime won't be flagged.
-
-**DE —** Wenn du Erinnerungen mit jemandem teilst, merkt sich deine App beim ersten Mal still dessen
-Sicherheitsschlüssel — ohne dass du etwas tun musst. Ändert er sich je, wirst du informiert, denn ein geänderter
-Schlüssel kann heißen, dass sich jemand als diese Person ausgibt. Du entscheidest dann: passt das (vielleicht ein
-neues Handy), oder wirkt es falsch? Kann dein Gerät diese Liste gemerkter Schlüssel einmal nicht lesen, teilt es
-mit niemandem mehr, den es nicht prüfen kann, und sagt dir das. Du kannst die Liste in den Einstellungen neu
-beginnen — aber nur du, und es kostet etwas: alle sind für dich wieder neu, jede verglichene Nummer ist vergessen,
-und ein Schlüssel, der sich inzwischen geändert hat, wird nicht mehr gemeldet.
+Your device remembers each person's key the first time and tells you if it ever changes, so nobody can quietly pose as
+someone you share with.
 
 ## Related
 
@@ -132,3 +120,4 @@ und ein Schlüssel, der sich inzwischen geändert hat, wird nicht mehr gemeldet.
   safety-number), [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the trust tier this rides on)
 - End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)
 - End-user view (docs site): [Verify a person](../../../../site/src/content/docs/account/verify-a-person.mdx)
+- End-user view (docs site): [Start a list over](../../../../site/src/content/docs/help/start-a-list-over.mdx)

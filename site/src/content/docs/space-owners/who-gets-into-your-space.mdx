@@ -5,6 +5,7 @@ sources:
   - docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md
   - docs/features/spaces/use-cases/uc.spaces.remove-tenant-member.md
   - docs/features/spaces/use-cases/uc.spaces.set-space-icon.md
+  - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -44,6 +45,15 @@ device, yours or another one's, locks a copy of the key to the newcomer the next
 
 They lose access to the space and its groups. What they already saw, they may have kept. A group they owned alone
 passes on or is closed.
+
+In more detail: a group they ran alone passes to the member who has been in it longest, and a group where they were
+the only person is deleted after 30 days. You never gain access to anyone's group this way. Their Personal space is
+not taken away at once: for 30 days they can still sign in, look through it and save what they want, but change
+nothing. Then it is erased.
+
+Each group they shared with others also gets a new lock. One of its owners' devices fits it by itself the next time
+that owner opens veyq. The server shuts them out at once, but until the new lock is in, their old key would still open
+what is new in that group.
 
 You cannot make another member an owner of the shared space here; that is possible only for a
 [group](/veyq/spaces/group-members/).

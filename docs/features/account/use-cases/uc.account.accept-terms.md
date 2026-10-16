@@ -41,16 +41,10 @@ gate reads the highest version accepted. No entry until accepted. **Anonymous pu
 - **Decline** → no acceptance recorded; the member stays out of the shell (they can sign out). No content is
   exposed by the gate itself.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Before you enter a shared space, you see the rules its operator set and agree to them once. If the
-operator later changes the rules, you're asked to agree again — so you always know what you've signed up to.
-Agreeing is just a small note the server keeps ("accepted version 3") — never anything about your photos.
-
-**DE —** Bevor du einen geteilten Bereich betrittst, siehst du die Regeln, die dessen Betreiber gesetzt hat, und
-stimmst ihnen einmal zu. Ändert der Betreiber die Regeln später, wirst du erneut um Zustimmung gebeten — so weißt
-du immer, worauf du dich eingelassen hast. Die Zustimmung ist nur eine kleine Notiz beim Server („Version 3
-akzeptiert") — nie etwas über deine Fotos.
+You see and agree to the rules a shared space's owner set before you enter, and again whenever they change, so you
+always know what you have agreed to.
 
 ## Related
 

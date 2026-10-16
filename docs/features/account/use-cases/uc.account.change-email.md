@@ -66,16 +66,9 @@
 - **One mail budget.** A request spends the per-account budget the address confirmation spends: one account aiming its
   space's relay, whichever mail it asks for.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can change the email address you sign in with. You confirm it with your password and Secret Key, then click
-the link sent to the new address. Your data and keys stay as they are; other devices are signed out, and your old address
-gets a short notice. Print a new Emergency Kit afterwards - the old one still works, but shows the old address.
-
-**DE —** Du kannst die E-Mail-Adresse ändern, mit der du dich anmeldest. Du bestätigst das mit Passwort und Secret Key und
-klickst dann auf den Link, der an die neue Adresse geht. Deine Daten und Schlüssel bleiben, wie sie sind; andere Geräte
-werden abgemeldet, und deine alte Adresse bekommt einen kurzen Hinweis. Drucke danach ein neues Emergency Kit - das alte
-funktioniert weiter, zeigt aber die alte Adresse.
+You can move your sign-in to a new email address without losing your account, your keys or anything you keep.
 
 ## Related
 

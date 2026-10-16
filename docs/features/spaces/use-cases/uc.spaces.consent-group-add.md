@@ -141,24 +141,10 @@ sequenceDiagram
   ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6), and a consent add carries a
   valid one from the moment the owner makes it — so the tag does not make consent operator-proof either.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** By default, a friend can add you to a shared group and you'll just find yourself in it — quick, but not
-everyone wants that. So there's a switch: **"ask before adding me to groups."** Turn it on and an add becomes an
-invitation instead. You'll see the group's **real name** — the very same name everyone already in the group sees,
-so the person adding you can't quietly show you a nicer-sounding one — and **who added you**, all unreadable to the
-server, and you decide: **Accept** and the group's key is handed to you the usual way; **Decline** and it's as if it
-never happened — nothing was shared with you, and no record of the "no" is kept. Until you accept, the key to the
-group is **never** handed out, so nothing of the group ever reaches you without your say-so.
-
-**DE —** Standardmäßig kann dich ein:e Freund:in zu einer geteilten Gruppe hinzufügen, und du findest dich einfach
-darin wieder — schnell, aber nicht jede:r will das. Darum gibt es einen Schalter: **„frag mich, bevor du mich zu
-Gruppen hinzufügst."** Ist er an, wird ein Hinzufügen zu einer Einladung. Du siehst den **echten Namen** der Gruppe
-— genau den Namen, den alle in der Gruppe schon sehen, sodass die Person, die dich hinzufügt, dir keinen
-schöner klingenden vorgaukeln kann — und **wer dich hinzugefügt hat**, für den Server unlesbar, und du
-entscheidest: **Annehmen**, und der Schlüssel zur Gruppe wird dir wie üblich übergeben; **Ablehnen**, und es ist,
-als wäre es nie passiert — nichts wurde mit dir geteilt, und das „Nein" wird nirgends festgehalten. Bis du annimmst,
-wird der Schlüssel zur Gruppe **nie** herausgegeben — nichts aus der Gruppe erreicht dich ohne dein Einverständnis.
+You can choose to be asked before anyone adds you to a group, so you see which group and who invited you, and nothing
+of it reaches you until you accept.
 
 ## Related
 
