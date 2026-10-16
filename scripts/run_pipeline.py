@@ -606,13 +606,16 @@ def classify_uses(uses: str) -> tuple[str, str]:
 
 
 def kill(proc: subprocess.Popen) -> None:
-    for sig in (signal.SIGTERM, signal.SIGKILL):
+    """Stop a step's whole process group the way a cancelled GitHub job is stopped: SIGINT first, so a step's own
+    `finally` runs (the races runner stops its MariaDB container there — measured: a SIGTERM first left it running),
+    then SIGTERM, then SIGKILL."""
+    for sig, grace in ((signal.SIGINT, 60), (signal.SIGTERM, 10), (signal.SIGKILL, 10)):
         try:
             os.killpg(proc.pid, sig)
         except ProcessLookupError:
             return
         try:
-            proc.wait(timeout=10)
+            proc.wait(timeout=grace)
             return
         except subprocess.TimeoutExpired:
             continue
@@ -647,7 +650,8 @@ class Run:
     # --- one job -----------------------------------------------------------------------------------------
 
     def run_job(self, job: Job, needs: dict) -> None:
-        started = time.monotonic()
+        started = time.monotonic()  # the budget's clock starts when the job does, not when it was queued
+        say(f"[start] {job.label}")
         log_path = self.out / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', job.label)}.log"
         temp = self.work / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', job.label)}.tmp"
         clone = self.work / re.sub(r"[^A-Za-z0-9_.-]+", "_", job.label)
@@ -971,7 +975,7 @@ def execute(run: Run, groups: dict) -> None:
                         say(f"[{decision}] {job.label} — {reason}")
                         continue
                     job.status = "running"
-                    say(f"[start] {job.label} (budget {text(job.budget)} min)")
+                    say(f"[queued] {job.label} (budget {text(job.budget)} min)")
                     needs_ctx = {n: aggregate(groups[n]) for n in needs if n in groups}
                     running[pool.submit(run.run_job, job, needs_ctx)] = job
             if not running and not progressed:
