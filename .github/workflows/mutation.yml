@@ -91,7 +91,7 @@ jobs:
         # From the workspace root: one `npm ci` links `@veyq/crypto` into web/ and runs each workspace's
         # `prepare` -> `generate:api`, so the generated API client the full dry-run suite imports exists
         # (mirrors ci.yml's frontend job). openapi-generator needs Java, pre-installed on ubuntu-latest.
-        # The registry half (other platforms' bindings) is asked once per commit, by container.yml's `test`.
+        # The registry half (other platforms' bindings) is asked once per commit, by ci.yml's `frontend` job.
         run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
 
       # TWO gates, not one, since the suite was split across packages (cr-admin-web-extraction, ADR 0065).
