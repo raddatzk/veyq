@@ -14,6 +14,7 @@ vi.mock('../core/node/treeStore', async (orig) => ({ ...(await orig<object>()), 
 vi.mock('../core/people/directory', async (orig) => ({ ...(await orig<object>()), resetPeopleDirectory: vi.fn() }))
 vi.mock('../core/favorites/favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
+vi.mock('../features/tenant/tenantCapabilities', () => ({ getTenantCapabilities: vi.fn() }))
 
 import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActiveScope, clearActiveSpace } from './activeSpace'
 import { resetPeopleDirectory } from '../core/people/directory'
@@ -32,6 +33,8 @@ import { serverState } from '../shared/state/serverState'
 import { suspensionSignals } from './tenantSuspension'
 import type { TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
+import { getTenantCapabilities } from '../features/tenant/tenantCapabilities'
+import { capabilityState } from '../shared/state/capabilities'
 
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'
 const TENANT_SCOPE_ID = 'tn-1'
@@ -67,6 +70,24 @@ describe('enterScope — tenant', () => {
     expect(activeSpace.name).toBeNull() // the tenant scope is anonymous — no per-scope name
     expect(activeSpace.tenantUnavailable).toBe(false)
     expect(activeScopeKey()).toBe(key)
+  })
+
+  it('loads the tenant\'s effective capability set on entry, falls back on a failed read, and forgets it on clear', async () => {
+    // ADR 0088 decision 3: after sign-in the shell soft-gates on what THIS tenant offers, not the pre-auth manifest.
+    vi.mocked(openScope).mockResolvedValue(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, new Uint8Array(32).fill(9)))
+    vi.mocked(getTenantCapabilities).mockResolvedValueOnce(['core.group-space'])
+    await enterScope(TENANT_SCOPE)
+    expect(getTenantCapabilities).toHaveBeenCalledWith(TENANT_ID)
+    expect(capabilityState.tenantIds).toEqual(['core.group-space'])
+
+    vi.mocked(getTenantCapabilities).mockRejectedValueOnce(httpError(500))
+    await enterScope(TENANT_SCOPE)
+    expect(capabilityState.tenantIds).toBeNull() // the instance's manifest stands; the server gates anyway
+
+    vi.mocked(getTenantCapabilities).mockResolvedValueOnce(['core.group-space'])
+    await enterScope(TENANT_SCOPE)
+    clearActiveSpace()
+    expect(capabilityState.tenantIds).toBeNull()
   })
 
   it('falls back to Personal (auto-birth + open) when there is no TENANT grant, flagging it unavailable', async () => {

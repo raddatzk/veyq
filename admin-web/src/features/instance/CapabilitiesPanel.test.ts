@@ -42,6 +42,7 @@ function entry(id: string, name: string, off: boolean, effective: boolean): Inst
     whenOff: { en: `Without ${name}, new ones are refused.`, de: `Ohne ${name} wird Neues abgelehnt.` },
     off,
     effective,
+    tenantSwitchable: false,
   }
 }
 
@@ -77,6 +78,12 @@ describe('CapabilitiesPanel (ADR 0088, admin-web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     i18n.global.locale.value = 'en'
+  })
+
+  it('says which entries a tenant owner can narrow further, and only those', async () => {
+    const w = await mountPanel([{ ...entry('core.x', 'Ex', false, true), tenantSwitchable: true }, entry('core.y', 'Why', false, true)])
+    expect(row(w, 'core.x').find('.capability__tenant').text()).toBe(t('capabilities.tenantSwitchable'))
+    expect(row(w, 'core.y').find('.capability__tenant').exists()).toBe(false)
   })
 
   it('shows the register as a tree, in served order, with each entry’s title, purpose and state', async () => {

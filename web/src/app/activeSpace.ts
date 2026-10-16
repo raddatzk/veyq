@@ -6,6 +6,8 @@
 import { reactive } from 'vue'
 import { ensurePersonalScope, openScope, openScopeById, openGroupByToken, type OpenedScope } from '../features/spaces/scopes'
 import { getTenantTerms } from '../features/tenant/tenantTerms'
+import { getTenantCapabilities } from '../features/tenant/tenantCapabilities'
+import { setTenantCapabilities } from '../shared/state/useCapabilities'
 import { zeroEpochKeys, type EpochKeys } from '../features/spaces/epochs'
 import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../core/node/location'
@@ -140,6 +142,9 @@ export async function enterScope(token: string): Promise<void> {
     // cr-0114: refresh the tenant's terms status so the router accept-gate knows if a (re-)accept is due. The
     // tenant is the same regardless of which scope (tenant/personal/group) is open, and terms are member-readable.
     await refreshTenantTerms(opened.tenantId)
+    // ADR 0088 decision 3: what this tenant offers, its owner's narrowing included. Every member reads it; the
+    // whole shell soft-gates on it from here on (`hasCapability`).
+    await refreshTenantCapabilities(opened.tenantId)
     // cr-invitations-topbar-badge: refresh the pending group-invitation count for the active tenant so the top-bar
     // attention badge reflects it. Not awaited — the badge updates whenever it resolves; scope entry never blocks
     // on it, and a failure just leaves the count at 0 (fail-quiet in refreshMyInvitations).
@@ -210,6 +215,7 @@ export function clearActiveSpace(): void {
   activeSpace.trustRefusal = null
   activeSpace.termsRevision = 0
   activeSpace.acceptedRevision = 0
+  setTenantCapabilities(null)
   if (epochKeys) zeroEpochKeys(epochKeys)
   epochKeys = null
   scopeKey = null
@@ -222,6 +228,20 @@ export function clearActiveSpace(): void {
 /** A 404 from the scope endpoints means no tenant claims this Host (`tenant_not_found`). */
 function isNoTenant(err: unknown): boolean {
   return isHttpStatus(err, HttpStatus.notFound)
+}
+
+/** Load the open tenant's effective capability set (ADR 0088 decision 3). A failed read falls back to the instance's
+ *  pre-auth manifest rather than hiding everything: it is a UX hint, and the server's gates refuse per tenant anyway. */
+export async function refreshTenantCapabilities(tenantId: string | null): Promise<void> {
+  if (!tenantId) {
+    setTenantCapabilities(null)
+    return
+  }
+  try {
+    setTenantCapabilities(await getTenantCapabilities(tenantId))
+  } catch {
+    setTenantCapabilities(null)
+  }
 }
 
 /** Fetch the active tenant's terms status into `activeSpace` (cr-0114). Fail-open: on any error the revisions

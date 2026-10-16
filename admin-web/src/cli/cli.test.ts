@@ -96,6 +96,7 @@ function capability(id: string, name: string, off: boolean, effective: boolean):
     whenOff: { en: `Without ${name}, new ones are refused.`, de: `Ohne ${name} wird Neues abgelehnt.` },
     off,
     effective,
+    tenantSwitchable: false,
   }
 }
 const register: InstanceCapability[] = [

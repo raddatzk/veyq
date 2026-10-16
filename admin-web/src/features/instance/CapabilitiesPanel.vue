@@ -10,7 +10,9 @@
 //   - switching off asks first and shows the entry's own `whenOff`, since it can send members to their
 //     Emergency Kit (a device switch says so in its own text); switching on only restores, so it asks nothing —
 //     the split `TenantDetailPanel`'s suspend / reactivate makes;
-//   - a row re-renders from the PUT's answer, not from what was asked for.
+//   - a row re-renders from the PUT's answer, not from what was asked for;
+//   - an entry a tenant owner may narrow further says so (`tenantSwitchable`, the catalog's levels): "on" here is not
+//     "on in every tenant".
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -109,6 +111,7 @@ async function toggle(entry: InstanceCapability) {
               <strong class="capability__title">{{ words(node.entry.title) }}</strong>
               <span class="veyq-badge capability__state" :class="STATE_TONE[node.state.kind]">{{ stateLabel(node.state) }}</span>
               <small class="settings-muted capability__purpose">{{ words(node.entry.purpose) }}</small>
+              <small v-if="node.entry.tenantSwitchable" class="settings-muted capability__tenant">{{ t('capabilities.tenantSwitchable') }}</small>
               <code class="capability__id">{{ node.entry.id }}</code>
             </div>
             <Button
@@ -154,6 +157,7 @@ async function toggle(entry: InstanceCapability) {
   min-width: 0;
 }
 .capability__purpose,
+.capability__tenant,
 .capability__id {
   flex-basis: 100%;
 }

@@ -7,12 +7,16 @@ import { reactive } from 'vue'
 // only when VERSION does, never by hand. `0` is pre-release.
 export const EXPECTED_MAJOR: number = __VEYQ_MAJOR__
 
-// Reactive capability state discovered from GET /api/setup on boot (uc.platform.capability-discovery). It is
-// instance-wide + identity-free — the same for every caller — so it lives in one module singleton the whole app
-// soft-gates on, mirroring serverState.
+// Reactive capability state (uc.platform.capability-discovery): the instance level discovered from GET /api/setup on
+// boot, and — once a space is open — its tenant's effective set (GET /api/tenants/{tenantId}/capabilities, ADR 0088
+// decision 3), which narrows it. Both are identity-free (the same for every caller, for every member of the tenant),
+// so they live in one module singleton the whole app soft-gates on, mirroring serverState.
 export const capabilityState = reactive({
   // The instance's ACTIVE capability ids; null while boot is still discovering (features stay hidden until known).
   ids: null as string[] | null,
+  // The open tenant's effective ids, a subset of `ids` (a tenant only narrows); null while no tenant's set is loaded,
+  // and then the instance's ids are what the client reads.
+  tenantIds: null as string[] | null,
   // The instance's advertised version; null until discovered. `major` drives the hard gate, `build` is info-only.
   major: null as number | null,
   build: null as number | null,
