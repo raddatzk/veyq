@@ -57,7 +57,7 @@ import java.util.UUID
 )
 class SharingResource(
     private val handler: SharingHandler,
-    /** A READ_WRITE guest's tree operations (`createShareNode`, `updateShareNode`). */
+    /** A guest's tree operations (`createShareNode`, `updateShareNode`, `abandonShareNode`). */
     private val nodes: ShareNodesHandler,
     private val identity: SecurityIdentity,
     private val tenant: RequestTenant,
@@ -410,6 +410,18 @@ class SharingResource(
             placementRevision = updateShareNodeRequest.placementRevision.validated(),
         )) {
             UpdateShareNodeOutcome.Updated -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @PermitAll
+    @RateLimitExempt(
+        reason = "An abandon adds no row: it erases one empty placeholder a guest created, so its volume is bounded by " +
+            "the creates, which spend the share's upload budget. Raw call volume by a link holder stays open, as for " +
+            "the guest reads (cc.security.rate-limit § Unbounded by decision).",
+    )
+    override fun abandonShareNode(shareId: String, nodeId: UUID, xContributorToken: String, xSharePassword: String?): Response =
+        when (val o = nodes.abandon(shareId, xSharePassword, xContributorToken, nodeId.toString())) {
+            AbandonShareNodeOutcome.Abandoned -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
 }

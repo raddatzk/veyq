@@ -1,16 +1,20 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.CreateNodeOutcome
+import me.raddatz.veyq.core.content.NodeSubtreePurge
 import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.content.SubtreeBoundary
 import me.raddatz.veyq.core.content.UpdateNodeOutcome
+import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
 import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
 import me.raddatz.veyq.core.http.FailureStatus.UNPROCESSABLE
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.persistence.createOrConflict
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -65,12 +69,31 @@ sealed interface UpdateShareNodeOutcome {
     object InvalidRequest : UpdateShareNodeOutcome, HttpFailure by Failures.invalidRequest
 }
 
+sealed interface AbandonShareNodeOutcome {
+    object Abandoned : AbandonShareNodeOutcome
+    /** The link's own 404 — as [CreateShareNodeOutcome.NotFound]. */
+    object NotFound : AbandonShareNodeOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+    /** No live node inside the guest's reach has that id — a 404, the same for a node outside it as for none. */
+    object NodeNotFound : AbandonShareNodeOutcome, HttpFailure by Failures.nodeNotFound
+    object NotContributable : AbandonShareNodeOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
+    object PasswordIncorrect : AbandonShareNodeOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
+    object RateLimited : AbandonShareNodeOutcome, HttpFailure by Failures.rateLimited
+    /** The share's root, a `WRITE_ONLY` guest's identity folder itself, or — for a `READ_WRITE` guest — an identity
+     *  folder or a node inside one. */
+    object IllegalStructure : AbandonShareNodeOutcome, HttpFailure by Failures.illegalStructure
+    /** The node holds something — a child, an upload somebody else has open into it, its application's content — or
+     *  its kind's owner declares nothing ([GuestPlaceholders]): nothing is written. */
+    object NotAPlaceholder : AbandonShareNodeOutcome, HttpFailure by httpFailure("not_a_placeholder", CONFLICT)
+}
+
 /**
  * A `READ_WRITE` guest's tree operations on a share link (ADR 0080 decisions 6, 9, 10): create a node inside the shared
  * subtree, and move or rename one (one placement write). Core's, because they carry no application semantics: behind
  * [ShareGuestGate] instead of a member session, then [NodesHandler]'s principal-free operations with the share's
- * [SubtreeBoundary]. The server checks structure only and opens nothing. **No guest delete:** nodes store no
- * authorship, so "delete your own" cannot be checked, and a contributor could remove anything below the root.
+ * [SubtreeBoundary]. The server checks structure only and opens nothing. **No guest delete of anything that holds
+ * something:** nodes store no authorship, so "delete your own" cannot be checked, and a contributor could remove
+ * anything below the root. What a guest may take back is an **empty upload placeholder** ([abandon]): the node it
+ * created for an upload that was then refused (a full link) or given up, erased at once so nothing of it is kept.
  *
  * Who may do what is the container's owner's ([GuestNodeRules], both sides of a move), on top of where a kind may live
  * at all (`NodeKindRules`, which the node operations ask). A `WRITE_ONLY` guest only creates, and only inside its own
@@ -99,6 +122,8 @@ class ShareNodesHandler(
     /** `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
     @All private val rules: MutableList<GuestNodeRules>,
     @All private val writeOnlyKinds: MutableList<WriteOnlyGuestKinds>,
+    @All private val placeholders: MutableList<GuestPlaceholders>,
+    private val purge: NodeSubtreePurge,
 ) {
 
     fun create(
@@ -216,6 +241,65 @@ class ShareNodesHandler(
                     error("a guest placement states no epoch and no meta, and passed the gate")
             }
         }
+    }
+
+    /**
+     * Erase an empty upload placeholder (ADR 0080 decision 6, `abandonShareNode`): the node a guest created for an upload
+     * that was refused or given up. Within the guest's reach — strictly inside the subtree for `READ_WRITE` (never an
+     * identity folder or anything inside one), strictly inside its own identity folder for `WRITE_ONLY` — and only a
+     * node that holds nothing anybody could lose: no child (live or trashed: a trashed one is restorable), no upload
+     * session a member or another identity opened for it (so no guest cuts another's upload off), and its kind's owner
+     * declares it empty ([GuestPlaceholders]). The erase is the trash purge's ([NodeSubtreePurge.erase]), at once, with
+     * the bump of the tree revision. Spends no budget: it removes a row. A session this identity opened for the node
+     * stays and ages out (`UploadSessionPurge`), as every given-up upload's does.
+     *
+     * The lock order of the class: everything below is decided under the scope lock, so a completion into the node
+     * either committed first — and the owner's check sees its content — or runs after and finds no node.
+     */
+    fun abandon(shareId: String, pwToken: String?, contributorToken: String, nodeId: String): AbandonShareNodeOutcome {
+        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = false)) {
+            is ShareWriteGate.Admitted -> g
+            ShareWriteGate.NotFound -> return AbandonShareNodeOutcome.NotFound
+            ShareWriteGate.PasswordIncorrect -> return AbandonShareNodeOutcome.PasswordIncorrect
+            ShareWriteGate.RateLimited -> return AbandonShareNodeOutcome.RateLimited
+            ShareWriteGate.NotContributable -> return AbandonShareNodeOutcome.NotContributable
+        }
+        val scopeId = gated.scopeId
+        val writeOnly = gated.role == ShareEntity.WRITE_ONLY
+        return QuarkusTransaction.requiringNew().call {
+            when (underLock(gated, shareId, gated.role)) {
+                Refusal.NOT_FOUND -> return@call AbandonShareNodeOutcome.NotFound
+                Refusal.NOT_CONTRIBUTABLE -> return@call AbandonShareNodeOutcome.NotContributable
+                null -> {}
+            }
+            // The reach, as create's: a WRITE_ONLY guest's is its own live identity folder in the root.
+            val root = if (!writeOnly) gated.rootNodeId else
+                tree.identityFolder(gated.rootNodeId, gated.identityId)?.takeIf { it.deletedAt == null }?.id
+                    ?: return@call AbandonShareNodeOutcome.NotContributable
+            // The boundary first (see update): the reach's own root is never erased, a node outside is not found.
+            if (nodeId == root) return@call AbandonShareNodeOutcome.IllegalStructure
+            val node = tree.findInScope(scopeId, nodeId)
+            if (node == null || !tree.withinSubtree(scopeId, root, nodeId)) return@call AbandonShareNodeOutcome.NodeNotFound
+            // A READ_WRITE guest of a link above a drop box touches no guest's identity folder nor anything in one (see
+            // update); a WRITE_ONLY guest's reach IS inside its own.
+            if (!writeOnly && tree.identityFolderOwner(scopeId, nodeId) != null) return@call AbandonShareNodeOutcome.IllegalStructure
+            if (!isPlaceholder(scopeId, node, gated.identityId)) return@call AbandonShareNodeOutcome.NotAPlaceholder
+            purge.erase(scopeId, listOf(node))
+            AbandonShareNodeOutcome.Abandoned
+        }
+    }
+
+    /** [node] holds nothing anybody could lose (see [abandon]); under the scope lock. A session row names the node it
+     *  was opened for as its client declared it (`ownerId`), so one naming this node blocks the erase whoever's it really
+     *  is — it can only keep a placeholder, never erase anything that is not one. */
+    private fun isPlaceholder(scopeId: String, node: NodeEntity, identityId: String): Boolean {
+        if (NodeEntity.count("parentId", node.id) > 0) return false
+        val openByAnother = UploadSessionEntity.count(
+            "scopeId = ?1 and ownerId = ?2 and (openerShareIdentityId is null or openerShareIdentityId <> ?3)",
+            scopeId, node.id, identityId,
+        )
+        if (openByAnother > 0) return false
+        return GuestPlaceholders.isEmpty(placeholders, node.kind, scopeId, node.id)
     }
 
     private enum class Refusal { NOT_FOUND, NOT_CONTRIBUTABLE }

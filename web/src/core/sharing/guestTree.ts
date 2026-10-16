@@ -1,7 +1,7 @@
 // A READ_WRITE guest's tree operations on a share link (ADR 0080 decisions 2, 3, 6 and 10; cr-node-key-hierarchy 5b.4a):
-// create a node inside the shared subtree, and move or rename one. Core's, like the member's (`core/node/tree.ts`): they
-// carry no application semantics, and the server checks structure only (inside the subtree, the containers' owners,
-// `NodeKindRules`) and opens nothing.
+// create a node inside the shared subtree, move or rename one, and take back an empty upload placeholder it gave up.
+// Core's, like the member's (`core/node/tree.ts`): they carry no application semantics, and the server checks structure
+// only (inside the subtree, the containers' owners, `NodeKindRules`) and opens nothing.
 //
 // **Keys come from the chain, never from `K_SC`.** A guest holds the root's key (the share's `wrap` under `K_share`) and
 // every key below it (`walkSubtree`); it never holds the scope key, so it never writes at the scope root. Every write
@@ -71,7 +71,7 @@ export function guestTreeContext(
 /** The refusals a guest's tree operation answers, by the server's `code`. */
 export const GUEST_TREE_CODES = [
   'slug_taken', 'stale_epoch', 'id_taken', 'illegal_structure', 'illegal_scope', 'share_not_contributable',
-  'share_password_incorrect', 'share_not_found', 'node_not_found', 'stale_placement', 'rate_limited',
+  'share_password_incorrect', 'share_not_found', 'node_not_found', 'stale_placement', 'rate_limited', 'not_a_placeholder',
 ] as const
 export type GuestTreeCode = (typeof GUEST_TREE_CODES)[number]
 
@@ -114,6 +114,7 @@ export function guestTreeErrorMessageKey(err: unknown): { key: string; params?: 
       return { key: 'share.folder.gone' }
     case 'stale_epoch':
     case 'id_taken':
+    case 'not_a_placeholder': // an abandon's, which no guest is shown (`abandonShareNodeAsGuest`)
       return { key: 'share.folder.createFailed' }
   }
 }
@@ -163,6 +164,24 @@ export async function createShareNodeAsGuest(
       },
     })
     return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey }
+  } catch (e) {
+    throw await guestTreeErrorOf(e)
+  }
+}
+
+/**
+ * Take back `nodeId` as a guest — the empty placeholder this guest created for an upload that was then refused (a full
+ * link) or given up (`abandonShareNode`, ADR 0080 decision 6). The server erases it at once, but only a node that holds
+ * nothing: no child, no upload a member or another guest has open into it, and its application calls it empty (Depot: a
+ * file whose slot never held a blob); anything else is a {@link GuestTreeError} `not_a_placeholder`, and nothing changes.
+ */
+export async function abandonShareNodeAsGuest(
+  ctx: Pick<GuestTreeContext, 'shareId' | 'contributorToken' | 'pwToken'>, nodeId: string,
+): Promise<void> {
+  try {
+    await publicSharesApi().abandonShareNode({
+      shareId: ctx.shareId, nodeId, xContributorToken: ctx.contributorToken, xSharePassword: ctx.pwToken,
+    })
   } catch (e) {
     throw await guestTreeErrorOf(e)
   }

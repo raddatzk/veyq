@@ -120,6 +120,10 @@ class ShareSwitchGuestGateCoreSliceTest {
                 )
                 .`when`().patch("/api/shares/$id/nodes/${w.sub}")
         },
+        // Past the gate a folder is no placeholder (core alone declares none): a refusal only an admitted link reaches.
+        Path("abandonShareNode") { id ->
+            given().header("X-Contributor-Token", token).`when`().delete("/api/shares/$id/nodes/${w.sub}")
+        },
     )
 
     private fun placementRevision(nodeId: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.findById(nodeId)!!.placementRevision }

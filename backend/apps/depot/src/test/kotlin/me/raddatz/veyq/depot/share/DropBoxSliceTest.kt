@@ -173,6 +173,35 @@ class DropBoxSliceTest {
         memberPlace(t, folder, to = t.other, version = 0).statusCode(204)
     }
 
+    /** A drop box's guest takes back an empty file of its own folder (a refused or given-up upload,
+     *  `abandonShareNode`) — never one in another guest's folder, never its folder, never a file it completed; and a
+     *  guest of a link above takes back nothing inside a drop box. */
+    @Test
+    fun aDropBoxGuestTakesBackAnEmptyFileOfItsOwnFolderOnly() {
+        val t = tree()
+        val anna = dropLink(t)
+        val ben = secondGuest(anna)
+        val annaFolder = ensure(anna).statusCode(200).extract().path<String>("nodeId")
+        val benFolder = ensure(ben).statusCode(200).extract().path<String>("nodeId")
+        val annas = UUID.randomUUID().toString()
+        GuestTreeShare.create(anna, annaFolder, DepotNodeKinds.FILE, nodeId = annas).statusCode(201)
+        val bens = UUID.randomUUID().toString()
+        GuestTreeShare.create(ben, benFolder, DepotNodeKinds.FILE, nodeId = bens).statusCode(201)
+        val sent = guestFile(anna, annaFolder)
+        val above = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
+
+        GuestTreeShare.abandon(anna, bens).statusCode(404).body("code", equalTo("node_not_found"))
+        GuestTreeShare.abandon(anna, annaFolder).statusCode(422).body("code", equalTo("illegal_structure"))
+        GuestTreeShare.abandon(anna, sent).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        GuestTreeShare.abandon(above, bens).statusCode(422).body("code", equalTo("illegal_structure"))
+        assertEquals(setOf(annas, sent), childrenOf(annaFolder).toSet(), "a refusal writes nothing")
+        assertEquals(listOf(bens), childrenOf(benFolder))
+
+        // Control: its own empty file goes, the folder and the sent file stay.
+        GuestTreeShare.abandon(anna, annas).statusCode(204)
+        assertEquals(listOf(sent), childrenOf(annaFolder))
+    }
+
     @Test
     fun revokingTheLinkKeepsTheFoldersTheFilesAndTheIdentitiesThatOpenThem() {
         val t = tree()

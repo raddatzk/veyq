@@ -301,6 +301,55 @@ class ShareFilesSliceTest {
         assertEquals(held.byteSize + next.byteSize, linkUsage(link))
     }
 
+    /**
+     * The Storage page's promise (site `space-owners/storage`): a full link takes no more uploads, and nothing of the
+     * refused one is kept. A guest's create made the file before its start was refused (the limit is checked at the
+     * start, against the bytes), so the guest takes the file back (`abandonShareNode`) and it is erased at once.
+     */
+    @Test
+    fun aFileWhoseUploadTheFullLinkRefusedIsTakenBackAndNothingOfItIsKept() {
+        val t = tree()
+        val link = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
+        setLimit(t.tenantId, 1)
+        val file = UUID.randomUUID().toString()
+        GuestTreeShare.create(link, t.folder, DepotNodeKinds.FILE, nodeId = file).statusCode(201)
+        guestStart(link, file).statusCode(200).body("results[0].error", equalTo("quota_exceeded"))
+
+        GuestTreeShare.abandon(link, file).statusCode(204)
+
+        assertNull(tx { NodeEntity.findById(file) }, "no node is left behind, not even in the trash")
+        listShare(link).statusCode(200).body("items.size()", equalTo(1)).body("items[0].nodeId", equalTo(t.file))
+        assertEquals(0L, linkUsage(link) ?: 0L, "and nothing counts against the link")
+    }
+
+    /** Only a `FILE` whose slot never held a blob, and that nobody else is uploading into, is a placeholder (Depot's
+     *  `DepotGuestPlaceholders`); nodes store no authorship, so an empty file a member made is one too. */
+    @Test
+    fun onlyAnEmptyFileNobodyElseIsUploadingIntoIsTakenBack() {
+        val t = tree()
+        val link = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
+        // A file that holds a blob — a member's, or the guest's own once its upload completed — is never one.
+        GuestTreeShare.abandon(link, t.file).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        val sent = UUID.randomUUID().toString()
+        GuestTreeShare.create(link, t.folder, DepotNodeKinds.FILE, nodeId = sent).statusCode(201)
+        completeShare(link, sent, guestStartStaged(link, sent)).statusCode(200)
+        GuestTreeShare.abandon(link, sent).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        // An empty file a member is uploading into is not cut off.
+        val uploading = seedNode(t.scopeId, DepotNodeKinds.FILE, parentId = t.folder, wrappedContentKey = CONTENT_KEY)
+        memberStart(t.userId, t.scopeId, uploading)
+        GuestTreeShare.abandon(link, uploading).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        // A drop box is the owner's link-bearing node, never a placeholder.
+        val dropBox = seedNode(t.scopeId, DepotNodeKinds.DROPBOX, parentId = t.folder, wrappedContentKey = CONTENT_KEY)
+        GuestTreeShare.abandon(link, dropBox).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        for (id in listOf(t.file, sent, uploading, dropBox)) assertNotNull(tx { NodeEntity.findById(id) }, "a refusal writes nothing")
+        assertNotNull(blobOf(t.file)); assertNotNull(blobOf(sent))
+
+        // Control: an empty file nobody is uploading into goes.
+        val bare = seedNode(t.scopeId, DepotNodeKinds.FILE, parentId = t.folder, wrappedContentKey = CONTENT_KEY)
+        GuestTreeShare.abandon(link, bare).statusCode(204)
+        assertNull(tx { NodeEntity.findById(bare) })
+    }
+
     @Test
     fun aDeletedLinkKeepsItsGuestsIdentityWhileItsFileNamesIt() {
         val t = tree()

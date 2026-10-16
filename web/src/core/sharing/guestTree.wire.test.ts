@@ -275,6 +275,7 @@ describe('a refusal maps by its code, whatever the status', () => {
     node_not_found: 'share.folder.gone',
     stale_placement: 'share.folder.placementConflict',
     rate_limited: 'share.folder.rateLimited',
+    not_a_placeholder: 'share.folder.createFailed', // an abandon's, which no guest is shown
   }
   // Each code on a status that does NOT carry it: a mapping by status would answer otherwise.
   it.each(Object.entries(expected))('%s → %s', async (code, key) => {
