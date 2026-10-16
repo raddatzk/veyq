@@ -48,8 +48,10 @@ tenant's existing links at once, a feature switch refuses only what is new (ADR 
   stored (the write refuses it) and would be ignored.
 - **D5 — every gate gets the tenant of the scope it acts in**: share create/update/reactivate/reissue and the
   guest gate take the share's (or node's) scope tenant; `createGroup` its `tenantId`; node creation its scope's
-  tenant. `KeyMaterialHandler` and `PairingHandler` pass `null` (D2). `createShare`'s check moves after the
-  node/access check, because only the node names the tenant: a non-member now gets the 404 it gets anyway.
+  tenant. `KeyMaterialHandler` and `PairingHandler` pass `null` (D2). `createShare` keeps its instance-level check
+  before any lookup (it reads as "the operator turned sharing off") and adds the tenant's after the node/access
+  check, because only the node names the tenant: a non-member gets the 404 it gets anyway and learns nothing of
+  another tenant's policy.
 - **D6 — the wire** (tag `tenants`):
   - `GET /api/tenants/{tenantId}/capabilities` → `TenantCapabilities { capabilities: [Capability] }`, every member
     (READ), the effective set (decision 3). `Capability` moves from `setup` to `_common`, so both deliveries are

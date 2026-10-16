@@ -261,12 +261,18 @@ class SharingHandler(
     ): CreateShareOutcome {
         // Instance policy first (ADR 0032): the capability this role needs must be active, else 422 — checked
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
-        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(role))) return CreateShareOutcome.CapabilityDisabled
+        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(role), null)) return CreateShareOutcome.CapabilityDisabled
         val keys = shareKeys(role, wrap, sealedDropPublicKey, sealedDropPrivateKey) ?: return CreateShareOutcome.InvalidRequest
         // A node in the trash is shared by nobody: a link on it would serve nothing, and a restore is not a new share.
         val node = store.findNode(nodeId)?.takeIf { it.deletedAt == null } ?: return CreateShareOutcome.NoNode
         access.check(userId, node.scopeId, WRITE)
             .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)?.let { return it }
+        // The tenant's level (ADR 0088 decision 2): the node's tenant may have narrowed it, else 422. After the access
+        // check, because only the node names the tenant: a caller who is no member of its scope gets the 404 it gets
+        // anyway, and learns nothing of another tenant's policy.
+        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(role), node.scopeId)) {
+            return CreateShareOutcome.CapabilityDisabled
+        }
         // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a node whose kind's owner
         // declares this role for a share root ([ShareRoots], ADR 0080 decision 6). Whether a guest may then upload
         // under it is a separate question, [writesFor]'s.
@@ -405,7 +411,7 @@ class SharingHandler(
         // turned READ_WRITE while `.contribute` is off would mint a contribute link past the switch, and since the
         // guest gate refuses that role (ADR 0088 decision 5) it would serve no guest at all. Only an actual change:
         // a request naming the current role, or narrowing to READ while READ is on, passes.
-        if (role != null && role != share.role && !capabilities.isActive(ShareAccessPolicy.capabilityFor(role))) {
+        if (role != null && role != share.role && !capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(role), share.scopeId)) {
             return UpdateShareOutcome.CapabilityDisabled
         }
         return when (store.updateShare(userId, shareId, sealedNote, sealedShareName, role, expiresAt, passwordRequired, pwSalt, pwVerifier, sealedPassword)) {
@@ -455,7 +461,7 @@ class SharingHandler(
         access.check(userId, share.scopeId, WRITE)
             .refusal(ReactivateShareOutcome.NotFound, ReactivateShareOutcome.Suspended, ReactivateShareOutcome.Deleting)
             ?.let { return it }
-        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(share.role))) return ReactivateShareOutcome.CapabilityDisabled
+        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(share.role), share.scopeId)) return ReactivateShareOutcome.CapabilityDisabled
         // ADR 0075: the same link comes back on, so a link a departed member may hold is re-issued instead.
         val scope = scopes.find(share.scopeId) ?: return ReactivateShareOutcome.NotFound
         if (reissueRequired(share, scope)) return ReactivateShareOutcome.ReissueRequired
@@ -506,7 +512,7 @@ class SharingHandler(
     ): ReissueShareOutcome {
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
-        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
+        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(old.role), old.scopeId)) return ReissueShareOutcome.CapabilityDisabled
         // No drop private key: the old WRITE_ONLY share proves the node already holds one (it is set once and
         // never cleared), and every upload so far is sealed to it (ADR 0031 point 7).
         val keys = shareKeys(old.role, wrap, sealedDropPublicKey, null) ?: return ReissueShareOutcome.InvalidRequest

@@ -23,6 +23,7 @@ import me.raddatz.veyq.core.http.httpError
 import java.time.ZoneOffset
 import me.raddatz.veyq.core.generated.model.InstanceStoreProvisioning
 import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityText
 import me.raddatz.veyq.core.validation.validated
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
@@ -130,6 +131,7 @@ class InstanceResource(
         id = state.id,
         title = texts.title.toWire(), purpose = texts.purpose.toWire(), whenOff = texts.whenOff.toWire(),
         off = state.off, effective = state.effective,
+        tenantSwitchable = state.id in CapabilityIds.TENANT_SWITCHABLE,
     )
 
     private fun CapabilityText.toWire() = InstanceCapabilityText(en = en, de = de)

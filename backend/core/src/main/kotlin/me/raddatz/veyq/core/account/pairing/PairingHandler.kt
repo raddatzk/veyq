@@ -55,7 +55,8 @@ class PairingHandler(
      * pairing in flight. Independent of `core.remember-device` (decision 11). It reads no channel, so it is the same
      * answer for every handle and adds nothing to the dead-channel oracle E1 closes.
      */
-    fun refusal(): HttpFailure? = if (capabilities.isActive(CapabilityIds.DEVICE_LINKING)) null else Failures.capabilityDisabled
+    // Instance-only (ADR 0088 decision 12): the new device asks before sign-in, and the channel carries no tenant.
+    fun refusal(): HttpFailure? = if (capabilities.isActive(CapabilityIds.DEVICE_LINKING, null)) null else Failures.capabilityDisabled
 
     /**
      * Open a channel under the client's handle.

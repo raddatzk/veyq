@@ -243,7 +243,7 @@ class ShareGuestGate(
         val expiry = share.expiresAt
         if (expiry != null && !expiry.isAfter(Instant.now())) return null
         if (!access.isLive(share.scopeId)) return null
-        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(share.role))) return null
+        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(share.role), share.scopeId)) return null
         return share
     }
 

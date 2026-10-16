@@ -278,9 +278,10 @@ class ScopesHandler(
     fun createGroup(
         userId: String, tenantId: String?, scopeId: String, encryptedName: String, grant: SignedGrant, admission: Admission,
     ): CreateGroupOutcome {
-        // Instance policy first (ADR 0032): a personal-only instance switches group scopes off → 422, enforced
-        // server-side even if a stale client still offers the affordance.
-        if (!capabilities.isActive(CapabilityIds.GROUP_SPACE)) return CreateGroupOutcome.CapabilityDisabled
+        // Policy first (ADR 0032, ADR 0088): a personal-only instance or tenant switches group scopes off → 422,
+        // enforced server-side even if a stale client still offers the affordance. The instance level is asked even
+        // without a tenant, so a request from no tenant's domain still reads as the operator's switch.
+        if (!capabilities.isActive(CapabilityIds.GROUP_SPACE, tenantId)) return CreateGroupOutcome.CapabilityDisabled
         tenantId ?: return CreateGroupOutcome.NoTenant
         access.check(userId, tenantId, WRITE)
             .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return it }

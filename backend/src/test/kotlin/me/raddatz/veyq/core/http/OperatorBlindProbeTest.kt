@@ -225,6 +225,12 @@ class OperatorBlindProbeTest {
         "updateTenantMailSettings" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/mail-settings", """{"tls":false,"enabled":false}""")
         },
+        "getTenantCapabilities" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/capabilities") },
+        "listTenantCapabilitySwitches" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/capability-switches") },
+        // The control switches an entry back on that is on: it changes nothing and answers 200, past the gate.
+        "setTenantCapabilitySwitch" to Probe(Address.TENANT) { s ->
+            Call("PUT", "/api/tenants/${s.tenantId}/capability-switches/core.group-space", """{"off":false}""")
+        },
         "getTenantStorage" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/storage") },
         "checkTenantStorageFit" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/storage-fit", """{"bytes":1}""") },
         "updateTenantStorage" to Probe(Address.TENANT) { s ->
