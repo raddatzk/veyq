@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""veyqctl — install, run and verify a veyq instance on Docker Compose from a published release (ADR 0096).
+"""veyqctl — install, run, upgrade and back up a veyq instance on Docker Compose from its releases (ADR 0096).
 
     veyqctl [--home DIR] [--source SRC] <command> …
 
@@ -8,6 +8,10 @@
     logs [-f] [--tail N] [SERVICE …]                 its logs
     verify [--release SEL] [--unsigned-local]        the signatures of the selected release, and nothing else
     check [--release SEL]                            which release `upgrade` would take, and a newer major beyond it
+    upgrade --key-into FILE [--unsigned-local]       to the release VEYQ_RELEASE selects, in ADR 0096 decision 5's order
+    backup --key-into FILE                           the three legs, by the running release's `instance_backup.py`
+    restore DIR --domain D (--key-from F | --without-key)   a capture onto this instance, which holds no data yet
+    self-update                                      this file, replaced by the installed release's `veyqctl`
 
 One file, Python 3.9 and the standard library only, because an operator fetches it with `curl` onto a host that
 already needs `python3` for backups: no `pip`, no virtualenv (ADR 0096 decision 2). It manages the instance's
@@ -55,18 +59,53 @@ operator's — given with `--set KEY=VALUE`, or asked for at a terminal, the tem
 without a terminal a missing one is refused, named. A `--set` key the template does not assign is kept below it.
 Written `0600`, in a home created `0700`.
 
+**`upgrade` runs only by hand, in ADR 0096 decision 5's order, and nothing stops before step 4:**
+  1. resolve the release `.env`'s `VEYQ_RELEASE` selects; nothing to do when it is the running one, refused when it is
+     an older one (there is no downgrade: going back is restoring a backup, ADR 0056 §6);
+  2. verify both images (as `install` does), then fetch its assets into `releases/<release>/`;
+  3. fill the new template from `.env` (`upgrade_values`): the image lines are the new release's, a key `.env` has
+     keeps its value, a secret veyqctl knows how to make is made — and every other key the new template assigns, and
+     every `${VAR:?…}` the new recipe or the override leaves unset, is refused, named; the result is staged as
+     `.env.next` and Compose itself checks it (`config --quiet`);
+  4. stop the app (the capture is cold, ADR 0056 §2: the database and the store keep running), back up the three legs
+     into `backups/<stamp>-before-<release>/` and check the capture, then switch `.env` and the recipe, `up`, and wait
+     until healthy. A failed backup switches nothing and starts the running release again. `--key-into` is required
+     and refused before anything else runs.
+The previous release's directory stays, so the diff and the way back are both on disk.
+
+**`backup` and `restore` are the running release's own `instance_backup.py`** — shipped beside `veyqctl` as an asset,
+checked against its manifest's sha256 before it runs — so the tool that captured is the tool its release documents.
+veyqctl gives it what the operator gave it by hand: the database password, the bundled store's endpoint and admin
+token (read from the instance's interpolated recipe, so through the environment, never an argv), the store's network,
+and Compose pointed at THIS instance (`COMPOSE_PROJECT_NAME`, `COMPOSE_ENV_FILES`). A store of the operator's own
+(`VEYQ_BACKUP_STORE_*` in the shell) passes through, as the tool documents. Leg (c) lives on a volume under Docker's
+data root, which a host cannot always read (Docker Desktop keeps it in a VM) and which needs root where it can: so the
+key comes out of the stopped app container with `docker cp`, into a `0700` directory in the home for as long as the
+tool needs it, and a restored key goes back in through a one-off container of the `app` service running as the
+image's own user — born the application's, `0600`, without root (the alternative `instance_backup.py`'s own refusal
+names). `--key-into` is required for `backup` and `upgrade`, and refused when it exists or lies inside `backups/`.
+
+**`self-update`** replaces this file with the installed release's `veyqctl` after checking it against that release's
+manifest — a release whose images were verified at `install`/`upgrade`, or one installed `--unsigned-local`, which it
+says. It checks no signature of `veyqctl`'s own: ADR 0096 decision 3 has the publish sign it with `cosign sign-blob`,
+and checking that bundle here is not built yet.
+
 **What proves it** — it is a host tool, not a coverage surface (ADR 0040; the use-case
 `uc.admin.install-and-upgrade-instance` stays `planned` for that reason): `scripts/veyqctl_selftest.py`, without
-Docker, holds the resolver, the manifest parse, the template merge and every refusal; the live runs of cr-veyqctl
-installed, stopped and started an instance from a mirror directory with images built from the tree.
+Docker, holds the resolver, the manifest parse, the template merge, `upgrade`'s order and every refusal; the live
+runs of cr-veyqctl installed, stopped and started an instance from a mirror directory with images built from the tree,
+upgraded it from one commit's release to the next with a Memory in it, and restored the upgrade's backup onto a fresh
+install.
 
 Its limits: it drives Compose only (Kubernetes upgrades with `helm upgrade`, decision 8); it cannot verify a mirror's
 `releases.json` or a manifest beyond its shape and the assets' sha256 — the images' signatures are what bind a
-release to veyq's publish; and it does not check that the Docker it talks to is the host's own.
+release to veyq's publish; it does not check that the Docker it talks to is the host's own; and an instance that was
+never set up has no tenant, so the backup tool refuses it and `upgrade` with it — such an instance is reinstalled.
 """
 from __future__ import annotations  # `str | None` below — the repo's scripts run on Python 3.9
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
@@ -74,8 +113,10 @@ import re
 import secrets
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -864,7 +905,7 @@ def cmd_logs(args: argparse.Namespace, host: Host) -> int:
 
 
 def selected(args: argparse.Namespace, home: Path) -> str:
-    if args.release:
+    if getattr(args, "release", None):
         return check_selector(args.release)
     env = home / ENV_FILE
     if env.is_file():
@@ -909,11 +950,321 @@ def cmd_check(args: argparse.Namespace, host: Host) -> int:
     return 0
 
 
+# ---- the running release's backup tool (ADR 0056) -------------------------------------------------------------
+
+class Facts(NamedTuple):
+    """What the backup tool needs, read from the instance's own interpolated recipe — never from key names here."""
+    key_path: str        # where the app keeps leg (c), inside its container
+    network: str         # the network the store is on, for the tool's rclone container
+    store_endpoint: str  # the bundled store, as that container reaches it
+    store_token: str     # the bundled store's admin token; the tool derives the S3 key pair from it
+    db_password: str     # the database's root password, for the dump and the load
+
+
+def stack_facts(host: Host, base: list[str]) -> Facts:
+    doc = json.loads(host.run([*base, "config", "--format", "json"]).stdout)
+    services = doc.get("services") or {}
+
+    def env(service: str, key: str) -> str:
+        value = ((services.get(service) or {}).get("environment") or {}).get(key)
+        if not value:
+            raise Refused(f"the recipe gives `{service}` no {key}, which the backup reads — this release's recipe "
+                          f"is not one this veyqctl knows how to back up")
+        return str(value)
+
+    store_networks = list((services.get("garage") or {}).get("networks") or {})
+    if not store_networks:
+        raise Refused("the recipe puts the store (`garage`) on no network, so the backup's rclone container cannot "
+                      "reach it")
+    network = ((doc.get("networks") or {}).get(store_networks[0]) or {}).get("name") or store_networks[0]
+    return Facts(env("app", "VEYQ_SECURITY_CONFIG_SECRET_FILE"), network, env("app", "VEYQ_BUNDLED_STORE_ENDPOINT"),
+                 env("app", "VEYQ_BUNDLED_STORE_ADMIN_TOKEN"), env("mariadb", "MARIADB_ROOT_PASSWORD"))
+
+
+def backup_env(home: Path, state: State, facts: Facts) -> dict[str, str]:
+    """The tool's environment: its credentials (never an argv), and Compose pointed at THIS instance.
+
+    The tool runs `docker compose -f <recipe> exec …` with no `-p` and no `--env-file`; the project and the `.env`
+    reach it through Compose's own variables, so it addresses this instance and interpolates the recipe with its
+    values. A store of the operator's own (`VEYQ_BACKUP_STORE_*` in the shell) passes through and wins, as the tool
+    documents.
+    """
+    return {"VEYQ_BACKUP_DB_PASSWORD": facts.db_password, "VEYQ_BUNDLED_STORE_ENDPOINT": facts.store_endpoint,
+            "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": facts.store_token, "COMPOSE_PROJECT_NAME": state.project,
+            "COMPOSE_ENV_FILES": str(home / ENV_FILE)}
+
+
+def verified_asset(home: Path, release: str, name: str) -> Path:
+    """A file of a release on disk, refused unless it is still the one its manifest names — it is about to run."""
+    manifest = read_release_manifest(home, release)
+    path = release_dir(home, release) / name
+    want = manifest.assets.get(name)
+    if not want or not path.is_file() or sha256(path.read_bytes()) != want:
+        raise Refused(f"{path} is not the {name} release {release}'s manifest names — a file of an installed "
+                      f"release changed on disk, and veyqctl does not run it")
+    return path
+
+
+def key_destination(home: Path, raw: str | None, why: str) -> Path:
+    """`--key-into`: required, new, on an existing directory, and never beside the captures (ADR 0056 §1)."""
+    if not raw:
+        raise Refused(f"{why} needs --key-into FILE: the backup's leg (c), the config-secret key, goes to a medium of "
+                      f"its own — the dump plus the key opens every tenant's SMTP password (ADR 0056 §1). Nothing "
+                      f"was stopped.")
+    path = Path(raw).expanduser().absolute()
+    if path.exists():
+        raise Refused(f"--key-into {path} exists — most likely an earlier capture's key; name a new file")
+    if not path.parent.is_dir():
+        raise Refused(f"--key-into {path}: its directory does not exist")
+    backups = (home / BACKUPS_DIR).absolute()
+    if path == backups or backups in path.parents:
+        raise Refused(f"--key-into {path} is inside {backups}, beside the dumps — the one place leg (c) must not go")
+    return path
+
+
+def app_container(host: Host, project: str) -> str:
+    """The project's `app` container, running or stopped — by its labels, never a one-off `run` of the service."""
+    ids = host.run(["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={project}", "--filter",
+                    "label=com.docker.compose.service=app", "--filter", "label=com.docker.compose.oneoff=False"]
+                   ).stdout.split()
+    if not ids:
+        raise Refused(f"project {project} has no app container to take the config-secret key from")
+    return ids[0]
+
+
+class BackupTool(NamedTuple):
+    path: Path
+    facts: Facts
+    env: dict
+
+
+def backup_tool(host: Host, home: Path, state: State) -> BackupTool:
+    """The running release's tool, checked, and what it needs — all of it settled BEFORE the app stops."""
+    facts = stack_facts(host, compose(home, state.release, state.project))
+    return BackupTool(verified_asset(home, state.release, BACKUP_ASSET), facts, backup_env(home, state, facts))
+
+
+def capture(host: Host, home: Path, state: State, tool: BackupTool, key_into: Path, name: str) -> Path:
+    """Legs (a), (b) and (c) of the stopped instance, by the running release's own backup tool, then verified."""
+    facts, env = tool.facts, tool.env
+    target = home / BACKUPS_DIR / name
+    # Leg (c) lives on a volume, under Docker's data root — not a path this host can always read (Docker Desktop
+    # keeps it in a VM). `docker cp` takes it out of the stopped app container instead, into a 0700 directory in
+    # the home, for exactly as long as the tool needs it.
+    with tempfile.TemporaryDirectory(prefix=".key-", dir=home) as tmp:
+        key = Path(tmp) / "config-secret.key"
+        host.run(["docker", "cp", f"{app_container(host, state.project)}:{facts.key_path}", str(key)])
+        host.run([sys.executable, str(tool.path), "capture", "--compose-file", str(release_dir(home, state.release) / COMPOSE_ASSET),
+                  "--docker-network", facts.network, "--config-secret-file", str(key), "--key-into", str(key_into),
+                  "--into", str(target)], env=env, stream=True)
+    host.run([sys.executable, str(tool.path), "verify", str(target), "--key-from", str(key_into)], env=env, stream=True)
+    say(f"backup: {target} (legs a and b), leg (c) at {key_into} — keep them apart, encrypt both before they leave "
+        f"this host")
+    return target
+
+
+def place_key(host: Host, home: Path, state: State, key: Path, key_path: str) -> None:
+    """Leg (c) into the app's volume, written by the app image's own user through a one-off container of the service.
+
+    The restored key must be the application's (uid 10001, `0600`) — a key born `root:root` there is one the app
+    cannot read (inbox #188). A host path into the volume needs root and a Docker whose data root the host can see;
+    a container of the service itself, run as the image's user, needs neither. The key travels on stdin, never argv.
+    """
+    script = 'umask 077 && cat > "$1.veyqctl" && mv -f "$1.veyqctl" "$1"'
+    host.run([*compose(home, state.release, state.project), "run", "--rm", "--no-deps", "-T", "--entrypoint", "/bin/sh",
+              "app", "-c", script, "place-key", key_path], stdin=key.read_bytes())
+
+
+def stop_app(host: Host, home: Path, state: State) -> None:
+    """The capture is cold: the writer stops, the database and the store keep running (ADR 0056 §2)."""
+    host.run([*compose(home, state.release, state.project), "stop", "app"], stream=True)
+
+
+def utc_stamp() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+# ---- upgrade (ADR 0096 decision 5) ------------------------------------------------------------------------------
+
+def upgrade_values(template: str, manifest: Manifest, old: dict[str, str]) -> tuple[dict[str, str], list[str]]:
+    """The next `.env`: the new template, filled from the running one — and what only the operator can give.
+
+    The image lines are the new release's; a key `.env` has keeps its value; a secret veyqctl knows how to make is
+    made; every other key the new template assigns and `.env` lacks is the operator's, so it is returned as missing
+    (the template's assigned keys are its required ones — its optional ones are comments). Every key of `.env` the
+    new template does not name is kept below it.
+    """
+    values: dict[str, str] = {}
+    missing = []
+    for key, _ in template_assignments(template):
+        if key in MANAGED:
+            values[key] = getattr(manifest, MANAGED[key])
+        elif key in old:
+            values[key] = old[key]
+        elif key in SECRETS:
+            values[key] = SECRETS[key]()
+        else:
+            missing.append(key)
+    for key, value in old.items():
+        values.setdefault(key, value)
+    return values, missing
+
+
+def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
+    """ADR 0096 decision 5, in its order; nothing is stopped before step 4."""
+    home = Path(args.home)
+    key_into = key_destination(home, args.key_into, "`upgrade` backs up before the new release migrates, so it")
+    state = read_state(home)
+    old = env_values((home / ENV_FILE).read_text())
+    selector = selected(args, home)
+
+    # 1. the release VEYQ_RELEASE selects; stop if it is the running one
+    spec = source_spec(args, home)
+    source = open_source(spec)
+    chosen = select(source.releases(), selector, source.describe())
+    running = tuple(int(x) for x in state.release.split("."))
+    if (chosen.major, chosen.minor) == running:
+        say(f"{RELEASE_KEY}={selector}: release {chosen.release} runs already — nothing to upgrade")
+        return 0
+    if (chosen.major, chosen.minor) < running:
+        raise Refused(f"{RELEASE_KEY}={selector} selects {chosen.release}, older than the running {state.release}. An "
+                      f"upgrade migrates the schema and there is no downgrade: going back is restoring a backup "
+                      f"taken under that release (ADR 0056 §6). Nothing was stopped.")
+    say(f"step 1: {RELEASE_KEY}={selector} takes release {chosen.release} (running: {state.release})")
+
+    # 2. its assets into releases/<release>/, both images verified by the manifest's digests
+    manifest = fetch_manifest(source, chosen)
+    verify_images(host, manifest, args.unsigned_local)
+    directory = fetch_release(source, chosen, manifest, home)
+    say(f"step 2: release {manifest.release} fetched and " + ("NOT verified (--unsigned-local)" if args.unsigned_local
+                                                             else "both images verified"))
+
+    # 3. refuse if the new template requires a value .env lacks, naming it
+    template = (directory / TEMPLATE_ASSET).read_text()
+    values, missing = upgrade_values(template, manifest, old)
+    missing += [k for k in unset_required(values, (directory / COMPOSE_ASSET).read_text(), override_text(home))
+                if k not in missing]
+    if missing:
+        raise Refused(f"release {manifest.release} requires {', '.join(missing)}, which {home / ENV_FILE} does not "
+                      f"give: add " + ", ".join(f"`{k}=…`" for k in missing) + " to it (the new template, "
+                      f"{directory / TEMPLATE_ASSET}, says what each is) and run `upgrade` again. Nothing was stopped.")
+    staged = home / f"{ENV_FILE}.next"
+    write_private(staged, render_env(template, values))
+    try:
+        named = ["docker", "compose", "-p", state.project, *compose_files(home, manifest.release), "--env-file", str(staged)]
+        host.run([*named, "config", "--quiet"])
+    except Refused:
+        staged.unlink()
+        raise
+    say(f"step 3: release {manifest.release}'s template is satisfied by {home / ENV_FILE}")
+    try:
+        tool = backup_tool(host, home, state)
+    except Refused:
+        staged.unlink()
+        raise
+
+    # 4. back up; stop the app; switch to the new release's recipe and image lines; up; wait until healthy
+    stop_app(host, home, state)
+    try:
+        backup = capture(host, home, state, tool, key_into, f"{utc_stamp()}-before-{manifest.release}")
+    except Refused:
+        staged.unlink()
+        say(f"the backup failed — nothing was switched; starting release {state.release} again")
+        up(host, compose(home, state.release, state.project), state.project)
+        raise
+    os.replace(staged, home / ENV_FILE)
+    write_state(home, state._replace(release=manifest.release, source=spec, unsigned_local=args.unsigned_local))
+    say(f"step 4: backed up to {backup}; switched {home / ENV_FILE} and the recipe to release {manifest.release}")
+    try:
+        up(host, compose(home, manifest.release, state.project), state.project)
+    except Refused as e:
+        raise Refused(f"{e}\nRelease {manifest.release} is switched in but not healthy. The way back is on disk: "
+                      f"release {state.release}'s recipe in {release_dir(home, state.release)}, and the backup "
+                      f"{backup} with its key at {key_into} — restore it onto release {state.release}.") from None
+    say(f"release {manifest.release} runs; release {state.release} stays in {release_dir(home, state.release)}")
+    return 0
+
+
+# ---- backup, restore, self-update ---------------------------------------------------------------------------------
+
+def cmd_backup(args: argparse.Namespace, host: Host) -> int:
+    home = Path(args.home)
+    key_into = key_destination(home, args.key_into, "`backup`")
+    state = read_state(home)
+    tool = backup_tool(host, home, state)
+    stop_app(host, home, state)
+    try:
+        capture(host, home, state, tool, key_into, utc_stamp())
+    finally:
+        up(host, compose(home, state.release, state.project), state.project)
+    return 0
+
+
+def cmd_restore(args: argparse.Namespace, host: Host) -> int:
+    """The running release's tool restores onto THIS instance, which must hold no data yet (ADR 0056 §4, A5)."""
+    home = Path(args.home)
+    state = read_state(home)
+    backup = Path(args.backup).absolute()
+    base = compose(home, state.release, state.project)
+    tool = backup_tool(host, home, state)
+    key_args = ["--without-key"] if args.without_key else (["--key-from", str(Path(args.key_from).absolute())]
+                                                           if args.key_from else [])
+    stop_app(host, home, state)
+    with tempfile.TemporaryDirectory(prefix=".key-", dir=home) as tmp:
+        key = Path(tmp) / "config-secret.key"
+        try:
+            host.run([sys.executable, str(tool.path), "restore", str(backup), "--domain", args.domain, "--compose-file",
+                      str(release_dir(home, state.release) / COMPOSE_ASSET), "--docker-network", tool.facts.network,
+                      "--config-secret-file", str(key), *key_args], env=tool.env, stream=True)
+        except Refused:
+            say("the restore did not finish; the app stays STOPPED — the tool above says whether anything was written "
+                "(a refusal at its gates wrote nothing: `veyqctl start` brings the instance back as it was)")
+            raise
+        if key.is_file():
+            place_key(host, home, state, key, tool.facts.key_path)
+            say(f"leg (c) placed at {tool.facts.key_path} in the app's volume, as the app's own user")
+    up(host, base, state.project)
+    say("restored. Now read the config-secret state as the Server Owner (admin console → Server → Config-secret key "
+        "must say OK), check the store, and open a Memory that has media — that is what separates a restore from a "
+        "hope (ADR 0056 §5)")
+    return 0
+
+
+SELF = Path(__file__)
+
+
+def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
+    """This file, replaced by the installed release's `veyqctl` — the one its manifest names, checked by sha256."""
+    home = Path(args.home)
+    state = read_state(home)
+    asset = verified_asset(home, state.release, SELF_ASSET)
+    target = SELF.resolve()
+    if target == asset.resolve():
+        say(f"{target} is release {state.release}'s own copy — nothing to replace")
+        return 0
+    data = asset.read_bytes()
+    if target.is_file() and target.read_bytes() == data:
+        say(f"{target} is already release {state.release}'s veyqctl")
+        return 0
+    staged = target.with_name(f".{target.name}.new")
+    mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o755
+    try:
+        staged.write_bytes(data)
+        os.chmod(staged, mode)
+        os.replace(staged, target)
+    except OSError as e:
+        staged.unlink(missing_ok=True)
+        raise Refused(f"{target} cannot be replaced: {e}") from None
+    say(f"{target} is now release {state.release}'s veyqctl (sha256 {sha256(data)[:16]}…, as its manifest names)"
+        + (" — that release was installed --unsigned-local: NOT VERIFIED" if state.unsigned_local else ""))
+    return 0
+
+
 # ---- main ------------------------------------------------------------------------------------------------------
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="veyqctl", description="Install, run and verify a veyq instance on Docker "
-                                "Compose from a published release (ADR 0096).")
+    p = argparse.ArgumentParser(prog="veyqctl", description="Install, run, upgrade and back up a veyq instance on "
+                                "Docker Compose from its releases (ADR 0096).")
     p.add_argument("--home", default=DEFAULT_HOME, help=f"the instance's directory (default {DEFAULT_HOME})")
     p.add_argument("--source", default=None,
                    help=f"where releases come from: a directory or an http(s) URL in the mirror layout "
@@ -945,6 +1296,29 @@ def parser() -> argparse.ArgumentParser:
     check = sub.add_parser("check", help="which release `upgrade` would take, and a newer major beyond it")
     check.add_argument("--release", default=None, help="a selector instead of .env's VEYQ_RELEASE")
     check.set_defaults(func=cmd_check)
+
+    upgrade = sub.add_parser("upgrade", help="move to the release .env's VEYQ_RELEASE selects (ADR 0096 decision 5)")
+    upgrade.add_argument("--key-into", metavar="FILE", help="where the backup's leg (c) goes — required, its own medium")
+    upgrade.add_argument("--unsigned-local", action="store_true",
+                         help="a release produced from a local docker build: no signature is checked")
+    upgrade.set_defaults(func=cmd_upgrade)
+
+    backup = sub.add_parser("backup", help="capture the three legs with the running release's backup tool")
+    backup.add_argument("--key-into", metavar="FILE", help="where leg (c) goes — required, its own medium")
+    backup.set_defaults(func=cmd_backup)
+
+    restore = sub.add_parser("restore", help="restore a capture onto this instance, which must hold no data yet")
+    restore.add_argument("backup", help="the capture directory")
+    # Required, never defaulted: the tool's domain gate is a deliberate statement by the operator (ADR 0056 §4), and
+    # a capture's domains are its TENANTS' — `.env`'s VEYQ_DOMAIN is the bootstrap domain, not one of them.
+    restore.add_argument("--domain", required=True, help="the tenant domain the capture holds (ADR 0056 §4)")
+    key = restore.add_mutually_exclusive_group()
+    key.add_argument("--key-from", metavar="FILE", help="leg (c), from wherever the capture's key was kept")
+    key.add_argument("--without-key", action="store_true", help="restore knowingly without leg (c)")
+    restore.set_defaults(func=cmd_restore)
+
+    update = sub.add_parser("self-update", help="replace this veyqctl with the installed release's")
+    update.set_defaults(func=cmd_self_update)
     return p
 
 

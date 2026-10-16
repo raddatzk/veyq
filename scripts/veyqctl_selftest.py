@@ -25,9 +25,23 @@ what prove it. Everything here runs against a mirror directory this file writes 
   7. **install end to end** on the stand-in host: the command order (verify before anything is written or started,
      `config` before `up`), the state it records (the project Compose named, which `start` then addresses by name),
      the manifest kept verbatim beside the release, a shell's `COMPOSE_*` dropped, and every printed line of an
-     `--unsigned-local` run saying that nothing was verified.
+     `--unsigned-local` run saying that nothing was verified;
+  8. **`upgrade`** — `VEYQ_RELEASE` per line of ADR 0096 decision 4 against a running 1.3 (a pin to the running
+     release does nothing and runs nothing, a major takes its newest, `latest` crosses majors and skips a prerelease, a
+     pin below the running release is refused); decision 5's order (both images, the staged `.env` checked by Compose,
+     then the app stopped, leg (c) copied out, the capture by the RUNNING release's tool and its check, the switch,
+     `up` on the new recipe) with nothing stopped before step 4; the new `.env` (the new image lines, the operator's
+     values and kept keys carried over); and the refusals — `--key-into` omitted, existing or inside `backups/`
+     before any command, a value the new template or recipe requires named before anything stops (never the
+     template's example), a failed backup switching nothing and starting the running release again;
+  9. **`backup` / `restore`** — the order (stop, key out, capture, check, up / stop, restore, key in, up), the tool's
+     Compose pointed at this instance with its credentials in the environment and in no argv, a tool that changed on
+     disk refused before the app stops, the restored key on stdin of a one-off `app` container, the app left stopped
+     after a failed restore;
+ 10. **`self-update`** — replaced by the installed release's `veyqctl` with its mode kept, nothing to do the second
+     time, refused (nothing replaced) when the installed copy no longer matches its manifest.
 
-What it cannot show: that Docker and cosign behave as the stand-in answers. That is the live runs' (the CR says
+What it cannot show: that Docker, cosign and the backup tool behave as the stand-in answers. That is the live runs' (the CR says
 which). Not a `validate_*.py`: it asserts nothing about the repository, only about the tool. Runnable locally:
 
     python3 scripts/veyqctl_selftest.py
@@ -71,6 +85,8 @@ DIGEST_A = "sha256:" + "a" * 64
 DIGEST_B = "sha256:" + "b" * 64
 SIGNED_APP = f"ghcr.io/raddatzk/veyq:1.12@{DIGEST_A}"
 SIGNED_ADMIN = f"ghcr.io/raddatzk/veyq-admin:1.12@{DIGEST_B}"
+DB_ROOT = "db-root-secret-in-config"
+STORE_TOKEN = "store-token-secret-in-config"
 
 TEMPLATE = """# a template
 VEYQ_DOMAIN=veyq.example.org
@@ -106,8 +122,12 @@ class FakeHost(vc.Host):
         {"ID": "c2", "Service": "volume-ownership", "State": "exited", "Health": "", "ExitCode": 0, "_restart": "no"},
     )
 
-    def __init__(self, *, local_images=(), signed=(), cosign=True, project="veyq", answers=None, ps=HEALTHY) -> None:
+    def __init__(self, *, local_images=(), signed=(), cosign=True, project="veyq", answers=None, ps=HEALTHY,
+                 fail_tool: str = "") -> None:
         self.commands: list[list[str]] = []
+        self.envs: list[dict] = []
+        self.stdins: list[bytes] = []
+        self.fail_tool = fail_tool
         self.local_images = set(local_images)
         self.signed = set(signed)
         self.cosign = cosign
@@ -115,15 +135,37 @@ class FakeHost(vc.Host):
         self.answers = answers or {}
         self.ps = ps
 
-    def run(self, cmd, *, check=True, stream=False, env=None):
+    def run(self, cmd, *, check=True, stream=False, env=None, stdin=None):
         self.commands.append(list(cmd))
+        self.envs.append(dict(env or {}))
+        if stdin is not None:
+            self.stdins.append(stdin)
         rc, out = 0, ""
-        if cmd[:3] == ["docker", "image", "inspect"]:
+        if cmd[0] == sys.executable and cmd[1].endswith(vc.BACKUP_ASSET):
+            rc = 1 if cmd[2] == self.fail_tool else 0
+            if cmd[2] == "restore" and not rc:  # the tool places leg (c) where veyqctl told it to
+                key = cmd[cmd.index("--config-secret-file") + 1]
+                pathlib.Path(key).write_bytes(b"restored-key")
+        elif cmd[:2] == ["docker", "cp"]:
+            pathlib.Path(cmd[3]).write_bytes(b"the-instance-key")
+        elif cmd[:3] == ["docker", "ps", "-aq"]:
+            out = "cid-app\n"
+        elif cmd[:3] == ["docker", "image", "inspect"]:
             rc = 0 if cmd[-1] in self.local_images else 1
         elif cmd[0].endswith("cosign") and cmd[1] == "verify":
             rc = 0 if cmd[2] in self.signed else 1
         elif "config" in cmd and "--format" in cmd:
-            out = json.dumps({"name": self.project})
+            out = json.dumps({
+                "name": self.project,
+                "services": {
+                    "app": {"environment": {"VEYQ_SECURITY_CONFIG_SECRET_FILE": "/var/lib/veyq/config-secret.key",
+                                            "VEYQ_BUNDLED_STORE_ENDPOINT": "http://garage:3900",
+                                            "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": STORE_TOKEN}},
+                    "mariadb": {"environment": {"MARIADB_ROOT_PASSWORD": DB_ROOT}},
+                    "garage": {"networks": {"edge": None}},
+                },
+                "networks": {"edge": {"name": f"{self.project}_edge"}},
+            })
         elif "ps" in cmd and "--format" in cmd:
             out = "\n".join(json.dumps({k: v for k, v in r.items() if not k.startswith("_")}) for r in self.ps)
         elif cmd[:2] == ["docker", "inspect"]:
@@ -431,6 +473,239 @@ def test_status() -> None:
     check("status: a project with no containers is not healthy", not healthy())
 
 
+# ---- phase 3: upgrade, backup, restore, self-update ---------------------------------------------------------------
+
+INSTALL_SETS = ["--set", "VEYQ_DOMAIN=veyq.test", "--set", "VEYQ_ACME_EMAIL=ops@veyq.test", "--set", "PLAIN_REQUIRED=1",
+                "--set", "QUOTED=q", "--set", "ADMIN_PORT=18081"]
+
+
+def upgrade_mirror(root: pathlib.Path) -> pathlib.Path:
+    """v1.3 → v1.7 → v1.12 → v2.1, and a prerelease v2.2; each release names images of its own."""
+    for tag, pre in (("v1.3", False), ("v1.7", False), ("v1.12", False), ("v2.1", False), ("v2.2", True)):
+        write_release(root, tag, prerelease=pre, app=f"veyq:{tag[1:]}", admin=f"veyq-admin:{tag[1:]}")
+    return root
+
+
+def all_images() -> set:
+    return {f"{n}:{r}" for n in ("veyq", "veyq-admin") for r in ("1.3", "1.4", "1.7", "1.12", "2.1", "2.2")}
+
+
+def installed(tmp: pathlib.Path, name: str, mirror: pathlib.Path, pin: str, selector: str) -> pathlib.Path:
+    """An instance installed at `pin` on the stand-in host, whose operator then set VEYQ_RELEASE to `selector`."""
+    home = tmp / name
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc = vc.main(["--home", str(home), "--source", str(mirror), "install", "--unsigned-local", *INSTALL_SETS,
+                      "--set", f"VEYQ_RELEASE={pin}"], FakeHost(local_images=all_images(), project="veyq-proof"))
+    assert rc == 0, f"install of {pin} failed"
+    env = home / vc.ENV_FILE
+    env.write_text("\n".join(f"{vc.RELEASE_KEY}={selector}" if line.startswith(f"{vc.RELEASE_KEY}=") else line
+                             for line in env.read_text().splitlines()) + "\n")
+    return home
+
+
+def upgrade(home: pathlib.Path, host: FakeHost, *extra: str) -> tuple:
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = vc.main(["--home", str(home), "upgrade", *extra], host)
+    return rc, out.getvalue()
+
+
+def first_of(host: FakeHost):
+    """The index of the first recorded command containing all the words, or a sentinel past every command."""
+    return lambda *words: (host.ran(*words) or [10 ** 6])[0]
+
+
+def test_upgrade_selector(tmp: pathlib.Path) -> None:
+    mirror = upgrade_mirror(tmp / "mirror-up")
+    keys = tmp / "keys-up"
+    keys.mkdir()
+    for selector, want in (("1.3", "1.3"), ("1", "1.12"), ("latest", "2.1"), ("2", "2.1"), ("1.7", "1.7")):
+        home = installed(tmp, f"home-up-{selector}", mirror, "1.3", selector)
+        host = FakeHost(local_images=all_images(), project="veyq-proof")
+        rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(keys / f"{selector}.key"))
+        check(f"upgrade: VEYQ_RELEASE={selector}, running 1.3, takes {want}"
+              + (" — nothing to do, nothing run" if want == "1.3" else ""),
+              rc == 0 and vc.read_state(home).release == want and (want != "1.3" or not host.commands), out[-400:])
+    home = installed(tmp, "home-up-down", mirror, "1.12", "1.3")
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(keys / "down.key"))
+    check("upgrade: VEYQ_RELEASE pinned BELOW the running release is refused (no downgrade), nothing run",
+          rc == 1 and "older than the running" in out and not host.commands, out[-300:])
+
+
+def test_upgrade_order(tmp: pathlib.Path) -> None:
+    mirror = upgrade_mirror(tmp / "mirror-order")
+    home = installed(tmp, "home-order", mirror, "1.3", "1")
+    key = tmp / "order.key"
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(key))
+    check("upgrade: exits 0 on the stand-in host", rc == 0, out[-600:])
+    first = first_of(host)
+    order = [first("image", "inspect", "veyq:1.12"),                           # 2. both images verified
+             first("config", "--quiet", str(home / ".env.next")),               # 3. Compose checks the staged .env
+             first("stop", "app"),                                              # 4. the app stops,
+             first("docker", "cp"),                                             #    leg (c) comes out,
+             first("capture"),                                                  #    the backup,
+             first("verify", "--key-from"),                                     #    checked,
+             first("up", str(home / "releases/1.12" / vc.COMPOSE_ASSET))]       #    switch and up
+    check("upgrade: ADR 0096 decision 5's order — verify, the template, then stop, back up, check, switch, up",
+          order == sorted(order) and order[-1] < 10 ** 6, str(order))
+    check("upgrade: nothing stops before step 4", not any("stop" in c for c in host.commands[:first("stop", "app")]))
+    values = vc.env_values((home / vc.ENV_FILE).read_text())
+    check("upgrade: .env switched to the new image lines; the operator's values and the kept keys carried over",
+          values.get("VEYQ_IMAGE") == "veyq:1.12" and values.get("VEYQ_ADMIN_IMAGE") == "veyq-admin:1.12"
+          and values.get("VEYQ_DOMAIN") == "veyq.test" and values.get("ADMIN_PORT") == "18081"
+          and values.get(vc.RELEASE_KEY) == "1" and not (home / ".env.next").exists())
+    check("upgrade: the previous release's directory stays",
+          (home / "releases/1.3" / vc.COMPOSE_ASSET).is_file() and vc.read_state(home).release == "1.12")
+    capture = host.commands[first("capture")]
+    tool_env = host.envs[first("capture")]
+    into = capture[capture.index("--into") + 1]
+    check("upgrade: the backup is the RUNNING release's tool, into backups/<stamp>-before-<new>",
+          capture[1] == str(home / "releases/1.3" / vc.BACKUP_ASSET) and into.startswith(str(home / vc.BACKUPS_DIR))
+          and into.endswith("-before-1.12") and capture[capture.index("--key-into") + 1] == str(key.absolute())
+          and capture[capture.index("--docker-network") + 1] == "veyq-proof_edge", str(capture))
+    check("upgrade: the tool's Compose is pointed at THIS instance, its credentials in the environment",
+          tool_env.get("COMPOSE_PROJECT_NAME") == "veyq-proof" and tool_env.get("COMPOSE_ENV_FILES") == str(home / ".env")
+          and tool_env.get("VEYQ_BACKUP_DB_PASSWORD") == DB_ROOT
+          and tool_env.get("VEYQ_BUNDLED_STORE_ADMIN_TOKEN") == STORE_TOKEN)
+    check("upgrade: no secret in any argv veyqctl started",
+          not any(secret in arg for c in host.commands for arg in c for secret in (DB_ROOT, STORE_TOKEN)))
+    key_copy = pathlib.Path(capture[capture.index("--config-secret-file") + 1])
+    check("upgrade: leg (c) is copied out into the home, and gone after the capture",
+          str(key_copy).startswith(str(home)) and not key_copy.exists())
+    check("upgrade: every printed line of an --unsigned-local upgrade says nothing was verified",
+          all(line.startswith("veyqctl [--unsigned-local: NOTHING VERIFIED]") for line in out.splitlines() if line))
+
+
+def test_upgrade_refusals(tmp: pathlib.Path) -> None:
+    mirror = upgrade_mirror(tmp / "mirror-ref")
+    home = installed(tmp, "home-ref", mirror, "1.3", "1")
+    before = ((home / vc.ENV_FILE).read_bytes(), (home / vc.STATE_FILE).read_bytes())
+
+    def untouched(h: pathlib.Path = home, was: tuple = before) -> bool:
+        return ((h / vc.ENV_FILE).read_bytes(), (h / vc.STATE_FILE).read_bytes()) == was and not (h / ".env.next").exists()
+
+    host = FakeHost(local_images=all_images())
+    rc, out = upgrade(home, host, "--unsigned-local")
+    check("upgrade: --key-into omitted is refused before ANY command runs",
+          rc == 1 and "--key-into" in out and not host.commands and untouched(), out[-300:])
+    (tmp / "taken.key").write_text("an earlier capture's key")
+    host = FakeHost(local_images=all_images())
+    rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(tmp / "taken.key"))
+    check("upgrade: an existing --key-into is refused before any command", rc == 1 and "exists" in out
+          and not host.commands)
+    host = FakeHost(local_images=all_images())
+    rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(home / vc.BACKUPS_DIR / "k.key"))
+    check("upgrade: --key-into inside backups/ (beside the dumps) is refused", rc == 1 and "beside the dumps" in out
+          and not host.commands)
+
+    host = FakeHost(local_images=all_images(), project="veyq-proof", fail_tool="capture")
+    rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(tmp / "fail.key"))
+    last_up = host.commands[host.ran("up")[-1]] if host.ran("up") else []
+    check("upgrade: a failed backup switches nothing and starts the RUNNING release again",
+          rc == 1 and untouched() and str(home / "releases/1.3" / vc.COMPOSE_ASSET) in last_up, out[-400:])
+
+    mirror2 = tmp / "mirror-new-var"
+    write_release(mirror2, "v1.3", app="veyq:1.3", admin="veyq-admin:1.3")
+    write_release(mirror2, "v1.4", app="veyq:1.4", admin="veyq-admin:1.4",
+                  files={vc.COMPOSE_ASSET: COMPOSE + "      G: ${VEYQ_NEW:?set VEYQ_NEW}\n      H: ${ONLY_COMPOSE:?x}\n",
+                         vc.TEMPLATE_ASSET: TEMPLATE + "VEYQ_NEW=\nNEW_WITH_EXAMPLE=example.org\n",
+                         vc.BACKUP_ASSET: "# backup tool\n", vc.SELF_ASSET: "# veyqctl\n", "garage.toml": "# g\n"})
+    home2 = installed(tmp, "home-new-var", mirror2, "1.3", "1")
+    before2 = ((home2 / vc.ENV_FILE).read_bytes(), (home2 / vc.STATE_FILE).read_bytes())
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = upgrade(home2, host, "--unsigned-local", "--key-into", str(tmp / "nv.key"))
+    named = [k for k in ("VEYQ_NEW", "NEW_WITH_EXAMPLE", "ONLY_COMPOSE") if k in out]
+    check("upgrade: every value the new template or recipe requires and .env lacks is refused, named — a "
+          "template's example value is never taken for one",
+          rc == 1 and named == ["VEYQ_NEW", "NEW_WITH_EXAMPLE", "ONLY_COMPOSE"], out[-500:])
+    check("upgrade: …before anything stops — no stop, no backup, .env and state untouched",
+          not host.ran("stop") and not host.ran("capture") and untouched(home2, before2))
+
+
+def test_backup_restore(tmp: pathlib.Path) -> None:
+    mirror = upgrade_mirror(tmp / "mirror-br")
+    home = installed(tmp, "home-br", mirror, "1.3", "1.3")
+    out = io.StringIO()
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    with contextlib.redirect_stdout(out):
+        rc = vc.main(["--home", str(home), "backup"], host)
+    check("backup: --key-into omitted is refused before any command", rc == 1 and not host.commands)
+    with contextlib.redirect_stdout(out):
+        rc = vc.main(["--home", str(home), "backup", "--key-into", str(tmp / "b.key")], host)
+    first = first_of(host)
+    steps = [first("stop", "app"), first("docker", "cp"), first("capture"), first("verify", "--key-from"), first("up")]
+    check("backup: stop the app, leg (c) out, capture, check it, the stack back up — in that order",
+          rc == 0 and steps == sorted(steps) and steps[-1] < 10 ** 6, str(steps))
+
+    tool = home / "releases/1.3" / vc.BACKUP_ASSET
+    tool.write_text("# not the tool the manifest names\n")
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    with contextlib.redirect_stdout(out):
+        rc = vc.main(["--home", str(home), "backup", "--key-into", str(tmp / "b2.key")], host)
+    check("backup: a release's backup tool that changed on disk is refused, before the app stops",
+          rc == 1 and not host.ran("stop") and not host.ran("capture"))
+    tool.write_text("# backup tool\n")
+
+    capture_dir = tmp / "a-capture"
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    with contextlib.redirect_stdout(out):
+        rc = vc.main(["--home", str(home), "restore", str(capture_dir), "--domain", "family.veyq.test",
+                      "--key-from", str(tmp / "b.key")], host)
+    first = first_of(host)
+    ran = host.commands[first("restore")] if host.ran("restore") else []
+    place = host.commands[first("run", "--rm", "app")] if host.ran("run", "--rm", "app") else []
+    check("restore: the running release's tool, onto the tenant domain given, with the key it was given",
+          rc == 0 and ran[1] == str(tool) and ran[ran.index("--domain") + 1] == "family.veyq.test"
+          and ran[ran.index("--key-from") + 1] == str((tmp / "b.key").absolute()), str(ran))
+    check("restore: leg (c) goes into the app's volume through a one-off app container, on stdin, never an argv",
+          place[:3] == ["docker", "compose", "-p"] and "--no-deps" in place
+          and place[-1] == "/var/lib/veyq/config-secret.key" and host.stdins == [b"restored-key"]
+          and not any("restored-key" in arg for arg in place), str(place))
+    steps = [first("stop", "app"), first("restore"), first("run", "--rm", "app"), first("up")]
+    check("restore: stop the app, restore, place the key, up — in that order", steps == sorted(steps), str(steps))
+    check("restore: the key's copy in the home is gone afterwards",
+          not any(p.name.startswith(".key-") for p in home.iterdir()))
+    host = FakeHost(local_images=all_images(), project="veyq-proof", fail_tool="restore")
+    with contextlib.redirect_stdout(out):
+        rc = vc.main(["--home", str(home), "restore", str(capture_dir), "--domain", "family.veyq.test",
+                      "--key-from", str(tmp / "b.key")], host)
+    check("restore: a failed restore leaves the app STOPPED — no up on a half-restored instance",
+          rc == 1 and not host.ran("up") and not host.ran("run", "--rm", "app"))
+
+
+def test_self_update(tmp: pathlib.Path) -> None:
+    mirror = upgrade_mirror(tmp / "mirror-su")
+    home = installed(tmp, "home-su", mirror, "1.3", "1.3")
+    bin_dir = tmp / "bin"
+    bin_dir.mkdir()
+    target = bin_dir / "veyqctl"
+    target.write_text("# an older veyqctl\n")
+    target.chmod(0o750)
+    asset = home / "releases/1.3" / vc.SELF_ASSET
+    saved = vc.SELF
+    vc.SELF = target
+    try:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = vc.main(["--home", str(home), "self-update"], FakeHost())
+        check("self-update: replaced by the installed release's veyqctl, its mode kept",
+              rc == 0 and target.read_bytes() == asset.read_bytes() and stat.S_IMODE(target.stat().st_mode) == 0o750,
+              out.getvalue()[-300:])
+        with contextlib.redirect_stdout(out):
+            rc = vc.main(["--home", str(home), "self-update"], FakeHost())
+        check("self-update: a second run finds nothing to replace", rc == 0 and "already" in out.getvalue())
+        asset.write_text("# tampered after it was fetched\n")
+        target.write_text("# an older veyqctl\n")
+        with contextlib.redirect_stdout(out):
+            rc = vc.main(["--home", str(home), "self-update"], FakeHost())
+        check("self-update: an installed veyqctl that no longer matches its manifest is refused, nothing replaced",
+              rc == 1 and target.read_text() == "# an older veyqctl\n")
+    finally:
+        vc.SELF = saved
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyqctl-selftest-") as raw:
         tmp = pathlib.Path(raw)
@@ -441,6 +716,11 @@ def main() -> int:
         test_signature_gate()
         test_status()
         test_install(tmp)
+        test_upgrade_selector(tmp)
+        test_upgrade_order(tmp)
+        test_upgrade_refusals(tmp)
+        test_backup_restore(tmp)
+        test_self_update(tmp)
     if failures:
         print(f"\nveyqctl self-test FAILED: {len(failures)} check(s)")
         return 1
