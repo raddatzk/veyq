@@ -149,10 +149,12 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
   - **Argument parsing: `node:util.parseArgs`, not a third-party CLI framework.** Node-core, zero
     dependencies, actively maintained by definition — the command surface (tenant CRUD and release info;
     mirrors whatever `admin-web/src/api/client.ts`'s factories are actually called for, located at CR time) is
-    small enough that a framework like commander/yargs buys nothing here. Nine operations, as built: eight
-    tenant verbs plus `release`. **Mail settings and terms authoring are not among them** for the same reason
-    they never left `web/`: they are **tenant-owner** actions (`403 not_tenant_owner`), so they were never
-    `admin-web`'s to wrap. **Setup is excluded too**, and that one is a decision rather than a consequence: it
+    small enough that a framework like commander/yargs buys nothing here. It started as nine operations (eight
+    tenant verbs plus `release`) and grows with what admin-web holds — since then the tenant storage quota, the
+    config-secret state, the object store (`store show|set|check|discard`) and the capability switches; the command
+    table in `admin-web/src/cli/commands.ts` is the list, so no count is kept here. **Mail settings and terms
+    authoring are not among them** for the same reason they never left `web/`: they are **tenant-owner**
+    actions (`403 not_tenant_owner`), so they were never `admin-web`'s to wrap. **Setup is excluded too**, and that one is a decision rather than a consequence: it
     is an interactive ceremony that mints key material and force-confirms a saved Emergency Kit, which a
     script cannot meaningfully do.
 - **Exposure is an operator choice, not a build-time one — two modes of the same image:**

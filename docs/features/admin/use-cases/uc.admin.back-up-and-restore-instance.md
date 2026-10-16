@@ -59,7 +59,7 @@
 11. The operator reads the instance's **config-secret state** as the Server Owner, on the admin channel (the
     admin console's Server section or `veyq-admin`) — not through a tenant's mail settings, which only that
     tenant's owner may read. A match is what says leg three arrived; a
-    mismatch is the fingerprint doing its job (A2). The operator also **checks the store** (Server → Store, or
+    mismatch is the fingerprint doing its job (A2). The operator also **checks the store** (Server → Object store, or
     `veyq-admin store check`): the restored setting must reach its store, its credentials sealed under the restored
     key ([uc.admin.configure-object-store](uc.admin.configure-object-store.md)). Then a person signs in and **opens a Memory that contains
     media** — the only assertion that exercises all three legs at once, because the row, the object and the key

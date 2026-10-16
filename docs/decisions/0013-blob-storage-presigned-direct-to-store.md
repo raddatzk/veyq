@@ -42,8 +42,11 @@ store set refuses every upload with `store_unavailable` and cannot create a tena
 store is a Server-Owner setting now, so the boot no longer fails on a blank endpoint, and the `veyq.blob-store.*`
 keys named below are the setting's fields.)* The `InMemoryBlobStore` survives **only in the
 `%test` profile** for the hermetic slice suite (metadata + wraps + the declare/verify control plane, no byte
-transport) — it is **never** a dev/prod fallback. Store credentials come from operator env, are never persisted
-to the DB, never logged, masked in any config dump, and never returned by any endpoint.
+transport) — it is **never** a dev/prod fallback. Store credentials are entered by the Server Owner and persisted
+only **sealed** under the config-secret key ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
+decision 4, [ADR 0050](0050-operator-config-secret-encryption.md)) — the bundled store's pair is derived from its
+hint and not stored at all; they are never logged, never in the clear in the database, and never returned by any
+endpoint.
 
 ### 2. Presigned direct-to-store is the only transport (no proxied fallback)
 
@@ -200,8 +203,9 @@ own bucket is unaffected. The policy is written by
 
 Because a byte path is a **hard requirement** (§1), there is
 **no client-facing store-availability flag**: the earlier advisory `directTransport` on `/api/setup` is
-**removed** — an instance either has a working store (it started) or fails loud at startup, so a client never
-needs to soft-gate media upload on it. (The capability-discovery manifest, [ADR 0032](0032-capability-discovery-version-gating.md),
+**removed** — an instance with no store set refuses every upload with a reason, and no tenant can be created
+before a store has passed its check (ADR 0089 decisions 5 and 6), so a client never needs to soft-gate media
+upload on it. (The capability-discovery manifest, [ADR 0032](0032-capability-discovery-version-gating.md),
 therefore does **not** carry an infra-preflight `directTransport`/`media.*` entry.)
 
 ### 5. No content dedup

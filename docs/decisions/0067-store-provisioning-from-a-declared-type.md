@@ -93,7 +93,8 @@ Forces:
    all. So provisioning **runs in the background, retries with a bound, and never gates the boot** — an
    instance whose store is not yet provisioned still answers `/api/setup` — and its outcome is **readable on
    the Server-Owner instance surface**, not only in a log. It runs from the stored setting of type *Garage*, or
-   from the bundled hint, and again when that setting changes; what the Server Owner *checks* afterwards
+   from the bundled hint, once at boot and again as the first step of every check of a *Garage* store — a passing
+   check is also what recovers a `FAILED` boot run without a restart; what the Server Owner *checks* afterwards
    (bucket, probe object, CORS preflight) is [ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
    decision 2, and writes nothing but its probe object into a store of type *S3-compatible*. A log line reaches whoever is already looking at
    logs; the failure it describes reaches the operator as a photo that will not upload, which is the

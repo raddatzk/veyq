@@ -3,8 +3,9 @@ name: veyq
 description: >-
   Self-hostable, end-to-end-encrypted memory sharing. The operator-blind server, its administration surface,
   MariaDB and the bundled Garage object store on an operator's own Kubernetes cluster (ADR 0064) — the same
-  five services infra/docker-compose.prod.yml runs, with tenant domains projected as Ingress objects by the
-  backend itself and certificates obtained for them through the operator's ingress controller.
+  four workloads infra/docker-compose.prod.yml runs beside its Traefik, whose job the operator's ingress
+  controller does here: tenant domains are projected as Ingress objects by the backend itself and certificates
+  obtained for them through that controller.
 type: application
 # A placeholder no publish uses. The publish packages the chart with its own release version as BOTH `version` and
 # `appVersion` (`<major>.<minor>`, or `<major>.<minor>-SNAPSHOT`; ADR 0057 §1, ADR 0064), and the minor is a commit

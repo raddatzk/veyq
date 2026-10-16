@@ -47,10 +47,14 @@ Garage, so using one means editing the compose file, and under Helm it is not po
    asks for them again. Media are unreachable until the Server Owner re-enters the store credentials — which they
    hold anyway, in the store's own console — but nothing is lost: *degrade, don't brick*, with the store as the
    loudest degradation.
-5. **A store setting takes effect at once, without a restart.** The store the backend signs against, the store
-   origin in the app shell's CSP and the store route in the tenant ingress follow the current setting. Until a
-   store is configured and has passed its check, the instance runs, answers `/api/setup`, and refuses uploads with
-   a reason — never the silent in-memory store, which stays a `%test` tool.
+5. **A store setting takes effect once it has passed its check, and then at once, without a restart.** A saved
+   setting is *pending*: the store the backend signs against, the store origin in the app shell's CSP and the store
+   route in the tenant ingress keep following the setting in use until the pending one passes its own check, which
+   replaces it. A typo in a credential or an endpoint therefore reaches the check, never a running instance's media;
+   a failed pending setting is corrected or discarded. Until a store has passed its check, the instance runs,
+   answers `/api/setup`, and refuses uploads with a reason — never the silent in-memory store, which stays a
+   `%test` tool. *(Edited when it was built, 2026-10-16: the first build applied a saved setting at once and only
+   cleared its check, which [inbox #451](../inbox.md) found against the use-case's A2; the owner chose this.)*
 6. **A working store is the precondition for a tenant.** Creating a tenant is refused until the current store
    setting has passed its check; nothing else in the console is gated by it. Once the first blob is stored the store
    is fixed: moving an instance's blobs to another store is out of scope here.
