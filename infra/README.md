@@ -27,6 +27,11 @@ compose. A verb without a surface selects every surface's — `./gradlew bootstr
 `./gradlew run` selects all four `run`s, which run one after another and so block on the first unless `--parallel`
 is given (`backend:run web:run --parallel` ran both, measured).
 
+`./gradlew tasks --all --group veyq` lists every task with its description; without `--all`, Gradle folds the
+same verb across projects into one row (`run`, `build`, … with one surface's description), so it is no task list.
+Each npm task runs the `node` on the Gradle daemon's `PATH` — IntelliJ's project-interpreter setting, which the run
+configurations used, no longer applies.
+
 **`infra:*` always runs the main checkout's compose file**, also from a worktree. The containers are named
 (`veyq-mariadb`, …) and the project is named after the file's directory, so a worktree's copy is the same project
 with other mount sources, and `up` would recreate the running containers onto the worktree's files (measured with

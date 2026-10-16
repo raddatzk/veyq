@@ -1,4 +1,4 @@
-// The root launcher (changes/cr-root-gradle-launcher.md): `./gradlew <surface>:<verb>` triggers a mechanism that
+// The root launcher (infra/README.md § The launcher): `./gradlew <surface>:<verb>` triggers a mechanism that
 // already exists — an npm script, a `docker compose` line, the backend's own `./gradlew` — and nothing more. It is
 // not an orchestrator: no surface's build lives here, and no task aggregates the surfaces' checks (each still proves
 // itself with its own `npm run check` / `./gradlew check`).
