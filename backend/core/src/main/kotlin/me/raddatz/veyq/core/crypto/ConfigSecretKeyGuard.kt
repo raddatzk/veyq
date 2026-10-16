@@ -19,8 +19,8 @@ enum class ConfigSecretKeyState {
 
 /**
  * A holder of sealed values, contributing the fingerprint each of them carries (ADR 0089 decision 4) to the
- * instance-wide [ConfigSecretKeyGuard.readState]. One per table that seals: the tenant SMTP passwords and the
- * object-store setting. A new sealed column is a new contribution, or the instance-wide state cannot see it.
+ * instance-wide [ConfigSecretKeyGuard.readState]. One per table that seals: the tenant SMTP passwords, the instance
+ * mail password and the object-store setting. A new sealed column is a new contribution, or the instance-wide state cannot see it.
  */
 interface SealedValueFingerprints {
     /** The fingerprint of every value currently stored sealed — one entry per value, duplicates kept. */

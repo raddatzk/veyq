@@ -31,6 +31,7 @@ import java.util.Optional
 interface VeyqConfig {
     fun version(): Version
     fun release(): Release
+    fun releaseCheck(): ReleaseCheck
     fun tenant(): Tenant
     fun session(): Session
     fun recovery(): Recovery
@@ -98,6 +99,22 @@ interface VeyqConfig {
          * (uc.admin.identify-instance-release A1).
          */
         fun version(): Optional<String>
+    }
+
+    /**
+     * `veyq.release-check.*` — the daily look for new releases (ADR 0097). Whether it runs and where it reads are the
+     * Server Owner's settings in admin-web (ADR 0089), never configuration; only its rhythm and its patience are here.
+     */
+    interface ReleaseCheck {
+        /** How often the check runs; read by `ReleaseCheck`'s `@Scheduled`. Once a day, and once shortly after a
+         *  start, because the scheduler fires an `every` job at its first trigger check. */
+        @WithDefault("24h")
+        fun every(): Duration
+
+        /** How long one request to the source may take, connecting and reading. A source slower than this is a
+         *  failed check, logged and retried at the next run; nothing waits on it. */
+        @WithDefault("PT10S")
+        fun timeout(): Duration
     }
 
     interface Tenant {

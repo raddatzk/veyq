@@ -1,11 +1,13 @@
 ---
 title: Storage and email
-description: The object store as the console sets it, the bundled store, setting a store up, quotas, why there is no instance mail server, and the config-secret key.
+description: The object store as the console sets it, the bundled store, setting a store up, quotas, each tenant's mail and the instance's own mail to you, and the config-secret key.
 sources:
   - docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md
   - docs/decisions/0067-store-provisioning-from-a-declared-type.md
   - docs/decisions/0050-operator-config-secret-encryption.md
   - docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md
+  - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
+  - docs/features/admin/use-cases/uc.admin.learn-of-new-releases.md
 ---
 
 ## The object store
@@ -47,7 +49,7 @@ failed. A passing **Check store** runs the set-up again.
 
 ## Email
 
-There is **no instance-wide mail server** for you to configure. Each tenant's owner sets up that tenant's own relay
+A tenant's mail is never yours to configure: each tenant's owner sets up that tenant's own relay
 in the app (Settings → Email): host, port, sender, username, password and STARTTLS
 ([uc.admin.tenant-mail-settings](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md)).
 Two things veyq mails have no substitute, because they are addressed to the person concerned: an invitation to join
@@ -55,16 +57,33 @@ the tenant, and a password-reset link. A tenant without working mail refuses bot
 
 What is yours:
 
-- **Let the application send mail out:** outbound SMTP to the hosts the tenant owners choose, usually port 587. Both
+- **Let the application send mail out:** outbound SMTP to the hosts the tenant owners choose (and yours, below), usually port 587. Both
   recipes leave the application's outbound traffic open for this; a firewall of yours must too.
 - **The first owner's invitation** of a new tenant is never mailed: the console gives you a link to pass on
   ([First-run setup](/veyq/run/first-run/#tenants)).
 - **The key that seals the relays' passwords** (below).
 
+### The instance's own mail, to you
+
+The one relay that is yours is optional: the instance's mail to **you**, for its notices about new releases
+([Operations](/veyq/run/operations/#new-releases)). Set it on the console's **Server → Mail** — the same fields as a
+tenant's relay. It sends only those notices and only to the address of your Server Owner account, and it never sends
+a tenant's mail, nor stands in for a tenant without one
+([ADR 0097](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)).
+
+1. Enter the relay and save. The instance mails an eight-digit code to your account's address.
+2. Type the code into **Server → Mail** within an hour. A wrong code counts; five spend it, and a save sends a new one.
+3. From then on each notice is mailed once, with the link to [Upgrade](/veyq/run/upgrade/); one with a date carries
+   it as a calendar entry (`.ics`).
+
+Every save asks for a code again, and so does a changed address on your account. Its password is sealed under the
+same key as the tenants' (below); while that key cannot open it, nothing is mailed and the panel says why. Without
+this relay the notices are shown on the console and that is all.
+
 ## The config-secret key
 
-The application seals the secrets it must keep — each tenant's SMTP password, and the secret key and Garage token of
-a store of your own — under a key file it generates on its first start
+The application seals the secrets it must keep — each tenant's SMTP password, the instance mail's password, and the
+secret key and Garage token of a store of your own — under a key file it generates on its first start
 ([ADR 0050](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0050-operator-config-secret-encryption.md)).
 The bundled store needs nothing sealed. The key defends a leaked database backup: the dump alone opens no secret. It
 does not defend a compromised host.
@@ -98,4 +117,5 @@ Back the key up apart from the database and the store, on a medium of its own
 
 The store setting, its check and the bundled hint are covered by the backend's tests; the backup rehearsal restores
 an instance onto a fresh install that sets its bundled store up from the hint. No S3 service other than Garage is
-recorded as tried, and no mail relay is exercised beyond a test mailbox.
+recorded as tried, and no mail relay is exercised beyond a test mailbox — the instance mail's code, notices and
+calendar entry included, which the backend's tests send through an SMTP server inside the test run.

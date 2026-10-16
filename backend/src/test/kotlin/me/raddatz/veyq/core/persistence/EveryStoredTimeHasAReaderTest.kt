@@ -82,6 +82,12 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_store_reclaim.created_at" to "StoreReclaimSweep takes the oldest due rows first",
             "veyq_store_reclaim.next_attempt_at" to "StoreReclaimSweep's not-before",
             "veyq_store_reclaim.abandoned_at" to "StoreReclaimSweep skips an abandoned row",
+            // --- instance: the release check and instance mail (ADR 0097) — operator state, no member's activity
+            "veyq_release_check.last_success_at" to "served: InstanceReleaseNotices.lastSuccessAt (uc.admin.learn-of-new-releases A2)",
+            "veyq_release_notice.found_at" to "served: InstanceReleaseNotice.foundAt",
+            "veyq_release_notice.mailed_at" to "served: InstanceReleaseNotice.mailedAt; a notice with one is never mailed again",
+            "veyq_instance_mail_settings.code_expires_at" to "InstanceMailConfirmation refuses an expired code",
+            "veyq_instance_mail_settings.confirmed_at" to "served: InstanceMailSettings.confirmedAt; its presence is the confirmation",
             // --- tasks
             "veyq_job.created_at" to "TasksStore claims the oldest job first and picks the newest covering rotation",
             "veyq_job.lease_expires_at" to "TasksStore re-offers a job whose lease ran out",

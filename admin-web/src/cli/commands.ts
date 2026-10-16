@@ -5,10 +5,12 @@
 // in the facade, where the UI gets it too.
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
-// + the tenant storage quota + release info + the config-secret state + the object-store setting and its check + the
-// capability switches with their requirements + the external services. Per-tenant mail settings, terms authoring and the per-link storage
+// + the tenant storage quota + release info with the release check's notices and its switch + the config-secret state +
+// the object-store setting and its check + the capability switches with their requirements + the external services.
+// Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
-// they are not Server-Owner commands.
+// they are not Server-Owner commands. The instance's OWN mail settings are the Server Owner's, but stay console-only
+// as tenant mail is: their save sends a code that is typed back into the same screen.
 // First-run **setup** is excluded on purpose (cr-admin-cli): it is a one-time interactive ceremony that mints
 // key material and force-confirms a saved Emergency Kit — not something a script should be able to do blind.
 import {
@@ -25,6 +27,7 @@ import {
 } from '../features/tenants/tenants'
 import { CliError } from './output'
 import { getInstanceRelease } from '../features/instance/release'
+import { getReleaseNotices, setReleaseCheck } from '../features/instance/releaseNotices'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import {
   BUNDLED_STORE_UPDATE,
@@ -201,9 +204,22 @@ export const COMMANDS: Record<string, Command> = {
   },
   release: {
     usage: 'release',
-    summary: 'Print the release version the running instance was published under.',
+    summary:
+      'Print the release version the running instance was published under, the daily release check (on or off, its source, its last success) and every newer release it found — an UNSCHEDULED_MAJOR means upgrade now.',
     flags: {},
-    run: () => getInstanceRelease(),
+    // `release` stays the document's first key, so a script that read it before still reads it.
+    run: async () => ({ ...(await getInstanceRelease()), ...(await getReleaseNotices()) }),
+  },
+  'release check': {
+    usage: 'release check <on|off>',
+    summary: 'Switch the daily release check on or off. Off, the instance makes no request at all; the source is kept.',
+    flags: {},
+    operand: { name: 'state', describe: 'on or off' },
+    run: async (f) => {
+      if (f.state !== 'on' && f.state !== 'off') throw new CliError(`release check takes on or off (got '${f.state}')`)
+      const current = await getReleaseNotices()
+      return setReleaseCheck(f.state === 'on', current.source)
+    },
   },
   'config-secret': {
     usage: 'config-secret',

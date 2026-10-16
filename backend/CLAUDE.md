@@ -188,7 +188,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   every existing one — Flyway runs `outOfOrder=false`, so an instance past a version refuses a file below it —
   and appends its SHA-256 line to `scripts/applied_migrations.sha256` in the same commit;
   `scripts/validate_migration_versions.py` holds the name shape, unique versions, the pins, their order and the
-  module direction. **An applied migration is never edited — not even a comment in it.** Flyway validates the
+  module direction. A new time column (an entity's `Instant`) names its reader in the root's
+  `EveryStoredTimeHasAReaderTest`, or that test is red — the one sweep a new table meets that no contract guard
+  predicts (cr-release-notices' list of sweeps missed it). **An applied migration is never edited — not even a comment in it.** Flyway validates the
   checksum of every applied migration at `migrate-at-start`, so a one-word fix to a `--` comment fails startup on
   every instance that already ran it; `%dev` hides this behind `repair-at-start=true`, so it is green exactly where
   you would test it and red only on somebody else's server. A migration's comment is a historical artifact:

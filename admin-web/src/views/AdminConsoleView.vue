@@ -26,6 +26,8 @@ import { getInstanceStore, storeReady, type InstanceStore } from '../features/in
 import ConfigSecretPanel from '../features/instance/ConfigSecretPanel.vue'
 import CapabilitiesPanel from '../features/instance/CapabilitiesPanel.vue'
 import ExternalServicesPanel from '../features/instance/ExternalServicesPanel.vue'
+import ReleaseNoticesPanel from '../features/instance/ReleaseNoticesPanel.vue'
+import InstanceMailPanel from '../features/instance/InstanceMailPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
 import { formatBytes } from '../shared/formatBytes'
 import { probeServerRole, serverRole } from '../app/serverRole'
@@ -47,7 +49,7 @@ const tenants = ref<TenantSummary[]>([])
 const createOpen = ref(false)
 const selected = ref<string | null>(null)
 // One rubric at a time under `Server`, so a second boolean cannot leave two panels open at once.
-const serverPanel = ref<'release' | 'store' | 'configSecret' | 'capabilities' | 'services' | null>(null)
+const serverPanel = ref<'release' | 'store' | 'configSecret' | 'capabilities' | 'services' | 'mail' | null>(null)
 const loading = ref(true)
 // The object store as last read or changed (ADR 0089 decision 6): a tenant waits for a store that passed its check.
 // Null until read, and when the read failed — then nothing is blocked here and the server decides.
@@ -187,15 +189,25 @@ async function signOut() {
               <span class="pi pi-globe" aria-hidden="true" /> {{ t('services.navTitle') }}
             </button>
           </li>
+          <li>
+            <button type="button" :class="{ 'is-active': serverPanel === 'mail' }" @click="serverPanel = 'mail'">
+              <span class="pi pi-envelope" aria-hidden="true" /> {{ t('instanceMail.navTitle') }}
+            </button>
+          </li>
         </ul>
       </nav>
 
       <section class="admin-shell__detail">
-        <ReleaseVersionPanel v-if="serverPanel === 'release'" />
+        <!-- The running release, then what the daily check found beside it (uc.admin.learn-of-new-releases). -->
+        <div v-if="serverPanel === 'release'" class="admin-shell__stack">
+          <ReleaseVersionPanel />
+          <ReleaseNoticesPanel />
+        </div>
         <StorePanel v-else-if="serverPanel === 'store'" @changed="store = $event" />
         <ConfigSecretPanel v-else-if="serverPanel === 'configSecret'" />
         <CapabilitiesPanel v-else-if="serverPanel === 'capabilities'" />
         <ExternalServicesPanel v-else-if="serverPanel === 'services'" />
+        <InstanceMailPanel v-else-if="serverPanel === 'mail'" />
         <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" @revoked="onRevoked" />
       </section>
     </div>
@@ -268,6 +280,10 @@ async function signOut() {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+.admin-shell__stack {
+  display: grid;
+  gap: 1.5rem;
 }
 .admin-shell__tenant {
   display: grid;
