@@ -9,7 +9,7 @@ import jakarta.transaction.Transactional
 
 /**
  * The cover's two writes, each ONE transaction: the slot ([AttachmentStore], which takes the scope lock first) and the
- * node's sealed meta that names it ([NodesStore.applyUpdate], version-checked, joining this transaction). Either both
+ * node's sealed meta that names it ([NodesStore.applyUpdate], revision-checked, joining this transaction). Either both
  * land or neither does, so a cover and the meta that names it can never part - a crash or a refusal between them leaves
  * the OLD cover, meta and blob exactly as they were (inbox #411).
  *
@@ -28,7 +28,7 @@ class NodeCoverStore(private val attachments: AttachmentStore, private val nodes
     @Transactional
     fun set(
         scopeId: String, nodeId: String, kind: String, session: UploadSessionEntity, manifest: List<Long>?,
-        expectedBlobId: String?, wrappedMeta: String, metaVersion: Long,
+        expectedBlobId: String?, wrappedMeta: String, metaRevision: Long,
     ): NodeCoverOutcome {
         when (val o = attachments.attach(scopeId, nodeId, setOf(kind), NodeCover.SLOT, session, manifest, expectedBlobId)) {
             is AttachOutcome.Attached -> Unit
@@ -39,24 +39,24 @@ class NodeCoverStore(private val attachments: AttachmentStore, private val nodes
             AttachOutcome.UploadMismatch -> return NodeCoverOutcome.UploadMismatch
             AttachOutcome.NotAdmitted -> error("a member's cover passes no gate: $o")
         }
-        return writeMeta(scopeId, nodeId, wrappedMeta, metaVersion)
+        return writeMeta(scopeId, nodeId, wrappedMeta, metaRevision)
     }
 
     @Transactional
-    fun remove(scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaVersion: Long): NodeCoverOutcome {
+    fun remove(scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaRevision: Long): NodeCoverOutcome {
         when (attachments.detach(scopeId, nodeId, NodeCover.SLOT, blobId)) {
             // An empty slot (a replay, a meta that named a blob already gone) still writes the meta: the removal is idempotent.
             AttachmentStore.DetachOutcome.Detached, AttachmentStore.DetachOutcome.Empty -> Unit
             AttachmentStore.DetachOutcome.Replaced -> return NodeCoverOutcome.CoverStale(attachments.slotBlobId(nodeId, NodeCover.SLOT))
         }
-        return writeMeta(scopeId, nodeId, wrappedMeta, metaVersion)
+        return writeMeta(scopeId, nodeId, wrappedMeta, metaRevision)
     }
 
-    private fun writeMeta(scopeId: String, nodeId: String, wrappedMeta: String, metaVersion: Long): NodeCoverOutcome =
-        when (val r = nodes.applyUpdate(scopeId, nodeId, null, null, wrappedMeta, metaVersion)) {
+    private fun writeMeta(scopeId: String, nodeId: String, wrappedMeta: String, metaRevision: Long): NodeCoverOutcome =
+        when (val r = nodes.applyUpdate(scopeId, nodeId, null, null, wrappedMeta, metaRevision)) {
             NodesStore.ApplyResult.Applied -> NodeCoverOutcome.Done
             NodesStore.ApplyResult.Missing -> rolledBack(NodeCoverOutcome.NotFound)
-            is NodesStore.ApplyResult.StaleMeta -> rolledBack(NodeCoverOutcome.StaleMeta(r.wrappedMeta, r.metaVersion))
+            is NodesStore.ApplyResult.StaleMeta -> rolledBack(NodeCoverOutcome.StaleMeta(r.wrappedMeta, r.metaRevision))
             else -> error("a meta-only update answers applied, missing or stale: $r")
         }
 

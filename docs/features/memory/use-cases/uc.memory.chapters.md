@@ -49,18 +49,10 @@ in [ADR 0012](../../../decisions/0012-content-key-hierarchy.md).
   § Reuse first). Chapter creation + the nested gallery are the existing shell and grid; only the data layer
   is new.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** A big Memory can be split into **chapters** — like „Day 1 / Day 2" inside one trip. Each chapter is a
-little Memory of its own with its own photos, and you can even nest chapters further. Every chapter is locked
-with its **own key** (kept inside the Memory's key), so later we can let you **share a single chapter** with
-someone without exposing the rest — your device does all the locking, the server only ever sees scrambled data.
-
-**DE —** Eine große Erinnerung lässt sich in **Kapitel** unterteilen — etwa „Tag 1 / Tag 2" innerhalb einer
-Reise. Jedes Kapitel ist eine kleine eigene Erinnerung mit eigenen Fotos und kann selbst wieder Kapitel
-enthalten. Jedes Kapitel hat einen **eigenen Schlüssel** (aufbewahrt im Schlüssel der Erinnerung), damit wir
-dir später erlauben können, **ein einzelnes Kapitel** mit jemandem zu teilen, ohne den Rest preiszugeben — dein
-Gerät verschlüsselt alles, der Server sieht nur verschlüsselte Daten.
+A long occasion splits into chapters, each a small Memory of its own, so you can organize a trip day by day and share
+one part without exposing the rest.
 
 ## Related
 

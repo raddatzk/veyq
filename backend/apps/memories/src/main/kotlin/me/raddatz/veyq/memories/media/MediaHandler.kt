@@ -59,8 +59,8 @@ sealed interface MetaOutcome {
     object Deleting : MetaOutcome, HttpFailure by Failures.scopeDeleting
     data class Found(val wrappedMeta: String?) : MetaOutcome
     object NoMedia : MetaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
-    /** The tier moved past the stated version; nothing was written (ADR 0077). Carries the current tier + version. */
-    data class Stale(val wrappedMeta: String?, val metaVersion: Long) : MetaOutcome, HttpFailure by Failures.staleVersion
+    /** The tier moved past the stated revision; nothing was written (ADR 0077). Carries the current tier + revision. */
+    data class Stale(val wrappedMeta: String?, val metaRevision: Long) : MetaOutcome, HttpFailure by Failures.staleRevision
 }
 
 sealed interface DeleteMediaOutcome {
@@ -216,14 +216,14 @@ class MediaHandler(
         return MediaExifOutcome.Found(media.wrappedExif)
     }
 
-    /** Overwrite the media's sealed listed-metadata blob (opaque re-seal, e.g. a corrected date), version-checked. */
-    fun updateMeta(userId: String, scopeId: String, mediaId: String, wrappedMeta: String?, metaVersion: Long): MetaOutcome {
+    /** Overwrite the media's sealed listed-metadata blob (opaque re-seal, e.g. a corrected date), revision-checked. */
+    fun updateMeta(userId: String, scopeId: String, mediaId: String, wrappedMeta: String?, metaRevision: Long): MetaOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(MetaOutcome.NoMedia, MetaOutcome.Suspended, MetaOutcome.Deleting)?.let { return it }
-        return when (val r = store.setMeta(scopeId, mediaId, wrappedMeta, metaVersion)) {
+        return when (val r = store.setMeta(scopeId, mediaId, wrappedMeta, metaRevision)) {
             is MediaStore.SetMetaResult.Written -> MetaOutcome.Found(r.wrappedMeta)
             MediaStore.SetMetaResult.Missing -> MetaOutcome.NoMedia
-            is MediaStore.SetMetaResult.Stale -> MetaOutcome.Stale(r.wrappedMeta, r.metaVersion)
+            is MediaStore.SetMetaResult.Stale -> MetaOutcome.Stale(r.wrappedMeta, r.metaRevision)
         }
     }
 

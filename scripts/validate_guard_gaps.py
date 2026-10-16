@@ -167,10 +167,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      standing — rejected: `validate_request_bounds` reads a `$ref`'d scalar's bounds as the property's, because the
      generator inlines it as a String and emits none of them. Before that, this property took any tag (measured:
      `9F3A1C04` was enqueued, 201) while its schema said lowercase hex of at most 64
-  59 one of `updateNode`'s version declarations dropped, its field still on the request — rejected:
-     `validate_write_concurrency` requires every version-shaped request property to be the `field` of a declaration.
-     ADR 0080 gave the operation a second, independent version, which is why `x-veyq-concurrency.fields` became a list
-  60 a second version-shaped property added to `UpdateNodeRequest` with no declaration — rejected: the reverse angle
+  59 one of `updateNode`'s revision declarations dropped, its field still on the request — rejected:
+     `validate_write_concurrency` requires every counter-shaped request property to be the `field` of a declaration.
+     ADR 0080 gave the operation a second, independent revision, which is why `x-veyq-concurrency.fields` became a list
+  60 a second counter-shaped property added to `UpdateNodeRequest` with no declaration — rejected: the reverse angle
      holds per field, not per operation, so a declared neighbour does not cover it
   61 `updateNode`'s `409` no longer naming a declared conflict code — rejected: each declaration's `conflictCode` must
      appear in the operation's `409` text, so a client meeting it finds it documented
@@ -223,6 +223,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   81 a stylesheet rule whose class only a `*.test.ts` spells — rejected: `validate_stylesheet_anchors` leaves test
      evidence (tests, `src/test/` helpers, snapshots, fixtures, goldens) out of its markup vocabulary. Until then a
      test asserting a button does NOT carry a class kept that class's hiding rule anchored (inbox #362)
+  82 `putIdentityPins` declaring and carrying its counter as `version` again, consistently on both sides — rejected:
+     `validate_write_concurrency` refuses a declared revision field with a version-shaped name (ADR 0086). Until
+     inbox #452 the pins, the register and the terms carried a bare `version`, and the guard read it as a counter
+     without asking what it was called
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -258,16 +262,6 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      Python guard, and the honest alternative (widen the filter to the four scope directories) costs ~70 files'
      worth of no-op mutation runs against the 10 that are in scope. Pinned so the limit in that guard's
      docstring is executable rather than a sentence.
-  15 a `$PROJECT_DIR$`-rooted path inside a run configuration's `<env>`/`<entry>` value pointing nowhere passes
-     `validate_run_configs`, which resolves a configuration's *subject* (the `package.json` plus the script it
-     names, the Gradle project, the shell working directory) and never an env value. **Left open on purpose** —
-     a build output legitimately does not exist on a clean tree (an env value naming a file the backend it
-     configures writes under `backend/build/`), so resolving env paths would make that guard red on arrival,
-     and red-because-wrong is indistinguishable from red-because-broken for every later reader. The same limit
-     covers the value that actually bites — a
-     `VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` disagreeing with the origin you browse is green here and a broken
-     presigned URL in the browser — which no file-shaped assertion can decide at all. Pinned so the limit in
-     that guard's docstring is executable rather than a sentence.
   16 a CSS class that no markup applies passes `validate_stylesheet_anchors` when it is not the selector's
      ANCHOR — `.a-live-class .never-applied` is green, `.never-applied` alone is red. **Left open on purpose**
      — the inside of a selector is exactly where a stylesheet legitimately reaches into a dependency's DOM
@@ -325,10 +319,28 @@ allocated number, so there is no number to reuse and nothing to guard. See `chan
 
 A `validate_*.py`, so the trust-chain glob runs it on every push with no build. Runnable locally:
 
-    python3 scripts/validate_guard_gaps.py
+    python3 scripts/validate_guard_gaps.py            # skipped when no guard changed since the last green run
+    python3 scripts/validate_guard_gaps.py --force    # the full run, whatever the stamp says
+    python3 scripts/validate_guard_gaps.py --case 35  # only the named case(s), never skipped, writes no stamp
+
+**Skipped locally when no guard changed.** It is 90 % of the glob's time (998 s of it, 901 here, measured
+2026-10-16: 79 copies of the tree and a subprocess each), and what it proves is about the GUARDS. So a full green
+run writes the SHA-256 of every file under `scripts/` and `.claude/skills/trust-chain/` (the guards, their helpers
+and the gap map, as git lists them) to `.trust-chain-cache/guard_gaps.json` (gitignored, one per checkout), and a
+later run whose inputs hash the same prints `SKIPPED` and exits 0 without copying anything. A red run writes no
+stamp, so it runs again until it is green. **In CI it never skips** (`CI` is set on every GitHub Actions runner): a
+fresh checkout has no stamp, and one restored from a cache would vouch for a tree it never saw.
+
+**What a skip does not see — its limit.** A verdict also rests on its forgery's ANCHORS, and many live outside
+`scripts/`: a test a coverage file cites, a coverage file's path, an ADR's wording. Renaming one turns this guard
+red ("could not apply forgery"), and a skip hides that until the next full run. So a change that renames or moves
+what a guard anchors on runs `--force` (`changes/README.md` § Coverage is part of the work, the renaming rule).
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import pathlib
 import re
 import shutil
@@ -340,6 +352,11 @@ import textwrap
 import backend_tree  # where the backend's test and fixture roots live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# The skip (module docstring § Skipped locally). The stamp sits outside every input and is gitignored, so it is
+# neither hashed nor copied into a forged tree.
+SKIP_INPUTS = ("scripts/", ".claude/skills/trust-chain/")
+STAMP = ROOT / ".trust-chain-cache" / "guard_gaps.json"
 
 # Anchors the forgeries edit. If one drifts (a coverage file relocated, a test class renamed), the forgery
 # fails to apply and the case reports red with a "could not forge" message — deliberately loud, because a
@@ -1105,24 +1122,6 @@ def forge_tenant_suspend_without_reproject(root: pathlib.Path) -> str:
     return "a tenant suspend that never re-projects the routing (must be REJECTED — the domain keeps resolving)"
 
 
-def forge_run_config_env_path_into_the_void(root: pathlib.Path) -> str:
-    # validate_run_configs resolves a configuration's SUBJECT and never an env value, so add an env value naming
-    # a path that does not exist and it still reports green. The forgery brings its own entry rather than bending
-    # an existing one: env values are developer-tunable lines, and since the dev-invite file left (inbox #285)
-    # none of them is a `$PROJECT_DIR$` path at all — pinning one's spelling would turn an innocent edit red.
-    env_map = re.compile(r"(<envs>|<map>)")
-    for f in sorted((root / ".run").glob("*.xml")):
-        src = f.read_text()
-        if env_map.search(src):
-            probe = '<entry key="VEYQ_GUARD_GAP_PROBE" value="$PROJECT_DIR$/does-not-exist/guard-gap-probe.jsonl" />'
-            if "<envs>" in src:
-                probe = probe.replace("<entry key=", "<env name=")
-            f.write_text(env_map.sub(lambda m: m.group(1) + probe, src, count=1))
-            return ("a run configuration's env value pointing at a path that does not exist "
-                    "(the env-values-unresolved open gap)")
-    raise ForgeError("no .run/*.xml carries an env map — re-anchor this forgery")
-
-
 def forge_host_read_through_an_alias(root: pathlib.Path) -> str:
     # validate_lookup_single_home matches the header name as a literal AT the call (or anywhere, for the forwarded
     # header). Hold the plain header's name in a constant and read through it, and no spelling matches: the call
@@ -1238,8 +1237,12 @@ def forge_wiki_pair_declares_fewer(root: pathlib.Path) -> str:
 def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
     # Every markdown link from the first declared docs/ source back to its English page is unlinked (kept as
     # text): one link left standing would keep the guard green, which is a bite that never landed.
-    for page in sorted((root / SITE_PAGES).glob("*.md")):
-        if page.name == "index.md":
+    # Every English page, in any section folder and of either suffix: the Use area keeps its pages in folders
+    # (cr-use-area-content), so a root-only glob ran out of pages once the last one moved into its section.
+    pages = (root / SITE_PAGES)
+    english = (p for p in pages.rglob("*") if p.suffix in {".md", ".mdx"} and not p.relative_to(pages).parts[0] == "de")
+    for page in sorted(english):
+        if page.relative_to(pages).as_posix() == "index.md":
             continue  # the landing page declares nothing
         for s in _site_sources(page):
             doc = root / s
@@ -1254,9 +1257,9 @@ def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
             text = doc.read_text()
             stripped = link.sub(unlink, text)
             if stripped == text:
-                raise ForgeError(f"{s} carries no link to {SITE_PAGES}/{page.name} to remove")
+                raise ForgeError(f"{s} carries no link to {page.relative_to(root)} to remove")
             doc.write_text(stripped)
-            return f"{s} no longer links back to {SITE_PAGES}/{page.name}"
+            return f"{s} no longer links back to {page.relative_to(root)}"
     raise ForgeError(f"no English page under {SITE_PAGES} declares a docs/ source — re-anchor this forgery")
 
 
@@ -1295,23 +1298,37 @@ def _in_operation(root: pathlib.Path, spec: str, operation_id: str, old: str, ne
 def forge_concurrency_declaration_dropped(root: pathlib.Path) -> str:
     # The second declaration, so the first still stands: one declared field must not cover another.
     _in_operation(root, "content.openapi.yaml", "updateNode",
-                  "          - field: placementVersion\n"
+                  "          - field: placementRevision\n"
                   "            requiredWith: [encryptedName, parentId, wrappedContentKey, slugToken]\n"
                   "            conflictCode: stale_placement\n", "")
-    return "updateNode's placementVersion declaration dropped, metaVersion's kept (must be REJECTED)"
+    return "updateNode's placementRevision declaration dropped, metaRevision's kept (must be REJECTED)"
 
 
 def forge_second_version_field_undeclared(root: pathlib.Path) -> str:
-    _in_request_property(root, "content.openapi.yaml", "UpdateNodeRequest", "metaVersion",
-                         "        metaVersion:\n", "        shadowVersion:\n          type: integer\n"
-                         "          format: int64\n          example: 0\n        metaVersion:\n")
-    return "UpdateNodeRequest gains a version-shaped shadowVersion no declaration names (must be REJECTED)"
+    _in_request_property(root, "content.openapi.yaml", "UpdateNodeRequest", "metaRevision",
+                         "        metaRevision:\n", "        shadowRevision:\n          type: integer\n"
+                         "          format: int64\n          example: 0\n        metaRevision:\n")
+    return "UpdateNodeRequest gains a counter-shaped shadowRevision no declaration names (must be REJECTED)"
 
 
 def forge_conflict_code_unnamed(root: pathlib.Path) -> str:
-    # Only the declaration's own text: the 409 still names stale_version, so one named code must not cover another.
+    # Only the declaration's own text: the 409 still names stale_revision, so one named code must not cover another.
     _in_operation(root, "content.openapi.yaml", "updateNode", "(`stale_placement`", "(`stale_plac3ment`")
     return "updateNode's 409 no longer names its declared conflict code stale_placement (must be REJECTED)"
+
+
+def forge_revision_field_named_version(root: pathlib.Path) -> str:
+    # Both sides renamed together, so every other rule still holds: only the word is wrong.
+    _in_operation(root, "account.openapi.yaml", "putIdentityPins", "          - field: revision\n",
+                  "          - field: version\n")
+    _in_request_property(root, "account.openapi.yaml", "IdentityPinsUpdate", "revision",
+                         "        revision:\n", "        version:\n")
+    f = root / "contracts" / "api" / "account.openapi.yaml"
+    head, sep, tail = f.read_text().partition("    IdentityPinsUpdate:\n")
+    if not sep or "      required: [blob, revision]\n" not in tail:
+        raise ForgeError("account.openapi.yaml IdentityPinsUpdate: required anchor not found (drifted?)")
+    f.write_text(head + sep + tail.replace("      required: [blob, revision]\n", "      required: [blob, version]\n", 1))
+    return "putIdentityPins declares and carries its counter as `version` (must be REJECTED, ADR 0086)"
 
 
 DEMO_SPEC = "contracts/api/demo/demo.openapi.yaml"
@@ -1395,7 +1412,6 @@ CASES = [
     ("12", "validate_blob_reference_arity.py", forge_fourth_blob_reference_arm, False),
     ("13", "validate_store_reclaim_arity.py", forge_direct_store_delete_bypass, False),
     ("14", "validate_tenant_ingress_triggers.py", forge_tenant_suspend_without_reproject, False),
-    ("15", "validate_run_configs.py", forge_run_config_env_path_into_the_void, True),
     ("16", "validate_stylesheet_anchors.py", forge_dead_class_inside_a_selector, True),
     ("17", "validate_coverage.py", forge_backend_ref_env_gated,          False),
     ("18", "validate_coverage.py", forge_backend_tests_never_run_in_ci,  False),
@@ -1460,6 +1476,7 @@ CASES = [
     ("79", "validate_web_contrast.py", forge_admin_web_primary_lightened, False),
     ("80", "validate_request_bounds.py", forge_request_list_elements_unbounded, False),
     ("81", "validate_stylesheet_anchors.py", forge_class_anchored_only_by_a_test, False),
+    ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
 ]
 
 
@@ -1488,11 +1505,33 @@ def source_files() -> list[str]:
     return files
 
 
-def snapshot() -> pathlib.Path:
+def inputs_digest(files: list[str]) -> str:
+    """SHA-256 over the path and bytes of every skip input, in `source_files()` order (sorted, so stable)."""
+    digest = hashlib.sha256()
+    for rel in files:
+        if rel.startswith(SKIP_INPUTS):
+            digest.update(rel.encode() + b"\0" + (ROOT / rel).read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def stamped_digest() -> str | None:
+    """The inputs' digest of the last green full run in this checkout, or None (no stamp, or one that does not parse)."""
+    try:
+        return json.loads(STAMP.read_text(encoding="utf-8"))["inputs"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def write_stamp(digest: str, cases: int) -> None:
+    STAMP.parent.mkdir(parents=True, exist_ok=True)
+    STAMP.write_text(json.dumps({"inputs": digest, "cases": cases}) + "\n", encoding="utf-8")
+
+
+def snapshot(files: list[str]) -> pathlib.Path:
     """Copy the source tree once; every case copies this, so all of them see the same tree."""
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="guardgap_snapshot_"))
     made: set[pathlib.Path] = set()
-    for rel in source_files():
+    for rel in files:
         dst = tmp / rel
         if dst.parent not in made:
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1545,12 +1584,24 @@ def check_case(snap: pathlib.Path, verdicts: dict[str, bool],
 
 def main() -> int:
     # `--case ID` (repeatable) runs only the named cases: a narrow loop while writing a forgery. The full run, with
-    # no argument, is what CI and the trust-chain loop do.
-    wanted = {a for a in sys.argv[2:]} if sys.argv[1:2] == ["--case"] else None
+    # no argument, is what CI and the trust-chain loop do; locally it is skipped while the stamp matches, and
+    # `--force` runs it anyway.
+    args = sys.argv[1:]
+    force = args[:1] == ["--force"]
+    wanted = set(args[1:]) if args[:1] == ["--case"] else None
+    if args and not force and wanted is None:
+        raise SystemExit(f"GUARD-GAP VALIDATION FAILED: unknown arguments {args} (use --force or --case ID …)")
     cases = [c for c in CASES if wanted is None or c[0] in wanted]
     if wanted is not None and {c[0] for c in cases} != wanted:
         raise SystemExit(f"GUARD-GAP VALIDATION FAILED: unknown case id(s) {sorted(wanted - {c[0] for c in cases})}")
-    snap = snapshot()
+    files = source_files()
+    digest = inputs_digest(files)
+    if wanted is None and not force and not os.environ.get("CI") and stamped_digest() == digest:
+        print(f"guard gaps SKIPPED: nothing under {' or '.join(SKIP_INPUTS)} changed since this checkout's last green "
+              f"full run, so its {len(cases)} case(s) were NOT re-checked. A renamed or moved anchor outside them is not "
+              "seen by a skip: run `python3 scripts/validate_guard_gaps.py --force` after one.")
+        return 0
+    snap = snapshot(files)
     try:
         verdicts: dict[str, bool] = {}
         errors = [e for c in cases if (e := check_case(snap, verdicts, *c))]
@@ -1561,6 +1612,8 @@ def main() -> int:
         for e in errors:
             print("  -", e)
         return 1
+    if wanted is None:
+        write_stamp(digest, len(cases))
     print(f"guard gaps OK: {len(cases)} pinned case(s) hold (closed holes stay rejected, open gaps stay open)")
     return 0
 

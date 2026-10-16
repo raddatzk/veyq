@@ -2,7 +2,7 @@
 // placement write (`moveNode`), recorded at `fetch` — the JSON the real generated client serializes. What is pinned is
 // what makes a moved subtree keep working (ADR 0080 decisions 1, 3, 4 and 11):
 //   - the node's OWN content key travels unchanged, re-wrapped under the destination's key at the NEXT placement
-//     version, and the request states the version it was built on (the server's compare-and-set);
+//     revision, and the request states the revision it was built on (the server's compare-and-set);
 //   - the epoch: a move into or out of the scope root seals at the CURRENT epoch (the entry is under `K_SC` there), a
 //     move between two folders at the node's stored one;
 //   - a drop-box guest's folder moved out: its key opened through the drop key and the guest's `K_up`, re-wrapped under
@@ -43,10 +43,10 @@ function recordFetch() {
 }
 
 /** A row sealed under `entryKey` at (epoch, version) — as the server would serve it. */
-function row(id: string, parentId: string | null, kind: string, entryKey: Uint8Array, key: Uint8Array, name: string, epoch: number, placementVersion: number, extra: Partial<TreeNode> = {}): TreeNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch, placementVersion }
+function row(id: string, parentId: string | null, kind: string, entryKey: Uint8Array, key: Uint8Array, name: string, epoch: number, placementRevision: number, extra: Partial<TreeNode> = {}): TreeNode {
+  const address = { scopeId: SCOPE, nodeId: id, epoch, placementRevision }
   return treeNode({
-    id, parentId, kind, name, epoch, placementVersion,
+    id, parentId, kind, name, epoch, placementRevision,
     wrappedContentKey: wrapContentKey(entryKey, address, key), ...extra,
   })
 }
@@ -57,7 +57,7 @@ const applied = (node: TreeNode, json: Record<string, unknown>): TreeNode => ({
   parentId: (json.parentId as string | undefined) ?? null,
   wrappedContentKey: json.wrappedContentKey as string,
   epoch: json.epoch as number,
-  placementVersion: node.placementVersion + 1,
+  placementRevision: node.placementRevision + 1,
   shareIdentityId: null,
   wrappedIdentityKey: null,
 })
@@ -88,9 +88,9 @@ describe('a member\'s move between folders', () => {
   it('re-wraps the node\'s own key under the destination at version + 1, states version 3, keeps the stored epoch', async () => {
     const nodes = tree()
     const json = await moveAsMember(epochsOf(scopeKey), nodes, M, B)
-    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'parentId', 'placementVersion', 'slugToken', 'wrappedContentKey'])
-    expect(json).toMatchObject({ parentId: B, placementVersion: 3, epoch: 0 })
-    const at4 = { purpose: 'content-key', scopeId: SCOPE, nodeId: M, epoch: 0, placementVersion: 4 } as const
+    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
+    expect(json).toMatchObject({ parentId: B, placementRevision: 3, epoch: 0 })
+    const at4 = { purpose: 'content-key', scopeId: SCOPE, nodeId: M, epoch: 0, placementRevision: 4 } as const
     same(v1.open(at4, keys.b, fromB64std(json.wrappedContentKey as string)), keys.m)
     expect(() => v1.open(at4, keys.a, fromB64std(json.wrappedContentKey as string)), 'never the old parent\'s key').toThrow(v1.OpenRefused)
     expect(new TextDecoder().decode(v1.open({ ...at4, purpose: 'node-name' }, keys.b, fromB64std(json.encryptedName as string)))).toBe('Italien')
@@ -134,8 +134,8 @@ describe('a member moves a selection of several', () => {
       const json = bodies[i].json
       // the same fields and the same placement as the single write; a fresh seal, so the ciphertexts differ and both open
       expect(Object.keys(json).sort()).toEqual(Object.keys(single.get(id)!).sort())
-      expect({ parentId: json.parentId, epoch: json.epoch, placementVersion: json.placementVersion, slugToken: json.slugToken })
-        .toEqual({ parentId: single.get(id)!.parentId, epoch: single.get(id)!.epoch, placementVersion: single.get(id)!.placementVersion, slugToken: single.get(id)!.slugToken })
+      expect({ parentId: json.parentId, epoch: json.epoch, placementRevision: json.placementRevision, slugToken: json.slugToken })
+        .toEqual({ parentId: single.get(id)!.parentId, epoch: single.get(id)!.epoch, placementRevision: single.get(id)!.placementRevision, slugToken: single.get(id)!.slugToken })
     }
     const after = tree().map((x) => (x.id === M ? applied(x, bodies[0].json) : x.id === X ? applied(x, bodies[1].json) : x))
     same(nodeContentKey(SCOPE, epochs, after, M), keys.m)
@@ -161,10 +161,10 @@ describe('a member\'s move and the scope\'s epochs (ADR 0080 decision 4)', () =>
     const nodes = tree()
     const json = await moveAsMember(rotated, nodes, M, null)
     expect(json.parentId, 'the root is no parent on the wire').toBeUndefined()
-    expect(json).toMatchObject({ epoch: 1, placementVersion: 3 })
+    expect(json).toMatchObject({ epoch: 1, placementRevision: 3 })
     const wrap = fromB64std(json.wrappedContentKey as string)
-    same(v1.open({ purpose: 'content-key', scopeId: SCOPE, nodeId: M, epoch: 1, placementVersion: 4 }, e1, wrap), keys.m)
-    expect(() => v1.open({ purpose: 'content-key', scopeId: SCOPE, nodeId: M, epoch: 0, placementVersion: 4 }, e0, wrap)).toThrow(v1.OpenRefused)
+    same(v1.open({ purpose: 'content-key', scopeId: SCOPE, nodeId: M, epoch: 1, placementRevision: 4 }, e1, wrap), keys.m)
+    expect(() => v1.open({ purpose: 'content-key', scopeId: SCOPE, nodeId: M, epoch: 0, placementRevision: 4 }, e0, wrap)).toThrow(v1.OpenRefused)
     const after = nodes.map((x) => (x.id === M ? applied(x, json) : x))
     same(nodeContentKey(SCOPE, rotated, after, M), keys.m)
     same(nodeContentKey(SCOPE, rotated, after, C), keys.c)
@@ -173,15 +173,15 @@ describe('a member\'s move and the scope\'s epochs (ADR 0080 decision 4)', () =>
   it('out of the scope root into a folder: the current epoch too (stored as sent), under the folder\'s key', async () => {
     const nodes = tree()
     const json = await moveAsMember(rotated, nodes, A, B)
-    expect(json).toMatchObject({ parentId: B, epoch: 1, placementVersion: 0 })
-    same(v1.open({ purpose: 'content-key', scopeId: SCOPE, nodeId: A, epoch: 1, placementVersion: 1 }, keys.b, fromB64std(json.wrappedContentKey as string)), keys.a)
+    expect(json).toMatchObject({ parentId: B, epoch: 1, placementRevision: 0 })
+    same(v1.open({ purpose: 'content-key', scopeId: SCOPE, nodeId: A, epoch: 1, placementRevision: 1 }, keys.b, fromB64std(json.wrappedContentKey as string)), keys.a)
     const after = nodes.map((x) => (x.id === A ? applied(x, json) : x))
     for (const [id, key] of [[A, keys.a], [M, keys.m], [C, keys.c]] as const) same(nodeContentKey(SCOPE, rotated, after, id), key)
   })
 
   it('between two folders: the node\'s stored epoch (0), whatever the current one', async () => {
     const json = await moveAsMember(rotated, tree(), C, B)
-    expect(json).toMatchObject({ parentId: B, epoch: 0, placementVersion: 0 })
+    expect(json).toMatchObject({ parentId: B, epoch: 0, placementRevision: 0 })
   })
 })
 
@@ -208,8 +208,8 @@ describe('a member moves a drop-box guest\'s folder out (ADR 0080 decision 11)',
       row(DEST, null, 'FOLDER', scopeKey, keys.dest, 'Vereinsablage', 0, 0),
     ]
     const json = await moveAsMember(epochs, nodes, FOLDER, DEST)
-    expect(json).toMatchObject({ parentId: DEST, placementVersion: 0, epoch: 0 })
-    const at1 = { purpose: 'content-key', scopeId: SCOPE, nodeId: FOLDER, epoch: 0, placementVersion: 1 } as const
+    expect(json).toMatchObject({ parentId: DEST, placementRevision: 0, epoch: 0 })
+    const at1 = { purpose: 'content-key', scopeId: SCOPE, nodeId: FOLDER, epoch: 0, placementRevision: 1 } as const
     same(v1.open(at1, keys.dest, fromB64std(json.wrappedContentKey as string)), keys.folder)
     expect(() => v1.open(at1, identityKey, fromB64std(json.wrappedContentKey as string)), 'no longer under the guest\'s K_up').toThrow(v1.OpenRefused)
     expect(new TextDecoder().decode(v1.open({ ...at1, purpose: 'node-name' }, keys.dest, fromB64std(json.encryptedName as string)))).toBe('Adelgunde')

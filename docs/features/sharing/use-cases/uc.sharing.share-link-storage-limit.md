@@ -55,18 +55,10 @@ link half of it; the tenant's own ceiling is [uc.admin.tenant-storage-quota](../
 - **One limit per tenant, not per link.** The share dialog gains nothing; a per-link override can sit on top later
   (ADR 0073 §4).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** A link that lets people add photos can end up anywhere, so each one has a size limit. By default a link
-can take 10 GB — plenty for a party or a wedding. If you run the space, you can change that number for all links at
-once. When a link is full, people using it see that it isn't taking uploads right now; nothing half-uploaded is left
-behind. Deleting photos makes room once the trash is emptied.
-
-**DE —** Ein Link, über den andere Fotos hinzufügen können, kann überall landen — deshalb hat jeder Link eine
-Obergrenze. Standardmäßig nimmt ein Link 10 GB auf — genug für eine Feier oder eine Hochzeit. Wer den Bereich
-betreibt, kann diesen Wert für alle Links auf einmal ändern. Ist ein Link voll, sehen alle, die ihn nutzen, dass er
-gerade nichts mehr annimmt; halb Hochgeladenes bleibt nicht zurück. Gelöschte Fotos schaffen Platz, sobald der
-Papierkorb geleert ist.
+A link that lets people add photos cannot fill your server even if it travels further than you meant, while an
+ordinary event still fits without changing any setting.
 
 ## Related
 
@@ -80,3 +72,4 @@ Papierkorb geleert ist.
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) §3 (the per-file ceiling beside it),
   [ADR 0030](../../../decisions/0030-contributor-public-share.md) §6,
   [ADR 0031](../../../decisions/0031-uploader-public-share.md) (the abuse controls it joins).
+- End-user view (docs site): [Storage and upload links](../../../../site/src/content/docs/space-owners/storage.mdx)

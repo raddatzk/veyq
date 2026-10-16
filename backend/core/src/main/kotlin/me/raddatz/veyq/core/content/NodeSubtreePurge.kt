@@ -90,8 +90,18 @@ class NodeSubtreePurge(
     fun eraseExpiredIn(scopeId: String, cutoff: Instant) {
         ScopeEntity.lockRow(scopeId) ?: return // the scope's own purge erased its nodes with it
         val expired = NodeEntity.find("scopeId = ?1 and deletedAt is not null and deletedAt < ?2", scopeId, cutoff).list()
-        if (expired.isEmpty()) return
-        val nodeIds = expired.map { it.id }
+        erase(scopeId, expired)
+    }
+
+    /**
+     * Erase [erased] — node rows of [scopeId] that are complete subtrees (every descendant among them) — for good,
+     * recording every store object it drops: the expired trash ([eraseExpiredIn]) and a guest's empty upload
+     * placeholder (`ShareNodesHandler.abandon`, which checked it has no child). Joins its caller's transaction, which
+     * holds the scope row's lock.
+     */
+    fun erase(scopeId: String, erased: List<NodeEntity>) {
+        if (erased.isEmpty()) return
+        val nodeIds = erased.map { it.id }
 
         // Every eraser in phase order: the application rows hanging off the nodes (their own locks, their blobs through
         //    their FK-ordered bodies) and core's attachments — a Memory's cover among them since inbox #341, so its
@@ -108,8 +118,8 @@ class NodeSubtreePurge(
         // The node rows, before the identities: a guest's identity folder names its identity
         //    (`veyq_node.share_identity_id`, ADR 0080 decision 11; `NodeGuestIdentityUsage` keeps it while a row does),
         //    so the folder's row goes first and its identity joins the ones the step below may drop.
-        guests += expired.mapNotNull { it.shareIdentityId }
-        expired.forEach { NodeEntity.deleteById(it.id) }
+        guests += erased.mapNotNull { it.shareIdentityId }
+        erased.forEach { NodeEntity.deleteById(it.id) }
 
         // The guests of ANY deleted link whose last attachment, identity folder or application row naming them went above — a link
         //    deleted earlier loses its guests here, with the last node that held their uploads. After every eraser

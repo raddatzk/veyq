@@ -62,7 +62,7 @@ Sealed client-side, never readable by the server:
 - **Scope and membership:** who belongs to which tenant and group, and in which role.
 - **Per member, per tenant:** the username, the identity public key and the group-add-consent flag. Any fellow
   tenant member can enumerate these (concession 4 below).
-- Whether a member **has a profile picture** and how often it changed (`avatar_version`); the picture itself is a
+- Whether a member **has a profile picture** and how often it changed (`avatar_revision`); the picture itself is a
   constant-size sealed blob. Contract, crypto and backend are built; the web client is not yet.
 - The account's **Ed25519 auth public key**, which verifies a signed login challenge. It is not a credential, and
   the password never reaches the server
@@ -128,8 +128,8 @@ that address.
 
 ### Terms acceptance
 
-The tenant's **terms text and version** are the operator's public policy, served to everyone. A member's
-**accepted terms versions and when they accepted each** are kept as a history, one row per version, never
+The tenant's **terms text and revision** are the space owner's public policy, served to everyone. A member's
+**accepted terms revisions and when they accepted each** are kept as a history, one row per revision, never
 overwritten: audit evidence for a dispute, served by no API.
 
 ## The five concessions

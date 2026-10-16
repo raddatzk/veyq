@@ -36,9 +36,15 @@ object StoreSettingFixtures {
         set(StoreSettingRow(false, StoreType.S3, endpoint, null, bucket, region, accessKey, SealedValue(sealed.ciphertext, sealed.nonce, fingerprint), null, null))
     }
 
+    /** Save [row] as the setting IN USE, skipping the check that would otherwise put it there. */
     fun set(row: StoreSettingRow) {
         QuarkusTransaction.requiringNew().run { store().save(row) }
         settings().invalidate()
+    }
+
+    /** Save [row] as the PENDING setting (ADR 0089 decision 5) — beside the one in use, which it does not change. */
+    fun setPending(row: StoreSettingRow) {
+        QuarkusTransaction.requiringNew().run { store().savePending(row) }
     }
 
     /** Record a check of the current setting — passed, with every step passing — without any network. */

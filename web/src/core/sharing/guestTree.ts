@@ -1,7 +1,7 @@
 // A READ_WRITE guest's tree operations on a share link (ADR 0080 decisions 2, 3, 6 and 10; cr-node-key-hierarchy 5b.4a):
-// create a node inside the shared subtree, and move or rename one. Core's, like the member's (`core/node/tree.ts`): they
-// carry no application semantics, and the server checks structure only (inside the subtree, the containers' owners,
-// `NodeKindRules`) and opens nothing.
+// create a node inside the shared subtree, move or rename one, and take back an empty upload placeholder it gave up.
+// Core's, like the member's (`core/node/tree.ts`): they carry no application semantics, and the server checks structure
+// only (inside the subtree, the containers' owners, `NodeKindRules`) and opens nothing.
 //
 // **Keys come from the chain, never from `K_SC`.** A guest holds the root's key (the share's `wrap` under `K_share`) and
 // every key below it (`walkSubtree`); it never holds the scope key, so it never writes at the scope root. Every write
@@ -12,7 +12,7 @@
 // **Epochs and versions (ADR 0080 decisions 3, 4 and 6).** A guest's create states the epoch it sealed with: the
 // parent's served epoch (any epoch at or below the scope's current one is stored as sent, and the parent's is one the
 // scope has had). A placement states none — the node keeps its own, so it is sealed at the node's served epoch — and
-// binds the next placement version, which the server compare-and-sets; a `409 stale_placement` re-resolves and rebuilds
+// binds the next placement revision, which the server compare-and-sets; a `409 stale_placement` re-resolves and rebuilds
 // once ({@link PLACEMENT_RETRIES}), then {@link PlacementConflictError}.
 //
 // **Errors by code, not status.** One status carries several refusals here (409: `slug_taken`, `stale_epoch`, `id_taken`,
@@ -71,7 +71,7 @@ export function guestTreeContext(
 /** The refusals a guest's tree operation answers, by the server's `code`. */
 export const GUEST_TREE_CODES = [
   'slug_taken', 'stale_epoch', 'id_taken', 'illegal_structure', 'illegal_scope', 'share_not_contributable',
-  'share_password_incorrect', 'share_not_found', 'node_not_found', 'stale_placement', 'rate_limited',
+  'share_password_incorrect', 'share_not_found', 'node_not_found', 'stale_placement', 'rate_limited', 'not_a_placeholder',
 ] as const
 export type GuestTreeCode = (typeof GUEST_TREE_CODES)[number]
 
@@ -114,6 +114,7 @@ export function guestTreeErrorMessageKey(err: unknown): { key: string; params?: 
       return { key: 'share.folder.gone' }
     case 'stale_epoch':
     case 'id_taken':
+    case 'not_a_placeholder': // an abandon's, which no guest is shown (`abandonShareNodeAsGuest`)
       return { key: 'share.folder.createFailed' }
   }
 }
@@ -134,7 +135,7 @@ function assertNameFree(parts: SharedSubtree, parentId: string, kind: NodeKind, 
 /**
  * Create a node of `kind` named `name` under `parentId` (a node of the subtree, the root included) as a guest: a fresh
  * random content key wrapped under the PARENT's key, its name and slug token (slot: the parent's id) under that same key,
- * all bound to a client-minted id at the parent's served epoch and placement version 0 (ADR 0080 decisions 1-3, 6).
+ * all bound to a client-minted id at the parent's served epoch and placement revision 0 (ADR 0080 decisions 1-3, 6).
  * Refuses a parent whose key the guest does not hold (`OpenRefused`) and a name a readable sibling already takes
  * ({@link GuestTreeError} `slug_taken`, naming it); a server refusal becomes a {@link GuestTreeError} by its code.
  */
@@ -146,7 +147,7 @@ export async function createShareNodeAsGuest(
   if (!parentKey || !parent) throw new v1.OpenRefused('content-key') // never K_SC: a guest writes only under keys it holds
   assertNameFree(ctx, parentId, kind, name)
   const contentKey = v1.randomBytes(32)
-  const node = { scopeId: ctx.scopeId, nodeId: crypto.randomUUID(), epoch: parent.epoch, placementVersion: 0 }
+  const node = { scopeId: ctx.scopeId, nodeId: crypto.randomUUID(), epoch: parent.epoch, placementRevision: 0 }
   try {
     const res = await publicSharesApi().createShareNode({
       shareId: ctx.shareId,
@@ -169,10 +170,28 @@ export async function createShareNodeAsGuest(
 }
 
 /**
+ * Take back `nodeId` as a guest — the empty placeholder this guest created for an upload that was then refused (a full
+ * link) or given up (`abandonShareNode`, ADR 0080 decision 6). The server erases it at once, but only a node that holds
+ * nothing: no child, no upload a member or another guest has open into it, and its kind's owner calls it empty (Depot: a
+ * file whose slot never held a blob; core: a folder with no attachment and no sealed metadata); anything else is a {@link GuestTreeError} `not_a_placeholder`, and nothing changes.
+ */
+export async function abandonShareNodeAsGuest(
+  ctx: Pick<GuestTreeContext, 'shareId' | 'contributorToken' | 'pwToken'>, nodeId: string,
+): Promise<void> {
+  try {
+    await publicSharesApi().abandonShareNode({
+      shareId: ctx.shareId, nodeId, xContributorToken: ctx.contributorToken, xSharePassword: ctx.pwToken,
+    })
+  } catch (e) {
+    throw await guestTreeErrorOf(e)
+  }
+}
+
+/**
  * Move `nodeId` under `newParentId` as a guest, renaming it to `newName` when given — a rename is a placement to the
  * node's current parent (ADR 0080 decisions 3 and 10). The node's key is re-wrapped under the DESTINATION's key and its
  * name (the current one or `newName`) and slug token re-sealed under it, at the node's served epoch and the NEXT
- * placement version; the request states the version it was built on and no epoch. The share root is never the source.
+ * placement revision; the request states the revision it was built on and no epoch. The share root is never the source.
  *
  * On `409 stale_placement` the link is re-resolved and the placement rebuilt on the node as it now is, at most
  * {@link PLACEMENT_RETRIES} time(s); then {@link PlacementConflictError}. Every other refusal is a {@link GuestTreeError}.
@@ -202,11 +221,11 @@ async function sendGuestPlacement(
   const key = parts.keys.get(nodeId)
   const destinationKey = parts.keys.get(newParentId)
   const name = newName ?? parts.names.get(nodeId)
-  if (!node || !key || !destinationKey || name === undefined || node.placementVersion == null) {
+  if (!node || !key || !destinationKey || name === undefined || node.placementRevision == null) {
     throw new v1.OpenRefused('content-key') // nothing to re-wrap, or nothing to re-wrap it under
   }
   assertNameFree(parts, newParentId, node.kind, name, nodeId)
-  const sealedAt = { scopeId: ctx.scopeId, nodeId, epoch: node.epoch, placementVersion: node.placementVersion + 1 }
+  const sealedAt = { scopeId: ctx.scopeId, nodeId, epoch: node.epoch, placementRevision: node.placementRevision + 1 }
   await publicSharesApi().updateShareNode({
     shareId: ctx.shareId,
     nodeId,
@@ -217,7 +236,7 @@ async function sendGuestPlacement(
       encryptedName: sealName(destinationKey, sealedAt, name),
       slugToken: slugTokenFor(destinationKey, newParentId, node.kind, name),
       wrappedContentKey: wrapContentKey(destinationKey, sealedAt, key),
-      placementVersion: node.placementVersion,
+      placementRevision: node.placementRevision,
     },
   })
 }

@@ -79,12 +79,12 @@ const exifCtx = (mediaId: string) => ({ purpose: 'media-exif', scopeId: SCOPE_ID
 /** A listed tier sealed as the upload would — the base a meta write re-reads (ADR 0077). */
 const sealTier = (mediaId: string, key: Uint8Array, tier: object) =>
   b64std(v1.seal(metaCtx(mediaId), key, new TextEncoder().encode(JSON.stringify(tier))))
-/** A media a write targets: its listed tier (or none) at a version. */
-const target = (mediaId: string, key: Uint8Array, tier: object | null, metaVersion = 0) =>
-  ({ mediaId, wrappedMeta: tier ? sealTier(mediaId, key, tier) : undefined, metaVersion })
-/** A thrown generated-client failure carrying `409 stale_version` with the server's current tier. */
-const staleTier = (wrappedMeta: string | null, metaVersion: number) => ({
-  response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaVersion }), { status: 409 }),
+/** A media a write targets: its listed tier (or none) at a revision. */
+const target = (mediaId: string, key: Uint8Array, tier: object | null, metaRevision = 0) =>
+  ({ mediaId, wrappedMeta: tier ? sealTier(mediaId, key, tier) : undefined, metaRevision })
+/** A thrown generated-client failure carrying `409 stale_revision` with the server's current tier. */
+const staleTier = (wrappedMeta: string | null, metaRevision: number) => ({
+  response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta, metaRevision }), { status: 409 }),
 })
 const openJson = (ctx: v1.SealContext, key: Uint8Array, sealed: string) =>
   JSON.parse(new TextDecoder().decode(v1.open(ctx, key, fromB64std(sealed))))
@@ -872,8 +872,8 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
 
     const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured, 3), memoryKey, CORRECTED)
 
-    expect(store.api.updateMediaMeta.mock.calls[0][0].mediaMetaUpdate.metaVersion).toBe(3) // the version it read
-    expect(updated.metaVersion).toBe(4)
+    expect(store.api.updateMediaMeta.mock.calls[0][0].mediaMetaUpdate.metaRevision).toBe(3) // the revision it read
+    expect(updated.metaRevision).toBe(4)
     // the wire carries only opaque ciphertext — never the plaintext date
     const sealed = store.captured.updatedMeta
     expect(typeof sealed).toBe('string')
@@ -955,11 +955,11 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     fakeApi(mediaApi, { updateMediaMeta })
 
     const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG }, 1), memoryKey, CORRECTED)
-    expect(updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.metaVersion).toBe(2)
+    expect(updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.metaRevision).toBe(2)
     expect(decodeMeta(memoryKey, updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.wrappedMeta!)).toEqual({
       v: 1, capturedAt: ORIG, placeName: 'Lisboa', capturedAtOverride: CORRECTED,
     })
-    expect(updated).toMatchObject({ metaVersion: 3, wrote: true })
+    expect(updated).toMatchObject({ metaRevision: 3, wrote: true })
 
     const corrected = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG, capturedAtOverride: 1 })
     const conflicting = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(corrected, 2)).mockResolvedValue({})
@@ -1074,7 +1074,7 @@ describe('the media type — the persisted video signal (cr-inline-video-playbac
     fakeApi(mediaApi, { updateMediaMeta: late })
     const result = await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10 }, 4), memoryKey, 'Lisboa')
     expect(late).toHaveBeenCalledTimes(1)
-    expect(result).toMatchObject({ wrote: false, metaVersion: 5, wrappedMeta: named })
+    expect(result).toMatchObject({ wrote: false, metaRevision: 5, wrappedMeta: named })
   })
 })
 

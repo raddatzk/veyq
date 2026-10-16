@@ -55,6 +55,19 @@ sequenceDiagram
 
 - **A1 — passkey (deferred):** a registered passkey is an alternate auth method (its signature
   authenticates); covered by a **separate use-case**, not this flow.
+- **A2 — the sign-in finds a live session (web, inbox #454):** boot revives a session from the refresh cookie and
+  may not open the vault (a convenience wrap withheld or gone, a session vault lost with its tab, a sign-out that did
+  not reach the server — [sign-out](uc.account.sign-out.md) E4), so the device reaches the sign-in screen with a
+  session. Typing the address ends nothing; the submit asks the server whose session it is
+  (`GET /api/account/email`, the server's own copy) and compares it with the typed or prefilled address under the
+  one normalization (trim, lower-case). The **same account** unlocks inside that session: no challenge, no verify,
+  no new family ([unlock](uc.account.unlock.md) A2). **Another account**, or a submit that turns "remember me" on
+  (a refresh never raises a cookie's lifetime, ADR 0004, and the client cannot read which one the restored session
+  has), first **ends** the found family with a logout and then runs this flow. The logout comes first because it
+  clears the browser's refresh cookies, so after the login it would clear the new one; a logout that does not reach
+  the server stops the sign-in, so no new family is minted beside a live one. A session the server refuses ends
+  through the one ending ([sign-out](uc.account.sign-out.md) § The ending). The same rule holds for a session this
+  screen's own login made: a Secret-Key retry stays on it, a changed address ends it.
 - **E1 — wrong password:** the derived keypair does not match the stored `authPublicKey`; signature
   verification fails → **generic auth failure**, indistinguishable from an unknown account.
 - **E2 — unknown account:** the server still issues a nonce and still fails verification identically →
@@ -108,21 +121,10 @@ stateDiagram-v2
 - **PQ posture.** Ed25519 now; migrate to a PQ/hybrid signature (ML-DSA) later via a suite bump. A login
   signature is a one-time live check — there is no harvest-now-decrypt-later for authentication.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you log in to your veyq instance, your password never leaves your device. Your device uses
-it to prove who you are with a **one-time signature**, and the server only ever checks that signature —
-it never learns your password and stores nothing it could reuse to impersonate you. Logging in gets you a
-**session**; actually opening your encrypted memories is a **separate unlock step** that also needs your
-Secret Key. The server can't tell a wrong password apart from an account that doesn't exist, so it never
-reveals who has an account.
-
-**DE —** Wenn du dich bei deiner veyq-Instanz anmeldest, verlässt dein Passwort nie dein Gerät. Dein
-Gerät beweist mit einer **einmaligen Signatur**, wer du bist, und der Server prüft nur diese Signatur —
-er erfährt dein Passwort nie und speichert nichts, womit er sich als du ausgeben könnte. Die Anmeldung
-verschafft dir eine **Sitzung**; deine verschlüsselten Erinnerungen tatsächlich zu öffnen ist ein
-**separater Entsperr-Schritt**, der zusätzlich deinen Secret Key braucht. Der Server kann ein falsches
-Passwort nicht von einem nicht existierenden Konto unterscheiden und verrät so nie, wer ein Konto hat.
+You sign in to your space without your password ever leaving your device, so the server cannot learn it or use it to
+pose as you.
 
 ## Related
 

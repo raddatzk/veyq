@@ -48,6 +48,9 @@
   the guests' folders and their files, with the download — read-only: nothing to send, replace, share, delete or move
   (owner decision 2026-10-08, inbox #380; one view for both, inbox #401). Two folders of one name may be numbered
   differently than for a member (the link serves no creation time).
+- **E9 — a file is refused or given up** (the link's storage limit is reached, the guest cancels): the empty file its
+  create made in the guest's folder is taken back and erased (`abandonShareNode`), so nothing of it is kept; a guest
+  takes back nothing in another guest's folder, nor its folder itself, nor a file that holds content.
 
 ## Quality notes
 
@@ -57,23 +60,14 @@
 - **A guest who loses its device data** cannot reach its folder again and starts a new one.
 - Where the build differs from ADR 0080 decision 11 is inbox #377, for the owner to review.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** A drop box is a place where others can hand you files without seeing anything else. Send someone the link:
-they type a name, pick their files, done — no account. Each person gets their own folder, so nobody sees what others
-sent, and you and the other members of your space see everything in one place. The files are encrypted in the sender's
-browser; the person running the server can't read them or their names. Switching the link off keeps everything that
-already arrived.
-
-**DE —** Ein Briefkasten ist ein Ort, an dem dir andere Dateien geben können, ohne sonst etwas zu sehen. Schick jemandem
-den Link: Name eintippen, Dateien auswählen, fertig — ohne Konto. Jede Person bekommt einen eigenen Ordner, niemand sieht,
-was andere geschickt haben, und du und die anderen Mitglieder deines Bereichs seht alles an einem Ort. Die Dateien werden
-im Browser der sendenden Person verschlüsselt; wer den Server betreibt, kann weder sie noch ihre Namen lesen. Schaltest du
-den Link ab, bleibt alles erhalten, was schon angekommen ist.
+People without an account can hand you files through a link, each into a folder of their own, without seeing anything
+else in your space.
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - End-user view (docs site): [Collect files with a drop box](../../../../site/src/content/docs/depot/drop-boxes.mdx)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md),
@@ -83,3 +77,4 @@ den Link ab, bleibt alles erhalten, was schon angekommen ist.
   decision 11, [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) § the drop
   key.
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md).
+- End-user view (docs site): [Ask people to add photos](../../../../site/src/content/docs/sharing/request-uploads.mdx)

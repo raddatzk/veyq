@@ -85,7 +85,7 @@ const open = (purpose: string, mediaId: string, key: Uint8Array, sealed: string)
   JSON.parse(new TextDecoder().decode(v1.open({ purpose, scopeId: SCOPE, mediaId } as v1.SealContext, key, fromB64std(sealed)))) as unknown
 
 const summary = (mediaId: string, original: Stored, tiers: [string, Stored][], wrappedMeta?: string) => ({
-  mediaId, ...original.ref, ownerKey: 'user:me', updatedAt: '2026-10-14T10:00:00Z', metaVersion: 3, wrappedMeta,
+  mediaId, ...original.ref, ownerKey: 'user:me', updatedAt: '2026-10-14T10:00:00Z', metaRevision: 3, wrappedMeta,
   derivatives: tiers.map(([kind, t]) => ({ kind, ...t.ref })),
 })
 const LISTINGS: Record<string, unknown> = {
@@ -161,7 +161,7 @@ function fakeServer() {
     if (method === 'GET' && path === `/api/scopes/${SCOPE}/nodes`) {
       return json(created.map((c) => ({
         id: c.nodeId, parentId: c.parentId, kind: c.kind, encryptedName: c.encryptedName, slugToken: c.slugToken, orderIndex: 0, epoch: 0,
-        wrappedContentKey: c.wrappedContentKey, wrappedMeta: c.wrappedMeta, metaVersion: 0, placementVersion: 0, createdAt: '2026-10-14T10:00:00Z',
+        wrappedContentKey: c.wrappedContentKey, wrappedMeta: c.wrappedMeta, metaRevision: 0, placementRevision: 0, createdAt: '2026-10-14T10:00:00Z',
       })))
     }
     if (method === 'POST' && path.endsWith('/blob-uploads-batch')) {
@@ -249,7 +249,7 @@ describe('a folder holding a Memory with a chapter, copied to the scope root, on
     expect(creates.map((c) => c.kind)).toEqual([FOLDER_KIND, MEMORY_KIND, CHAPTER_KIND])
     const [folder, memory, chapter] = creates
     expect([folder.parentId, memory.parentId, chapter.parentId]).toEqual([undefined, result.nodeIds[0], memory.nodeId])
-    const at = (nodeId: unknown) => ({ scopeId: SCOPE, nodeId: nodeId as string, epoch: 0, placementVersion: 0 })
+    const at = (nodeId: unknown) => ({ scopeId: SCOPE, nodeId: nodeId as string, epoch: 0, placementRevision: 0 })
     const keyOf = (c: Record<string, unknown>, parent: Uint8Array) => v1.open({ purpose: 'content-key', ...at(c.nodeId) }, parent, fromB64std(c.wrappedContentKey as string))
     const newFolderKey = keyOf(folder, scopeKey)
     const newMemoryKey = keyOf(memory, newFolderKey)

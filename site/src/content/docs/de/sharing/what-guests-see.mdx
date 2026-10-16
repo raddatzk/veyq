@@ -1,0 +1,36 @@
+---
+title: "Was ein Gast sieht"
+sources:
+  - docs/features/sharing/use-cases/uc.sharing.share-accept.md
+  - docs/features/sharing/use-cases/uc.sharing.share-note.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Ein Gast öffnet den Link in irgendeinem Browser. Bevor etwas gezeigt wird, kann es bis zu drei Schritte geben:
+
+1. **Diese Freigabe ist passwortgeschützt**: Er gibt das Passwort ein und wählt **Entsperren**.
+2. **Bitte akzeptiere die Nutzungsbedingungen**, wenn dein Bereich [Bedingungen](/veyq/de/space-owners/terms/) hat: Er
+   wählt **Akzeptieren und fortfahren**. Gefragt wird einmal, und wieder, wenn sich die Bedingungen ändern.
+   Die Zustimmung bleibt nur im eigenen Browser und geht nie an den Server; das Öffnen des Links bleibt also anonym.
+3. **Bitte lies diesen Hinweis**, wenn der Hinweis akzeptiert werden muss: Er wählt **Akzeptieren und fortfahren**. Die
+   Zustimmung bleibt auf seinem eigenen Gerät; niemand bekommt eine Liste, wer zugestimmt hat.
+
+<Screenshot id="sharing-guest-view" shows="Eine geteilte Erinnerung, wie ein Gast sie sieht, mit dem Abzeichen Mit dir geteilt · schreibgeschützt über der Galerie" />
+
+Dann sieht er, was du geteilt hast, in derselben Ansicht, die du hast, mit einer Zeile, was er darf, zum Beispiel **Mit
+dir geteilt · schreibgeschützt**. Die Rolle nimmt nur Schaltflächen weg; ein eigenes Gast-Design gibt es nicht.
+
+- Mit einem Link **Nur ansehen** schaut er sich um und lädt herunter: eine Datei als sie selbst, einen Ordner oder eine
+  Erinnerung als ZIP.
+- Mit einem Link **Ansehen + mitwirken** wird er beim ersten Hinzufügen gefragt **Wie heißt du?**. Danach steht dort **Du
+  bist hier als …**, und **Nicht du?** lässt jemand anderen mit einem neuen Namen neu beginnen.
+- Ein Upload-Link oder ein Briefkasten zeigt nur die Seite zum Hinzufügen.
+
+Unten erklärt **Wie sicher ist das?** in einfachen Worten, warum der Server nicht lesen kann, was geteilt wurde. Gäste
+sehen nie, wer sonst in deinem Bereich ist, wer bei einer Erinnerung dabei war, oder jemandes Bild.
+
+Wurde der Link abgeschaltet, ist er abgelaufen oder unvollständig, sagt die Seite **Dieser Link ist nicht verfügbar**.
+
+Alles, was ein Gast sieht, wird in seinem eigenen Browser mit dem Schlüssel aus dem Link geöffnet:
+[Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

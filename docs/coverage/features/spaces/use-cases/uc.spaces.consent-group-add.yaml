@@ -26,10 +26,12 @@ acceptanceCriteria:
     text: Accept clears pendingConsent → the proposal becomes a normal grant-less membership → ordinary grant-delivery wraps K_SC (awaiting access → Active), identical to direct-add from there. Re-accept is an idempotent no-op.
     coverage:
       backend: { integration: [ConsentGroupAddSliceTest.acceptFlipsToDeliverableAndClearsTheInvitation] }
+      web: { e2e: [src/features/spaces/consentReAdd.e2e.test.ts] }
   - id: decline-silent-drop
     text: Decline deletes the soft membership with no trace (no "declined" state) and no rotation; nothing was ever wrapped. A re-invite later is allowed (a fresh proposal). Decline with no open proposal is still a silent 204 (no enumeration); accept with none is 404.
     coverage:
       backend: { integration: [ConsentGroupAddSliceTest.declineDropsTheSoftRowWithNoTraceAndNoRotation, ConsentGroupAddSliceTest.acceptWithNoProposalIs404] }
+      web: { e2e: [src/features/spaces/consentReAdd.e2e.test.ts] }
   - id: owner-only-pending
     text: A pendingConsent invitee is visible in the group's member directory as "awaiting consent" to group OWNERS only; ordinary key-holders in the group do not see them until they accept.
     coverage:

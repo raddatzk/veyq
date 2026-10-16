@@ -59,7 +59,7 @@
 11. The operator reads the instance's **config-secret state** as the Server Owner, on the admin channel (the
     admin console's Server section or `veyq-admin`) — not through a tenant's mail settings, which only that
     tenant's owner may read. A match is what says leg three arrived; a
-    mismatch is the fingerprint doing its job (A2). The operator also **checks the store** (Server → Store, or
+    mismatch is the fingerprint doing its job (A2). The operator also **checks the store** (Server → Object store, or
     `veyq-admin store check`): the restored setting must reach its store, its credentials sealed under the restored
     key ([uc.admin.configure-object-store](uc.admin.configure-object-store.md)). Then a person signs in and **opens a Memory that contains
     media** — the only assertion that exercises all three legs at once, because the row, the object and the key
@@ -150,24 +150,10 @@
   sweep tick — and it comes back with the reclaim row that explains it, so the restored instance finishes the
   job the captured one had started.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Whoever runs your instance can back up everything the server holds and bring it back after a disk
-dies — but everything they hold is locked, including to them. That is why a backup has a second half only you
-have: your password and your Emergency Kit. If the server is restored and you still have those, your memories
-open exactly as before, and nothing was re-encrypted or handed over on the way. If the server is restored and
-you lost both, your memories stay closed forever — there is no master key on the operator's side to open them
-with. It is the same promise that keeps your memories private, seen from its uncomfortable end: keep your
-Emergency Kit somewhere you will still find it in a year.
-
-**DE —** Wer deine Instanz betreibt, kann alles sichern, was der Server hält, und es nach einem Plattendefekt
-zurückholen — aber alles, was er hält, ist verschlossen, auch für ihn. Deshalb hat eine Sicherung eine zweite
-Hälfte, die nur du hast: dein Passwort und dein Notfall-Kit. Wird der Server wiederhergestellt und du hast
-beides noch, öffnen sich deine Erinnerungen genau wie vorher — unterwegs wurde nichts neu verschlüsselt und
-nichts herausgegeben. Wird der Server wiederhergestellt und du hast beides verloren, bleiben deine Erinnerungen
-für immer zu; auf der Betreiberseite liegt kein Hauptschlüssel, mit dem sich das öffnen ließe. Das ist dasselbe
-Versprechen, das deine Erinnerungen privat hält, nur von seiner unbequemen Seite: bewahre dein Notfall-Kit dort
-auf, wo du es in einem Jahr noch findest.
+A server that loses its disk can be brought back whole, and your memories open again with your own password and
+Emergency Kit — never with a master key the operator holds.
 
 ## Related
 
@@ -181,3 +167,4 @@ auf, wo du es in einem Jahr noch findest.
 - Run area of the docs site: [Backup and restore](../../../../site/src/content/docs/run/backup-and-restore.md) — the
   procedure's commands
 - Operator view (docs site): [Running your own instance](../../../../site/src/content/docs/run/index.md)
+- End-user view (docs site): [Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx)

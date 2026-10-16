@@ -100,6 +100,13 @@ sequenceDiagram
 - **E3 — the member's grant won't unwrap** (corrupt / identity rotated without re-wrap): the member can't open the
   group → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not force a wipe),
   matching [en.spaces.group-scope](../enablers/en.spaces.group-scope.md) E2.
+- **E4 — a key-holder refuses the admission** (its tag does not verify under that key-holder's epoch key): its
+  worker declines the delivery (`admission_unverified`) and that account stays off the job, while any other
+  key-holder still delivers. A tag *ahead* of the worker's key never earns a refusal — the worker pauses until it
+  holds the new epoch. A rotation that re-tags the admission lifts the refusals, so every key-holder judges again;
+  a member refused by every key-holder in spite of a genuine admission comes back by being removed and added again
+  (a new membership, a new job) — [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6
+  § What a refusal lasts.
 
 ## Quality notes
 
@@ -126,24 +133,10 @@ sequenceDiagram
   demote a co-owner, remove a member, the last-owner guard, `K_SC` rotation, and the orphan rule** are the
   group-lifecycle slice ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4/§6).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Your group starts solo; this is how you bring someone in. Find a fellow member of your space by their
-username and add them — that's your one decision. There's nothing for them to set up: they're already here, so the
-key to the group is handed over **automatically** — any member's device (yours or another's) seals a copy of the
-key to them as soon as it's online, and from then on they see everything in the group. The key is sealed **on a
-member's device** straight to them; the server only passes along data it can't read, never the key and never the
-group's name. Because a person, not the server, hands over the key, a new member waits briefly until any of you is
-next online — the price of the server never being able to slip someone into your group behind your back.
-
-**DE —** Deine Gruppe fängt allein an; so holst du jemanden hinzu. Finde ein Mitglied deines Bereichs über seinen
-Benutzernamen und füge es hinzu — das ist deine eine Entscheidung. Es gibt für die Person nichts einzurichten: sie
-ist schon da, also wird der Schlüssel zur Gruppe **automatisch** übergeben — das Gerät irgendeines Mitglieds (deins
-oder ein anderes) versiegelt ihr eine Kopie des Schlüssels, sobald es online ist, und ab dann sieht sie alles in
-der Gruppe. Der Schlüssel wird **auf dem Gerät eines Mitglieds** direkt an sie versiegelt; der Server reicht nur
-Daten weiter, die er nicht lesen kann — nie den Schlüssel und nie den Namen der Gruppe. Weil ein Mensch, nicht der
-Server, den Schlüssel übergibt, wartet ein neues Mitglied kurz, bis eine:r von euch das nächste Mal online ist —
-der Preis dafür, dass der Server niemanden hinter deinem Rücken in deine Gruppe schleusen kann.
+You bring a fellow member of your space into a group by their username, and the group's key reaches them from a
+member's device, so the server can never slip anyone into your group.
 
 ## Related
 

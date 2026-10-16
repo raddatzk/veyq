@@ -72,6 +72,19 @@ export function parseQuotaGib(input: string): number | null | undefined {
   return s !== '' && Number.isFinite(n) && n >= 0 ? Math.round(n * GIB) : undefined
 }
 
+const twoDecimals = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, useGrouping: false })
+const twoDigits = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 2, useGrouping: false })
+
+/**
+ * Bytes as the GiB the detail panel's quota field shows: two decimals, and below 0.01 GiB two significant digits, so
+ * a quota that is not 0 never shows as "0" (0 is a real quota: nothing more may be uploaded). A display only — the
+ * panel sends the stored bytes back for a field nobody edited, never what this rounds. `parseQuotaGib` reads it back.
+ */
+export function formatQuotaGib(bytes: number): string {
+  const gib = bytes / GIB
+  return (gib === 0 || gib >= 0.01 ? twoDecimals : twoDigits).format(gib)
+}
+
 /**
  * Set, change or clear (`null`) a tenant's storage quota (uc.admin.tenant-storage-quota, ADR 0073 §1): the most the
  * tenant may hold in this instance's store. Every upload start into the tenant is reserved against it from then on;

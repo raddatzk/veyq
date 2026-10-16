@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The "New" menu's entries as the two real applications declare them (inbox #406): which entry shows to whom is the
-// application's capability matrix (`memoryCapabilities`, `depotCapabilities`) read through the descriptor's `allowed`, and
+// application's rights matrix (`memoryRights`, `depotRights`) read through the descriptor's `allowed`, and
 // the order is the registry's. Fail closed: no entry for a READ guest, a pending deletion or a guest's identity folder.
 import { describe, it, expect } from 'vitest'
 import { createRegistry, type LevelActionContext } from '../core/applications/registry'
@@ -10,14 +10,14 @@ import { ShareRole } from '../api/generated/sharing'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../test/models'
 import { epochsOf } from '../features/spaces/epochsTestUtil'
 import { FOLDER_KIND } from '../core/node/kind'
-import { folderCapabilities, targetOf, type Access } from '../core/access'
+import { folderRights, targetOf, type Access } from '../core/access'
 import * as v1 from '@veyq/crypto/v1'
 
 const registry = createRegistry()
 registerMemories(registry)
 registerDepot(registry)
 
-const FOLDER = treeNode({ id: 'f1', kind: FOLDER_KIND, name: 'Trips', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+const FOLDER = treeNode({ id: 'f1', kind: FOLDER_KIND, name: 'Trips', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 
 function ctx(access: Access, over: { identity?: boolean; epochs?: boolean } = {}): LevelActionContext {
   const epochs = over.epochs === false ? null : epochsOf(v1.randomBytes(32))
@@ -61,7 +61,7 @@ describe('the applications\' "New" menu entries', () => {
   // refuses those (`GuestCreatableKinds`), so the menu does not offer them at all: hidden, not greyed out.
   it('a READ_WRITE guest sees core\'s folder entry and both uploads, no Memory and no drop box', () => {
     const c = ctx(guestAccessOf(ShareRole.ReadWrite))
-    expect(folderCapabilities(c.access, targetOf(c.tree, c.folder)).createFolder, "core's folder entry").toBe(true)
+    expect(folderRights(c.access, targetOf(c.tree, c.folder)).createFolder, "core's folder entry").toBe(true)
     expect(shown(c)).toEqual(['depot.upload', 'depot.uploadFolder'])
   })
 

@@ -6,7 +6,8 @@
 //   forbidden      -> the backend's own 403, restated for a person. Not a redirect: a Server Owner who
 //                     mistyped an account should see WHY, and a non-owner should see that the refusal is the
 //                     server's, not this page's politeness.
-//   unauthenticated-> back to sign-in (the session lapsed between boot and here)
+//   unauthenticated-> back to sign-in, saying the session ended (it lapsed between boot and here and the
+//                     rotation was refused — `app/sessionEnd.ts`)
 //   unreachable    -> say so, rather than render an empty console
 //
 // The gate is a courtesy over an authority that lives elsewhere: every call below is authorized server-side
@@ -24,10 +25,12 @@ import StorePanel from '../features/instance/StorePanel.vue'
 import { getInstanceStore, storeReady, type InstanceStore } from '../features/instance/store'
 import ConfigSecretPanel from '../features/instance/ConfigSecretPanel.vue'
 import CapabilitiesPanel from '../features/instance/CapabilitiesPanel.vue'
+import ExternalServicesPanel from '../features/instance/ExternalServicesPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
 import { formatBytes } from '../shared/formatBytes'
 import { probeServerRole, serverRole } from '../app/serverRole'
 import { logout } from '../features/auth/login'
+import { endExpiredSession } from '../app/sessionEnd'
 
 const router = useRouter()
 const { t, locale } = useI18n()
@@ -44,7 +47,7 @@ const tenants = ref<TenantSummary[]>([])
 const createOpen = ref(false)
 const selected = ref<string | null>(null)
 // One rubric at a time under `Server`, so a second boolean cannot leave two panels open at once.
-const serverPanel = ref<'release' | 'store' | 'configSecret' | 'capabilities' | null>(null)
+const serverPanel = ref<'release' | 'store' | 'configSecret' | 'capabilities' | 'services' | null>(null)
 const loading = ref(true)
 // The object store as last read or changed (ADR 0089 decision 6): a tenant waits for a store that passed its check.
 // Null until read, and when the read failed — then nothing is blocked here and the server decides.
@@ -61,7 +64,7 @@ async function loadTenants() {
 onMounted(async () => {
   const verdict = await probeServerRole()
   if (verdict === 'unauthenticated') {
-    await router.replace({ name: 'login' })
+    await endExpiredSession(router)
     return
   }
   if (verdict === 'owner') {
@@ -76,6 +79,13 @@ async function onCreated() {
   // owner configures them, so no other channel exists yet (ADR 0055 §3). Closing here would refresh the list
   // and silently throw away the one artifact the Server Owner came for. Caught by driving the real container:
   // the tenant appeared in the list and the link did not.
+  await loadTenants().catch(() => {})
+}
+
+/** A revoked tenant is gone: close its panel and read the list again (inbox #451 — the panel used to push a route
+ *  this surface does not have, which redirected to the page it was on and left both stale). */
+async function onRevoked() {
+  selected.value = null
   await loadTenants().catch(() => {})
 }
 
@@ -172,6 +182,11 @@ async function signOut() {
               <span class="pi pi-sliders-h" aria-hidden="true" /> {{ t('capabilities.navTitle') }}
             </button>
           </li>
+          <li>
+            <button type="button" :class="{ 'is-active': serverPanel === 'services' }" @click="serverPanel = 'services'">
+              <span class="pi pi-globe" aria-hidden="true" /> {{ t('services.navTitle') }}
+            </button>
+          </li>
         </ul>
       </nav>
 
@@ -180,7 +195,8 @@ async function signOut() {
         <StorePanel v-else-if="serverPanel === 'store'" @changed="store = $event" />
         <ConfigSecretPanel v-else-if="serverPanel === 'configSecret'" />
         <CapabilitiesPanel v-else-if="serverPanel === 'capabilities'" />
-        <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" />
+        <ExternalServicesPanel v-else-if="serverPanel === 'services'" />
+        <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" @revoked="onRevoked" />
       </section>
     </div>
 

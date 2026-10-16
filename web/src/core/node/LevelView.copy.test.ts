@@ -35,7 +35,7 @@ import { stubRows } from '../../test/stubRows'
 import { actionIdsOf, clickAction } from '../../test/levelRows'
 
 function node(id: string, kind: NodeKind, parentId: string | null = 'Trips'): TreeNode {
-  return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+  return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 }
 const TRIPS = node('Trips', FOLDER_KIND, null)
 const TREE = [TRIPS, node('Sub', FOLDER_KIND), node('a1', 'ALPHA'), node('a2', 'ALPHA'), node('b1', 'BETA')]

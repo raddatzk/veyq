@@ -89,7 +89,7 @@ class NodeCoverCoreSliceTest {
         val revisionBefore = nodes.treeRevision(scopeId)
 
         val first = CoverKit.start(userId, scopeId, folder, wrap = "Zmlyc3Q=", meta = "Zmlyc3QtbWV0YQ==")
-        CoverKit.set(userId, scopeId, folder, first.uploadId, expectedBlobId = null, wrappedMeta = "bTE=", metaVersion = 0).statusCode(204)
+        CoverKit.set(userId, scopeId, folder, first.uploadId, expectedBlobId = null, wrappedMeta = "bTE=", metaRevision = 0).statusCode(204)
         assertEquals(first.blobId, CoverKit.slot(folder))
         assertEquals("bTE=" to 1L, CoverKit.meta(folder), "the meta that names the cover landed in the same write")
         assertEquals("store_unavailable", CoverKit.downloadError(userId, scopeId, first.blobId))
@@ -97,13 +97,13 @@ class NodeCoverCoreSliceTest {
         assertEquals(Triple(1L, 1L, 0L), residue(scopeId), "one attachment, one blob, the session spent")
 
         val second = CoverKit.start(userId, scopeId, folder, blob = TestBlob.ofChunks(2), wrap = "c2Vjb25k")
-        CoverKit.set(userId, scopeId, folder, second.uploadId, expectedBlobId = first.blobId, wrappedMeta = "bTI=", metaVersion = 1).statusCode(204)
+        CoverKit.set(userId, scopeId, folder, second.uploadId, expectedBlobId = first.blobId, wrappedMeta = "bTI=", metaRevision = 1).statusCode(204)
         assertEquals(second.blobId, CoverKit.slot(folder))
         assertEquals("upload_not_found", CoverKit.downloadError(userId, scopeId, first.blobId), "the replaced blob's row is gone")
         assertEquals(1L, reclaimRows(first.storageKey), "a reclaim row for the replaced blob's storage key")
         assertEquals(Triple(1L, 1L, 0L), residue(scopeId), "still one slot, one blob")
 
-        CoverKit.remove(userId, scopeId, folder, second.blobId, wrappedMeta = "bTM=", metaVersion = 2).statusCode(204)
+        CoverKit.remove(userId, scopeId, folder, second.blobId, wrappedMeta = "bTM=", metaRevision = 2).statusCode(204)
         assertNull(CoverKit.slot(folder))
         assertEquals("bTM=" to 3L, CoverKit.meta(folder))
         assertEquals("upload_not_found", CoverKit.downloadError(userId, scopeId, second.blobId))
@@ -161,7 +161,7 @@ class NodeCoverCoreSliceTest {
             CoverKit.remove(stranger, scopeId, folder, started.blobId).statusCode(404).body("code", equalTo("node_not_found"))
         }
         given().contentType(ContentType.JSON)
-            .body("""{"uploadId":"${started.uploadId}","wrappedMeta":"bQ==","metaVersion":0}""")
+            .body("""{"uploadId":"${started.uploadId}","wrappedMeta":"bQ==","metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$folder/cover").then().statusCode(401)
         assertNull(CoverKit.slot(folder))
     }
@@ -201,7 +201,7 @@ class NodeCoverCoreSliceTest {
         val loser = CoverKit.start(userId, scopeId, folder)
 
         // the loser believes the slot is empty
-        CoverKit.set(userId, scopeId, folder, loser.uploadId, expectedBlobId = null, wrappedMeta = "bG9zZXI=", metaVersion = 1)
+        CoverKit.set(userId, scopeId, folder, loser.uploadId, expectedBlobId = null, wrappedMeta = "bG9zZXI=", metaRevision = 1)
             .statusCode(409).body("code", equalTo("cover_stale")).body("currentBlobId", equalTo(mine.blobId))
         assertEquals(mine.blobId, CoverKit.slot(folder), "the old cover is intact")
         assertEquals("bTE=" to 1L, CoverKit.meta(folder), "and so is the meta that names it")
@@ -217,17 +217,17 @@ class NodeCoverCoreSliceTest {
         CoverKit.set(userId, scopeId, folder, old.uploadId, null, "bTE=", 0).statusCode(204)
         val next = CoverKit.start(userId, scopeId, folder)
 
-        // built on version 0 while the node is at 1: the WHOLE write is refused, the slot swap included
-        CoverKit.set(userId, scopeId, folder, next.uploadId, expectedBlobId = old.blobId, wrappedMeta = "bTI=", metaVersion = 0)
-            .statusCode(409).body("code", equalTo("stale_version")).body("wrappedMeta", equalTo("bTE=")).body("metaVersion", equalTo(1))
+        // built on revision 0 while the node is at 1: the WHOLE write is refused, the slot swap included
+        CoverKit.set(userId, scopeId, folder, next.uploadId, expectedBlobId = old.blobId, wrappedMeta = "bTI=", metaRevision = 0)
+            .statusCode(409).body("code", equalTo("stale_revision")).body("wrappedMeta", equalTo("bTE=")).body("metaRevision", equalTo(1))
         assertEquals(old.blobId, CoverKit.slot(folder), "a failed new cover leaves the OLD one intact (no half state)")
         assertEquals("bTE=" to 1L, CoverKit.meta(folder))
         assertEquals("store_unavailable", CoverKit.downloadError(userId, scopeId, old.blobId), "the old blob was not freed")
         assertEquals(0L, reclaimRows(old.storageKey), "and nothing of it is on the reclaim list")
         assertEquals(Triple(1L, 1L, 1L), residue(scopeId), "the new upload is still open")
 
-        // the retry on the version the 409 handed back lands
-        CoverKit.set(userId, scopeId, folder, next.uploadId, expectedBlobId = old.blobId, wrappedMeta = "bTI=", metaVersion = 1).statusCode(204)
+        // the retry on the revision the 409 handed back lands
+        CoverKit.set(userId, scopeId, folder, next.uploadId, expectedBlobId = old.blobId, wrappedMeta = "bTI=", metaRevision = 1).statusCode(204)
         assertEquals(next.blobId, CoverKit.slot(folder))
         assertEquals(Triple(1L, 1L, 0L), residue(scopeId))
     }
@@ -241,7 +241,7 @@ class NodeCoverCoreSliceTest {
         val peers = CoverKit.start(userId, scopeId, folder)
         CoverKit.set(userId, scopeId, folder, peers.uploadId, mine.blobId, "bTI=", 1).statusCode(204)
 
-        CoverKit.remove(userId, scopeId, folder, blobId = mine.blobId, wrappedMeta = "bTM=", metaVersion = 2)
+        CoverKit.remove(userId, scopeId, folder, blobId = mine.blobId, wrappedMeta = "bTM=", metaRevision = 2)
             .statusCode(409).body("code", equalTo("cover_stale")).body("currentBlobId", equalTo(peers.blobId))
         assertEquals(peers.blobId, CoverKit.slot(folder))
         assertEquals("bTI=" to 2L, CoverKit.meta(folder))
@@ -254,8 +254,8 @@ class NodeCoverCoreSliceTest {
         val mine = CoverKit.start(userId, scopeId, folder)
         CoverKit.set(userId, scopeId, folder, mine.uploadId, null, "bTE=", 0).statusCode(204)
 
-        CoverKit.remove(userId, scopeId, folder, mine.blobId, wrappedMeta = "bTI=", metaVersion = 0)
-            .statusCode(409).body("code", equalTo("stale_version"))
+        CoverKit.remove(userId, scopeId, folder, mine.blobId, wrappedMeta = "bTI=", metaRevision = 0)
+            .statusCode(409).body("code", equalTo("stale_revision"))
         assertEquals(mine.blobId, CoverKit.slot(folder), "the detach rolled back with the refused meta")
         assertEquals("store_unavailable", CoverKit.downloadError(userId, scopeId, mine.blobId))
         assertEquals(0L, reclaimRows(mine.storageKey))
@@ -268,7 +268,7 @@ class NodeCoverCoreSliceTest {
         val mine = CoverKit.start(userId, scopeId, folder)
         CoverKit.set(userId, scopeId, folder, mine.uploadId, null, "bTE=", 0).statusCode(204)
         CoverKit.remove(userId, scopeId, folder, mine.blobId, "bTI=", 1).statusCode(204)
-        // a replay: the slot is empty, the meta is written again at the version the client now holds
+        // a replay: the slot is empty, the meta is written again at the revision the client now holds
         CoverKit.remove(userId, scopeId, folder, mine.blobId, "bTM=", 2).statusCode(204)
         assertEquals("bTM=" to 3L, CoverKit.meta(folder))
         assertEquals(Triple(0L, 0L, 0L), residue(scopeId))

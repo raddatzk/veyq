@@ -47,10 +47,14 @@ Garage, so using one means editing the compose file, and under Helm it is not po
    asks for them again. Media are unreachable until the Server Owner re-enters the store credentials — which they
    hold anyway, in the store's own console — but nothing is lost: *degrade, don't brick*, with the store as the
    loudest degradation.
-5. **A store setting takes effect at once, without a restart.** The store the backend signs against, the store
-   origin in the app shell's CSP and the store route in the tenant ingress follow the current setting. Until a
-   store is configured and has passed its check, the instance runs, answers `/api/setup`, and refuses uploads with
-   a reason — never the silent in-memory store, which stays a `%test` tool.
+5. **A store setting takes effect once it has passed its check, and then at once, without a restart.** A saved
+   setting is *pending*: the store the backend signs against, the store origin in the app shell's CSP and the store
+   route in the tenant ingress keep following the setting in use until the pending one passes its own check, which
+   replaces it. A typo in a credential or an endpoint therefore reaches the check, never a running instance's media;
+   a failed pending setting is corrected or discarded. Until a store has passed its check, the instance runs,
+   answers `/api/setup`, and refuses uploads with a reason — never the silent in-memory store, which stays a
+   `%test` tool. *(Edited when it was built, 2026-10-16: the first build applied a saved setting at once and only
+   cleared its check, which [inbox #451](../inbox.md) found against the use-case's A2; the owner chose this.)*
 6. **A working store is the precondition for a tenant.** Creating a tenant is refused until the current store
    setting has passed its check; nothing else in the console is gated by it. Once the first blob is stored the store
    is fixed: moving an instance's blobs to another store is out of scope here.
@@ -64,6 +68,11 @@ Garage, so using one means editing the compose file, and under Helm it is not po
 - The compose file, `.env.example` and the Helm values lose every store variable except the bundled hint; the
   run configuration, the dev and e2e profiles and the e2e orchestrator set the store through the same API the
   console uses, or through the hint.
+- **The external services are the second setting moved** (built with inbox #439 step 4): the map tiles, the geocoder
+  and the breached-password check were build-time variables or a fixed origin; they are Server-Owner settings in
+  `veyq_external_service` (admin-web's **Server → External services**, `veyq-admin services`), applied without a restart,
+  seeded with the old defaults, and followed by the served CSP
+  ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 7).
 - Configuration-as-code ([inbox #444](../inbox.md)) is a later, optional layer over these settings — a declared
   value that wins and shows as fixed in admin-web — not a second place to keep them.
 - ADR 0050's single global fingerprint becomes a per-value one, so re-entering one secret cannot hide that another

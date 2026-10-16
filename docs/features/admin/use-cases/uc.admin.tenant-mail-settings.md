@@ -67,22 +67,10 @@ channel, stated honestly.
 - **A template references an unknown `{{tag}}`** → rejected at save (`400 invalid_mail_template`), never stored, so
   a malformed template can never reach send time.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** If you run a veyq space, point it at an email server so invitations arrive as real emails from your own
-domain. This is a setup step you cannot skip: without it you cannot invite anyone, and nobody in your space can
-reset a forgotten password. A simple relay that needs no login is enough. You can word the invitation yourself,
-dropping in the link, your domain and the expiry date. Your email server and ours only ever see that
-invite: never the names of your groups, memories or members. What you type into the invitation, you're choosing to
-share — so keep it about the invite.
-
-**DE —** Wenn du einen veyq-Bereich betreibst, verbinde ihn mit einem E-Mail-Server, damit Einladungen als echte
-E-Mails von deiner eigenen Domain ankommen. Das ist ein Einrichtungsschritt, den du nicht auslassen kannst: ohne
-ihn kannst du niemanden einladen, und niemand in deinem Bereich kann ein vergessenes Passwort zurücksetzen. Ein
-einfaches Relais ohne Anmeldung genügt. Den Einladungstext kannst du selbst formulieren und Link, Domain und
-Ablaufdatum einsetzen. Dein E-Mail-Server und unserer sehen immer nur diese Einladung: nie die Namen deiner
-Gruppen, Erinnerungen oder Mitglieder. Was du in die Einladung schreibst, gibst du bewusst preis — halte es also
-bei der Einladung.
+Invitations and password-reset links reach your members as real emails from your own domain, carrying only a link and
+never anything you keep in your space.
 
 ## Related
 
@@ -100,3 +88,4 @@ bei der Einladung.
   not a key).
 - Operator view (docs site): [Running your own instance](../../../../site/src/content/docs/run/index.md)
 - Run area of the docs site: [Storage and email](../../../../site/src/content/docs/run/storage-and-email.md), [Troubleshooting](../../../../site/src/content/docs/run/troubleshooting.md)
+- End-user view (docs site): [Email for your space](../../../../site/src/content/docs/space-owners/email.mdx)

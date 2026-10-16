@@ -15,6 +15,11 @@ export async function isTrusted(email: string): Promise<boolean> {
   return (await device.loadTrust(email)) !== null
 }
 
+/** The emails this device holds a password DEVICE wrap for (normalised), read from the local records alone. */
+export function trustedEmails(): Promise<string[]> {
+  return device.listTrustedEmails()
+}
+
 /**
  * Trust this device. Invoked **at unlock time** with the just-entered (known-correct) password and the
  * unlocked Master Key: generates a non-extractable device key, derives the device KEK, wraps the Master Key,

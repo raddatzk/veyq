@@ -971,7 +971,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
       new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt: Date.UTC(2021, 4, 1, 10, 0, 0), capturedAtOverride: PEER })),
     ))
     store.api.updateMediaMeta.mockRejectedValueOnce({
-      response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta: peers, metaVersion: 1 }), { status: 409 }),
+      response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta: peers, metaRevision: 1 }), { status: 409 }),
     })
 
     const wrapper = mountLightbox(memoryKey, items, 0)
@@ -985,7 +985,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     expect(wrapper.text()).toContain(t('media.capturedAtConflict'))
     expect(wrapper.find('#captured-at-input').exists()).toBe(true) // the editor is still open…
     expect(new Date((wrapper.find('#captured-at-input').element as HTMLInputElement).value).getTime()).toBe(PEER) // …on theirs
-    expect(wrapper.emitted('updated')?.at(-1)?.[0]).toEqual({ mediaId: items[0].mediaId, wrappedMeta: peers, metaVersion: 1 })
+    expect(wrapper.emitted('updated')?.at(-1)?.[0]).toEqual({ mediaId: items[0].mediaId, wrappedMeta: peers, metaRevision: 1 })
   })
 
   /**

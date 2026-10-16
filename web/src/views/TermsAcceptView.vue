@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // uc.account.accept-terms (web, cr-0114, ADR 0035) — the member terms accept-gate. A standalone full-screen card
-// (no app shell): the router bounces any member whose accepted_terms_version is below the active tenant's current
-// version here, and they can only ACCEPT (records it server-side → returns them where they were headed) or SIGN
-// OUT. Operator-blind: the terms are the operator's PUBLIC policy; acceptance is coarse operational metadata.
+// (no app shell): the router bounces any member whose accepted_terms_revision is below the active tenant's current
+// revision here, and they can only ACCEPT (records it server-side → returns them where they were headed) or SIGN
+// OUT. Operator-blind: the terms are the space owner's PUBLIC policy; acceptance is coarse operational metadata.
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -67,8 +67,8 @@ async function accept() {
   error.value = ''
   busy.value = true
   try {
-    const updated = await acceptTenantTerms(activeSpace.tenantId!, terms.value.termsVersion)
-    markTermsAccepted(updated.acceptedVersion) // clears termsStale() so the guard lets the member back in
+    const updated = await acceptTenantTerms(activeSpace.tenantId!, terms.value.termsRevision)
+    markTermsAccepted(updated.acceptedRevision) // clears termsStale() so the guard lets the member back in
     phase.value = 'done'
     // Return the member to where the guard intercepted them (remembered deep link), else the shell home.
     await router.push(takeRoute() ?? { name: 'home' })
@@ -76,9 +76,9 @@ async function accept() {
     on401(e)
     if (isUnauthorized(e)) return
     const { code } = await tenantError(e)
-    if (code === 'terms_version_changed') {
-      // The operator bumped the terms while this was open — re-load + re-present the newer version.
-      error.value = t('terms.versionChanged')
+    if (code === 'terms_revision_changed') {
+      // The space owner bumped the terms while this was open — re-load + re-present the newer revision.
+      error.value = t('terms.revisionChanged')
       await load()
     } else {
       error.value = t('terms.acceptFailed')

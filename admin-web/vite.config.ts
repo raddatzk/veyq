@@ -39,6 +39,8 @@ export default defineConfig(({ command }) => ({
     setupFiles: ['./src/test/setup.ts'],
   },
   build: {
+    // The minifier drops the bundled dependencies' license comments; Vite writes their notices out instead (as web/ does).
+    license: { fileName: 'third-party-licenses.txt' },
     rollupOptions: {
       input: { main: fileURLToPath(new URL('./index.html', import.meta.url)) },
     },

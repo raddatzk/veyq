@@ -121,26 +121,10 @@
 - **Operator-blind throughout.** The request carries only ciphertext, a public key and two signatures — never a
   password, the Secret Key, or the Master Key.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can change your password any time you're signed in — you don't need to wait for a "forgot
-password" email. You need three things: your current password, your Secret Key from the Emergency Kit, and the
-new password. Both of the first two are checked on your device before anything is sent, so a wrong one costs
-you a retry and nothing else. If you've genuinely forgotten your current password, use the reset-by-email
-route instead — being signed in is not enough on its own, on purpose: it is also all a thief with your unlocked
-phone would have. Your other devices are signed out and lose their saved key, so each will need the new
-password and your Secret Key to sign back in — this one
-stays signed in and just asks you to reconfirm you want it remembered.
-
-**DE —** Du kannst dein Passwort jederzeit ändern, während du angemeldet bist — du musst nicht auf eine
-"Passwort vergessen"-Mail warten. Du brauchst drei Dinge: dein aktuelles Passwort, deinen Secret Key aus dem
-Notfall-Kit und das neue Passwort. Die ersten beiden werden auf deinem Gerät geprüft, bevor irgendetwas
-gesendet wird — ein Tippfehler kostet dich also einen zweiten Versuch und sonst nichts. Hast du dein aktuelles
-Passwort wirklich vergessen, nimm den Weg über die E-Mail-Zurücksetzung: angemeldet zu sein reicht hier
-absichtlich nicht — genau das hätte auch jemand, der dein entsperrtes Handy in die Hand bekommt. Deine anderen
-Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel; jedes braucht zum neuen Anmelden das neue
-Passwort und deinen Secret Key — dieses Gerät bleibt angemeldet
-und fragt dich nur, ob es sich weiter merken soll.
+You can change your password whenever you like without losing anything you keep, and someone holding your unlocked
+device cannot change it without your Secret Key.
 
 ## Related
 

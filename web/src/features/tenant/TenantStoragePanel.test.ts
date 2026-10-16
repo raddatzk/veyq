@@ -65,6 +65,30 @@ describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => 
     expect(updateTenantStorage).toHaveBeenCalledWith('t-1', 2_684_354_560) // 2.5 × 1024³, in bytes on the wire
   })
 
+  it('shows a limit under 0.01 GiB as non-zero, and saves it unchanged as the stored bytes, not as 0', async () => {
+    // 107 374 B rounded to two decimals was "0" — and an unchanged save then switched link uploads off (ADR 0073 §4).
+    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 0, quotaBytes: null, shareLinkLimitBytes: 107_374 })
+    vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 0, quotaBytes: null, shareLinkLimitBytes: 107_374 })
+    const wrapper = await mountPanel()
+    expect((wrapper.find('input').element as HTMLInputElement).value).toBe('0.0001')
+
+    await saveButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(updateTenantStorage).toHaveBeenCalledWith('t-1', 107_374)
+  })
+
+  it('saves a limit the display rounds unchanged as the stored bytes, so an untouched page never drifts', async () => {
+    const stored = Math.round(1.234 * GIB)
+    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 0, quotaBytes: null, shareLinkLimitBytes: stored })
+    vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 0, quotaBytes: null, shareLinkLimitBytes: stored })
+    const wrapper = await mountPanel()
+    expect((wrapper.find('input').element as HTMLInputElement).value).toBe('1.23')
+
+    await saveButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(updateTenantStorage).toHaveBeenCalledWith('t-1', stored)
+  })
+
   it('sends 0 as link uploads off, and refuses a limit that is not a non-negative number without calling', async () => {
     vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 0, quotaBytes: null, shareLinkLimitBytes: 10 * GIB })
     vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 0, quotaBytes: null, shareLinkLimitBytes: 0 })

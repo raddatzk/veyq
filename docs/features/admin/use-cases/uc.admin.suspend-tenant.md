@@ -80,19 +80,10 @@ stateDiagram-v2
   every request from the moment it takes effect, including reads already in flight against a still-valid
   session — not "new sessions only" or "writes only."
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** As the operator, you can temporarily take a whole space offline — for maintenance, a dispute, or any
-reason of your own — without ever being able to read what's inside it. The moment you do, nobody in that
-space can get in any more, even if they were already signed in, and its shared links stop working; bringing
-it back online undoes exactly that, and nothing else. Your own data, wherever it lives, is never touched by
-this.
-
-**DE —** Als Betreiber kannst du einen ganzen Bereich vorübergehend offline nehmen — für Wartung, einen
-Streitfall oder aus eigenem Ermessen — ohne jemals lesen zu können, was darin liegt. Ab diesem Moment kommt
-niemand mehr in diesen Bereich hinein, auch nicht, wer gerade angemeldet war, und seine geteilten Links
-funktionieren nicht mehr; ihn wieder online zu nehmen macht genau das rückgängig, und nichts sonst. Die Daten
-selbst werden davon nie berührt.
+The person running a server can take a whole space offline and bring it back exactly as it was, without ever being
+able to read or change what is inside.
 
 ## Related
 
@@ -105,3 +96,4 @@ selbst werden davon nie berührt.
   [tenant-reachability](uc.admin.tenant-reachability.md) (step 4's routing withdrawal, and where it is
   verified).
 - Run area of the docs site: [Moderation](../../../../site/src/content/docs/run/moderation.md)
+- End-user view (docs site): [Offline or unreachable](../../../../site/src/content/docs/help/offline.mdx)

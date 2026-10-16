@@ -76,8 +76,9 @@ fatal: it presigns a valid URL that 404s, with no server-side error and a broken
 
 **Credentials never reach `argv`.** The store remote is defined entirely through `RCLONE_CONFIG_<REMOTE>_*` in
 the child environment and the database password through `MYSQL_PWD`, both passed as bare `-e NAME` flags so
-`ps` never sees a value and no config file is written. They are read from **the same variables the backend
-already reads**, so an operator who can start the app already holds everything `capture` needs.
+`ps` never sees a value and no config file is written. They are read from **this process's environment** (the
+variables below), never from the database: the app keeps a store of your own sealed there under the config-secret
+key, and the capture is cold, so nothing could open it.
 
 **`sync` out, `copy` in — never the reverse.** `sync` deletes at the destination, which is right for a capture
 directory (a re-run must not silently become the union of two captures) and catastrophic against a live
@@ -900,9 +901,10 @@ def cmd_capture(args: argparse.Namespace) -> int:
         # Not fatal, and loudly not fatal: a capture that refused here would leave the operator with nothing,
         # where a capture that records the absence leaves them with two thirds and a stated defect.
         log(f"WARNING: no config-secret key at {key_source} — this backup has TWO legs, not three. A restore "
-            f"from it will boot, serve content, report configSecretState: MISMATCH, and refuse member invites "
-            f"and password resets with 503 mail_unavailable (ADR 0055, A2). Point --config-secret-file at the "
-            f"real path and capture again.")
+            f"from it will boot, report configSecretState: MISMATCH, and refuse member invites and password "
+            f"resets with 503 mail_unavailable (ADR 0055, A2); a store of your own cannot be opened either, so "
+            f"media stay unreachable until its credentials are entered again (ADR 0089 decision 4). Point "
+            f"--config-secret-file at the real path and capture again.")
 
     manifest = {
         "backupFormat": BACKUP_FORMAT,
@@ -1175,18 +1177,20 @@ def cmd_restore(args: argparse.Namespace) -> int:
             log(f"the key belongs to {plan.uid}:{plan.gid}, the owner of its directory — the application's user")
     else:
         log(f"WARNING: this restore places no config-secret key (leg (c) {placement}"
-            f"{', and --without-key was given' if args.without_key else ''}). The instance will start and serve "
-            f"content, report configSecretState: MISMATCH, and refuse member invites and password resets with "
-            f"503 mail_unavailable until the key is restored or each tenant owner re-enters their SMTP "
-            f"password (ADR 0055, A2).")
+            f"{', and --without-key was given' if args.without_key else ''}). The instance will start, report "
+            f"configSecretState: MISMATCH, and refuse member invites and password resets with 503 "
+            f"mail_unavailable until the key is restored or each tenant owner re-enters their SMTP password "
+            f"(ADR 0055, A2); a store of your own stays unreadable, and media with it, until the key is restored "
+            f"or its credentials are entered again in Server → Object store (ADR 0089 decision 4).")
 
     restored, restored_bytes = store.size()
     log(f"restored: schema V{manifest['database']['schemaVersion']}, {restored} object(s) / {restored_bytes} B")
     if standing == OLDER:
         log(older_backup_notice(manifest, target_version))
-    log("Now start the application, then read its config-secret state — that is the step that separates a "
-        "restore from a hope (ADR 0056 §5): GET /api/tenants/{id}/mail-settings must report "
-        "configSecretState: OK, and a person must be able to sign in and open a Memory that has media.")
+    log("Now start the application, then read its config-secret state as the Server Owner — that is the step "
+        "that separates a restore from a hope (ADR 0056 §5): `veyq-admin config-secret` (or the admin console's "
+        "Server → Config-secret key) must report OK; `veyq-admin store check` (Server → Object store) must pass; "
+        "and a person must be able to sign in and open a Memory that has media.")
     return 0
 
 

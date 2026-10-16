@@ -68,7 +68,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   node. How an application adopts it: [docs/apps/README.md](../docs/apps/README.md#how-an-application-publishes-a-revisioned-list).
 - **A node's cover is core's write, in ONE transaction** (inbox #411, `core/content/NodeCover*.kt`): `setNodeCover` / `removeNodeCover` attach or detach
   the `COVER` blob through `AttachmentStore` (compare-and-set on the blob replaced; a refused slot COMMITS the loser's freed upload) and then
-  write the node's re-sealed `wrappedMeta` through `NodesStore.applyUpdate` (ADR 0077 version check; a stale meta ROLLS the attach back so the
+  write the node's re-sealed `wrappedMeta` through `NodesStore.applyUpdate` (ADR 0077 revision check; a stale meta ROLLS the attach back so the
   upload stays open). Which kinds take a cover is `NodeKindRules.takesCover`, answered by the rule that already handles the kind - core names
   none; `COVER` is a role core declares (`CoreMemberBlobRoles`), so core alone admits it. Two bumps of the tree revision per request is
   harmless. The zero-residue proof (set, replace, remove: no row, no blob, no session, quota back, a reclaim row per storage key, the sweep
@@ -101,7 +101,14 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   enough here. The only trust rules are
   for what an IntelliJ sync fetches and nothing runs: the `-sources`/`-javadoc` jars and the Gradle
   distribution's `-src` zip. `scripts/validate_build_input_pins.py` holds all of this, plus the one generator
-  version the three surfaces run. **The build logic is `buildSrc`** (the convention plugins `veyq.module` and
+  version the three surfaces run. **Every `quarkusBuild` also writes the image's third-party notices**
+  (`buildSrc`'s `ThirdPartyLicenses`, finalizing it; `build/third-party-licenses/THIRD-PARTY-LICENSES.txt`, which the
+  Dockerfile copies to `/usr/share/licenses/veyq/`): each jar in `quarkus-app/lib`, its license from its POM (or the
+  nearest parent's), the license files it carries, and the texts under `licenses/`. It fails on a jar no resolved module
+  explains, on a license name its `KNOWN` table lacks and on a license with no text — so a bump that brings a new license
+  is red at the build that would ship it. Admitting one is a decision beside AGPL-3.0-only code: its `KNOWN` entry and its
+  SPDX text (`licenses/README.md`) together. The POMs it reads are pinned like every other artifact, so a bump's
+  metadata write above covers them. **The build logic is `buildSrc`** (the convention plugins `veyq.module` and
   `veyq.openapi`): it is verified against the same metadata file, and every version it and the build choose — Kotlin,
   Quarkus (plugin and BOM), the OpenAPI generator — is declared once, in `gradle/libs.versions.toml`.
 
@@ -161,7 +168,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   since the length is the type's. Same trap for any `format:` that changes the generated type.
   **A required `type: integer` or `boolean` is no presence check.** It generates a primitive Kotlin
   `Long`/`Int`/`Boolean`, and Jackson fills a missing one with 0/false — measured: `updateMediaMeta` without
-  `metaVersion` answered 200, not 400, and so did a mail-settings update without `tls` (STARTTLS off). Unless its
+  `metaRevision` answered 200, not 400, and so did a mail-settings update without `tls` (STARTTLS off). Unless its
   `minimum` already excludes 0, make the type nullable (`[integer, "null"]`), annotate `@NotNull`, and read it in
   the resource with `.validated()` (`validate_request_bounds.py` rule 5 holds it). A null that would *mean*
   something ("no quota") is not a field value at all but an operation of its own (`clearTenantStorageQuota`): once

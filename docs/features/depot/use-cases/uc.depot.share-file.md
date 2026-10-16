@@ -48,20 +48,13 @@
   key; every seal is bound to the file node (ADR 0072), so a blob listed for another node opens nothing.
 - **A file inside a folder link opens to the same view**, with the folder link's role.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can share a single file — no need to share the whole folder it sits in. With a view link, people see the
-file's details and can download it; with a contributor link they can also put a newer version in place. They need no
-account, everything stays encrypted end to end, and nobody can see the rest of your folder through that link.
-
-**DE —** Du kannst eine einzelne Datei teilen — der ganze Ordner, in dem sie liegt, muss dafür nicht freigegeben
-werden. Mit einem Ansichtslink sehen andere die Angaben zur Datei und können sie herunterladen; mit einem
-Mitmach-Link können sie auch eine neuere Fassung ablegen. Sie brauchen kein Konto, alles bleibt Ende-zu-Ende
-verschlüsselt, und über diesen Link kann niemand den Rest deines Ordners sehen.
+You can hand someone exactly one file through a link, without an account and without exposing the folder it sits in.
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md) (a folder link carries its files),
   [uc.depot.member-files](uc.depot.member-files.md),
@@ -69,3 +62,4 @@ verschlüsselt, und über diesen Link kann niemand den Rest deines Ordners sehen
 - **Decisions:** [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   decisions 1 and 6, [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md).
+- End-user view (docs site): [Create a link](../../../../site/src/content/docs/sharing/create-a-link.mdx)

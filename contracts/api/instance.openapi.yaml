@@ -6,10 +6,11 @@ info:
     Operational reads about the running instance itself, for the **Server Owner**. This is the operator's
     view of the software — which bits are running — and not the client's view of the protocol.
 
-    The two are deliberately never merged (ADR 0057 §4). The pre-auth `GET /api/setup` advertises
-    `version: { major, build }`, which answers *can this client and this server talk to each other?* and must
-    be readable before login because that is where its gate fires. The **release version** here answers
-    *which bits are running, and what do I roll back to?* — and it stays authenticated and Server-Owner-only,
+    The two share one major and differ in precision (ADR 0057 §4, ADR 0085 decision 1). The pre-auth
+    `GET /api/setup` advertises `version: { major, build }`, which answers *can this client and this server
+    talk to each other?* and must be readable before login because that is where its gate fires. The
+    **release version** here, `<major>.<minor>`, answers *which bits are running, and what do I roll back to?*
+    — and its minor stays authenticated and Server-Owner-only,
     because a precise release number is what maps an instance to a list of known vulnerabilities, and a
     self-hosted instance is the kind that upgrades late. The capability manifest already discloses this
     instance's feature set to any visitor; the release number does not become public with it.
@@ -186,11 +187,12 @@ paths:
       tags: [instance]
       operationId: getInstanceStore
       x-veyq-channel: admin
-      summary: Read the object-store setting, its last check, and whether a bundled store is offered.
+      summary: Read the object-store setting in use, a pending change and its check, and whether a bundled store is offered.
       description: >
         The object store is a Server-Owner setting held in the database, not in the environment
         ([ADR 0089](../../docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
-        This returns the current setting (or its absence), the result of the last check of **that** setting,
+        This returns the setting in use (or its absence) with the result of the last check of **that** setting,
+        a changed setting that is saved but not yet in use (`pending`, decision 5) with its own last check,
         whether a bundled store is offered by the deployment, and whether blobs already exist — after which the
         store's type, endpoint and bucket are fixed. Server-Owner only.
 
@@ -209,7 +211,7 @@ paths:
               examples:
                 unset:
                   summary: A fresh install of the bundled recipe — nothing chosen yet, the bundled store offered
-                  value: { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null }
+                  value: { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null }
                 bundledChecked:
                   summary: The bundled store chosen and checked
                   value:
@@ -237,6 +239,7 @@ paths:
                         - { step: PROBE_PUT, outcome: PASSED, detail: null }
                         - { step: PROBE_GET, outcome: PASSED, detail: null }
                         - { step: CORS, outcome: SKIPPED, detail: "The store is served on each tenant's own domain, so no browser request to it is cross-origin." }
+                    pending: null
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -258,20 +261,25 @@ paths:
           One writer: the Server Owner; the form shows the whole setting it sends, and secrets it leaves out are
           kept rather than overwritten.
       x-veyq-channel: admin
-      summary: Set the object store — the bundled one, or an S3-compatible or Garage store.
+      summary: Save a store setting — the bundled one, or an S3-compatible or Garage store — to be checked before it is used.
       description: >
-        Stores the object-store setting and applies it at once, without a restart (ADR 0089 decision 5): the
-        store the backend signs against, the store origin in the app shell's CSP and the store route in the
-        tenant ingress follow it. A changed setting has not been checked, so `lastCheck` is cleared and tenant
-        creation waits for a passed check again. Server-Owner only.
+        Saves the setting as `pending` and changes nothing the instance does (ADR 0089 decision 5): the store
+        the backend signs against, the store origin in the app shell's CSP and the store route in the tenant
+        ingress keep following the setting in use until the pending one passes its own check
+        (`POST /api/instance/store/check`), which then replaces it at once, without a restart. A typo therefore
+        never reaches a running instance's media. On a fresh instance there is no setting in use, so uploads and
+        tenant creation wait for the first passed check. A later write replaces the pending setting; a write
+        equal to the setting in use discards it. Server-Owner only.
 
         `bundled: true` chooses the store the deployment brings and stores a **reference** to it, not a copy of
         its secrets (decision 3); every other field must then be absent. Otherwise `type` and the connection
         fields are required; `secretKey` (and, for Garage, `garageAdminToken`) are write-only and sealed under
-        the config-secret key with the fingerprint of that key (decision 4) — omit one to keep the stored value.
+        the config-secret key with the fingerprint of that key (decision 4) — omit one to keep the stored value
+        (the pending setting's, else the one in use).
 
-        Once blobs exist, changing the type, endpoint or bucket is refused: moving an instance's blobs to
-        another store is not something this does (decision 6). Credentials and the public endpoint may change.
+        Once blobs exist, changing the type, endpoint or bucket away from the setting in use is refused: moving an
+        instance's blobs to another store is not something this does (decision 6). Credentials and the public
+        endpoint may change.
       security:
         - bearerAuth: []
       requestBody:
@@ -296,26 +304,29 @@ paths:
                   secretKey: example-secret-key
       responses:
         "200":
-          description: The setting was stored and applied; the store as it now stands is returned.
+          description: The setting was saved as pending (or, equal to the one in use, discarded the pending one); the store as it now stands is returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/InstanceStore" }
               example:
                 bundledAvailable: false
                 blobsStored: false
-                setting:
-                  bundled: false
-                  type: S3
-                  endpoint: https://s3.eu-central-1.example.com
-                  publicEndpoint: null
-                  bucket: veyq-blobs
-                  region: eu-central-1
-                  accessKey: AKIAEXAMPLE
-                  garageAdminEndpoint: null
-                  secretKeySet: true
-                  garageAdminTokenSet: false
-                  unreadable: []
+                setting: null
                 lastCheck: null
+                pending:
+                  setting:
+                    bundled: false
+                    type: S3
+                    endpoint: https://s3.eu-central-1.example.com
+                    publicEndpoint: null
+                    bucket: veyq-blobs
+                    region: eu-central-1
+                    accessKey: AKIAEXAMPLE
+                    garageAdminEndpoint: null
+                    secretKeySet: true
+                    garageAdminTokenSet: false
+                    unreadable: []
+                  lastCheck: null
         "400":
           description: >
             The request was malformed, or its fields do not form a setting: `bundled: true` with any other field,
@@ -340,7 +351,8 @@ paths:
         "409":
           description: >
             `no_bundled_store` = `bundled: true`, but this deployment offers no bundled store. `store_in_use` =
-            blobs already exist and the request changes the store's type, endpoint or bucket. Nothing is stored.
+            blobs already exist and the request changes the type, endpoint or bucket of the store in use. Nothing
+            is stored.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -358,15 +370,50 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: store_secret_unavailable }
 
+  /api/instance/store/pending:
+    delete:
+      tags: [instance]
+      operationId: discardPendingInstanceStore
+      x-veyq-channel: admin
+      summary: Discard the pending store setting; the one in use stays.
+      description: >
+        Drops the changed setting that is saved but not in use (ADR 0089 decision 5), with its check. The
+        setting in use, and everything that follows it, is untouched. Idempotent: with nothing pending it changes
+        nothing. Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Nothing is pending any more; the store as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceStore" }
+              example: { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
   /api/instance/store/check:
     post:
       tags: [instance]
       operationId: checkInstanceStore
       x-veyq-channel: admin
-      summary: Check the current store setting, step by step.
+      summary: Check the pending store setting, or with none pending the one in use, step by step.
       description: >
-        Runs the check of ADR 0089 decision 2 against the current setting and stores its result, which
-        `GET /api/instance/store` returns until the setting changes. Server-Owner only.
+        Runs the check of ADR 0089 decision 2 against the pending setting when there is one, else against the
+        setting in use, and stores its result, which `GET /api/instance/store` returns beside that setting. A
+        pending setting that **passes** replaces the one in use at once, without a restart (decision 5): the
+        store the backend signs against, the app shell's CSP and the tenant ingress follow it from then on. One
+        that fails stays pending, and the setting in use is untouched. Server-Owner only.
 
         The steps run in order and stop at the first failure; every later step reports `SKIPPED`.
         `CREDENTIALS` = the sealed secrets can be opened under the current config-secret key. `PROVISION` (Garage
@@ -415,7 +462,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
         "409":
-          description: No store is set, so there is nothing to check.
+          description: No store is set or pending, so there is nothing to check.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -459,12 +506,16 @@ paths:
                   whenOff: { en: "No new public link of any kind can be made …", de: "Es lässt sich kein neuer öffentlicher Link mehr anlegen …" }
                   "off": true
                   effective: false
+                  tenantSwitchable: true
+                  requirements: []
                 - id: core.public-shares.contribute
                   title: { en: "Links to look and add", de: "Links zum Ansehen und Hinzufügen" }
                   purpose: { en: "A public link whose guests can add to what they see …", de: "Ein öffentlicher Link, über den Gäste …" }
                   whenOff: { en: "No new link of this kind can be made …", de: "Es lässt sich kein neuer Link dieser Art anlegen …" }
                   "off": false
                   effective: false
+                  tenantSwitchable: true
+                  requirements: []
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -541,6 +592,8 @@ paths:
                 whenOff: { en: "No device can be newly remembered …", de: "Kein Gerät lässt sich neu merken …" }
                 "off": true
                 effective: false
+                tenantSwitchable: false
+                requirements: []
         "400":
           description: The request was malformed, or `off` is missing. Nothing is stored.
           content:
@@ -565,6 +618,264 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: capability_not_found }
+
+  /api/instance/capabilities/{capabilityId}/requirements/{requirement}:
+    put:
+      tags: [instance]
+      operationId: setInstanceCapabilityRequirement
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the write carries one requirement's value, never the register, and the later
+          write on the same requirement is the one the owner made last.
+      x-veyq-channel: admin
+      summary: Set one requirement on a capability entry for the instance.
+      description: >
+        Sets the instance's value of one requirement (ADR 0088 decision 8): a flag (`1`) or a number of days (1 to
+        3650), as the catalog's `kind` says. It acts at once, without a restart: every client reads the value with the
+        capability, and every gate refuses what does not meet it, existing links and sessions included as the
+        requirement's `whenSet` says. The effective value, per tenant, is the strictest of the instance's and the
+        tenant's. Server-Owner only. Returns the entry as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          description: The entry's id, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: core.public-shares }
+        - name: requirement
+          in: path
+          required: true
+          description: The requirement's name, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: linkMaxDays }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceCapabilityRequirementUpdate" }
+            example: { value: 30 }
+      responses:
+        "200":
+          description: The value was stored and applied; the entry as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceCapability" }
+        "400":
+          description: The request was malformed, or the value does not fit the requirement's kind (a flag is `1`, days 1–3650). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: The entry has no requirement of this name (`requirement_not_found`). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: requirement_not_found }
+    delete:
+      tags: [instance]
+      operationId: clearInstanceCapabilityRequirement
+      x-veyq-channel: admin
+      summary: Clear one requirement on a capability entry for the instance.
+      description: >
+        Removes the instance's value: the requirement is then in effect only where a tenant set it. Everything it
+        refused serves again, because nothing was written onto a link or a session. Clearing one that is not set
+        changes nothing and answers the same. Server-Owner only. Returns the entry as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          description: The entry's id, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: core.public-shares }
+        - name: requirement
+          in: path
+          required: true
+          description: The requirement's name, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: linkMaxDays }
+      responses:
+        "200":
+          description: The value is cleared; the entry as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceCapability" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: The entry has no requirement of this name (`requirement_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: requirement_not_found }
+
+  /api/instance/external-services:
+    get:
+      tags: [instance]
+      operationId: listInstanceExternalServices
+      x-veyq-channel: admin
+      summary: List the external services the browser may call, with their configured addresses.
+      description: >
+        The outside services a member's browser calls directly (ADR 0088 decision 7, ADR 0089): the map tiles
+        (`memories.map`), the geocoder (`memories.places`) and the breached-password check (`core.breached-password`),
+        each keyed by its register entry. A service with no `url` is not configured: its entry is not active and the
+        served CSP leaves its origin out, which is how an instance without internet runs. A new instance starts with
+        today's defaults (OpenStreetMap tiles, Nominatim, the HIBP range API). Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Every external service, in catalog order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InstanceExternalService" }
+              example:
+                - id: memories.map
+                  title: { en: "Maps", de: "Karten" }
+                  url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution: "© OpenStreetMap contributors"
+                  takesAttribution: true
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+  /api/instance/external-services/{capabilityId}:
+    put:
+      tags: [instance]
+      operationId: setInstanceExternalService
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the write carries one service's address, never the set, and the later write
+          on the same service is the one the owner made last.
+      x-veyq-channel: admin
+      summary: Configure one external service's address.
+      description: >
+        Stores the address (and, for the map tiles, the attribution) and applies it at once, without a restart: the
+        manifest carries it to every client as the entry's `serviceUrl`, and the served CSP names its origin while the
+        entry is on. `url` is an `https://` or `http://` URL; the map tiles' holds `{z}`, `{x}` and `{y}`. An
+        attribution is accepted for the map tiles only. Server-Owner only. Returns the service as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          description: The service's register entry.
+          schema: { type: string, maxLength: 64, example: memories.map }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceExternalServiceUpdate" }
+            example: { url: "https://tiles.example.com/{z}/{x}/{y}.png", attribution: "© Example tiles" }
+      responses:
+        "200":
+          description: Stored and applied; the service as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceExternalService" }
+        "400":
+          description: >
+            The request was malformed: not an http(s) URL, a tile template without `{z}`, `{x}` or `{y}`, or an
+            attribution for a service that takes none (`invalid_request`). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No external service has this register entry (`service_not_found`). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: service_not_found }
+    delete:
+      tags: [instance]
+      operationId: clearInstanceExternalService
+      x-veyq-channel: admin
+      summary: Unconfigure one external service.
+      description: >
+        Removes the address: the entry stops being active at once, no client is told an address, and the served CSP
+        leaves the origin out. Unconfiguring one that has no address changes nothing and answers the same.
+        Server-Owner only. Returns the service as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          description: The service's register entry.
+          schema: { type: string, maxLength: 64, example: memories.map }
+      responses:
+        "200":
+          description: Unconfigured; the service as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceExternalService" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No external service has this register entry (`service_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: service_not_found }
 
 components:
   schemas:
@@ -614,8 +925,9 @@ components:
             `IN_PROGRESS` = a bring-up is running or waiting to retry. Uploads may fail until it finishes;
             wait, and read again. `PROVISIONED` = the store is usable — layout, bucket, key, grant and CORS
             policy are all in place. `FAILED` = the bounded retries are exhausted and veyq has given up
-            (ADR 0067 Decision 3). Blob transfer stays broken until the store is repaired and the server restarted; the
-            log carries which call failed.
+            (ADR 0067 Decision 3). Blob transfer stays broken until the store is repaired and then either checked
+            (`POST /api/instance/store/check` provisions a Garage store again; a pass moves this to `PROVISIONED`)
+            or the server restarted; the log carries which call failed.
           enum: [NOT_ATTEMPTED, IN_PROGRESS, PROVISIONED, FAILED]
           example: PROVISIONED
 
@@ -646,7 +958,7 @@ components:
       description: >
         The object-store setting as it stands (ADR 0089). Operator configuration and server self-description:
         it describes the operator's own infrastructure, never anything in it, and never carries a secret.
-      required: [bundledAvailable, blobsStored, setting, lastCheck]
+      required: [bundledAvailable, blobsStored, setting, lastCheck, pending]
       properties:
         bundledAvailable:
           x-veyq-visibility: flag
@@ -663,12 +975,36 @@ components:
             decision 6).
           example: false
         setting:
-          description: The current setting, or null when no store has been set yet.
+          description: >
+            The setting in use — the one the backend signs against — or null when no setting has passed its check
+            yet.
           oneOf:
             - $ref: "#/components/schemas/InstanceStoreSetting"
             - type: "null"
         lastCheck:
-          description: The last check of the current setting, or null when it has not been checked since it was set.
+          description: The last check of the setting in use, or null when there is none.
+          oneOf:
+            - $ref: "#/components/schemas/InstanceStoreCheck"
+            - type: "null"
+        pending:
+          description: >
+            A changed setting saved but not yet in use, with its own last check; null when nothing is pending.
+            It replaces `setting` once it passes its check (ADR 0089 decision 5).
+          oneOf:
+            - $ref: "#/components/schemas/InstanceStorePending"
+            - type: "null"
+
+    InstanceStorePending:
+      type: object
+      description: >
+        A store setting saved but not in use until it passes its own check (ADR 0089 decision 5). Operator
+        configuration, never a secret.
+      required: [setting, lastCheck]
+      properties:
+        setting:
+          $ref: "#/components/schemas/InstanceStoreSetting"
+        lastCheck:
+          description: The last check of the pending setting, or null when it has not been checked since it was saved.
           oneOf:
             - $ref: "#/components/schemas/InstanceStoreCheck"
             - type: "null"
@@ -906,7 +1242,7 @@ components:
       # `off` is quoted wherever it is a key or a list item, in this schema, InstanceCapabilityUpdate and the
       # examples: a YAML 1.1 parser reads a bare `off` as the boolean false. PyYAML, which every contracts guard
       # reads the specs with, did exactly that, and saw a property named "false".
-      required: [id, title, purpose, whenOff, "off", effective]
+      required: [id, title, purpose, whenOff, "off", effective, tenantSwitchable, requirements]
       properties:
         id:
           x-veyq-visibility: public
@@ -934,6 +1270,29 @@ components:
             Whether the entry is active: it and every ancestor entry are on (the AND along the path). This is what
             the gates and the manifest follow.
           example: true
+        tenantSwitchable:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether a tenant owner may switch the entry off for their own tenant as well (the catalog's `levels`,
+            ADR 0088 decision 12). Such a tenant only narrows: an entry on here may still be off in a tenant, never
+            the other way round. Entries offered before sign-in are the Server Owner's alone.
+          example: true
+        serviceConfigured:
+          x-veyq-visibility: flag
+          type: [boolean, "null"]
+          description: >
+            For an external-service entry (ADR 0088 decision 7): whether its address is configured
+            (`listInstanceExternalServices`); while it is not, the entry is not `effective` whatever its switch says.
+            Null for every other entry.
+          example: null
+        requirements:
+          type: array
+          description: >
+            The entry's requirements (the catalog's, in its order; empty for most), each with its words and the
+            instance's value (ADR 0088 decision 8).
+          maxItems: 16
+          items: { $ref: "#/components/schemas/InstanceCapabilityRequirement" }
 
     InstanceCapabilityText:
       type: object
@@ -954,6 +1313,102 @@ components:
           description: The German text.
           maxLength: 1024
           example: Gemerkte Geräte
+
+    InstanceCapabilityRequirement:
+      type: object
+      description: >
+        One requirement of a register entry (ADR 0088 decision 8) with its words and the instance's value.
+      required: [name, kind, title, whenSet]
+      properties:
+        name:
+          x-veyq-visibility: public
+          type: string
+          description: The requirement's name, unique in the catalog; also the property that carries it on `Capability`.
+          maxLength: 64
+          example: linkMaxDays
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          enum: [flag, days]
+          description: A flag (set or not, value `1`) or a number of days.
+          example: days
+        title:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        whenSet:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        value:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          description: The instance's value (`1` for a set flag, days for days); null while the instance sets none.
+          example: 30
+
+    InstanceCapabilityRequirementUpdate:
+      type: object
+      description: One requirement's value to store at the instance level.
+      required: [value]
+      properties:
+        value:
+          x-veyq-visibility: measure
+          type: integer
+          description: '`1` sets a flag; for days, the number of days, 1 to 3650.'
+          minimum: 1
+          maximum: 3650
+          example: 30
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(3650)'
+
+    InstanceExternalService:
+      type: object
+      description: >
+        One outside service a member's browser calls (ADR 0088 decision 7), keyed by its register entry, with the
+        address the Server Owner configured. Instance configuration; nothing here is member data.
+      required: [id, title, takesAttribution]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: The service's register entry (`memories.map`, `memories.places`, `core.breached-password`).
+          maxLength: 64
+          example: memories.map
+        title:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        url:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The configured address; null while the service is not configured (its entry then is not active).
+          maxLength: 512
+          example: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+        attribution:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The map tiles' attribution, shown on every map; null for the other services or while none is set.
+          maxLength: 256
+          example: © OpenStreetMap contributors
+        takesAttribution:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the service takes an attribution (the map tiles only).
+          example: true
+
+    InstanceExternalServiceUpdate:
+      type: object
+      description: One external service's address to store.
+      required: [url]
+      properties:
+        url:
+          x-veyq-visibility: public
+          type: string
+          description: An http(s) URL; the map tiles' a template holding `{z}`, `{x}` and `{y}`.
+          minLength: 1
+          maxLength: 512
+          example: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        attribution:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The map tiles' attribution, plain text; refused for any other service.
+          maxLength: 256
+          example: © OpenStreetMap contributors
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 256)'
 
     InstanceCapabilityUpdate:
       type: object

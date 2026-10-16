@@ -13,7 +13,7 @@ import java.util.UUID
 /**
  * A share link with one named guest, seeded as rows (so any role on any kind — a `WRITE_ONLY` folder share
  * included, which [ShareRoots] refuses to create), and the guest's tree operations over HTTP (`createShareNode`,
- * `updateShareNode`, ADR 0080 decisions 6 and 10).
+ * `updateShareNode`, `abandonShareNode`, ADR 0080 decisions 6 and 10).
  */
 object GuestTreeShare {
 
@@ -53,13 +53,17 @@ object GuestTreeShare {
             .`when`().post("/api/shares/${link.shareId}/nodes").then()
 
     fun place(
-        link: Link, nodeId: String, parentId: String, placementVersion: Long = 0, slugToken: String = slug(),
+        link: Link, nodeId: String, parentId: String, placementRevision: Long = 0, slugToken: String = slug(),
         encryptedName: String = "cGxhY2Vk", wrappedContentKey: String = "cmUtd3JhcHBlZA==",
     ): ValidatableResponse =
         given().contentType(ContentType.JSON).header("X-Contributor-Token", link.token)
             .body(
                 """{"parentId":"$parentId","encryptedName":"$encryptedName","slugToken":"$slugToken",""" +
-                    """"wrappedContentKey":"$wrappedContentKey","placementVersion":$placementVersion}""",
+                    """"wrappedContentKey":"$wrappedContentKey","placementRevision":$placementRevision}""",
             )
             .`when`().patch("/api/shares/${link.shareId}/nodes/$nodeId").then()
+
+    /** Take back the empty upload placeholder [nodeId] (`abandonShareNode`). */
+    fun abandon(link: Link, nodeId: String): ValidatableResponse =
+        given().header("X-Contributor-Token", link.token).`when`().delete("/api/shares/${link.shareId}/nodes/$nodeId").then()
 }

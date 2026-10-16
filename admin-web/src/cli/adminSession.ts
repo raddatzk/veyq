@@ -9,9 +9,10 @@
 //      cannot import it even with type-stripping — only a bundler resolves it. That is why the CLI ships as
 //      an esbuild bundle (`npm run build:cli`) and never as loose files.
 //
-// Fresh login per invocation, nothing written to disk (ADR 0065): no token cache, no refresh, no "remember
-// me". The Argon2id cost (~1–3s) is paid on every call and is the accepted price of never holding a session
-// that outlives the process. If that ever blocks a real workflow it is a new decision, not a local shortcut.
+// Fresh login per invocation, nothing written to disk (ADR 0065): no token cache, no refresh across runs, no
+// "remember me". (Within one run the clients are the console's, so a run that outlives its 15-minute access token
+// is rotated in memory by the same retry-on-401, `app/sessionRefresh.ts`.) The Argon2id cost (~1–3s) is paid on
+// every call and is the accepted price of never holding a session that outlives the process. If that ever blocks a real workflow it is a new decision, not a local shortcut.
 import { session } from '../app/session'
 import { login } from '../features/auth/login'
 import { CliError } from './output'

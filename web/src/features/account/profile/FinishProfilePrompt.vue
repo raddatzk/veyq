@@ -25,7 +25,7 @@ async function check() {
     if (!own) return // no tenant key yet: nothing could be sealed, so nothing to ask for
     const name = unsealName(own.key, own.address, profile.sealedName)
     const hasName = Boolean(name && `${name.firstName}${name.lastName}`.trim())
-    show.value = !hasName && profile.avatarVersion === 0
+    show.value = !hasName && profile.avatarRevision === 0
   } catch {
     // best-effort: a prompt that cannot be decided is not shown
   }

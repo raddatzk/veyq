@@ -55,8 +55,10 @@ class KeyMaterialHandler(
     fun forUser(userId: String): KeyMaterial? {
         val withheld = buildSet {
             add(WrapMethod.RECOVERY.name)
-            if (!capabilities.isActive(CapabilityIds.REMEMBER_DEVICE)) add(WrapMethod.DEVICE.name)
-            if (!capabilities.isActive(CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS)) add(WrapMethod.DEVICE_KEY.name)
+            // Instance-only entries (ADR 0088 decision 12): the key material is the account's, not a tenant's, and the
+            // sign-in screen that offers remembering reads the pre-auth manifest. So no tenant is asked.
+            if (!capabilities.isActive(CapabilityIds.REMEMBER_DEVICE, null)) add(WrapMethod.DEVICE.name)
+            if (!capabilities.isActive(CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS, null)) add(WrapMethod.DEVICE_KEY.name)
         }
         return store.find(userId)?.let { m -> m.copy(wraps = m.wraps.filterNot { it.method in withheld }) }
     }
@@ -80,7 +82,7 @@ class KeyMaterialHandler(
         kdfParams: String?,
     ): AddWrapOutcome {
         // Instance policy first (ADR 0032): the capability this method needs must be active, else 422, server-enforced.
-        if (!capabilities.isActive(capabilityFor(method))) return AddWrapOutcome.CapabilityDisabled
+        if (!capabilities.isActive(capabilityFor(method), null)) return AddWrapOutcome.CapabilityDisabled // instance-only, as above
         accounts.lock(userId)
         if (!sessions.isLiveSessionOf(userId, presentedAccessToken)) return AddWrapOutcome.SessionEnded
         if (store.countWraps(userId, method) >= MAX_WRAPS_PER_METHOD) return AddWrapOutcome.LimitReached

@@ -71,8 +71,8 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_tenant_invite.created_at" to "TenantStore.currentInvite: the newest invite of a tenant",
             "veyq_scope.deleted_at" to "ScopePurge's grace cutoff; served as deletedAt/purgeAfter of a pending group",
             "veyq_membership.created_at" to "ScopesStore.oldestOtherMember: the orphan rule's successor (ADR 0014 §6)",
-            "veyq_tenant_terms_acceptance.accepted_at" to "audit evidence of acceptance, one row per version (when " +
-                "which version was accepted); read by operators/support from the database, deliberately not served " +
+            "veyq_tenant_terms_acceptance.accepted_at" to "audit evidence of acceptance, one row per revision (when " +
+                "which revision was accepted); read by operators/support from the database, deliberately not served " +
                 "by an API (owner decisions 2026-10-09, history 2026-10-10 #402)",
             // --- content + blobs
             "veyq_node.created_at" to "served: NodeSummary.createdAt, the order equal-named siblings take (ADR 0015)",

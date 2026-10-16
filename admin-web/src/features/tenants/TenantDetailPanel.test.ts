@@ -10,12 +10,14 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 
 const push = vi.fn()
-vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+const replace = vi.fn()
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, replace }) }))
 
-// The real `GIB` and `parseQuotaGib`: the conversion is what the quota cases assert, so it must not be stubbed away.
+// The real `GIB`, `parseQuotaGib` and `formatQuotaGib`: the conversion is what the quota cases assert, so it must not be stubbed away.
 vi.mock('./tenants', async (importOriginal) => ({
   GIB: (await importOriginal<typeof import('./tenants')>()).GIB,
   parseQuotaGib: (await importOriginal<typeof import('./tenants')>()).parseQuotaGib,
+  formatQuotaGib: (await importOriginal<typeof import('./tenants')>()).formatQuotaGib,
   setTenantStorageQuota: vi.fn(),
   listTenants: vi.fn(),
   resendInvite: vi.fn(),
@@ -40,6 +42,7 @@ import TenantDetailPanel from './TenantDetailPanel.vue'
 import { listTenants, revokeTenant, resendInvite, reassignInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError, setTenantStorageQuota } from './tenants'
 import type { TenantInviteState, TenantSummary } from './tenants'
 import { httpError } from '../../test/httpError'
+import { session, setTokens } from '../../app/session'
 
 const i18n = createI18n({
   legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false,
@@ -145,8 +148,8 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await btn(w, 'Take offline').trigger('click')
     await flushPromises()
     expect(suspendTenant).toHaveBeenCalledWith('t-2')
-    // Stays on the panel (unlike revoke, which routes away) and re-renders in the new state.
-    expect(push).not.toHaveBeenCalledWith('/settings')
+    // Stays on the panel (unlike revoke, which hands back to the console) and re-renders in the new state.
+    expect(w.emitted('revoked')).toBeUndefined()
     expect(w.text()).toContain('Suspended')
   })
 
@@ -189,7 +192,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     expect(w.find('input[readonly]').exists()).toBe(true) // the invite-link field
   })
 
-  it('revoke is confirm-gated, delegates to the facade, and routes back to the hub', async () => {
+  it('revoke is confirm-gated, delegates to the facade, and hands the gone tenant back to the console', async () => {
     const w = mountPanel()
     await flushPromises()
 
@@ -201,7 +204,9 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await btn(w, 'Revoke').trigger('click')
     await flushPromises()
     expect(revokeTenant).toHaveBeenCalledWith('t-1')
-    expect(push).toHaveBeenCalledWith('/settings')
+    expect(w.emitted('revoked')).toEqual([['t-1']])
+    // The bite: the old panel pushed `/settings`, a route admin-web does not have.
+    expect(push).not.toHaveBeenCalled()
   })
 
   it('moves an ACTIVE tenant to a new address, confirm-gated, and reloads in place', async () => {
@@ -299,6 +304,28 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     expect(setTenantStorageQuota).toHaveBeenCalledWith('t-3', null)
   })
 
+  it('shows a quota under 0.01 GiB as non-zero, and saves it unchanged as the stored bytes, not as 0', async () => {
+    // 107 374 B rounded to two decimals was "0" — and 0 is a real quota: an unchanged save stopped every upload.
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageQuotaBytes: 107_374 }])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    expect((quotaInput(w).element as HTMLInputElement).value).toBe('0.0001')
+    await submitQuota(w)
+    await flushPromises()
+    expect(setTenantStorageQuota).toHaveBeenCalledWith('t-2', 107_374)
+  })
+
+  it('saves a quota the display rounds unchanged as the stored bytes, so an untouched field never drifts', async () => {
+    const stored = Math.round(1.234 * GiB)
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageQuotaBytes: stored }])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    expect((quotaInput(w).element as HTMLInputElement).value).toBe('1.23')
+    await submitQuota(w)
+    await flushPromises()
+    expect(setTenantStorageQuota).toHaveBeenCalledWith('t-2', stored)
+  })
+
   it('refuses a quota that is not a number of GiB without calling', async () => {
     vi.mocked(listTenants).mockResolvedValue([ACTIVE])
     const w = mountPanel('t-2')
@@ -325,10 +352,12 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     expect(w.text()).not.toContain('Acme')
   })
 
-  it('redirects to login on a 401', async () => {
+  it('ends the session on a 401 — tokens dropped BEFORE the sign-in, or the router bounces it (inbox #449)', async () => {
+    setTokens('expired-access', 'dead-refresh', 'family-1')
     vi.mocked(listTenants).mockRejectedValueOnce(httpError(401))
     mountPanel()
     await flushPromises()
-    expect(push).toHaveBeenCalledWith({ name: 'login' })
+    expect(replace).toHaveBeenCalledWith({ name: 'login' })
+    expect(session.accessToken).toBeNull()
   })
 })

@@ -98,20 +98,10 @@ sequenceDiagram
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator on
   operator-served web.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** To be sure someone really is who they say, open their profile and compare your **safety number** for them
-with the one they see on their own profile — scan the code on their screen, or read the digits to each other. If it
-matches, they are marked **"Verified"**, on their profile and in every member list. If it doesn't, the app tells
-you not to trust that key. If a verified person's key ever changes, the app says so more loudly, and you compare
-again before they are verified once more.
-
-**DE —** Um sicher zu sein, dass jemand wirklich die Person ist, die sie vorgibt zu sein, öffne ihr Profil und
-vergleiche deine **Sicherheitsnummer** für sie mit der, die sie in ihrem eigenen Profil sieht — scanne den Code auf
-ihrem Bildschirm oder lest euch die Ziffern vor. Stimmt sie überein, wird die Person als **„Verifiziert"** markiert,
-im Profil und in jeder Mitgliederliste. Stimmt sie nicht, sagt dir die App, dass du diesem Schlüssel nicht trauen
-sollst. Ändert sich der Schlüssel einer verifizierten Person einmal, sagt die App das deutlicher, und ihr vergleicht
-erneut, bevor sie wieder verifiziert ist.
+You can be sure a member really is who they say by comparing a safety number with them, and veyq marks them Verified
+everywhere and warns loudly if their key ever changes.
 
 ## Related
 

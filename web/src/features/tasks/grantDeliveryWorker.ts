@@ -37,9 +37,14 @@ export async function runGrantDeliveryWorker(scope: ScopeKeyHolder): Promise<num
   // The identity whose signing key signs every grant this run posts (ADR 0028 Decision 6). Locked vault: no run.
   const priv = identityPrivate()
   if (!priv) return 0
+  // The run's own copy of K_SC. The poll hands over the active space's write key, which leaving or re-entering the
+  // space zeroes in place while a run may still be in flight: read through that reference, a genuine admission no
+  // longer verified (declined for good, found live 2026-10-16) and the seal would wrap an all-zero key to the member.
+  const key = scope.key.slice()
   try {
-    return await drain(scope, priv.sign)
+    return await drain({ ...scope, key }, priv.sign)
   } finally {
+    key.fill(0)
     priv.kemSeed.fill(0)
     priv.sign.fill(0)
   }
@@ -61,6 +66,13 @@ async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise
     // session alone (no vault), or the operator, can create a membership but not a tag; such a target is declined,
     // never wrapped to, and the member stays awaiting access. Checked before the TOFU pin, so an unadmitted target's
     // key is never pinned either.
+    //
+    // An admission stated AHEAD of this worker's epoch is the one exception: a rotation landed and re-tagged it while
+    // this tab still holds the older key. That is a fact about the worker, not the target — a decline would exclude
+    // this key-holder for good, even once it holds the new key. PAUSE, like `stale_epoch` below: nothing is wrapped,
+    // the lease lapses, and every further job would meet the same behind key. A tag made BEFORE a rotation (behind
+    // the worker) still declines.
+    if (target.admissionEpoch != null && target.admissionEpoch > scope.epoch) break
     if (!admissionVerifies(scope.key, scope.epoch, scope, target.targetUserId, target)) {
       await declineJob(job.jobId, ADMISSION_UNVERIFIED)
       continue

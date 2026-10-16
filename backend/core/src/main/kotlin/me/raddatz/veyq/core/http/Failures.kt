@@ -76,11 +76,11 @@ object Failures {
      *  client re-reads and rebuilds against the current epoch (ADR 0024). */
     val staleEpoch: HttpFailure = httpFailure("stale_epoch", CONFLICT)
 
-    /** A version-checked write stated a version the stored one has moved past → 409; nothing was written. The
+    /** A revision-checked write stated a revision the stored one has moved past → 409; nothing was written. The
      *  sealed-meta writes answer it with the blob's current value ([httpStaleSealedMeta], ADR 0077). */
-    val staleVersion: HttpFailure = httpFailure("stale_version", CONFLICT)
+    val staleRevision: HttpFailure = httpFailure("stale_revision", CONFLICT)
 
-    /** A placement write (a move or a rename) stated a `placementVersion` the node has moved past → 409; nothing was
+    /** A placement write (a move or a rename) stated a `placementRevision` the node has moved past → 409; nothing was
      *  written, and the client re-reads the node and rebuilds the placement against it (ADR 0080 Decision 3). */
     val stalePlacement: HttpFailure = httpFailure("stale_placement", CONFLICT)
 
@@ -95,6 +95,15 @@ object Failures {
 
     /** A required capability is disabled for the tenant → 422. */
     val capabilityDisabled: HttpFailure = httpFailure("capability_disabled", UNPROCESSABLE)
+
+    /** No register entry has a requirement of this name, at the level asked (ADR 0088 decision 8). */
+    val requirementNotFound: HttpFailure = httpFailure("requirement_not_found", NOT_FOUND)
+
+    /** A link without a password while every link of its tenant needs one (requirement `linkPassword`). */
+    val linkPasswordRequired: HttpFailure = httpFailure("link_password_required", UNPROCESSABLE)
+
+    /** A link with no end date, or one beyond its tenant's `linkMaxDays` after it was made (requirement `linkMaxDays`). */
+    val linkExpiryRequired: HttpFailure = httpFailure("link_expiry_required", UNPROCESSABLE)
 
     /** Request violates the node tree's structural rules → 422. */
     val illegalStructure: HttpFailure = httpFailure("illegal_structure", UNPROCESSABLE)

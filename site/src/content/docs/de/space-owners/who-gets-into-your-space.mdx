@@ -1,0 +1,70 @@
+---
+title: "Mitglieder einladen und verwalten"
+sources:
+  - docs/features/spaces/use-cases/uc.spaces.add-member.md
+  - docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md
+  - docs/features/spaces/use-cases/uc.spaces.remove-tenant-member.md
+  - docs/features/spaces/use-cases/uc.spaces.set-space-icon.md
+  - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Gehört dir ein geteilter Bereich, entscheidest du, wer darin ist. Alles hier findest du unter **Einstellungen →
+Mitglieder**: das Menü unten in der Seitenleiste, dann **Einstellungen**, dann **Mitglieder** unter **Geteilter
+Bereich**. Mitglieder sehen die Liste auch; die Schaltflächen siehst nur du.
+
+## Jemanden einladen
+
+Dein Bereich muss zuerst E-Mails senden können ([E-Mail](/veyq/de/space-owners/email/)).
+
+1. Wähle **Mitglied einladen**.
+2. Gib die **E-Mail-Adresse** ein und wähle **Einladung senden**.
+
+<Screenshot id="owners-invite" shows="Der Dialog Mitglied einladen mit dem Feld E-Mail-Adresse und der Schaltfläche Einladung senden" />
+
+Die Einladung geht per E-Mail an die Person, und nur dorthin. Auf deinem Bildschirm gibt es keinen Link zum Kopieren oder
+Weiterleiten: Eine Einladung ist eine Eintrittskarte, und eine Karte, die über jeden Bildschirm wandert, auf den gerade
+jemand schaut, kann bei der falschen Person landen. Die Person legt ihr Konto aus der Mail an:
+[Eine Einladung annehmen](/veyq/de/getting-started/accept-an-invitation/).
+
+Unter **Ausstehende Einladungen** siehst du, wer noch nicht beigetreten ist. **Erneut senden** schickt die Einladung noch
+einmal; **Einladung zurückziehen** macht ihren Link ungültig.
+
+## Nach dem Beitritt
+
+Ein neues Mitglied zeigt **Wartet auf Zugang**, bis der Schlüssel zum Bereich ankommt. Das passiert von selbst: Das Gerät
+irgendeines Mitglieds, deines oder eines anderen, verschließt eine Kopie des Schlüssels für die neue Person, sobald es
+online ist. Dann steht dort **Aktiv**. Der Server reicht die verschlossene Kopie nur weiter; er kann nie jemanden hinter
+deinem Rücken hereinlassen.
+
+## Ein Mitglied entfernen
+
+1. Wähle **Mitglied entfernen** in seiner Zeile.
+2. Könnte die Person Links zu Dingen im Bereich kopiert haben, setze den Haken bei **Auch alle Links dieses Bereichs
+   abschalten**.
+3. Bestätige.
+
+Sie verliert den Zugang zum Bereich und seinen Gruppen. Was sie schon gesehen hat, kann sie behalten haben. Eine Gruppe,
+die ihr allein gehörte, wird übergeben oder geschlossen.
+
+Genauer: Eine Gruppe, die ihr allein gehörte, geht an das Mitglied, das am längsten darin ist, und eine Gruppe, in der
+sie die einzige Person war, wird nach 30 Tagen gelöscht. Du bekommst dabei nie Zugang zur Gruppe von jemand anderem.
+Ihren persönlichen Bereich verliert sie nicht sofort: 30 Tage lang kann sie sich noch anmelden, ihn durchsehen und
+speichern, was sie behalten will, aber nichts mehr ändern. Danach wird er gelöscht.
+
+Jede Gruppe, die sie mit anderen geteilt hat, bekommt außerdem ein neues Schloss. Das Gerät einer Person, die die
+Gruppe besitzt, baut es von selbst ein, sobald diese veyq das nächste Mal öffnet. Der Server sperrt die entfernte
+Person sofort aus, aber bis das neue Schloss eingebaut ist, würde ihr alter Schlüssel Neues in dieser Gruppe noch
+öffnen.
+
+Ein anderes Mitglied zur besitzenden Person des geteilten Bereichs machen kannst du hier nicht; das geht nur bei einer
+[Gruppe](/veyq/de/spaces/group-members/).
+
+## Dem Bereich ein Icon geben
+
+Wähle **Icon hinzufügen** neben dem Namen des Bereichs, such ein Bild aus, schieb es in das Quadrat und wähle **Icon
+speichern**. Alle Mitglieder sehen es in der Seitenleiste. **Icon entfernen** bringt den Anfangsbuchstaben zurück.
+
+Der Schlüssel zu deinem Bereich erreicht den Server nie: Die Geräte der Mitglieder geben ihn einander weiter, für jedes
+verschlossen: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

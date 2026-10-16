@@ -9,6 +9,19 @@ export type { TenantStorage } from '../../api/generated/tenants'
 /** One GiB — the unit the per-link limit is entered in; the wire carries bytes. */
 export const GIB = 1024 ** 3
 
+const twoDecimals = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, useGrouping: false })
+const twoDigits = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 2, useGrouping: false })
+
+/**
+ * Bytes as the GiB the limit field shows: two decimals, and below 0.01 GiB two significant digits, so a limit that is
+ * not 0 never shows as "0" (`0` means link uploads off). A display only — what it rounds is not what an unchanged
+ * save sends: the panel sends the stored bytes back for a field nobody edited.
+ */
+export function formatGib(bytes: number): string {
+  const gib = bytes / GIB
+  return (gib === 0 || gib >= 0.01 ? twoDecimals : twoDigits).format(gib)
+}
+
 /** Owner-only: the tenant's storage usage and its per-link limit. A non-owner member is 403, a non-member 404. */
 export function getTenantStorage(tenantId: string): Promise<TenantStorage> {
   return tenantsApi().getTenantStorage({ tenantId })

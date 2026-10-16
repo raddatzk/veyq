@@ -100,20 +100,10 @@
 - **Read-only while deleting** is the honest state ("on its way out") and keeps restore trivial — there is nothing
   to reconcile, because nothing changed during the window.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Deleting a group isn't instant destruction — it starts a 30-day countdown. Everyone can still open it and
-look through the pictures one last time, clearly told it's on its way out, and **any owner can undo the deletion**
-during that window. Nothing new can be added while it winds down, and its shared links are paused. After 30 days
-it's gone for good: the memories and their files are **erased from the server**, not just hidden. Whatever someone
-saved to their own device in the meantime is theirs — but the shared group is truly gone.
-
-**DE —** Eine Gruppe zu löschen ist keine sofortige Zerstörung — es startet ein 30-Tage-Countdown. Alle können sie
-noch öffnen und die Bilder ein letztes Mal durchsehen, klar gekennzeichnet, dass sie ausläuft, und **jede:r Owner
-kann die Löschung** in diesem Fenster rückgängig machen. Während sie ausläuft, kann nichts Neues hinzukommen, und
-ihre geteilten Links pausieren. Nach 30 Tagen ist sie endgültig weg: die Erinnerungen und ihre Dateien werden **vom
-Server gelöscht**, nicht nur versteckt. Was jemand in der Zwischenzeit auf dem eigenen Gerät gespeichert hat, gehört
-ihm — aber die geteilte Gruppe ist wirklich fort.
+Deleting a group gives everyone 30 days to look through it one last time and any owner the chance to undo it, before
+it is erased from the server for good.
 
 ## Related
 

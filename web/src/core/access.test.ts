@@ -1,5 +1,5 @@
 // Core's half of "who looks" (inbox #401, `core/access.ts`): the shapes of `Access` and `TreeSource`, the member's
-// factories over the decrypted tree, the capability target core builds from the registry, and core's own fail-closed
+// factories over the decrypted tree, the rights target core builds from the registry, and core's own fail-closed
 // matrix for its one kind, FOLDER. Kinds other than FOLDER are made-up tokens: core knows no application, nor does its
 // test. The registry is a fresh one per test behind a delegating export (as `LevelView.test.ts` does).
 import { describe, it, expect, expectTypeOf, vi, beforeEach } from 'vitest'
@@ -23,8 +23,8 @@ vi.mock('./node/tree', async (importOriginal) => ({
 }))
 
 import {
-  folderCapabilities, memberAccess, memberTreeSource, targetOf,
-  type Access, type CapabilityTarget, type FolderCapabilities, type GuestAccess, type MemberAccess, type TreeSource,
+  folderRights, memberAccess, memberTreeSource, targetOf,
+  type Access, type RightsTarget, type FolderRights, type GuestAccess, type MemberAccess, type TreeSource,
 } from './access'
 import { createRegistry } from './applications/registry'
 import { FOLDER_KIND } from './node/kind'
@@ -142,7 +142,7 @@ describe('memberTreeSource: the member\'s tree', () => {
   })
 })
 
-describe('targetOf: the node as a capability is asked about it', () => {
+describe('targetOf: the node as a rights function is asked about it', () => {
   const tree = memberTreeSource({ nodes: () => [n('f', FOLDER_KIND, null, { shareIdentityId: 'i' }), n('x', 'ALPHA', null)], scopeId: () => 's', epochs: () => null, scope: () => '' })
   const Dialog = defineComponent({ render: () => null })
 
@@ -184,12 +184,12 @@ describe('targetOf: the node as a capability is asked about it', () => {
   })
 })
 
-// Core's matrix for FOLDER (`folderCapabilities`). Every row names the rights it grants; every other right must be
+// Core's matrix for FOLDER (`folderRights`). Every row names the rights it grants; every other right must be
 // false — so a right that turns true by accident (a default flipped, a role or kind falling through) is red.
-describe('folderCapabilities: core\'s fail-closed matrix', () => {
-  const NONE: FolderCapabilities = { navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, shareContribute: false, nodeTrash: false, move: false }
-  const at = (kind: string | null, o: Partial<CapabilityTarget> = {}): CapabilityTarget => ({ kind, inIdentityFolder: false, shareable: kind === FOLDER_KIND, ...o })
-  const grants = (...keys: (keyof FolderCapabilities)[]) => ({ ...NONE, ...Object.fromEntries(keys.map((k) => [k, true])) })
+describe('folderRights: core\'s fail-closed matrix', () => {
+  const NONE: FolderRights = { navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, shareContribute: false, nodeTrash: false, move: false }
+  const at = (kind: string | null, o: Partial<RightsTarget> = {}): RightsTarget => ({ kind, inIdentityFolder: false, shareable: kind === FOLDER_KIND, ...o })
+  const grants = (...keys: (keyof FolderRights)[]) => ({ ...NONE, ...Object.fromEntries(keys.map((k) => [k, true])) })
   const member = memberAccessOf()
   const pending = memberAccessOf({ readonly: true })
   // `core.public-shares` off: by the server's AND along the path its two children are absent from the manifest too.
@@ -197,7 +197,7 @@ describe('folderCapabilities: core\'s fail-closed matrix', () => {
   // Only `core.public-shares.contribute` off: READ links stay, the contribute role is not offered.
   const noContribute = memberAccessOf({ publicSharesContribute: false })
 
-  const rows: [string, Access, CapabilityTarget, FolderCapabilities][] = [
+  const rows: [string, Access, RightsTarget, FolderRights][] = [
     // member
     ['member at the scope root', member, at(null), grants('navigate', 'createFolder', 'nodeTrash')],
     ['member in a folder', member, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'shareContribute', 'nodeTrash', 'move')],
@@ -227,7 +227,7 @@ describe('folderCapabilities: core\'s fail-closed matrix', () => {
     ['an unknown mode', { mode: 'operator' } as unknown as Access, at(FOLDER_KIND), NONE],
   ]
   it.each(rows)('%s', (_label, access, target, expected) => {
-    expect(folderCapabilities(access, target)).toEqual(expected)
+    expect(folderRights(access, target)).toEqual(expected)
   })
 
   it('never grants anything to a guest beyond navigate, create-folder and a READ_WRITE move, in any role or position', () => {
@@ -235,7 +235,7 @@ describe('folderCapabilities: core\'s fail-closed matrix', () => {
       for (const kind of [null, FOLDER_KIND, 'ALPHA']) {
         for (const inIdentityFolder of [false, true]) {
           for (const parentKind of [undefined, null, FOLDER_KIND, 'ALPHA']) {
-            const c = folderCapabilities(guestAccessOf(role), { kind, inIdentityFolder, shareable: true, parentKind })
+            const c = folderRights(guestAccessOf(role), { kind, inIdentityFolder, shareable: true, parentKind })
             expect([c.rename, c.deleteNode, c.share, c.shareContribute, c.nodeTrash]).toEqual([false, false, false, false, false])
             // a move only for READ_WRITE, only of a folder a folder holds, never in an identity folder (#358, #377 (a))
             const mayMove = role === 'READ_WRITE' && kind === FOLDER_KIND && !inIdentityFolder && parentKind === FOLDER_KIND

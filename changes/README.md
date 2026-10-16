@@ -61,7 +61,7 @@ phase that reshapes a request is red in `web/` and `admin-web/` until the client
 phase; the Done-when for it is `generate:api` plus the contracts guards. **A removed *response* field is the
 other way round: it reddens only code that reads it and fixtures typed against the model.** **An added *required*
 response field reddens the server that builds it**: `cr-meta-writes-carry-the-version-they-read` predicted "backend
-green" for a contracts phase that added `metaVersion` to `NodeSummary`, and `ContentResource`'s
+green" for a contracts phase that added `metaVersion` (now `metaRevision`) to `NodeSummary`, and `ContentResource`'s
 `NodeSummary(...)` construction stopped compiling.
 `cr-guest-names-for-members-only` predicted a red at the fixture that served the removed field and got a green,
 because that fixture reached the code cast `as unknown as` (165 such casts, inbox #195). So a phase that predicts
@@ -423,6 +423,31 @@ members** — the one being removed, the ones being kept, and the surfaces expli
 locators are variations of one another) and self-checking: if two classes' commands overlap, the classification
 itself is wrong, which is worth finding at refine rather than in the retrospective.
 
+### The published docs move with the change, in the same CR
+
+The docs site (`site/`, [ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md))
+is how users, space owners, Server Owners and researchers learn what veyq does, so a CR that changes what one of
+them sees or does — a screen, a label, a step, an operator procedure or command, a configuration key, a security
+property or a residual — updates the site pages that speak for it **in the same CR**, as a phase or inside the
+phase that makes the change, never as a follow-up. A page left behind tells its reader something the product no
+longer does, and nobody notices until a user follows it. The locator is the pages' `sources:`: every doc the CR
+edits under `docs/` is declared by the pages that restate it (`git grep -ln "<doc path>" -- site/src/content/docs`),
+and a Use page's steps use the UI's own words (`web/src/i18n/index.ts`), so a changed label is found by grepping the
+site for the old one. A Use page changes in English and German together; a new user-facing capability gets its
+page, at the same depth as its neighbours. The CR says which pages it touched, or that it touched none and why.
+
+### Text retired because another home carries it is compared claim by claim, and checked at the code
+
+`cr-published-docs-site`'s last phase cut every use-case's bilingual reader section to one line, because the Use
+pages were to carry its material. Compared claim by claim, 28 of the 74 sections said something no page said (that
+signing in never reveals whether an account exists, that a deleted group's links pause for its 30 days). And seven
+were false or stale against the code: the server does know who added you to a group; a guest accepts the space's
+terms, per space, not the server's; re-framing a cover keeps the picture; Personal's address is `~<username>`. A
+section cut unread loses the true half, and one carried over verbatim publishes the false half. So a phase that
+retires text because another home carries it lists each claim. It finds the claim in the new home, or checks it at
+the code and then adds it there, and it reports every claim it found false. A section-level "the page covers this"
+is not that check.
+
 ### Coverage is part of the work, not a follow-up
 
 Every CR updates `docs/coverage/` for the
@@ -435,7 +460,9 @@ coverage file that gaps every target surface.)
 `docs/coverage/`.** `cr-store-connection-in-admin-web` renamed four test methods in its phase 2 commit with a Done-when
 that named only `./gradlew check`; `validate_coverage.py` and `validate_guard_gaps.py` (which goes red on a copy it
 cannot forge) stayed red through phases 3 and 4 and were first measured in phase 5. The locator is the refs, not
-the test sources: `git grep -n "<old test name>" -- docs/coverage`.
+the test sources: `git grep -n "<old test name>" -- docs/coverage`. Such a phase runs `validate_guard_gaps.py
+--force`, too: locally that guard skips while no file under `scripts/` changed, and a renamed anchor is exactly what
+a skip does not see.
 
 **Where a CR may not name its use-cases yet, a phase owns writing them.** A new application cannot name use-cases
 before its concept settles, so `cr-files-application` started with `satisfies: []` and *"written with F1"* — and
@@ -518,7 +545,9 @@ no file restates it, because a restated list drifts out of step with the one tha
 *"point at a canonical source, don't restate it"*, applied to itself. A red guard means the CR isn't done.
 (The glob sees files, not commits: CI runs it over the **committed** tree, so an *untracked* guard — or an
 untracked file a guard would have rejected — is green locally and unchecked in CI. Commit before believing a
-local green.)
+local green.) One guard runs less locally than in CI: `validate_guard_gaps.py` prints `SKIPPED` while nothing under
+`scripts/` or the trust-chain skill changed since the checkout's last green full run, and never skips in CI — its
+docstring says what a skip does not see.
 
 **In a wave of parallel CRs the glob gates the MERGED tree, once — not each branch.** A branch is not the tree
 that lands, so its green says nothing about the merge, and the price of running it anyway is real: on 2026-09-24
@@ -604,6 +633,12 @@ the sibling the reshape breaks. #103 nearly re-homed the role enum into a shared
 the *drift* guard (`validate_contracts_common.py`) was named; `validate_scope_model_vocabulary.py` silently
 anchors on `SetMemberRoleRequest.role.enum`, and a `$ref` would have broken it. Enumerate the guards on the
 symbol first, then choose the shape — the shape that keeps every anchor green is a constraint, not an afterthought.
+
+**A guard can anchor on a symbol's SHAPE, and a rename moves it out of the shape.** Grep `scripts/` for the pattern a
+guard matches as well as for the literal. `validate_write_concurrency.py` found a write's counter by the regex `…Version`;
+inbox #437 renamed `metaVersion` / `placementVersion` to `…Revision`, and the guard, run on the renamed contract, went red
+on `removeNodeCover` (a write that only its counter makes a subject) and would have passed an undeclared `placementRevision`.
+A literal grep for the old names finds nothing in that guard, so only running it on the renamed tree shows the break.
 
 **The mutation manifests anchor on FILES, and a green gate does not say you broke one.** `web/stryker.mutate.json`,
 `packages/crypto/stryker.mutate.json` and `backend/core/pitest.scope.json` admit a file only while it is pure.
@@ -1405,7 +1440,8 @@ browser pass needed a fresh instance — which the done-when never said, and a `
 dev data to get. A database of its own on the same compose stack leaves theirs alone: `CREATE DATABASE` beside `veyq`
 (root credential as in `scripts/run_web_e2e.py`), boot the fast-jar under `-Dquarkus.profile=e2e` with
 `QUARKUS_DATASOURCE_JDBC_URL` pointed at it, its own `VEYQ_SECURITY_CONFIG_SECRET_FILE`, and
-`VEYQ_BLOB_STORE_PUBLIC_ENDPOINT` set to the browsed origin, then `npm run bootstrap:user` — which writes `.run/.env`
+`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` set to the browsed origin (the old `VEYQ_BLOB_STORE_…` name is read by nothing
+any more, so a boot that sets it signs for the store's own endpoint and the seeder's store check fails), then `npm run bootstrap:user` — which writes `.run/.env`
 back, so that file is snapshotted first and restored byte-equal after. A CR that changes a stored format names this
 instance in its browser pass.
 Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused even a scratchpad snapshot on
@@ -1413,6 +1449,11 @@ Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused
 copy of `web/scripts/bootstrap-user.mts` that reads an env file of generated test values outside the repo seeds it, the
 copy is deleted after, and the login goes through the form (`?devlogin` reads only `.run/.env`). Boot a COPY of the
 fast-jar, too: a neighbour's `./gradlew` rebuilds `backend/build/` under a running pass.
+Two devices are two HOSTS, not two ports: cookies ignore the port, so `capx.localhost:8087` and `capx.localhost:8085`
+share one refresh cookie and the second "device" opens on the first one's session (inbox #447's pass). A second Vite with
+`VEYQ_SMOKE_HOST=<tenant domain>` serves the same tenant under another `*.localhost` name with cookies and storage of
+its own. And the instance takes its own ports (`QUARKUS_HTTP_PORT`, `VEYQ_ADMIN_CHANNEL_PORT`) when a neighbour holds
+8080/8090, with admin-web's Vite pointed at that admin port (`VEYQ_API_TARGET`, `VITE_ADMIN_PORT`).
 
 ### A UI phase's done-when names its browser pass
 
@@ -1715,6 +1756,18 @@ takes a control away, its refine greps the matrix row, the share roots and the r
 (`grep -n <capability> docs/apps/<app>.md`, the `roleContributorHint`-style strings). It then writes down, for each
 role, what that role can still do.
 
+### A page that tells users what to click is walked in the client before it counts as written
+
+`cr-use-area-content` wrote two of its eight phases from `web/src/i18n/index.ts` and the components, and the later
+walk in the running web client still corrected each of them several times. Some controls exist only behind a
+switch: *Determine location automatically* appears only once maps are enabled. Some labels depend on state: a
+contributions group says *You* only until you have added something. A folder row's menu has no *Move to…* at all.
+A guest drop page starts over with *Not you?*, not with the string the drop-box namespace defines. None of that
+shows in a catalog. So a CR whose output is user-facing steps (a Use page, an onboarding text) walks every step in
+the running client with a test account and a fresh instance. It writes from the walk and corrects the page against
+it, and it names in its CR what it could not walk (a second device, a camera, a third-party map) instead of
+implying it. A page written from code alone is a draft.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong
@@ -1760,7 +1813,9 @@ crosscutting concern(s), ADR(s), and the specific invariants at risk.
 Tests green across the listed platforms, AND `docs/coverage/` updated for each `satisfies:` use-case
 (every new acceptance criterion covered by a test or an explicit gap) with
 `python3 scripts/validate_coverage.py` green. If the CR rests on a structural invariant, its proof is
-promoted to a permanent guard (or the CR notes why a one-shot check suffices).
+promoted to a permanent guard (or the CR notes why a one-shot check suffices). The docs site's pages that speak
+for what changed are updated (EN+DE for Use pages) and `npm run check` in `site/` is green — or the CR says why no
+page was affected.
 
 ## Retrospective
 What didn't go well — in planning, execution, AND process/collaboration (did we honor the conventions

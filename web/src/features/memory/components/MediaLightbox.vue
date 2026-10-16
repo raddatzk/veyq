@@ -19,7 +19,7 @@
 //
 // **One lightbox for a member and a share guest** (inbox #401). It touches no API itself: every byte and seal comes
 // through the loaders the Memory's data source hands in (`../source.ts`, the member's or the guest's — required, so no
-// default can fall through to a member call), and every write is offered per capability, never by a mode flag:
+// default can fall through to a member call), and every write is offered per right, never by a mode flag:
 // 'set as cover' where `canSetCover`, the delete where `canDelete` answers for the shown item (a member's trash any, a
 // guest's purge only its own — the parent runs each), the capture-time correction and the place-name backfill where
 // the source carries the medium's meta door (`mediaMeta`), the heavy EXIF where it carries `exifLoader`.
@@ -373,7 +373,7 @@ function startCapturedAtEdit() {
 }
 
 /** A write landed (or a conflict handed back the current tier): show it, and let the grid patch its item — the
- *  item's `wrappedMeta` + `metaVersion` are the base of the next write from here. */
+ *  item's `wrappedMeta` + `metaRevision` are the base of the next write from here. */
 function applyMetaState(target: MediaItem, state: SealedMetaState, tier: MediaMeta | null) {
   if (item.value === target) captured.value = tier
   emit('updated', { mediaId: target.mediaId, ...state })

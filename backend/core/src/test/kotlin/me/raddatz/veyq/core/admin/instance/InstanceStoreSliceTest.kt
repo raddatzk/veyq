@@ -1,14 +1,18 @@
 package me.raddatz.veyq.core.admin.instance
 
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.blobstore.StoreResolution
 import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
+import me.raddatz.veyq.core.blobstore.StoreSettings
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import me.raddatz.veyq.core.testing.TestFixtures.seedAttachment
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import com.sun.net.httpserver.HttpServer
 import io.quarkus.test.junit.QuarkusTest
+import jakarta.inject.Inject
 import io.restassured.http.ContentType
 import io.restassured.response.ValidatableResponse
 import org.hamcrest.CoreMatchers.containsString
@@ -19,13 +23,18 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.net.InetSocketAddress
 import java.util.UUID
 
 /**
  * The Server Owner's object-store setting and its check (ADR 0089) over the full HTTP stack on the admin channel:
- * what may be stored, what is never returned, the refusals the contract names, and the precondition the setting puts
- * on creating a tenant. The check's own steps are [me.raddatz.veyq.core.blobstore.StoreCheckTest]'s, against a fake
- * store that records what the check sends; here the check can only be refused (no store set) or fail honestly.
+ * what may be stored, what is never returned, the refusals the contract names, the precondition the setting puts
+ * on creating a tenant — and decision 5's promotion: a write is saved as **pending** and changes nothing the instance
+ * does until its own check passes. The check's own steps are [me.raddatz.veyq.core.blobstore.StoreCheckTest]'s; here
+ * a check passes against a local fake S3 endpoint ([fakeStore]) and fails against a host nobody answers.
+ *
+ * The bite of the promotion is [aChangedSettingIsNotUsedUntilItsCheckPassesAndAFailingOneLeavesTheOldInUse]: had a
+ * write applied at once (as it did before), the store the backend resolves would be the typo right after the `PUT`.
  *
  * `%test` has no bundled-store hint, so `bundled: true` is the refused case here; the accepted one runs in the
  * profile that supplies a hint ([me.raddatz.veyq.core.blob.StoreOriginPresignSliceTest]). The H2 mem DB is
@@ -34,49 +43,138 @@ import java.util.UUID
 @QuarkusTest
 class InstanceStoreSliceTest {
 
+    @Inject
+    lateinit var settings: StoreSettings
+
+    private lateinit var fakeStore: HttpServer
+
     @BeforeEach
     fun seed() {
         ensureUser(OWNER_ID, "store-owner@example.com", "SERVER_OWNER")
         ensureUser(MEMBER_ID, "store-member@example.com", "MEMBER")
         StoreSettingFixtures.clear()
+        fakeStore = startFakeStore()
     }
 
     @AfterEach
-    fun forget() = StoreSettingFixtures.clear()
+    fun forget() {
+        fakeStore.stop(0)
+        StoreSettingFixtures.clear()
+    }
 
     @Test
     fun aFreshInstanceReadsNoSettingAndNoCheck() {
         owner().`when`().get("/api/instance/store").then().statusCode(200)
             .body("setting", nullValue())
             .body("lastCheck", nullValue())
+            .body("pending", nullValue())
             .body("bundledAvailable", equalTo(false))
     }
 
     @Test
-    fun anS3StoreIsStoredAndItsSecretIsNeverReturned() {
+    fun anS3StoreIsSavedAsPendingAndItsSecretIsNeverReturned() {
         val body = put(s3("secret-never-returned")).statusCode(200)
-            .body("setting.bundled", equalTo(false))
-            .body("setting.type", equalTo("S3"))
-            .body("setting.bucket", equalTo("veyq-blobs"))
-            .body("setting.accessKey", equalTo("AKIAEXAMPLE"))
-            .body("setting.secretKeySet", equalTo(true))
-            .body("setting.garageAdminTokenSet", equalTo(false))
-            .body("setting.unreadable.size()", equalTo(0))
-            .body("lastCheck", nullValue())
+            .body("setting", nullValue()) // not in use before it passed its check
+            .body("pending.setting.bundled", equalTo(false))
+            .body("pending.setting.type", equalTo("S3"))
+            .body("pending.setting.bucket", equalTo("veyq-blobs"))
+            .body("pending.setting.accessKey", equalTo("AKIAEXAMPLE"))
+            .body("pending.setting.secretKeySet", equalTo(true))
+            .body("pending.setting.garageAdminTokenSet", equalTo(false))
+            .body("pending.setting.unreadable.size()", equalTo(0))
+            .body("pending.lastCheck", nullValue())
             .extract().asString()
 
         assertEquals(false, body.contains("secret-never-returned"), "the write response echoed the secret")
         owner().`when`().get("/api/instance/store").then().statusCode(200)
             .body(not(containsString("secret-never-returned")))
-            .body("setting.secretKeySet", equalTo(true))
+            .body("pending.setting.secretKeySet", equalTo(true))
+        assertEquals(StoreResolution.NotSet, settings.current(), "a setting that never passed its check is not used")
     }
 
     @Test
     fun aSecretOmittedOnALaterWriteKeepsTheStoredOne() {
         put(s3("first-secret")).statusCode(200)
         put(s3(null, accessKey = "AKIANEW")).statusCode(200)
-            .body("setting.accessKey", equalTo("AKIANEW"))
-            .body("setting.secretKeySet", equalTo(true))
+            .body("pending.setting.accessKey", equalTo("AKIANEW"))
+            .body("pending.setting.secretKeySet", equalTo(true))
+    }
+
+    @Test
+    fun aPassingCheckPutsThePendingSettingInUse() {
+        put(s3("s", endpoint = fakeEndpoint())).statusCode(200)
+
+        owner().`when`().post("/api/instance/store/check").then().statusCode(200).body("passed", equalTo(true))
+
+        owner().`when`().get("/api/instance/store").then().statusCode(200)
+            .body("setting.endpoint", equalTo(fakeEndpoint()))
+            .body("lastCheck.passed", equalTo(true))
+            .body("pending", nullValue())
+        assertEquals(fakeEndpoint(), resolvedEndpoint())
+        createTenant().statusCode(201)
+    }
+
+    @Test
+    fun aChangedSettingIsNotUsedUntilItsCheckPassesAndAFailingOneLeavesTheOldInUse() {
+        seedABlob() // a running instance: its media are stored, so only credentials and the public endpoint may change
+        put(s3("s", endpoint = fakeEndpoint())).statusCode(200)
+        owner().`when`().post("/api/instance/store/check").then().statusCode(200).body("passed", equalTo(true))
+
+        // A typo in the public endpoint — a change still allowed once media are stored (decision 6), so the case a
+        // running instance meets: saved, and nothing the instance does follows it.
+        put(s3(null, endpoint = fakeEndpoint(), publicEndpoint = TYPO_ENDPOINT)).statusCode(200)
+            .body("setting.publicEndpoint", nullValue())
+            .body("lastCheck.passed", equalTo(true))
+            .body("pending.setting.publicEndpoint", equalTo(TYPO_ENDPOINT))
+        assertEquals(null, resolvedPublicEndpoint(), "the write switched the store in use")
+
+        // Its check fails at the probe: it stays pending, the store in use and the tenant gate are untouched.
+        owner().`when`().post("/api/instance/store/check").then().statusCode(200).body("passed", equalTo(false))
+        owner().`when`().get("/api/instance/store").then()
+            .body("setting.publicEndpoint", nullValue())
+            .body("lastCheck.passed", equalTo(true))
+            .body("pending.setting.publicEndpoint", equalTo(TYPO_ENDPOINT))
+            .body("pending.lastCheck.passed", equalTo(false))
+        assertEquals(null, resolvedPublicEndpoint(), "a failed check switched the store in use")
+        assertEquals(fakeEndpoint(), resolvedEndpoint())
+        createTenant().statusCode(201)
+    }
+
+    @Test
+    fun aPendingSettingCanBeDiscardedAndTheOneInUseStays() {
+        put(s3("s", endpoint = fakeEndpoint())).statusCode(200)
+        owner().`when`().post("/api/instance/store/check").then().statusCode(200).body("passed", equalTo(true))
+        put(s3(null, endpoint = fakeEndpoint(), publicEndpoint = TYPO_ENDPOINT)).statusCode(200).body("pending", not(nullValue()))
+
+        owner().`when`().delete("/api/instance/store/pending").then().statusCode(200)
+            .body("pending", nullValue())
+            .body("setting.publicEndpoint", nullValue())
+        owner().`when`().delete("/api/instance/store/pending").then().statusCode(200).body("pending", nullValue()) // idempotent
+        assertEquals(fakeEndpoint(), resolvedEndpoint())
+    }
+
+    @Test
+    fun aWriteEqualToTheSettingInUseLeavesNothingPending() {
+        put(s3("s", endpoint = fakeEndpoint())).statusCode(200)
+        owner().`when`().post("/api/instance/store/check").then().statusCode(200).body("passed", equalTo(true))
+
+        // The form sent back as it stands, the secret omitted: nothing changed, so nothing waits for a check.
+        put(s3(null, endpoint = fakeEndpoint())).statusCode(200).body("pending", nullValue())
+    }
+
+    @Test
+    fun withNothingPendingTheCheckRunsAgainstTheSettingInUse() {
+        put(s3("s", endpoint = fakeEndpoint())).statusCode(200)
+        owner().`when`().post("/api/instance/store/check").then().statusCode(200).body("passed", equalTo(true))
+        fakeStore.stop(0) // the store in use stops answering
+
+        owner().`when`().post("/api/instance/store/check").then().statusCode(200).body("passed", equalTo(false))
+        owner().`when`().get("/api/instance/store").then()
+            .body("setting.endpoint", equalTo(fakeEndpoint()))
+            .body("lastCheck.passed", equalTo(false))
+            .body("pending", nullValue())
+        createTenant().statusCode(409).body("code", equalTo("store_not_ready"))
+        fakeStore = startFakeStore() // for forget()
     }
 
     @Test
@@ -107,7 +205,7 @@ class InstanceStoreSliceTest {
 
     @Test
     fun aCheckAgainstAStoreNobodyAnswersFailsAtItsStepAndIsRemembered() {
-        put(s3("s", endpoint = "http://store-check.invalid:9000")).statusCode(200)
+        put(s3("s", endpoint = TYPO_ENDPOINT)).statusCode(200)
 
         owner().`when`().post("/api/instance/store/check").then().statusCode(200)
             .body("passed", equalTo(false))
@@ -116,46 +214,48 @@ class InstanceStoreSliceTest {
             .body("steps[3].outcome", equalTo("SKIPPED"))
 
         owner().`when`().get("/api/instance/store").then().statusCode(200)
-            .body("lastCheck.passed", equalTo(false))
-            .body("lastCheck.steps[2].outcome", equalTo("FAILED"))
+            .body("setting", nullValue())
+            .body("pending.lastCheck.passed", equalTo(false))
+            .body("pending.lastCheck.steps[2].outcome", equalTo("FAILED"))
     }
 
     @Test
-    fun changingTheSettingClearsItsCheck() {
-        put(s3("s")).statusCode(200)
-        StoreSettingFixtures.recordPassedCheck()
-        owner().`when`().get("/api/instance/store").then().body("lastCheck.passed", equalTo(true))
+    fun changingTheSettingStartsThePendingOneUnchecked() {
+        put(s3("s", endpoint = fakeEndpoint())).statusCode(200)
+        owner().`when`().post("/api/instance/store/check").then().statusCode(200).body("passed", equalTo(true))
 
-        put(s3(null, accessKey = "AKIAOTHER")).statusCode(200).body("lastCheck", nullValue())
+        put(s3(null, endpoint = fakeEndpoint(), accessKey = "AKIAOTHER")).statusCode(200)
+            .body("lastCheck.passed", equalTo(true))
+            .body("pending.lastCheck", nullValue())
     }
 
     @Test
     fun onceBlobsExistTheStoreIsFixedButItsCredentialsAreNot() {
+        StoreSettingFixtures.chooseS3(endpoint = "https://s3.eu-central-1.example.com", bucket = "veyq-blobs") // in use
         seedABlob()
-        put(s3("s")).statusCode(200) // no earlier store to differ from
 
-        put(s3(null, bucket = "another-bucket")).statusCode(409).body("code", equalTo("store_in_use"))
-        put(s3(null, endpoint = "https://s3.elsewhere.example.com")).statusCode(409).body("code", equalTo("store_in_use"))
+        put(s3("s", bucket = "another-bucket")).statusCode(409).body("code", equalTo("store_in_use"))
+        put(s3("s", endpoint = "https://s3.elsewhere.example.com")).statusCode(409).body("code", equalTo("store_in_use"))
         // the refusal stored nothing
-        owner().`when`().get("/api/instance/store").then().body("setting.bucket", equalTo("veyq-blobs"))
+        owner().`when`().get("/api/instance/store").then().body("setting.bucket", equalTo("veyq-blobs")).body("pending", nullValue())
         // credentials, and the public endpoint, may change
         put(s3("rotated-secret", accessKey = "AKIAROTATED", publicEndpoint = "https://files.example.com")).statusCode(200)
-            .body("setting.accessKey", equalTo("AKIAROTATED"))
-            .body("setting.publicEndpoint", equalTo("https://files.example.com"))
+            .body("pending.setting.accessKey", equalTo("AKIAROTATED"))
+            .body("pending.setting.publicEndpoint", equalTo("https://files.example.com"))
     }
 
     @Test
-    fun aTenantIsRefusedUntilTheCurrentSettingHasPassedItsCheck() {
-        put(s3("s")).statusCode(200) // a store is set, and has not been checked
+    fun aTenantIsRefusedUntilASettingHasPassedItsCheck() {
+        put(s3("s", endpoint = fakeEndpoint())).statusCode(200) // saved, not checked: nothing in use
 
         createTenant().statusCode(409).body("code", equalTo("store_not_ready"))
 
-        StoreSettingFixtures.recordPassedCheck()
+        owner().`when`().post("/api/instance/store/check").then().statusCode(200).body("passed", equalTo(true))
         createTenant().statusCode(201)
 
-        // a changed setting has not been checked: the precondition is gone again
-        put(s3(null, accessKey = "AKIAAGAIN")).statusCode(200)
-        createTenant().statusCode(409).body("code", equalTo("store_not_ready"))
+        // a changed setting waits beside the checked one, so the precondition holds
+        put(s3(null, endpoint = fakeEndpoint(), accessKey = "AKIAAGAIN")).statusCode(200)
+        createTenant().statusCode(201)
     }
 
     @Test
@@ -166,6 +266,8 @@ class InstanceStoreSliceTest {
             .`when`().put("/api/instance/store").then().statusCode(403)
         givenAdminChannel().header("Authorization", bearer(MEMBER_ID))
             .`when`().post("/api/instance/store/check").then().statusCode(403)
+        givenAdminChannel().header("Authorization", bearer(MEMBER_ID))
+            .`when`().delete("/api/instance/store/pending").then().statusCode(403)
     }
 
     // --- helpers ---
@@ -193,6 +295,38 @@ class InstanceStoreSliceTest {
         append("}")
     }
 
+    private fun resolvedEndpoint(): String? = (settings.current() as? StoreResolution.Ready)?.connection?.endpoint
+
+    private fun resolvedPublicEndpoint(): String? = (settings.current() as? StoreResolution.Ready)?.connection?.publicEndpoint
+
+    private fun fakeEndpoint() = "http://127.0.0.1:${fakeStore.address.port}"
+
+    /**
+     * A local S3 endpoint that answers what the check asks: the bucket exists, the probe object is stored and read
+     * back, and a preflight is answered with its own origin. It ignores the signature — the check's steps are
+     * StoreCheckTest's; here only "this store passes" matters.
+     */
+    private fun startFakeStore(): HttpServer {
+        val objects = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+        return HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { ex ->
+                val path = ex.requestURI.path
+                var body = ByteArray(0)
+                val status = when (ex.requestMethod) {
+                    "HEAD" -> 200
+                    "PUT" -> { objects[path] = ex.requestBody.readBytes(); 200 }
+                    "GET" -> objects[path]?.let { body = it; 200 } ?: 404
+                    "OPTIONS" -> { ex.requestHeaders.getFirst("Origin")?.let { ex.responseHeaders.add("Access-Control-Allow-Origin", it) }; 200 }
+                    else -> 400
+                }
+                ex.sendResponseHeaders(status, if (ex.requestMethod == "HEAD" || body.isEmpty()) -1 else body.size.toLong())
+                if (body.isNotEmpty()) ex.responseBody.use { it.write(body) }
+                ex.close()
+            }
+            start()
+        }
+    }
+
     private fun seedABlob() {
         val m = seedMemberScope()
         val node = seedNode(m.scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY)
@@ -200,6 +334,9 @@ class InstanceStoreSliceTest {
     }
 
     private companion object {
+        /** A host nobody answers (`.invalid` never resolves): a typo's store. */
+        const val TYPO_ENDPOINT = "http://store-check.invalid:9000"
+
         /** Distinct from every other class's: the `%test` H2 mem DB is JVM-shared across test classes. */
         const val OWNER_ID = "7c2e9b14-5d3a-4f68-8a01-e4b6d9c3f527"
         const val MEMBER_ID = "1b8d4f06-9e27-4c53-b3a8-5f0e2d7a6c91"

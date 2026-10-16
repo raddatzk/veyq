@@ -23,9 +23,8 @@ export default defineConfig({
       // Use is task-first in nine sections (cr-use-area-content): platform first (Getting started, Your account,
       // Spaces), then the applications (Memories, Depot), then Sharing, the space owner's tasks, Privacy and Help.
       // A section's pages live in its folder (getting-started/, account/, spaces/, memories/, depot/, sharing/,
-      // space-owners/, privacy/, help/), so a page's URL says its section; the one moved wiki page still at the
-      // root (sharing) waits for the phase that splits it. A section with no page yet is left out rather than
-      // shown empty. The labels are the web client's own words in each language.
+      // space-owners/, privacy/, help/), so a page's URL says its section. A section with no page yet is left out
+      // rather than shown empty. The labels are the web client's own words in each language.
       sidebar: [
         {
           label: 'Use',
@@ -112,16 +111,44 @@ export default defineConfig({
                 },
               ],
             },
-            { label: 'Sharing', translations: { de: 'Teilen' }, items: ['sharing'] },
+            {
+              label: 'Sharing',
+              translations: { de: 'Teilen' },
+              items: [
+                'sharing',
+                'sharing/create-a-link',
+                'sharing/request-uploads',
+                'sharing/manage-links',
+                'sharing/what-guests-see',
+              ],
+            },
             {
               label: 'For space owners',
               translations: { de: 'Wenn dir der Bereich gehört' },
-              items: ['space-owners/who-gets-into-your-space'],
+              items: [
+                'space-owners/who-gets-into-your-space',
+                'space-owners/terms',
+                'space-owners/email',
+                'space-owners/storage',
+                'space-owners/capabilities',
+              ],
             },
             {
               label: 'Privacy',
               translations: { de: 'Privatsphäre' },
               items: ['privacy/is-my-data-safe', 'privacy/quantum-computers-and-your-photos'],
+            },
+            {
+              label: 'Help',
+              translations: { de: 'Hilfe' },
+              items: [
+                'help',
+                'help/lost-emergency-kit',
+                'help/lost-device',
+                'help/key-changed',
+                'help/start-a-list-over',
+                'help/offline',
+              ],
             },
           ],
         },
@@ -157,6 +184,7 @@ export default defineConfig({
             'security/cryptography',
             'security/key-hierarchy',
             'security/protocols',
+            'security/how-veyq-is-tested',
             'security/verify-it-yourself',
             'security/known-limitations',
             'security/roadmap',

@@ -61,6 +61,23 @@ trap is splitting the two: recovery once chose the relay by the Host but looked 
 whole instance, which put other tenants' links in a tenant owner's mail relay
 ([ADR 0054](../decisions/0054-password-recovery-two-factor-release.md) §4).
 
+**The header is not a trust boundary, so a client-written `X-Forwarded-Host` is accepted as it is.** The backend
+does not need the proxy to strip one. The client writes its `Host` too, and every tenant domain reaches the same
+backend, so a request routed as tenant A that names tenant B in `X-Forwarded-Host` gets what a request sent to
+B's domain gets. Three things keep that harmless:
+- Sessions are account-global and carry no tenant ([ADR 0004](../decisions/0004-session-tokens.md)), so naming a
+  tenant gives a request no credential it did not have.
+- Every content operation is membership-gated by scope access, whatever the Host says.
+- The suspension gate reads the same rule as the handlers, so acting as a suspended tenant means resolving to it,
+  and that request is refused.
+
+The residual lies outside the backend. A gateway policy that an operator adds per tenant host (an IP allow-list,
+an auth layer, a host-scoped rate limit) can be bypassed by naming that tenant from another tenant's route. So
+can a shared cache in front that keys on `Host`. veyq's own projection never builds either: one route per
+domain, the same annotations on every route. On Compose the bundled Traefik also drops a client's
+`X-Forwarded-Host`. On Helm the operator's gateway may pass it through, and that is the case this paragraph
+covers.
+
 Every scope — including personal and group — lives **within** a tenant, so there is no host-less scope:
 each is reached under its tenant's host like everything else. This is what keeps share links on the
 correct domain (see the scope kinds above and [ADR 0002](../decisions/0002-personal-scope-per-tenant.md)).

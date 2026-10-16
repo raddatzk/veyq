@@ -184,7 +184,7 @@ export async function pollPublicShare(
 }
 
 // --- accountless terms gate (uc.sharing.share-accept, ADR 0035 §3) ----------
-// The accountless half of the two-tier terms gate. The terms are the operator's PUBLIC policy (never E2EE); a
+// The accountless half of the two-tier terms gate. The terms are the space owner's PUBLIC policy (never E2EE); a
 // visitor accepts them before viewing/contributing, and acceptance is stored **client-side only** (localStorage
 // keyed per tenant) so the server records NOTHING about the accountless visitor. This is an **operational gate,
 // not enforcement**: a localStorage flag is bypassable by an accountless visitor (devtools / a fresh profile /
@@ -195,7 +195,7 @@ const TERMS_ACCEPTED_KEY_PREFIX = 'veyq:terms-accepted:'
 /**
  * The owning tenant's public terms for a share (a guest read keyed on the non-enumerable `shareId`, so unknown/
  * disabled/expired is the same non-enumerable 404 as `resolvePublicShare` — no `tenantId` existence oracle). Returns
- * `{ tenantId, termsVersion, terms }`; `termsVersion` 0 means the operator published no terms (the client never
+ * `{ tenantId, termsRevision, terms }`; `termsRevision` 0 means the space owner published no terms (the client never
  * gates). No auth, no password — terms are public.
  */
 export async function fetchShareTerms(shareId: string): Promise<ShareTerms> {
@@ -210,8 +210,8 @@ export function pickShareTerms(terms: ShareTerms, locale: string): string {
   return pickLocaleText(map, locale)
 }
 
-/** The locally-recorded accepted terms version for a tenant (0 if never accepted or the store is unreadable). */
-export function acceptedTermsVersion(tenantId: string): number {
+/** The locally-recorded accepted terms revision for a tenant (0 if never accepted or the store is unreadable). */
+export function acceptedTermsRevision(tenantId: string): number {
   try {
     const raw = localStorage.getItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`)
     const n = raw ? Number.parseInt(raw, 10) : 0
@@ -221,12 +221,12 @@ export function acceptedTermsVersion(tenantId: string): number {
   }
 }
 
-/** Record acceptance of [version] for [tenantId] — client-only (localStorage), keyed per tenant so accepting on
+/** Record acceptance of [revision] for [tenantId] — client-only (localStorage), keyed per tenant so accepting on
  *  one share of a tenant clears the gate on **every** share of that tenant. A storage failure is swallowed: the
  *  gate is operational, not enforcement, so it must never throw and block a visitor from viewing. */
-export function recordTermsAccepted(tenantId: string, version: number): void {
+export function recordTermsAccepted(tenantId: string, revision: number): void {
   try {
-    localStorage.setItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`, String(version))
+    localStorage.setItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`, String(revision))
   } catch {
     /* private-mode / quota — an unrecordable acceptance still clears the in-memory gate for this session */
   }

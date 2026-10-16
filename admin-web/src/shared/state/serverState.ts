@@ -6,4 +6,7 @@ export const serverState = reactive({
   setupCompleted: null as boolean | null,
   // true when the instance couldn't be reached on boot — surfaces a clear error instead of a blank screen.
   unreachable: false,
+  // The breached-password check's range API as the instance's manifest carries it (`core.breached-password`'s
+  // `serviceUrl`, ADR 0088 decision 7), or null while the instance runs no check. Read once at boot.
+  breachRangeUrl: null as string | null,
 })

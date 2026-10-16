@@ -49,3 +49,14 @@ acceptanceCriteria:
       web:
         unit: [src/features/tasks/grantDeliveryWorker.test.ts, src/features/spaces/useMemberDirectory.test.ts]
         e2e: [src/features/tasks/scopeRotation.e2e.test.ts]
+  - id: admission-refusal-lasts-as-long-as-its-admission
+    # ADR 0020 move 6 § What a refusal lasts: an `admission_unverified` decline excludes that key-holder's account
+    # from the job, so it may record only a judgment of the target. A tag ahead of the worker's epoch (its key is
+    # behind) pauses instead; a rotation that re-tags the admission lifts the declines its old tag earned, never an
+    # `identity_changed` one, never a dropped admission's.
+    text: A member is never kept from the group key by a key-holder whose own key was behind their admission, and a rotation that re-admits them makes every key-holder judge their admission again.
+    coverage:
+      backend:
+        integration: [ScopesSliceTest.aReTaggedAdmissionLiftsTheAdmissionDeclinesItsOldTagEarned]
+      web:
+        unit: [src/features/tasks/grantDeliveryWorker.test.ts]

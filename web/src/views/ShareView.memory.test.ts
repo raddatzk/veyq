@@ -100,8 +100,8 @@ const keys = { memory: v1.randomBytes(32), chapter: v1.randomBytes(32) }
 const GUEST: GuestIdentity = { identityId: 'id-g', contributorToken: 'tok-g', displayName: 'Oma' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementVersion: 0 }
-  return { id, parentId, kind, epoch: 0, placementVersion: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
+  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A link rooted at the Memory "Rom 2026" (its chapter "Tag 1" below), or — `chapterRoot` — at the chapter itself. */
 function head(role: ShareRole, o: { chapterRoot?: boolean } = {}): PublicShareHead {
@@ -134,7 +134,7 @@ beforeEach(async () => {
   authenticatedCalls.length = 0
   vi.clearAllMocks()
   setViewMode('grid')
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
   stubApi(publicShareMediaApi, { listShareMedia: { media: [row('m-1', MEMORY), row('c-1', CHAPTER)], identities: [] } })
   // A tier read (the lightbox's preview) is refused: the stage shows its error, the download stays.
   fakeApi(publicSharesApi, { resolveShareBlob: async () => { throw new Error('no store here') } })
@@ -352,7 +352,7 @@ describe('a note that asks to be accepted before the share opens', () => {
   }
 
   it('comes after the tenant terms', async () => {
-    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: 't-1', termsVersion: 1, terms: { en: 'Be nice.' } })
+    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: 't-1', termsRevision: 1, terms: { en: 'Be nice.' } })
     const w = await mountPage(asks(head(ShareRole.Read)))
     expect(w.text()).toContain(t('share.termsTitle'))
     expect(gate(w).exists(), 'not before the terms').toBe(false)

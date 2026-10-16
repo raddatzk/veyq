@@ -38,16 +38,10 @@
 - **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Enforced on the client, so it
   holds against an active operator only on a client that operator does not serve.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** **Planned — not in the app today.** You can already compare a member's safety number on their profile and
-mark them "verified". What does not exist yet is a setting that refuses to share with anyone you have not verified:
-how it could protect a space other members also share into is still open.
-
-**DE —** **Geplant — heute noch nicht in der App.** Die Sicherheitsnummer eines Mitglieds kannst du schon heute in
-seinem Profil vergleichen und es als „verifiziert" markieren. Was es noch nicht gibt, ist eine Einstellung, die das
-Teilen mit allen verweigert, die du nicht verifiziert hast: Wie sie einen Raum schützen soll, in den auch andere
-Mitglieder teilen, ist noch offen.
+Planned: you could refuse to share with anyone you have not verified, so an unchecked key never receives your content;
+today you can verify people, but nothing enforces it.
 
 ## Related
 

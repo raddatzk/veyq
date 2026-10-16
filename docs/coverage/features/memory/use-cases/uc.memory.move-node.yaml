@@ -2,17 +2,17 @@ useCase: uc.memory.move-node
 feature: memory
 title: Move a node — put a folder, a Memory, a chapter, a file or a drop box somewhere else in the tree
 # Built by inbox #358 (web only; the placement endpoints, rules and refusals are ADR 0080's and were already server-side).
-# Every web criterion was bitten: the capability rows, the browser's places and blocks (the folder browser replaced the
+# Every web criterion was bitten: the rights rows, the browser's places and blocks (the folder browser replaced the
 # list of every destination, owner decision 2026-10-14), the door per session, the refusal mapping,
 # the dialog's question, pre-check, re-read and undo, the epoch rule on the wire, the hosts' wiring and the placement
 # hints each turned their own tests red when sabotaged. The live run (`src/core/node/move.e2e.test.ts`: a moved subtree
 # decrypts; a guest's folder moved out takes no more files) is written but has not run in CI, so it is cited nowhere here.
 acceptanceCriteria:
   - id: a-move-keeps-the-subtree-readable
-    text: "A move re-wraps only the moved node's own content key under the destination's key (K_SC at the current epoch at the scope root, the destination node's key elsewhere) and re-seals its name and slug token there at the next placement version, stating the version it was built on; every key below opens as before. A move into or out of the scope root seals at the current epoch, a move between two folders at the node's stored one."
+    text: "A move re-wraps only the moved node's own content key under the destination's key (K_SC at the current epoch at the scope root, the destination node's key elsewhere) and re-seals its name and slug token there at the next placement revision, stating the revision it was built on; every key below opens as before. A move into or out of the scope root seals at the current epoch, a move between two folders at the node's stored one."
     coverage:
       backend:
-        integration: [NodePlacementCoreSliceTest.theEpochIsCheckedOnlyAtTheRoot, NodePlacementCoreSliceTest.theListingServesThePlacementVersionAndOnlyAPlacementMovesIt, NodePlacementRaceCoreSliceTest.twoMovesOfOneNodeToDifferentParentsLandOne]
+        integration: [NodePlacementCoreSliceTest.theEpochIsCheckedOnlyAtTheRoot, NodePlacementCoreSliceTest.theListingServesThePlacementRevisionAndOnlyAPlacementMovesIt, NodePlacementRaceCoreSliceTest.twoMovesOfOneNodeToDifferentParentsLandOne]
       web:
         unit: [src/core/node/move.wire.test.ts, src/core/node/tree.wire.test.ts]
 
@@ -30,7 +30,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, DropBoxSliceTest.aGuestOfALinkAboveMovesNothingOutOfADropBox]
       web:
-        unit: [src/core/access.test.ts, src/features/depot/capabilities.test.ts, src/features/memory/capabilities.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/depot/levelRows.test.ts, src/features/depot/levelRows.guest.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memory/components/MemoryDetail.caps.test.ts, src/core/node/LevelView.test.ts]
+        unit: [src/core/access.test.ts, src/features/depot/rights.test.ts, src/features/memory/rights.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/depot/levelRows.test.ts, src/features/depot/levelRows.guest.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memory/components/MemoryDetail.rights.test.ts, src/core/node/LevelView.test.ts]
 
   - id: refusals-are-explained-by-name
     text: "Each server refusal of a move is said by its code — slug_taken, illegal_structure, illegal_scope, stale_epoch, share_not_contributable, a gone node or link, rate_limited, scope_deleting — and a lost race (stale_placement, after the write's own bounded re-read) re-reads the tree so the next attempt builds on the node as it now is; a guest who declines to name itself sends nothing and is told nothing."

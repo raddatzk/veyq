@@ -49,7 +49,11 @@ sequenceDiagram
 
 - **A1 — already set up:** after setup completes, the setup endpoint is **closed**; there is no second
   bootstrap.
-- **E1 — kit not confirmed:** if the Emergency Kit backup is not confirmed, setup is **not finalized**.
+- **E1 — kit not confirmed:** if the Emergency Kit backup is not confirmed, setup is **not finalized**: nothing
+  has been sent, so a tab closed on the kit screen leaves setup open and the keys minted for it are simply gone.
+  The owner is posted only after the confirmation (admin-web's `SetupView`, the order web's member registration
+  already keeps). If someone else finishes setup in between, the post is refused (A1) and the console says the
+  kit belongs to no account.
 
 ## Setup state
 
@@ -94,20 +98,10 @@ stateDiagram-v2
   tenant (see [ADR 0002](../../../decisions/0002-personal-scope-per-tenant.md)); at first-run no tenant
   exists, so the owner has no personal scope until they create or join one.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you set up your own veyq server, the very first account — yours — is created with
-end-to-end encryption from the start. Your keys are generated **on your device**, never on the server,
-and during setup you save an **Emergency Kit** (your email and your Secret Key). From that first
-moment, content can only be read with your keys — not by the server, not even by you acting as the
-operator. Setup runs **once**: after your account exists, the setup page closes for good.
-
-**DE —** Wenn du deinen eigenen veyq-Server einrichtest, wird der allererste Account — deiner — von
-Anfang an Ende-zu-Ende-verschlüsselt angelegt. Deine Schlüssel entstehen **auf deinem Gerät**, nie auf
-dem Server, und beim Einrichten sicherst du ein **Notfall-Kit** (deine E-Mail-Adresse und
-deinen Secret Key). Ab diesem Moment lassen sich Inhalte nur mit deinen Schlüsseln lesen — nicht
-durch den Server und auch nicht durch dich als Betreiber. Die Einrichtung läuft **einmal**: Sobald dein
-Account existiert, schließt sich die Setup-Seite endgültig.
+The very first account on a new server is end-to-end encrypted from its first moment, with keys made on your own
+device and an Emergency Kit you keep, and setup can never run again.
 
 ## Related
 

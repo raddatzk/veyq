@@ -55,8 +55,8 @@ beforeEach(() => {
 
 // sealedName is null here (no K_tenant in the test → names stay sealed) so the rows show the @username.
 const MEMBERS: ScopeMember[] = [
-  { userId: 'u-own', username: 'owner', avatarVersion: 0, sealedName: null, email: 'owner@x.z', role: 'OWNER', identityPublicKey: 'AA==', hasGrant: true },
-  { userId: 'u-pend', username: 'partner', avatarVersion: 0, sealedName: null, email: 'partner@x.z', role: 'MEMBER', identityPublicKey: 'BB==', hasGrant: false },
+  { userId: 'u-own', username: 'owner', avatarRevision: 0, sealedName: null, email: 'owner@x.z', role: 'OWNER', identityPublicKey: 'AA==', hasGrant: true },
+  { userId: 'u-pend', username: 'partner', avatarRevision: 0, sealedName: null, email: 'partner@x.z', role: 'MEMBER', identityPublicKey: 'BB==', hasGrant: false },
 ]
 
 const PENDING: PendingMemberInvite[] = [{ inviteId: 'inv-1', email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date() }]

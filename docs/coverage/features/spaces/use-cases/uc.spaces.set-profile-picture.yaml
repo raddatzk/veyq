@@ -21,23 +21,23 @@ acceptanceCriteria:
     gaps:
       - surface: web
         reason: The crop, the canvas bake and the WebP encode are the pixel stage, which the dialog test mocks; no test runs them in a real browser, so that a 256 px crop really fits the 16 KiB budget on real photos is unverified.
-  - id: set-clear-and-version
-    text: "`PUT` overwrites and bumps `avatar_version`, `DELETE` clears and bumps and is idempotent; the directory and profile carry only the integer `avatarVersion`, never the bytes."
+  - id: set-clear-and-revision
+    text: "`PUT` overwrites and bumps `avatar_revision`, `DELETE` clears and bumps and is idempotent; the directory and profile carry only the integer `avatarRevision`, never the bytes."
     coverage:
       backend:
         integration:
-          - MemberAvatarSliceTest.anOverwriteBumpsTheVersionAndReplacesTheBlob
+          - MemberAvatarSliceTest.anOverwriteBumpsTheRevisionAndReplacesTheBlob
           - MemberAvatarSliceTest.clearRemovesThePictureBumpsAndIsIdempotent
-          - MemberAvatarSliceTest.overlappingSetsEachBumpTheVersionOnce
-          - MemberAvatarSliceTest.theDirectoryCarriesTheVersionAndNeverTheBytes
+          - MemberAvatarSliceTest.overlappingSetsEachBumpTheRevisionOnce
+          - MemberAvatarSliceTest.theDirectoryCarriesTheRevisionAndNeverTheBytes
       web:
         unit:
           - src/features/account/profile/useNameAndPicture.test.ts
           - src/features/account/profile/ProfilePanel.test.ts
           - src/core/people/avatarCache.test.ts
           - src/core/people/directory.test.ts
-  - id: members-only-versioned-read
-    text: "`getMemberAvatar` is tenant-membership gated (a non-member gets the ADR 0042 404), answers 200 with an `ETag` from the version, 304 on a matching `If-None-Match`, 404 `avatar_not_found` when none; no share endpoint serves it."
+  - id: members-only-revision-tagged-read
+    text: "`getMemberAvatar` is tenant-membership gated (a non-member gets the ADR 0042 404), answers 200 with an `ETag` from the revision, 304 on a matching `If-None-Match`, 404 `avatar_not_found` when none; no share endpoint serves it."
     coverage:
       backend:
         integration:
@@ -64,7 +64,7 @@ acceptanceCriteria:
     coverage:
       backend:
         integration:
-          - MemberAvatarSliceTest.theOwnerJoinSealsThePictureAtAcceptWithVersionOne
+          - MemberAvatarSliceTest.theOwnerJoinSealsThePictureAtAcceptWithRevisionOne
           - MemberAvatarSliceTest.registerAndAcceptSealsThePictureOnlyOnTheOwnerPath
           - MemberAvatarSliceTest.anOversizeOrMalformedAvatarOnAnAcceptBodyIs400AndSpendsNothing
       web:
@@ -72,14 +72,14 @@ acceptanceCriteria:
           - src/views/TenantJoinView.avatar.test.ts
           - src/features/account/profile/FinishProfilePrompt.test.ts
   - id: removal-clears-picture-keeps-handle
-    text: Removing a member from the tenant clears `sealed_avatar` and bumps the version but keeps the username.
+    text: Removing a member from the tenant clears `sealed_avatar` and bumps the revision but keeps the username.
     coverage:
       backend:
         integration:
           - MemberAvatarSliceTest.removingAMemberClearsThePictureAndKeepsTheHandle
           - MemberAvatarSliceTest.aRemovalOfAMemberWithNoPictureLeavesNothingToServe
   - id: operator-blind-probe
-    text: The three operations and the new accept fields are covered by the operator-blind probe, and the operator sees only an opaque constant-size blob and a version counter.
+    text: The three operations and the new accept fields are covered by the operator-blind probe, and the operator sees only an opaque constant-size blob and a revision counter.
     coverage:
       backend:
         integration:

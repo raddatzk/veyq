@@ -46,7 +46,7 @@
   `{type: image/jpeg}`. Lives in a scope.
 - **media** — the link record attaching a blob to a **node** (a Memory or a Chapter), carrying any per-use
   metadata under `K_node` — capture time, GPS and the resolved place name in the listed tier (written whole by
-  any member, so every write carries the tier's `metaVersion` and a stale one answers `409 stale_version` —
+  any member, so every write carries the tier's `metaRevision` and a stale one answers `409 stale_revision` —
   [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)), and the camera/editor bundle in the
   lazy EXIF tier. The original's **filename and media type** are not in either tier: they are the original's blob
   meta (above), read synchronously from the listing — the name is shown in the detail panel and is the original's

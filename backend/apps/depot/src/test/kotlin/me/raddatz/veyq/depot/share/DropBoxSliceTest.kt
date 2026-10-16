@@ -71,7 +71,7 @@ class DropBoxSliceTest {
         val anna = dropLink(t)
         val ben = secondGuest(anna)
 
-        val annaFolder = ensure(anna).statusCode(200).body("created", equalTo(true)).body("placementVersion", equalTo(0))
+        val annaFolder = ensure(anna).statusCode(200).body("created", equalTo(true)).body("placementRevision", equalTo(0))
             .extract().path<String>("nodeId")
         // the same identity again — another minted id, another wrap: the stored folder answers, nothing new is made
         ensure(anna, wrap = "b3RoZXItd3JhcA==").statusCode(200).body("created", equalTo(false))
@@ -162,7 +162,7 @@ class DropBoxSliceTest {
         GuestTreeShare.place(above, file, parentId = t.folder).statusCode(422).body("code", equalTo("illegal_structure"))
         assertEquals(t.dropBox to folder, parentOf(folder) to parentOf(file), "nothing moved")
         assertEquals(identityOf(guest), tx { NodeEntity.findById(folder)!!.shareIdentityId }, "the folder keeps its identity")
-        assertEquals(0L to 0L, tx { NodeEntity.findById(folder)!!.placementVersion to NodeEntity.findById(file)!!.placementVersion })
+        assertEquals(0L to 0L, tx { NodeEntity.findById(folder)!!.placementRevision to NodeEntity.findById(file)!!.placementRevision })
 
         // control: the same guest moves a plain file of the subtree, and a member moves the guest's folder out
         val plain = UUID.randomUUID().toString()
@@ -171,6 +171,35 @@ class DropBoxSliceTest {
         GuestTreeShare.create(above, t.folder, NodeEntity.FOLDER, nodeId = sub).statusCode(201)
         GuestTreeShare.place(above, plain, parentId = sub).statusCode(204)
         memberPlace(t, folder, to = t.other, version = 0).statusCode(204)
+    }
+
+    /** A drop box's guest takes back an empty file of its own folder (a refused or given-up upload,
+     *  `abandonShareNode`) — never one in another guest's folder, never its folder, never a file it completed; and a
+     *  guest of a link above takes back nothing inside a drop box. */
+    @Test
+    fun aDropBoxGuestTakesBackAnEmptyFileOfItsOwnFolderOnly() {
+        val t = tree()
+        val anna = dropLink(t)
+        val ben = secondGuest(anna)
+        val annaFolder = ensure(anna).statusCode(200).extract().path<String>("nodeId")
+        val benFolder = ensure(ben).statusCode(200).extract().path<String>("nodeId")
+        val annas = UUID.randomUUID().toString()
+        GuestTreeShare.create(anna, annaFolder, DepotNodeKinds.FILE, nodeId = annas).statusCode(201)
+        val bens = UUID.randomUUID().toString()
+        GuestTreeShare.create(ben, benFolder, DepotNodeKinds.FILE, nodeId = bens).statusCode(201)
+        val sent = guestFile(anna, annaFolder)
+        val above = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
+
+        GuestTreeShare.abandon(anna, bens).statusCode(404).body("code", equalTo("node_not_found"))
+        GuestTreeShare.abandon(anna, annaFolder).statusCode(422).body("code", equalTo("illegal_structure"))
+        GuestTreeShare.abandon(anna, sent).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        GuestTreeShare.abandon(above, bens).statusCode(422).body("code", equalTo("illegal_structure"))
+        assertEquals(setOf(annas, sent), childrenOf(annaFolder).toSet(), "a refusal writes nothing")
+        assertEquals(listOf(bens), childrenOf(benFolder))
+
+        // Control: its own empty file goes, the folder and the sent file stay.
+        GuestTreeShare.abandon(anna, annas).statusCode(204)
+        assertEquals(listOf(sent), childrenOf(annaFolder))
     }
 
     @Test
@@ -307,7 +336,7 @@ class DropBoxSliceTest {
 
     private fun memberPlace(t: Tree, node: String, to: String, version: Long): ValidatableResponse =
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
-            .body("""{"parentId":"$to","encryptedName":"cGxhY2Vk","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementVersion":$version}""")
+            .body("""{"parentId":"$to","encryptedName":"cGxhY2Vk","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":$version}""")
             .`when`().patch("/api/scopes/${t.scopeId}/nodes/$node").then()
 
     private fun share(userId: String, nodeId: String, role: String): ValidatableResponse {

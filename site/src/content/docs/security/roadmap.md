@@ -180,18 +180,19 @@ server refuses the matching action with `422 capability_disabled`. Seven entries
 gate is tested. **The Server Owner switches them** in the admin console and its CLI, for the whole instance, with no
 restart, and each entry describes itself in English and German. A device switch acts at once: the server withholds
 what those devices unlock with, without deleting it, so their members need the password and the Secret Key until it
-is switched back on. The [Moderation](/veyq/run/moderation/#switch-a-feature-off) page says how. There is no
+is switched back on. A share switch acts at once too: every existing link of its kind answers a guest as a link that
+never existed, until it is switched back on. The [Capabilities](/veyq/run/capabilities/) page says how. There is no
 tenant-owner switch.
 
-**The gap.** A tenant owner who does not want password-less devices in their tenant has no way to say so, and a
-Server Owner who switches public links off still has every existing link working.
+**The gap.** A tenant owner who does not want password-less devices or public links in their tenant has no way to
+say so.
 
 **Design state.** Decided in ADR 0088; the instance level is built, the rest is not. The ids are a tree, a child is
 off when its own id or any parent's is, and a tenant owner can only narrow what the operator allows. A switch exists
 only where the server can see what it refuses and a rule says what happens to what already exists: share switches act
 at once, on existing links too, and a feature switch refuses only what is new. A tenant owner would switch in the
-tenant settings. Declaring switches in the deployment files is a later topic. Share switches reaching existing links
-and requirements such as a password on every link are each part of this and not built either.
+tenant settings. Declaring switches in the deployment files is a later topic. Requirements such as a password on
+every link are part of this and not built either.
 
 | Entry | State | What the server sees |
 |---|---|---|
@@ -199,8 +200,9 @@ and requirements such as a password on every link are each part of this and not 
 | `core.group-space` | built | creating a group space |
 | `core.remember-device`, with `.passwordless` | built | a device wrap, or a device-key wrap |
 | `core.device-linking` | built | the pairing endpoints |
-| `core.personal-space`, `core.member-invites`, `core.breached-password` | planned | a scope kind; the invite endpoint; a call to an external service |
-| `memories.chapters`, `.places`, `.map`, `.download-originals` and the application's own share entries | planned | a node kind; external services; a blob role |
+| `core.breached-password`, `memories.places`, `memories.map` | built | an external service's origin in the served CSP, and its configured address |
+| `core.personal-space`, `core.member-invites` | planned | a scope kind; the invite endpoint |
+| `memories.chapters`, `.download-originals` and the application's own share entries | planned | a node kind; a blob role |
 | `depot.*` share entries | planned | the application's node kind and blob role |
 | `memories.journal`, `memories.gpx` | planned | a node kind or blob role the server would then see |
 | `core.self-registration`, `memories.faces` | idea | a new endpoint; a role for a face index |

@@ -81,6 +81,10 @@ range API whether the password appears in known breaches. The fences apply like 
   instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
   The docs site says so, in [Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) and
   [Change your password](../../site/src/content/docs/account/change-password.mdx). A one-sentence note under the password field says what leaves the device.
+- **Its address is the Server Owner's** ([ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+  decision 7): the register entry `core.breached-password` carries it, a new instance starts with the HIBP range API, a
+  mirror can replace it, and an instance with none configured (or the entry switched off) runs no check at all, sends
+  nothing and says nothing.
 - **It advises, never gates.** A hit shows a warning that needs an **explicit "Use it anyway"** before the dialog
   submits that password; the result is not stored. **A check that could not run** (offline, firewalled, the admin
   container with no route out) **does not stop anything**: the dialog submits and says, in one line, that the
@@ -113,7 +117,7 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   shares; scope and membership (who belongs to which tenant/group); a member's **per-tenant username,
   identity public key, and group-add-consent flag** — visible to, and effectively **enumerable by**, any
   fellow tenant member (anyone can create a group to run the member-resolve, [ADR 0014](../decisions/0014-group-scopes-and-governance.md) §5);
-  whether a member **has a profile picture** and how often it changed (`avatar_version`; the picture itself is a
+  whether a member **has a profile picture** and how often it changed (`avatar_revision`; the picture itself is a
   constant-size sealed blob, [ADR 0084](../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md); contract, crypto and backend built, the web client not yet);
   server timestamps (created, changed, trashed, last rotated) for ordering — stored as written, to the second (a
   medium's change time and a node's creation time to the millisecond — the latter served to members on the node
@@ -132,8 +136,8 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   medium's trash time and a medium's change time (cursor + purge; set at attach, so also its creation), a bucket's
   creation (order), a share's creation (served), `email_confirmed_at` (its presence shows "confirmed"; the time is
   [ADR 0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md) Decision 1's record,
-  kept by decision, inbox #398), and when a member accepted each terms version they
-  accepted (a history, one row per version — audit evidence, served by no API — below); sizes; job-queue and op-log offsets; presence facts; a media
+  kept by decision, inbox #398), and when a member accepted each terms revision they
+  accepted (a history, one row per revision — audit evidence, served by no API — below); sizes; job-queue and op-log offsets; presence facts; a media
   item's **trash state** (a trashed flag + who trashed it + when, until the scheduled purge); a media item's
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
@@ -145,10 +149,10 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
   node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
-  space); the tenant's **terms text + `terms_version`** (the operator's *public* policy,
-  served to everyone incl. pre-auth) and a member's **accepted terms versions** and **when they accepted each**
-  (one row per version, never overwritten; `accepted_at`, the server's own clock, written once per version — audit
-  evidence for a dispute, also about a superseded version; restored by owner decision 2026-10-09 after #318 had
+  space); the tenant's **terms text + `terms_revision`** (the space owner's *public* policy,
+  served to everyone incl. pre-auth) and a member's **accepted terms revisions** and **when they accepted each**
+  (one row per revision, never overwritten; `accepted_at`, the server's own clock, written once per revision — audit
+  evidence for a dispute, also about a superseded revision; restored by owner decision 2026-10-09 after #318 had
   dropped it, kept as a history since #402) (acceptance metadata, like membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
   (plaintext — the login identifier and the source of the deterministic auth salt,
   [ADR 0003](../decisions/0003-operator-blind-password-auth.md); named here to close a prior inventory gap); a
@@ -363,8 +367,8 @@ server-blind token makes this work without the server ever seeing a name:
   documented future upgrade.
 - **The accountless-visitor terms acceptance is client-only** ([ADR 0035](../decisions/0035-server-terms-of-service.md)
   §3, [uc.sharing.share-accept](../features/sharing/use-cases/uc.sharing.share-accept.md)): before viewing, an
-  account-less share visitor accepts the operator's tenant terms, but the acceptance lives in **localStorage** (per
-  tenant + version) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
+  account-less share visitor accepts the space's terms, but the acceptance lives in **localStorage** (per
+  tenant + revision) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
   terms are **public operational content** (no blindness cost), served from the *share* via a guest
   `GET /api/shares/{shareId}/terms` keyed on the non-enumerable `shareId` (no `tenantId` existence oracle). It is an
   **operational gate, not enforcement** — bypassable by an accountless visitor and no legal-non-repudiation record;
@@ -469,7 +473,7 @@ operator lacks can.
 | links a device of its own while the user links theirs | **Cannot** — the QR carries a secret the relay never receives, and both relayed values carry a MAC under the channel key it derives: the trusted device seals only to an answer whose MAC verifies, the new device opens only an envelope whose MAC does. What remains is an attacker who also reads the QR (below) | [ADR 0059](../decisions/0059-device-linking.md) §11 |
 | gets a removed group member re-granted by the removal's own rotation | **Cannot** — the removal and its rotation are one request, and the remover's client wraps the new epoch only to the members it picked from, minus the one it removes, however the server lists them afterwards. A rotation *queued* to another key-holder is outside this row (below) | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4 |
 | has a member seal new content under an epoch the removed member holds | **Cannot** once the member's device has held the newer epoch — each device remembers the highest epoch it has held for each scope and opens no older grant, whatever current epoch the operator pairs it with. A member who never learnt of the newer epoch is the fork (below) | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 6 |
-| wipes or rolls back the pin store or the device register, so a detected key change becomes a silent first use | **Cannot** on a device that has held one — it keeps the highest version it opened and refuses an older store, a missing one and one that does not open, before every read and every write; a linked device starts from its linker's marks. A device with no mark yet trusts the first store it is served (below). **Residual, consented:** a refused document's one way back is the user starting it over (empty) after a confirmation that names the cost — no server response reaches that write, but a server that keeps a document refused can wait for the user to press it; the downgrade is visible and consented now, not silent. On a client the operator serves, it could ship a client that writes the empty store itself ([ADR 0026](../decisions/0026-client-trust-tiers.md)) | [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7 |
+| wipes or rolls back the pin store or the device register, so a detected key change becomes a silent first use | **Cannot** on a device that has held one — it keeps the highest revision it opened and refuses an older store, a missing one and one that does not open, before every read and every write; a linked device starts from its linker's marks. A device with no mark yet trusts the first store it is served (below). **Residual, consented:** a refused document's one way back is the user starting it over (empty) after a confirmation that names the cost — no server response reaches that write, but a server that keeps a document refused can wait for the user to press it; the downgrade is visible and consented now, not silent. On a client the operator serves, it could ship a client that writes the empty store itself ([ADR 0026](../decisions/0026-client-trust-tiers.md)) | [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7 |
 | reads an uploader link's Memory — with the link and a dump; no activity needed | **Cannot** — an uploader link carries no wrap of `K_node`, only the Memory's drop public key; its guests seal under keys of their own, wrapped to that drop key, so the link plus a dump reads what its guests uploaded and nothing else — no other media, no sibling share's key | [ADR 0031](../decisions/0031-uploader-public-share.md) point 7 |
 | reads another share's password, private label or note, or rebuilds its link — with a viewer or contributor link of the same Memory and a dump | **Cannot** — each share's recovery copy of `K_share` is sealed under the scope key `K_SC`, which no share link carries; the link's `K_node` and its own `K_share` open none of it. A member removed from a group may still hold the old links (below) | [ADR 0036](../decisions/0036-editable-share-note-recoverable-share-key.md) point 4 |
 | makes every unlock derive near-forever | **Cannot** — a client derives only with the profile it writes | [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5 |

@@ -1,6 +1,8 @@
 package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.sharing.ShareEntity
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -61,5 +63,25 @@ class ShareAccessPolicyTest {
     @Test
     fun unknownRoleCannotUpload() {
         assertFalse(ShareAccessPolicy.canUpload(unknownRole), "an unrecognised role may not contribute (deny-by-default)")
+    }
+
+    // --- capabilityFor: the register leaf a role's link needs, to be published and to be served (ADR 0088) ----------
+
+    @Test
+    fun eachRoleNeedsItsOwnLeaf() {
+        assertEquals(CapabilityIds.PUBLIC_SHARES, ShareAccessPolicy.capabilityFor(ShareEntity.READ), "a READ link needs public links")
+        assertEquals(
+            CapabilityIds.PUBLIC_SHARES_CONTRIBUTE, ShareAccessPolicy.capabilityFor(ShareEntity.READ_WRITE),
+            "a READ_WRITE link needs the contribute leaf (and, through the AND along the path, its parent)",
+        )
+        assertEquals(
+            CapabilityIds.PUBLIC_SHARES_DROP_BOX, ShareAccessPolicy.capabilityFor(ShareEntity.WRITE_ONLY),
+            "a WRITE_ONLY link needs the drop-box leaf (and, through the AND along the path, its parent)",
+        )
+    }
+
+    @Test
+    fun anUnknownRoleNeedsTheParent() {
+        assertEquals(CapabilityIds.PUBLIC_SHARES, ShareAccessPolicy.capabilityFor(unknownRole), "an unrecognised role is switched by public links")
     }
 }

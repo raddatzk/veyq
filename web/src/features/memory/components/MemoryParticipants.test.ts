@@ -2,9 +2,9 @@
 // The Memory header's participants row (ADR 0083, uc.memory.participants): overlapping avatars (three at most, past three
 // the third slot is "+N"), a popover with every name that links a member to their profile, a greyed "Former member"
 // without a link, nothing at all with no participant, the picker (checkboxes, search) over the scope's CURRENT members -
-// opened through the exposed `openPicker` the header's "Participants" action calls (`MemoryDetail.caps.test.ts` clicks
+// opened through the exposed `openPicker` the header's "Participants" action calls (`MemoryDetail.rights.test.ts` clicks
 // that action) - and - the member / guest difference - nothing at all (not even a request for the members) where the
-// capability is off.
+// right is off.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -38,7 +38,7 @@ const E = 'ffffffff-0000-4000-8000-000000000006'
 const people = vi.mocked(loadScopePeople)
 
 const nodeWith = (ids: string[], version = 3) =>
-  treeNode({ id: NODE, wrappedMeta: ids.length ? sealNodeMeta(key, { scopeId: SCOPE, nodeId: NODE }, { v: 1, participants: { userIds: ids } }) : null, metaVersion: version })
+  treeNode({ id: NODE, wrappedMeta: ids.length ? sealNodeMeta(key, { scopeId: SCOPE, nodeId: NODE }, { v: 1, participants: { userIds: ids } }) : null, metaRevision: version })
 
 const mounted: VueWrapper[] = []
 async function mountRow(opts: { ids?: string[]; show?: boolean; write?: NodeMetaDoor | null } = {}) {
@@ -211,11 +211,11 @@ describe('MemoryParticipants: the picker', () => {
 
     expect(updateNode).toHaveBeenCalledTimes(1)
     const sent = updateNode.mock.calls[0][0].updateNodeRequest
-    expect(sent.metaVersion).toBe(3)
+    expect(sent.metaRevision).toBe(3)
     const stored = unsealNodeMeta(key, { scopeId: SCOPE, nodeId: NODE }, sent.wrappedMeta).participants
     expect(stored).toEqual({ userIds: [A, C, B] }) // opaque ids only, in the order picked - no name anywhere
     expect(Object.keys(stored as object)).toEqual(['userIds'])
-    expect(w.emitted('metaUpdated')?.[0]?.[0]).toMatchObject({ nodeId: NODE, metaVersion: 4 })
+    expect(w.emitted('metaUpdated')?.[0]?.[0]).toMatchObject({ nodeId: NODE, metaRevision: 4 })
   })
 
   it('the search narrows the members by name, ignoring case and diacritics, and says so when nothing matches', async () => {
@@ -298,7 +298,7 @@ describe('MemoryParticipants: the picker', () => {
   })
 })
 
-describe('MemoryParticipants: no capability (a share guest)', () => {
+describe('MemoryParticipants: no right (a share guest)', () => {
   it('renders nothing and reads nothing, even though the sealed meta carries participants', async () => {
     const w = await mountRow({ ids: [A, B], show: false })
     expect(w.element.parentElement?.textContent ?? '').toBe('')

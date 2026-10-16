@@ -147,10 +147,10 @@ const en = {
   // ADR 0075 point 5: a scope owner's switch-off of every public link in the space — the group and tenant panels
   spaceLinks: {
     title: 'Links',
-    sub: 'Public links to Memories in this space. If one may have reached the wrong hands, turn them all off at once.',
+    sub: 'Every public link in this space — to folders, files, drop boxes and Memories. If one may have reached the wrong hands, turn them all off at once.',
     revokeAll: 'Turn off every link',
     revokeAllConfirm:
-      'Turn off every public link to a Memory in this space? They stop working at once and come back only as new links — each link’s owner renews the ones still needed. Guests keep the photos they added.',
+      'Turn off every public link in this space? They stop working at once and come back only as new links — each link’s owner renews the ones still needed. Guests keep what they added.',
     revokedAll: 'No link was on. | One link turned off. | {count} links turned off.',
     revokeAllFailed: 'The links could not be turned off. Please try again.',
   },
@@ -324,6 +324,9 @@ const en = {
     // a session and can only ever reach the server's wrap (ADR 0058).
     deviceRemembered: 'This device stays signed in — it opens your memories without a password.',
     deviceTrusted: 'This device is trusted — it unlocks with just your password.',
+    // Instead of the two lines above while that tier's switch is off (ADR 0088 decision 5): the wrap is withheld, not
+    // deleted, so this device keeps its key and opens with it again once the switch is back on.
+    deviceHeldBack: 'This server does not allow remembered devices right now, so unlocking here needs your Secret Key. This device keeps its saved key: once the server allows it again, it unlocks as before.',
     deviceUntrusted: 'This device has no saved unlock — you’ll need your Secret Key here.',
     deviceUnsupported: 'This browser can’t remember a device, so unlocking here always needs your Secret Key.',
     untrustConfirmTitle: 'Forget this device?',
@@ -488,6 +491,7 @@ const en = {
     noNameYet: 'Your name can be added once your access to the shared space is ready.',
     consentGroupAdd: 'Ask before adding me to groups',
     consentGroupAddHint: 'When on, being added to a group becomes an invitation you accept or decline — nothing reaches you until you say yes. Applies in every space you belong to.',
+    consentRequiredHere: 'This space asks everyone before adding them to a group, whatever this setting says.',
     save: 'Save profile',
     saved: 'Profile updated.',
     saveFailed: 'Could not save your profile. Please try again.',
@@ -721,7 +725,7 @@ const en = {
   terms: {
     navTitle: 'Terms',
     editorSub: 'The terms members of this space agree to. Set them per language; a change asks everyone to agree again.',
-    version: 'Version {version}',
+    revision: 'Revision {revision}',
     loading: 'Loading terms…',
     loadFailed: 'Couldn’t load the terms.',
     readonlyNote: 'Only the space owner can edit these terms.',
@@ -735,7 +739,7 @@ const en = {
     preview: 'Preview',
     noneSet: 'No terms have been set yet.',
     save: 'Save terms',
-    saved: 'Saved — now version {version}.',
+    saved: 'Saved — now revision {revision}.',
     saveFailed: 'Couldn’t save the terms.',
     notOwner: 'Only the space owner can edit the terms.',
     gateTitle: 'Please review the terms',
@@ -743,7 +747,7 @@ const en = {
     accept: 'I agree',
     accepted: 'Thanks — you’re all set.',
     acceptFailed: 'Couldn’t record your agreement. Please try again.',
-    versionChanged: 'The terms just changed — please review the updated version and agree again.',
+    revisionChanged: 'The terms just changed — please review the updated revision and agree again.',
     signOut: 'Sign out',
   },
   mail: {
@@ -785,6 +789,29 @@ const en = {
     kekUnavailable: 'This server can’t encrypt secrets yet, so the password can’t be saved. An administrator needs to configure the encryption key (KEK) first.',
     keyMismatch: 'The server’s encryption key has changed, so your saved SMTP password can’t be decrypted anymore. Re-enter the password below to save it under the new key, or restore the original key file. Until then, no invitations or password-reset emails can be sent.',
   },
+  tenantCapabilities: {
+    navTitle: 'Capabilities',
+    sub: 'Decide what this space offers, such as public links or groups. You can only switch off what the server allows; switching back on brings everything back as it was, because nothing is deleted.',
+    loading: 'Loading capabilities…',
+    loadFailed: 'Couldn’t load the capabilities.',
+    notOwner: 'Only the space owner can switch capabilities.',
+    on: 'On',
+    off: 'Off',
+    offThrough: 'Off through “{parent}”',
+    serverOff: 'Off for the whole server',
+    switchOn: 'Switch on',
+    switchOff: 'Switch off',
+    confirmTitle: 'Switch off “{title}”?',
+    switchFailed: 'Couldn’t switch “{title}”.',
+    requirementNone: 'Not required',
+    requirementOn: 'Required',
+    requirementDays: '{days} days',
+    requirementByServer: '{value}, set by the server',
+    requirementSet: 'Require',
+    requirementClear: 'Clear',
+    requirementConfirmTitle: 'Require “{title}”?',
+    requirementInvalidDays: 'Enter a number of days from 1 to 3650.',
+  },
   storage: {
     navTitle: 'Storage',
     editorSub: 'How much this space keeps on the server, and how much any one upload link may add. Each link that lets people add photos gets the same limit, counted separately — so a link that travels further than you meant can’t fill the server.',
@@ -795,7 +822,7 @@ const en = {
     quota: 'Storage limit of this space:',
     quotaHint: 'Set by whoever runs this server. Nothing more can be uploaded once it is reached; trash counts until it is emptied.',
     linkLimit: 'Limit per upload link (GiB)',
-    linkLimitHint: 'Applies to every upload link from its next upload on; nothing already stored is removed. Trash counts until it is emptied. 0 switches uploads through links off.',
+    linkLimitHint: 'Applies to every upload link from its next upload on; nothing already stored is removed. Trash counts until its items are removed for good. 0 switches uploads through links off.',
     invalidLimit: 'Enter a number of GiB, 0 or more.',
     save: 'Save storage settings',
     saved: 'Storage settings saved.',
@@ -1008,8 +1035,8 @@ const en = {
     // Deleting a level's selection (`core/node/components/DeleteNodesDialog.vue`, inbox #421): ONE question naming how many and
     // of which kinds (`{kinds}`: the kinds' `nounWithArticle`, joined), one summary naming each node that was not deleted.
     deleteMany: {
-      title: 'Delete {count} items',
-      copy: '{count} selected items move to the trash, with everything inside them. The selection includes {kinds}. You can restore them from there until they are removed for good.',
+      title: 'Delete {count} item | Delete {count} items',
+      copy: '{count} selected item moves to the trash, with everything inside it. The selection includes {kinds}. You can restore it from there until it is removed for good. | {count} selected items move to the trash, with everything inside them. The selection includes {kinds}. You can restore them from there until they are removed for good.',
       moved: '{count} item moved to the trash. | {count} items moved to the trash.',
       noneDeleted: 'Nothing was deleted.',
       notDeleted: 'Not deleted:',
@@ -1075,7 +1102,7 @@ const en = {
         kind: 'This place can’t hold it.',
       },
       many: {
-        title: 'Copy {count} items',
+        title: 'Copy {count} item | Copy {count} items',
         hint: 'Open the place the copies should go to and choose “Copy here”. Everything inside them is copied along.',
         copied: '{count} copied to “{to}”.',
         here: {
@@ -1116,7 +1143,7 @@ const en = {
       // summary says how many moved and names each one that did not, with its reason (`reason`: a sentence of `here`,
       // `nameTakenThere` or `refused`). `{names}` is a list of `quoted` names.
       many: {
-        title: 'Move {count} items',
+        title: 'Move {count} item | Move {count} items',
         empty: 'No place here can take them.',
         hint: 'Open the place they should go to and choose “Move here”. Everything inside them moves along and stays readable.',
         here: {
@@ -1259,6 +1286,7 @@ const en = {
       consentBody:
         'To place a Memory on a map, tiles load from a third-party map provider and the framed point is sent to a third-party geocoder for a name — both client-direct, never through the veyq server, which stays blind. You can turn this off anytime.',
       consentEnable: 'Enable maps',
+      mapsNotOffered: 'This server shows no maps.',
     },
     map: {
       empty: 'No places yet',
@@ -1663,6 +1691,9 @@ const en = {
     noteGateAccept: 'Accept and continue',
     passwordSection: 'Password protection',
     passwordSectionHint: 'Open the share only with a password ({min}+ characters).',
+    passwordRequiredByRule: 'This space requires a password on every link.',
+    expiryRequiredByRule: 'This space requires every link to end within {days} days of the day it is made.',
+    requirementRefused: 'This space now requires a password or an end date on every link. Add what is missing and try again.',
     expirySection: 'Expiry date',
     expirySectionHint: 'The link stops working after this date.',
     expiryLabel: 'Expires on',
@@ -1780,7 +1811,7 @@ const en = {
       intro: 'Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.',
       roleContributor: 'View + contribute',
       roleViewerHint: 'Anyone with the link can look at this folder and everything in it, read-only.',
-      roleContributorHint: 'Anyone with the link can look, add folders and content, rename or move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history.',
+      roleContributorHint: 'Anyone with the link can look, add folders and content, move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history.',
       deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.',
       reissueWarning: 'This makes a new link and deletes the old one. Hand out the new link.',
       // A guest's tree operations on a folder link (core/sharing/guestTree.ts, guestTreeErrorMessageKey).
@@ -1911,9 +1942,9 @@ const de: typeof en = {
     awaitingAccess: 'Wartet auf Zugang',
     compromiseRotation: {
       stalled:
-        'Ein Mitglied hat sein Konto neu abgesichert, und dieser Raum braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann sein alter Schlüssel Neues hier noch lesen.',
+        'Ein Mitglied hat sein Konto neu abgesichert, und dieser Bereich braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann sein alter Schlüssel Neues hier noch lesen.',
       failed:
-        'Ein Mitglied hat sein Konto neu abgesichert, und das neue Schloss dieses Raums ließ sich wiederholt nicht einbauen — sein alter Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt dein Gerät.',
+        'Ein Mitglied hat sein Konto neu abgesichert, und das neue Schloss dieses Bereichs ließ sich wiederholt nicht einbauen — sein alter Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt dein Gerät.',
     },
     compromiseRotationMark: 'Braucht ein neues Schloss',
     compromiseRotationRequeue: 'Neu anstoßen',
@@ -1927,7 +1958,7 @@ const de: typeof en = {
     revokeConfirm: 'Diese Einladung zurückziehen? Ihr Link wird ungültig.',
     inviteSentTo: 'Einladung an {email} gesendet.',
     inviteSentIntro: 'Die Einladung ging per E-Mail an die Person — sie ist an sie adressiert, du musst also nichts weitergeben. Der Zugang zum geteilten Bereich wird automatisch ausgeliefert, sobald sie beitritt und ein Mitglied online ist.',
-    mailUnavailable: 'Dieser Bereich kann noch keine E-Mails senden, deshalb können keine Einladungen rausgehen. Eine Besitzerin oder ein Besitzer muss E-Mail in den Bereichseinstellungen einrichten.',
+    mailUnavailable: 'Dieser Bereich kann noch keine E-Mails senden, deshalb können keine Einladungen rausgehen. Eine besitzende Person muss E-Mail in den Bereichseinstellungen einrichten.',
     mailSendFailed: 'Die E-Mail konnte nicht gesendet werden, deshalb wurde keine Einladung erstellt. Bitte versuch es noch einmal.',
     inviteRateLimited: 'Gerade zu viele Einladungen — bitte versuch es gleich noch einmal.',
     inviteRevoked: 'Einladung zurückgezogen.',
@@ -1942,10 +1973,10 @@ const de: typeof en = {
   },
   spaceLinks: {
     title: 'Links',
-    sub: 'Öffentliche Links zu Erinnerungen in diesem Bereich. Wenn einer in falsche Hände geraten sein könnte, schalte alle auf einmal ab.',
+    sub: 'Jeder öffentliche Link in diesem Bereich — zu Ordnern, Dateien, Briefkästen und Erinnerungen. Wenn einer in falsche Hände geraten sein könnte, schalte alle auf einmal ab.',
     revokeAll: 'Alle Links abschalten',
     revokeAllConfirm:
-      'Alle öffentlichen Links zu Erinnerungen in diesem Bereich abschalten? Sie funktionieren sofort nicht mehr und kommen nur als neue Links zurück — wem ein Link gehört, erneuert die noch benötigten. Gäste behalten die Fotos, die sie hinzugefügt haben.',
+      'Alle öffentlichen Links in diesem Bereich abschalten? Sie funktionieren sofort nicht mehr und kommen nur als neue Links zurück — wem ein Link gehört, erneuert die noch benötigten. Gäste behalten, was sie hinzugefügt haben.',
     revokedAll: 'Es war kein Link aktiv. | Ein Link abgeschaltet. | {count} Links abgeschaltet.',
     revokeAllFailed: 'Die Links konnten nicht abgeschaltet werden. Bitte erneut versuchen.',
   },
@@ -2031,7 +2062,7 @@ const de: typeof en = {
     factNeedsKit:
       'Du brauchst dein Notfall-Kit. Das ist Absicht: es ist das Einzige, was die Person nicht hat, und genau das hindert sie daran, das mit dir zu machen.',
     factSharedSpaces:
-      'In geteilten Räumen muss jemand anderes bestätigen, dass du wirklich du bist — am besten, indem ihr die Sicherheitsnummer am Telefon vergleicht — bevor du wieder drin bist. In einem Raum, den nur du besitzt, mach vorher jemanden zur Besitzerin oder zum Besitzer, sonst kann dich dort niemand wieder hineinlassen.',
+      'In geteilten Bereichen muss jemand anderes bestätigen, dass du wirklich du bist — am besten, indem ihr die Sicherheitsnummer am Telefon vergleicht — bevor du wieder drin bist. In einem Bereich, den nur du besitzt, mach vorher jemanden zur besitzenden Person, sonst kann dich dort niemand wieder hineinlassen.',
     gateNotCold:
       'Dieses Gerät wurde ohne deinen Secret Key entsperrt, deshalb wird er hier abgefragt. Genau diese Prüfung hindert jemanden, der in dein Konto gekommen ist, daran, das mit dir zu tun — dein Notfall-Kit hat die Person nicht.',
     passwordLabel: 'Dein Passwort',
@@ -2040,7 +2071,7 @@ const de: typeof en = {
     action: 'Schlüssel ersetzen',
     confirmTitle: 'Schlüssel wirklich ersetzen?',
     confirmBody:
-      'Deine Räume bekommen neue Schlösser und alle anderen Geräte werden abgemeldet. Was diese Person schon gesehen hat, bleibt bei ihr. Das lässt sich nicht rückgängig machen.',
+      'Deine Bereiche bekommen neue Schlösser und alle anderen Geräte werden abgemeldet. Was diese Person schon gesehen hat, bleibt bei ihr. Das lässt sich nicht rückgängig machen.',
     errorLocked: 'Entsperre auf diesem Gerät zuerst deine Erinnerungen, dann kannst du die Schlüssel ersetzen.',
     errorCredential: 'Passwort oder Secret Key haben nicht gepasst. Es wurde nichts geändert.',
     errorNoFloor:
@@ -2055,19 +2086,19 @@ const de: typeof en = {
       failed: 'Nicht gesichert',
     },
     statusHint: {
-      secured: 'Dieser Raum hat ein neues Schloss, und nur deine neuen Schlüssel öffnen es.',
-      failed: 'Dieser Raum hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
+      secured: 'Dieser Bereich hat ein neues Schloss, und nur deine neuen Schlüssel öffnen es.',
+      failed: 'Dieser Bereich hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
     },
-    queuedTitle: 'Geteilte Räume',
+    queuedTitle: 'Geteilte Bereiche',
     queuedHint: {
       waiting:
-        'Eine andere besitzende Person dieses Raums baut das neue Schloss ein, sobald sie veyq das nächste Mal öffnet. Bis dahin kann der alte Schlüssel Neues hier noch lesen. Und jemand hier muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
+        'Eine andere besitzende Person dieses Bereichs baut das neue Schloss ein, sobald sie veyq das nächste Mal öffnet. Bis dahin kann der alte Schlüssel Neues hier noch lesen. Und jemand hier muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
       stalled:
-        'Hier kann niemand das neue Schloss einbauen: Es gibt keine andere besitzende Person mehr, die es kann. Mach jemand anderen zur besitzenden Person dieses Raums. Bis dahin kann der alte Schlüssel Neues hier noch lesen.',
+        'Hier kann niemand das neue Schloss einbauen: Es gibt keine andere besitzende Person mehr, die es kann. Mach jemand anderen zur besitzenden Person dieses Bereichs. Bis dahin kann der alte Schlüssel Neues hier noch lesen.',
       secured:
-        'Dieser Raum hat ein neues Schloss, das der alte Schlüssel nicht öffnet. Jemand hier muss noch bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
+        'Dieser Bereich hat ein neues Schloss, das der alte Schlüssel nicht öffnet. Jemand hier muss noch bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
       failed:
-        'Das neue Schloss ließ sich wiederholt nicht einbauen, deshalb hat dieser Raum noch sein altes — der alte Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt eine andere besitzende Person.',
+        'Das neue Schloss ließ sich wiederholt nicht einbauen, deshalb hat dieser Bereich noch sein altes — der alte Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt eine andere besitzende Person.',
     },
     groupNameUnavailable: 'Gruppe (Name nicht verfügbar, bis du wieder aufgenommen bist)',
     groupNameLastSeen: 'Name, wie ihn dieses Gerät zuletzt gesehen hat — er kann sich geändert haben.',
@@ -2119,6 +2150,7 @@ const de: typeof en = {
     // nie die `escalate*`-Texte oben, die eine Sitzung beenden und nur den Server-Wrap erreichen (ADR 0058).
     deviceRemembered: 'Dieses Gerät bleibt angemeldet — es öffnet deine Erinnerungen ohne Passwort.',
     deviceTrusted: 'Diesem Gerät wird vertraut — es entsperrt allein mit deinem Passwort.',
+    deviceHeldBack: 'Dieser Server lässt gemerkte Geräte gerade nicht zu, darum brauchst du zum Entsperren hier deinen Secret Key. Dieses Gerät behält seinen gespeicherten Schlüssel: Sobald der Server es wieder zulässt, entsperrt es wie zuvor.',
     deviceUntrusted: 'Dieses Gerät hat keinen gespeicherten Zugang — du brauchst hier deinen Secret Key.',
     deviceUnsupported: 'Dieser Browser kann sich kein Gerät merken; zum Entsperren brauchst du hier immer deinen Secret Key.',
     untrustConfirmTitle: 'Dieses Gerät vergessen?',
@@ -2260,6 +2292,7 @@ const de: typeof en = {
     noNameYet: 'Deinen Namen kannst du hinterlegen, sobald dein Zugang zum geteilten Bereich bereit ist.',
     consentGroupAdd: 'Frag mich, bevor du mich zu Gruppen hinzufügst',
     consentGroupAddHint: 'Ist das an, wird das Hinzufügen zu einer Gruppe zu einer Einladung, die du annimmst oder ablehnst — nichts erreicht dich, bevor du zustimmst. Gilt in jedem Bereich, zu dem du gehörst.',
+    consentRequiredHere: 'Dieser Bereich fragt alle, bevor sie zu einer Gruppe hinzugefügt werden, egal was diese Einstellung sagt.',
     save: 'Profil speichern',
     saved: 'Profil aktualisiert.',
     saveFailed: 'Profil konnte nicht gespeichert werden. Bitte erneut versuchen.',
@@ -2489,7 +2522,7 @@ const de: typeof en = {
   terms: {
     navTitle: 'Nutzungsbedingungen',
     editorSub: 'Die Bedingungen, denen Mitglieder dieses Bereichs zustimmen. Lege sie je Sprache fest; bei einer Änderung wird erneut um Zustimmung gebeten.',
-    version: 'Version {version}',
+    revision: 'Fassung {revision}',
     loading: 'Bedingungen werden geladen…',
     loadFailed: 'Bedingungen konnten nicht geladen werden.',
     readonlyNote: 'Nur die Besitzperson des Bereichs kann diese Bedingungen bearbeiten.',
@@ -2503,7 +2536,7 @@ const de: typeof en = {
     preview: 'Vorschau',
     noneSet: 'Es wurden noch keine Bedingungen festgelegt.',
     save: 'Bedingungen speichern',
-    saved: 'Gespeichert — jetzt Version {version}.',
+    saved: 'Gespeichert — jetzt Fassung {revision}.',
     saveFailed: 'Bedingungen konnten nicht gespeichert werden.',
     notOwner: 'Nur die Besitzperson des Bereichs kann die Bedingungen bearbeiten.',
     gateTitle: 'Bitte sieh dir die Bedingungen an',
@@ -2511,7 +2544,7 @@ const de: typeof en = {
     accept: 'Ich stimme zu',
     accepted: 'Danke — alles erledigt.',
     acceptFailed: 'Deine Zustimmung konnte nicht gespeichert werden. Bitte versuch es erneut.',
-    versionChanged: 'Die Bedingungen haben sich gerade geändert — bitte sieh dir die aktualisierte Fassung an und stimme erneut zu.',
+    revisionChanged: 'Die Bedingungen haben sich gerade geändert — bitte sieh dir die aktualisierte Fassung an und stimme erneut zu.',
     signOut: 'Abmelden',
   },
   mail: {
@@ -2553,6 +2586,29 @@ const de: typeof en = {
     kekUnavailable: 'Dieser Server kann noch keine Secrets verschlüsseln, daher lässt sich das Passwort nicht speichern. Ein Administrator muss zuerst den Verschlüsselungsschlüssel (KEK) konfigurieren.',
     keyMismatch: 'Der Verschlüsselungsschlüssel des Servers hat sich geändert, daher lässt sich dein gespeichertes SMTP-Passwort nicht mehr entschlüsseln. Gib das Passwort unten neu ein, um es unter dem neuen Schlüssel zu speichern, oder stelle die ursprüngliche Schlüsseldatei wieder her. Bis dahin lassen sich keine Einladungen und keine E-Mails zum Zurücksetzen des Passworts verschicken.',
   },
+  tenantCapabilities: {
+    navTitle: 'Funktionen',
+    sub: 'Lege fest, was dieser Bereich anbietet, etwa öffentliche Links oder Gruppen. Ausschalten lässt sich nur, was der Server erlaubt; wieder eingeschaltet ist alles wie zuvor, denn gelöscht wird nichts.',
+    loading: 'Funktionen werden geladen…',
+    loadFailed: 'Die Funktionen konnten nicht geladen werden.',
+    notOwner: 'Nur die Besitzperson des Bereichs kann Funktionen schalten.',
+    on: 'An',
+    off: 'Aus',
+    offThrough: 'Aus über „{parent}“',
+    serverOff: 'Für den ganzen Server aus',
+    switchOn: 'Einschalten',
+    switchOff: 'Ausschalten',
+    confirmTitle: '„{title}“ ausschalten?',
+    switchFailed: '„{title}“ konnte nicht geschaltet werden.',
+    requirementNone: 'Nicht verlangt',
+    requirementOn: 'Verlangt',
+    requirementDays: '{days} Tage',
+    requirementByServer: '{value}, vom Server festgelegt',
+    requirementSet: 'Verlangen',
+    requirementClear: 'Aufheben',
+    requirementConfirmTitle: '„{title}“ verlangen?',
+    requirementInvalidDays: 'Gib eine Zahl von Tagen zwischen 1 und 3650 ein.',
+  },
   storage: {
     navTitle: 'Speicher',
     editorSub: 'Wie viel dieser Bereich auf dem Server belegt und wie viel ein einzelner Upload-Link hinzufügen darf. Jeder Link, über den andere Fotos hinzufügen können, bekommt dieselbe Grenze, einzeln gezählt — so kann ein Link, der weiter wandert als gedacht, den Server nicht füllen.',
@@ -2563,7 +2619,7 @@ const de: typeof en = {
     quota: 'Speichergrenze dieses Bereichs:',
     quotaHint: 'Festgelegt von der Person, die diesen Server betreibt. Ist sie erreicht, kann nichts mehr hochgeladen werden; der Papierkorb zählt mit, bis er geleert ist.',
     linkLimit: 'Grenze pro Upload-Link (GiB)',
-    linkLimitHint: 'Gilt für jeden Upload-Link ab seinem nächsten Upload; bereits Gespeichertes wird nicht entfernt. Der Papierkorb zählt mit, bis er geleert ist. 0 schaltet Uploads über Links ab.',
+    linkLimitHint: 'Gilt für jeden Upload-Link ab seinem nächsten Upload; bereits Gespeichertes wird nicht entfernt. Der Papierkorb zählt mit, bis seine Einträge endgültig entfernt sind. 0 schaltet Uploads über Links ab.',
     invalidLimit: 'Gib eine Zahl in GiB ein, 0 oder mehr.',
     save: 'Speichereinstellungen speichern',
     saved: 'Speichereinstellungen gespeichert.',
@@ -2748,8 +2804,8 @@ const de: typeof en = {
     deleteCopy: '„{name}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.',
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
     deleteMany: {
-      title: '{count} Einträge löschen',
-      copy: '{count} ausgewählte Einträge kommen mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
+      title: '{count} Eintrag löschen | {count} Einträge löschen',
+      copy: '{count} ausgewählter Eintrag kommt mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich der Eintrag wiederherstellen, bis er endgültig entfernt wird. | {count} ausgewählte Einträge kommen mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
       moved: '{count} Eintrag liegt jetzt im Papierkorb. | {count} Einträge liegen jetzt im Papierkorb.',
       noneDeleted: 'Nichts wurde gelöscht.',
       notDeleted: 'Nicht gelöscht:',
@@ -2809,7 +2865,7 @@ const de: typeof en = {
         kind: 'Dieser Ort kann es nicht aufnehmen.',
       },
       many: {
-        title: '{count} Einträge kopieren',
+        title: '{count} Eintrag kopieren | {count} Einträge kopieren',
         hint: 'Öffne den Ort, an den die Kopien sollen, und wähle „Hierher kopieren“. Alles darin wird mitkopiert.',
         copied: '{count} nach „{to}“ kopiert.',
         here: {
@@ -2843,7 +2899,7 @@ const de: typeof en = {
       undoFailed: '„{name}“ konnte nicht zurückverschoben werden. Bitte verschiebe es selbst.',
       nameTakenThere: 'Dort gibt es schon {kind} namens „{name}“. Benenne zuerst eines davon um oder wähle einen anderen Ort.',
       many: {
-        title: '{count} Einträge verschieben',
+        title: '{count} Eintrag verschieben | {count} Einträge verschieben',
         empty: 'Hier gibt es keinen Ort, der sie aufnehmen kann.',
         hint: 'Öffne den Ort, an den sie sollen, und wähle „Hierher verschieben“. Alles darin wird mitverschoben und bleibt lesbar.',
         here: {
@@ -2976,6 +3032,7 @@ const de: typeof en = {
       consentBody:
         'Um eine Erinnerung auf einer Karte zu platzieren, werden Kacheln von einem Drittanbieter geladen und der eingerahmte Punkt wird für einen Namen an einen Drittanbieter-Geocoder gesendet – beides direkt vom Gerät, nie über den veyq-Server, der blind bleibt. Du kannst das jederzeit deaktivieren.',
       consentEnable: 'Karten aktivieren',
+      mapsNotOffered: 'Dieser Server zeigt keine Karten.',
     },
     map: {
       empty: 'Noch keine Orte',
@@ -3337,6 +3394,9 @@ const de: typeof en = {
     noteGateAccept: 'Akzeptieren und fortfahren',
     passwordSection: 'Passwortschutz',
     passwordSectionHint: 'Freigabe nur mit Passwort ab {min} Zeichen öffnen.',
+    passwordRequiredByRule: 'Dieser Bereich verlangt für jeden Link ein Passwort.',
+    expiryRequiredByRule: 'Dieser Bereich verlangt, dass jeder Link spätestens {days} Tage nach dem Tag endet, an dem er angelegt wird.',
+    requirementRefused: 'Dieser Bereich verlangt jetzt für jeden Link ein Passwort oder ein Enddatum. Ergänze, was fehlt, und versuche es erneut.',
     expirySection: 'Ablaufdatum',
     expirySectionHint: 'Der Link funktioniert nach diesem Datum nicht mehr.',
     expiryLabel: 'Läuft ab am',
@@ -3438,7 +3498,7 @@ const de: typeof en = {
       intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten.',
       roleContributor: 'Ansehen + mitwirken',
       roleViewerHint: 'Wer den Link hat, kann diesen Ordner mit allem darin ansehen — schreibgeschützt.',
-      roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner und Inhalte hinzufügen, darin umbenennen oder verschieben und Dateien hochladen — auch über jede Datei, die schon darin liegt, deine eingeschlossen. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
+      roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner und Inhalte hinzufügen, darin verschieben und Dateien hochladen — auch über jede Datei, die schon darin liegt, deine eingeschlossen. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
       deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Was Gäste angelegt haben, bleibt in diesem Ordner.',
       reissueWarning: 'Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.',
       nameTaken: 'Hier gibt es schon „{name}“. Wähle einen anderen Namen.',

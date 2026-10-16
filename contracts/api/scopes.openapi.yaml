@@ -243,13 +243,13 @@ paths:
               example:
                 - userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
                   username: kevin
-                  avatarVersion: 1
+                  avatarRevision: 1
                   role: OWNER
                   identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
                   hasGrant: true
                 - userId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
                   username: partner
-                  avatarVersion: 0
+                  avatarRevision: 0
                   role: MEMBER
                   identityPublicKey: bWVtYmVyLXB1YmxpYy1rZXk=
                   hasGrant: false
@@ -332,7 +332,7 @@ paths:
                 userId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
                 username: partner
                 sealedName: c2VhbGVkLW5hbWU=
-                avatarVersion: 0
+                avatarRevision: 0
                 role: MEMBER
                 identityPublicKey: bWVtYmVyLXB1YmxpYy1rZXk=
                 hasGrant: false
@@ -1520,7 +1520,7 @@ components:
 
     ScopeMember:
       type: object
-      required: [userId, username, avatarVersion, role, identityPublicKey, hasGrant]
+      required: [userId, username, avatarRevision, role, identityPublicKey, hasGrant]
       properties:
         userId:
           x-veyq-visibility: id
@@ -1548,13 +1548,13 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
-        avatarVersion:
+        avatarRevision:
           x-veyq-visibility: structure
           type: integer
           format: int32
           minimum: 0
           description: >
-            The version of the member's profile picture in their tenant: `0` = none, bumped on every set and clear
+            The revision of the member's profile picture in their tenant: `0` = none, bumped on every set and clear
             (ADR 0084). Only the small integer rides the directory, never the picture; a tenant member fetches it with
             `getMemberAvatar` when this is non-zero and differs from the cached one. A group member's picture is the
             one of their tenant profile.

@@ -19,16 +19,16 @@ acceptanceCriteria:
       backend:
         integration: [CoreAloneSliceTest.onlyAFolderTakesACoverWithCoreAlone, ModuleCompositionTest.everyKindThatTakesACoverIsOptedInByItsOwnRule, NodeCoverCoreSliceTest.aKindNoRuleOptedInTakesNoCover, NodeCoverDepotSliceTest.aFileTakesNoCoverAndAnUploadThatDoesNotFitTheDeclarationIsRefused]
       web:
-        unit: [src/core/node/cover/capabilities.test.ts]
+        unit: [src/core/node/cover/rights.test.ts]
   - id: writers-only-fail-closed
     text: Only a member who may write the scope sets or removes a cover - never a reader, a guest of any role, a pending deletion, locked keys or a guest's identity folder; the server refuses a stranger, an anonymous caller, another tenant's member and another member's upload.
     coverage:
       backend:
         integration: [NodeCoverDepotSliceTest.aMemberWhoMayOnlyReadSetsNoCover, NodeCoverCoreSliceTest.aStrangerAnAnonymousCallerAndAnotherTenantsMemberReachNothing, NodeCoverCoreSliceTest.anotherMembersOpenUploadIsNotFound, NodeCoverCoreSliceTest.aSpacePendingDeletionIsReadOnlyForACover, NodeCoverMemoriesSliceTest.noGuestRouteSetsOrRemovesACover]
       web:
-        unit: [src/core/node/cover/capabilities.test.ts, src/core/node/cover/cover.dom.test.ts]
+        unit: [src/core/node/cover/rights.test.ts, src/core/node/cover/cover.dom.test.ts]
   - id: one-write-no-half-state
-    text: The blob step and the sealed meta that names it are ONE transaction - a slot another writer changed is `cover_stale` (nothing attached, the upload spent and freed), a meta that moved is `stale_version` with nothing written and the upload still open; a failed new cover leaves the old cover, its blob and its meta exactly as they were; two writers racing for an empty slot leave exactly one cover.
+    text: The blob step and the sealed meta that names it are ONE transaction - a slot another writer changed is `cover_stale` (nothing attached, the upload spent and freed), a meta that moved is `stale_revision` with nothing written and the upload still open; a failed new cover leaves the old cover, its blob and its meta exactly as they were; two writers racing for an empty slot leave exactly one cover.
     coverage:
       backend:
         integration: [NodeCoverCoreSliceTest.aSlotAnotherWriterFilledIsCoverStaleAndTheLoserIsFreed, NodeCoverCoreSliceTest.aMetaThatMovedWritesNothingAndKeepsTheUploadOpenForTheRetry, NodeCoverCoreSliceTest.aRemovalWithAStaleMetaUndoesTheDetach, NodeCoverCoreSliceTest.aRemovalNamingAReplacedCoverIsRefusedAndTheReplacementKept, NodeCoverCoreSliceTest.aRemovalIsIdempotentAndHealsAMetaThatNamedAGoneBlob, NodeCoverCoreSliceTest.twoWritersRacingForAnEmptySlotLeaveExactlyOneCover]
@@ -50,7 +50,7 @@ acceptanceCriteria:
       web:
         unit: [src/core/node/cover/coverModel.test.ts]
   - id: one-dialog-one-action
-    text: A node that takes a cover has ONE cover action (`Set cover` without one, `Change cover` with one, the image icon) in its header and ONE matching entry in its row menu, and no separate Remove; it opens core's dialog, which offers choosing an image, re-cropping the current cover, Remove (only where a cover exists) and Save/Cancel, and is the same dialog for a folder, a drop box and a Memory. Where the capability function says no (a file, a guest, a pending deletion, locked keys) there is no action and the dialog does not open.
+    text: A node that takes a cover has ONE cover action (`Set cover` without one, `Change cover` with one, the image icon) in its header and ONE matching entry in its row menu, and no separate Remove; it opens core's dialog, which offers choosing an image, re-cropping the current cover, Remove (only where a cover exists) and Save/Cancel, and is the same dialog for a folder, a drop box and a Memory. Where the rights function says no (a file, a guest, a pending deletion, locked keys) there is no action and the dialog does not open.
     coverage:
       web:
         unit: [src/core/node/cover/components/CoverDialog.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/cover.dom.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memory/components/MemoryDetailHost.cover.test.ts]
@@ -68,4 +68,4 @@ acceptanceCriteria:
     text: The Memory page's header action, its cover tile and the gallery lightbox's "Set as cover" all open core's one dialog; the Memory adds only its second source through the kind's `cover.extraSource` (the photo to crop, a line pointing at the gallery, the stored shape it seals and the photo a stored cover already is); a cover chosen from the Memory's own photos is read by the Memory's reader; the Memory's rows draw the cover core resolved.
     coverage:
       web:
-        unit: [src/features/memory/components/MemoryDetailHost.cover.test.ts, src/features/memory/components/MemoryDetail.caps.test.ts, src/features/memory/useMemoryCover.test.ts, src/features/memory/memoryCover.test.ts, src/core/node/cover/useNodeCover.test.ts, src/features/memory/levelRows.test.ts, src/features/memory/levelRows.guest.test.ts]
+        unit: [src/features/memory/components/MemoryDetailHost.cover.test.ts, src/features/memory/components/MemoryDetail.rights.test.ts, src/features/memory/useMemoryCover.test.ts, src/features/memory/memoryCover.test.ts, src/core/node/cover/useNodeCover.test.ts, src/features/memory/levelRows.test.ts, src/features/memory/levelRows.guest.test.ts]

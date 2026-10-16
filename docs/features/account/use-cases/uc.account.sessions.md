@@ -254,48 +254,10 @@ Key again.
   handed over ([ADR 0059](../../../decisions/0059-device-linking.md) § Context). The earlier framing here —
   that this use-case makes linking reversible — was wrong, and no copy on either screen may imply it.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can see every place you are currently signed in, and sign any of them out from here — useful when
-a laptop is lost, or you signed in on someone else's machine and forgot to sign out. "Sign out everywhere else"
-ends every other session in one go and keeps you signed in where you are. You don't need your Secret Key for
-any of this — and that holds on a borrowed or brand-new device too, which is the one you are most likely to be
-holding when a laptop goes missing. On the sign-in screen there, choose **"I don't have my Secret Key with
-me"**: you sign in, your memories stay locked, and what you can do there is sign every device out, this one
-included (or, if the kit turns up after all, unlock without saving anything). It keeps nothing afterwards — no
-saved key, and you stay signed in only until the browser closes. (If you still have a device you are signed in
-on, you don't need this: choose **"Sign in with a QR code"** on the sign-in screen instead and let this one in
-properly.) If a device is really gone, use **"Sign out + remove key"** on its row instead: signing out alone
-stops it reaching the server, but that device could still open your memories with just your password.
-Removing its saved key means whoever has it needs your password *and* your Secret Key — so keep that for
-devices you have actually lost, because it is your own device that will ask you for the Emergency Kit next
-time. Two honest details: the server never learns your device names — those are stored scrambled and only your
-unlocked app can read them. And none of this reaches into the lost device itself; what it takes away is what
-the server was keeping for it. If this device ever can't read that list of names, every session still shows and
-can still be ended — just unnamed. You can start the list over in the settings; only you can, and until each
-device signs in again it stays unnamed.
-
-**DE —** Du siehst hier jede Stelle, an der du gerade angemeldet bist, und kannst jede davon von hier aus
-abmelden — praktisch, wenn ein Laptop weg ist oder du dich auf einem fremden Rechner angemeldet und das
-Abmelden vergessen hast. „Überall sonst abmelden" beendet alle anderen Sitzungen auf einmal und lässt dich
-dort angemeldet, wo du gerade bist. Deinen Secret Key brauchst du dafür nicht — auch nicht auf einem geliehenen
-oder nagelneuen Gerät, und genau so eines hast du meistens in der Hand, wenn ein Laptop verschwunden ist. Wähle
-auf dessen Anmeldeseite „Ich habe meinen Secret Key nicht dabei": Du meldest dich an, deine Erinnerungen
-bleiben gesperrt, und tun kannst du dort eines: jedes Gerät abmelden, dieses eingeschlossen (oder, falls das
-Kit doch auftaucht, entsperren, ohne etwas zu speichern). Das Gerät behält danach nichts: keinen gespeicherten
-Schlüssel, und angemeldet bleibst du nur, bis der Browser geschlossen wird. (Hast du noch ein Gerät, an dem du
-angemeldet bist, brauchst du das nicht: Wähle auf der Anmeldeseite stattdessen **„Über QR-Code anmelden"** und
-lass dieses Gerät richtig herein.) Ist ein Gerät wirklich weg, nimm stattdessen **„Abmelden + Schlüssel
-entfernen"** in seiner Zeile: Abmelden allein hindert das Gerät nur daran,
-den Server zu erreichen — deine Erinnerungen könnte es mit deinem Passwort weiterhin öffnen. Ohne seinen
-gespeicherten Schlüssel braucht es dein Passwort *und* deinen Secret Key. Heb dir das also für wirklich
-verlorene Geräte auf, denn beim nächsten Mal fragt dich dein eigenes Gerät nach dem Notfall-Kit. Zwei ehrliche
-Hinweise: Die Gerätenamen erfährt der Server nie — sie liegen verschlüsselt, und lesen kann sie nur deine
-entsperrte App. Und nichts davon greift auf das
-verlorene Gerät selbst durch; entzogen wird ihm, was der Server für es aufbewahrt hat. Kann dieses Gerät die
-Liste der Namen einmal nicht lesen, wird trotzdem jede Sitzung angezeigt und lässt sich beenden — nur ohne Namen.
-Du kannst die Liste in den Einstellungen neu beginnen; nur du kannst das, und bis sich jedes Gerät wieder anmeldet,
-bleibt es unbenannt.
+You see everywhere you are signed in and can cut off any device, even a lost one and even from a borrowed device
+without your Emergency Kit.
 
 ## Related
 
@@ -317,3 +279,4 @@ bleibt es unbenannt.
   [onboard-device](uc.account.onboard-device.md) (the flow whose locked entry E3 hosts, and whose grants this
   screen contains)
 - End-user view (docs site): [Devices and sessions](../../../../site/src/content/docs/account/devices-and-sessions.mdx)
+- End-user view (docs site): [Lost device](../../../../site/src/content/docs/help/lost-device.mdx)

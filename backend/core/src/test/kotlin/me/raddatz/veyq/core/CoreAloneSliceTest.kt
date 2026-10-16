@@ -30,7 +30,10 @@ import me.raddatz.veyq.core.scope.MembershipEraser
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.CoreTestGuestCreatableKinds
+import me.raddatz.veyq.core.sharing.CoreTestGuestPlaceholders
+import me.raddatz.veyq.core.sharing.FolderGuestPlaceholders
 import me.raddatz.veyq.core.sharing.GuestCreatableKinds
+import me.raddatz.veyq.core.sharing.GuestPlaceholders
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.NodeGuestIdentityUsage
@@ -85,7 +88,7 @@ import org.junit.jupiter.api.Test
  * link, places a kind, completes an upload — instead of refusing. So:
  *
  * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's four (attachments, pins, nodes, shares),
- *    `NodeKindRules` and `ShareRoots` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
+ *    `NodeKindRules`, `ShareRoots` and `GuestPlaceholders` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
  *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), and every other seam —
  *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds`,
  *    `GuestCreatableKinds`, `MemberBlobRoles` — none. The composed application's
@@ -114,7 +117,7 @@ class CoreAloneSliceTest {
     class CoreAloneProfile : QuarkusTestProfile {
         override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
         override fun getConfigOverrides(): Map<String, String> =
-            mapOf("quarkus.arc.exclude-types" to listOf(CoreTestMemberBlobRoles::class, CoreTestGuestCreatableKinds::class).joinToString(",") { it.java.name })
+            mapOf("quarkus.arc.exclude-types" to listOf(CoreTestMemberBlobRoles::class, CoreTestGuestCreatableKinds::class, CoreTestGuestPlaceholders::class).joinToString(",") { it.java.name })
     }
 
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
@@ -130,6 +133,7 @@ class CoreAloneSliceTest {
     @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
     @Inject @All lateinit var writeOnlyGuestKinds: MutableList<WriteOnlyGuestKinds>
     @Inject @All lateinit var guestCreatableKinds: MutableList<GuestCreatableKinds>
+    @Inject @All lateinit var guestPlaceholders: MutableList<GuestPlaceholders>
     @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
 
     @Inject lateinit var nodes: NodesStore
@@ -163,6 +167,7 @@ class CoreAloneSliceTest {
             "SharedSubtreeContributor: core's attachments only")
         assertEquals(setOf(FolderNodeRules::class.java), classes(kindRules), "NodeKindRules: core's FOLDER rule only")
         assertEquals(setOf(FolderShareRoots::class.java), classes(shareRoots), "ShareRoots: core's FOLDER answer only")
+        assertEquals(setOf(FolderGuestPlaceholders::class.java), classes(guestPlaceholders), "GuestPlaceholders: core's FOLDER answer only")
         for ((seam, beans) in mapOf(
             "MembershipEraser" to membershipErasers,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,

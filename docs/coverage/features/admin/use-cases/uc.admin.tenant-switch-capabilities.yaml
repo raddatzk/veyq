@@ -1,0 +1,44 @@
+useCase: uc.admin.tenant-switch-capabilities
+feature: admin
+title: Switch capabilities off for a tenant
+# Built by cr-tenant-capability-switches (inbox #439 step 2, ADR 0088 decisions 2, 3, 5, 12): the catalog's `levels`,
+# veyq_tenant_capability_switch read through a per-tenant cache, the registry's AND at both levels, every gate asking the
+# tenant of the scope it acts in, the tenant owner's two operations and the members' effective set, and web's
+# TenantCapabilitiesPanel in the tenant settings. Every negative in the slice test has its control in a second tenant.
+acceptanceCriteria:
+  - id: tenant-register-listed
+    text: The tenant owner lists the entries a tenant may switch (the catalog's levels naming tenant) as a tree, each with its title, purpose and effect-when-off in the app's language from text the API serves, and its state - on, off, off through its parent, or off for the whole server. Entries offered before sign-in (remembered devices, unlocking without a password, adding a device from another one) are not listed.
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.theTenantRegisterListsTheTenantSwitchableEntriesInCatalogOrder]
+        integration: [TenantCapabilitySwitchesSliceTest.theOwnerSwitchesAnEntryOffAndEveryMemberReadsTheNarrowedSet]
+      web:
+        unit: [src/features/tenant/TenantCapabilitiesPanel.test.ts, src/features/tenant/tenantCapabilities.test.ts]
+  - id: tenant-switch-narrows-only
+    text: A tenant owner's switch is stored in the database and acts without a restart; the effective state is the AND of the instance level and the tenant's along the path, so the Server Owner's off wins over a tenant that left an entry on, the tenant's own switch survives it, and a tenant row for an instance-only entry would change nothing.
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.aTenantCannotWidenWhatTheInstanceSwitchedOff, CapabilityRegistryTest.aTenantRowForAnInstanceOnlyEntryIsIgnored]
+        integration: [TenantCapabilitySwitchesSliceTest.theServerOwnersSwitchWinsAndTheTenantsOwnSwitchSurvivesIt]
+  - id: tenant-gates-refuse-per-tenant
+    text: Every gate acting on a tenant's content asks that tenant - creating, changing into, re-activating and re-issuing a link of a switched-off role, creating a group, creating a drop box - and refuses with 422 capability_disabled there and in no other tenant.
+    coverage:
+      backend:
+        integration: [TenantCapabilitySwitchesSliceTest.aTenantShareSwitchRefusesANewLinkInThatTenantAndNotInAnother, TenantCapabilitySwitchesSliceTest.aTenantGroupSwitchRefusesANewGroupInThatTenantAndNotInAnother, DropBoxCapabilitySliceTest.aTenantsDropBoxSwitchRefusesANewDropBoxInThatTenantAndNotInAnother]
+  - id: tenant-share-switch-acts-at-once
+    text: A tenant's share switch reaches the tenant's existing links at once - a guest gets the same 404 as for an unknown link - and no other tenant's links; nothing is written onto a link, so switching back on serves it again.
+    coverage:
+      backend:
+        integration: [TenantCapabilitySwitchesSliceTest.aTenantShareSwitchStopsThatTenantsExistingLinksAtOnceAndNoOtherTenants]
+  - id: tenant-switch-confirmed
+    text: Switching off asks first and shows the entry's own effect-when-off; switching on asks nothing; the row shows the server's answer and the app's own capability set follows at once.
+    coverage:
+      web:
+        unit: [src/features/tenant/TenantCapabilitiesPanel.test.ts]
+  - id: tenant-switch-gated
+    text: Only the tenant owner reads and writes the switches (a member 403 not_tenant_owner, the panel's read-only notice); every member reads the effective set; a non-member is 404 tenant_not_found; an unknown or instance-only id is 404 capability_not_found; a missing off is 400; nothing is stored on any refusal.
+    coverage:
+      backend:
+        integration: [TenantCapabilitySwitchesSliceTest.aMemberReadsTheSetButNotTheSwitchesAndAnOutsiderNeither, TenantCapabilitySwitchesSliceTest.anInstanceOnlyOrUnknownEntryIsRefusedAndNothingIsStored, TenantCapabilitySwitchesSliceTest.aMissingOffIsRefused]
+      web:
+        unit: [src/features/tenant/TenantCapabilitiesPanel.test.ts]

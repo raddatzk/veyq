@@ -1,0 +1,38 @@
+useCase: uc.admin.configure-external-services
+feature: admin
+title: Configure the external services a browser calls
+# Built by cr-external-services-as-settings (inbox #439 step 4, ADR 0088 decision 7, ADR 0089): veyq_external_service
+# seeded with the old defaults, the registry's "configured" precondition, the address on both deliveries, the served CSP
+# from a snapshot recomputed after each write, web reading the address instead of build variables, admin-web's panel
+# and CLI. Each "gone" in the slice test has its control (another service stays, the same one comes back).
+acceptanceCriteria:
+  - id: services-listed-and-set
+    text: The Server Owner lists the three services with their addresses (a new instance has OpenStreetMap tiles with their attribution, Nominatim and the HIBP range API), sets one without a restart, and unconfigures one; an address that is no http(s) URL, a tile template without {z}, {x} and {y}, an attribution for a service that takes none, or an unknown entry is refused and nothing stored; only the Server Owner reaches it.
+    coverage:
+      backend:
+        integration: [ExternalServicesSliceTest.aNewInstanceStartsWithTodaysDefaultsAndServesThem, ExternalServicesSliceTest.anAddressThatIsNoHttpUrlOrATileTemplateWithoutItsPlaceholdersIsRefused, ExternalServicesSliceTest.onlyTheServerOwnerReachesTheServices]
+  - id: unconfigured-is-not-served
+    text: A service without an address is not active, whatever its switch says, so it leaves both deliveries and the served policy while another service stays; configured again at another address, the manifest carries it and the policy allows exactly its origin.
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.anExternalServiceWithoutAnAddressIsNotActiveAndItsSwitchCannotBringItBack, CapabilityRegistryTest.theOriginOfAServiceAddressIsItsSchemeHostAndPort]
+        integration: [ExternalServicesSliceTest.anUnconfiguredServiceLeavesTheManifestAndThePolicyAndAnotherStays]
+  - id: policy-follows-the-instance
+    text: The served Content Security Policy names a service's origin (img-src for the tiles, connect-src for the geocoder and the breach check) only while its entry is active at the instance level, and follows a switch at once; a tenant's own switch leaves that tenant's set and not the policy; the built policy names no outside service.
+    coverage:
+      backend:
+        integration: [ExternalServicesSliceTest.aSwitchedOffServiceLeavesThePolicyUntilItIsBackOn, ExternalServicesSliceTest.aTenantsSwitchLeavesItsSetAndNotThePolicy, AppShellSliceTest.theShellsResponsesCarryThePolicyAndTheApiDoesNot, AppShellStoreOriginSliceTest.thePolicyAllowsTheOriginOfAUrlThisAppSigns]
+      web:
+        unit: [src/shared/security/csp.test.ts]
+  - id: clients-read-the-address
+    text: The web client reads the tiles' template and attribution, the geocoder's base and the breach check's range API from the capabilities it holds; without the map entry there is no map and no consent prompt, without the geocoder names are typed, and without the breach entry no request is made, nothing is said and no submit is stopped; admin-web's first-run check follows the manifest the same way.
+    coverage:
+      web:
+        unit: [src/shared/state/useMapConfig.test.ts, src/features/account/passwordWarning.test.ts, src/features/account/changePassword/ChangePasswordPanel.policy.test.ts]
+gaps:
+  admin-web: >-
+    The console's Server → External services panel and `veyq-admin services list | set <id> | unset <id>` live in
+    `admin-web` (ADR 0065); their suites (`ExternalServicesPanel.test.ts` for the rows, the attribution field, the save
+    and the asked-for removal; `cli.test.ts` for the commands; `AdminConsoleView.test.ts` for the nav; admin-web's
+    `passwordWarning.test.ts` for its first-run check following the manifest) exist and pass under `npm run check`, and
+    wait until admin-web's CI job has executed (ADR 0040), as uc.admin.switch-capabilities' do.

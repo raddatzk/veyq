@@ -11,11 +11,17 @@
 //     is the blob's, so it goes with the bytes it describes, and the guest writes no node payload at all.
 //
 // As the member's job: a node it created is reused by a retry, a final refusal (taken name, illegal place, a peer's
-// replace) is remembered and rethrown without a request.
+// replace) is remembered and rethrown without a request. And once the job is given up (the queue's `abandon`: failed —
+// a full link's `quota_exceeded` among it — or cancelled), a node it CREATED that holds nothing is taken back
+// (`abandonShareNodeAsGuest`), erased at once: a guest cannot trash, and a refused upload leaves nothing behind (the
+// Storage page's promise). The server decides "holds nothing" under its lock — a completion whose answer was lost is
+// seen there and the node kept — so the job asks no listing first, as the member's must.
 import { planBlob, reserveAndPump, throwIfAborted } from '../../core/blob/transport'
 import type { UploadJob, UploadJobContext } from '../../core/blob/queue'
 import { expectMintedId } from '../../core/node/mintedId'
-import { createShareNodeAsGuest, guestTreeErrorOf, GuestTreeError, type GuestTreeContext } from '../../core/sharing/guestTree'
+import {
+  abandonShareNodeAsGuest, createShareNodeAsGuest, guestTreeErrorOf, GuestTreeError, type GuestTreeContext,
+} from '../../core/sharing/guestTree'
 import { guestReserve, guestWindow, type GuestUploadTarget } from '../../core/sharing/guestBlob'
 import type { FileBlobRef } from '../../api/generated/depot'
 import { publicShareFilesApi } from './api'
@@ -66,17 +72,23 @@ export function guestFileUploadJob(target: GuestFileTarget, file: File): UploadJ
   let node: { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null } | null =
     target.replace ? { ...target.replace } : null
   let final: Error | null = null
+  /** The node this job created and that holds nothing of it yet — what {@link abandon} takes back. */
+  let created: string | null = null
 
   async function run({ onProgress, signal }: UploadJobContext): Promise<FileUploadResult> {
     if (final) throw final
     throwIfAborted(signal)
     try {
-      node ??= { ...(await createGuestFileNode(target, file.name)), expectedBlobId: null }
+      if (!node) {
+        node = { ...(await createGuestFileNode(target, file.name)), expectedBlobId: null }
+        created = node.nodeId
+      }
       const to: GuestUploadTarget = { shareId: ctx.shareId, contributorToken: ctx.contributorToken, pwToken: ctx.pwToken, nodeId: node.nodeId }
       const plan = planBlob(ctx.scopeId, { ownerId: node.nodeId, role: FILE_CONTENT_ROLE }, node.nodeKey, file, fileBlobMeta(file))
       const [uploadId] = await reserveAndPump([plan], (d) => guestReserve(to, d), guestWindow(to), onProgress, signal)
       throwIfAborted(signal)
       const attached = await completeGuestFile(ctx, node.nodeId, uploadId, node.expectedBlobId)
+      created = null // the node holds the file now: nothing to take back, whatever fails after
       expectMintedId(plan.blobId, attached.blobId)
       return { nodeId: node.nodeId }
     } catch (e) {
@@ -85,10 +97,29 @@ export function guestFileUploadJob(target: GuestFileTarget, file: File): UploadJ
     }
   }
 
+  /** Given up: take back the node this job created, and forget it, so a retry creates the file afresh. A node the
+   *  server keeps (`not_a_placeholder`: it holds the file after all, or somebody else is uploading into it) is left as it
+   *  is; one it already lost (`node_not_found`: a member trashed it) is forgotten too. Anything else is thrown — the
+   *  queue's abandon is best effort — and the node stays for a retry to fill. */
+  async function abandon(): Promise<void> {
+    const nodeId = created
+    if (!nodeId) return
+    try {
+      await abandonShareNodeAsGuest(ctx, nodeId)
+    } catch (e) {
+      if (!(e instanceof GuestTreeError) || (e.code !== 'not_a_placeholder' && e.code !== 'node_not_found')) throw e
+      created = null
+      if (e.code === 'not_a_placeholder') return
+    }
+    created = null
+    node = null
+  }
+
   return {
     name: file.name,
     sizeBytes: file.size,
     run,
+    abandon,
     isFinal: (error) => FINAL.has(error),
     extra: target.replace ? { file, replaceNodeId: target.replace.nodeId } : { file },
   }

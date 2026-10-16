@@ -82,7 +82,7 @@ Memories' original file name and the media type its gallery badges a video by), 
 own. For a **new** application, its keys are derived from the scope
 key by HKDF with the application id as context (`veyq/v1/<application id>:…`, the form the existing derivations
 use in `packages/crypto/src/v1.ts`), so two applications never share a key by accident; the seals' associated
-data binds the application id or kind, the object id and the version, by the ADR 0072 mechanism. **Measured with
+data binds the application id or kind, the object id and the revision, by the ADR 0072 mechanism. **Measured with
 Depot (cr-files-application P3-S1/P5), a new kind meets both rules with no new seal purpose and no HKDF context:**
 its node key is random and wrapped under its parent's key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
 so it shares no key with another application's node by construction, which is what the HKDF context was for; and
@@ -148,7 +148,7 @@ on their own.
   `PublicShare` for its own read there, a wire change). Core's spec texts and its main comments describe what core
   does.
 - **The node's payload slot and content key are core's** (decided 2026-10-06, cr-platform-contract-split). Core
-  gives every node one sealed, versioned payload (`wrappedMeta`, `metaVersion`): core stores it, compare-and-sets
+  gives every node one sealed, versioned payload (`wrappedMeta`, `metaRevision`): core stores it, compare-and-sets
   it ([ADR 0077](0077-a-write-carries-the-version-it-read.md)) and lists it with the tree, and never opens it. Its
   plaintext format is the node kind's application's, versioned per Decision 7. `wrappedContentKey` is the content
   key of every node, `FOLDER` included ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
@@ -278,7 +278,7 @@ on their own.
   core's `FOLDER`, Depot's drop box, Memories' two kinds; not a `FILE`) carries one image its owner uploads as the node's own
   blob in the `COVER` slot, written by core's `setNodeCover` / `removeNodeCover` - the blob step (`AttachmentStore` attach
   with a compare on the blob replaced, or detach) and the node's re-sealed `wrappedMeta` (the `cover` field, ADR 0077
-  version-checked) in ONE transaction, so the slot and the meta that names it never part. `COVER` is a role core declares
+  revision-checked) in ONE transaction, so the slot and the meta that names it never part. `COVER` is a role core declares
   (`CoreMemberBlobRoles`) and the opt-in is a seam on each kind's own placement rules, so core names no application kind. The web
   mechanism (`core/node/cover/`: the model, the upload, the one writer, the store, the action, the one dialog and the display) serves every kind;
   an application adds only what is its own - Memories' second source (one of its photos: `cover.load` reads it, `cover.extraSource`
@@ -291,7 +291,7 @@ on their own.
   directory is still named `features/memory`; the folder level view is core's (`core/node/LevelView.vue`) and each
   application contributes ROW DATA per kind through the registry (inbox #407: the sections are retired, core draws ONE
   list of the folders and every kind's rows — a factory per application answers a row per node: icon or cover, title,
-  meta line, primary click and capability-gated actions) — naming the presentations it switches between beyond core's grid
+  meta line, primary click and rights-gated actions) — naming the presentations it switches between beyond core's grid
   and list (`views`, Memories' map), whose switch is the level's toolbar, core's (inbox #370); the level shows the stored
   mode only where something on screen offers it, else the grid, and hands that mode to every row factory
   (`LevelRowsContext.viewMode`, inbox #404: no factory reads the stored preference) — and so its create and share dialogs (a folder's
@@ -312,7 +312,7 @@ on their own.
     decrypted scope tree or the guest's opened subtree, every navigation through its `linkTo`, so a guest's link keeps
     its `#k=` fragment. Core mounts them in **both** modes: the share page runs its gates, builds the guest's access and
     tree, and renders core's level view or the kind's `detail` exactly as the member host does.
-  - What a view offers is its application's **capability function**: pure and fail-closed — every right false unless
+  - What a view offers is its application's **rights function**: pure and fail-closed — every right false unless
     granted, an unknown mode, role or kind grants nothing — the role matrix of
     [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 6 in code, written down
     in its `docs/apps/<application>.md`; core has its own for `FOLDER`. A right holds only where the matrix allows it
@@ -324,12 +324,12 @@ on their own.
     render the member's way. The guest-only shell stays core's: the password and terms gates, one naming flow with
     "Not you?", the curator's note, the role badge.
 
-  Rejected: a capabilities object that defaults to allowed, with the operations as optional props that fall back to the
+  Rejected: a rights object that defaults to allowed, with the operations as optional props that fall back to the
   member's calls — the legacy plaintext client's design; a forgotten prop there calls the member API from a share page.
   **Built** (inbox #401, five steps, 2026-10-09 to 2026-10-11). Core: `web/src/core/access.ts` (`Access`, `TreeSource`,
-  the member's factories, `targetOf`, `folderCapabilities`) and the guest's half, `core/sharing/guestAccess.ts`
+  the member's factories, `targetOf`, `folderRights`) and the guest's half, `core/sharing/guestAccess.ts`
   (`guestAccess`, `guestTreeSource` over the opened subtree — a served `ShareNode` as a `TreeNode`, `createdAt` 0 so equal
-  names number by node id, `metaVersion` 0, `wrappedMeta` as served, every `linkTo` keeping `#k=`). The shell
+  names number by node id, `metaRevision` 0, `wrappedMeta` as served, every `linkTo` keeping `#k=`). The shell
   (`views/ShareView.vue`) runs the gates, builds the access and owns the page's one naming flow (`requestGuest`, core's
   `GuestNaming` with "Not you?"); then a `READ` or `READ_WRITE` link of any root kind gets core's page
   (`core/sharing/ShareTreePage.vue`): core's `LevelView` at a folder, the kind's `detail` at any other node — the link's
@@ -340,14 +340,14 @@ on their own.
   `ShareFilesSection` and `DropBoxSharedView` are deleted) and Memories' `features/memory/source.ts` (`MemoryDetail`,
   its composables, the lightbox and the organizer touch no API but through it; `MemoryDetailHost` picks the source by
   `access.mode` and reads nothing of the member's world for a guest). A view shows a right where the matrix grants it
-  AND the source carries the door (`sourceCapabilities`); the lightbox takes its loaders as required props and each
-  write per capability (`canDelete` per item; a node's cover is core's, `coverCapabilities`, the source's `mediaMeta` door). Memories' share body is the
+  AND the source carries the door (`sourceRights`); the lightbox takes its loaders as required props and each
+  write per right (`canDelete` per item; a node's cover is core's, `coverRights`, the source's `mediaMeta` door). Memories' share body is the
   drop page alone: the grouped-chapters guest gallery of #356, its lightbox wiring and its own-delete are deleted, and a
   contributor uploads into the chapter it navigated to (the chapter named as the target, sealed under its own key; the
   server creates the guest's own bucket there). A guest's Memory view shows the date and place the members sealed but
   never reconciles them (that writes the node's meta). `shareSection`, `embedBelowFolder`, `embeddedShareBody` and a share
   body's `subtreeRoot` are gone. A move (inbox #358) follows the same rule: one right per matrix
-  (`folderCapabilities.move`, `depotCapabilities.moveFile`/`moveNode`, `memoryCapabilities.move` — a guest's only
+  (`folderRights.move`, `depotRights.moveFile`/`moveNode`, `memoryRights.move` — a guest's only
   `READ_WRITE`, only of a node a `FOLDER` of its subtree holds, never in an identity folder), one core dialog
   (`core/node/MoveNodeDialog.vue`) mounted by both hosts, and one door per session (`core/node/move.ts` `nodeMover`:
   the member's `moveNode`, a `READ_WRITE` guest's `placeShareNodeAsGuest`, none for any other role); its destinations

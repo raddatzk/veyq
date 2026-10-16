@@ -24,7 +24,11 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      whole is. The `publish` job carries a step that fails when an artifact's tag or `v<major>.<minor>` already
      exists, and a step that creates that ref — both run for `kind == release` only, neither with `--force`, and
      both keyed on the *tree-derived* version rather than on anything else. The `build` job stamps the same value
-     into the image as `VEYQ_VERSION`, which is what the running instance later reports.
+     into the image as `VEYQ_VERSION`, which is what the running instance later reports — and every build-arg it
+     stamps is declared by the target stage each matrix entry publishes, and by **no other stage** of that entry's
+     Dockerfile (nor before its first `FROM`). The stage that compiles the web client is served to anyone before any
+     login, so a stamp it could read is a release on the pre-auth surface (ADR 0057 §4); a stamp the target does not
+     declare is one Docker drops without a word. Both found by stage, from the build matrix, never listed.
   8. **The chart is the release's third artifact** (ADR 0064). The refuse step names every published image (the
      build matrix) AND `charts/<name>` (`Chart.yaml`'s `name`), so a release with any of the three already out
      is refused; the step that runs `helm package` sets `--version` and `--app-version` from the tree-derived
@@ -504,6 +508,70 @@ if workflow_doc and f"VEYQ_VERSION={VERSION_EXPR}" not in build_args:
         f"the `{BUILD_JOB}` job does not pass `VEYQ_VERSION={VERSION_EXPR}` as a build-arg — the running "
         f"instance would then report a release version that is not the one it was published under"
     )
+
+
+# The stamp lands only in the stage a publish ships. A build stage that declares it compiles it into bits the
+# image serves — the web bundle is served before any login, so that is the release on the pre-auth surface
+# (ADR 0057 §4); the obvious repair for an export manifest that says `dev` is exactly that. And a stamp the target
+# stage does not declare is silently dropped by Docker, so the instance reports no release at all.
+ARG_LINE = re.compile(r"^\s*ARG\s+(.+?)\s*$", re.IGNORECASE)
+FROM_LINE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*(?:\s+AS\s+(\S+))?\s*$", re.IGNORECASE)
+
+
+def stage_args(body: str) -> list[tuple[str | None, set[str]]]:
+    """Each stage's declared ARG names, in order; the stage name is None for the preamble and an unnamed stage."""
+    stages: list[tuple[str | None, set[str]]] = [(None, set())]
+    for line in body.splitlines():
+        start = FROM_LINE.match(line)
+        if start:
+            stages.append((start.group(1), set()))
+            continue
+        arg = ARG_LINE.match(line)
+        if arg:
+            stages[-1][1].update(token.split("=", 1)[0] for token in arg.group(1).split())
+    return stages
+
+
+stamped = {line.split("=", 1)[0].strip() for line in build_args.splitlines() if "=" in line}
+stamped_targets = 0
+if workflow_doc:
+    matrix = ((workflow_doc.get("jobs") or {}).get(BUILD_JOB) or {}).get("strategy", {}).get("matrix", {}) or {}
+    entries = [e for e in (matrix.get("include") or []) if isinstance(e, dict) and "dockerfile" in e]
+    if not stamped:
+        fail(f"the `{BUILD_JOB}` job passes no build-args — there is no stamp to hold to its stage, so this checked NOTHING")
+    if not entries:
+        fail(
+            f"the `{BUILD_JOB}` job's matrix names no `dockerfile` — the stage a stamp belongs in cannot be found, "
+            f"so this checked NOTHING"
+        )
+    for entry in entries:
+        dockerfile, target = ROOT / str(entry["dockerfile"]), str(entry.get("target") or "")
+        where = f"{dockerfile.relative_to(ROOT)}"
+        if not dockerfile.is_file():
+            fail(f"the `{BUILD_JOB}` matrix builds `{where}`, which does not exist")
+            continue
+        stages = stage_args(dockerfile.read_text())
+        targets = [args for name, args in stages if name == target]
+        if len(targets) != 1:
+            fail(f"`{where}` has {len(targets)} stages named `{target}`, the target the `{BUILD_JOB}` matrix publishes")
+            continue
+        stamped_targets += 1
+        for name in sorted(stamped - targets[0]):
+            fail(
+                f"`{where}`'s `{target}` stage does not declare `ARG {name}`, which the `{BUILD_JOB}` job passes — "
+                f"Docker drops an undeclared build-arg without failing, so the published image carries no {name}"
+            )
+        for name, args in stages:
+            if name == target:
+                continue
+            for leaked in sorted(stamped & args):
+                fail(
+                    f"`{where}` declares `ARG {leaked}` in "
+                    + (f"its `{name}` stage" if name else "a stage with no name or before its first FROM")
+                    + f", not only in `{target}`, the stage a publish ships. A build stage that reads the stamp "
+                    f"compiles it into what the image serves, and the web client is served before any login — the "
+                    f"precise release never goes there (ADR 0057 §4). An export names the major instead."
+                )
 
 
 # ---- 3. a publish refuses to replace a release, and leaves one ref -------------------------------------------
@@ -1115,7 +1183,8 @@ if errors:
 print(
     f"release identity OK: VERSION {version_value} is the major, the minor is counted offline from the history "
     f"({len(publishing_branches)} publishing branch(es), a shallow checkout refused), every registry write waits for "
-    f"a dispatch, a release refuses a republish and creates its v{version_value}.<minor> ref, the recipe is declared in "
+    f"a dispatch, the stamp is declared by the {stamped_targets} published target stage(s) and no other, a release "
+    f"refuses a republish and creates its v{version_value}.<minor> ref, the recipe is declared in "
     f"{len(runtime_stages(DOCKERFILE.read_text()))} runtime target(s), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"

@@ -40,7 +40,7 @@ const FOLDER_KEY = v1.randomBytes(32)
 const MEMORY_KEY = v1.randomBytes(32)
 
 function folderHead(): PublicShareHead {
-  const address = { scopeId: SCOPE_ID, nodeId: MEMORY, epoch: 0, placementVersion: 0 }
+  const address = { scopeId: SCOPE_ID, nodeId: MEMORY, epoch: 0, placementRevision: 0 }
   return {
     shareId: route.params.shareId, kShare: K_SHARE, scopeId: SCOPE_ID, name: 'Familie', noteByLocale: {}, role: ShareRole.Read, rootKind: FOLDER_KIND,
     share: {
@@ -48,7 +48,7 @@ function folderHead(): PublicShareHead {
       nodes: [
         { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
         {
-          id: MEMORY, parentId: ROOT, kind: MEMORY_KIND, epoch: 0, placementVersion: 0,
+          id: MEMORY, parentId: ROOT, kind: MEMORY_KIND, epoch: 0, placementRevision: 0,
           encryptedName: sealName(FOLDER_KEY, address, 'Rom 2026'), wrappedContentKey: wrapContentKey(FOLDER_KEY, address, MEMORY_KEY),
         },
       ],
@@ -66,7 +66,7 @@ beforeEach(() => {
   route.hash = `#k=${b64url(K_SHARE)}`
   route.query = {}
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(folderHead())
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
   stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
 })
 

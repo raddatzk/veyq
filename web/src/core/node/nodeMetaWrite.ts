@@ -7,8 +7,8 @@ import { openNodeMetaForWrite, sealNodeMeta, type RawNodeMeta } from './nodeMeta
 import { writeSealedMeta, type MetaEditContext, type SealedMetaResult, type SealedMetaState } from './sealedMetaWrite'
 
 /**
- * Write a node's sealed meta, version-checked (ADR 0077): open the blob at `base`, apply `edit`, seal, and PATCH
- * it with the `metaVersion` it was built from; on `409 stale_version` re-run `edit` on the blob the conflict
+ * Write a node's sealed meta, revision-checked (ADR 0077): open the blob at `base`, apply `edit`, seal, and PATCH
+ * it with the `metaRevision` it was built from; on `409 stale_revision` re-run `edit` on the blob the conflict
  * handed back. Every node-meta writer — the three editors and the two self-heals — goes through here.
  */
 export function writeNodeMeta(
@@ -17,7 +17,7 @@ export function writeNodeMeta(
   nodeKey: Uint8Array,
   base: SealedMetaState,
   edit: (meta: RawNodeMeta, ctx: MetaEditContext) => RawNodeMeta | null | Promise<RawNodeMeta | null>,
-  send?: (wrappedMeta: string | null, metaVersion: number) => Promise<void>,
+  send?: (wrappedMeta: string | null, metaRevision: number) => Promise<void>,
 ): Promise<SealedMetaResult<RawNodeMeta>> {
   const address = { scopeId, nodeId }
   return writeSealedMeta<RawNodeMeta>(
@@ -29,9 +29,9 @@ export function writeNodeMeta(
       // blob step with the meta it names (`cover/coverWrite.ts`), so the two can never part.
       send:
         send ??
-        (async (wrappedMeta, metaVersion) => {
+        (async (wrappedMeta, metaRevision) => {
           await withRefresh(() =>
-            contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: wrappedMeta!, metaVersion } }),
+            contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: wrappedMeta!, metaRevision } }),
           )
         }),
     },

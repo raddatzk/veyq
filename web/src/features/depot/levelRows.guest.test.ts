@@ -36,6 +36,7 @@ vi.mock('../../core/sharing/guestTree', async (orig) => ({
   ...(await orig<typeof import('../../core/sharing/guestTree')>()),
   guestTreeContext: vi.fn((head: unknown, o: object) => ({ head, ...o, keys: new Map(), names: new Map(), nodes: new Map() })),
   createShareNodeAsGuest: vi.fn(),
+  abandonShareNodeAsGuest: vi.fn(),
 }))
 vi.mock('../tenant/tenantStorage', () => ({ tenantStorageFits: vi.fn() }))
 
@@ -46,7 +47,7 @@ import { publicShareFilesApi } from './api'
 import { downloadFile } from './download'
 import { guestFileUploadJob, type GuestFileTarget } from './shareUpload'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
-import { createShareNodeAsGuest, guestTreeContext } from '../../core/sharing/guestTree'
+import { abandonShareNodeAsGuest, createShareNodeAsGuest, guestTreeContext } from '../../core/sharing/guestTree'
 import { tenantStorageFits } from '../tenant/tenantStorage'
 import { planBlob } from '../../core/blob/transport'
 import { deleteNode, sealName, wrapContentKey, type TreeNode } from '../../core/node/tree'
@@ -102,8 +103,8 @@ const LISTING: ShareFileListing = {
 const GUEST: GuestIdentity = { identityId: 'id-1', contributorToken: 'tok-1' }
 
 function child(id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementVersion: 0 }
-  return { id, parentId, kind, epoch: 0, placementVersion: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
+  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key) }
 }
 // A drop box below the link with one guest's identity folder (ADR 0080 decision 11): nobody but that guest places there.
 const { sealedDropPrivateKey } = dropKeysForShare(SCOPE, DROP, keys.drop, v1.randomBytes(32), null)
@@ -321,8 +322,19 @@ describe('a contributor uploads a folder', () => {
   beforeEach(() => {
     let n = 0
     vi.mocked(createShareNodeAsGuest).mockReset().mockImplementation(async () => ({ nodeId: `g-${++n}`, contentKey: v1.randomBytes(32) }))
+    vi.mocked(abandonShareNodeAsGuest).mockReset().mockResolvedValue(undefined)
     vi.mocked(tenantStorageFits).mockClear()
   })
+  const folderPicker = () => pickers().filter((p) => p.webkitdirectory).at(-1)!
+  /** Each picked file's job ends as `outcome` names it (an error code), or lands. */
+  const jobsEnding = (outcome: Record<string, string>) => (_t: GuestFileTarget, file: File) => ({
+    name: file.name, sizeBytes: 1, extra: { file: new File([''], file.name) },
+    run: vi.fn(async () => {
+      if (outcome[file.name]) throw new Error(outcome[file.name])
+      return { nodeId: 'n' }
+    }),
+  })
+  const abandoned = () => vi.mocked(abandonShareNodeAsGuest).mock.calls.map(([ctx, id]) => [id, ctx.contributorToken])
 
   it('is offered to a READ_WRITE guest only; a pick is created as its tree, as the guest, its .veyq/ included as files', async () => {
     expect(mountSection({ role: ShareRole.Read }).actions.get('depot.uploadFolder')!.enabled()).toBe(false)
@@ -340,6 +352,29 @@ describe('a contributor uploads a folder', () => {
     expect((targets()[0].ctx as unknown as { keys: Map<string, Uint8Array> }).keys.has('g-2')).toBe(true)
     expect(tenantStorageFits).not.toHaveBeenCalled()
     expectNoMemberWorld()
+  })
+
+  // The Storage page's promise (site space-owners/storage): a full link keeps nothing of a refused upload. The folders were
+  // created before any file was sent; a guest cannot trash, so it takes them back - core's empty FOLDER, erased at once.
+  it('a link that refuses every file keeps none of the folders the upload made: each is taken back, deepest first', async () => {
+    vi.mocked(guestFileUploadJob).mockImplementation(jobsEnding({ 'a.txt': 'quota_exceeded', 'b.txt': 'quota_exceeded' }))
+    mountSection({ role: ShareRole.ReadWrite })
+    await flushPromises()
+    await setPicked(folderPicker(), picked('T/a.txt', 'T/S/b.txt'))
+    await vi.waitFor(() => expect(abandoned()).toEqual([['g-2', 'tok-1'], ['g-1', 'tok-1']]))
+    expectNoMemberWorld()
+  })
+
+  it('a folder below which a file landed, or a retry could still land one, stays; a refusal of the server is borne', async () => {
+    vi.mocked(guestFileUploadJob).mockImplementation(jobsEnding({ 'a.txt': 'quota_exceeded', 'c.txt': 'quota_exceeded', 'd.txt': 'upload_failed' }))
+    vi.mocked(abandonShareNodeAsGuest).mockRejectedValueOnce(new Error('not_a_placeholder'))
+    mountSection({ role: ShareRole.ReadWrite })
+    await flushPromises()
+    // T (g-1) holds a refused a.txt and S (g-2), R (g-3), Q (g-4): b.txt lands in S, c.txt is refused in R, d.txt fails in Q
+    await setPicked(folderPicker(), picked('T/a.txt', 'T/S/b.txt', 'T/R/c.txt', 'T/Q/d.txt'))
+    await vi.waitFor(() => expect(useUploadQueue().batches.value[0]?.finishedAt).not.toBeNull())
+    await flushPromises()
+    expect(abandoned(), 'only R holds nothing and nothing can still land in it').toEqual([['g-3', 'tok-1']])
   })
 
   it('a visitor who declines to name itself creates nothing', async () => {

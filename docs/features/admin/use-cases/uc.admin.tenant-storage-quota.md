@@ -52,19 +52,10 @@ distribution below it is [uc.sharing.share-link-storage-limit](../../sharing/use
 - **Suspension and quota are independent.** A suspended tenant keeps its quota; suspension refuses its uploads by
   its own rule ([uc.admin.suspend-tenant](uc.admin.suspend-tenant.md)), which the quota neither replaces nor needs.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** If you run the server, you can give each space a storage limit, and see how much each one uses. Nobody
-inside a space can raise their own limit. If someone tries to upload into a full space, the upload stops before
-anything is sent, and they're told there's no room left — deleted photos only free space once the trash is emptied.
-Without a limit, a space can use whatever your disk holds. We only ever count sizes, which the server sees anyway —
-never what's in your photos.
-
-**DE —** Wer den Server betreibt, kann jedem Bereich eine Speichergrenze geben und sehen, wie viel jeder belegt.
-Niemand in einem Bereich kann die eigene Grenze anheben. Wer in einen vollen Bereich hochladen will, wird gestoppt,
-bevor etwas übertragen wird, und erfährt, dass kein Platz mehr frei ist — gelöschte Fotos geben Platz erst frei,
-wenn der Papierkorb geleert ist. Ohne Grenze kann ein Bereich so viel belegen, wie die Festplatte hergibt. Gezählt
-werden nur Größen, die der Server ohnehin sieht — nie, was auf deinen Fotos ist.
+Whoever pays for the server's storage decides how much each space may keep, and a full space refuses an upload up
+front instead of failing halfway — counted by size, never by content.
 
 ## Related
 
@@ -77,3 +68,4 @@ werden nur Größen, die der Server ohnehin sieht — nie, was auf deinen Fotos 
   [ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md) (the Server-Owner surface),
   [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) (one store connection today).
 - Run area of the docs site: [Plan your instance](../../../../site/src/content/docs/run/plan.md)
+- End-user view (docs site): [Storage and upload links](../../../../site/src/content/docs/space-owners/storage.mdx)

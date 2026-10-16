@@ -3,11 +3,12 @@
 // settings. A read, and only a read: the Server Owner sees which build this instance is actually running, so an
 // upgrade has a rollback target that can be stated rather than guessed.
 //
-// This is NOT the pre-auth `version: { major, build }` that `useCapabilities` already holds (ADR 0032). That one
-// answers "can this client and this server talk to each other?" and is public; this one answers "which bits are
-// running, and what do I roll back to?" and is Server-Owner-only, because a precise release number is what maps
-// an instance to a list of known vulnerabilities. The two are never merged (ADR 0057 §4) — which is why this
-// panel calls its own owner-gated endpoint instead of reading a value the client already has.
+// This is NOT the pre-auth `version: { major, build }` from `GET /api/setup` (ADR 0032). That one answers "can this
+// client and this server talk to each other?" and is public; this one answers "which bits are running, and what do
+// I roll back to?" and is Server-Owner-only, because a precise release number is what maps an instance to a list of
+// known vulnerabilities. The two share the major (ADR 0085 decision 1) and only the major: the minor never goes
+// pre-auth (ADR 0057 §4) — which is why this panel calls its own owner-gated endpoint instead of reading a value the
+// client already has.
 //
 // The read is owner-gated server-side, so a 403 means "not the Server Owner" and gets the read-only notice
 // rather than a scary error. Nothing here is user content: a release version is a property of the software.

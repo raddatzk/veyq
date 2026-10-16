@@ -28,10 +28,10 @@ const EPOCHS: EpochKeys = { current: 1, keys: new Map([[0, k0], [1, k1]]) }
 const keyTop = v1.randomBytes(32)
 const keySub = v1.randomBytes(32)
 const wrapUnder = (kek: Uint8Array, id: string, k: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }, kek, k))
+  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }, kek, k))
 const folder = (id: string, parentId: string | null, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
   id, parentId, kind: FOLDER_KIND, orderIndex: 0, epoch: 0, name, wrappedContentKey: wrapUnder(kek, id, k),
-  wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+  wrappedMeta: null, metaRevision: 0, placementRevision: 0,
 })
 const TREE: TreeNode[] = [folder(TOP, null, k0, keyTop, 'Reisen'), folder(SUB, TOP, keyTop, keySub, 'Archiv 2026')]
 

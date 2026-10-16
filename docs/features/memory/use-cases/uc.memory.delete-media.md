@@ -117,19 +117,10 @@ delete *whose* — is deferred to a later groups/moderation refine.)
   no per-item "delete forever" UI, no cross-scope trash. The store isn't freed until the purge — an honest
   trade-off of recoverability, communicated by the retention window.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Remove a photo from a memory and it goes into that memory's trash — out of sight right away, but you can
-put it back for 30 days if you change your mind. Only after that is it erased for good, automatically. In a shared
-memory anyone can tidy up, and the trash shows who removed what — nothing vanishes without a trace. Everything
-stays encrypted: the server only ever flips an "in the trash" marker and, later, deletes scrambled files it can't
-read.
-
-**DE —** Nimm ein Foto aus einer Erinnerung, und es wandert in deren Papierkorb — sofort aus dem Blick, aber
-30 Tage lang zurückholbar, falls du es dir anders überlegst. Erst danach wird es automatisch endgültig gelöscht.
-In einer geteilten Erinnerung kann jedes Mitglied aufräumen, und der Papierkorb zeigt, wer was entfernt hat —
-nichts verschwindet spurlos. Alles bleibt verschlüsselt: der Server setzt nur eine „im Papierkorb"-Markierung und
-löscht später verschlüsselte Dateien, die er nicht lesen kann.
+Removing a photo from a Memory is never a slip you cannot take back: it waits in that Memory's trash for 30 days,
+showing who removed it, before it is erased for good.
 
 ## Related
 

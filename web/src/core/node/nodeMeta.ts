@@ -9,7 +9,7 @@
 // current blob, merge only its own sub-object, re-seal — or it would clobber a sibling (writing a `location`
 // must not wipe the `date`, and vice-versa). And since any member writes it, the read it modifies must be the
 // server's current one: every write goes through `writeNodeMeta` (`nodeMetaWrite.ts`), which states the
-// `metaVersion` it was built from and re-runs the change on a `409 stale_version` (ADR 0077). This module owns the
+// `metaRevision` it was built from and re-runs the change on a `409 stale_revision` (ADR 0077). This module owns the
 // envelope and stays PURE — it is in the crypto mutation scope (`web/stryker.mutate.json`), which admits a file
 // only when nothing in it does I/O, so the PATCH lives next door. The domain modules (`memoryDate`,
 // `memoryLocation`, `memoryCover`) own how each sub-object is validated + materialized.
@@ -73,9 +73,9 @@ export function openNodeMetaForWrite(nodeKey: Uint8Array, node: NodeMetaAddress,
 }
 
 /** A node's sealed meta as the tree holds it (`listNodes` carries both). */
-export const nodeMetaState = (node: { wrappedMeta: string | null; metaVersion: number }): SealedMetaState => ({
+export const nodeMetaState = (node: { wrappedMeta: string | null; metaRevision: number }): SealedMetaState => ({
   wrappedMeta: node.wrappedMeta,
-  metaVersion: node.metaVersion,
+  metaRevision: node.metaRevision,
 })
 
 /**

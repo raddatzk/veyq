@@ -102,14 +102,18 @@ sequenceDiagram
 - **A2 — revoked / expired:** `enabled = false` or a passed `expiresAt` → the resolve **and** the upload
   endpoints `404`/`403`. An upload in flight stops at its next window or at its complete, whichever comes first
   (every window is authorized again, [ADR 0013 §2](../../../decisions/0013-blob-storage-presigned-direct-to-store.md));
-  already-uploaded photos remain (no retraction — see Quality notes).
+  already-uploaded photos remain (no retraction — see Quality notes). While `core.public-shares.contribute` (or
+  its parent) is switched off on the instance, an existing READ_WRITE link answers every guest endpoint as an unknown
+  link does, a `404`, and an upload in flight stops the same way; once it is back on the link serves again unchanged
+  ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md) A3, ADR 0088 decision 5).
 - **A3 — change the grant in place (cr-0119):** the curator edits an existing **READ** share and switches it to
   **READ_WRITE** (or back) from the share-management dialog — the **same link keeps working**, no new `K_share`,
   no re-wrap. `role` is plaintext authorization the server enforces per request, so the new grant bites on the next
   resolve/upload (a promote enables contributions at once; a demote 403s new uploads at once, already-contributed
   photos stay). Restricted to **READ ↔ READ_WRITE** — a **WRITE_ONLY** drop-box is its own separate action and its
   write-only promise is never flipped in place (a `422 invalid_role_change` rejects setting WRITE_ONLY or editing a
-  WRITE_ONLY share's role). Owner-gated via `updateShare` ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
+  WRITE_ONLY share's role). A promote while `core.public-shares.contribute` is switched off on the instance is a
+  `422 capability_disabled`, as creating a READ_WRITE link is (ADR 0088). Owner-gated via `updateShare` ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 - **A4 — someone else uses the same device ("Not you?", inbox #401 S2):** once named, the page says whose session
   this device holds ("You are here as Anna") with a "Not you?" that asks first, then forgets the session on the device;
   the next visitor names itself afresh, a new identity. Nothing on the server changes — what the first one added stays,
@@ -160,27 +164,14 @@ sequenceDiagram
   removal; group/tenant contributor shares — where removal soft-revokes the removed member's shares — are now
   [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) (cr-0104).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can turn one memory into a link where friends and family can **add their own photos** — not just
-look. They open it in a browser, type their name once (so you can see who added what — other visitors of the link
-don't see it), and drop in their pictures
-— no account, nothing to install. It shows them **only that one memory**, never the rest of your space, and you
-can switch the link off any time. New photos show up right away; if something doesn't belong, you can remove it.
-The same honest note as always: on the web this is as private as your trust in whoever runs your veyq server —
-if that's you, it's fully private; the "how safe is this?" link explains the details.
-
-**DE —** Du kannst eine Erinnerung in einen Link verwandeln, bei dem Freunde und Familie **eigene Fotos beisteuern**
-können — nicht nur anschauen. Sie öffnen ihn im Browser, tippen einmal ihren Namen ein (damit du siehst, wer was
-beigetragen hat — andere, die den Link öffnen, sehen ihn nicht) und laden ihre Bilder hoch — ohne Konto, ohne Installation. Der Link zeigt **nur diese eine
-Erinnerung**, nie den Rest deines Bereichs, und du kannst ihn jederzeit abschalten. Neue Fotos erscheinen sofort;
-was nicht passt, kannst du entfernen. Dieselbe ehrliche Anmerkung wie immer: im Browser ist das so privat wie dein
-Vertrauen in den, der deinen veyq-Server betreibt — bist das du selbst, ist es voll privat; der „Wie sicher ist
-das?"-Link erklärt die Details.
+Friends and family can add their own photos to one Memory through a link, without an account, while the rest of your
+space stays private and you see who added what.
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - Feature: [Sharing](../_index.md)
 - Decisions: [ADR 0030](../../../decisions/0030-contributor-public-share.md) (this contributor share — the sealed
   anonymous identity + the share-scoped upload path), [ADR 0029](../../../decisions/0029-public-viewer-share.md)
@@ -194,3 +185,4 @@ das?"-Link erklärt die Details.
 - Related: [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md) (the read-only viewer share this
   builds on), [Memory](../../memory/_index.md) (what a Memory is — the thing being shared + contributed to).
 - End-user view (docs site): [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)
+- End-user view (docs site): [Create a link](../../../../site/src/content/docs/sharing/create-a-link.mdx)

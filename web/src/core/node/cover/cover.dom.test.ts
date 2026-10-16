@@ -3,7 +3,7 @@
 // `main.ts` fills it (Memories' and Depot's real row factories), a folder, a Memory, a file and a drop box in one level.
 //
 // Pinned here: the ONE action - `Set cover` / `Change cover`, core's, in the row's menu and in the header; removal lives in the
-// dialog it opens - is offered exactly where the capability function says (a writer, on the kinds that opted in; never a file,
+// dialog it opens - is offered exactly where the rights function says (a writer, on the kinds that opted in; never a file,
 // never a guest, never a pending deletion, never while the keys are locked), and a click opens core's dialog, whose Save runs
 // core's flow (the derive and upload, ONE write with the meta, the crop it was framed with); the cover is the leading visual
 // of the row, the tile and the header, the kind's icon the fallback when it is missing or fails to open; and a share guest sees
@@ -52,7 +52,7 @@ import { actionIdsOf, actionLabel, clickAction, rowOf } from '../../../test/leve
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const KEY = v1.randomBytes(32)
-const EPOCHS = {} as EpochKeys // only its presence matters: the capability asks "are the keys loaded", the tree source supplies the key
+const EPOCHS = {} as EpochKeys // only its presence matters: the right asks "are the keys loaded", the tree source supplies the key
 
 const id = (n: number) => `d0000000-0000-4000-8000-00000000000${n}`
 const sealCover = (nodeId: string, blobId: string) =>
@@ -60,7 +60,7 @@ const sealCover = (nodeId: string, blobId: string) =>
     v: 1, cover: uploadedCover({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId }),
   }))))
 const node = (n: number, kind: string, name: string, parentId: string | null, wrappedMeta: string | null = null): TreeNode =>
-  treeNode({ id: id(n), kind, name, parentId, wrappedMeta, metaVersion: wrappedMeta ? 4 : 0 })
+  treeNode({ id: id(n), kind, name, parentId, wrappedMeta, metaRevision: wrappedMeta ? 4 : 0 })
 
 const TRIPS = node(1, FOLDER_KIND, 'Trips', null)
 const ROME = node(2, MEMORY_KIND, 'Rome', TRIPS.id)
@@ -118,12 +118,12 @@ beforeEach(() => {
   vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
   vi.mocked(openBlobFromUrls).mockResolvedValue(new Uint8Array([4, 5, 6]))
   vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'up-1', plan: { blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: SUB.id } })
-  vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaVersion: 5, replaced: null })
+  vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaRevision: 5, replaced: null })
   stubApi(filesApi, { listFiles: { items: [] } satisfies FileListPage })
 })
 afterEach(() => vi.restoreAllMocks())
 
-describe('who is offered the cover action, and on which kinds (capability matrix, fail closed)', () => {
+describe('who is offered the cover action, and on which kinds (rights matrix, fail closed)', () => {
   it('a writer gets it on a folder, a Memory and a drop box - in the row menu - and never on a file', async () => {
     const w = mountLevel(TRIPS)
     await flushPromises()
@@ -203,7 +203,7 @@ describe('the cover dialog, by a real click: choose, crop, Save - the derive and
     expect(deriver, 'the existing derive pipeline, its default').toBeUndefined()
     expect(opts).toMatchObject({ strict: true }) // an unreadable image is refused, never sealed as a cover
     const write = vi.mocked(writeNodeCover).mock.calls[0][0]
-    expect(write).toMatchObject({ scopeId: SCOPE, nodeId: target.id, uploadId: 'up-1', surfaceConflict: false, current: { wrappedMeta: target.wrappedMeta, metaVersion: target.metaVersion } })
+    expect(write).toMatchObject({ scopeId: SCOPE, nodeId: target.id, uploadId: 'up-1', surfaceConflict: false, current: { wrappedMeta: target.wrappedMeta, metaRevision: target.metaRevision } })
     const stored = uploadedCover({ blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: SUB.id })
     expect(write.cover).toMatchObject({ source: stored.source })
     const crop = (write.cover as { crop: { x: number; y: number; width: number; height: number } }).crop
@@ -360,7 +360,7 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
 
     // the write landed: the tree now holds the node's new (cover-less) meta, as `patchNodeMeta` leaves it
     withCover.wrappedMeta = b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: id(5) }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1 }))))
-    withCover.metaVersion = 5
+    withCover.metaRevision = 5
     await w.setProps({ level: childrenOf([...TREE], TRIPS.id) })
     await vi.waitFor(() => expect(visual(w, 'Sub').find('img').exists()).toBe(false))
     expect(visual(w, 'Sub').find('.pi-folder').exists()).toBe(true)

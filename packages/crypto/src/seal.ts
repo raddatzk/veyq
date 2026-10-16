@@ -1,6 +1,6 @@
 // The ONE way to seal in veyq (ADR 0072). Every AEAD seal binds its purpose AND the identity of the object it is
 // stored as, so the operator-blind server can no longer serve one object's ciphertext in another object's slot:
-// the AAD carries the purpose, every id the opener addresses the object by, and the epoch or version the wire
+// the AAD carries the purpose, every id the opener addresses the object by, and the epoch or revision the wire
 // stores it at. The opener supplies those values from the ADDRESS it fetched the object by — the route it called,
 // the row it looked up, the scope it opened — never from fields of the response that carry the ciphertext
 // (Decision 1). Where the key is unique to one object, the key is the binding and the context names the purpose
@@ -25,7 +25,7 @@ import {
 /**
  * What a binding field is: a canonical lowercase UUID, a share id (the 43-character base64url bearer token a share
  * is addressed by — a capability, so it keeps its 256-bit form rather than becoming a UUID), an unsigned integer
- * (epoch/version), or a blob role (a bounded token). Statements (below) add five kinds a seal never binds: an id that may be absent
+ * (epoch/revision), or a blob role (a bounded token). Statements (below) add five kinds a seal never binds: an id that may be absent
  * (encoded as the empty field), a scope kind, a 32-byte SHA-256 digest, an opaque byte string bound whole, and a
  * six-digit pairing code (its ASCII digits).
  */
@@ -48,12 +48,12 @@ type Schema = Readonly<Record<string, readonly (readonly [string, FieldKind])[]>
 
 /** Symmetric purposes (`seal`/`open`), each with its binding fields in canonical order. */
 export const SEAL_PURPOSES = {
-  // A node's directory entry and key wrap bind the placement version the wire stores them at (ADR 0080 Decision 3):
-  // 0 at birth, `n + 1` for a move or rename built on `n`, so a name or wrap served at another version — one a move
+  // A node's directory entry and key wrap bind the placement revision the wire stores them at (ADR 0080 Decision 3):
+  // 0 at birth, `n + 1` for a move or rename built on `n`, so a name or wrap served at another revision — one a move
   // superseded — does not open. Added before V1 (ADR 0072: a stored-format change, so a code change and a reset,
   // not a suite v2); the parent stays unbound (ADR 0072 Decision 4) — the parent's key is the binding.
-  'node-name': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementVersion', 'uint']],
-  'content-key': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementVersion', 'uint']],
+  'node-name': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
+  'content-key': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
   'node-meta': [['scopeId', 'id'], ['nodeId', 'id']],
   // ownerId is the media id for a media's blobs, the node id for a cover or a file's content; the role names which.
   'blob-key': [['scopeId', 'id'], ['ownerId', 'id'], ['blobId', 'id'], ['role', 'role']],
@@ -78,8 +78,8 @@ export const SEAL_PURPOSES = {
   'scope-epoch': [['scopeId', 'id'], ['epoch', 'uint']],
   'group-name': [['scopeId', 'id'], ['nameEpoch', 'uint']],
   'space-icon': [['scopeId', 'id'], ['iconEpoch', 'uint']],
-  'identity-pins': [['version', 'uint']],
-  'device-register': [['version', 'uint']],
+  'identity-pins': [['revision', 'uint']],
+  'device-register': [['revision', 'uint']],
   // Purpose only: sealed under the share's own K_share (ADR 0072 Decision 2).
   'share-key': [],
   'share-memory-name': [],

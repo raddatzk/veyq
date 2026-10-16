@@ -39,7 +39,7 @@ const { t } = realI18n().global
 const SHARE = 'Dr0pIdDr0pIdDr0pIdDr0pIdDr0pIdDr0pIdDr0p-_1'
 const HEAD = { shareId: SHARE, scopeId: 'scope', name: 'Steuer 2026' } as PublicShareHead
 const SESSION: DropGuestSession = { identityId: 'id-1', contributorToken: 'tok-1', identityKey: 'a2V5' }
-const FOLDER = { nodeId: 'folder-1', key: v1.randomBytes(32), epoch: 0, placementVersion: 0, created: true }
+const FOLDER = { nodeId: 'folder-1', key: v1.randomBytes(32), epoch: 0, placementRevision: 0, created: true }
 
 /** A 404 as the generated client throws it: a `response` with the server's `ErrorResponse`. */
 const http = (status: number, code: string) =>

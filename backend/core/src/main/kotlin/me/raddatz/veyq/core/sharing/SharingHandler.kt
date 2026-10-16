@@ -11,7 +11,6 @@ import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestGate.PwCheck
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
 import me.raddatz.veyq.core.admin.tenant.TenantTermsHandler
-import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.blobstore.BlobStore
@@ -45,6 +44,9 @@ sealed interface CreateShareOutcome {
     object Deleting : CreateShareOutcome, HttpFailure by Failures.scopeDeleting
     /** The sharing capability this role needs is disabled instance-wide (ADR 0032) — a 422, instance policy. */
     object CapabilityDisabled : CreateShareOutcome, HttpFailure by Failures.capabilityDisabled
+    /** The link misses a requirement in effect for its tenant (ADR 0088 decision 8, [LinkRequirements]) — a 422. */
+    object LinkPasswordRequired : CreateShareOutcome, HttpFailure by Failures.linkPasswordRequired
+    object LinkExpiryRequired : CreateShareOutcome, HttpFailure by Failures.linkExpiryRequired
     /** No such node, or the caller holds no grant for its scope (a 404, no reveal). */
     object NoNode : CreateShareOutcome, HttpFailure by Failures.nodeNotFound
     /** The node's kind may not be the root of a share of this role ([ShareRoots], ADR 0080 decision 6) — a 422. */
@@ -162,6 +164,11 @@ sealed interface UpdateShareOutcome {
     /** An illegal role change (cr-0119) — `role = WRITE_ONLY`, a change on a WRITE_ONLY share, or a role the shared
      *  node's kind may not be the root of ([ShareRoots]) → 422. */
     object InvalidRole : UpdateShareOutcome, HttpFailure by httpFailure("invalid_role_change", UNPROCESSABLE)
+    /** A change into a role whose instance capability is not active (ADR 0088) — the 422 `create` answers. */
+    object CapabilityDisabled : UpdateShareOutcome, HttpFailure by Failures.capabilityDisabled
+    /** The link misses a requirement in effect for its tenant (ADR 0088 decision 8, [LinkRequirements]) — a 422. */
+    object LinkPasswordRequired : UpdateShareOutcome, HttpFailure by Failures.linkPasswordRequired
+    object LinkExpiryRequired : UpdateShareOutcome, HttpFailure by Failures.linkExpiryRequired
 }
 
 sealed interface SetShareSealedNameOutcome {
@@ -192,6 +199,9 @@ sealed interface ReissueShareOutcome {
     object NotFound : ReissueShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     /** The capability the old share's role needs is off (ADR 0032) — a re-issue publishes a link. */
     object CapabilityDisabled : ReissueShareOutcome, HttpFailure by Failures.capabilityDisabled
+    /** The link misses a requirement in effect for its tenant (ADR 0088 decision 8, [LinkRequirements]) — a 422. */
+    object LinkPasswordRequired : ReissueShareOutcome, HttpFailure by Failures.linkPasswordRequired
+    object LinkExpiryRequired : ReissueShareOutcome, HttpFailure by Failures.linkExpiryRequired
     /** The keys do not match the old share's role — a 400, as on create. */
     object InvalidRequest : ReissueShareOutcome, HttpFailure by Failures.invalidRequest
     /** The recovery copy is not sealed at the scope's current epoch (ADR 0024 Decision 6) — a 409, nothing written. */
@@ -216,8 +226,8 @@ sealed interface NodeSharesOutcome {
 }
 
 sealed interface ShareTermsOutcome {
-    /** The owning tenant's public terms — `termsVersion` 0 (with null `de`/`en`) when the operator published none. */
-    data class Found(val tenantId: String, val termsVersion: Int, val de: String?, val en: String?) : ShareTermsOutcome
+    /** The owning tenant's public terms — `termsRevision` 0 (with null `de`/`en`) when the space owner published none. */
+    data class Found(val tenantId: String, val termsRevision: Int, val de: String?, val en: String?) : ShareTermsOutcome
     /** Unknown/disabled/expired share — the same non-enumerable 404 as [ResolveShareOutcome.NotFound]. */
     object NotFound : ShareTermsOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
 }
@@ -260,12 +270,22 @@ class SharingHandler(
     ): CreateShareOutcome {
         // Instance policy first (ADR 0032): the capability this role needs must be active, else 422 — checked
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
-        if (!capabilities.isActive(capabilityFor(role))) return CreateShareOutcome.CapabilityDisabled
+        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(role), null)) return CreateShareOutcome.CapabilityDisabled
         val keys = shareKeys(role, wrap, sealedDropPublicKey, sealedDropPrivateKey) ?: return CreateShareOutcome.InvalidRequest
         // A node in the trash is shared by nobody: a link on it would serve nothing, and a restore is not a new share.
         val node = store.findNode(nodeId)?.takeIf { it.deletedAt == null } ?: return CreateShareOutcome.NoNode
         access.check(userId, node.scopeId, WRITE)
             .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)?.let { return it }
+        // The tenant's level (ADR 0088 decision 2): the node's tenant may have narrowed it, else 422. After the access
+        // check, because only the node names the tenant: a caller who is no member of its scope gets the 404 it gets
+        // anyway, and learns nothing of another tenant's policy.
+        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(role), node.scopeId)) {
+            return CreateShareOutcome.CapabilityDisabled
+        }
+        // The tenant's link requirements (ADR 0088 decision 8): a new link is made now.
+        linkRefusal(node.scopeId, passwordRequired && pwVerifier != null, Instant.now(), expiresAt)?.let {
+            return if (it === Failures.linkPasswordRequired) CreateShareOutcome.LinkPasswordRequired else CreateShareOutcome.LinkExpiryRequired
+        }
         // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a node whose kind's owner
         // declares this role for a share root ([ShareRoots], ADR 0080 decision 6). Whether a guest may then upload
         // under it is a separate question, [writesFor]'s.
@@ -400,6 +420,23 @@ class SharingHandler(
         if (role != null && !ShareRoots.allows(roots, store.findNode(share.nodeId)?.kind.orEmpty(), role)) {
             return UpdateShareOutcome.InvalidRole
         }
+        // A change INTO a role publishes a link of that role, so it asks what `create` asks (ADR 0088): a READ link
+        // turned READ_WRITE while `.contribute` is off would mint a contribute link past the switch, and since the
+        // guest gate refuses that role (ADR 0088 decision 5) it would serve no guest at all. Only an actual change:
+        // a request naming the current role, or narrowing to READ while READ is on, passes.
+        if (role != null && role != share.role && !capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(role), share.scopeId)) {
+            return UpdateShareOutcome.CapabilityDisabled
+        }
+        // The link requirements (ADR 0088 decision 8) on the link as the edit leaves it: the password tri-state (null
+        // keeps the stored one) and the end date, a full replace, measured from the link's own start.
+        val keepsPassword = when (passwordRequired) {
+            null -> share.pwVerifier != null
+            true -> pwVerifier != null
+            false -> false
+        }
+        linkRefusal(share.scopeId, keepsPassword, share.createdAt, expiresAt)?.let {
+            return if (it === Failures.linkPasswordRequired) UpdateShareOutcome.LinkPasswordRequired else UpdateShareOutcome.LinkExpiryRequired
+        }
         return when (store.updateShare(userId, shareId, sealedNote, sealedShareName, role, expiresAt, passwordRequired, pwSalt, pwVerifier, sealedPassword)) {
             SharingStore.UpdateResult.DONE -> UpdateShareOutcome.Done
             SharingStore.UpdateResult.NOT_FOUND -> UpdateShareOutcome.NotFound
@@ -447,7 +484,7 @@ class SharingHandler(
         access.check(userId, share.scopeId, WRITE)
             .refusal(ReactivateShareOutcome.NotFound, ReactivateShareOutcome.Suspended, ReactivateShareOutcome.Deleting)
             ?.let { return it }
-        if (!capabilities.isActive(capabilityFor(share.role))) return ReactivateShareOutcome.CapabilityDisabled
+        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(share.role), share.scopeId)) return ReactivateShareOutcome.CapabilityDisabled
         // ADR 0075: the same link comes back on, so a link a departed member may hold is re-issued instead.
         val scope = scopes.find(share.scopeId) ?: return ReactivateShareOutcome.NotFound
         if (reissueRequired(share, scope)) return ReactivateShareOutcome.ReissueRequired
@@ -498,7 +535,11 @@ class SharingHandler(
     ): ReissueShareOutcome {
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
-        if (!capabilities.isActive(capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
+        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(old.role), old.scopeId)) return ReissueShareOutcome.CapabilityDisabled
+        // A re-issue makes a new link now, so it meets the requirements as a new one does.
+        linkRefusal(old.scopeId, passwordRequired && pwVerifier != null, Instant.now(), expiresAt)?.let {
+            return if (it === Failures.linkPasswordRequired) ReissueShareOutcome.LinkPasswordRequired else ReissueShareOutcome.LinkExpiryRequired
+        }
         // No drop private key: the old WRITE_ONLY share proves the node already holds one (it is set once and
         // never cleared), and every upload so far is sealed to it (ADR 0031 point 7).
         val keys = shareKeys(old.role, wrap, sealedDropPublicKey, null) ?: return ReissueShareOutcome.InvalidRequest
@@ -525,6 +566,10 @@ class SharingHandler(
             }
         }
     }
+
+    /** The link requirements in effect for [scopeId]'s tenant, asked of a link with these properties ([LinkRequirements]). */
+    private fun linkRefusal(scopeId: String, hasPassword: Boolean, createdAt: Instant, expiresAt: Instant?): HttpFailure? =
+        LinkRequirements.refusal(capabilities.requirementsInScope(scopeId), hasPassword, createdAt, expiresAt)
 
     /** A re-issue's refusals that a removal, a delete or an adoption can turn: the caller's membership, a deleted
      *  share, an enabled one that is not the caller's. The store's compare-and-set decides "deleted" again. */
@@ -579,7 +624,7 @@ class SharingHandler(
      * acceptance in localStorage, which an accountless visitor can bypass (devtools / a fresh profile / resolving the
      * share directly). It records + surfaces consent; it does not *prevent* access. The legally-meaningful protection
      * is the terms' own content (CSAM/illegal-content + review-and-removal) and the decryptable-on-report path, not
-     * this prompt. A tenant with no published terms yields `termsVersion` 0, and the client then never gates.
+     * this prompt. A tenant with no published terms yields `termsRevision` 0, and the client then never gates.
      */
     fun shareTerms(shareId: String): ShareTermsOutcome {
         val share = gate.activeShare(shareId) ?: return ShareTermsOutcome.NotFound
@@ -587,7 +632,7 @@ class SharingHandler(
         // ADR 0029 §6). Defensive null (a share always has a scope+tenant by FK) → the same non-enumerable 404.
         val tenantId = scopes.scopeTenantId(share.scopeId) ?: return ShareTermsOutcome.NotFound
         val terms = tenantTerms.guestTerms(tenantId)
-        return ShareTermsOutcome.Found(tenantId, terms?.version ?: 0, terms?.terms?.de, terms?.terms?.en)
+        return ShareTermsOutcome.Found(tenantId, terms?.revision ?: 0, terms?.terms?.de, terms?.terms?.en)
     }
 
     // --- contributor / uploader (cr-0101, cr-0102) -----------------------------
@@ -704,15 +749,6 @@ class SharingHandler(
         val blob = store.authorizedBlob(share.scopeId, share.nodeId, blobId) ?: return ShareBlobOutcome.NotFound
         val gets = blobStore.presignGets(blob.storageKey, blob.chunkCount, domain) ?: return ShareBlobOutcome.StoreUnavailable
         return ShareBlobOutcome.Found(gets)
-    }
-
-    /** The instance capability a role's public share needs (ADR 0032, ADR 0088): one leaf per role. READ_WRITE and
-     *  WRITE_ONLY are children of [CapabilityIds.PUBLIC_SHARES], so through the registry's AND along the path they
-     *  also need it. READ, the one role left, needs the parent alone. */
-    private fun capabilityFor(role: String): String = when (role) {
-        ShareEntity.READ_WRITE -> CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
-        ShareEntity.WRITE_ONLY -> CapabilityIds.PUBLIC_SHARES_DROP_BOX
-        else -> CapabilityIds.PUBLIC_SHARES
     }
 
     /**

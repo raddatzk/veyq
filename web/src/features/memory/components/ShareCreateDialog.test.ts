@@ -27,6 +27,7 @@ import { ShareRole } from '../../../api/generated/sharing'
 import { realI18n, t } from '../../../test/i18n'
 import { buildShareLink } from '../shareLink'
 import * as share from '../share'
+import { setTenantCapabilities } from '../../../shared/state/useCapabilities'
 
 const createShare = vi.mocked(share.createShare).mockResolvedValue({ shareId: 's1', kShare: new Uint8Array(32) })
 const updateShare = vi.mocked(share.updateShare).mockResolvedValue(undefined)
@@ -52,7 +53,7 @@ const stubs = {
   InputText: true,
   // Controllable toggle/date stubs so a test can enable expiry + pick a date; $attrs forwards the aria-label.
   ToggleSwitch: { props: ['modelValue'], emits: ['update:modelValue'], template: '<button v-bind="$attrs" @click="$emit(\'update:modelValue\', !modelValue)" />' },
-  DatePicker: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input class="datepicker" />' },
+  DatePicker: { props: ['modelValue', 'maxDate'], emits: ['update:modelValue'], template: '<input class="datepicker" :data-max="maxDate ? maxDate.toDateString() : \'\'" />' },
   LocaleMarkdownEditor: true,
 }
 
@@ -277,5 +278,35 @@ describe("ShareCreateDialog — the note's acceptance switch", () => {
     await w.findAll('button').find((b) => b.text() === t('share.create'))!.trigger('click')
     await flushPromises()
     expect(createShare.mock.calls[0][7]).toEqual({ texts: { en: 'Read me first' }, mustAccept: true })
+  })
+
+  it('a space\'s link requirements turn the password and end-date cards on, lock them and limit the picker (ADR 0088 decision 8)', async () => {
+    setTenantCapabilities([{ id: 'core.public-shares', linkPassword: true, linkMaxDays: 7 }])
+    try {
+      createShare.mockClear()
+      const w = mountDialog({})
+      await flushPromises()
+      expect(w.text()).toContain(t('share.passwordRequiredByRule'))
+      expect(w.text()).toContain(t('share.expiryRequiredByRule', { days: 7 }))
+      expect(w.find(`[aria-label="${t('share.passwordSection')}"]`).attributes('disabled')).toBeDefined()
+      expect(w.find(`[aria-label="${t('share.expirySection')}"]`).attributes('disabled')).toBeDefined()
+      // The picker ends on the last day a link made now may run, and starts filled with it.
+      const last = new Date(Date.now() + 7 * 24 * 3600 * 1000)
+      last.setDate(last.getDate() - 1)
+      expect(w.find('.datepicker').attributes('data-max')).toBe(last.toDateString())
+      // Without the required password the create does nothing.
+      await w.findAll('button').find((b) => b.text() === t('share.create'))!.trigger('click')
+      await flushPromises()
+      expect(createShare).not.toHaveBeenCalled()
+    } finally {
+      setTenantCapabilities(null)
+    }
+  })
+
+  it('control: without requirements both cards start off and unlocked', async () => {
+    const w = mountDialog({})
+    await flushPromises()
+    expect(w.text()).not.toContain(t('share.passwordRequiredByRule'))
+    expect(w.find(`[aria-label="${t('share.passwordSection')}"]`).attributes('disabled')).toBeUndefined()
   })
 })

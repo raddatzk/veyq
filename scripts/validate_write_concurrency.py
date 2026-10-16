@@ -6,21 +6,25 @@ every operation whose method is PUT or PATCH, plus every POST whose `operationId
 (`rename|set|update|change|commit|move|put`). Each must carry an operation-level `x-veyq-concurrency` mapping
 with a `mode` of one of two values:
 
-  - `version` — the write carries the version it read and is compare-and-set. The mapping's `fields` is a
-    non-empty LIST of declarations, one per version the operation checks — an operation may guard two independent
-    things on one row (`updateNode`: the sealed payload's `metaVersion`, the placement's `placementVersion`, ADR
+  - `revision` — the write carries the revision it read and is compare-and-set. The mapping's `fields` is a
+    non-empty LIST of declarations, one per revision the operation checks — an operation may guard two independent
+    things on one row (`updateNode`: the sealed payload's `metaRevision`, the placement's `placementRevision`, ADR
     0080), and each conflicts on its own. A declaration names the request `field` (an integer property of the
     request schema, resolved through `$ref` across spec files, declared once); the field is `required`, or the
     declaration's `requiredWith` names the property — or the list of properties — whose presence makes it required
     (the server enforces that half). The operation's `409` response — inline or a `$ref` into `_common` — names each
-    declaration's `conflictCode` (default `stale_version`) in its description or example.
-  - `last-writer-wins` — with a non-empty `reason`: why no version is needed (one writer, or the write carries
+    declaration's `conflictCode` (default `stale_revision`) in its description or example. A declared field is
+    named as a revision (`revision` or `…Revision`), never as a version: ADR 0086 keeps "version" for
+    compatibility, so a counter that says version is a word error the contract would carry onto every client.
+  - `last-writer-wins` — with a non-empty `reason`: why no revision is needed (one writer, or the write carries
     only what its writer typed).
 
-The reverse angle: any non-GET operation whose request schema carries a version-shaped property (`version`, or
-a name ending in `Version`) must be declared `version` with that property as the `field` of one of its declarations —
-subject or not, so a version-checked write outside the verb list is still held to its wire form, and a second version
-added beside a declared one is not carried silently.
+The reverse angle: any non-GET operation whose request schema carries a counter-shaped property (`revision` or
+`version`, or a name ending in `Revision` or `Version`) must be declared `revision` with that property as the `field`
+of one of its declarations — subject or not, so a revision-checked write outside the verb list is still held to its
+wire form, and a second counter added beside a declared one is not carried silently. The shape keeps reading both
+words although every counter now says revision (inbox #452): a new counter named version must still be found, so the
+naming rule above can refuse it rather than the reverse angle never seeing it.
 
 The failure names the list — spec, operation, rule — never a count.
 
@@ -30,18 +34,23 @@ silent by construction: a member who only opened a Memory re-sealed its date, pl
 at space entry, erasing a peer's newer place, and nobody saw anything. What made that possible was that "can a
 second writer lose data here?" was never asked per operation. Its first run, before any annotation landed,
 named the 20 subject operations and `acceptTenantTerms` (a POST outside the verb list carrying `version`).
+When inbox #437 renamed the node counters to revisions, the shape still read `Version` only: run on the renamed
+contract it was red on `removeNodeCover` (a write the counter alone makes a subject), and an undeclared
+`placementRevision` would have passed unseen. The shape learned `Revision` in the same change. When inbox #452
+renamed the rest (the pins, the register, the terms), nothing held the word itself: a counter could be re-added
+as `version`, consistently declared, and pass — so the naming rule came with it.
 
 **Its limit.** It proves a **declaration** and its **wire form**, never behaviour: that the server actually
-compares the version is proven by the red-first slice tests (`NodesSliceTest`, `MediaSliceTest`,
+compares the revision is proven by the red-first slice tests (`NodesSliceTest`, `MediaSliceTest`,
 `IdentityPinsSliceTest`, the placement's `NodePlacementCoreSliceTest`), and that a `last-writer-wins` reason is *true* is a reviewer's call. A POST edit whose
-`operationId` starts with a verb outside the list slips through unless it carries a version-shaped field. A
+`operationId` starts with a verb outside the list slips through unless it carries a counter-shaped field. A
 `requiredWith` is not checked against the server's enforcement. The first shape reached for was keyed on the
 method alone (PUT/PATCH), which misses six POST edits (`renameGroup`, `setScopeIcon`, `moveBucketMedia`,
 `commitCoverBlob`, `changeTenantDomain`, `changePassword`); the verb list is what closes that. The declaration
-was one `field` per operation until ADR 0080 gave `updateNode` a second, independent version (`placementVersion`
-beside `metaVersion`); a single slot would have forced one of them undeclared, so `fields` became a list with a
+was one `field` per operation until ADR 0080 gave `updateNode` a second, independent counter (`placementRevision`
+beside `metaRevision`); a single slot would have forced one of them undeclared, so `fields` became a list with a
 conflict code each. Its bite cases are `validate_guard_gaps.py` 59–61 (a declaration dropped, a second
-version-shaped field undeclared, a conflict code the `409` does not name).
+counter-shaped field undeclared, a conflict code the `409` does not name) and 82 (a declared field named version).
 """
 from __future__ import annotations
 
@@ -57,9 +66,10 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 API = contract_specs.API
 
 EDIT_VERB = re.compile(r"^(rename|set|update|change|commit|move|put)[A-Z]")
+COUNTER_SHAPED = re.compile(r"^(revision|version|[a-z][A-Za-z0-9]*(Revision|Version))$")
+MODES = ("revision", "last-writer-wins")
 VERSION_SHAPED = re.compile(r"^(version|[a-z][A-Za-z0-9]*Version)$")
-MODES = ("version", "last-writer-wins")
-DEFAULT_CONFLICT = "stale_version"
+DEFAULT_CONFLICT = "stale_revision"
 METHODS = ("get", "put", "post", "patch", "delete")
 
 
@@ -123,21 +133,24 @@ def conflict_text(specs: dict[str, dict], op: dict, file: str) -> str:
 def check_declaration(
     where: str, entry: dict, props: dict, required: set[str], conflict: str, declared: list[str],
 ) -> list[str]:
-    """One `fields` entry: its version field, what makes it required, and its conflict code in the `409`."""
+    """One `fields` entry: its revision field, what makes it required, and its conflict code in the `409`."""
     errors: list[str] = []
     field = entry.get("field")
     if field in declared:
-        return [f"{where}: version field {field!r} is declared twice"]
+        return [f"{where}: revision field {field!r} is declared twice"]
     if field not in props:
-        return [f"{where}: version field {field!r} is not a property of the request schema"]
+        return [f"{where}: revision field {field!r} is not a property of the request schema"]
     declared.append(field)
+    if VERSION_SHAPED.match(field):
+        errors.append(f"{where}: revision field {field!r} is named as a version — a counter is a revision "
+                      f"(ADR 0086)")
     if not is_integer(props[field]):
-        errors.append(f"{where}: version field {field!r} is not an integer")
+        errors.append(f"{where}: revision field {field!r} is not an integer")
     with_ = entry.get("requiredWith")
     with_list = [with_] if isinstance(with_, str) else list(with_ or [])
     if field not in required:
         if not with_list:
-            errors.append(f"{where}: version field {field!r} is neither required nor `requiredWith` "
+            errors.append(f"{where}: revision field {field!r} is neither required nor `requiredWith` "
                           f"another property")
         for w in with_list:
             if w not in props:
@@ -151,7 +164,7 @@ def check_declaration(
 def main() -> int:
     specs = load_specs()
     errors: list[str] = []
-    n_subject = n_version = n_lww = 0
+    n_subject = n_revision = n_lww = 0
     for file, spec in specs.items():
         for path, item in (spec.get("paths") or {}).items():
             for method, op in (item or {}).items():
@@ -161,16 +174,16 @@ def main() -> int:
                 where = f"{file} {oid}"
                 body = (((op.get("requestBody") or {}).get("content") or {}).get("application/json") or {}).get("schema")
                 props, required = request_properties(specs, body, file) if body else ({}, set())
-                versioned = sorted(n for n in props if VERSION_SHAPED.match(n))
+                counters = sorted(n for n in props if COUNTER_SHAPED.match(n))
                 subject = method in ("put", "patch") or (method == "post" and EDIT_VERB.match(oid) is not None)
                 decl = op.get("x-veyq-concurrency")
-                if not subject and not (method != "get" and versioned):
+                if not subject and not (method != "get" and counters):
                     if decl is not None:
                         errors.append(f"{where}: declares x-veyq-concurrency but is no edit operation")
                     continue
                 n_subject += 1
                 if not isinstance(decl, dict):
-                    why = "an edit operation" if subject else f"a write carrying {', '.join(versioned)}"
+                    why = "an edit operation" if subject else f"a write carrying {', '.join(counters)}"
                     errors.append(f"{where}: {why} with no x-veyq-concurrency declaration (ADR 0077)")
                     continue
                 mode = decl.get("mode")
@@ -181,13 +194,13 @@ def main() -> int:
                     n_lww += 1
                     if not str(decl.get("reason") or "").strip():
                         errors.append(f"{where}: last-writer-wins without a reason")
-                    if versioned:
+                    if counters:
                         errors.append(f"{where}: declared last-writer-wins but its request carries "
-                                      f"{', '.join(versioned)} — a version-carrying write is declared `version`")
+                                      f"{', '.join(counters)} — a counter-carrying write is declared `revision`")
                     continue
-                n_version += 1
+                n_revision += 1
                 if "field" in decl or "requiredWith" in decl or "conflictCode" in decl:
-                    errors.append(f"{where}: a version declaration lists its fields under `fields` "
+                    errors.append(f"{where}: a revision declaration lists its fields under `fields` "
                                   f"(a list of {{field, requiredWith, conflictCode}}), not at the top level")
                     continue
                 fields = decl.get("fields")
@@ -201,9 +214,9 @@ def main() -> int:
                         errors.append(f"{where}: a fields entry is {entry!r}, expected a mapping")
                         continue
                     errors.extend(check_declaration(where, entry, props, required, text, declared))
-                for other in versioned:
+                for other in counters:
                     if other not in declared:
-                        errors.append(f"{where}: carries version-shaped {other!r} that no declaration names "
+                        errors.append(f"{where}: carries counter-shaped {other!r} that no declaration names "
                                       f"(declared: {', '.join(declared) or 'none'})")
 
     if errors:
@@ -211,7 +224,7 @@ def main() -> int:
         for e in errors:
             print("  -", e)
         return 1
-    print(f"write concurrency OK: {n_subject} edit operation(s) declared — {n_version} version-checked, "
+    print(f"write concurrency OK: {n_subject} edit operation(s) declared — {n_revision} revision-checked, "
           f"{n_lww} last-writer-wins with a reason.")
     print("  scope: the DECLARATION and its wire form, never that the server compares — see the docstring.")
     return 0

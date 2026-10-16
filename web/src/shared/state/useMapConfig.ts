@@ -5,23 +5,19 @@
 //
 // **One coupled, two-stage opt-in (personal space).** Tiles gate geocoding: there is no tiles-on/geocoding-off
 // middle stage. `mapsConsent` **off** ⇒ no map ⇒ no location feature; **on** ⇒ tiles **and** reverse geocoding.
-// Off by default — the user actively opts in. (The group consent state-machine — owner soft-enable, per-member
-// notice, unanimity-binds — is a later CR; here it's simply the user's own toggle.)
+// Off by default — the user actively opts in.
 //
-// **Off until configured.** The reference provider is public OSM tiles + Nominatim (ADR 0016/0018), shipped as
-// the built-in default and overridable via env (`VITE_VEYQ_MAP_TILE_URL`, `VITE_VEYQ_MAP_GEOCODER_URL`) or a
-// per-device localStorage override. With no tile URL there is no map; with no geocoder URL, names are typed only.
+// **The addresses are the server's** (ADR 0088 decision 7, uc.admin.configure-external-services): the Server Owner
+// configures the tile service and the geocoder, and the client reads them from the capabilities it holds — the
+// entries `memories.map` and `memories.places`, present only while configured and switched on, their `serviceUrl`
+// (and the tiles' `serviceAttribution`). The served Content Security Policy allows exactly those origins. Without the
+// map entry there is no map and nothing to consent to (`mapsOffered`); without the geocoder, names are typed only.
 import { computed, readonly, ref } from 'vue'
-import {
-  DEFAULT_GEOCODER_URL,
-  DEFAULT_TILE_ATTRIBUTION,
-  DEFAULT_TILE_MAX_ZOOM,
-  DEFAULT_TILE_URL,
-} from './mapDefaults'
+import { DEFAULT_TILE_MAX_ZOOM } from './mapDefaults'
+import { useCapabilities } from './useCapabilities'
+import { MEMORIES_MAP, MEMORIES_PLACES } from '../../features/platform/capabilities'
 
 const CONSENT_KEY = 'veyq:maps-consent'
-const TILE_URL_KEY = 'veyq:map-tile-url'
-const GEOCODER_URL_KEY = 'veyq:map-geocoder-url'
 
 function storage(): Storage | null {
   try {
@@ -31,33 +27,26 @@ function storage(): Storage | null {
   }
 }
 
-/** Env override (build/deploy config) for an operator-pointed provider, else the built-in reference default. */
-function envDefault(key: 'VITE_VEYQ_MAP_TILE_URL' | 'VITE_VEYQ_MAP_GEOCODER_URL', fallback: string): string {
-  const v = (import.meta.env as Record<string, string | undefined>)[key]
-  return typeof v === 'string' && v.trim() ? v.trim() : fallback
-}
-
 const mapsConsent = ref<boolean>(storage()?.getItem(CONSENT_KEY) === '1')
-const tileUrl = ref<string>(storage()?.getItem(TILE_URL_KEY) || envDefault('VITE_VEYQ_MAP_TILE_URL', DEFAULT_TILE_URL))
-const geocoderUrl = ref<string>(
-  storage()?.getItem(GEOCODER_URL_KEY) || envDefault('VITE_VEYQ_MAP_GEOCODER_URL', DEFAULT_GEOCODER_URL),
-)
+const { capabilityValues } = useCapabilities()
+const tileUrl = computed(() => capabilityValues(MEMORIES_MAP)?.serviceUrl ?? '')
+const tileAttribution = computed(() => capabilityValues(MEMORIES_MAP)?.serviceAttribution ?? '')
+const geocoderUrl = computed(() => capabilityValues(MEMORIES_PLACES)?.serviceUrl ?? '')
 
 /**
- * Consent + provider config for the map/geocoding surface. `mapsAvailable` gates the whole location feature (a
- * consented map with a tile URL); `geocodingAvailable` additionally requires a geocoder URL — when it's false the
- * user types the name on the map instead. `reset` is for tests.
+ * Consent + provider config for the map/geocoding surface. `mapsOffered` says the server serves a map at all (the
+ * consent is asked only then); `mapsAvailable` gates the whole location feature (a consented map with a tile URL);
+ * `geocodingAvailable` additionally requires a geocoder URL — when it's false the user types the name on the map.
  */
 export function useMapConfig() {
   return {
     mapsConsent: readonly(mapsConsent),
     setMapsConsent,
-    tileUrl: readonly(tileUrl),
-    tileAttribution: DEFAULT_TILE_ATTRIBUTION,
+    tileUrl,
+    tileAttribution,
     tileMaxZoom: DEFAULT_TILE_MAX_ZOOM,
-    geocoderUrl: readonly(geocoderUrl),
-    setTileUrl,
-    setGeocoderUrl,
+    geocoderUrl,
+    mapsOffered: computed(() => Boolean(tileUrl.value)),
     mapsAvailable: computed(() => mapsConsent.value && Boolean(tileUrl.value)),
     geocodingAvailable: computed(() => mapsConsent.value && Boolean(geocoderUrl.value)),
   }
@@ -67,14 +56,4 @@ export function setMapsConsent(on: boolean): void {
   mapsConsent.value = on
   if (on) storage()?.setItem(CONSENT_KEY, '1')
   else storage()?.removeItem(CONSENT_KEY)
-}
-
-export function setTileUrl(url: string): void {
-  tileUrl.value = url
-  storage()?.setItem(TILE_URL_KEY, url)
-}
-
-export function setGeocoderUrl(url: string): void {
-  geocoderUrl.value = url
-  storage()?.setItem(GEOCODER_URL_KEY, url)
 }

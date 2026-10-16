@@ -78,20 +78,10 @@ One's own bucket reads **"Deine Beiträge"**.
   contributor's), but **never a primary** and **never across owners** (a move stays within one owner-root);
   **delete media** + **edit capture time** stay any key-holder.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** In a shared memory, see who added what: a "Contributions" view groups the photos and videos by the person
-who uploaded them — you, a fellow member, or someone who added through a public link. It's just a lens over the
-same memory; nothing is moved or changed, and everything stays encrypted — the grouping happens on your device, and
-the server never learns anyone's name. The names guests type in are shown to the people this memory belongs to,
-never to others who open the link.
-
-**DE —** In einer geteilten Erinnerung siehst du, wer was beigetragen hat: eine „Beiträge"-Ansicht gruppiert die
-Fotos und Videos nach der Person, die sie hochgeladen hat — du selbst, ein anderes Mitglied oder jemand, der über
-einen öffentlichen Link beigesteuert hat. Es ist nur eine Linse auf dieselbe Erinnerung; nichts wird verschoben
-oder verändert, und alles bleibt verschlüsselt — die Gruppierung passiert auf deinem Gerät, und der Server erfährt
-keinen Namen. Die Namen, die Gäste eintippen, sehen die Personen, denen die Erinnerung gehört — nie andere, die den
-Link öffnen.
+In a shared Memory you see at a glance who added which photos and videos, without anything being moved and without the
+server learning anyone's name.
 
 ## Related
 

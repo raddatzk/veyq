@@ -46,14 +46,14 @@ fun TenantInviteEntity.admission(): Admission? {
     return Admission(id, admissionEpoch ?: return null, admissionTag ?: return null)
 }
 
-/** A tenant's current terms + a specific caller's accepted version (cr-0114). `markdownByLocale` is the raw
+/** A tenant's current terms + a specific caller's accepted revision (cr-0114). `markdownByLocale` is the raw
  *  serialized locale→markdown map (null = none set); the handler decodes it into the per-locale DTO. */
-data class TenantTermsRow(val version: Int, val acceptedVersion: Int, val markdownByLocale: String?)
+data class TenantTermsRow(val revision: Int, val acceptedRevision: Int, val markdownByLocale: String?)
 
-/** A tenant's current terms with **no** caller — version + the raw serialized markdown, no acceptance lookup
+/** A tenant's current terms with **no** caller — revision + the raw serialized markdown, no acceptance lookup
  *  (the accountless share terms read, uc.sharing.share-accept). Distinct from [TenantTermsRow] which carries a
- *  caller's acceptedVersion; an accountless visitor has no account, so there is nothing to report. */
-data class TenantGuestTermsRow(val version: Int, val markdownByLocale: String?)
+ *  caller's acceptedRevision; an accountless visitor has no account, so there is nothing to report. */
+data class TenantGuestTermsRow(val revision: Int, val markdownByLocale: String?)
 
 /** A tenant's mail configuration (cr-email-smtp-transport). Carries the **sealed** SMTP password (ciphertext +
  *  nonce, ADR 0050) for internal use; the handler redacts it to `passwordSet` before it leaves the server. */
@@ -400,52 +400,52 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
 
     // --- terms of service (cr-0114, ADR 0035) ---
 
-    /** The tenant's current terms + the highest version [userId] accepted (0 if never). Null if no such tenant.
-     *  The highest is the gate's answer: an accept is refused unless it names the current version and a version only
-     *  ever grows, so "highest == current" is exactly "has a row for the current version". */
+    /** The tenant's current terms + the highest revision [userId] accepted (0 if never). Null if no such tenant.
+     *  The highest is the gate's answer: an accept is refused unless it names the current revision and a revision only
+     *  ever grows, so "highest == current" is exactly "has a row for the current revision". */
     fun termsFor(tenantId: String, userId: String): TenantTermsRow? {
         val tenant = TenantEntity.findById(tenantId) ?: return null
         val accepted = TenantTermsAcceptanceEntity
-            .find("userId = ?1 and tenantId = ?2 order by acceptedVersion desc", userId, tenantId)
-            .firstResult()?.acceptedVersion ?: 0
-        return TenantTermsRow(tenant.termsVersion, accepted, tenant.termsMarkdownByLocale)
+            .find("userId = ?1 and tenantId = ?2 order by acceptedRevision desc", userId, tenantId)
+            .firstResult()?.acceptedRevision ?: 0
+        return TenantTermsRow(tenant.termsRevision, accepted, tenant.termsMarkdownByLocale)
     }
 
-    /** The tenant's current terms **without** a caller — version + serialized markdown, and **no** acceptance
+    /** The tenant's current terms **without** a caller — revision + serialized markdown, and **no** acceptance
      *  lookup (uc.sharing.share-accept: the accountless visitor's acceptance is client-only, so the server keeps
      *  no record and needs no userId). Null if no such tenant. */
     fun guestTermsFor(tenantId: String): TenantGuestTermsRow? {
         val tenant = TenantEntity.findById(tenantId) ?: return null
-        return TenantGuestTermsRow(tenant.termsVersion, tenant.termsMarkdownByLocale)
+        return TenantGuestTermsRow(tenant.termsRevision, tenant.termsMarkdownByLocale)
     }
 
-    /** Store the (already normalized) serialized terms and bump the version **only if the markdown changed** — an
-     *  idempotent re-save returns the same version (the pre-E2EE logic). Returns the resulting current version. */
+    /** Store the (already normalized) serialized terms and bump the revision **only if the markdown changed** — an
+     *  idempotent re-save returns the same revision (the pre-E2EE logic). Returns the resulting current revision. */
     @Transactional
     fun updateTerms(tenantId: String, normalizedMarkdown: String): Int {
         val tenant = TenantEntity.findById(tenantId) ?: return 0
-        if (tenant.termsMarkdownByLocale == normalizedMarkdown) return tenant.termsVersion
+        if (tenant.termsMarkdownByLocale == normalizedMarkdown) return tenant.termsRevision
         tenant.termsMarkdownByLocale = normalizedMarkdown
-        tenant.termsVersion += 1
+        tenant.termsRevision += 1
         tenant.persist()
-        return tenant.termsVersion
+        return tenant.termsRevision
     }
 
-    /** Record [userId]'s acceptance of [version] for [tenantId], stamped with the server's own time — one row per
-     *  version (keyed by the (user, tenant, version) UNIQUE), so an older version's row and time stay as evidence
-     *  (ADR 0035 §4). Written once per version: re-accepting a version already recorded changes nothing — the first
+    /** Record [userId]'s acceptance of [revision] for [tenantId], stamped with the server's own time — one row per
+     *  revision (keyed by the (user, tenant, revision) UNIQUE), so an older revision's row and time stay as evidence
+     *  (ADR 0035 §4). Written once per revision: re-accepting a revision already recorded changes nothing — the first
      *  time stands. */
     @Transactional
-    fun recordAcceptance(userId: String, tenantId: String, version: Int) {
+    fun recordAcceptance(userId: String, tenantId: String, revision: Int) {
         val recorded = TenantTermsAcceptanceEntity.count(
-            "userId = ?1 and tenantId = ?2 and acceptedVersion = ?3", userId, tenantId, version,
+            "userId = ?1 and tenantId = ?2 and acceptedRevision = ?3", userId, tenantId, revision,
         ) > 0
         if (recorded) return
         TenantTermsAcceptanceEntity().apply {
             id = UUID.randomUUID().toString()
             this.userId = userId
             this.tenantId = tenantId
-            acceptedVersion = version
+            acceptedRevision = revision
             acceptedAt = Instant.now()
         }.persist()
     }

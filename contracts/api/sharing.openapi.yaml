@@ -108,7 +108,10 @@ paths:
             any scope check, so it reads as instance policy, not a scope error (ADR 0032). `illegal_scope` — the
             node's kind may not be a share root with this role (`ShareRoots`, ADR 0080: a `FOLDER` with READ or READ_WRITE, a kind of an
             application as that application declares — Files: a `FILE` with READ or READ_WRITE, never WRITE_ONLY; a kind
-            nobody declares, or two do, is never shared); a non-member scope is a non-enumerable `404`, not `422`.
+            nobody declares, or two do, is never shared); a non-member scope is a non-enumerable `404`, not `422`. Two more, from the requirements on `core.public-shares` in effect for the node's tenant
+            (ADR 0088 decision 8, the strictest of the instance's and the tenant's): `link_password_required` — the
+            link carries no password while every link needs one; `link_expiry_required` — it has no end date, or one
+            more than `linkMaxDays` days after the link was made, while links must end within that.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
     get:
@@ -301,7 +304,8 @@ paths:
         "422":
           description: >
             The instance capability the share's role needs is disabled (`capability_disabled`, ADR 0032) — a
-            re-issue publishes a link, so it checks what `createShare` checks.
+            re-issue publishes a link, so it checks what `createShare` checks, the requirements included
+            (`link_password_required`, `link_expiry_required`, as `createShare`; the new link is made now).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
 
@@ -313,7 +317,7 @@ paths:
         mode: last-writer-wins
         reason: >-
           The value is always the share root's current name, re-sealed by whichever member renamed it last; a
-          later write carries a later name, so no version guards it (ADR 0080 decision 14).
+          later write carries a later name, so no revision guards it (ADR 0080 decision 14).
       summary: Store a share's root name re-sealed under `K_share` (any member with write access).
       description: >
         Replaces the share's `sealedName` — the shared root's name re-sealed under `K_share` (seal purpose
@@ -369,7 +373,8 @@ paths:
         under the nodes' content keys. What an application attached under those nodes is that application's own
         guest read (ADR 0079). The viewer unwraps the root's content key with the fragment key, derives each
         descendant's from `wrappedContentKey`, and decrypts names / payloads **locally**. A disabled, expired, or
-        unknown share is a non-enumerable `404` (same shape in every case). Without the fragment key the response is inert — the wrap cannot be opened.
+        unknown share, and one whose role's instance capability is switched off (ADR 0088 decision 5), is a
+        non-enumerable `404` (same shape in every case). Without the fragment key the response is inert — the wrap cannot be opened.
         **Password-protected shares (cr-0118, ADR 0037):** with **no** `X-Share-Password` the response is
         **locked** — only `passwordRequired` + `pwSalt` (no `wrap`/`sealedName`/subtree); the client prompts,
         derives the token, and re-resolves with the header. A **wrong** token → `403 share_password_incorrect`.
@@ -407,7 +412,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
         "404":
-          description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4) — non-enumerable, identical in every case.
+          description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4), or the instance capability of its role is switched off (ADR 0088 decision 5 — `core.public-shares`, `.contribute` or `.drop-box`; the link serves again once it is back on) — non-enumerable, identical in every case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
     patch:
@@ -459,9 +464,15 @@ paths:
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "422":
           description: >
-            An illegal role change (cr-0119) — `role = WRITE_ONLY`, a role change on a share whose current role is
-            WRITE_ONLY, or a role the shared node's kind may not be a share root with (`ShareRoots`, ADR 0080). The
-            write-only drop-box is a separate action and its role is not editable in place.
+            Unprocessable. Two codes: `invalid_role_change` (cr-0119) — `role = WRITE_ONLY`, a role change on a share
+            whose current role is WRITE_ONLY, or a role the shared node's kind may not be a share root with
+            (`ShareRoots`, ADR 0080); the write-only drop-box is a separate action and its role is not editable in
+            place. `capability_disabled` — a change INTO a role whose instance capability is not active (READ →
+            READ_WRITE while `core.public-shares.contribute` or its parent is off, ADR 0088): the change would publish
+            a link of that role, so it checks what `createShare` checks. A request that names the share's current
+            role changes no role and is not refused for it. `link_password_required` — the update would leave the link
+            without a password while every link needs one; `link_expiry_required` — the end date it sets (a full
+            replace) is absent or more than `linkMaxDays` days after the link was made (ADR 0088 decision 8).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_role_change } }
     delete:
@@ -513,22 +524,22 @@ paths:
         **No auth.** The accountless half of the two-tier terms gate (uc.sharing.share-accept,
         [ADR 0035](../../docs/decisions/0035-server-terms-of-service.md) §3). Returns the **owning tenant's**
         public terms so an accountless share visitor can accept them **client-side** before viewing/contributing —
-        `{ tenantId, termsVersion, terms }`. The terms are **public operational content, never E2EE**; `tenantId`
+        `{ tenantId, termsRevision, terms }`. The terms are **public operational content, never E2EE**; `tenantId`
         is opaque metadata (the caller's localStorage key), only **returned**, never passed in — so this adds **no
         `tenantId` existence oracle**. Keyed on the already non-enumerable `shareId`: it reuses the share's
         `activeShare()` gate, so an unknown / disabled / expired share is the **same non-enumerable 404** as
         `resolveShare`. Independent of the share password (terms are public — **no** `X-Share-Password`). The server
         records **nothing** about the accountless visitor: acceptance is client-only, no acceptance is written here.
-        A tenant with no published terms returns `termsVersion: 0` (`terms` null) — the client never gates.
+        A tenant with no published terms returns `termsRevision: 0` (`terms` null) — the client never gates.
       parameters:
         - $ref: "#/components/parameters/ShareId"
       responses:
         "200":
-          description: The owning tenant's current public terms (or version 0 / null when the operator has published none).
+          description: The owning tenant's current public terms (or revision 0 / null when the space owner has published none).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareTerms" }
-              example: { tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, termsVersion: 3, terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" } }
+              example: { tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, termsRevision: 3, terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" } }
         "404":
           description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4) — non-enumerable, identical in every case, like `resolveShare`.
           content:
@@ -777,7 +788,7 @@ paths:
         guest-creatable — `GuestCreatableKinds`, Files' `FILE` — and never a Memory, a drop box or another application's
         node; a container kind no owner declares allows nothing — either refusal is `422 illegal_scope`); the
         slug is free under the parent (`409 slug_taken`). **Epoch:** the request carries the epoch the guest sealed
-        with (ADR 0080 Decision 6) — the name and the wrap are bound to scope, node, that epoch and placement version
+        with (ADR 0080 Decision 6) — the name and the wrap are bound to scope, node, that epoch and placement revision
         0, so the server stores it as sent; a guest never writes at the scope root, so the server checks it as a
         member's placement off the root: at or below the scope's current epoch, else `409 stale_epoch`. No `wrappedMeta`:
         a node's payload is its application's content, never a core tree operation's.
@@ -842,9 +853,9 @@ paths:
       tags: [sharing]
       operationId: updateShareNode
       x-veyq-concurrency:
-        mode: version
+        mode: revision
         fields:
-          - field: placementVersion
+          - field: placementRevision
             conflictCode: stale_placement
       summary: Move or rename a node inside a shared subtree (unauthenticated) — one placement write.
       description: >
@@ -853,8 +864,8 @@ paths:
         parent, as in `updateNode`. Behind core's guest gate like `createShareNode`, without spending the upload
         budget; only a **READ_WRITE** link takes it. The request carries the destination `parentId`, the node's
         content key re-wrapped under the destination's key (`wrappedContentKey`), the name and the slug token
-        re-sealed under it, and the `placementVersion` it was built on; the wrap and the name are bound to scope,
-        node, the node's stored epoch and `placementVersion + 1`. **No `epoch`:** a guest's node never moves into or
+        re-sealed under it, and the `placementRevision` it was built on; the wrap and the name are bound to scope,
+        node, the node's stored epoch and `placementRevision + 1`. **No `epoch`:** a guest's node never moves into or
         out of the scope root, so it keeps its stored epoch. **Structure only:** the node lies strictly inside the
         share's subtree — the root is never moved or renamed by a guest, nor is a guest's identity folder in a drop box
         or anything inside one: only a member moves out of a drop box (ADR 0080 Decision 11; `422 illegal_structure`,
@@ -863,8 +874,9 @@ paths:
         (else `422 illegal_structure`); the owners of the containers on both sides allow it (`GuestNodeRules`: a
         move needs the source parent's owner to let a READ_WRITE guest move that kind out and the destination's to
         let it move in, a rename the parent's to let it rename — `422 illegal_scope` otherwise); the slug is free
-        there (`409 slug_taken`). The server compare-and-sets the placement version and writes everything at once,
-        or nothing (`409 stale_placement`). No guest delete: nodes store no authorship.
+        there (`409 slug_taken`). The server compare-and-sets the placement revision and writes everything at once,
+        or nothing (`409 stale_placement`). No guest delete of a node that holds anything: nodes store no authorship
+        (a guest takes back only an empty upload placeholder, `abandonShareNode`).
         **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
         token → `403 share_password_incorrect`.
       parameters:
@@ -882,7 +894,7 @@ paths:
               encryptedName: cmVuYW1lZA==
               slugToken: bmV3LXNsdWc=
               wrappedContentKey: cmUtd3JhcHBlZC1rLW1lbQ==
-              placementVersion: 2
+              placementRevision: 2
       responses:
         "204":
           description: The node was moved or renamed.
@@ -901,7 +913,7 @@ paths:
         "409":
           description: >
             A sibling at the destination already has that slug (`slug_taken`), or the node was moved or renamed since
-            the stated `placementVersion` (`stale_placement` — nothing was written; the client re-reads the share and
+            the stated `placementRevision` (`stale_placement` — nothing was written; the client re-reads the share and
             rebuilds the placement, ADR 0080 Decision 3).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_placement } }
@@ -912,6 +924,57 @@ paths:
             outside the share's subtree, the node itself or inside its subtree, or the kind's placement rule refuses
             it there), or an owner of the containers on either side does not let a READ_WRITE guest move or rename
             that kind (`illegal_scope`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
+        "429":
+          description: Too many wrong password attempts on this share (the password gate's own limiter).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+
+    delete:
+      tags: [sharing]
+      operationId: abandonShareNode
+      summary: Erase an empty upload placeholder inside a shared subtree (unauthenticated) — a guest's given-up upload.
+      description: >
+        **No auth.** A guest takes back the node it created for an upload that was then refused or given up — an
+        upload into a full link (`quota_exceeded`), a cancel: the node is **erased at once**, never trashed, so nothing
+        of the refused upload is kept (it is a guest's tree operation, [ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+        Decision 6). Behind core's guest gate like `updateShareNode`, without spending the upload budget; a
+        **READ_WRITE** link takes it for a node strictly inside its subtree, never a guest's identity folder or
+        anything inside one; a **WRITE_ONLY** link only for a node strictly inside its guest's own identity folder; a
+        READ link is `403 share_not_contributable`. **Only a placeholder:** nodes store no authorship, so the server
+        cannot tell whose node it is, and it erases only one that holds nothing anybody could lose — no child (live or
+        trashed), no upload another identity or a member is sending into it, and the owner of the node's kind
+        declares it empty (`GuestPlaceholders`: Depot's `FILE` whose slot never held a blob; core's own `FOLDER` that
+        carries no attachment and no sealed metadata — the folders a guest's folder-tree upload created before every
+        file of it was refused). So any guest in reach may take back any such node, a member's empty folder too: all it
+        can remove is a name with nothing behind it. Anything else is `409
+        not_a_placeholder`, and nothing is written. The erase is the trash purge's (the node's links ended, its
+        guest identities dropped where nothing names them any more) and moves the scope's tree revision.
+        **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
+        token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/SharePassword"
+        - $ref: "#/components/parameters/ContributorToken"
+      responses:
+        "204":
+          description: The placeholder was erased.
+        "403":
+          description: The share is a READ link, a WRITE_ONLY link whose identity has no live identity folder, the contributor token names no identity of it, or its root is in the trash or gone (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such share (disabled/expired/unknown/deleted, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (`share_not_found`); or no live node inside the guest's reach has that id (`node_not_found`) — non-enumerable.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: The node is not an empty upload placeholder — it has a child, an upload by another identity or a member is open into it, or the owner of its kind does not declare it empty (`not_a_placeholder`); nothing was written.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_a_placeholder } }
+        "422":
+          description: The node is the share's root, a WRITE_ONLY guest's identity folder itself, or — for a READ_WRITE link — a guest's identity folder or inside one (`illegal_structure`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
         "429":
@@ -1621,16 +1684,16 @@ components:
           description: The content-key epoch the node was sealed at (as `NodeSummary.epoch`) — a descendant's `wrappedContentKey` and `encryptedName` are bound to it (ADR 0072).
           minimum: 0
           example: 0
-        placementVersion:
+        placementRevision:
           x-veyq-visibility: structure
           type: integer
           format: int64
           # Omitted, not `null`, at the root, like `encryptedName`: the root's placement is above the share.
           x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
           description: >
-            A descendant's placement version (as `NodeSummary.placementVersion`): its `wrappedContentKey` and
+            A descendant's placement revision (as `NodeSummary.placementRevision`): its `wrappedContentKey` and
             `encryptedName` are bound to it (ADR 0072, ADR 0080 Decision 3), so the viewer opens them at the
-            version served with them. Omitted at the root, whose entry is not served (ADR 0080 Decision 9).
+            revision served with them. Omitted at the root, whose entry is not served (ADR 0080 Decision 9).
           minimum: 0
           example: 0
         encryptedName:
@@ -1640,7 +1703,7 @@ components:
           x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
           description: >
             A descendant's name, AEAD-sealed under its **parent's** content key (seal purpose `node-name`, bound to
-            scope, node, epoch and placement version; opaque base64) — the same value as `NodeSummary.encryptedName`, which the viewer
+            scope, node, epoch and placement revision; opaque base64) — the same value as `NodeSummary.encryptedName`, which the viewer
             opens with the key chain it derives from the root. Omitted at the root: its name is sealed under a key
             above the share (ADR 0080 Decision 9); the root's title is the share's `sealedName`.
           contentEncoding: base64
@@ -1654,7 +1717,7 @@ components:
           example: d3JhcHBlZC1rLW1lbQ==
         wrappedMeta:
           type: [string, "null"]
-          description: The node's versioned sealed payload, sealed under its content key (AAD `node-meta`; opaque base64); its format is the kind's application's. Null when unset.
+          description: The node's sealed payload, with its own revision, sealed under its content key (AAD `node-meta`; opaque base64); its format is the kind's application's. Null when unset.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -1717,7 +1780,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under the parent's content key (seal purpose `node-name`), bound to scope, node, `epoch` and placement version 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
+          description: The node name, AEAD-sealed under the parent's content key (seal purpose `node-name`), bound to scope, node, `epoch` and placement revision 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -1749,7 +1812,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         wrappedContentKey:
           type: string
-          description: The node's content key — a fresh random key the guest mints, wrapped under the parent's content key (seal purpose `content-key`), bound to scope, node, `epoch` and placement version 0 (ADR 0080 Decision 1; opaque base64).
+          description: The node's content key — a fresh random key the guest mints, wrapped under the parent's content key (seal purpose `content-key`), bound to scope, node, `epoch` and placement revision 0 (ADR 0080 Decision 1; opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
@@ -1767,7 +1830,7 @@ components:
 
     UpdateShareNodeRequest:
       type: object
-      required: [parentId, encryptedName, slugToken, wrappedContentKey, placementVersion]
+      required: [parentId, encryptedName, slugToken, wrappedContentKey, placementRevision]
       description: >
         A READ_WRITE guest's placement write (`updateShareNode`) — every field of the node's directory entry and key
         wrap at once, as the placement half of the member's `UpdateNodeRequest`, without `epoch` (the node keeps its
@@ -1781,7 +1844,7 @@ components:
           example: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
         encryptedName:
           type: string
-          description: The name re-sealed under the destination parent's content key (seal purpose `node-name`), bound to scope, node, the node's stored epoch and `placementVersion + 1` (ADR 0072, ADR 0080 Decision 3; opaque base64).
+          description: The name re-sealed under the destination parent's content key (seal purpose `node-name`), bound to scope, node, the node's stored epoch and `placementRevision + 1` (ADR 0072, ADR 0080 Decision 3; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: cmVuYW1lZA==
@@ -1795,19 +1858,19 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedContentKey:
           type: string
-          description: The node's own content key (unchanged) re-wrapped under the destination parent's content key (seal purpose `content-key`), bound to scope, node, the node's stored epoch and `placementVersion + 1` (opaque base64). A rename re-wraps too.
+          description: The node's own content key (unchanged) re-wrapped under the destination parent's content key (seal purpose `content-key`), bound to scope, node, the node's stored epoch and `placementRevision + 1` (opaque base64). A rename re-wraps too.
           contentEncoding: base64
           maxLength: 256
           example: cmUtd3JhcHBlZC1rLW1lbQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        placementVersion:
+        placementRevision:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0 (backend/CLAUDE.md)
           type: [integer, "null"]
           format: int64
           description: >
-            The `ShareNode.placementVersion` the placement was built on. The server compare-and-sets it and stores
-            `placementVersion + 1`; a mismatch is `409 stale_placement` with nothing written (ADR 0080 Decision 3).
+            The `ShareNode.placementRevision` the placement was built on. The server compare-and-sets it and stores
+            `placementRevision + 1`; a mismatch is `409 stale_placement` with nothing written (ADR 0080 Decision 3).
           minimum: 0
           example: 2
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
@@ -2085,22 +2148,22 @@ components:
         The owning tenant's public terms for a share, served to an accountless visitor to accept **client-side**
         (uc.sharing.share-accept). No acceptance is recorded server-side. The `tenantId` is opaque metadata only
         **returned** (never passed in — no existence oracle); it is the client's per-tenant localStorage key.
-      required: [tenantId, termsVersion]
+      required: [tenantId, termsRevision]
       properties:
         tenantId:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The opaque id of the tenant that owns the share — the client's localStorage key for the accepted version. Only returned, never a request parameter.
+          description: The opaque id of the tenant that owns the share — the client's localStorage key for the accepted revision. Only returned, never a request parameter.
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-        termsVersion:
+        termsRevision:
           x-veyq-visibility: structure
           type: integer
           format: int32
-          description: The tenant's current terms version. 0 = no terms published (the client never gates).
+          description: The tenant's current terms revision. 0 = no terms published (the client never gates).
           example: 3
         terms:
-          description: The current per-locale terms (null/absent until the operator publishes any).
+          description: The current per-locale terms (null/absent until the space owner publishes any).
           oneOf:
             - $ref: "#/components/schemas/LocalizedMarkdown"
             - type: "null"

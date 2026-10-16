@@ -112,22 +112,10 @@ create-gate (scope) and a member-removal hook are new.
 - **Who may publish = any member.** A deliberately permissive governance choice (symmetric to member capabilities),
   distinct from the per-instance `sharing.*` capability and the per-scope membership gate — three orthogonal checks.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Shared spaces get the same public links your personal memories already have: anyone in the group or
-household can turn a shared memory into a browser link for people outside. And it stays honest when someone leaves —
-the moment a member is removed, the links *they* made stop working, and you can switch off every link of the space in
-the same step — or at any time. A link made before someone left keeps working until you **renew** it: renewing gives it a new address
-and deletes the old one, so hand the new one out — your guests keep their photos. A link you switched off can be
-**deleted** for good: what it said goes, the photos guests added stay.
-
-**DE —** Geteilte Bereiche bekommen dieselben öffentlichen Links wie deine persönlichen Erinnerungen: jede:r in der
-Gruppe oder im Haushalt kann eine geteilte Erinnerung in einen Browser-Link für Außenstehende verwandeln. Und es
-bleibt ehrlich, wenn jemand geht — sobald ein Mitglied entfernt wird, hören die Links auf zu funktionieren, die diese
-Person erstellt hat, und im selben Schritt — oder jederzeit — lassen sich alle Links des Bereichs abschalten. Ein Link, der entstanden ist,
-bevor jemand gegangen ist, funktioniert weiter, bis du ihn **erneuerst**: Dann bekommt er eine neue Adresse, und die
-alte wird gelöscht — gib die neue weiter; deine Gäste behalten ihre Fotos. Einen abgeschalteten Link kannst du
-endgültig **löschen**: Was er enthielt, verschwindet; die Fotos, die Gäste hinzugefügt haben, bleiben.
+Members of a group or shared space can share its Memories through links too; when someone is removed, their links
+switch off at once, and any remaining member can renew or delete them.
 
 ## Related
 
@@ -142,3 +130,4 @@ endgültig **löschen**: Was er enthielt, verschwindet; die Fotos, die Gäste hi
   [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) (the `sharing.*` capability gate)
 - Cross-cutting: [Security Model](../../../crosscutting/security-model.md),
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md)
+- End-user view (docs site): [Change, switch off, renew and delete links](../../../../site/src/content/docs/sharing/manage-links.mdx)

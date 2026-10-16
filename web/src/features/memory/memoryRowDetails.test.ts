@@ -64,9 +64,9 @@ describe('unsealRowFacts', () => {
     const key = v1.randomBytes(32)
     return treeNode({
       id, kind: MEMORY_KIND, name: 'M', parentId: null, orderIndex: 0, epoch: 0,
-      wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId: id, epoch: 0, placementVersion: 0 }, under, key)),
+      wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }, under, key)),
       wrappedMeta: meta ? sealNodeMeta(key, { scopeId: SCOPE, nodeId: id }, { v: 1, ...meta }) : null,
-      metaVersion: 0, placementVersion: 0,
+      metaRevision: 0, placementRevision: 0,
     })
   }
 

@@ -40,6 +40,12 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   ([ADR 0064](docs/decisions/0064-kubernetes-helm-deployment-target.md)). Every infra-level decision has an
   answer on both, and a change to one checks the other; the docs site's Run area (`site/src/content/docs/run/`) owns
   the operator commands for both, and `infra/README.md` the dev stack and cutting a release.
+- `settings.gradle.kts` + `launcher/` — the **dev launcher**: `./gradlew <surface>:<verb>` (`infra:up`,
+  `backend:run`, `web:bootstrap`, `admin:image`, …) triggers the commands the surfaces already have, from a terminal
+  or IntelliJ's Gradle tool window; it replaced the `.run/*.xml` configurations. A launcher, never an
+  orchestrator: it includes no surface's build (`backend/` is run through its own wrapper, never `includeBuild` —
+  its verification metadata would be ignored) and aggregates no check. `infra/README.md` § The launcher holds the
+  task list and the per-worktree ports.
 - `packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
   suite + the cold account birth + the Emergency Kit codec that carries its Secret Key + the wire base64,
   shared by `web/` and `admin-web/`

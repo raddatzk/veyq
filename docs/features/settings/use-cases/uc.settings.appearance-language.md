@@ -34,15 +34,9 @@
 - **Names are data, not strings.** Decrypted folder/Memory names are user content — they are shown verbatim
   and are **not** translated when the language changes.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Make the app yours: switch between light, dark, or follow-your-system, and use it in English or
-German. Your choice applies instantly and is remembered on this device — and because it's purely a local
-preference, it never leaves your device or reaches the server.
-
-**DE —** Mach die App zu deiner: wechsle zwischen Hell, Dunkel oder „dem System folgen" und nutze sie auf
-Deutsch oder Englisch. Deine Wahl gilt sofort und wird auf diesem Gerät gemerkt — und weil es eine rein lokale
-Einstellung ist, verlässt sie dein Gerät nie und erreicht den Server nicht.
+You choose a light or dark look and English or German, and the choice stays on this device.
 
 ## Related
 

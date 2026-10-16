@@ -78,8 +78,8 @@ const PARTICIPANTS = ['aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-400
 const GUEST: GuestIdentity = { identityId: 'id-g', contributorToken: 'tok-g' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementVersion: 0 }
-  return { id, parentId, kind, epoch: 0, placementVersion: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
+  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A folder link: the folder, a Memory in it, a chapter in the Memory. */
 function head(role: ShareRole): PublicShareHead {
@@ -266,7 +266,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     w.unmount()
   })
 
-  // S5: the lightbox's one `readonly` split per capability — a contributor deletes its OWN photo there too (asked first,
+  // S5: the lightbox's one `readonly` split per right — a contributor deletes its OWN photo there too (asked first,
   // purged), never another's, and is offered no "set as cover".
   it('READ_WRITE: in the lightbox, its own photo carries the delete — asked first, then purged — and no other does', async () => {
     saveGuestSession(SHARE, GUEST)
@@ -291,6 +291,27 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     await flushPromises()
     expect(publicShareMediaApi().deleteShareMedia).toHaveBeenCalledWith({ shareId: SHARE, mediaId: 'm-own', xContributorToken: GUEST.contributorToken, xSharePassword: PW })
     await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
+    expectGuestOnly(w)
+    w.unmount()
+  })
+
+  // The Storage page's promise (site space-owners/storage): whoever uses a full link is told it takes no more uploads right
+  // now. The member's detail serves the guest (share view = member view), so its tile must know the upload is a link's -
+  // without that it read "Upload failed" with a Retry that no retry can help (ADR 0073 §6).
+  it('READ_WRITE: an upload the full link refuses reads as the link being full, with no retry', async () => {
+    saveGuestSession(SHARE, GUEST)
+    vi.mocked(addSharePhoto).mockRejectedValue(new Error('quota_exceeded'))
+    const w = await mountPage(ShareRole.ReadWrite)
+    const input = w.find('input[type="file"]')
+    const file = new File([new Uint8Array(4)], 'voll.jpg', { type: 'image/jpeg' })
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await vi.waitFor(() => expect(w.find('.gallery-tile-optimistic.is-failed').exists()).toBe(true))
+    const tile = w.find('.gallery-tile-optimistic')
+    expect(tile.text()).toContain(t('media.uploadTileLinkFull'))
+    expect(tile.text()).not.toContain(t('media.uploadTileFailed'))
+    expect(tile.find('.upload-tile-retry').exists(), 'a retry').toBe(false)
+    expect(addSharePhoto).toHaveBeenCalledTimes(1) // and the queue made none either
     expectGuestOnly(w)
     w.unmount()
   })

@@ -95,7 +95,7 @@ const keyOf = (label: string): Uint8Array => {
   return keyOfLabel.get(label)!
 }
 const wrapFor = (id: string, under: Uint8Array, key: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'content-key', scopeId: fixed.scopeId, nodeId: id, epoch: 0, placementVersion: 0 }, under, key))
+  b64std(v1.seal({ purpose: 'content-key', scopeId: fixed.scopeId, nodeId: id, epoch: 0, placementRevision: 0 }, under, key))
 
 function nodeOf(label: string, kind: NodeKind, parentLabel: string | null, orderIndex: number, meta?: Omit<RawNodeMeta, 'v'>): TreeNode {
   const id = uid(label)
@@ -104,7 +104,7 @@ function nodeOf(label: string, kind: NodeKind, parentLabel: string | null, order
     id, kind, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex, epoch: 0,
     wrappedContentKey: wrapFor(id, parentLabel === null ? fixed.scopeKey : keyOf(parentLabel), key),
     wrappedMeta: meta ? sealNodeMeta(key, { scopeId: fixed.scopeId, nodeId: id }, { v: 1, ...meta }) : null,
-    metaVersion: 0, placementVersion: 0,
+    metaRevision: 0, placementRevision: 0,
   })
 }
 const day = (from: string, to = from) => ({ date: { mode: 'single' as const, from, to } })

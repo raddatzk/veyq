@@ -7,13 +7,14 @@
 // at `VEYQ_DOMAIN`, which made a public hostname a precondition for bootstrapping the instance at all.
 import { setupApi } from '../api/client'
 import { serverState } from '../shared/state/serverState'
-import { refreshSession } from '../features/auth/login'
+import { refreshSession } from './sessionRefresh'
 
 export async function boot(): Promise<void> {
   serverState.unreachable = false
   try {
     const status = await setupApi().getSetupStatus()
     serverState.setupCompleted = !status.setupRequired
+    serverState.breachRangeUrl = status.capabilities.find((c) => c.id === 'core.breached-password')?.serviceUrl ?? null
   } catch {
     // Unreachable backend: say so, rather than rendering a console that cannot load anything.
     serverState.unreachable = true

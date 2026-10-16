@@ -1,7 +1,7 @@
 // The share guest's two inputs of every view (inbox #401 S2; `core/access.ts` says what they are): its `GuestAccess` and
 // its `TreeSource` over the opened subtree — the guest's counterparts of `memberAccess` / `memberTreeSource`, built by the
 // share page (`views/ShareView.vue` the access, `ShareTreePage.vue` the tree) after its gates, so a level or a detail
-// renders for a guest exactly as for a member, with what the capability functions take away.
+// renders for a guest exactly as for a member, with what the rights functions take away.
 //
 // **The tree is what the walk opened, and nothing above it.** Every node, key and name comes from `openGuestTreeParts`
 // (the share's `wrap` under `K_share`, then the chain, `shareTree.walkSubtree`): a node whose key or name did not open is
@@ -11,7 +11,7 @@
 //
 // **A served `ShareNode` as a `TreeNode`** (the views are `TreeNode`-typed): its name is the chain's (the root's the
 // share's own name), `wrappedMeta` is served on `ShareNode` (the kind's sealed payload — a Memory's date, place and
-// cover), `metaVersion` is not (a guest writes no meta: 0), and neither is a creation time — `createdAt` is 0 for every
+// cover), `metaRevision` is not (a guest writes no meta: 0), and neither is a creation time — `createdAt` is 0 for every
 // node, so `compareByCreation` falls to its node-id tie-break and a guest numbers equal-named siblings by id
 // (`compareById`, `location.ts`; the numbers a guest sees may differ from a member's, documented there).
 //
@@ -47,8 +47,8 @@ function asTreeNode(n: ShareNode, rootId: string, name: string): TreeNode {
     name,
     wrappedContentKey: n.wrappedContentKey ?? '',
     wrappedMeta: n.wrappedMeta ?? null,
-    metaVersion: 0,
-    placementVersion: n.placementVersion ?? 0,
+    metaRevision: 0,
+    placementRevision: n.placementRevision ?? 0,
     createdAt: 0,
     sealedDropPrivateKey: n.sealedDropPrivateKey ?? null,
     shareIdentityId: n.shareIdentityId ?? null,

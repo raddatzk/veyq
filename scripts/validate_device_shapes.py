@@ -5,7 +5,7 @@
 `MasterKeyWrap` is, is read where it is defined — `contract_specs.schema`):
 
   - `components.schemas.DeviceRegister` and `components.schemas.DeviceRegisterUpdate` carry exactly
-    `{blob, version}` — one opaque ciphertext and the monotonic optimistic-concurrency counter, nothing else.
+    `{blob, revision}` — one opaque ciphertext and the monotonic optimistic-concurrency counter, nothing else.
   - `components.schemas.MasterKeyWrap` carries exactly `{id, method, wrappedKey, kdfParams}` — a handle, which
     method opens it, the ciphertext and the opaque KDF params, nothing else.
 
@@ -34,9 +34,9 @@ and nothing enforced it. Prose that three documents agree on is still prose.
 **A predicate reached for first, and wrong — recorded so it is not reached for again.** The *file-scoped*
 shape *"no non-base64 cleartext property in `account.openapi.yaml`"* is **red on arrival**: a parse of the
 untouched tree returns **14** such properties, among them `MasterKeyWrap.id`, `AddWrapResult.id` and
-`IdentityPins.version`, all of which are legitimate. Only the schema-scoped allowlists below are green on the
-tree as it stands, which is what makes a later red mean *"someone added a field"* rather than *"this guard was
-always red"*.
+`IdentityPins.version` (a `revision` since inbox #452), all of which are legitimate. Only the schema-scoped
+allowlists below are green on the tree as it stands, which is what makes a later red mean *"someone added a
+field"* rather than *"this guard was always red"*.
 
 **Its limits.**
   - This is a *contract* sensor over *three schemas*. It says nothing about any other schema, and it cannot see
@@ -49,7 +49,7 @@ always red"*.
     That test pins the response *instance* the backend actually serves; this pins the *contract*, including the
     `PUT` request body (`DeviceRegisterUpdate`) the test never sees, and the wrap schema no slice test covers.
 
-Green means exactly: **the register's two wire shapes still carry only a blob and a version, and a wrap still
+Green means exactly: **the register's two wire shapes still carry only a blob and a revision, and a wrap still
 carries only its handle, method and ciphertext.**
 """
 from __future__ import annotations
@@ -66,8 +66,8 @@ SPEC = contract_specs.API / "account.openapi.yaml"
 EXPECTED = {
     # One opaque ciphertext the server relays verbatim + the counter it compares. Anything else here is a fact
     # about the account's devices the operator did not have before.
-    "DeviceRegister": {"blob", "version"},
-    "DeviceRegisterUpdate": {"blob", "version"},
+    "DeviceRegister": {"blob", "revision"},
+    "DeviceRegisterUpdate": {"blob", "revision"},
     # A handle, which method opens it, the ciphertext, and the opaque KDF params. A `deviceId`, `label` or
     # `createdAt` here would join the wrap to its device server-side — the correlation the sealed register
     # exists to keep client-only.

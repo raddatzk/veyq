@@ -1,0 +1,48 @@
+---
+title: "Create a link"
+sources:
+  - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
+  - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
+  - docs/features/sharing/use-cases/uc.sharing.share-password.md
+  - docs/features/sharing/use-cases/uc.sharing.share-note.md
+  - docs/features/depot/use-cases/uc.depot.share-file.md
+  - docs/features/admin/use-cases/uc.admin.capability-requirements.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+1. Open the folder, file or Memory and choose **Share** at the top of its page.
+2. Choose **New share**.
+3. Give the link a **Name** if you like; only you see it.
+4. Under **What can people do?**, choose **View only**, or **View + contribute** (on a Memory: **View + add photos**).
+5. If you like, add any of these:
+   - **Note**: a message shown to whoever opens the link. Write it per language with **Edit**. Tick **Must be accepted
+     before opening** if people should read and accept it first.
+   - **Password protection**: the link opens only with a password of at least 10 characters. Tell it to people
+     another way than the link itself.
+     The password is checked by the server, not built into the encryption: it holds as far as you trust whoever runs
+     the server, fully when that is you. What you shared stays encrypted either way.
+   - **Expiry date**: the link stops working after that day.
+
+   Your space may require a password, or an end date within a number of days, on every link. The form then has the
+   section switched on and says so, and the date picker offers no later day.
+6. Choose **Create link**, then **Copy link**, and send it.
+
+<Screenshot id="sharing-create-link" shows="The New share form with the role choice, the Note, Password protection and Expiry date sections and the Create link button" />
+
+## What "View + contribute" allows
+
+- **On a folder:** guests can add folders and upload files, put a newer version over a file (veyq warns them that there
+  is no version history), and move things around inside the shared folder. They cannot delete or rename anything, and
+  cannot create a Memory or a drop box.
+- **On a Memory:** guests can add photos and videos, and delete their own again.
+- **On a single file:** guests can see and download it, and put a newer version in its place. veyq warns them first
+  that the file changes for everyone who has the link, you included, and that the old content cannot be brought back.
+
+Guests who add something give their name once, so you can see who added what. Other guests never see it. What guests
+add counts against your space's storage, up to a limit per link that the space owner sets
+([Storage](/veyq/space-owners/storage/)).
+
+Everything you write, the note included, is locked before it leaves your device; only people with the link can read
+it, and the server cannot even tell whether a link asks for a note to be accepted:
+[Is my data safe?](/veyq/privacy/is-my-data-safe/#when-you-share)

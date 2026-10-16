@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_DROP_BOX
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
+import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchFixtures
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import io.quarkus.test.junit.QuarkusTest
@@ -61,12 +62,23 @@ class DropBoxCapabilitySliceTest {
     }
 
     @Test
+    fun aTenantsDropBoxSwitchRefusesANewDropBoxInThatTenantAndNotInAnother() {
+        // The tenant level (ADR 0088 decision 2): the gate asks the tenant of the scope the node is created in.
+        val a = seedMemberScope()
+        val b = seedMemberScope()
+        TenantCapabilitySwitchFixtures.with(a.tenantId, PUBLIC_SHARES_DROP_BOX) {
+            create(a.userId, a.scopeId, null, DepotNodeKinds.DROPBOX).statusCode(422).body("code", equalTo("capability_disabled"))
+            create(b.userId, b.scopeId, null, DepotNodeKinds.DROPBOX).statusCode(201) // control: another tenant
+        }
+    }
+
+    @Test
     fun anExistingDropBoxIsRenamedWhileTheSwitchIsOff() {
         val (userId, scopeId) = seedMemberScope()
         val dropBox = create(userId, scopeId, null, DepotNodeKinds.DROPBOX).statusCode(201).extractId()
         capabilities.with(PUBLIC_SHARES_DROP_BOX) {
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{"encryptedName":"cmVuYW1lZA==","slugToken":"${slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementVersion":0}""")
+                .body("""{"encryptedName":"cmVuYW1lZA==","slugToken":"${slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":0}""")
                 .`when`().patch("/api/scopes/$scopeId/nodes/$dropBox")
                 .then().statusCode(204)
         }

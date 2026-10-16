@@ -80,6 +80,9 @@ sequenceDiagram
 - **A1 — expiry:** a share past its `expiresAt` resolves `404` (same shape as an unknown id — non-enumerable).
 - **A2 — revoked:** `enabled = false` → the resolve **and** the gated blob endpoint `404`; a visitor who already
   downloaded ciphertext can still replay *that*, but gets nothing new (no key rotation — see Quality notes).
+- **A3 — public links switched off on the instance:** while `core.public-shares` is off, every link of every role
+  answers the resolve, the blob endpoint and every other guest endpoint exactly as an unknown id — a `404`, before any
+  password is asked — and serves again, unchanged, once it is back on ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md) A3, ADR 0088 decision 5).
 - **E1 — link without the fragment key:** the `shareId` alone is **inert** — the server returns the wrapped key,
   but without `K_share` the client cannot unwrap `K_node`, so nothing decrypts. Both halves are required.
 - **E2 — wrong / guessed id:** unknown `shareId` → `404`. The 256-bit id is unguessable; there is no enumeration.
@@ -106,24 +109,14 @@ sequenceDiagram
   where a member IS removed — is now [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) (cr-0104),
   which soft-revokes the removed member's shares as the honest-server revocation ([ADR 0029](../../../decisions/0029-public-viewer-share.md) §6).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can turn one memory into a link and send it to anyone — a grandparent, a friend, a group chat — and
-they just open it in a browser, nothing to install, no account. Only someone with the **exact** link can see it,
-and it shows them **only that one memory** — never the rest of your space. You can switch the link off whenever you
-like. One honest note: on the web, this is as private as your trust in whoever runs your veyq server — if that's
-you (self-hosted), it's fully private; the little "how safe is this?" link in the footer explains the details.
-
-**DE —** Du kannst eine Erinnerung in einen Link verwandeln und ihn an irgendwen schicken — Oma, eine Freundin,
-einen Gruppenchat — und sie öffnen ihn einfach im Browser, ohne Installation, ohne Konto. Nur wer den **genauen**
-Link hat, sieht sie, und er zeigt **nur diese eine Erinnerung** — nie den Rest deines Bereichs. Du kannst den Link
-jederzeit abschalten. Eine ehrliche Anmerkung: im Browser ist das so privat wie dein Vertrauen in den, der deinen
-veyq-Server betreibt — bist das du selbst (self-hosted), ist es voll privat; der kleine „Wie sicher ist das?"-Link
-im Footer erklärt die Details.
+You can show one Memory to anyone, a grandparent or a group chat, through a link they open in a browser, without an
+account, and switch it off whenever you like.
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - Feature: [Sharing](../_index.md)
 - Decisions: [ADR 0029](../../../decisions/0029-public-viewer-share.md) (this share's resource + anonymous access
   path), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (the `K_node` second-wrap keying),
@@ -134,3 +127,5 @@ im Footer erklärt die Details.
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md)
 - Related: [Memory](../../memory/_index.md) (what a Memory is — the thing being shared)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
+- End-user view (docs site): [Create a link](../../../../site/src/content/docs/sharing/create-a-link.mdx)
+- End-user view (docs site): [Change, switch off, renew and delete links](../../../../site/src/content/docs/sharing/manage-links.mdx)

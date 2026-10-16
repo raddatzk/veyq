@@ -17,10 +17,10 @@ const GRANDCHILD = '5c09e000-0000-4000-8000-00000000ce02'
 const SIBLING = '5c09e000-0000-4000-8000-00000000ce03'
 
 /** A node's directory entry under its parent's key, as the tree seals it (ADR 0080 Decisions 2 and 3). */
-function entry(parentKey: Uint8Array, nodeId: string, name: string, key: Uint8Array, placementVersion = 0) {
-  const ctx = { scopeId: SCOPE_ID, nodeId, epoch: 0, placementVersion }
+function entry(parentKey: Uint8Array, nodeId: string, name: string, key: Uint8Array, placementRevision = 0) {
+  const ctx = { scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision }
   return {
-    placementVersion,
+    placementRevision,
     wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', ...ctx }, parentKey, key)),
     encryptedName: b64std(v1.seal({ purpose: 'node-name', ...ctx }, parentKey, v1.utf8(name))),
   }
@@ -65,12 +65,12 @@ describe('walkSubtree', () => {
     expect(walk.nodes.has(CHILD)).toBe(false)
   })
 
-  it('opens nothing at a placement version other than the one served with the entry', () => {
+  it('opens nothing at a placement revision other than the one served with the entry', () => {
     const rootKey = v1.randomBytes(32)
     const sealed = entry(rootKey, CHILD, 'Renamed', v1.randomBytes(32), 2)
     const nodes: ShareNode[] = [
       { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
-      { id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...sealed, placementVersion: 1 },
+      { id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...sealed, placementRevision: 1 },
     ]
     expect(walkSubtree(SCOPE_ID, nodes, rootKey).names.size).toBe(0)
   })

@@ -64,8 +64,8 @@ response and a client-side gate that reads them.
 - **Two deliveries.** The pre-auth `/api/setup` advertises the **instance** level, for what matters before login.
   After login the server delivers the **effective** set for the tenant. The client only reads it and never
   computes it (ADR 0088 decision 3).
-- **Wire shape** `[{ id }]` today. It grows to `[{ id, …values }]` for requirements (ADR 0088 decision 8), which is
-  additive and costs no major. The deprecation lifecycle (`state`, `sunsetAt`, `supersededBy`) stays deferred: a
+- **Wire shape** `[{ id, …values }]`: each entry carries the requirement values in effect on it (ADR 0088 decision
+  8), one optional property per requirement of the catalog, which was additive and cost no major. The deprecation lifecycle (`state`, `sunsetAt`, `supersededBy`) stays deferred: a
   removal under [ADR 0085](0085-one-major-moved-on-a-yearly-train.md) is marked `deprecated: true` in its contract
   and needs no manifest state.
 
@@ -99,9 +99,10 @@ disabled capability is then:
 
 Both are required: the manifest alone is only UX; the endpoint gate alone gives a broken-looking UI. Together
 they are honest and safe. A device switch also acts on what exists: the key material withholds the switched-off wraps
-without deleting them (ADR 0088 decision 5). A tenant owner is to switch a `+` entry off for their tenant the same way,
-from the tenant settings in `web/`, with the same gate answering `422` (ADR 0088 decisions 2, 5 and 12); that level is
-not built (inbox #439).
+without deleting them (ADR 0088 decision 5). A tenant owner switches a `+` entry off for their tenant the same way,
+from the tenant settings in `web/`, with the same gate answering `422` for that tenant's content (ADR 0088 decisions 2,
+5 and 12): the entry leaves the tenant's set every member reads after sign-in, and the pre-auth manifest stays the
+instance level.
 
 ### 5. The built entries
 
@@ -113,16 +114,17 @@ the AND along the path being the server's (ADR 0088 decision 2):
 
 | id | `serves` (use-cases) | disabled ⇒ |
 |---|---|---|
-| `core.public-shares` | share-public-viewer | Share affordance hidden; `createShare`, re-activating and re-issuing a READ link → `422`, and by the AND those of the two children below |
-| `core.public-shares.contribute` | share-contributor | the READ_WRITE role is not offered; the same three operations on a READ_WRITE link → `422` |
-| `core.public-shares.drop-box` | share-uploader | the uploader option and the drop-box node are not offered; WRITE_ONLY links and creating a drop-box node → `422` |
+| `core.public-shares` | share-public-viewer | Share affordance hidden; `createShare`, re-activating and re-issuing a READ link → `422`, and by the AND those of the two children below; every existing link answers guests `404` like an unknown one |
+| `core.public-shares.contribute` | share-contributor | the READ_WRITE role is not offered; the same three operations on a READ_WRITE link, and changing a READ link into one, → `422`; an existing READ_WRITE link answers guests `404` |
+| `core.public-shares.drop-box` | share-uploader | the uploader option and the drop-box node are not offered; WRITE_ONLY links and creating a drop-box node → `422`; an existing WRITE_ONLY link answers guests `404` |
 | `core.group-space` | add-group-member, manage-group-members, rename-group, delete-group, consent-group-add | group creation hidden; `createGroup` → `422` (an existing group stays usable, inbox #440 resolved as a doc fault) |
 | `core.remember-device` | trust-device, remember-this-device | enrolling a DEVICE wrap → `422`, and by the AND a passwordless one |
 | `core.remember-device.passwordless` | remember-this-device | the "remember this device" toggle hidden; enrolling a DEVICE_KEY wrap → `422` |
 | `core.device-linking` | onboard-device | "sign in with code" and the Settings entry hidden; every `/api/pairing/*` endpoint → `422` |
 
-**Sharing is the worked end-to-end proof** (manifest → client soft-gate → server `422`). Share switches act on new links
-only until inbox #442 lets them reach existing ones.
+**Sharing is the worked end-to-end proof** (manifest → client soft-gate → server `422`). A share switch also reaches
+existing links at once (ADR 0088 decision 5): core's guest gate answers a link of a switched-off role exactly as an
+unknown one, on every guest endpoint, and serves it again once the switch is back on.
 
 The **infra-detected** category (a capability computed by a preflight, not a policy toggle, with no operator
 off-switch or `422`) was originally illustrated by `directTransport` on `/api/setup`. That flag has been

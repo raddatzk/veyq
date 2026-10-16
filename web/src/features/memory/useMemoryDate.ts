@@ -20,7 +20,7 @@ export interface MemoryDateContext {
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
   chapters: () => TreeNode[] | undefined
-  /** The node-meta writes this view may make — the source's door where the capabilities grant `editMeta`, else null:
+  /** The node-meta writes this view may make — the source's door where the rights grant `editMeta`, else null:
    *  then the save and the `auto` self-heal write nothing (a guest, a scope pending deletion). */
   write: () => NodeMetaDoor | null
   items: Ref<MediaItem[]>

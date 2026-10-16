@@ -39,5 +39,8 @@ terminates TLS for every host above, the refresh cookie (Secure) is never sent b
 points at https — an instance that boots and then silently breaks. See ingress.tls in values.yaml.
 {{- end }}
 
-Store provisioning runs in the background on the app's first start; read how it went as the Server Owner:
-    GET https://{{ .Values.domain }}/api/instance/store-provisioning
+Before the first tenant, set the object store in the same console (over the port-forward above): open
+Server → Object store, choose "Use the bundled store" or a store of your own, save it, then "Check store".
+Tenants can be created only after a passed check. For the bundled Garage the same page shows how its background
+provisioning went — the public origin answers no Server-Owner operation, so this is the place to read it;
+`veyq-admin store check` provisions it again and prints every step.

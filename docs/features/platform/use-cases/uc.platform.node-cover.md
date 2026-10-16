@@ -17,7 +17,7 @@
 
 1. In the row's **⋯** menu (or the node's header) the member chooses **Cover** — labelled **Set cover** where the node has none,
    **Change cover** where it has one. It is **ONE action** (one id `cover`, the image icon, in the header and in the row menu
-   beside the favorite heart) gated by `coverCapabilities` (fail closed); there is **no separate Remove entry** — removal lives
+   beside the favorite heart) gated by `coverRights` (fail closed); there is **no separate Remove entry** — removal lives
    in the dialog.
 2. Core's **cover dialog** (`core/node/cover/components/CoverDialog.vue`) opens — the same one for a folder, a drop box and a
    Memory. It offers **Choose an image** (a hidden `image/*` input: an image, not empty, up to **40 MB**, otherwise a clear
@@ -30,7 +30,7 @@
    blob: a fresh `K_blob` wrapped under the **node's content key**, bound to blob, node and role `COVER`
    ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), the blob meta `{type: image/jpeg}` under `K_blob`. The upload
    runs as a job of the core upload queue (progress and failure show in the tray; a quota refusal says so).
-4. One request hands the open upload **and** the node's re-sealed `wrappedMeta` (the `cover` field `{ source, crop }`, version-
+4. One request hands the open upload **and** the node's re-sealed `wrappedMeta` (the `cover` field `{ source, crop }`, revision-
    checked, [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)): `setNodeCover` attaches the upload,
    freeing in the same transaction the blob it replaces (`expectedBlobId`) and compare-and-setting the meta. Either both land or
    neither does. A **re-crop** of the current cover is a plain meta write (the stored image, a moved crop); a **photo** the
@@ -52,7 +52,7 @@
   second *source* in the same sealed field that core carries untouched and the Memory's `cover.load` reads. Core's dialog, crop and
   write are the only ones — the Memory has no dialog of its own.
 - **E1 — a peer changed the cover meanwhile:** `409 cover_stale` — nothing was attached, the old cover is intact, the upload was
-  spent and freed; the member is told and may try again. A meta that moved is `409 stale_version`: nothing written, the upload
+  spent and freed; the member is told and may try again. A meta that moved is `409 stale_revision`: nothing written, the upload
   still open, the client re-applies its change on the current meta and sends the same upload again.
 - **E2 — the upload or the write fails, or is cancelled:** the **old cover stays, exactly as it was** (the blob step and the
   meta are one transaction); an upload no write ever attached is an unfinished upload like any other, which the server's
@@ -61,7 +61,7 @@
 - **E4 — a cover that fails to load or has no reader:** the node shows its kind's **icon**, silently.
 - **E5 — a share guest:** sees the covers of the nodes in its shared subtree (the node's `wrappedMeta` it already gets, the
   attachment through the share's gated blob route) and gets **no action**: no guest role sets a cover in this step, the server has
-  no guest operation for it, and the capability says so first. **Share view = member view**, with the function removed.
+  no guest operation for it, and the right says so first. **Share view = member view**, with the function removed.
 - **E6 — a pending deletion, locked keys, a guest's identity folder, a kind that did not opt in:** no action is offered; the
   server refuses the rest (`scope_deleting`, `illegal_target`).
 
@@ -82,20 +82,10 @@
 - **Core names no application kind.** The opt-in is a seam on each kind's own rules; the tests assert the matrix across core and
   every application.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Give a folder, a drop box or a memory a **face**: choose **Set cover** in its menu, pick any picture from your
-device and frame it — the same window everywhere. It replaces the icon in the list, on the page and in your favorites. The picture is locked on your device with the
-entry's own key; the server only stores scrambled data. **Change cover** re-frames or swaps it, and **Remove cover** inside the same window takes it away; either really deletes the old picture from the
-server's storage — only copies other people's browsers already hold cannot be taken back. People you share a link with can see
-the covers but cannot set them.
-
-**DE —** Gib einem Ordner, einem Briefkasten oder einer Erinnerung ein **Gesicht**: Wähle im Menü **Cover festlegen**, such ein
-beliebiges Bild von deinem Gerät aus und wähle den Ausschnitt — überall derselbe. Es ersetzt das Symbol in der Liste, auf der Seite und in deinen Favoriten. Das Bild wird
-auf deinem Gerät mit dem eigenen Schlüssel des Eintrags verschlüsselt; der Server speichert nur verschlüsselte Daten. Mit
-**Cover ändern** richtest du den Ausschnitt neu ein oder tauschst das Bild, mit **Cover entfernen** im selben Fenster nimmst du es weg;
-beides löscht das alte Bild wirklich aus dem Speicher des Servers gelöscht — nur Kopien, die andere Browser
-schon geladen haben, lassen sich nicht zurückholen. Wer nur einen Link bekommt, sieht die Cover, kann sie aber nicht festlegen.
+You can give a folder, a drop box or a Memory a picture of your own so you recognise it at a glance in lists, on its
+page and in your favorites.
 
 ## Related
 

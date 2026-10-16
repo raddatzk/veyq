@@ -28,7 +28,7 @@ import java.util.UUID
 
 /**
  * Slice tests for the member profile picture (uc.spaces.set-profile-picture, ADR 0084): set / overwrite / clear and the
- * version each bumps, the tenant-gated read with its `ETag` / `304`, the directory that carries the version and never
+ * revision each bumps, the tenant-gated read with its `ETag` / `304`, the directory that carries the revision and never
  * the bytes, the removal that clears the picture and keeps the handle, and the owner join that seals it at accept.
  * Distinct domains/emails per test so the JVM-lived H2 mem DB cannot bleed state.
  */
@@ -55,17 +55,17 @@ class MemberAvatarSliceTest {
         val t = world("av-rt")
         put(t, t.member, "c2VhbGVkLWF2YXRhcg==").then().statusCode(204)
 
-        // another member reads it: the opaque blob verbatim, ETag = version, never a shared cache
+        // another member reads it: the opaque blob verbatim, ETag = revision, never a shared cache
         read(t, t.owner, t.member).then().statusCode(200)
             .body("sealedAvatar", equalTo("c2VhbGVkLWF2YXRhcg=="))
             .header("ETag", "\"1\"").header("Cache-Control", "private")
-        // and the profile read shows the version the directory will carry
+        // and the profile read shows the revision the directory will carry
         given().header("Authorization", bearer(t.member)).header("X-Forwarded-Host", t.domain)
-            .`when`().get("/api/account/profile").then().statusCode(200).body("avatarVersion", equalTo(1))
+            .`when`().get("/api/account/profile").then().statusCode(200).body("avatarRevision", equalTo(1))
     }
 
     @Test
-    fun anOverwriteBumpsTheVersionAndReplacesTheBlob() {
+    fun anOverwriteBumpsTheRevisionAndReplacesTheBlob() {
         val t = world("av-over")
         put(t, t.member, "Zmlyc3Q=").then().statusCode(204)
         put(t, t.member, "c2Vjb25k").then().statusCode(204)
@@ -80,7 +80,7 @@ class MemberAvatarSliceTest {
             .body(equalTo(""))
         read(t, t.owner, t.member, ifNoneMatch = "W/\"1\"").then().statusCode(304)
         put(t, t.member, "c2Vjb25k").then().statusCode(204)
-        // the cached version is stale now, an unparsable one is no match: both a plain 200
+        // the cached revision is stale now, an unparsable one is no match: both a plain 200
         read(t, t.owner, t.member, ifNoneMatch = "\"1\"").then().statusCode(200).header("ETag", "\"2\"")
         read(t, t.owner, t.member, ifNoneMatch = "garbage").then().statusCode(200)
     }
@@ -93,17 +93,17 @@ class MemberAvatarSliceTest {
         read(t, t.owner, t.member).then().statusCode(404).body("code", equalTo("avatar_not_found"))
         val afterClear = stored(t.tenantId, t.member)
         assertNull(afterClear.sealedAvatar)
-        assertEquals(2, afterClear.avatarVersion, "a clear bumps like a set")
+        assertEquals(2, afterClear.avatarRevision, "a clear bumps like a set")
         given().header("Authorization", bearer(t.member)).header("X-Forwarded-Host", t.domain)
-            .`when`().get("/api/account/profile").then().statusCode(200).body("avatarVersion", equalTo(0))
+            .`when`().get("/api/account/profile").then().statusCode(200).body("avatarRevision", equalTo(0))
         // the directory reads 0 again too (not the counter a clear left behind)
         given().header("Authorization", bearer(t.owner))
             .`when`().get("/api/scopes/${t.tenantId}/members").then().statusCode(200)
-            .body("find { it.userId == '${t.member}' }.avatarVersion", equalTo(0))
+            .body("find { it.userId == '${t.member}' }.avatarRevision", equalTo(0))
         // idempotent: clearing again (or clearing what was never set) is a 204
         delete(t, t.member).then().statusCode(204)
         delete(t, t.owner).then().statusCode(204)
-        // a set after a clear never reuses a version a client may hold
+        // a set after a clear never reuses a revision a client may hold
         put(t, t.member, "bmV3").then().statusCode(204)
         read(t, t.owner, t.member).then().statusCode(200).header("ETag", "\"4\"")
     }
@@ -139,15 +139,15 @@ class MemberAvatarSliceTest {
     }
 
     @Test
-    fun theDirectoryCarriesTheVersionAndNeverTheBytes() {
+    fun theDirectoryCarriesTheRevisionAndNeverTheBytes() {
         val t = world("av-dir")
         val marker = "ZGlyZWN0b3J5LW1hcmtlcg=="
         put(t, t.member, marker).then().statusCode(204)
         val body = given().header("Authorization", bearer(t.owner))
             .`when`().get("/api/scopes/${t.tenantId}/members")
             .then().statusCode(200)
-            .body("find { it.userId == '${t.member}' }.avatarVersion", equalTo(1))
-            .body("find { it.userId == '${t.owner}' }.avatarVersion", equalTo(0))
+            .body("find { it.userId == '${t.member}' }.avatarRevision", equalTo(1))
+            .body("find { it.userId == '${t.owner}' }.avatarRevision", equalTo(0))
             .body(not(containsString("sealedAvatar")))
             .body(not(containsString(marker)))
             .extract().asString()
@@ -158,14 +158,14 @@ class MemberAvatarSliceTest {
     fun removingAMemberClearsThePictureAndKeepsTheHandle() {
         val t = world("av-rm")
         put(t, t.member, "Zmlyc3Q=").then().statusCode(204)
-        val before = stored(t.tenantId, t.member).avatarVersion
+        val before = stored(t.tenantId, t.member).avatarRevision
 
         given().header("Authorization", bearer(t.owner))
             .`when`().delete("/api/tenants/${t.tenantId}/members/${t.member}").then().statusCode(204)
 
         val after = stored(t.tenantId, t.member)
         assertNull(after.sealedAvatar, "the picture goes with the access")
-        assertTrue(after.avatarVersion > before, "and the version moves so a cached copy is revalidated")
+        assertTrue(after.avatarRevision > before, "and the revision moves so a cached copy is revalidated")
         assertEquals("av-rm-member", after.username, "the handle outlives the removal (old Memories keep a name)")
         read(t, t.owner, t.member).then().statusCode(404).body("code", equalTo("avatar_not_found"))
     }
@@ -179,7 +179,7 @@ class MemberAvatarSliceTest {
     }
 
     @Test
-    fun overlappingSetsEachBumpTheVersionOnce() {
+    fun overlappingSetsEachBumpTheRevisionOnce() {
         val t = world("av-race")
         val n = 8
         val pool = java.util.concurrent.Executors.newFixedThreadPool(n)
@@ -188,7 +188,7 @@ class MemberAvatarSliceTest {
         } finally {
             pool.shutdown()
         }
-        assertEquals(n, stored(t.tenantId, t.member).avatarVersion, "the counter moves in the database: no lost bump")
+        assertEquals(n, stored(t.tenantId, t.member).avatarRevision, "the counter moves in the database: no lost bump")
     }
 
     @Test
@@ -201,7 +201,7 @@ class MemberAvatarSliceTest {
         given().header("Authorization", bearer(t.member)).header("X-Forwarded-Host", t.domain)
             .contentType(ContentType.JSON).body("{}").`when`().put("/api/account/profile/avatar").then().statusCode(400)
         // the refused bodies changed nothing
-        assertEquals(1, stored(t.tenantId, t.member).avatarVersion)
+        assertEquals(1, stored(t.tenantId, t.member).avatarRevision)
     }
 
     @Test
@@ -218,7 +218,7 @@ class MemberAvatarSliceTest {
     }
 
     @Test
-    fun theOwnerJoinSealsThePictureAtAcceptWithVersionOne() {
+    fun theOwnerJoinSealsThePictureAtAcceptWithRevisionOne() {
         val secret = "av-acc-secret"
         val id = pendingTenant("av-acc.example.com", "owner@av-acc.example.com", secret)
         val userId = seedUser(email = "owner@av-acc.example.com")
@@ -227,7 +227,7 @@ class MemberAvatarSliceTest {
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         val p = stored(id, userId)
         assertEquals("c2VhbGVkLWF2YXRhcg==", p.sealedAvatar)
-        assertEquals(1, p.avatarVersion)
+        assertEquals(1, p.avatarRevision)
         read(Tenant(id, "av-acc.example.com", userId, userId), userId, userId).then().statusCode(200).header("ETag", "\"1\"")
 
         // an accept without one leaves none
@@ -238,7 +238,7 @@ class MemberAvatarSliceTest {
             .body("""{"bootstrapSecret":"$secret2","username":"avowner2","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         assertNull(stored(id2, user2).sealedAvatar)
-        assertEquals(0, stored(id2, user2).avatarVersion)
+        assertEquals(0, stored(id2, user2).avatarRevision)
     }
 
     @Test
@@ -249,7 +249,7 @@ class MemberAvatarSliceTest {
         given().contentType(ContentType.JSON).body(registerBody(ownerSecret, ownerId, "regowner", owner = true, avatar = "c2VhbGVkLWF2YXRhcg=="))
             .`when`().post("/api/tenants/accept/register").then().statusCode(201)
         assertEquals("c2VhbGVkLWF2YXRhcg==", stored(id, ownerId).sealedAvatar)
-        assertEquals(1, stored(id, ownerId).avatarVersion)
+        assertEquals(1, stored(id, ownerId).avatarRevision)
 
         // a MEMBER invitee holds no K_tenant yet: a picture on its body is not stored
         QuarkusTransaction.requiringNew().run {
@@ -263,7 +263,7 @@ class MemberAvatarSliceTest {
         given().contentType(ContentType.JSON).body(registerBody("av-reg-m", memberId, "regmember", owner = false, avatar = "c2VhbGVkLWF2YXRhcg=="))
             .`when`().post("/api/tenants/accept/register").then().statusCode(201)
         assertNull(stored(id, memberId).sealedAvatar)
-        assertEquals(0, stored(id, memberId).avatarVersion)
+        assertEquals(0, stored(id, memberId).avatarRevision)
     }
 
     @Test

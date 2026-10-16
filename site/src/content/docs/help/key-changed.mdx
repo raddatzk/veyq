@@ -1,0 +1,23 @@
+---
+title: "A key changed"
+sources:
+  - docs/features/account/enablers/en.account.identity-pinning.md
+---
+
+When a member shows **Key changed**, the server has started handing out a different key for them than the one your app
+trusted. Most of the time that person simply [replaced their keys](/veyq/account/replace-your-keys/). It can also be
+someone trying to pass off a key as theirs, which is exactly why veyq stops and asks.
+
+1. Ask the person directly, outside veyq (a call, in person), whether they replaced their keys.
+2. Choose **Review key** on their profile or in the member list, and compare the **Current** number with the one on
+   their own profile.
+3. If it is really them, choose **Accept new key**. If not, or you cannot reach them, choose **Refuse**.
+
+Until you accept, your device hands that person no key and does not add them to a group, so nothing new reaches a key
+you have not checked. Step by step: [Verify a person](/veyq/account/verify-a-person/#when-a-key-has-changed).
+
+If you replaced your own keys, the others see this about you. Ask them to check with you, and you are back in once one
+of them accepts.
+
+Only a key your own device has accepted is trusted; the server cannot change that quietly:
+[Is my data safe?](/veyq/privacy/is-my-data-safe/)

@@ -3,6 +3,7 @@ title: "Dein Notfall-Kit"
 sources:
   - docs/features/account/enablers/en.account.key-model.md
   - docs/features/account/use-cases/uc.account.recover-access.md
+  - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -32,11 +33,17 @@ Key** und einem QR-Code, der beides enthält. Bewahre es so sorgfältig auf wie 
 ## Wenn es verloren ist
 
 Solange du dein Passwort kennst und auf einem Gerät angemeldet bist, ist nichts verloren: Du nutzt veyq weiter wie
-bisher.
+bisher. Ein neues Kit bekommst du aber nicht, und ohne Kit kannst du ein vergessenes Passwort nicht zurücksetzen und
+deine Schlüssel nicht ersetzen. Nutze die Zeit, um [ein zweites Gerät hinzuzufügen](/veyq/de/account/adding-another-device/),
+damit ein verlorenes Gerät nicht das Ende ist: [Notfall-Kit verloren](/veyq/de/help/lost-emergency-kit/).
 
 Verlierst du **beides**, dein Passwort und dein Notfall-Kit, kann niemand zurückholen, was du aufbewahrst: nicht wer
 deinen Bereich besitzt und nicht die Person, die den Server betreibt. Bei ihnen liegt kein Hauptschlüssel und es gibt
 keine Hintertür. Was sie daran hindert, deine Fotos zu lesen, hindert sie auch daran, sie zu retten.
+
+Eine Wiederherstellung aus einer Sicherung ändert daran nichts. Stellt die Person, die den Server betreibt, ihn wieder
+her und du hast dein Passwort und dein Notfall-Kit noch, öffnet sich alles, was du aufbewahrst, genau wie vorher:
+Unterwegs wurde nichts geöffnet, neu verschlüsselt oder an jemanden herausgegeben.
 
 Der Secret Key ist lang und völlig zufällig, niemand kann ihn erraten. Weil deine Daten ihn zusätzlich zu deinem
 Passwort brauchen, öffnet ein erratenes oder geleaktes Passwort allein nichts:

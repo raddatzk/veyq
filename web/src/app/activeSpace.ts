@@ -6,6 +6,8 @@
 import { reactive } from 'vue'
 import { ensurePersonalScope, openScope, openScopeById, openGroupByToken, type OpenedScope } from '../features/spaces/scopes'
 import { getTenantTerms } from '../features/tenant/tenantTerms'
+import { getTenantCapabilities } from '../features/tenant/tenantCapabilities'
+import { setTenantCapabilities } from '../shared/state/useCapabilities'
 import { zeroEpochKeys, type EpochKeys } from '../features/spaces/epochs'
 import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../core/node/location'
@@ -45,25 +47,25 @@ export const activeSpace = reactive({
   // With status 'error': the i18n key naming the trust-state refusal that stopped the scope opening (ADR 0028
   // Decision 7 — a shared grant's granter is checked against the pin store this device refused), else null.
   trustRefusal: null as string | null,
-  // The active tenant's terms of service (cr-0114, ADR 0035): the operator's current `termsVersion` and the
-  // caller's `acceptedVersion` — both 0 when no terms are set / none accepted. When accepted < version the
+  // The active tenant's terms of service (cr-0114, ADR 0035): the space owner's current `termsRevision` and the
+  // caller's `acceptedRevision` — both 0 when no terms are set / none accepted. When accepted < revision the
   // member accept-gate fires (`termsStale()`, enforced by the router). Refreshed on every scope entry.
-  termsVersion: 0,
-  acceptedVersion: 0,
+  termsRevision: 0,
+  acceptedRevision: 0,
 })
 
 /** Whether the active tenant has terms the caller hasn't accepted yet — the member accept-gate condition
- *  (uc.account.accept-terms). False when no tenant is active or no terms are set (version 0). Fail-open: a
- *  transient terms-fetch error leaves the versions at 0, so a member is never locked out by an API hiccup. */
+ *  (uc.account.accept-terms). False when no tenant is active or no terms are set (revision 0). Fail-open: a
+ *  transient terms-fetch error leaves the revisions at 0, so a member is never locked out by an API hiccup. */
 export function termsStale(): boolean {
-  return activeSpace.tenantId !== null && activeSpace.termsVersion > 0 &&
-    activeSpace.acceptedVersion < activeSpace.termsVersion
+  return activeSpace.tenantId !== null && activeSpace.termsRevision > 0 &&
+    activeSpace.acceptedRevision < activeSpace.termsRevision
 }
 
-/** Record locally that the caller accepted [version] (called by the /terms view after a successful accept), so
+/** Record locally that the caller accepted [revision] (called by the /terms view after a successful accept), so
  *  `termsStale()` clears and the guard lets them back into the shell without a re-fetch. */
-export function markTermsAccepted(version: number): void {
-  if (version > activeSpace.acceptedVersion) activeSpace.acceptedVersion = version
+export function markTermsAccepted(revision: number): void {
+  if (revision > activeSpace.acceptedRevision) activeSpace.acceptedRevision = revision
 }
 
 // The scope's epoch keys are held outside the reactive proxy on purpose — key material must not flow through Vue
@@ -140,6 +142,9 @@ export async function enterScope(token: string): Promise<void> {
     // cr-0114: refresh the tenant's terms status so the router accept-gate knows if a (re-)accept is due. The
     // tenant is the same regardless of which scope (tenant/personal/group) is open, and terms are member-readable.
     await refreshTenantTerms(opened.tenantId)
+    // ADR 0088 decision 3: what this tenant offers, its owner's narrowing included. Every member reads it; the
+    // whole shell soft-gates on it from here on (`hasCapability`).
+    await refreshTenantCapabilities(opened.tenantId)
     // cr-invitations-topbar-badge: refresh the pending group-invitation count for the active tenant so the top-bar
     // attention badge reflects it. Not awaited — the badge updates whenever it resolves; scope entry never blocks
     // on it, and a failure just leaves the count at 0 (fail-quiet in refreshMyInvitations).
@@ -208,8 +213,9 @@ export function clearActiveSpace(): void {
   activeSpace.purgeAfter = null
   activeSpace.tenantUnavailable = false
   activeSpace.trustRefusal = null
-  activeSpace.termsVersion = 0
-  activeSpace.acceptedVersion = 0
+  activeSpace.termsRevision = 0
+  activeSpace.acceptedRevision = 0
+  setTenantCapabilities(null)
   if (epochKeys) zeroEpochKeys(epochKeys)
   epochKeys = null
   scopeKey = null
@@ -224,21 +230,35 @@ function isNoTenant(err: unknown): boolean {
   return isHttpStatus(err, HttpStatus.notFound)
 }
 
-/** Fetch the active tenant's terms status into `activeSpace` (cr-0114). Fail-open: on any error the versions
+/** Load the open tenant's effective capability set (ADR 0088 decision 3). A failed read falls back to the instance's
+ *  pre-auth manifest rather than hiding everything: it is a UX hint, and the server's gates refuse per tenant anyway. */
+export async function refreshTenantCapabilities(tenantId: string | null): Promise<void> {
+  if (!tenantId) {
+    setTenantCapabilities(null)
+    return
+  }
+  try {
+    setTenantCapabilities(await getTenantCapabilities(tenantId))
+  } catch {
+    setTenantCapabilities(null)
+  }
+}
+
+/** Fetch the active tenant's terms status into `activeSpace` (cr-0114). Fail-open: on any error the revisions
  *  stay/reset to 0 so `termsStale()` is false — a transient terms hiccup must never lock a member out of the
  *  shell (terms acceptance is an operational gate, not a confidentiality control). */
 async function refreshTenantTerms(tenantId: string | null): Promise<void> {
   if (!tenantId) {
-    activeSpace.termsVersion = 0
-    activeSpace.acceptedVersion = 0
+    activeSpace.termsRevision = 0
+    activeSpace.acceptedRevision = 0
     return
   }
   try {
     const t = await getTenantTerms(tenantId)
-    activeSpace.termsVersion = t.termsVersion
-    activeSpace.acceptedVersion = t.acceptedVersion
+    activeSpace.termsRevision = t.termsRevision
+    activeSpace.acceptedRevision = t.acceptedRevision
   } catch {
-    activeSpace.termsVersion = 0
-    activeSpace.acceptedVersion = 0
+    activeSpace.termsRevision = 0
+    activeSpace.acceptedRevision = 0
   }
 }

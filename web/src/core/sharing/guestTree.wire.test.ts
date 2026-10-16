@@ -1,6 +1,6 @@
 // A guest's tree operations on the wire (cr-node-key-hierarchy 5b.4a, ADR 0080 decisions 2, 3, 6 and 10): recorded at
 // `fetch` — the JSON and headers the real generated client sends, no mock of the API client. A create seals under the
-// PARENT's key (never the root's when the parent is below it, never `K_SC`) at the parent's served epoch and version 0;
+// PARENT's key (never the root's when the parent is below it, never `K_SC`) at the parent's served epoch and revision 0;
 // a placement re-wraps under the DESTINATION's key at served+1 and states no epoch; one `stale_placement` retry; a
 // readable sibling's name refuses before sending; every refusal maps by its code.
 import { describe, it, expect, vi, afterEach } from 'vitest'
@@ -45,19 +45,19 @@ const kLeft = v1.randomBytes(32)
 const kRight = v1.randomBytes(32)
 const kItem = v1.randomBytes(32)
 
-/** A served child row: its name and key wrap sealed under its parent's key, at its epoch and placement version. */
-function row(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, epoch: number, placementVersion: number, kind = FOLDER_KIND): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch, placementVersion }
-  return { id, parentId, kind, epoch, placementVersion, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+/** A served child row: its name and key wrap sealed under its parent's key, at its epoch and placement revision. */
+function row(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, epoch: number, placementRevision: number, kind = FOLDER_KIND): ShareNode {
+  const address = { scopeId: SCOPE_ID, nodeId: id, epoch, placementRevision }
+  return { id, parentId, kind, epoch, placementRevision, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 
-// The root at epoch 5, its two subfolders at epochs 3 and 1, an item in the left one (served at version 2).
-function servedNodes(itemVersion = 2): ShareNode[] {
+// The root at epoch 5, its two subfolders at epochs 3 and 1, an item in the left one (served at revision 2).
+function servedNodes(itemRevision = 2): ShareNode[] {
   return [
-    { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 5, placementVersion: 0 },
+    { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 5, placementRevision: 0 },
     row(LEFT, ROOT, kRoot, kLeft, 'Briefe', 3, 1),
     row(RIGHT, ROOT, kRoot, kRight, 'Fotos', 1, 0),
-    row(ITEM, LEFT, kLeft, kItem, 'Tagebuch', 4, itemVersion, ITEM_KIND),
+    row(ITEM, LEFT, kLeft, kItem, 'Tagebuch', 4, itemRevision, ITEM_KIND),
   ]
 }
 
@@ -91,7 +91,7 @@ const refused = (status: number, code: string) => () => new Response(JSON.string
 const bytes = (k: Uint8Array) => Array.from(k)
 
 describe('a guest creates a node', () => {
-  it('seals the new key, name and slug under the PARENT\'s key at the parent\'s served epoch and version 0', async () => {
+  it('seals the new key, name and slug under the PARENT\'s key at the parent\'s served epoch and revision 0', async () => {
     const sent = recordFetch(created)
     const ctx = context()
     const { nodeId, contentKey } = await createShareNodeAsGuest(ctx, { parentId: LEFT, kind: FOLDER_KIND, name: 'Urlaub 1998' })
@@ -106,11 +106,11 @@ describe('a guest creates a node', () => {
     expect(json).toMatchObject({ nodeId, parentId: LEFT, kind: FOLDER_KIND, epoch: 3 }) // the parent's served epoch, not the root's 5
     expect(JSON.stringify(json)).not.toContain('Urlaub')
 
-    const wrap = { id: nodeId, epoch: 3, placementVersion: 0, wrappedContentKey: json.wrappedContentKey as string }
+    const wrap = { id: nodeId, epoch: 3, placementRevision: 0, wrappedContentKey: json.wrappedContentKey as string }
     expect(bytes(openContentKey(SCOPE_ID, kLeft, wrap)), 'the wrap opens under the parent key to the new key').toEqual(bytes(contentKey))
     for (const other of [kRoot, kSC]) expect(() => openContentKey(SCOPE_ID, other, wrap), 'not under the root key or K_SC').toThrow(v1.OpenRefused)
-    expect(() => openContentKey(SCOPE_ID, kLeft, { ...wrap, placementVersion: 1 }), 'bound to version 0').toThrow(v1.OpenRefused)
-    const address = { scopeId: SCOPE_ID, nodeId, epoch: 3, placementVersion: 0 }
+    expect(() => openContentKey(SCOPE_ID, kLeft, { ...wrap, placementRevision: 1 }), 'bound to revision 0').toThrow(v1.OpenRefused)
+    const address = { scopeId: SCOPE_ID, nodeId, epoch: 3, placementRevision: 0 }
     expect(openName(kLeft, address, json.encryptedName as string), 'the name opens under the parent key').toBe('Urlaub 1998')
     expect(json.slugToken, 'the slug token is keyed by the parent key in the parent\'s slot').toBe(b64std(v1.slugToken(kLeft, LEFT, slugify('Urlaub 1998'))))
   })
@@ -119,7 +119,7 @@ describe('a guest creates a node', () => {
     const sent = recordFetch(created)
     const { nodeId } = await createShareNodeAsGuest(context(), { parentId: ROOT, kind: FOLDER_KIND, name: 'Neu' })
     expect(sent[0].json.epoch).toBe(5)
-    expect(openName(kRoot, { scopeId: SCOPE_ID, nodeId, epoch: 5, placementVersion: 0 }, sent[0].json.encryptedName as string)).toBe('Neu')
+    expect(openName(kRoot, { scopeId: SCOPE_ID, nodeId, epoch: 5, placementRevision: 0 }, sent[0].json.encryptedName as string)).toBe('Neu')
   })
 
   it('refuses a parent whose key the guest does not hold, sending nothing', async () => {
@@ -157,14 +157,14 @@ describe('a guest places a node', () => {
     expect(method).toBe('PATCH')
     expect(url).toContain(`/api/shares/${SHARE_ID}/nodes/${ITEM}`)
     expect(headers.get('X-Contributor-Token')).toBe(TOKEN)
-    expect(Object.keys(json).sort(), 'no epoch on the wire').toEqual(['encryptedName', 'parentId', 'placementVersion', 'slugToken', 'wrappedContentKey'])
-    expect(json).toMatchObject({ parentId: RIGHT, placementVersion: 2 }) // the version it was built on
+    expect(Object.keys(json).sort(), 'no epoch on the wire').toEqual(['encryptedName', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
+    expect(json).toMatchObject({ parentId: RIGHT, placementRevision: 2 }) // the revision it was built on
 
-    const wrap = { id: ITEM, epoch: 4, placementVersion: 3, wrappedContentKey: json.wrappedContentKey as string }
+    const wrap = { id: ITEM, epoch: 4, placementRevision: 3, wrappedContentKey: json.wrappedContentKey as string }
     expect(bytes(openContentKey(SCOPE_ID, kRight, wrap)), 'opens under the destination key at served+1').toEqual(bytes(kItem))
-    expect(() => openContentKey(SCOPE_ID, kRight, { ...wrap, placementVersion: 2 }), 'not at the served version').toThrow(v1.OpenRefused)
+    expect(() => openContentKey(SCOPE_ID, kRight, { ...wrap, placementRevision: 2 }), 'not at the served revision').toThrow(v1.OpenRefused)
     expect(() => openContentKey(SCOPE_ID, kLeft, wrap), 'not under the source parent').toThrow(v1.OpenRefused)
-    const address = { scopeId: SCOPE_ID, nodeId: ITEM, epoch: 4, placementVersion: 3 }
+    const address = { scopeId: SCOPE_ID, nodeId: ITEM, epoch: 4, placementRevision: 3 }
     expect(openName(kRight, address, json.encryptedName as string), 'the existing name, under the destination key').toBe('Tagebuch')
     expect(json.slugToken).toBe(b64std(v1.slugToken(kRight, RIGHT, slugify('Tagebuch'))))
   })
@@ -172,17 +172,17 @@ describe('a guest places a node', () => {
   it('a rename is a placement to the same parent under the new name; the root is a destination', async () => {
     const sent = recordFetch(noContent, noContent)
     await placeShareNodeAsGuest(context(), { nodeId: ITEM, newParentId: LEFT, newName: 'Tagebuch 2' })
-    expect(openName(kLeft, { scopeId: SCOPE_ID, nodeId: ITEM, epoch: 4, placementVersion: 3 }, sent[0].json.encryptedName as string)).toBe('Tagebuch 2')
+    expect(openName(kLeft, { scopeId: SCOPE_ID, nodeId: ITEM, epoch: 4, placementRevision: 3 }, sent[0].json.encryptedName as string)).toBe('Tagebuch 2')
     await placeShareNodeAsGuest(context(), { nodeId: ITEM, newParentId: ROOT })
-    expect(bytes(openContentKey(SCOPE_ID, kRoot, { id: ITEM, epoch: 4, placementVersion: 3, wrappedContentKey: sent[1].json.wrappedContentKey as string }))).toEqual(bytes(kItem))
+    expect(bytes(openContentKey(SCOPE_ID, kRoot, { id: ITEM, epoch: 4, placementRevision: 3, wrappedContentKey: sent[1].json.wrappedContentKey as string }))).toEqual(bytes(kItem))
   })
 
-  it('never places the share root, and refuses a node served without its placement version', async () => {
+  it('never places the share root, and refuses a node served without its placement revision', async () => {
     const sent = recordFetch(noContent)
     const err = await placeShareNodeAsGuest(context(), { nodeId: ROOT, newParentId: LEFT }).then(() => null, (e: unknown) => e)
     expect((err as GuestTreeError).code).toBe('illegal_structure')
     const ctx = context()
-    ctx.nodes.set(ITEM, { ...ctx.nodes.get(ITEM)!, placementVersion: undefined })
+    ctx.nodes.set(ITEM, { ...ctx.nodes.get(ITEM)!, placementRevision: undefined })
     await expect(placeShareNodeAsGuest(ctx, { nodeId: ITEM, newParentId: RIGHT })).rejects.toThrow(v1.OpenRefused)
     expect(sent).toHaveLength(0)
   })
@@ -248,8 +248,8 @@ describe('a guest places a node', () => {
     await placeShareNodeAsGuest(ctx, { nodeId: ITEM, newParentId: RIGHT })
     expect(ctx.reresolve).toHaveBeenCalledTimes(1)
     expect(sent).toHaveLength(2)
-    expect(sent[1].json.placementVersion).toBe(7)
-    expect(bytes(openContentKey(SCOPE_ID, kRight, { id: ITEM, epoch: 4, placementVersion: 8, wrappedContentKey: sent[1].json.wrappedContentKey as string }))).toEqual(bytes(kItem))
+    expect(sent[1].json.placementRevision).toBe(7)
+    expect(bytes(openContentKey(SCOPE_ID, kRight, { id: ITEM, epoch: 4, placementRevision: 8, wrappedContentKey: sent[1].json.wrappedContentKey as string }))).toEqual(bytes(kItem))
   })
 
   it('two stale_placement answers end in PlacementConflictError', async () => {
@@ -275,6 +275,7 @@ describe('a refusal maps by its code, whatever the status', () => {
     node_not_found: 'share.folder.gone',
     stale_placement: 'share.folder.placementConflict',
     rate_limited: 'share.folder.rateLimited',
+    not_a_placeholder: 'share.folder.createFailed', // an abandon's, which no guest is shown
   }
   // Each code on a status that does NOT carry it: a mapping by status would answer otherwise.
   it.each(Object.entries(expected))('%s → %s', async (code, key) => {

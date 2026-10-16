@@ -1,13 +1,10 @@
-// Reference map-provider defaults (ADR 0016/0018): public OpenStreetMap raster tiles + the Nominatim reverse
-// geocoder. These are the built-in fallbacks when no operator override is set (env `VITE_VEYQ_MAP_*` or a
-// per-device localStorage override). Kept in their own module because two consumers must agree on the SAME
-// values: `useMapConfig` (the runtime provider the client fetches from) and the build-time CSP generator
-// (`vite.config.ts` derives the allowed tile/geocoder origins from these) — one source, so the policy can
-// never drift from the provider it is meant to allow.
-
-/** Basemap raster tile template; Leaflet fetches these as `<img>` (→ CSP `img-src`). */
-export const DEFAULT_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-export const DEFAULT_TILE_ATTRIBUTION = '© OpenStreetMap contributors'
+// The map's one client-side constant (ADR 0018): the deepest zoom Leaflet asks the tile service for. The addresses are
+// the server's (the `memories.map` / `memories.places` capabilities, uc.admin.configure-external-services).
 export const DEFAULT_TILE_MAX_ZOOM = 19
-/** Reverse geocoder base; fetched via XHR (→ CSP `connect-src`). */
-export const DEFAULT_GEOCODER_URL = 'https://nominatim.openstreetmap.org'
+
+// The reference providers a new instance starts with (the backend's migration seeds them, ADR 0016/0018). Only the dev
+// server's Content-Security-Policy reads them (`vite.config.ts`): a dev instance seeded with the defaults works, one
+// pointed elsewhere edits its dev policy. Production's policy is the backend's, following the configured services.
+export const DEV_TILE_ORIGIN = 'https://tile.openstreetmap.org'
+export const DEV_GEOCODER_ORIGIN = 'https://nominatim.openstreetmap.org'
+export const DEV_BREACH_ORIGIN = 'https://api.pwnedpasswords.com'

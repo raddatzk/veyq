@@ -1,7 +1,7 @@
 // A placement write on the wire (ADR 0080 Decision 3): recorded at `fetch` — the JSON the real generated client
 // serializes, not the object handed to it — so a field the client dropped or renamed fails here. A rename carries the
-// whole placement (parent, re-wrapped key, re-sealed name, slug token, epoch, the version it was built on), and the
-// wrap it sends opens only under the destination parent's key at the NEXT version. A restore's token and name are
+// whole placement (parent, re-wrapped key, re-sealed name, slug token, epoch, the revision it was built on), and the
+// wrap it sends opens only under the destination parent's key at the NEXT revision. A restore's token and name are
 // derived under the live parent's key (ADR 0080 Decision 8). A listing's `createdAt` reaches the tree (ADR 0015). No
 // mock of the API client.
 import { describe, it, expect, vi, afterEach } from 'vitest'
@@ -24,14 +24,14 @@ const scopeKey = v1.randomBytes(32)
 const keyA = v1.randomBytes(32)
 const keyB = v1.randomBytes(32)
 const keyM = v1.randomBytes(32)
-const at = (placementVersion: number) => ({ scopeId: SCOPE_ID, nodeId: M, epoch: 0, placementVersion })
+const at = (placementRevision: number) => ({ scopeId: SCOPE_ID, nodeId: M, epoch: 0, placementRevision })
 const sealWrap = (kek: Uint8Array, id: string, k: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 3 }, kek, k))
+  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 3 }, kek, k))
 const row = (id: string, parentId: string | null, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
   id, parentId, kind: parentId === null ? 'FOLDER' : 'MEMORY', orderIndex: 0, epoch: 0, name, wrappedContentKey: sealWrap(kek, id, k),
-  wrappedMeta: null, metaVersion: 0, placementVersion: 3,
+  wrappedMeta: null, metaRevision: 0, placementRevision: 3,
 })
-// Every node at version 3, so the next one (4) is told apart from both 0 and the one built on.
+// Every node at revision 3, so the next one (4) is told apart from both 0 and the one built on.
 const tree = (): TreeNode[] => [row(A, null, scopeKey, keyA, 'Reisen'), row(B, null, scopeKey, keyB, 'Archiv'), row(M, A, keyA, keyM, 'Italien')]
 
 function recordFetch() {
@@ -44,7 +44,7 @@ function recordFetch() {
 }
 
 describe('a placement write on the wire (ADR 0080 Decision 3)', () => {
-  it('a rename carries the whole placement, its wrap opening only under the parent\'s key at version + 1', async () => {
+  it('a rename carries the whole placement, its wrap opening only under the parent\'s key at revision + 1', async () => {
     const bodies = recordFetch()
 
     await renameNode(SCOPE_ID, epochsOf(scopeKey), tree(), M, 'Neapel')
@@ -53,8 +53,8 @@ describe('a placement write on the wire (ADR 0080 Decision 3)', () => {
     const { url, method, json } = bodies[0]
     expect(method).toBe('PATCH')
     expect(url).toContain(`/api/scopes/${SCOPE_ID}/nodes/${M}`)
-    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'parentId', 'placementVersion', 'slugToken', 'wrappedContentKey'])
-    expect(json).toMatchObject({ parentId: A, epoch: 0, placementVersion: 3 })
+    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
+    expect(json).toMatchObject({ parentId: A, epoch: 0, placementRevision: 3 })
     const wrap = fromB64std(json.wrappedContentKey as string)
     expect(Array.from(v1.open({ purpose: 'content-key', ...at(4) }, keyA, wrap))).toEqual(Array.from(keyM))
     expect(() => v1.open({ purpose: 'content-key', ...at(3) }, keyA, wrap)).toThrow(v1.OpenRefused)
@@ -64,17 +64,17 @@ describe('a placement write on the wire (ADR 0080 Decision 3)', () => {
     expect(json.slugToken).toBe(b64std(v1.slugToken(keyA, A, 'neapel')))
   })
 
-  it('a move\'s wrap opens under the destination parent\'s key at version + 1, and under no other', async () => {
+  it('a move\'s wrap opens under the destination parent\'s key at revision + 1, and under no other', async () => {
     const bodies = recordFetch()
 
     await moveNode(SCOPE_ID, epochsOf(scopeKey), tree(), M, B)
 
     const { json } = bodies[0]
-    expect(json).toMatchObject({ parentId: B, placementVersion: 3 })
+    expect(json).toMatchObject({ parentId: B, placementRevision: 3 })
     const wrap = fromB64std(json.wrappedContentKey as string)
     expect(Array.from(v1.open({ purpose: 'content-key', ...at(4) }, keyB, wrap))).toEqual(Array.from(keyM))
-    for (const [key, version] of [[keyA, 4], [keyB, 3], [scopeKey, 4]] as const) {
-      expect(() => v1.open({ purpose: 'content-key', ...at(version) }, key, wrap)).toThrow(v1.OpenRefused)
+    for (const [key, revision] of [[keyA, 4], [keyB, 3], [scopeKey, 4]] as const) {
+      expect(() => v1.open({ purpose: 'content-key', ...at(revision) }, key, wrap)).toThrow(v1.OpenRefused)
     }
   })
 })
@@ -82,16 +82,16 @@ describe('a placement write on the wire (ADR 0080 Decision 3)', () => {
 // ADR 0080 Decision 8: a restore's slug token — and, on the taken-name retry, its re-sealed name — is derived under the
 // LIVE parent's key, opened from the tree as it is now. Here the parent A was moved under B while M sat in the trash, so
 // A's own key is reached through B; neither B's key nor K_SC (the node's epoch key) may stand in for it. A restore is
-// not a placement: the name binds the version M already has (3), and its key wrap is not sent at all.
+// not a placement: the name binds the revision M already has (3), and its key wrap is not sent at all.
 describe('a restore on the wire (ADR 0080 Decision 8)', () => {
-  const sealAt = (kek: Uint8Array, id: string, k: Uint8Array, version: number) =>
-    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: version }, kek, k))
+  const sealAt = (kek: Uint8Array, id: string, k: Uint8Array, revision: number) =>
+    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: revision }, kek, k))
   const liveTree = (): TreeNode[] => [
     { ...row(B, null, scopeKey, keyB, 'Archiv') },
-    // A moved under B: its key is now wrapped under B's, at the version the move took it to
-    { ...row(A, B, keyB, keyA, 'Reisen'), kind: 'FOLDER', placementVersion: 5, wrappedContentKey: sealAt(keyB, A, keyA, 5) },
+    // A moved under B: its key is now wrapped under B's, at the revision the move took it to
+    { ...row(A, B, keyB, keyA, 'Reisen'), kind: 'FOLDER', placementRevision: 5, wrappedContentKey: sealAt(keyB, A, keyA, 5) },
   ]
-  const trashed = { id: M, parentId: A, kind: 'MEMORY', epoch: 0, placementVersion: 3, name: 'Italien' }
+  const trashed = { id: M, parentId: A, kind: 'MEMORY', epoch: 0, placementRevision: 3, name: 'Italien' }
 
   it('an ordinary restore sends only the slug token, derived under the live parent\'s key', async () => {
     const bodies = recordFetch()
@@ -107,7 +107,7 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
     for (const stale of [keyB, scopeKey]) expect(json.slugToken).not.toBe(b64std(v1.slugToken(stale, A, 'italien')))
   })
 
-  it('the taken-name retry seals the new name under the live parent\'s key at the node\'s own version', async () => {
+  it('the taken-name retry seals the new name under the live parent\'s key at the node\'s own revision', async () => {
     const bodies = recordFetch()
 
     await restoreNode(SCOPE_ID, epochsOf(scopeKey), liveTree(), trashed, 'Neapel')
@@ -117,8 +117,8 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
     expect(json.slugToken).toBe(b64std(v1.slugToken(keyA, A, 'neapel')))
     const name = fromB64std(json.encryptedName as string)
     expect(new TextDecoder().decode(v1.open({ purpose: 'node-name', ...at(3) }, keyA, name))).toBe('Neapel')
-    for (const [key, version] of [[keyA, 4], [keyA, 0], [keyB, 3], [scopeKey, 3]] as const) {
-      expect(() => v1.open({ purpose: 'node-name', ...at(version) }, key, name)).toThrow(v1.OpenRefused)
+    for (const [key, revision] of [[keyA, 4], [keyA, 0], [keyB, 3], [scopeKey, 3]] as const) {
+      expect(() => v1.open({ purpose: 'node-name', ...at(revision) }, key, name)).toThrow(v1.OpenRefused)
     }
   })
 })
@@ -165,7 +165,7 @@ describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
 
   it('a restore folds with the trashed node\'s kind, on the plain restore and the taken-name retry', async () => {
     const bodies = recordFetch()
-    const trashed = { id: M, parentId: A, kind: LEAF, epoch: 0, placementVersion: 3, name: NAME }
+    const trashed = { id: M, parentId: A, kind: LEAF, epoch: 0, placementRevision: 3, name: NAME }
     await restoreNode(SCOPE_ID, epochsOf(scopeKey), tree(), trashed)
     await restoreNode(SCOPE_ID, epochsOf(scopeKey), tree(), trashed, 'FOTO.jpg')
     expect(bodies[0].json.slugToken).toBe(leafToken(keyA, A))
@@ -179,10 +179,10 @@ describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
 // the millisecond kept — the instant siblings are ordered by. Served as JSON at `fetch`, read through the real client.
 describe('a listing on the wire', () => {
   it('carries each node\'s server-observed createdAt to the millisecond', async () => {
-    const name = b64std(v1.seal({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId: A, epoch: 0, placementVersion: 3 }, scopeKey, v1.utf8('Reisen')))
+    const name = b64std(v1.seal({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId: A, epoch: 0, placementRevision: 3 }, scopeKey, v1.utf8('Reisen')))
     const summary = {
       id: A, kind: 'FOLDER', encryptedName: name, slugToken: 'c2x1Zw==', orderIndex: 0, epoch: 0,
-      wrappedContentKey: sealWrap(scopeKey, A, keyA), metaVersion: 0, placementVersion: 3, createdAt: '2026-10-08T10:15:30.123Z',
+      wrappedContentKey: sealWrap(scopeKey, A, keyA), metaRevision: 0, placementRevision: 3, createdAt: '2026-10-08T10:15:30.123Z',
     }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([summary]), { status: 200, headers: { 'Content-Type': 'application/json' } })))
 

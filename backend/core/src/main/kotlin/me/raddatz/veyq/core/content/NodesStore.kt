@@ -25,11 +25,11 @@ data class NodeRow(
     val wrappedMeta: String?,
     /** The drop private key of a WRITE_ONLY link's shared root, sealed under its content key (ADR 0031 point 7), or null until its first WRITE_ONLY share. */
     val sealedDropPrivateKey: String? = null,
-    /** How many times [wrappedMeta] was replaced — the version a meta write states (ADR 0077). */
-    val metaVersion: Long = 0,
-    /** How many times the node was moved or renamed — the version its name and key wrap are sealed at, and the one a
+    /** How many times [wrappedMeta] was replaced — the revision a meta write states (ADR 0077). */
+    val metaRevision: Long = 0,
+    /** How many times the node was moved or renamed — the revision its name and key wrap are sealed at, and the one a
      *  placement write states (ADR 0080 Decision 3). */
-    val placementVersion: Long = 0,
+    val placementRevision: Long = 0,
     /** An identity folder's guest identity (ADR 0080 decision 11, [NodeEntity.shareIdentityId]), else null. */
     val shareIdentityId: String? = null,
     /** With [shareIdentityId]: that identity's `K_up` wrapped to the parent's drop public key, the first link of the
@@ -47,8 +47,8 @@ data class TrashedNodeRow(
     val kind: String,
     val encryptedName: String,
     val epoch: Int,
-    /** The placement version [encryptedName] is sealed at; a trash and a restore leave it alone. */
-    val placementVersion: Long,
+    /** The placement revision [encryptedName] is sealed at; a trash and a restore leave it alone. */
+    val placementRevision: Long,
     val deletedAt: Instant,
     /** A trashed identity folder's identity and its wrapped `K_up` (ADR 0080 decision 11), which its entry opens through. */
     val shareIdentityId: String? = null,
@@ -207,7 +207,7 @@ class NodesStore {
         return nodes.map {
             NodeRow(
                 it.id, it.parentId, it.kind, it.encryptedName, it.slugToken, it.orderIndex, it.epoch, it.wrappedContentKey,
-                it.wrappedMeta, it.sealedDropPrivateKey, it.metaVersion, it.placementVersion,
+                it.wrappedMeta, it.sealedDropPrivateKey, it.metaRevision, it.placementRevision,
                 it.shareIdentityId, it.shareIdentityId?.let(wrapped::get), it.createdAt,
             )
         }
@@ -274,12 +274,12 @@ class NodesStore {
         object IllegalMove : ApplyResult
         object SlugTaken : ApplyResult
         object StalePlacement : ApplyResult
-        data class StaleMeta(val wrappedMeta: String?, val metaVersion: Long) : ApplyResult
+        data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : ApplyResult
     }
 
     /**
      * A placement write (ADR 0080 Decision 3): every field of the node's directory entry and key wrap at once, built on
-     * [expectedVersion]. [epoch] is the epoch to store, or null to keep the stored one (a placement between two
+     * [expectedRevision]. [epoch] is the epoch to store, or null to keep the stored one (a placement between two
      * non-root parents, ADR 0080 Decision 4 — the handler decides which).
      */
     data class Placement(
@@ -288,16 +288,16 @@ class NodesStore {
         val slugToken: String,
         val wrappedContentKey: String,
         val epoch: Int?,
-        val expectedVersion: Long,
+        val expectedRevision: Long,
     )
 
     /**
      * Apply a partial update: a [placement], a reorder, a payload re-seal — each optional. A placement is written only
-     * if the node's `placementVersion` is still [Placement.expectedVersion] (ADR 0080 Decision 3), a [wrappedMeta]
-     * only if [metaVersion] is still the stored one (ADR 0077); on either miss **nothing** is written and the caller
+     * if the node's `placementRevision` is still [Placement.expectedRevision] (ADR 0080 Decision 3), a [wrappedMeta]
+     * only if [metaRevision] is still the stored one (ADR 0077); on either miss **nothing** is written and the caller
      * learns which.
      *
-     * **One statement.** Every column the request changes, both version bumps and both version compares sit in ONE
+     * **One statement.** Every column the request changes, both revision bumps and both revision compares sit in ONE
      * bulk UPDATE, so its row count is the whole verdict: two compare-and-sets in two statements would have to undo
      * the first when the second missed. It runs before this transaction loads the node, so no managed copy holds the
      * pre-update row for a flush to write back; on a miss the node is loaded afterwards, as it now is, to tell the two
@@ -321,7 +321,7 @@ class NodesStore {
      */
     @Transactional
     fun applyUpdate(
-        scopeId: String, nodeId: String, placement: Placement?, orderIndex: Int?, wrappedMeta: String?, metaVersion: Long?,
+        scopeId: String, nodeId: String, placement: Placement?, orderIndex: Int?, wrappedMeta: String?, metaRevision: Long?,
         boundary: SubtreeBoundary? = null,
     ): ApplyResult {
         lockScope(scopeId)
@@ -345,7 +345,7 @@ class NodesStore {
         placement?.let { p ->
             sets += listOf(
                 "parentId = :parentId", "encryptedName = :encryptedName", "slugToken = :slugToken",
-                "wrappedContentKey = :wrappedContentKey", "placementVersion = :nextPlacement",
+                "wrappedContentKey = :wrappedContentKey", "placementRevision = :nextPlacement",
                 // An identity folder's one possible placement is a member's move out of its drop box (a rename or a
                 // move inside is refused by the kinds' placement rules): its key is re-wrapped under the new parent's,
                 // so it is no identity's folder any more (ADR 0080 decision 11). A no-op on every other node.
@@ -353,18 +353,18 @@ class NodesStore {
             )
             params += mapOf(
                 "parentId" to p.parentSlot, "encryptedName" to p.encryptedName, "slugToken" to p.slugToken,
-                "wrappedContentKey" to p.wrappedContentKey, "nextPlacement" to p.expectedVersion + 1,
-                "placementVersion" to p.expectedVersion,
+                "wrappedContentKey" to p.wrappedContentKey, "nextPlacement" to p.expectedRevision + 1,
+                "placementRevision" to p.expectedRevision,
             )
-            conds += "placementVersion = :placementVersion"
+            conds += "placementRevision = :placementRevision"
             p.epoch?.let { sets += "epoch = :epoch"; params["epoch"] = it }
         }
         orderIndex?.let { sets += "orderIndex = :orderIndex"; params["orderIndex"] = it }
         if (wrappedMeta != null) {
-            val expected = checkNotNull(metaVersion) { "the handler refuses wrappedMeta without its metaVersion" }
-            sets += listOf("wrappedMeta = :wrappedMeta", "metaVersion = :nextMeta")
-            params += mapOf("wrappedMeta" to wrappedMeta, "nextMeta" to expected + 1, "metaVersion" to expected)
-            conds += "metaVersion = :metaVersion"
+            val expected = checkNotNull(metaRevision) { "the handler refuses wrappedMeta without its metaRevision" }
+            sets += listOf("wrappedMeta = :wrappedMeta", "metaRevision = :nextMeta")
+            params += mapOf("wrappedMeta" to wrappedMeta, "nextMeta" to expected + 1, "metaRevision" to expected)
+            conds += "metaRevision = :metaRevision"
         }
         if (sets.isEmpty()) return if (findInScope(scopeId, nodeId) != null) ApplyResult.Applied else ApplyResult.Missing
         val rows = NodeEntity.update("${sets.joinToString(", ")} where ${conds.joinToString(" and ")}", params)
@@ -373,8 +373,8 @@ class NodesStore {
             return ApplyResult.Applied
         }
         val current = NodeEntity.findById(nodeId)?.takeIf { it.deletedAt == null } ?: return ApplyResult.Missing
-        if (placement != null && current.placementVersion != placement.expectedVersion) return ApplyResult.StalePlacement
-        if (wrappedMeta != null && current.metaVersion != metaVersion) return ApplyResult.StaleMeta(current.wrappedMeta, current.metaVersion)
+        if (placement != null && current.placementRevision != placement.expectedRevision) return ApplyResult.StalePlacement
+        if (wrappedMeta != null && current.metaRevision != metaRevision) return ApplyResult.StaleMeta(current.wrappedMeta, current.metaRevision)
         return ApplyResult.Missing
     }
 
@@ -492,7 +492,7 @@ class NodesStore {
             .sortedWith(compareByDescending<NodeEntity> { it.deletedAt }.thenBy { it.id })
             .map {
                 TrashedNodeRow(
-                    it.id, it.parentId, it.kind, it.encryptedName, it.epoch, it.placementVersion, it.deletedAt!!,
+                    it.id, it.parentId, it.kind, it.encryptedName, it.epoch, it.placementRevision, it.deletedAt!!,
                     it.shareIdentityId, it.shareIdentityId?.let(wrapped::get), it.id in attached,
                 )
             }

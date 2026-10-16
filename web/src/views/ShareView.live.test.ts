@@ -55,8 +55,8 @@ const ROOT_KEY = v1.randomBytes(32)
 const HASH = `#k=${b64url(K_SHARE)}`
 
 function file(id: string, name: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementVersion: 0 }
-  return { id, parentId: ROOT, kind: FILE_KIND, epoch: 0, placementVersion: 0, encryptedName: sealName(ROOT_KEY, address, name), wrappedContentKey: wrapContentKey(ROOT_KEY, address, v1.randomBytes(32)) }
+  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
+  return { id, parentId: ROOT, kind: FILE_KIND, epoch: 0, placementRevision: 0, encryptedName: sealName(ROOT_KEY, address, name), wrappedContentKey: wrapContentKey(ROOT_KEY, address, v1.randomBytes(32)) }
 }
 // Stable ciphertext per file, as the server serves it: the same rows twice must fingerprint equal.
 const fileCache = new Map<string, ShareNode>()
@@ -112,7 +112,7 @@ beforeEach(() => {
   vi.mocked(pollPublicShare).mockReset().mockImplementation(async (_id, _key, _pw, ifNoneMatch) =>
     ifNoneMatch === servedTag ? null : { head: served, etag: servedTag },
   )
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
 })
 afterEach(() => {
   vi.useRealTimers()

@@ -183,7 +183,7 @@ object moved **out of the Memories module into the platform's**:
   entity, store, handler, resource and the scope eraser (phase 600, as before). The seal purpose `favorites`, the
   plaintext (a bare id array) and the last-write-wins rule are **unchanged**, so every crypto vector stays valid and a pin
   set stored by the Memories-era client opens as it did.
-- **Surfaces.** The heart is a **core action** — `favoriteCapabilities(access, node)` (member only, fail closed: no
+- **Surfaces.** The heart is a **core action** — `favoriteRights(access, node)` (member only, fail closed: no
   guest in any role, no scope root, no kind this client cannot draw) contributed through `NodeHeader`'s `coreActions` and
   the level list's `coreRowActions`, so every kind gets the same heart with no change to its application; the sidebar
   Favorites section is core's too and lists every kind's pinned nodes, each with its kind's registry icon (the Memory

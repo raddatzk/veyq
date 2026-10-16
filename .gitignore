@@ -277,6 +277,10 @@ gradle-app.setting
 # holds real instance state and a canary file holds the plaintext a suite sealed, so neither is committable.
 .e2e-out/
 
+# `scripts/validate_guard_gaps.py`'s stamp: the hash of the guards at this checkout's last green full run, which lets
+# a local run skip while no guard changed. Per checkout by design — committed, it would vouch for trees it never saw.
+.trust-chain-cache/
+
 # The server-managed config-secret KEK file (ADR 0050 amendment). Generated on first start at the default path
 # (relative to the process CWD); it is a real secret and must never be committed. Operators keep it on a persisted
 # volume; a local dev/quarkusDev run drops one here.
@@ -289,3 +293,6 @@ config-secret.key
 graphify-out/
 # The docs site's generated content types (ADR 0087), rebuilt by `astro check` / `astro build`.
 site/.astro/
+
+# The root launcher's per-checkout ports (settings.gradle.kts): a worktree's own, never shared.
+/local.properties

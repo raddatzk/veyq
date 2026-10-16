@@ -596,6 +596,31 @@ class TasksStore {
         return JobDeclineEntity.delete("workerId = ?1 and jobId in ?2", workerId, jobIds).toInt()
     }
 
+    /**
+     * Drop every `admission_unverified` decline on the grant-delivery jobs of these memberships — called by a rotation
+     * for each membership whose admission it **re-tagged** (ADR 0020 move 6).
+     *
+     * Such a decline judged one admission under one key: it lasts as long as that admission, not as long as the job.
+     * A re-tag means the rotator verified the old tag under the old epoch and vouched for it under the new one, so a
+     * key-holder's earlier refusal — of that tag, or of a tag its own key could not yet check — no longer describes
+     * anything, and every worker judges again at its next claim. Loosening it is safe because the exclusion was never
+     * the security control: every claim re-runs the admission and the TOFU check, so a re-offer cannot lead to a wrap
+     * a fresh check refuses. What it protects is liveness — a worker never spinning on a job it will refuse again —
+     * which is why it is lifted only where the premise moved. **Narrow in two ways:** only this reason (a decline
+     * about the target's key is the pin's, lifted by [clearDeclinesForTarget] after a human looked), and only
+     * re-tagged memberships (a dropped admission is still unadmitted). A `scope-rotation` job is never matched: its
+     * `resourceRef` is a scope id. The server compares no tag; it only knows that the opaque admission moved.
+     */
+    @Transactional
+    fun liftAdmissionDeclines(membershipIds: Collection<String>): Int {
+        if (membershipIds.isEmpty()) return 0
+        val jobIds = JobEntity.find(
+            "capabilityTag = ?1 and resourceRef in ?2", CapabilityTags.GRANT_DELIVERY, membershipIds,
+        ).list().map { it.id }
+        if (jobIds.isEmpty()) return 0
+        return JobDeclineEntity.delete("reason = ?1 and jobId in ?2", ADMISSION_UNVERIFIED, jobIds).toInt()
+    }
+
     // --- grant-delivery structural origination + dead-letter sweep -------------------------------------------
 
     /**
@@ -667,6 +692,12 @@ class TasksStore {
          *  what tells a rotation exclusion apart from a worker's own `identity_changed` decline. Only this reason
          *  binds `rotateScope` ([isRotationExcluded]) and names a compromise rotation ([compromiseRotations]). */
         const val ROTATION_ORIGINATOR = "rotation_originator"
+
+        /** The `reason` a grant-delivery worker declines with when the target's admission tag does not verify under
+         *  its key (the web's `ADMISSION_UNVERIFIED`). Client-written like any reason; the server reads it only to
+         *  know which declines a re-tag lifts ([liftAdmissionDeclines]) — a worker naming it otherwise only keeps
+         *  itself excluded. */
+        const val ADMISSION_UNVERIFIED = "admission_unverified"
 
         /**
          * Which of several jobs covering one (scope, rotator) is the **newest**: the later `createdAt` (millisecond,

@@ -16,10 +16,19 @@
 1. On startup (before login), the client fetches `GET /api/setup` → `{ setupRequired, suites, instanceSalt,
    version: { major, build }, capabilities: [{ id }] }`.
 2. The client compares `server.version.major` to the **`major` it was compiled against**. Equal → continue.
+   Both are the platform's one major, the repository's `VERSION` when each was built
+   ([ADR 0085](../../../decisions/0085-one-major-moved-on-a-yearly-train.md) decision 1), so the web client and the
+   server it ships with always agree; the gate exists for a client built from another tree.
    (Mismatch → A1/A2. `build` never gates.)
 3. The client keeps the `capabilities` set and exposes `hasCapability(id)`.
 4. Each feature that is **optional per instance** gates its entry points on its capability: present → offered,
    absent → **hidden** (A3), never invoked.
+5. After sign-in, on every entry into a space, the client reads the **tenant's effective set**
+   (`GET /api/tenants/{tenantId}/capabilities`, every member): the instance level ANDed with what the tenant owner
+   switched off ([uc.admin.tenant-switch-capabilities](../../admin/use-cases/uc.admin.tenant-switch-capabilities.md),
+   [ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 3).
+   From then on `hasCapability` reads that set, a subset of the pre-auth one; when it cannot be read, the pre-auth set
+   stands, and the server's gates refuse per tenant either way. Signing out forgets it.
 
 ## Alternate / exception flows
 
@@ -33,12 +42,14 @@
 
 ## Quality notes
 
-- **A capability is not a permission.** It is instance-wide and pre-auth; it says what this *server* offers, not
+- **A capability is not a permission.** It is instance-wide before sign-in and per tenant after it; it says what this
+  *server* and this *tenant* offer, not
   what *you* may do. A feature is offered only when **(capability present) AND (policy permits here)** — e.g.
   `core.public-shares` present **and** the node is one the caller may share. Conflating the two
   is the modelling error this use-case exists to prevent ([ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) §6).
 - **Operator-blind-safe.** The response is identical for every caller and carries no per-user state, so a
-  pre-auth manifest leaks nothing — that is what lets it sit outside the auth boundary.
+  pre-auth manifest leaks nothing — that is what lets it sit outside the auth boundary. The tenant's set is the same
+  for every member of the tenant, and only members read it.
 - **The catalog is a coarser projection over use-cases, not a 1:1 rename.** Each entry in
   `contracts/platform/capabilities.json` declares a `serves: [uc.…]` back-ref (catalog-only, never on the wire);
   `scripts/validate_capabilities.py` enforces that every `serves` resolves to a real use-case, so the catalog
@@ -47,21 +58,14 @@
 - **Seeded with seven operator-policy capabilities**, all under `core` and arranged as a tree (ADR 0088), sharing being
   the worked end-to-end proof; each is advertised, soft-gated by `hasCapability` and refused with `422` at its
   create/enable path. The authoritative list is the catalog file, not this page. The Server Owner turns one off for
-  the instance in admin-web or its CLI ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md));
-  no tenant level is built.
+  the instance in admin-web or its CLI ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md)),
+  and a tenant owner turns a `tenant`-level one off for their tenant in the web client's tenant settings
+  ([uc.admin.tenant-switch-capabilities](../../admin/use-cases/uc.admin.tenant-switch-capabilities.md)).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** veyq can be run by anyone, so the server you use and the app you open it with may not be the same age,
-and not every server offers every feature. When they don't fit together, veyq tells you straight away — before
-you sign in — instead of letting you get halfway through something that then fails. And a feature your server
-doesn't offer simply isn't shown, rather than sitting there and breaking when you touch it.
-
-**DE —** veyq kann jede und jeder selbst betreiben — der Server, den du nutzt, und die App, mit der du ihn
-öffnest, sind also nicht zwangsläufig gleich alt, und nicht jeder Server bietet jede Funktion an. Wenn beides
-nicht zusammenpasst, sagt veyq dir das sofort — noch vor der Anmeldung — statt dich mitten in etwas laufen zu
-lassen, das dann scheitert. Und was dein Server nicht anbietet, wird gar nicht erst angezeigt, anstatt da zu
-sein und beim Antippen kaputtzugehen.
+Whoever runs your server and whichever version you open it with, veyq tells you up front when they do not fit and
+shows only what your server actually offers.
 
 ## Related
 
@@ -73,3 +77,5 @@ sein und beim Antippen kaputtzugehen.
   "new feature" notices/acks, audience filtering, folding `suites` into the unified manifest, and client device
   self-capabilities. (`directTransport` was **removed** rather than folded in — a byte-path store is now a hard
   requirement, cr-0105.)
+- End-user view (docs site): [Sign in](../../../../site/src/content/docs/getting-started/sign-in.mdx)
+- End-user view (docs site): [Help](../../../../site/src/content/docs/help/index.mdx)

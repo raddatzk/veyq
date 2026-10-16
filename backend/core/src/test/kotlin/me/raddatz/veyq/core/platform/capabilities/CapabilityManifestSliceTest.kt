@@ -10,6 +10,14 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
+import java.io.File
+
+/**
+ * The repository's `VERSION` file, read from disk (tests run from `backend/`), never through the build's
+ * `PlatformMajor`: the assertions below hold the served major to the file itself, so a derivation that stops
+ * deriving — a hand-set number anywhere between the two — is red here (ADR 0085 decision 1).
+ */
+internal val VERSION_FILE_MAJOR: Int = File("../VERSION").readText().trim().toInt()
 
 /**
  * Slice test for the capability-discovery manifest on GET /api/setup (uc.platform.capability-discovery
@@ -36,9 +44,19 @@ class CapabilityManifestSliceTest {
         )
         given().`when`().get("/api/setup")
             .then().statusCode(200)
-            .body("version.major", equalTo(1))
+            .body("version.major", equalTo(VERSION_FILE_MAJOR))
             .body("version.build", equalTo(1))
             .body("capabilities.id", equalTo(CapabilityIds.ADVERTISED))
+    }
+
+    @Test
+    fun theAdvertisedMajorIsTheVersionFilesMajor() {
+        // One major (ADR 0085 decision 1): the protocol major a client gates on is the release major in VERSION —
+        // `0` before V1 is advertised as `0`, never floored — and still nothing more precise than the major.
+        given().`when`().get("/api/setup")
+            .then().statusCode(200)
+            .body("version.major", equalTo(VERSION_FILE_MAJOR))
+            .body("version.keySet()", equalTo(setOf("major", "build")))
     }
 
     @Test
@@ -47,12 +65,21 @@ class CapabilityManifestSliceTest {
         val anon = given().`when`().get("/api/setup").then().statusCode(200)
             .extract().`as`(Map::class.java) as Map<String, Any>
 
-        // No per-user data on the wire: no identity/user key at the root, and each capability entry is { id }.
+        // No per-user data on the wire: no identity/user key at the root, and each capability entry is { id } plus the
+        // requirement values the catalog declares (ADR 0088 decision 8), which are instance configuration and null
+        // while none is set.
         assertFalse(anon.containsKey("userId"), "the pre-auth manifest must carry no identity")
         assertFalse(anon.containsKey("identity"), "the pre-auth manifest must carry no identity")
         @Suppress("UNCHECKED_CAST")
         val caps = anon["capabilities"] as List<Map<String, Any>>
-        caps.forEach { assertEquals(setOf("id"), it.keys, "a manifest capability is { id } only — no metadata/identity") }
+        val requirementNames = CapabilityRequirements.ALL.map { it.name }.toSet()
+        val serviceKeys = setOf("serviceUrl", "serviceAttribution")
+        caps.forEach { cap ->
+            assertEquals(setOf("id"), cap.keys - requirementNames - serviceKeys, "a manifest capability is { id, …values } only")
+            assertEquals(emptyList<Any>(), requirementNames.mapNotNull { cap[it] }, "no requirement is set, so none carries a value")
+            // An external service's address (ADR 0088 decision 7) rides on its own entry only.
+            if (cap["id"] !in CapabilityIds.EXTERNAL_SERVICES) assertEquals(null, cap["serviceUrl"], "${cap["id"]} carries no address")
+        }
 
         // Identical whether or not the caller authenticates (the manifest is instance-wide, not per-user).
         val bearer = bearer(seedUser())

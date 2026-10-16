@@ -100,31 +100,10 @@
 - **`DEVICE_KEY` wraps must die with the rest.** They carry no password input, so they would survive a reset
   and keep granting password-less entry to a device the actor may be resetting *because of*.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** If you forget your password, you are not locked out — as long as you still have your Emergency Kit.
-Ask for a reset link, open the mail we send you, and enter the Secret Key from your kit. Asking is always
-offered — and if your space cannot send email yet, it tells you so right there, instead of leaving you waiting
-for a link that was never going to arrive (an owner of your space sets email up, in its settings). You choose a new
-password, and everything you have saved is still there: your memories are never re-encrypted, and your kit keeps
-working afterwards. Two things have to come together, on purpose: reading your mail, and holding your kit.
-Someone who breaks into your mailbox gets nothing they can open. What we cannot do is help if both the password
-*and* the kit are gone — there is no master key on our side, and no back door. That is the same promise that
-keeps your memories private, seen from its uncomfortable end. After a reset every device signs in fresh, so you
-will enter your Secret Key once more on each of them.
-
-**DE —** Wenn du dein Passwort vergisst, bist du nicht ausgesperrt — solange du dein Notfall-Kit noch hast.
-Fordere einen Link an, öffne die Mail, die wir dir schicken, und gib den Secret Key aus deinem Kit ein. Anfordern
-kannst du immer — und kann dein Bereich noch keine E-Mails verschicken, bekommst du das direkt gesagt, statt
-auf einen Link zu warten, der nie gekommen wäre (E-Mail richtet eine Person ein, der dein Bereich gehört, in
-dessen Einstellungen). Du
-wählst ein neues Passwort, und alles Gespeicherte ist weiterhin da: deine Erinnerungen werden nie neu
-verschlüsselt, und dein Kit funktioniert danach weiter. Zwei Dinge müssen zusammenkommen, und das ist Absicht:
-Zugriff auf dein Postfach und das Kit in der Hand. Wer in dein Postfach einbricht, bekommt nur etwas, das er
-nicht öffnen kann. Nicht helfen können wir, wenn Passwort **und** Kit weg sind — bei uns liegt kein
-Hauptschlüssel, und eine Hintertür gibt es nicht. Das ist dasselbe Versprechen, das deine Erinnerungen privat
-hält, nur von seiner unbequemen Seite. Nach einem Zurücksetzen meldet sich jedes Gerät neu an, du gibst deinen
-Secret Key dort also noch einmal ein.
+A forgotten password does not cost you anything you keep: with a link from your email and your Emergency Kit you set a
+new one and everything is still there.
 
 ## Related
 
@@ -138,3 +117,4 @@ Secret Key dort also noch einmal ein.
 - End-user view (docs site): [Forgot your password](../../../../site/src/content/docs/account/forgot-password.mdx)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
 - End-user view (docs site): [Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx)
+- End-user view (docs site): [Help](../../../../site/src/content/docs/help/index.mdx)

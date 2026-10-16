@@ -17,7 +17,7 @@ import { identityNameContext } from '../../core/sharing/guestIdentity'
 import { registry } from '../../core/applications/registry'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { fileNameSlug } from '../../shared/naming'
-import { dropGuestContext, ensureDropFolder, forgetDropGuest, loadDropGuest, nameDropGuest, saveDropGuest } from './dropBox'
+import { dropGuestContext, dropGuestJob, ensureDropFolder, forgetDropGuest, loadDropGuest, nameDropGuest, saveDropGuest } from './dropBox'
 import { guestFileUploadJob } from './shareUpload'
 import { FILE_KIND } from './kinds'
 
@@ -51,7 +51,7 @@ function fakeServer(stored?: () => { nodeId: string; wrappedContentKey: string }
     if (path === `/api/shares/${SHARE}/identities`) return json({ identityId: body!.identityId, contributorToken: 'tok-drop' }, 201)
     if (path === `/api/shares/${SHARE}/files/drop-folder`) {
       const s = stored?.()
-      return json({ nodeId: s?.nodeId ?? body!.nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: s?.wrappedContentKey ?? body!.wrappedContentKey, created: !s })
+      return json({ nodeId: s?.nodeId ?? body!.nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: s?.wrappedContentKey ?? body!.wrappedContentKey, created: !s })
     }
     if (path === `/api/shares/${SHARE}/nodes`) return json({ nodeId: body!.nodeId }, 201)
     if (path === `/api/shares/${SHARE}/blob-uploads`) {
@@ -67,7 +67,7 @@ function fakeServer(stored?: () => { nodeId: string; wrappedContentKey: string }
   return requests
 }
 
-const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 })
+const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 })
 
 describe('a drop-box guest on the wire', () => {
   it('names itself with a K_up the member opens through the drop key, and keeps it on the device', async () => {
@@ -102,7 +102,7 @@ describe('a drop-box guest on the wire', () => {
     const sentAt = at(String(sent.nodeId))
     expect(openName(kUp, sentAt, String(sent.encryptedName))).toBe('Adelgunde')
     expect(() => openName(boxKey, sentAt, String(sent.encryptedName))).toThrow() // never under the drop box's key
-    expect(openContentKey(SCOPE, kUp, { id: sentAt.nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: String(sent.wrappedContentKey) })).toHaveLength(32)
+    expect(openContentKey(SCOPE, kUp, { id: sentAt.nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: String(sent.wrappedContentKey) })).toHaveLength(32)
     expect(sent.contributorToken).toBe('tok-drop')
 
     const file = new File([new Uint8Array(300).map((_, i) => i % 251)], 'Bericht.pdf', { type: 'application/pdf' })
@@ -111,7 +111,7 @@ describe('a drop-box guest on the wire', () => {
     const create = requests.find((r) => r.path === `/api/shares/${SHARE}/nodes`)!.json!
     expect(create).toMatchObject({ parentId: STORED, kind: FILE_KIND, nodeId: result.nodeId, epoch: 0 })
     expect(openName(storedKey, at(result.nodeId), String(create.encryptedName))).toBe('Bericht.pdf')
-    const fileKey = openContentKey(SCOPE, storedKey, { id: result.nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: String(create.wrappedContentKey) })
+    const fileKey = openContentKey(SCOPE, storedKey, { id: result.nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: String(create.wrappedContentKey) })
     expect(fileKey).toHaveLength(32)
     expect(requests.find((r) => r.path.endsWith('/blob-uploads'))!.json!.nodeId).toBe(result.nodeId)
     // the file's meta rides the declare, sealed under the blob's own K_blob — down the chain the member opens (inbox #397)
@@ -121,5 +121,14 @@ describe('a drop-box guest on the wire', () => {
     expect(requests.map((r) => JSON.stringify(r.json ?? {})).join('')).not.toContain('Bericht.pdf')
     // control: a seal under the drop box key is what the member's own nodes use, and it is not what the guest sent
     expect(sealName(boxKey, at(STORED), 'x')).not.toBe(String(sent.encryptedName))
+  })
+
+  // A refused upload into a full drop box leaves nothing behind either: the page's wrapper keeps the job's take-back, so
+  // the queue's `abandon` still reaches `abandonShareNode` (shareUpload.wire.test.ts holds what it sends).
+  it("the page's job wrapper keeps a given-up job's take-back", async () => {
+    const abandon = vi.fn(async () => {})
+    const job = { name: 'a.pdf', sizeBytes: 1, run: vi.fn(), abandon, extra: {} }
+    await dropGuestJob(job, { gone: false }).abandon?.()
+    expect(abandon).toHaveBeenCalledTimes(1)
   })
 })

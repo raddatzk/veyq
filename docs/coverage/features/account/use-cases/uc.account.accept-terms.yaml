@@ -2,34 +2,34 @@ useCase: uc.account.accept-terms
 feature: account
 title: Accept terms — a member accepts the tenant's current terms to enter (re-accept on change)
 # cr-0114 (ADR 0035) delivers the member half end-to-end: contracts (getTenantTerms + acceptTenantTerms) →
-# backend (veyq_tenant_terms_acceptance keyed (user_id, tenant_id, accepted_version) since #402, membership-gated read/accept, a stale-version
-# accept → 409 terms_version_changed, TenantTermsHandler) → web (a router accept-gate: activeSpace.termsStale()
+# backend (veyq_tenant_terms_acceptance keyed (user_id, tenant_id, accepted_revision) since #402, membership-gated read/accept, a stale-revision
+# accept → 409 terms_revision_changed, TenantTermsHandler) → web (a router accept-gate: activeSpace.termsStale()
 # refreshed on every enterScope + a cold-boot watcher → the /terms TermsAcceptView; accepting records server-side
-# and returns the member to the remembered route). accepted_terms_version is coarse operational metadata (never
+# and returns the member to the remembered route). accepted_terms_revision is coarse operational metadata (never
 # content). Backend slice tests run over the full HTTP stack; a signed ijhttp lifecycle proves the accept/re-stale/
 # stale-409 loop live. The anonymous public-share client-side notice (localStorage on the share page) is a later
 # sharing slice on top of these terms, NOT this member-facing gate. The
 # browser smoke passed too: set terms → gate bounces home→/terms → accept → back in shell → reload confirms the
 # acceptance persisted server-side (no re-gate), live against the dev instance.
 acceptanceCriteria:
-  - id: hard-gate-on-stale-version
-    text: A member with a session whose accepted_terms_version is below the tenant's terms_version is blocked from the shell and routed to /terms (after the session/unlock check — the gate needs a session, not an unlocked vault). A tenant with no terms (version 0) never gates.
+  - id: hard-gate-on-stale-revision
+    text: A member with a session whose accepted_terms_revision is below the tenant's terms_revision is blocked from the shell and routed to /terms (after the session/unlock check — the gate needs a session, not an unlocked vault). A tenant with no terms (revision 0) never gates.
     coverage:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: accept-recorded-server-side
-    text: Accepting records the member's accepted_terms_version = the current terms_version (+ accepted_at, the server's own time — audit evidence, written once per version, never client-supplied) server-side, one row per (user_id, tenant_id, accepted_version) — a newer version adds a row and leaves the older ones and their times as evidence; the rows go with their tenant. The gate reads the highest accepted version, then clears and the shell renders.
+    text: Accepting records the member's accepted_terms_revision = the current terms_revision (+ accepted_at, the server's own time — audit evidence, written once per revision, never client-supplied) server-side, one row per (user_id, tenant_id, accepted_revision) — a newer revision adds a row and leaves the older ones and their times as evidence; the rows go with their tenant. The gate reads the highest accepted revision, then clears and the shell renders.
     coverage:
-      backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409, TenantTermsSliceTest.eachAcceptedVersionKeepsItsOwnRowAndFirstTime, TenantTermsSliceTest.anOlderAcceptanceDoesNotClearTheGateForTheCurrentVersion, TenantTermsSliceTest.aClientSentAcceptanceTimeHasNoEffect, TenantTermsSliceTest.deletingATenantErasesEveryAcceptanceRow] }
+      backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409, TenantTermsSliceTest.eachAcceptedRevisionKeepsItsOwnRowAndFirstTime, TenantTermsSliceTest.anOlderAcceptanceDoesNotClearTheGateForTheCurrentRevision, TenantTermsSliceTest.aClientSentAcceptanceTimeHasNoEffect, TenantTermsSliceTest.deletingATenantErasesEveryAcceptanceRow] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts] }
-  - id: re-accept-on-version-bump
-    text: When the operator bumps terms_version, the member's stored acceptance is now stale, so the gate re-appears; accepting the now-stale version is refused (409 terms_version_changed) until they re-read and re-accept the current one.
+  - id: re-accept-on-revision-bump
+    text: When the space owner bumps terms_revision, the member's stored acceptance is now stale, so the gate re-appears; accepting the now-stale revision is refused (409 terms_revision_changed) until they re-read and re-accept the current one.
     coverage:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
   - id: operator-blind
-    text: accepted_terms_version is coarse operational metadata (like membership), never content; the terms text itself is public. A non-member read/accept is 404 (indistinguishable), and no server record is kept for an accountless visitor (anonymity preserved).
+    text: accepted_terms_revision is coarse operational metadata (like membership), never content; the terms text itself is public. A non-member read/accept is 404 (indistinguishable), and no server record is kept for an accountless visitor (anonymity preserved).
     coverage:
-      # memberAccepts…AStaleAcceptIs409 proves acceptance is stored/compared as a bare integer version (coarse
+      # memberAccepts…AStaleAcceptIs409 proves acceptance is stored/compared as a bare integer revision (coarse
       # operational metadata, never content); readOrAcceptByANonMemberIs404 proves the non-member 404 is
       # indistinguishable for read AND accept. The accountless-visitor "no record kept" clause is true by
       # construction (both endpoints are membership-gated — no path writes a record without a session) and has

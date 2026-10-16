@@ -38,7 +38,7 @@ export function useNameAndPicture() {
     ownKey = await openOwnNameKey()
     hasKey.value = ownKey !== null
     meId.value = ownKey?.address.userId ?? ''
-    serverHasPicture.value = p.avatarVersion > 0
+    serverHasPicture.value = p.avatarRevision > 0
     if (ownKey) {
       const name = unsealName(ownKey.key, ownKey.address, p.sealedName)
       firstName.value = name?.firstName ?? ''

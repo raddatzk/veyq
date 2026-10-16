@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import jakarta.enterprise.context.ApplicationScoped
 import java.security.MessageDigest
 import java.time.Instant
@@ -29,8 +30,8 @@ sealed interface ShareWriteGate {
         val admitted: () -> Boolean,
     ) : ShareWriteGate
 
-    /** Unknown, disabled, expired or deleted share, a space that serves no guests, or a password-protected share
-     *  with no token — the non-enumerable 404. */
+    /** Unknown, disabled, expired or deleted share, a space that serves no guests, a role whose instance capability
+     *  is switched off, or a password-protected share with no token — the non-enumerable 404. */
     object NotFound : ShareWriteGate
     /** Password-protected + a wrong token (cr-0164) — a 403. */
     object PasswordIncorrect : ShareWriteGate
@@ -77,7 +78,8 @@ sealed interface ShareViewGate {
 
     /** A write-only mode ([ShareAccessPolicy.canView] false, ADR 0031): the guest is served nothing of the subtree. */
     object WriteOnly : ShareViewGate
-    /** Unknown, disabled, expired or deleted share, or a space that serves no guests — the non-enumerable 404. */
+    /** Unknown, disabled, expired or deleted share, a space that serves no guests, or a role whose instance
+     *  capability is switched off — the non-enumerable 404. */
     object NotFound : ShareViewGate
     /** Password-protected + no token (cr-0118): the caller answers as its own locked or not-found shape. */
     object Locked : ShareViewGate
@@ -90,8 +92,9 @@ sealed interface ShareViewGate {
 /**
  * Core's guest gate on a public link (ADR 0079 § Application guest operations, ADR 0029/0030/0031): an application
  * calls it before its own guest read or write, and does its work only past it. The steps run in this order, each
- * answering its own refusal: an active share → the password → the mode's capability ([ShareAccessPolicy]) → the
- * guest identity's token (writes) → the per-share upload budget, **only where the caller asks** (writes). The budget
+ * answering its own refusal: an active share ([activeShare]: its role's instance switch included) → the password →
+ * the mode's rights ([ShareAccessPolicy.canView] / [ShareAccessPolicy.canUpload]) → the guest identity's token
+ * (writes) → the per-share upload budget, **only where the caller asks** (writes). The budget
  * is the caller's to ask for because the operations differ: completing an upload creates rows and spends it, a
  * delete of one's own contribution does not (`@RateLimitExempt` on `deleteShareMedia`).
  *
@@ -108,6 +111,7 @@ class ShareGuestGate(
     private val passwordAttemptLimiter: SharePasswordAttemptLimiter,
     private val access: ScopeAccess,
     private val nodes: NodesStore,
+    private val capabilities: CapabilityRegistry,
 ) {
 
     /**
@@ -219,10 +223,23 @@ class ShareGuestGate(
     internal enum class PwCheck { OK, MISSING, WRONG, TOO_MANY }
 
     /**
-     * A share that exists, is enabled, has not expired, and whose space serves guests — else null (the single
-     * non-enumerable 404 gate). A space being deleted or a suspended tenant answers exactly as a revoked link does:
-     * a guest is no member and learns neither state, and nothing is written onto the share, so it serves again
-     * unchanged after a restore or a reactivation (uc.spaces.scope-access A4).
+     * A share that exists, is enabled, has not expired, whose space serves guests, and whose role's instance capability
+     * is on — else null (the single non-enumerable 404 gate). A space being deleted or a suspended tenant answers
+     * exactly as a revoked link does: a guest is no member and learns neither state, and nothing is written onto the
+     * share, so it serves again unchanged after a restore or a reactivation (uc.spaces.scope-access A4).
+     *
+     * **The share switch** (ADR 0088 decision 5): while `core.public-shares`, `.contribute` or `.drop-box` is
+     * effectively off ([ShareAccessPolicy.capabilityFor], the AND along the path is [CapabilityRegistry]'s), a link of
+     * that role is refused here, so every guest path — core's resolve, terms, blob, identity, upload start and window,
+     * tree operations, and every application's read and write through [viewGate] / [writeGate] — answers it exactly
+     * as an unknown link, and a guest learns nothing of the instance's policy. Before the password: a locked challenge
+     * would tell the guest the link exists. Nothing is written, so switching back on serves the same link again. No
+     * re-check under the share-row lock ([SharingStore.admitsGuests]): a switch is no row the write could lock against,
+     * and each later step of a guest write (a window, the complete) passes this gate again.
+     *
+     * **The link requirements** (ADR 0088 decision 8, [LinkRequirements]) act the same way: a link without a password
+     * while every link needs one, or outside the lifetime links may have, answers as an unknown link until its owner
+     * fixes it or the requirement is cleared; nothing is written onto it.
      */
     internal fun activeShare(shareId: String): ShareEntity? {
         val share = store.find(shareId) ?: return null
@@ -230,6 +247,8 @@ class ShareGuestGate(
         val expiry = share.expiresAt
         if (expiry != null && !expiry.isAfter(Instant.now())) return null
         if (!access.isLive(share.scopeId)) return null
+        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(share.role), share.scopeId)) return null
+        if (!LinkRequirements.admits(capabilities.requirementsInScope(share.scopeId), share)) return null
         return share
     }
 

@@ -1,6 +1,8 @@
 # ADR 0057 — A release is identified by the tree, and the deployment recipe travels in the image
 
-- Status: Accepted
+- Status: Accepted; built as a hand-dispatched publish that builds again for a release. §1's snapshot per green push and
+  its promotion to a release, and §7's stack lanes, are decided ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md))
+  and not built: `container.yml` still publishes on `workflow_dispatch` only.
 - Date: 2026-08-10
 
 ## Context
@@ -57,27 +59,34 @@ no commit exists only to move a number, and the whole derivation is **checkable 
 form can never be, and which is the difference between a provable change and an asserted one in a repository
 with no remote. The count needs the full history: a shallow clone counts 1.
 
-Nothing is published by a push. A push (and a pull request, Dependabot's included) builds both images and
-publishes nothing — the dry run. A publish is started by hand, from `main` or `release/<major>.x` only, and is
-one of two kinds:
+**A green push publishes a snapshot; a release promotes one** ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+decision 5). A pull request (Dependabot's included) builds and tests both images and publishes nothing — a pull
+request never writes to a registry. A push to `main` or `release/<major>.x` builds them once per commit and
+architecture, runs every stage on those digests, and only when all are green publishes them:
 
-- **A snapshot** — the default. Published as `<major>.<minor>-SNAPSHOT` and `sha-<sha>`, signed like a release,
-  and **mutable**: dispatching again on the same commit replaces it. It gets no `<major>`, no `latest` and no
-  git ref. A version range never selects it: for the chart, Helm resolves a two-part version only by its exact
-  name or digest, a release included (measured, [ADR 0064](0064-kubernetes-helm-deployment-target.md)). A
-  snapshot is for trying a build on an instance that may be thrown away, and **never a rollback target**: an
-  instance that ran one may hold a migration that changes before it is released, which Flyway's checksum check
-  then refuses at the next start.
-- **A release** — asked for explicitly. Published as `<major>.<minor>`, `<major>`, and `latest` from `main`.
-  A release whose tag already exists **fails** rather than replacing it, so a republish is an error instead of a
-  silent substitution.
+- **A snapshot** — every green push. Published as `<major>.<minor>-SNAPSHOT` and `sha-<sha>` on the tested digests,
+  signed, with each test lane's result attached as a signed attestation. **Written once per commit and never
+  replaced.** It gets no `<major>`, no `latest` and no git ref. A version range never selects it: for the chart, Helm
+  resolves a two-part version only by its exact name or digest, a release included (measured,
+  [ADR 0064](0064-kubernetes-helm-deployment-target.md)). A snapshot is for trying a build on an instance that may be
+  thrown away, and **never a rollback target**: an instance that ran one may hold a migration that changes before it
+  is released, which Flyway's checksum check then refuses at the next start.
+- **A release** — asked for explicitly, by a dispatch that names a commit. It **promotes** that commit's snapshot: its
+  attestations are verified, any lane whose inputs have moved since (a newer predecessor, a newer archived backup) runs
+  on the same digests first, and then the same bytes get `<major>.<minor>`, `<major>`, `latest` from `main`, and a
+  release signature. **Nothing is rebuilt**, so a release is bytes every test saw. A release whose tag already exists
+  **fails** rather than replacing it, so a republish is an error instead of a silent substitution.
+- **The image carries `<major>.<minor>`, never `-SNAPSHOT`.** The minor is a function of the commit, so `0.12` can
+  only ever name that tree, and a snapshot and its release are the same bytes. Whether a digest *is* a release is the
+  registry's and the signature's fact: `cosign verify` with the release identity answers it (§3). The cost, accepted:
+  a snapshot never promoted reports `0.12` too.
 
 **Major `0` is pre-release.** A `0.<minor>` release exercises the publish path end to end — signature, git ref,
 the refusal to republish — and promises no upgrade path. The migration set is frozen by the first release of a
 major ≥ 1, which the owner declares on the `release:` line of `scripts/applied_migrations.sha256`
 ([backend/CLAUDE.md](../../backend/CLAUDE.md) § Migrations); a `0.x` release does not move that line.
 
-**2. A release has exactly one git ref, `v<major>.<minor>`,** created by the publish. One release, one name,
+**2. A release has exactly one git ref, `v<major>.<minor>`,** created by the promotion. One release, one name,
 one tree. A snapshot has none: it names a build, not a release.
 
 **3. The deployment recipe travels inside the image.** `infra/docker-compose.prod.yml` and
@@ -97,7 +106,7 @@ of that image** rather than fetching them from a URL. Two things follow that no 
   verified digest**, never by the tag, because a tag can move between the verify and the pull.
 
 **4. One major, and the precise release never pre-auth.** The release major in `VERSION` *is* the protocol major
-([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 1, not built yet): both count the same event, a
+([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 1): both count the same event, a
 removal, and two counters for one event drift. What stays apart is the precision.
 
 - The **protocol version** (`major` / `build`, pre-auth, ADR 0032) answers *"can these two sides talk to each
@@ -114,6 +123,12 @@ removal, and two counters for one event drift. What stays apart is the precision
   removed: the moment a native client exists, a pre-auth build number is what answers *"which server build is
   this app talking to?"*, and removing it now would mean re-adding it later at the cost of two `major` bumps
   instead of none.
+- **The built client is pre-auth too.** The web bundle is served to anyone who asks, before any login, so a value
+  compiled into it is on the pre-auth surface as surely as one in `GET /api/setup`. The release stamp therefore enters
+  an image only in the stage a publish ships (`runtime-*`, as `ENV`), never in a stage that compiles a client, and what
+  a client writes about itself — an export manifest's `appVersion` (ADR 0082) — is the **major**. The bundle's content
+  hashes still fingerprint a build for whoever catalogues the public images; that takes a catalogue, where a compiled
+  number would take a `grep`. `scripts/validate_release_identity.py` holds the Dockerfiles to it.
 
 **5. A field that cannot be true is not shipped.** The backup manifest's `app.version` is sourced from the
 instance being captured, or it is removed. A field that is structurally always `null` is a claim with nothing
@@ -140,6 +155,9 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
 **7. An upgrade is proven before it is published** (owner decision 2026-10-14, inbox #419). A release does not only
 claim that it upgrades an instance of its predecessor; a run shows it — `scripts/run_web_e2e.py --upgrade` locally and
 `container.yml`'s `upgrade-proof` job ([Upgrade](../../site/src/content/docs/run/upgrade.mdx), the Run area's procedure).
+**Its successor is decided:** ADR 0091's lanes L2 (the previous release's images upgraded in place) and L3 (every
+archived backup of the major restored into the candidate) prove the same data path on the images that ship, on every
+push; the jar-level proof below retires when they gate (ADR 0091 decision 7). Until then it stands as written.
 
 - **The proof.** The predecessor's own build (its fast-jar and its own e2e suites, from a worktree of its ref) writes
   sealed content into a fresh instance; [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s tool
@@ -161,8 +179,8 @@ claim that it upgrades an instance of its predecessor; a run shows it — `scrip
 
 ## Consequences
 
-- **A release becomes a deliberate act.** Dispatching the publish as a release is the release; bumping
-  `VERSION` is reserved for a new major. Nothing is released by pushing, and nothing is released twice.
+- **A release becomes a deliberate act.** Dispatching a promotion is the release; bumping `VERSION` is reserved for
+  a new major. Nothing is released by pushing, and nothing is released twice.
 - **Minors have gaps, and say nothing about size.** `1.42` → `1.57` means fifteen commits, not fifteen
   releases; a commit `container.yml` does not build (docs only) still counts. A `release/<major>.x` branch counts
   its own history and can reach a number `main` already released — that publish is refused, red rather than
@@ -170,9 +188,10 @@ claim that it upgrades an instance of its predecessor; a run shows it — `scrip
 - **`VERSION` is touched only to change the major.** Any commit that touches it, even one that only reformats
   it, restarts the minor at `0`. The next release would then reuse a number already released, and the refusal to
   republish turns that red. It cannot ship silently.
-- **A snapshot is the one mutable name, and it says so in the name.** The rule that a name never moves holds
-  for every name an operator is told to roll back to. Whoever runs a snapshot pins it by digest like anything
-  else, so a replaced `-SNAPSHOT` tag changes nothing that is already running.
+- **No name moves except the ones that say so.** A snapshot is written once per commit; `<major>` and `latest` move
+  with each release, as they always did. Whoever runs a snapshot pins it by digest like anything else.
+- **Registry growth is bounded by retention** (ADR 0091 decision 5): the 20 newest unpromoted snapshots per branch and
+  every promoted one are kept.
 - **The upgrade procedure gains the two things it was missing** — a nameable rollback target, and a way to
   obtain the recipe that belongs to a version. That procedure is not decided here; this ADR only makes it
   possible for one to exist.

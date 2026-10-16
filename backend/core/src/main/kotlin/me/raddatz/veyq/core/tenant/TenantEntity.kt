@@ -40,15 +40,15 @@ class TenantEntity : PanacheEntityBase {
     @Column(name = "status", nullable = false, length = 16)
     lateinit var status: String
 
-    /** cr-0114 (ADR 0035): the operator's per-locale terms markdown, serialized as a locale→markdown JSON map
+    /** cr-0114 (ADR 0035): the space owner's per-locale terms markdown, serialized as a locale→markdown JSON map
      *  (opaque TEXT). Null until the owner first publishes. Public operational content, never a key. */
     @Column(name = "terms_markdown_by_locale")
     var termsMarkdownByLocale: String? = null
 
-    /** cr-0114: the terms version, bumped only on a **normalized** change (idempotent re-saves don't). 0 = no
-     *  terms set (the member accept-gate never fires); a member whose accepted version is below this re-accepts. */
-    @Column(name = "terms_version", nullable = false)
-    var termsVersion: Int = 0
+    /** cr-0114: the terms revision, bumped only on a **normalized** change (idempotent re-saves don't). 0 = no
+     *  terms set (the member accept-gate never fires); a member whose accepted revision is below this re-accepts. */
+    @Column(name = "terms_revision", nullable = false)
+    var termsRevision: Int = 0
 
     /** The most any one READ_WRITE or WRITE_ONLY link of this tenant stores (ADR 0073 §4), set by the tenant owner.
      *  Read under the tenant-row lock a link start takes, so a start and a change of the limit serialize. */

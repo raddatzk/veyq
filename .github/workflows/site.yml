@@ -13,6 +13,7 @@ on:
       - main
     paths:
       - "site/**"
+      - "contracts/platform/capabilities.json"
       - "scripts/npm_ci_no_deprecated.py"
       - ".github/workflows/site.yml"
   pull_request:
@@ -20,6 +21,7 @@ on:
       - main
     paths:
       - "site/**"
+      - "contracts/platform/capabilities.json"
       - "scripts/npm_ci_no_deprecated.py"
       - ".github/workflows/site.yml"
   workflow_dispatch:

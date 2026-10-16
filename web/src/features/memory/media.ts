@@ -169,9 +169,9 @@ export type MediaItem = {
   derivatives: MediaDerivative[]
   /** The original's listed-metadata tier sealed under `K_node` (opaque base64); unwrap with [unsealMeta]. Absent when none. */
   wrappedMeta?: string
-  /** The version [wrappedMeta] is at — what a meta write states it was built from (ADR 0077). Absent in the
+  /** The revision [wrappedMeta] is at — what a meta write states it was built from (ADR 0077). Absent in the
    *  public-share viewer, which never writes; a write that lacks it states 0 and re-bases on the `409`. */
-  metaVersion?: number
+  metaRevision?: number
   /** When this media last changed (cr-0107) — the `(updatedAt, mediaId)` pair is the live-updates keyset cursor.
    *  Present for the authenticated gallery (`listMedia`/`listMediaPage`); absent for the public-share snapshot
    *  viewer, which doesn't poll (the sharing resolve carries no per-media timestamp). */
@@ -211,7 +211,7 @@ export function summaryToItem(s: MediaSummary, uploader?: UploaderOrigin): Media
       },
     })),
     wrappedMeta: s.wrappedMeta ?? undefined,
-    metaVersion: s.metaVersion,
+    metaRevision: s.metaRevision,
     updatedAt: s.updatedAt,
     deletedAt: s.deletedAt ?? undefined,
     deletedBy: s.deletedBy ?? undefined,
@@ -871,18 +871,18 @@ export async function loadMediaExif(scopeId: string, media: MediaRef, memoryKey:
   }
 }
 
-/** A media a meta write targets: its id + origin (which key seals it) and the tier + version it was listed at. */
-export type MediaMetaTarget = MediaRef & Pick<MediaItem, 'wrappedMeta' | 'metaVersion'>
+/** A media a meta write targets: its id + origin (which key seals it) and the tier + revision it was listed at. */
+export type MediaMetaTarget = MediaRef & Pick<MediaItem, 'wrappedMeta' | 'metaRevision'>
 
 /** The outcome of a media meta write: the display tier, the state the server confirmed or handed back, and
  *  whether this call wrote (a backfill the fresh tier no longer needs does not). */
-export type MediaMetaWrite = { tier: MediaMeta | null; wrappedMeta: string | null; metaVersion: number; wrote: boolean }
+export type MediaMetaWrite = { tier: MediaMeta | null; wrappedMeta: string | null; metaRevision: number; wrote: boolean }
 
 /**
  * Set (or clear, with `null`) a media's **capturedAt override** (cr-0065/0066/0068) — a corrected capture time.
  * Operator-blind: the whole listed-metadata tier is re-sealed under `K_node` with the override added/removed and
  * PUT verbatim (geometry, GPS and the place name ride along unchanged — only the date is user-editable). The base
- * is the tier the media was listed with, at its `metaVersion` (ADR 0077); a peer's correction written meanwhile
+ * is the tier the media was listed with, at its `metaRevision` (ADR 0077); a peer's correction written meanwhile
  * throws `MetaConflictError` so the lightbox re-opens on it, while a peer's backfill merges silently. Clearing the
  * last field drops the tier to null. Returns the new tier so the caller can update local state (and the grid can
  * re-sort).
@@ -958,10 +958,10 @@ function metaHasContent(m: RawMediaMeta): boolean {
 }
 
 /**
- * Re-seal a metadata tier under the media's key and PUT it with the `metaVersion` it was built from
+ * Re-seal a metadata tier under the media's key and PUT it with the `metaRevision` it was built from
  * (`updateMediaMeta`, ADR 0077) — the one write path behind the capturedAt edit ([setMediaMeta]) and the place
  * backfill ([backfillPlaceName]). `edit` gets the RAW tier (every field verbatim, never [unsealMeta]'s projection) and returns the next
- * one, or null for no write; on a `409 stale_version` it re-runs on the tier the conflict handed back. A present
+ * one, or null for no write; on a `409 stale_revision` it re-runs on the tier the conflict handed back. A present
  * tier that does not open is refused (`MetaUnreadableError`), never rebuilt from empty (#273). The key is the one
  * the media's origin fixes ([mediaKey]): a member editing what a WRITE_ONLY guest added re-seals under that guest's
  * key, never under `K_node`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is
@@ -975,18 +975,18 @@ async function persistMeta(
 ): Promise<MediaMetaWrite> {
   const { mediaId } = media
   const { state, meta, wrote } = await writeSealedMeta<RawMediaMeta>(
-    { wrappedMeta: media.wrappedMeta ?? null, metaVersion: media.metaVersion ?? 0 },
+    { wrappedMeta: media.wrappedMeta ?? null, metaRevision: media.metaRevision ?? 0 },
     {
       open: (wrappedMeta) => openMediaMetaForWrite(scopeId, memoryKey, media, wrappedMeta),
       seal: (raw) =>
         metaHasContent(raw) ? sealJson(mediaKey(scopeId, memoryKey, media), prune(raw), mediaMetaContext(scopeId, mediaId)) : null,
-      send: async (wrappedMeta, metaVersion) => {
-        await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta, metaVersion } }))
+      send: async (wrappedMeta, metaRevision) => {
+        await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta, metaRevision } }))
       },
     },
     edit,
   )
-  return { tier: state.wrappedMeta ? normalizeMediaMeta(meta) : null, wrappedMeta: state.wrappedMeta, metaVersion: state.metaVersion, wrote }
+  return { tier: state.wrappedMeta ? normalizeMediaMeta(meta) : null, wrappedMeta: state.wrappedMeta, metaRevision: state.metaRevision, wrote }
 }
 
 function tierRef(item: MediaItem, kind: MediaDerivativeKind): BlobRef | undefined {

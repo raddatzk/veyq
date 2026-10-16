@@ -45,14 +45,14 @@ const ROOT_KEY = v1.randomBytes(32)
 const HASH = `#k=${b64url(K_SHARE)}`
 
 function folderHead(role: ShareRole): PublicShareHead {
-  const address = { scopeId: SCOPE_ID, nodeId: SUB, epoch: 0, placementVersion: 0 }
+  const address = { scopeId: SCOPE_ID, nodeId: SUB, epoch: 0, placementRevision: 0 }
   return {
     shareId: SHARE_ID, kShare: K_SHARE, scopeId: SCOPE_ID, name: 'Familie', noteByLocale: {}, role, rootKind: FOLDER_KIND,
     share: {
       role, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, ROOT_KEY)),
       nodes: [
         { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
-        { id: SUB, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, placementVersion: 0, encryptedName: sealName(ROOT_KEY, address, 'Briefe'), wrappedContentKey: wrapContentKey(ROOT_KEY, address, v1.randomBytes(32)) },
+        { id: SUB, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, placementRevision: 0, encryptedName: sealName(ROOT_KEY, address, 'Briefe'), wrappedContentKey: wrapContentKey(ROOT_KEY, address, v1.randomBytes(32)) },
       ],
     } as PublicShare,
   }
@@ -77,7 +77,7 @@ beforeEach(async () => {
   if (confirmRequest.value) settleConfirm(false)
   localStorage.clear()
   authenticatedCalls.length = 0
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
   stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
   stubApi(publicShareFilesApi, { listShareFiles: { items: [] } })
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:shareId', component: ShareView }] })

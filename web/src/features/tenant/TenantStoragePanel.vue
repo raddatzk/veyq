@@ -13,7 +13,7 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import InputText from 'primevue/inputtext'
-import { getTenantStorage, updateTenantStorage, GIB, type TenantStorage } from './tenantStorage'
+import { getTenantStorage, updateTenantStorage, formatGib, GIB, type TenantStorage } from './tenantStorage'
 import { activeSpace } from '../../app/activeSpace'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
@@ -30,12 +30,16 @@ const usedBytes = ref(0)
 const quotaBytes = ref<number | null>(null)
 // The limit as typed, in GiB (a decimal is allowed: 0.5 GiB is a real limit).
 const limitGib = ref('')
+// The limit as loaded: a field nobody edited saves these bytes, never the rounded GiB it shows — otherwise a page
+// saved unchanged moves the limit, and one under 0.01 GiB, shown as "0", switched link uploads off.
+const loaded = ref({ text: '', bytes: 0 })
 const actionError = ref('')
 
 function applyView(s: TenantStorage) {
   usedBytes.value = s.usedBytes
   quotaBytes.value = s.quotaBytes ?? null
-  limitGib.value = String(Math.round((s.shareLinkLimitBytes / GIB) * 100) / 100)
+  limitGib.value = formatGib(s.shareLinkLimitBytes)
+  loaded.value = { text: limitGib.value, bytes: s.shareLinkLimitBytes }
 }
 
 const { pending: loading, error: loadErr } = useAsyncData(async () => {
@@ -48,6 +52,7 @@ const used = computed(() => formatBytes(usedBytes.value, locale.value, 'binary')
 const quota = computed(() => (quotaBytes.value === null ? null : formatBytes(quotaBytes.value, locale.value, 'binary')))
 // Accepts "2", "2.5" and the German "2,5"; anything else (empty, negative, text) is not a limit.
 const limitBytes = computed<number | null>(() => {
+  if (limitGib.value.trim() === loaded.value.text) return loaded.value.bytes
   const n = Number(limitGib.value.trim().replace(',', '.'))
   return limitGib.value.trim() !== '' && Number.isFinite(n) && n >= 0 ? Math.round(n * GIB) : null
 })

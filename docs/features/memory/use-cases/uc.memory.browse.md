@@ -44,7 +44,7 @@
    the mode or the level clears it. The selection belongs to the level, not to a tab: switching tabs keeps it, "All"
    and "None" act on what the tab on screen shows, and the count says when part of the selection is hidden by the tab
    on screen; a node that leaves the level (moved, deleted) drops out of it. Every row is selectable; each action works
-   on the part of the selection the session may act on (the applications' capability functions per node) and says
+   on the part of the selection the session may act on (the applications' rights functions per node) and says
    "n of m cannot be moved / deleted" for the rest - a `READ_WRITE` guest selects and moves, and is offered no delete.
    Select is offered only where some node of the level allows an action (a `READ` guest has none), and the map
    presentation has no rows and offers no Select. Seen in a real browser on 2026-10-14 (the dev instance, a member and
@@ -116,20 +116,10 @@
   `location` unsealed on device from what `listNodes` already returns, behind the personal tiles opt-in (ADR
   0018); there is no locations API. It is **browse-only** (the Chapters-tab grid offers grid/list only).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Once you unlock veyq, you land in your personal space and can browse your Memories and the folders
-that organize them — create, rename, move into, and delete them. Every folder and Memory **name is
-decrypted on your own device**; the server only ever stores scrambled names and the shape of your tree, and
-it can't even work out the path you're looking at — your app builds that locally. Opening a Memory to see its
-photos and journal comes in a later step; for now this is the home that makes your encrypted space navigable.
-
-**DE —** Sobald du veyq entsperrst, landest du in deinem persönlichen Bereich und kannst deine Erinnerungen
-und die Ordner, die sie organisieren, durchstöbern — anlegen, umbenennen, hinein­navigieren und löschen.
-Jeder Ordner- und Erinnerungs­name wird **auf deinem eigenen Gerät entschlüsselt**; der Server speichert nur
-verschlüsselte Namen und die Form deines Baums und kann nicht einmal den Pfad ableiten, den du gerade
-ansiehst — das baut deine App lokal. Eine Erinnerung zu öffnen, um Fotos und Journal zu sehen, kommt in einem
-späteren Schritt; vorerst ist dies das Zuhause, das deinen verschlüsselten Bereich navigierbar macht.
+Your encrypted space stays easy to find your way around: you browse, create and organize folders and Memories, and
+every name is read only on your own device, never by the server.
 
 ## Related
 

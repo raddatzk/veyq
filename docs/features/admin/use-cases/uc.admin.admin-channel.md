@@ -77,20 +77,10 @@ flowchart LR
   `tenants.openapi.yaml` mixes Server-Owner operations with ones every member reaches (invite accept, terms). The
   backend builds its set from the specs; nobody lists it.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** If you run your own veyq server, the controls that administer it — creating the very first account,
-adding and suspending tenants — only answer through the separate administration container, which you reach
-privately. The public address your members use does not offer them at all. So a stranger who finds your server
-in the minutes after you install it cannot claim it before you do — and even someone who got hold of your
-sign-in details could not use them to administer your server from the internet.
-
-**DE —** Wenn du deinen eigenen veyq-Server betreibst, antworten die Funktionen, mit denen du ihn verwaltest —
-das Anlegen des allerersten Accounts, das Hinzufügen und Sperren von Tenants — nur über den separaten
-Administrations-Container, den du privat erreichst. Die öffentliche Adresse, die deine Mitglieder nutzen, bietet
-sie gar nicht erst an. Wer deinen Server in den Minuten nach der Installation findet, kann ihn also nicht vor dir
-übernehmen — und selbst wer an deine Zugangsdaten käme, könnte damit deinen Server nicht aus dem Internet
-verwalten.
+Nobody who finds a freshly installed server can claim it first, and nobody can administer it from the internet,
+because its controls answer only on a separate admin surface reached privately.
 
 ## Related
 

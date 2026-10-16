@@ -4,7 +4,7 @@
 //   - a member creates folders A and B, a folder N in A holding a file with real content; moves N (and so its subtree)
 //     into B, then to the scope root, then back into A — after each move the tree lists N where it went, and N's file
 //     downloads and decrypts byte for byte through the chain as it now is (the node's own key never changed, only its
-//     wrap); a stale second move built on the old placement version is refused `409 stale_placement`;
+//     wrap); a stale second move built on the old placement revision is refused `409 stale_placement`;
 //   - a drop box: a guest names itself, gets its folder and uploads a file; the member moves the guest's folder out into
 //     a normal folder — the folder lists there as an ordinary one (no identity), its file still decrypts, and the guest
 //     can no longer add to it with its old token (the server answers 403, the guest tree client reports `share_not_contributable`).
@@ -70,7 +70,7 @@ const contentOf = async (b: Blob) => Array.from(new Uint8Array(await b.arrayBuff
 const failure = (p: Promise<unknown>): Promise<unknown> => p.then(() => null, (e: unknown) => e)
 const byId = (tree: TreeNode[], id: string) => tree.find((n) => n.id === id)!
 
-// Random opaque bytes of a sealed field's minimum size: the server refuses this move on its VERSION before it looks at the
+// Random opaque bytes of a sealed field's minimum size: the server refuses this move on its REVISION before it looks at the
 // values, and the wire assertion (cc.security.wire-assertion) requires every opaque field to look sealed.
 const filler = (): string => Buffer.from(crypto.getRandomValues(new Uint8Array(48))).toString('base64')
 
@@ -105,12 +105,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('move e2e (live, real crypto: a subtree k
     const before = await readsUnder(aId)
     await moveNode(scopeId, epochs, before, nId, bId)
     const inB = await readsUnder(bId)
-    expect(byId(inB, nId).placementVersion).toBe(byId(before, nId).placementVersion + 1)
+    expect(byId(inB, nId).placementRevision).toBe(byId(before, nId).placementRevision + 1)
     // a second move built on the placement the first one superseded is refused by the server's compare-and-set
-    // (sent once, unretried: the version stated is the stale one)
+    // (sent once, unretried: the revision stated is the stale one)
     const stale = await failure(contentApi().updateNode({
       scopeId, nodeId: nId,
-      updateNodeRequest: { parentId: aId, wrappedContentKey: byId(inB, nId).wrappedContentKey, encryptedName: filler(), slugToken: filler(), epoch: epochs.current, placementVersion: byId(before, nId).placementVersion },
+      updateNodeRequest: { parentId: aId, wrappedContentKey: byId(inB, nId).wrappedContentKey, encryptedName: filler(), slugToken: filler(), epoch: epochs.current, placementRevision: byId(before, nId).placementRevision },
     }))
     expect(await decodeHttpError(stale)).toEqual({ status: 409, code: 'stale_placement' })
     await moveNode(scopeId, epochs, inB, nId, null) // to the scope root: sealed under K_SC at the current epoch

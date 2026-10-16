@@ -90,7 +90,7 @@ class OperatorBlindProbeTest {
             // A complete placement write (ADR 0080 Decision 3): a rename at the root, where the world's Memory lives.
             Call(
                 "PATCH", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}",
-                """{"encryptedName":"$B64","slugToken":"$slug","wrappedContentKey":"$B64","epoch":0,"placementVersion":0}""",
+                """{"encryptedName":"$B64","slugToken":"$slug","wrappedContentKey":"$B64","epoch":0,"placementRevision":0}""",
             )
         },
         "deleteNode" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}") },
@@ -124,17 +124,17 @@ class OperatorBlindProbeTest {
         },
         "deleteBucket" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets/${s.bucketId}") },
         "setNodeCover" to Probe(Address.SCOPE) { s ->
-            Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover", """{"uploadId":"${s.uploadId}","expectedBlobId":null,"wrappedMeta":"$B64","metaVersion":0}""")
+            Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover", """{"uploadId":"${s.uploadId}","expectedBlobId":null,"wrappedMeta":"$B64","metaRevision":0}""")
         },
         "removeNodeCover" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover/removal", """{"blobId":"${UUID.randomUUID()}","wrappedMeta":"$B64","metaVersion":0}""")
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover/removal", """{"blobId":"${UUID.randomUUID()}","wrappedMeta":"$B64","metaRevision":0}""")
         },
         "moveBucketMedia" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/media-moves", """{"mediaIds":["${s.mediaId}"],"targetBucketId":"${s.bucketId}"}""")
         },
         "getMediaExif" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/media/${s.mediaId}/exif") },
         "updateMediaMeta" to Probe(Address.SCOPE) { s ->
-            Call("PUT", "/api/scopes/${s.scopeId}/media/${s.mediaId}/meta", """{"wrappedMeta":"$B64","metaVersion":0}""")
+            Call("PUT", "/api/scopes/${s.scopeId}/media/${s.mediaId}/meta", """{"wrappedMeta":"$B64","metaRevision":0}""")
         },
         "deleteMedia" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/media/${s.mediaId}") },
         "restoreMedia" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/media/${s.mediaId}/restore") },
@@ -219,11 +219,24 @@ class OperatorBlindProbeTest {
         "updateTenantTerms" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/terms", """{"terms":{"de":"Bedingungen","en":"Terms"}}""")
         },
-        // The live tenant publishes no terms, so the control's accept answers `409 terms_version_changed` — past the gate.
-        "acceptTenantTerms" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/terms/accept", """{"version":1}""") },
+        // The live tenant publishes no terms, so the control's accept answers `409 terms_revision_changed` — past the gate.
+        "acceptTenantTerms" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/terms/accept", """{"revision":1}""") },
         "getTenantMailSettings" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/mail-settings") },
         "updateTenantMailSettings" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/mail-settings", """{"tls":false,"enabled":false}""")
+        },
+        "getTenantCapabilities" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/capabilities") },
+        "listTenantCapabilitySwitches" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/capability-switches") },
+        // The control switches an entry back on that is on: it changes nothing and answers 200, past the gate.
+        "setTenantCapabilitySwitch" to Probe(Address.TENANT) { s ->
+            Call("PUT", "/api/tenants/${s.tenantId}/capability-switches/core.group-space", """{"off":false}""")
+        },
+        // The control clears a requirement that is not set: it changes nothing and answers 200, past the gate.
+        "clearTenantCapabilityRequirement" to Probe(Address.TENANT) { s ->
+            Call("DELETE", "/api/tenants/${s.tenantId}/capability-switches/core.public-shares/requirements/linkMaxDays")
+        },
+        "setTenantCapabilityRequirement" to Probe(Address.TENANT) { s ->
+            Call("PUT", "/api/tenants/${s.tenantId}/capability-switches/core.public-shares/requirements/linkMaxDays", """{"value":3650}""")
         },
         "getTenantStorage" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/storage") },
         "checkTenantStorageFit" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/storage-fit", """{"bytes":1}""") },
@@ -245,7 +258,7 @@ class OperatorBlindProbeTest {
             "getSetupStatus", "createServerOwner",
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
-            "createShareNode", "updateShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
+            "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
             "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite",
         )
         reason(
@@ -256,8 +269,10 @@ class OperatorBlindProbeTest {
             "getInstanceRelease",
             "getInstanceStoreProvisioning",
             "getInstanceConfigSecret",
-            "getInstanceStore", "setInstanceStore", "checkInstanceStore",
+            "getInstanceStore", "setInstanceStore", "discardPendingInstanceStore", "checkInstanceStore",
             "listInstanceCapabilities", "setInstanceCapability",
+            "setInstanceCapabilityRequirement", "clearInstanceCapabilityRequirement",
+            "listInstanceExternalServices", "setInstanceExternalService", "clearInstanceExternalService",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +

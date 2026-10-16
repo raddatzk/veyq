@@ -31,7 +31,7 @@ import {
   derivePasswordToken,
   fetchShareTerms,
   pickShareTerms,
-  acceptedTermsVersion,
+  acceptedTermsRevision,
   recordTermsAccepted,
   pickLocaleText,
   SharePasswordRequiredError,
@@ -75,42 +75,42 @@ const pwBusy = ref(false) // deriving Argon2id + re-resolving
 const head = shallowRef<PublicShareHead | null>(null)
 
 // --- accountless terms gate (uc.sharing.share-accept, ADR 0035 §3) ----------
-// Before viewing/contributing, the visitor accepts the operator's tenant terms. Acceptance is stored CLIENT-SIDE
+// Before viewing/contributing, the visitor accepts the space's terms. Acceptance is stored CLIENT-SIDE
 // only (localStorage, keyed per tenant) — the server records nothing about the accountless visitor. This is an
 // OPERATIONAL GATE, NOT ENFORCEMENT: a localStorage flag is bypassable, so it records + surfaces consent, it does
 // not police access (the terms' content + the decryptable-on-report path are the operator's real remedy). It also
-// FAILS OPEN: a transient terms-fetch error is treated as "no terms" (version 0) so a network blip never locks a
+// FAILS OPEN: a transient terms-fetch error is treated as "no terms" (revision 0) so a network blip never locks a
 // visitor out. The terms come from the share (GET /api/shares/{shareId}/terms) — a public share is Host-independent,
 // so the tenant can't come from the Host, and the member terms endpoint is auth+membership-gated.
 const termsTenantId = ref('')
-const termsVersion = ref(0) // 0 = no gate (also the fail-open value on a fetch error)
-const acceptedVersion = ref(0) // the locally-recorded accepted version; bumped in-memory on accept so the gate clears
+const termsRevision = ref(0) // 0 = no gate (also the fail-open value on a fetch error)
+const acceptedRevision = ref(0) // the locally-recorded accepted revision; bumped in-memory on accept so the gate clears
 const termsMarkdown = ref('')
 const renderedTerms = computed(() => (termsMarkdown.value ? renderMarkdown(termsMarkdown.value) : ''))
 // The gate fires once the share is resolved (post-password), the tenant has published terms, and the locally-stored
-// accepted version is below current. Sits BETWEEN the password shell and the display-name pre-screen in the template.
-const needsTerms = computed(() => status.value === 'ready' && termsVersion.value > 0 && acceptedVersion.value < termsVersion.value)
+// accepted revision is below current. Sits BETWEEN the password shell and the display-name pre-screen in the template.
+const needsTerms = computed(() => status.value === 'ready' && termsRevision.value > 0 && acceptedRevision.value < termsRevision.value)
 
-/** Fetch the owning tenant's terms + read the locally-stored accepted version. FAILS OPEN (uc.sharing.share-accept):
- *  a transient error is treated as "no terms" (version 0) so the visitor is never locked out by a network blip. */
+/** Fetch the owning tenant's terms + read the locally-stored accepted revision. FAILS OPEN (uc.sharing.share-accept):
+ *  a transient error is treated as "no terms" (revision 0) so the visitor is never locked out by a network blip. */
 async function loadTerms() {
   try {
     const terms = await fetchShareTerms(shareId)
     termsTenantId.value = terms.tenantId
-    termsVersion.value = terms.termsVersion
+    termsRevision.value = terms.termsRevision
     termsMarkdown.value = pickShareTerms(terms, locale.value)
-    acceptedVersion.value = acceptedTermsVersion(terms.tenantId)
+    acceptedRevision.value = acceptedTermsRevision(terms.tenantId)
   } catch {
-    termsVersion.value = 0
-    acceptedVersion.value = 0
+    termsRevision.value = 0
+    acceptedRevision.value = 0
   }
 }
 
 /** Record acceptance client-side (localStorage, per tenant) + clear the gate in-memory. No server call — the
  *  accountless visitor's acceptance is client-only, so the server keeps no record (anonymity preserved). */
 function acceptTerms() {
-  recordTermsAccepted(termsTenantId.value, termsVersion.value)
-  acceptedVersion.value = termsVersion.value
+  recordTermsAccepted(termsTenantId.value, termsRevision.value)
+  acceptedRevision.value = termsRevision.value
 }
 
 // --- the note's acceptance gate (uc.sharing.share-note, ADR 0036 point 2) ----------------------------------------
@@ -332,7 +332,7 @@ onMounted(() => {
       </form>
     </div>
 
-    <!-- The accountless terms gate (uc.sharing.share-accept, ADR 0035 §3): the operator's terms + an Accept button,
+    <!-- The accountless terms gate (uc.sharing.share-accept, ADR 0035 §3): the space's terms + an Accept button,
          BETWEEN the password shell and the display-name pre-screen (password → terms → name → content). Acceptance
          is client-only (localStorage) — an operational gate, not enforcement: it records + surfaces consent, it does
          not police access. renderMarkdown escapes first (safe subset), so v-html is safe. -->

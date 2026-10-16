@@ -28,7 +28,7 @@ import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
 import FileDetail from './components/FileDetail.vue'
 import FileShareDialog from './components/FileShareDialog.vue'
-import { canUploadFolder, depotCapabilities } from './capabilities'
+import { canUploadFolder, depotRights } from './rights'
 import { depotRows, UPLOAD_ACTION, UPLOAD_FOLDER_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
 import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent, DEPOT_CONTENT_SCHEMA } from './exportImport'
@@ -52,7 +52,7 @@ const DEPOT_PLACEMENT = { root: true, parents: [FOLDER_KIND] } as const
 /** The plain text of the Depot tab when it has nothing: where a file may be uploaded it points at "New"; a reader is not
  *  pointed at a menu it does not have, a guest says what its link shows. */
 function depotEmptyText(ctx: LevelActionContext): string {
-  if (depotCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).upload) return 'depot.empty'
+  if (depotRights(ctx.access, targetOf(ctx.tree, ctx.folder)).upload) return 'depot.empty'
   return ctx.access.mode === 'guest' ? 'depot.guest.empty' : 'depot.emptyReadOnly'
 }
 
@@ -90,7 +90,7 @@ export function registerDepot(registry: Registry): void {
     // a download unpacked, the member's import (core decides that, by its content).
     levelActions: [{
       id: UPLOAD_ACTION, label: 'depot.upload', icon: 'pi pi-upload', order: NEW_UPLOAD_ORDER, acceptsDrop: true,
-      allowed: (ctx: LevelActionContext) => depotCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).upload,
+      allowed: (ctx: LevelActionContext) => depotRights(ctx.access, targetOf(ctx.tree, ctx.folder)).upload,
     }, {
       id: UPLOAD_FOLDER_ACTION, label: 'depot.uploadFolder', icon: 'pi pi-folder-open', order: NEW_UPLOAD_FOLDER_ORDER, acceptsDrop: true,
       allowed: (ctx: LevelActionContext) => canUploadFolder(ctx.access, targetOf(ctx.tree, ctx.folder)),
@@ -115,7 +115,7 @@ export function registerDepot(registry: Registry): void {
     createDialog: DropBoxCreateDialog,
     createEntry: {
       label: 'depot.dropBox.create', icon: 'pi pi-inbox', order: NEW_DROPBOX_ORDER,
-      allowed: (ctx: LevelActionContext) => depotCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).createDropBox,
+      allowed: (ctx: LevelActionContext) => depotRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createDropBox,
       enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
     },
     shareDialog: DropBoxShareDialog,

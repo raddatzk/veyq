@@ -114,7 +114,7 @@ acceptanceCriteria:
       does not rise with the escalation increment either (E3); their absence is by construction, not by omission.
     coverage:
       # Structural, so the assertion is over SHAPE: a family exposes exactly id/createdAt/lastUsedAt/current, a
-      # register response exactly blob/version, and the whole backend suite unlocks nothing. The contract half is
+      # register response exactly blob/revision, and the whole backend suite unlocks nothing. The contract half is
       # the permanent guard `scripts/validate_session_family_shape.py` (SessionFamily grows no field, and no
       # base64 one). The web locked render has the unlocked mount as its control: with the vault locked the list
       # renders, every revoke stays enabled, the register is never touched, and neither wrap action is offered.
@@ -125,7 +125,7 @@ acceptanceCriteria:
         integration:
           - SessionManagerSliceTest.aFamilyCarriesNothingButItsIdTimestampsAndTheCurrentMarker
           - SessionManagerSliceTest.theSessionManagerNeedsASessionAndRefusesWithoutOne
-          - DeviceRegisterSliceTest.theRegisterCarriesNothingButTheSealedBlobAndItsVersion
+          - DeviceRegisterSliceTest.theRegisterCarriesNothingButTheSealedBlobAndItsRevision
       web: { unit: [src/features/account/sessions/SessionsPanel.test.ts] }
   - id: the-locked-state-is-reachable-without-a-secret-key
     text: >-
@@ -168,8 +168,8 @@ acceptanceCriteria:
       # control, and that a throwing register leaves the list revocable.
       backend:
         integration:
-          - DeviceRegisterSliceTest.bornEmptyRegisterReadsNullBlobVersionZero
-          - DeviceRegisterSliceTest.firstWriteRoundTripsAndBumpsToVersionOne
+          - DeviceRegisterSliceTest.bornEmptyRegisterReadsNullBlobRevisionZero
+          - DeviceRegisterSliceTest.firstWriteRoundTripsAndBumpsToRevisionOne
       web:
         unit:
           - src/features/account/deviceRegister.test.ts
@@ -182,7 +182,7 @@ acceptanceCriteria:
       the unlock-time write could not (a cold boot restore never learned its own family id). There is no retry
       queue: a register write that fails leaves rows unnamed and the next open repairs them. The load-bearing
       case is the merge discipline, and it is the one case that distinguishes the two candidate implementations:
-      a family created by another device BETWEEN this client's read and its write must survive the stale-version
+      a family created by another device BETWEEN this client's read and its write must survive the stale-revision
       retry (a frozen id-delta), while eviction must be recomputed on the merged map. Every other assertion
       passes under both formulations.
     coverage:
@@ -194,9 +194,9 @@ acceptanceCriteria:
       # attempt, reddens exactly its own case.
       backend:
         integration:
-          - DeviceRegisterSliceTest.staleVersionOnFirstWriteIsConflict
-          - DeviceRegisterSliceTest.staleVersionAfterAWriteIsConflictAndLeavesTheStoredBlobIntact
-          - DeviceRegisterSliceTest.aWriteAtAFutureVersionIsAlsoRejected
+          - DeviceRegisterSliceTest.staleRevisionOnFirstWriteIsConflict
+          - DeviceRegisterSliceTest.staleRevisionAfterAWriteIsConflictAndLeavesTheStoredBlobIntact
+          - DeviceRegisterSliceTest.aWriteAtAFutureRevisionIsAlsoRejected
       web:
         unit:
           - src/features/account/deviceRegister.test.ts
@@ -324,14 +324,14 @@ acceptanceCriteria:
   - id: the-device-wrap-join-never-reaches-the-server
     text: >-
       The join lives only inside the Master-Key-sealed register: the PUT body is exactly a sealed blob and a
-      version, and neither the wrap id nor the device label is legible in it. The wire shapes that would leak
+      revision, and neither the wrap id nor the device label is legible in it. The wire shapes that would leak
       the correlation while everything kept working — a cleartext wrap-id list on the register, or a deviceId /
       label / timestamp on MasterKeyWrap — are pinned as a permanent contract guard rather than as prose, since
       no test would catch either. The register also stays off every unlock path in both directions: a device
       finds its own wrap by the id in its local record, so a pruned or withheld join row can never cost anyone
       access.
     coverage:
-      # The PUT body is exactly `blob` + `version`, and neither the wrap id nor the device label is legible in it.
+      # The PUT body is exactly `blob` + `revision`, and neither the wrap id nor the device label is legible in it.
       # The wire shapes that would leak the correlation while everything kept working are the permanent guard
       # `scripts/validate_device_shapes.py`, since no test would catch them. A sealed ROUND-TRIP that supplies
       # neither map a second time was bite-tested in both directions (drop the map from the seal, then from the
@@ -340,7 +340,7 @@ acceptanceCriteria:
       # suite asserts the register's absence.
       backend:
         integration:
-          - DeviceRegisterSliceTest.theRegisterCarriesNothingButTheSealedBlobAndItsVersion
+          - DeviceRegisterSliceTest.theRegisterCarriesNothingButTheSealedBlobAndItsRevision
       web:
         unit:
           - src/features/account/deviceRegister.test.ts
@@ -355,7 +355,7 @@ acceptanceCriteria:
           - src/features/account/deviceRegister.test.ts
           - src/features/account/sessions/SessionsPanel.test.ts
   - id: a-refused-register-is-started-over-only-by-the-user
-    text: A refused device register can be started over only by the user, on a device, after a confirmation that names the cost (every device unnamed until it next signs in, removing another device's saved key not offered until then); no server response reaches it. It writes the empty register one version above the served one, never over a copy that opens, and sets this device's mark to the version it wrote.
+    text: A refused device register can be started over only by the user, on a device, after a confirmation that names the cost (every device unnamed until it next signs in, removing another device's saved key not offered until then); no server response reaches it. It writes the empty register one revision above the served one, never over a copy that opens, and sets this device's mark to the revision it wrote.
     # ADR 0028 Decision 7's way back (inbox #192). The reset's import is pinned to its one dialog by
     # `veyq/trust-reset-one-door` in web/eslint.config.js — not a coverage surface (ADR 0040), so it is named here
     # rather than listed. The negative ("no server response reaches it") anchors on the recorded PUTs across every

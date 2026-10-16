@@ -76,16 +76,10 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
   open; the manage list shows no label, note or password for it and cannot re-copy its link. Its guests are
   unaffected.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** When you share a memory, you can add a short message that whoever opens the link will see — "Enjoy our
-trip!" or "Drop your photos here." You can change that message later without making a new link. It's encrypted
-like everything else: the person running the server can't read it, only people you send the link to.
-
-**DE —** Wenn du eine Erinnerung teilst, kannst du eine kurze Nachricht hinzufügen, die alle sehen, die den Link
-öffnen — „Viel Spaß mit unserer Reise!" oder „Ladet eure Fotos hier hoch." Du kannst die Nachricht später ändern,
-ohne einen neuen Link zu erzeugen. Sie ist wie alles andere verschlüsselt: Die Person, die den Server betreibt,
-kann sie nicht lesen — nur wer den Link von dir bekommt.
+You can greet or instruct whoever opens your link with a short message you can change later, readable only by people
+with the link.
 
 ## Related
 
@@ -96,6 +90,8 @@ kann sie nicht lesen — nur wer den Link von dir bekommt.
 - **Decisions:** [ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md) (the recoverable
   share key + the editable note), [ADR 0029](../../../decisions/0029-public-viewer-share.md) (the share model +
   `K_share`), [ADR 0035](../../../decisions/0035-server-terms-of-service.md) (the reused markdown renderer).
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md) (`sealed_share_key` = new opaque
   ciphertext; the members-only `K_share`-derivability note; the § What holds today row on a sibling link).
+- End-user view (docs site): [Create a link](../../../../site/src/content/docs/sharing/create-a-link.mdx)
+- End-user view (docs site): [What a guest sees](../../../../site/src/content/docs/sharing/what-guests-see.mdx)

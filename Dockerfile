@@ -37,6 +37,9 @@ COPY web/package.json web/openapitools.json ./
 # scripts/validate_npm_installs_gated.py holds both premises — keep `npm ci` (never `npm install`) and the COPY.
 RUN npm ci
 COPY web/ ./
+# The platform's one major: vite.config.ts compiles the web gate's EXPECTED_MAJOR from `../VERSION` (ADR 0085
+# decision 1), so the build fails without it. After the install, so a new major does not bust that layer.
+COPY VERSION /src/VERSION
 # verify:no-backdoor is the prod guard from `npm run check` that asserts the dev auto-unlock seam
 # (__dev/seed-credentials) never reaches dist/. A release image is exactly where that must hold. verify:csp is
 # its sibling for ADR 0069: the policy file exists and index.html has no CSP <meta> — the two things the
@@ -71,10 +74,15 @@ COPY contracts/api ../contracts/api
 # The capability catalog: buildSrc's `generateCapabilityRegister` builds :core's CapabilityIds and their EN/DE texts
 # from it (ADR 0088 decision 13), so without it the compile has no register.
 COPY contracts/platform/capabilities.json ../contracts/platform/capabilities.json
+# The platform's one major: buildSrc's `generatePlatformMajor` compiles :core's PlatformMajor from it, the major
+# GET /api/setup advertises (ADR 0085 decision 1), so without it the compile has no major.
+COPY VERSION ../VERSION
 COPY backend/src ./src
 COPY backend/core/src ./core/src
 COPY backend/apps/memories/src ./apps/memories/src
 COPY backend/apps/depot/src ./apps/depot/src
+# The license texts buildSrc's ThirdPartyLicenses appends to the backend's notices; `quarkusBuild` runs it after itself.
+COPY backend/licenses ./licenses
 COPY --from=frontend-build /src/web/dist ./src/main/resources/META-INF/resources
 # Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (this is 3.36.0, backend/build.gradle.kts:26)
 # and fast-jar is the default anyway — ci.yml builds the same artifact with a bare `quarkusBuild`.
@@ -153,6 +161,12 @@ COPY --from=backend-build-jvm --chown=10001:10001 /code/backend/build/quarkus-ap
 # Extract with: docker run --rm --entrypoint cat <image> /opt/veyq/deploy/docker-compose.prod.yml
 COPY infra/docker-compose.prod.yml /opt/veyq/deploy/docker-compose.prod.yml
 COPY infra/.env.example /opt/veyq/deploy/.env.example
+# The AGPL travels with the object code it covers (§4/§6): a pulled image is a conveyed copy. The same path in
+# both images, beside the notices of every jar in /work/quarkus-app/lib (buildSrc's ThirdPartyLicenses); the web
+# bundle's own are served by the app, at /third-party-licenses.txt. The MariaDB driver (LGPL-2.1) stays a jar of
+# its own in lib/main, which is what lets a recipient replace it.
+COPY LICENSE NOTICE /usr/share/licenses/veyq/
+COPY --from=backend-build-jvm /code/backend/build/third-party-licenses/THIRD-PARTY-LICENSES.txt /usr/share/licenses/veyq/
 USER 10001
 # The public port only. The admin listener (veyq.admin-channel.port, 8090 — ADR 0065) is deliberately NOT
 # exposed: `docker run -P` publishes every EXPOSEd port, and that one must only ever be reached by the admin

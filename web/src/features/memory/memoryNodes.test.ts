@@ -31,7 +31,7 @@ function echoCreate() {
 function mockContent(over: { createNode: ReturnType<typeof echoCreate> }) {
   fakeApi(contentApi, { ...over })
 }
-const nameCtx = (nodeId: string, epoch = 0) => ({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch, placementVersion: 0 }) as const
+const nameCtx = (nodeId: string, epoch = 0) => ({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch, placementRevision: 0 }) as const
 
 describe('createMemory', () => {
   it('seals the name, blinds the slug, and wraps a K_node that opens back (operator-blind)', async () => {
@@ -49,9 +49,9 @@ describe('createMemory', () => {
     // name round-trips under K_SC, bound to this node; the server only ever saw ciphertext
     expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Italien 2026')
     // wrapped K_node opens to exactly the returned key
-    expect(Array.from(openMemory(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
+    expect(Array.from(openMemory(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
     // ...and is refused on any other node's row (a server moving the wrap gets no key)
-    expect(() => openMemory(SCOPE_ID, scopeKey, { id: crypto.randomUUID(), epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey }))
+    expect(() => openMemory(SCOPE_ID, scopeKey, { id: crypto.randomUUID(), epoch: 0, placementRevision: 0, wrappedContentKey: req.wrappedContentKey }))
       .toThrow(v1.OpenRefused)
     // slug token = blinded MAC under K_SC over the root parent slot (the scope id) + the slug
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, SCOPE_ID, 'italien-2026')))
@@ -104,7 +104,7 @@ describe('a Memory inside a folder (ADR 0080 Decision 1)', () => {
     const folderId = await createFolder(SCOPE_ID, epochs, 'Reisen')
     const rows = (): TreeNode[] => create.mock.calls.map(([{ createNodeRequest: r }]) => treeNode({
       id: r.nodeId, parentId: r.parentId ?? null, kind: r.kind, orderIndex: 0, epoch: r.epoch ?? 0, name: '',
-      wrappedContentKey: r.wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+      wrappedContentKey: r.wrappedContentKey, wrappedMeta: null, metaRevision: 0, placementRevision: 0,
     }))
     const folderKey = nodeContentKey(SCOPE_ID, epochs, rows(), folderId)!
     const { nodeId, memoryKey } = await createMemory(SCOPE_ID, epochs, 'Italien', { id: folderId, key: folderKey })
@@ -112,8 +112,8 @@ describe('a Memory inside a folder (ADR 0080 Decision 1)', () => {
     const req = create.mock.calls[1][0].createNodeRequest
     expect(req.parentId).toBe(folderId)
     // the Memory's K_node opens under the folder's key, and not under K_SC…
-    expect(Array.from(openContentKey(SCOPE_ID, folderKey, { id: nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
-    expect(() => openContentKey(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey })).toThrow(v1.OpenRefused)
+    expect(Array.from(openContentKey(SCOPE_ID, folderKey, { id: nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
+    expect(() => openContentKey(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: req.wrappedContentKey })).toThrow(v1.OpenRefused)
     // …and the browse's walk from the scope root opens it through the folder
     expect(Array.from(nodeContentKey(SCOPE_ID, epochs, rows(), nodeId)!)).toEqual(Array.from(memoryKey))
   })
@@ -138,7 +138,7 @@ describe('createChapter — recursive K_node (cr-0060)', () => {
     expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), parentKey, fromB64(req.encryptedName)))).toBe('Tag 1')
     expect(() => v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName))).toThrow(v1.OpenRefused)
     expect(req.slugToken).toBe(b64std(v1.slugToken(parentKey, MEM, 'tag-1')))
-    const row = { id: nodeId, epoch: 0, placementVersion: 0, wrappedContentKey: req.wrappedContentKey }
+    const row = { id: nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: req.wrappedContentKey }
     // the K_node opens under the PARENT key…
     expect(Array.from(openContentKey(SCOPE_ID, parentKey, row)!)).toEqual(Array.from(chapterKey))
     // …and NOT under K_SC (a wrong KEK can't open it — crypto-enforced least privilege)

@@ -112,7 +112,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     // the member sees the guest's file: its name, its blob's meta (declared with the upload), its bytes
     const tree = await listTree(scopeId, epochs)
     const guestNode = tree.find((n) => n.id === guestFile)!
-    expect(guestNode).toMatchObject({ kind: FILE_KIND, parentId: folderId, name: GUEST_FILE, metaVersion: 0 })
+    expect(guestNode).toMatchObject({ kind: FILE_KIND, parentId: folderId, name: GUEST_FILE, metaRevision: 0 })
     const guestKey = nodeContentKey(scopeId, epochs, tree, guestFile)!
     const memberListing = (await filesApi().listFiles({ scopeId, parentId: folderId })).items
     const guestBlob = memberListing.find((i) => i.nodeId === guestFile)!.fileBlob!

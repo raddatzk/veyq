@@ -38,6 +38,7 @@ class AppShellRoutes(
     config: VeyqConfig,
     private val blobStore: BlobStore,
     files: AppShellFiles,
+    private val external: ExternalOrigins,
 ) {
     private val policy: String? = files.read(AppShell.POLICY_FILE)?.toString(Charsets.UTF_8)
 
@@ -53,19 +54,28 @@ class AppShellRoutes(
         // Fail closed for every store a Server Owner may set later, not only the one at boot: a policy with no
         // `connect-src` cannot take a store origin, and learning that at the first request after a setting changes
         // would be a 500 on every response.
-        if (shell is AppShell.Present) AppShell.withStoreOrigin(policy!!, "https://boot-check.invalid")
+        // The same for the outside services a Server Owner may configure later (ADR 0088 decision 7): the policy must
+        // carry an `img-src` for the map tiles and a `connect-src` for the geocoder and the breach check.
+        if (shell is AppShell.Present) {
+            AppShell.withOrigins(policy!!, listOf("https://boot-check.invalid"), listOf("https://boot-check.invalid"))
+        }
     }
 
-    private class Emitted(val storeOrigin: String?, val csp: String)
+    private class Emitted(val storeOrigin: String?, val external: ExternalOriginSet, val csp: String)
 
     @Volatile
     private var emitted: Emitted? = null
 
-    /** The policy for the store the backend signs against right now: the base policy plus that store's origin. */
+    /** The policy for right now: the base policy plus the origin of the store the backend signs against and the origins
+     *  of the outside services in use ([ExternalOrigins], a snapshot, so no database is read here). [emitted] is a memo
+     *  checked against both on every call, so a racing response that stores the policy of an older state costs the
+     *  next one a rebuild, never a stale header (inbox #445). */
     private fun cspNow(): String {
         val origin = blobStore.storeOrigin
-        emitted?.let { if (it.storeOrigin == origin) return it.csp }
-        return AppShell.withStoreOrigin(policy!!, origin).also { emitted = Emitted(origin, it) }
+        val services = external.current()
+        emitted?.let { if (it.storeOrigin == origin && it.external == services) return it.csp }
+        return AppShell.withOrigins(policy!!, listOfNotNull(origin) + services.connect, services.img)
+            .also { emitted = Emitted(origin, services, it) }
     }
 
     private val hsts: String? = config.http().hsts().let { if (it.enabled()) "max-age=${it.maxAge().seconds}" else null }

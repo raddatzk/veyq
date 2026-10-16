@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The level's Select mode (inbox #421) against a STUBBED registry (as `LevelView.test.ts`): kinds are made-up tokens, each
-// row's part in a selection is the stub's `selection` answer (an application's capability answer), a sub-folder's is core's
-// `folderCapabilities`. Every control is clicked for real: the toolbar's Select, each row's checkbox, the bar's All / None,
+// row's part in a selection is the stub's `selection` answer (an application's rights answer), a sub-folder's is core's
+// `folderRights`. Every control is clicked for real: the toolbar's Select, each row's checkbox, the bar's All / None,
 // the tabs, Move to… and Delete. What the level hands the host is the emitted part of the selection; the writes are the
 // hosts' (`MoveNodesDialog`, `DeleteNodesDialog`).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -38,7 +38,7 @@ import { titlesOf } from '../../test/levelRows'
 import type { LevelRowSelection } from './levelRow'
 
 function node(id: string, kind: NodeKind, parentId: string | null = 'Trips'): TreeNode {
-  return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+  return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 }
 const TRIPS = node('Trips', FOLDER_KIND, null)
 const OTHER = node('Other', FOLDER_KIND, null)

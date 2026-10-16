@@ -94,26 +94,10 @@
   personal scope and solo groups unchanged — the only twist is **keeping the target's membership** so they retain
   read access during grace.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Removing someone from your space cuts their account off from everything shared straight away — the shared
-tenant space and every group they were in. Public links are different: they could have copied any link to a shared
-memory, and a link works for whoever holds it. Those links can't simply be switched back on any more, only renewed —
-and when you remove someone you can turn every link of the space off in the same step, or at any later time. A group they alone ran passes to its longest-standing member so it's never left
-leaderless; if they were its only person, it winds down on the same 30-day timer as a deleted group. Their **own**
-private memories aren't snatched away the instant they leave: they keep **read-only** access to look through and save
-them for 30 days, and only then are they erased. You never gain access to anyone's private group — the handover is
-automatic.
-
-**DE —** Jemanden aus deinem Bereich zu entfernen trennt sie sofort von allem Geteilten — dem gemeinsamen
-Tenant-Bereich und jeder Gruppe, in der sie waren. Bei öffentlichen Links ist es anders: Jeden Link zu einer geteilten
-Erinnerung können sie kopiert haben, und ein Link funktioniert für alle, die ihn haben. Solche Links lassen sich
-nicht mehr einfach wieder einschalten, nur erneuern — und beim Entfernen kannst du im selben Schritt alle Links des
-Bereichs abschalten, oder jederzeit später. Eine Gruppe, die sie allein geführt haben, geht an ihr
-langjährigstes Mitglied, damit sie nie führungslos zurückbleibt; waren sie die einzige Person, läuft sie auf
-demselben 30-Tage-Timer aus wie eine gelöschte Gruppe. Ihre **eigenen** privaten Erinnerungen werden ihnen nicht im
-Moment des Entfernens entrissen: sie behalten **30 Tage** lesenden Zugriff zum Durchsehen und Speichern, erst danach
-werden sie gelöscht. Du bekommst nie Zugriff auf die private Gruppe von jemandem — die Übergabe ist automatisch.
+You can remove someone from your shared space and cut them off from everything shared at once, while their own private
+memories stay readable to them for 30 days to save.
 
 ## Related
 
@@ -126,3 +110,4 @@ werden sie gelöscht. Du bekommst nie Zugriff auf die private Gruppe von jemande
 - Sibling use-cases: [uc.spaces.delete-group](uc.spaces.delete-group.md) (the lifecycle reused),
   [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) (group removal + rotation),
   [uc.spaces.add-member](uc.spaces.add-member.md) (the tenant roster's other half)
+- End-user view (docs site): [Invite and manage members](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)

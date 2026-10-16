@@ -11,10 +11,15 @@ import jakarta.enterprise.context.ApplicationScoped
  * `scripts/validate_lookup_single_home.py` keeps it the only one: no other file reads the Host header or looks a
  * tenant up by domain.
  *
- * Header precedence is the reverse-proxy convention `X-Forwarded-Host` before `Host`, and it inherits that
- * header's trust model exactly: `X-Forwarded-Host` is only meaningful behind a proxy that sets it and strips a
- * client-supplied one. Spoofing it cannot *widen* access here — it can name a tenant the caller is not a member
- * of (every route stays membership-gated behind this) or a suspended one (which only refuses them harder).
+ * Header precedence is the reverse-proxy convention `X-Forwarded-Host` before `Host`, and **neither is a trust
+ * boundary, so nothing here relies on a proxy stripping a client-written `X-Forwarded-Host`.** A client writes
+ * its `Host` too, and every tenant domain reaches this one backend, so `Host: a` plus `X-Forwarded-Host: b` buys
+ * exactly what `Host: b` buys. What a forged value can reach is bounded where the tenant is *used*: sessions are
+ * account-global, not tenant-bound (ADR 0004), so it widens no credential; every content route stays
+ * membership-gated behind this; and the suspension gate reads the same rule, so the only way to act as a
+ * suspended tenant is to resolve to it — and be refused. The residual lives in front of the backend: a per-host
+ * policy an operator adds at their own gateway, or a shared cache keyed by `Host`, can be stepped around this way
+ * (docs/crosscutting/scopes-and-tenancy.md § Tenant resolution).
  */
 @ApplicationScoped
 class TenantHostResolver {

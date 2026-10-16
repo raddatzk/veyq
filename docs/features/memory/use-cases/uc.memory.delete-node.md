@@ -119,24 +119,10 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
   an opaque id — the same class of operational metadata the media trash already discloses. No name, no key, no
   content.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Delete a memory or a chapter and it goes away right away — out of your space, and out of any share link
-you handed out. But it is not gone for good yet: it waits in your space's trash, and you can put it back with
-everything still in it — every photo, every chapter, the cover, exactly as it was. Only after the waiting period
-does the system erase it for good, automatically. The name is free again the moment you delete, so you can
-immediately make a new memory with the same title. To delete several things at once, choose "Select", tick them and
-choose "Delete" — you are asked once, and one "Undo" brings all of them back. Everything stays encrypted throughout: the server only notes
-that something was deleted and later removes scrambled files it cannot read.
-
-**DE —** Löschst du eine Erinnerung oder ein Kapitel, ist es sofort weg — aus deinem Space und aus jedem
-Share-Link, den du weitergegeben hast. Endgültig ist es aber noch nicht: es wartet im Papierkorb deines Space, und
-du kannst es vollständig zurückholen — jedes Foto, jedes Kapitel, das Titelbild, genau wie vorher. Erst nach
-Ablauf der Frist löscht das System es automatisch für immer. Der Name ist sofort wieder frei, du kannst also
-gleich eine neue Erinnerung mit demselben Titel anlegen. Um mehreres auf einmal zu löschen, wähle „Auswählen“, hake es
-an und wähle „Löschen“ — du wirst einmal gefragt, und ein „Rückgängig“ holt alles zurück. Alles bleibt dabei
-verschlüsselt: der Server merkt sich
-nur, dass etwas gelöscht wurde, und entfernt später verschlüsselte Dateien, die er nicht lesen kann.
+Deleting a Memory, chapter or folder takes it out of your space and its share links at once, yet you can restore it
+complete until the waiting period ends.
 
 ## Related
 

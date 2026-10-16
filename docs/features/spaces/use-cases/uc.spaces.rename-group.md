@@ -90,17 +90,10 @@ sequenceDiagram
   The forward-secrecy holds as far as [ADR 0024](../../../decisions/0024-scope-key-rotation.md) § Guarantee states
   for a rotation, and honest-operator on served web — the same tier as all veyq E2EE, no rename-specific weakness.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Named a group in a hurry, or the trip's dates changed? As an owner you can rename it, and the new name
-shows up for everyone in the group. The name is sealed just like everything else — the server only ever stores
-scrambled text, never the words. And it's tidy about people who've left: someone you removed **before** the rename
-can't read the new name, only the old one they already saw.
-
-**DE —** Eine Gruppe in Eile benannt, oder der Reisezeitraum hat sich geändert? Als Owner kannst du sie umbenennen,
-und der neue Name erscheint für alle in der Gruppe. Der Name ist wie alles andere versiegelt — der Server speichert
-nur verwürfelten Text, nie die Worte. Und mit Ausgetretenen geht es sauber um: Wen du **vor** dem Umbenennen
-entfernt hast, kann den neuen Namen nicht lesen, nur den alten, den er ohnehin schon sah.
+You can rename a group for everyone in it, and the name stays readable only to its current members, never to the
+server.
 
 ## Related
 

@@ -85,13 +85,13 @@ components:
           example: { code: scope_deleting }
   schemas:
     StaleSealedMeta:
-      # The 409 body of every version-checked sealed-meta write (ADR 0077): core's node payload and any
+      # The 409 body of every revision-checked sealed-meta write (ADR 0077): core's node payload and any
       # application's own sealed blob. Shared because every such blob answers the same way, and a loser may have
       # no single-item read to re-GET: the conflict body IS the re-read.
       type: object
       description: >
-        A refused write. With `code: stale_version` the blob moved since the caller read it: nothing was written,
-        and the body carries the blob's current `wrappedMeta` (null when it has none) and its `metaVersion` — the
+        A refused write. With `code: stale_revision` the blob moved since the caller read it: nothing was written,
+        and the body carries the blob's current `wrappedMeta` (null when it has none) and its `metaRevision` — the
         base the caller re-applies its own change to before retrying (ADR 0077). Any other 409 code
         (`scope_deleting`, `slug_taken`) carries `code` alone. Operator-blind: the ciphertext is what the caller
         can already list.
@@ -102,7 +102,7 @@ components:
           type: string
           description: Stable, client-localizable error code.
           maxLength: 64
-          example: stale_version
+          example: stale_revision
         message:
           x-veyq-visibility: public
           type: [string, "null"]
@@ -111,15 +111,15 @@ components:
           example: null
         wrappedMeta:
           type: [string, "null"]
-          description: The blob's current sealed value (opaque base64), present with `stale_version`; null when it has none.
+          description: The blob's current sealed value (opaque base64), present with `stale_revision`; null when it has none.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
-        metaVersion:
+        metaRevision:
           x-veyq-visibility: structure
           type: [integer, "null"]
           format: int64
-          description: The blob's current version, present with `stale_version` — a retry states this one.
+          description: The blob's current revision, present with `stale_revision` — a retry states this one.
           example: 4
 
     TenantStatus:
@@ -134,6 +134,81 @@ components:
         its content, keys and memberships are untouched.
       enum: [PENDING, ACTIVE, SUSPENDED]
       example: ACTIVE
+
+    Capability:
+      type: object
+      description: >
+        One entry of an effective capability set (ADR 0032, ADR 0088): the pre-auth instance manifest of
+        `GET /api/setup`, and the tenant's set a member reads after sign-in (`GET /api/tenants/{tenantId}/capabilities`).
+        Both are one type and carry the entry's requirements in effect as values, `[{ id, …values }]` (ADR 0088
+        decision 8): each value property belongs to one entry (the catalog's `requirements`, whose names
+        `scripts/validate_capabilities.py` holds to these properties) and carries a value only on it and only while set
+        (null otherwise). The
+        pre-auth manifest carries the instance level's, the tenant's set the strictest of both. Additive, no `major`
+        bump.
+      required: [id]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            Stable lowercase-dotted capability id, a path in the register tree (e.g. "core.public-shares.drop-box"),
+            from the catalog contracts/platform/capabilities.json. A capability says what this server, and this tenant,
+            serves at all ("X exists here") — NOT a per-scope/role permission ("you may do X here"). A feature is offered
+            only when the capability is present AND local policy permits.
+          maxLength: 64
+          example: core.public-shares.drop-box
+        linkPassword:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            On `core.public-shares` only, and only while in effect: every link of any kind needs a password (a
+            requirement, ADR 0088 decision 8). A share dialog then asks for one; the server refuses a link without it
+            (`422 link_password_required`) and answers guests of an existing one as an unknown link.
+          example: true
+        linkMaxDays:
+          x-veyq-visibility: measure
+          type: integer
+          description: >
+            On `core.public-shares` only, and only while in effect: a link ends at most this many days after it was
+            made (a requirement). A share dialog then asks for an end date within it; the server refuses one beyond
+            (`422 link_expiry_required`) and answers guests of an existing link outside it as an unknown link.
+          minimum: 1
+          maximum: 3650
+          example: 30
+        addConsent:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            On `core.group-space` only, and only while in effect: being added to a group needs the person's yes,
+            whatever their own setting (a requirement). Members already added stay.
+          example: true
+        passwordMaxDays:
+          x-veyq-visibility: measure
+          type: integer
+          description: >
+            On `core.remember-device` only, and only while in effect: a session is not renewed more than this many
+            days after it began, so a device asks for the password again (a requirement, instance level only).
+          minimum: 1
+          maximum: 3650
+          example: 14
+        serviceUrl:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            On an external-service entry only (`memories.map`, `memories.places`, `core.breached-password`; the
+            catalog's `source`), and only while it is active: the address the Server Owner configured, which the
+            browser calls directly (ADR 0088 decision 7). The tiles' URL is a `{z}/{x}/{y}` template, the geocoder's a
+            Nominatim-compatible base, the breach check's the range API's prefix. The served CSP names its origin.
+          maxLength: 512
+          example: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+        serviceAttribution:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            On `memories.map` only, while active: the tile provider's attribution, shown on every map.
+          maxLength: 256
+          example: © OpenStreetMap contributors
 
     ErrorResponse:
       type: object
@@ -154,11 +229,11 @@ components:
 
     LocalizedMarkdown:
       # Shared by the tenants spec (member terms, cr-0114) and the sharing spec (the accountless share terms
-      # gate, cr-anonymous-accept-gate). Single-sourced here (ADR 0038) so the operator-terms shape cannot drift
+      # gate, cr-anonymous-accept-gate). Single-sourced here (ADR 0038) so the terms shape cannot drift
       # between the two acceptance tiers.
       type: object
       description: >
-        Per-locale terms markdown (the operator's public policy). Each locale is optional; an absent/blank
+        Per-locale terms markdown (the space owner's public policy). Each locale is optional; an absent/blank
         locale falls back to the other at display time (no empty terms shown). Trimmed + newline-normalized
         server-side before comparison.
       properties:

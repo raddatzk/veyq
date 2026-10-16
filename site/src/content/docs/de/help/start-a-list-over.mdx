@@ -1,0 +1,37 @@
+---
+title: "Liste neu beginnen"
+sources:
+  - docs/features/account/enablers/en.account.device-register.md
+  - docs/features/account/enablers/en.account.identity-pinning.md
+  - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
+---
+
+Dein Gerät führt für dein Konto zwei Listen: **deine vertrauten Schlüssel** und **deine Gerätenamen**. Beide liegen
+verschlossen auf dem Server, und dein Gerät prüft jede Fassung, die es zurückbekommt. Liefert der Server eine ältere
+Fassung, als dein Gerät schon gesehen hat, oder eine, die sich nicht öffnen lässt, lehnt dein Gerät sie ab. Dann siehst
+du eine Warnung, zum Beispiel, dass Gerätenamen nicht verfügbar sind, mit dem Link **Diese Liste neu beginnen**.
+Solange dein Gerät die Liste deiner vertrauten Schlüssel ablehnt, teilt es nichts mit Schlüsseln, die sich nicht
+prüfen lassen, bis die Liste wieder da ist.
+
+## Erst einmal warten
+
+Oft kommt die Liste von selbst zurück. Beginne sie nur neu, wenn sie das nicht tut. Der Server kann eine Liste nicht für
+dich neu beginnen, er könnte sie aber zurückhalten, bis du es tust; lass dich von einer Warnung also nicht drängen.
+
+## Sie neu beginnen
+
+1. Öffne **Einstellungen → Liste neu beginnen**. Das steht nur dort, solange dieses Gerät eine Liste ablehnt.
+2. Wähle **Neu beginnen…** neben der Liste.
+3. Lies, was es kostet, setze den Haken bei **Ich verstehe, was das Neubeginnen kostet.** und wähle **Neu beginnen**.
+
+Was das Neubeginnen kostet:
+
+- **Deine vertrauten Schlüssel:** Alle deine Kontakte sind für dich wieder neu. Jede verglichene Sicherheitsnummer ist
+  vergessen, und ein Schlüssel, der sich inzwischen geändert hat, wird als neu angenommen, ohne die Warnung, die es dir
+  gesagt hätte. Vergleiche die wichtigen erneut: [Eine Person verifizieren](/veyq/de/account/verify-a-person/).
+- **Deine Gerätenamen:** Jedes Gerät bleibt unbenannt, bis es sich das nächste Mal anmeldet, und den gespeicherten
+  Schlüssel eines anderen Geräts zu entfernen, wird bis dahin nicht angeboten. Jede Sitzung wird weiter angezeigt und
+  lässt sich weiter beenden.
+
+Diese Listen sind der Grund, warum ein Server nicht heimlich zurückdrehen kann, was dein Gerät gelernt hat; eine alte
+Fassung abzulehnen ist dein Gerät, das seine Arbeit tut: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

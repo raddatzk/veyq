@@ -63,7 +63,7 @@ class NodeCoverMemoriesSliceTest {
         val started = CoverKit.start(userId, scopeId, memory)
         CoverKit.set(userId, scopeId, memory, started.uploadId, null, "dXBsb2Fk", 0).statusCode(204)
 
-        CoverKit.remove(userId, scopeId, memory, started.blobId, wrappedMeta = "cGhvdG8=", metaVersion = 1).statusCode(204)
+        CoverKit.remove(userId, scopeId, memory, started.blobId, wrappedMeta = "cGhvdG8=", metaRevision = 1).statusCode(204)
         assertNull(CoverKit.slot(memory))
         assertEquals("cGhvdG8=" to 2L, CoverKit.meta(memory))
         assertEquals("upload_not_found", CoverKit.downloadError(userId, scopeId, started.blobId))
@@ -105,10 +105,10 @@ class NodeCoverMemoriesSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val started = CoverKit.start(userId, scopeId, memory)
         given().contentType(ContentType.JSON)
-            .body("""{"uploadId":"${started.uploadId}","wrappedMeta":"bQ==","metaVersion":0}""")
+            .body("""{"uploadId":"${started.uploadId}","wrappedMeta":"bQ==","metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$memory/cover").then().statusCode(401)
         given().contentType(ContentType.JSON)
-            .body("""{"blobId":"${started.blobId}","wrappedMeta":"bQ==","metaVersion":0}""")
+            .body("""{"blobId":"${started.blobId}","wrappedMeta":"bQ==","metaRevision":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover/removal").then().statusCode(401)
         assertNull(CoverKit.slot(memory))
     }

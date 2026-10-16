@@ -1,13 +1,13 @@
 useCase: uc.admin.tenant-terms
 feature: admin
-title: Tenant terms — the operator sets their server's legal terms (versioned)
-# cr-0114 (ADR 0035) delivers the operator half end-to-end: contracts (getTenantTerms/updateTenantTerms on the
-# tenants spec) → backend (terms_markdown_by_locale + terms_version on veyq_tenant, an owner-gated update that
+title: Tenant terms — the space owner sets the space's legal terms (a new revision on each change)
+# cr-0114 (ADR 0035) delivers the owner half end-to-end: contracts (getTenantTerms/updateTenantTerms on the
+# tenants spec) → backend (terms_markdown_by_locale + terms_revision on veyq_tenant, an owner-gated update that
 # normalizes + bumps-on-change, TenantTermsHandler/TenantsResource) → web (the owner terms editor in the settings
 # hub `tenant` category, TenantTermsPanel, the 11-clause DE+EN template + free per-locale markdown). Terms are the
-# operator's PUBLIC operational content (served) — no E2EE. Backend slice tests run over the full HTTP stack; a
+# space's PUBLIC operational content (served) — no E2EE. Backend slice tests run over the full HTTP stack; a
 # signed ijhttp lifecycle proves it against a live instance. The
-# browser smoke passed too (owner sets terms → version 1 badge, live against the dev instance).
+# browser smoke passed too (owner sets terms → a "version 1" badge, now "Revision 1", live against the dev instance).
 #
 # cr-terms-editor-lists-the-languages-that-have-terms reshapes the web half only — no contract, no backend
 # change, because LocalizedMarkdown already carried both locales optional. The editor now lists the languages
@@ -15,24 +15,24 @@ title: Tenant terms — the operator sets their server's legal terms (versioned)
 # per-language act that asks. That distinction is only expressible over a LocaleMap, where a key's presence
 # means the language exists; the two flat de/en refs the panel used to hold could not tell '' from absent.
 acceptanceCriteria:
-  - id: operator-sets-per-locale-terms
+  - id: owner-sets-per-locale-terms
     text: The tenant owner sets terms_markdown_by_locale (per-locale markdown) on veyq_tenant, writing each language freely and optionally filling one from the starter template; served as public operational content. Editing is owner-gated (isOwner); a non-owner is refused (403 not_tenant_owner), a member sees it read-only.
     coverage:
-      backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsVersionAndIdempotentReSaveDoesNot, TenantTermsSliceTest.nonOwnerCannotUpdateTerms, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses] }
+      backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsRevisionAndIdempotentReSaveDoesNot, TenantTermsSliceTest.nonOwnerCannotUpdateTerms, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts, src/features/tenant/TenantTermsPanel.test.ts] }
   - id: editor-lists-the-languages-that-carry-terms
     text: The editor renders one row per language the terms actually carry and none for a language that has none — an absent locale is offered as something to ADD, by name, never as an empty box. A locale the server sends as null or omits is absent; a locale sent as '' is a language that exists and is still empty, and the editor says out loud that a language with no text will not survive the save (the backend drops a blank locale on normalize). An absent language is sent back as absent, not as an empty string.
     coverage:
       web: { unit: [src/features/tenant/TenantTermsPanel.test.ts, src/shared/ui/LocaleMarkdownEditor.test.ts] }
   - id: template-and-removal-ask-first
-    text: The starter template fills ONE named language and asks before it writes — naming the replacement when that language already holds text, and leaving the text untouched when the question is declined. Removing a language asks too, and the question names both consequences (the language's terms are gone, and the version bump re-gates every member).
+    text: The starter template fills ONE named language and asks before it writes — naming the replacement when that language already holds text, and leaving the text untouched when the question is declined. Removing a language asks too, and the question names both consequences (the language's terms are gone, and the revision bump re-gates every member).
     coverage:
       web: { unit: [src/features/tenant/TenantTermsPanel.test.ts] }
-  - id: version-bumped-on-change
-    text: Saving normalizes the markdown and bumps terms_version only when it actually changed (an idempotent re-save does not bump — the pre-E2EE logic). The higher version re-gates every member.
+  - id: revision-bumped-on-change
+    text: Saving normalizes the markdown and bumps terms_revision only when it actually changed (an idempotent re-save does not bump — the pre-E2EE logic). The higher revision re-gates every member.
     coverage:
-      backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsVersionAndIdempotentReSaveDoesNot] }
+      backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsRevisionAndIdempotentReSaveDoesNot] }
   - id: operator-blind
-    text: The terms text is the operator's public policy (served, no content key); terms_version is a plain int. No user content, no E2EE key — the operator-blind boundary is unaffected (ADR 0035).
+    text: The terms text is the space's public policy (served, no content key); terms_revision is a plain int. No user content, no E2EE key — the operator-blind boundary is unaffected (ADR 0035).
     coverage:
-      backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsVersionAndIdempotentReSaveDoesNot] }
+      backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsRevisionAndIdempotentReSaveDoesNot] }

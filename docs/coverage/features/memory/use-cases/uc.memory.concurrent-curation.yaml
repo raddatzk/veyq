@@ -1,34 +1,34 @@
 useCase: uc.memory.concurrent-curation
 feature: memory
-title: Two members curate one Memory at once — every sealed meta write carries the version it read
+title: Two members curate one Memory at once — every sealed meta write carries the revision it read
 # Built by cr-meta-writes-carry-the-version-they-read (inbox #271, #273, #274), ADR 0077. Each backend criterion
 # was red first against the tree before the compare-and-set (the stale write answered 204/200 and replaced the
 # blob); each web criterion was red against the loop with no retry, and the #273/#274 ones against the untouched
 # client (a write over an unopenable blob, a toggle before load).
 acceptanceCriteria:
   - id: node-meta-compare-and-set
-    text: An updateNode carrying wrappedMeta must carry the metaVersion it was built from (else 400). The server compare-and-sets it and stores metaVersion + 1, or writes nothing — a rename in the same request included — and answers 409 stale_version with the current blob and version. A rename alone needs no version and leaves it unmoved.
+    text: An updateNode carrying wrappedMeta must carry the metaRevision it was built from (else 400). The server compare-and-sets it and stores metaRevision + 1, or writes nothing — a rename in the same request included — and answers 409 stale_revision with the current blob and revision. A rename alone needs no revision and leaves it unmoved.
     coverage:
       backend:
         integration:
           - NodesSliceTest.staleMetaWriteIs409WithTheCurrentBlobAndWritesNothing
-          - NodesSliceTest.metaWithoutVersionIs400AndARenameLeavesTheVersionUnmoved
+          - NodesSliceTest.metaWithoutRevisionIs400AndARenameLeavesTheRevisionUnmoved
           - NodesSliceTest.staleMetaWriteThatAlsoRenamesLeavesTheNameUnchanged
       web:
         unit:
           - src/features/memory/memoryDate.test.ts
   - id: media-meta-compare-and-set
-    text: updateMediaMeta carries a required metaVersion and is compare-and-set the same way; the node's item revision moves on the success and not on the 409.
+    text: updateMediaMeta carries a required metaRevision and is compare-and-set the same way; the node's item revision moves on the success and not on the 409.
     coverage:
       backend:
         integration:
           - MediaSliceTest.staleMediaMetaWriteIs409AndMovesNoRevision
-          - MediaSliceTest.mediaMetaWithoutVersionIs400
+          - MediaSliceTest.mediaMetaWithoutRevisionIs400
       web:
         unit:
           - src/features/memory/media.test.ts
   - id: loser-reapplies-only-its-own-change
-    text: A writer that meets 409 stale_version re-runs its own change on the conflict body's blob and retries (at most five times), so a peer's field written meanwhile survives — for the date, place and cover editors and for the media backfills.
+    text: A writer that meets 409 stale_revision re-runs its own change on the conflict body's blob and retries (at most five times), so a peer's field written meanwhile survives — for the date, place and cover editors and for the media backfills.
     coverage:
       web:
         unit:

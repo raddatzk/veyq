@@ -153,39 +153,10 @@ flowchart TB
   — the wrap escalation, a password reset's wrap sweep — reaches it exactly as it reaches any remembered
   device, and lands harder, which its copy says.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can let a new phone or laptop in without digging out your Emergency Kit: one device you are
-already signed in on hands the other everything it needs. There are two ways round, and you pick whichever
-suits the device in your hand. From the device you are signed in on, choose **"add a device"** — it shows a
-code, your new device scans it, both screens then show a short number, and you check they match before sliding
-to confirm. Or, standing at the new device with nothing but the app open, choose **"sign in with a QR code"** —
-it shows a code, you scan it with your phone, and your phone then gives you a short code to type into the new
-device. That last step feels like an extra hoop and it is the one that matters: it is how your phone can tell
-that the thing it just scanned is really the device in front of you, and not a code someone sent you. Never
-type a code someone gave you over the phone or in a message — nobody legitimate will ever ask you for one. If
-the code is typed wrong, that attempt is over: your phone says so, and you simply start the whole thing again on
-the new device. Two honest details. Adding a device gives it **everything**, permanently: it can read every memory you have, and
-signing it out later stops it reaching the server but does not take the key back — so only ever add a device
-you are holding. And a device added this way has no password saved on it, so if it ever forgets its key it
-will ask you for your password and your Emergency Kit — or you add it again.
-
-**DE —** Du kannst ein neues Handy oder einen neuen Laptop hereinlassen, ohne das Notfall-Kit herauszusuchen:
-ein Gerät, an dem du schon angemeldet bist, gibt dem anderen alles Nötige. Es gibt zwei Wege, und du nimmst
-den, der zum Gerät in deiner Hand passt. Am angemeldeten Gerät wählst du **„Gerät hinzufügen"** — es zeigt
-einen Code, dein neues Gerät scannt ihn, danach zeigen beide Bildschirme eine kurze Zahl, und du prüfst, dass
-sie übereinstimmt, bevor du zur Bestätigung schiebst. Oder du stehst am neuen Gerät und hast nur die App offen:
-dann wählst du dort **„Über QR-Code anmelden"** — es zeigt einen Code, du scannst ihn mit deinem Handy, und
-dein Handy nennt dir dann eine kurze Zahl, die du am neuen Gerät eintippst. Dieser letzte Schritt wirkt wie
-eine Hürde zu viel und ist genau der wichtige: nur so kann dein Handy erkennen, dass das gerade Gescannte
-wirklich das Gerät vor dir ist und nicht ein Code, den dir jemand geschickt hat. Tippe deshalb nie eine Zahl
-ein, die dir jemand am Telefon oder in einer Nachricht durchgibt — seriös fragt danach niemand. Wird die Zahl
-falsch eingetippt, ist dieser Versuch vorbei: dein Handy sagt es dir, und du fängst am neuen Gerät einfach neu
-an. Zwei ehrliche Hinweise: Ein hinzugefügtes Gerät bekommt **alles**, dauerhaft — es kann jede deiner Erinnerungen lesen, und
-späteres Abmelden hindert es nur daran, den Server zu erreichen, den Schlüssel nimmt es ihm nicht zurück. Füge
-also nur Geräte hinzu, die du in der Hand hältst. Und ein so hinzugefügtes Gerät hat kein Passwort gespeichert:
-Sollte es seinen Schlüssel je verlieren, fragt es dich nach deinem Passwort und deinem Notfall-Kit — oder du
-fügst es erneut hinzu.
+You can let a new phone or laptop in from a device you are already signed in on, without digging out your Emergency
+Kit.
 
 ## Related
 
@@ -207,3 +178,4 @@ fügst es erneut hinzu.
   [unlock](uc.account.unlock.md) (the Secret-Key path this exists to avoid needing)
 - End-user view (docs site): [Adding another device](../../../../site/src/content/docs/account/adding-another-device.mdx)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
+- End-user view (docs site): [Lost Emergency Kit](../../../../site/src/content/docs/help/lost-emergency-kit.mdx)

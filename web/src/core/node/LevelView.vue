@@ -44,10 +44,10 @@
 // create here, offered as the import (ADR 0082 decision 7); there is no import entry of its own in the "New" menu.
 //
 // **Who looks** (inbox #401): the host hands the level its `access` and its `tree` (`core/access.ts`), and the level hands both
-// on to every factory; what the level's own controls offer is core's `folderCapabilities` for the folder on screen - no write
+// on to every factory; what the level's own controls offer is core's `folderRights` for the folder on screen - no write
 // during a pending deletion, none in a guest's identity folder, a share only of a folder. The share guest's folder page renders
 // this very level (`core/sharing/ShareTreePage.vue`): every row is a member's and a guest's alike, the guest's functions removed
-// by the capability functions and the sources of the applications' data.
+// by the rights functions and the sources of the applications' data.
 //
 // In a guest's identity folder (a drop box's, inbox #385) a tab with nothing to show is left out instead of saying "none yet" -
 // nobody can add anything there, so an empty tab only says that this kind exists.
@@ -56,8 +56,8 @@
 // selection mode (`selection.ts`): a labelled checkbox on every row, and a bar with All / None, the count (announced) and the
 // selection's **Move to…**, **Copy to…** (core's, a member's: uc.platform.copy-node) and **Delete**. The selection is the LEVEL's: switching tabs keeps it ("All" adds what the tab on
 // screen shows, "None" takes that away, the count says how many of the selected the tab hides), leaving the mode or the
-// folder clears it, and a node no longer here drops out. What each selected node allows is its application's capability
-// answer (`LevelRow.selection`; a folder's is core's `folderCapabilities`): an action is shown where some node of the level
+// folder clears it, and a node no longer here drops out. What each selected node allows is its application's rights
+// answer (`LevelRow.selection`; a folder's is core's `folderRights`): an action is shown where some node of the level
 // allows it, enabled where some SELECTED node does, and its hint says how many of the selected it cannot reach. Select is
 // offered only where some node here allows an action (a `READ` guest has none) and never in an application's own
 // presentation (Memories' map has no rows). The level writes nothing itself: it hands the movable part to the host
@@ -76,7 +76,7 @@ import type { Level } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import { registry, type LevelActionContext, type LevelMenuItem, type NodeShareOffer } from '../applications/registry'
 import { createLevelActions } from './levelActions'
-import { folderCapabilities, targetOf, type Access, type TreeSource } from '../access'
+import { folderRights, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
 import { setLevelTab, useLevelTab } from '../../shared/state/useLevelTab'
 import { compareByCreation, displayNamesOf } from './location'
@@ -150,11 +150,11 @@ const { viewMode } = useViewMode()
 const { levelTab } = useLevelTab()
 
 const inIdentityFolder = computed(() => props.tree.inIdentityFolder(props.folder?.id ?? null))
-const caps = computed(() => folderCapabilities(props.access, targetOf(props.tree, props.folder)))
+const rights = computed(() => folderRights(props.access, targetOf(props.tree, props.folder)))
 const hideEmptyTabs = computed(() => inIdentityFolder.value)
 
 // --- the "New" menu (inbox #406) -----------------------------------------------------------------------------------------
-// Core's folder entry plus every entry the registry derives from the kinds' descriptors, each shown only where ITS capability
+// Core's folder entry plus every entry the registry derives from the kinds' descriptors, each shown only where ITS rights
 // function says yes (member and guest alike; a READ guest gets none, so no menu button). An application action (Depot's
 // upload) runs the handler its row source registered (`levelActions.ts`) - registered for the level's whole life, whichever
 // tab is shown; an entry whose handler says it is not ready (keys still locked) is disabled, never a click that does nothing.
@@ -167,7 +167,7 @@ const menuCtx = computed<LevelActionContext>(() => ({
   folder: props.folder,
   epochs: props.access.mode === 'member' ? props.access.epochs : null,
 }))
-const menuEntries = computed(() => [...(caps.value.createFolder ? [FOLDER_ENTRY] : []), ...registryMenu.filter((e) => e.allowed(menuCtx.value))])
+const menuEntries = computed(() => [...(rights.value.createFolder ? [FOLDER_ENTRY] : []), ...registryMenu.filter((e) => e.allowed(menuCtx.value))])
 const menuItems = computed<MenuItem[]>(() =>
   menuEntries.value.map((e) => {
     const handler = e.create === undefined ? levelActions.get(e.id) : undefined
@@ -182,13 +182,13 @@ const menuItems = computed<MenuItem[]>(() =>
   }),
 )
 const newMenu = ref<InstanceType<typeof Menu> | null>(null)
-// The folder header's actions: the capability answers for the folder on screen, in the header's fixed order.
+// The folder header's actions: the rights answers for the folder on screen, in the header's fixed order.
 const folderActions = computed(() =>
   standardNodeActions(
     t,
-    { share: caps.value.share, rename: caps.value.rename, move: caps.value.move, remove: caps.value.deleteNode },
+    { share: rights.value.share, rename: rights.value.rename, move: rights.value.move, remove: rights.value.deleteNode },
     {
-      share: () => emit('share', { contribute: caps.value.shareContribute }),
+      share: () => emit('share', { contribute: rights.value.shareContribute }),
       rename: () => emit('renameFolder'),
       move: () => props.folder && emit('moveNode', props.folder),
       remove: () => emit('deleteFolder'),
@@ -322,9 +322,9 @@ function rawItem(node: TreeNode): Item {
     },
   }
 }
-/** A sub-folder's part in a selection: core's matrix for THAT folder (`folderCapabilities`). */
+/** A sub-folder's part in a selection: core's matrix for THAT folder (`folderRights`). */
 function folderSelection(node: TreeNode): LevelRowSelection {
-  const c = folderCapabilities(props.access, targetOf(props.tree, node))
+  const c = folderRights(props.access, targetOf(props.tree, node))
   return { move: c.move, delete: c.deleteNode }
 }
 
@@ -404,11 +404,11 @@ watch(canSelect, (can) => {
 })
 watch(levelItems, (now) => selection.retain(now.keys()))
 
-// Core's own row actions: the favorite heart of inbox #409, gated by `favoriteCapabilities` (member only, fail closed) and
+// Core's own row actions: the favorite heart of inbox #409, gated by `favoriteRights` (member only, fail closed) and
 // merged around the application's, for EVERY kind and the folders, with no change to any application. An unsupported row
 // (a kind nobody draws) gets none.
 // The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" /
-// cover" / "Remove cover" in the row's menu, gated by `coverCapabilities` (a writer, a kind that opted in; a guest none).
+// cover" / "Remove cover" in the row's menu, gated by `coverRights` (a writer, a kind that opted in; a guest none).
 // Core's "Copy to…" (uc.platform.copy-node) sits beside the application's "Move to…" in the row's menu, for a member only.
 const coreRowActions = (item: Item): CoreRowAction[] =>
   item.unsupported
@@ -461,7 +461,7 @@ const emptyText = computed<string | null>(() => {
 // directory cannot be "uploaded as a file"). One import per pick or drop: the first download found is offered, every other file
 // or directory (another download too) is the ordinary upload. A guest - whatever the role - never imports: for a guest a
 // download is an ordinary file, and an unpacked one an ordinary folder.
-const canImport = computed(() => props.access.mode === 'member' && caps.value.createFolder)
+const canImport = computed(() => props.access.mode === 'member' && rights.value.createFolder)
 const importReady = computed(() => canImport.value && menuCtx.value.epochs !== null)
 
 async function screenUpload(files: File[], uploadAsFile: ((files: File[]) => void) | null): Promise<File[]> {
@@ -526,7 +526,7 @@ async function onDrop(e: DragEvent): Promise<void> {
     <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own. Hidden
          where nothing is written (a pending deletion: a restore is a write; a guest's folder). The view switch governs the
          whole list, so it is the level's too - a guest's as well. -->
-    <div v-if="menuEntries.length || caps.nodeTrash || showViews || canSelect" class="veyq-level-toolbar">
+    <div v-if="menuEntries.length || rights.nodeTrash || showViews || canSelect" class="veyq-level-toolbar">
       <template v-if="menuEntries.length">
         <Button
           type="button"
@@ -540,7 +540,7 @@ async function onDrop(e: DragEvent): Promise<void> {
         <Menu ref="newMenu" :model="menuItems" popup />
       </template>
       <Button
-        v-if="caps.nodeTrash"
+        v-if="rights.nodeTrash"
         type="button"
         :label="t('node.trash.open')"
         icon="pi pi-trash"

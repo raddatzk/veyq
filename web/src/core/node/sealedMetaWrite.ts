@@ -3,20 +3,20 @@
 // (corrected time, place name, media type). Core's since cr-files-application F1b (moved from Memories unchanged), so
 // every application's meta writer runs the same loop; each brings its own envelope (`open`/`seal`) and its own `send`.
 // Any member writes these blobs WHOLE, and the server cannot merge what it cannot read, so the merge is ours:
-// every write states the `metaVersion` it was built from; a `409 stale_version` hands back the current blob, and
+// every write states the `metaRevision` it was built from; a `409 stale_revision` hands back the current blob, and
 // the writer re-runs ONLY its own change on it — the identity-pin loop (`account/identityPins.ts`).
 //
 // Two rules sit underneath, and each was a live defect (inbox #271, #273):
 //  - a writer that re-sealed from its own cached copy erased what a peer wrote meanwhile (a member who merely OPENED
-//    a Memory wiped a peer's place through the auto-date self-heal) — hence the version;
+//    a Memory wiped a peer's place through the auto-date self-heal) — hence the revision;
 //  - a writer that treated a blob it could not open as empty re-sealed one field and dropped every sibling — hence
 //    `MetaUnreadableError`: only an ABSENT blob is a fresh one.
 import { HttpStatus, httpStatus } from '../../shared/httpError'
 
-/** A sealed meta blob as listed: its ciphertext (null when none) and the version it is at (ADR 0077). */
-export type SealedMetaState = { wrappedMeta: string | null; metaVersion: number }
+/** A sealed meta blob as listed: its ciphertext (null when none) and the revision it is at (ADR 0077). */
+export type SealedMetaState = { wrappedMeta: string | null; metaRevision: number }
 
-/** Bounds the re-base/retry loop on a `409 stale_version` — the identity-pin store's bound. */
+/** Bounds the re-base/retry loop on a `409 stale_revision` — the identity-pin store's bound. */
 export const MAX_META_WRITE_ATTEMPTS = 5
 
 /** A present blob the writer could not open or parse. Never rebuilt from empty — refused (ADR 0077 point 4). */
@@ -39,17 +39,17 @@ export class MetaConflictError extends Error {
 export type MetaEditContext = { retry: boolean; state: SealedMetaState }
 
 /**
- * The current state a `409 stale_version` carries (the `StaleSealedMeta` body), or null for any other failure —
+ * The current state a `409 stale_revision` carries (the `StaleSealedMeta` body), or null for any other failure —
  * a 409 with another code (`scope_deleting`, `slug_taken`) included. The body is read for exactly these fields.
  */
 export async function staleMetaOf(e: unknown): Promise<SealedMetaState | null> {
   if (httpStatus(e) !== HttpStatus.conflict) return null
   try {
     const body = (await (e as { response: Response }).response.clone().json()) as {
-      code?: unknown; wrappedMeta?: unknown; metaVersion?: unknown
+      code?: unknown; wrappedMeta?: unknown; metaRevision?: unknown
     }
-    if (body?.code !== 'stale_version' || typeof body.metaVersion !== 'number') return null
-    return { wrappedMeta: typeof body.wrappedMeta === 'string' ? body.wrappedMeta : null, metaVersion: body.metaVersion }
+    if (body?.code !== 'stale_revision' || typeof body.metaRevision !== 'number') return null
+    return { wrappedMeta: typeof body.wrappedMeta === 'string' ? body.wrappedMeta : null, metaRevision: body.metaRevision }
   } catch {
     return null
   }
@@ -61,14 +61,14 @@ export type SealedMetaOps<M> = {
   open: (wrappedMeta: string | null) => M
   /** The sealed blob to send, or null to clear it (a media tier with nothing left in it). */
   seal: (meta: M) => string | null
-  send: (wrappedMeta: string | null, metaVersion: number) => Promise<void>
+  send: (wrappedMeta: string | null, metaRevision: number) => Promise<void>
 }
 
 /** The outcome of a write: the state the server last confirmed or handed back, and whether this call wrote. */
 export type SealedMetaResult<M> = { state: SealedMetaState; meta: M; wrote: boolean }
 
 /**
- * Apply `edit` to the blob at `base` and store it, version-checked. On `409 stale_version` re-open the conflict
+ * Apply `edit` to the blob at `base` and store it, revision-checked. On `409 stale_revision` re-open the conflict
  * body's blob, re-run `edit` on it and retry — at most [MAX_META_WRITE_ATTEMPTS] times. `edit` returns null for
  * "no write" (a self-heal whose decision says so on the fresh blob, a backfill the fresh blob no longer needs) and
  * may throw [MetaConflictError] (an editor whose own field moved). The returned `state` is always the newest the
@@ -86,8 +86,8 @@ export async function writeSealedMeta<M>(
     if (next === null) return { state, meta: opened, wrote: false }
     const wrappedMeta = ops.seal(next)
     try {
-      await ops.send(wrappedMeta, state.metaVersion)
-      return { state: { wrappedMeta, metaVersion: state.metaVersion + 1 }, meta: next, wrote: true }
+      await ops.send(wrappedMeta, state.metaRevision)
+      return { state: { wrappedMeta, metaRevision: state.metaRevision + 1 }, meta: next, wrote: true }
     } catch (e) {
       const fresh = attempt + 1 < MAX_META_WRITE_ATTEMPTS ? await staleMetaOf(e) : null
       if (!fresh) throw e

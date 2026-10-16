@@ -37,7 +37,13 @@
 - **E3 — the file was trashed, moved out of the subtree, or the link revoked between start and completion:** the
   completion is refused (`upload_not_found` / `node_not_found`), nothing is attached.
 - **E4 — a trashed file** (or one under a trashed folder): not listed, its blob `404`, an upload into it `404`.
-- **E5 — the link's storage limit is reached:** refused at the exact byte; the page says the link is full.
+- **E5 — the link's storage limit is reached:** refused at the exact byte; the page says the link is full, and nothing
+  of the refused upload is kept: the file its create made is taken back and erased (`abandonShareNode`), and so are the
+  folders a refused folder upload made, once nothing below them landed or can still land. Seen in a real browser on
+  2026-10-16 (the dev instance, a `READ_WRITE` folder link at a 105 KiB per-link limit filled by a guest's file): an
+  "Upload folder…" of a tree two subfolders deep said per file that the link takes no more uploads, then took back
+  every file and folder it had made — the guest's listing, the member's tree and the database held none of them; with
+  room on the link the same upload kept every folder and file.
 - **E6 — a name a readable sibling already holds:** a file's is the replace of step 5, after the question; a folder's,
   a Memory's or a drop box's is refused before anything is sent, the sibling named by its kind. A sibling the guest
   could not see is the server's `409 slug_taken`, said in the generic words.
@@ -53,23 +59,14 @@
   between the subtree's folders through core's move dialog ([uc.memory.move-node](../../memory/use-cases/uc.memory.move-node.md)).
 - The metadata is the blob's, declared with the upload and written in the attach transaction, for a guest as for a member (docs/apps/depot.md § How a file is stored).
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Share a folder and the files in it come along. With a view link, people can download them; with a
-contributor link, they can also add files or put a newer version in place — without an account. Everything stays
-encrypted end to end: the files are decrypted only in the browser of whoever holds the link, and the person running
-the server sees neither contents nor names. Anything a guest adds counts against the space you allowed that link, and
-it stays yours when you switch the link off.
-
-**DE —** Teilst du einen Ordner, gehen die Dateien darin mit. Mit einem Ansichtslink können andere sie herunterladen,
-mit einem Mitmach-Link auch Dateien hinzufügen oder eine neuere Fassung ablegen — ohne Konto. Alles bleibt Ende-zu-Ende
-verschlüsselt: Entschlüsselt wird nur im Browser derer, die den Link haben, und wer den Server betreibt, sieht weder
-Inhalte noch Namen. Was Gäste hinzufügen, zählt gegen den Platz, den du dem Link erlaubt hast, und bleibt bei dir, wenn
-du den Link abschaltest.
+You can hand a folder's files to people without an account, letting them download or, if you allow it, add and replace
+files, all still end-to-end encrypted.
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.member-files](uc.depot.member-files.md),
   [uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md) (core's link, gate and guest

@@ -1,6 +1,7 @@
 # ADR 0083 — Memory participants are a sealed list in the Memory's metadata
 
-- Status: Accepted
+- Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the conflict is `stale_revision`
+  (was `stale_version`).
 - Date: 2026-10-13
 
 ## Context
@@ -12,7 +13,7 @@ operator must not learn), and a **share is the member view** with rights removed
 principle of 2026-10-09), which raises what a guest may see of it.
 
 A Memory already has the right home for sealed per-Memory facts: the `wrappedMeta` blob under `K_node` (purpose
-`node-meta`) that carries its date, place and cover, written with a compare-and-set on `metaVersion`
+`node-meta`) that carries its date, place and cover, written with a compare-and-set on `metaRevision`
 ([ADR 0077](0077-a-write-carries-the-version-it-read.md), [en.memory.node-meta](../features/memory/enablers/en.memory.node-meta.md)).
 
 ## Decision
@@ -27,7 +28,7 @@ it**, because the list is sealed.
 
 **2. Storage: a sealed `participants` sub-object in the Memory's `wrappedMeta`.** It holds **user ids only**, sits next
 to `date`, `location` and `cover` under `K_node` (purpose `node-meta`), and is written through the same
-compare-and-set write as the rest (`writeNodeMeta`, stating the `metaVersion` it read). **No server-visible relation**:
+compare-and-set write as the rest (`writeNodeMeta`, stating the `metaRevision` it read). **No server-visible relation**:
 no `veyq_node_participant` table. Such a table would hand the operator who was on which trip.
 
 **3. Leaving the scope does not remove a participant.** The id stays; it renders greyed as "former member" with **no
@@ -38,14 +39,14 @@ validated on read (non-strings, duplicates dropped). It is **capped at 100 ids**
 characters of base64 (about 6 KB sealed), and an id is about 40 bytes of JSON next to the date, place and cover. Unknown
 sibling fields are preserved. A write is a read-modify-write through `writeNodeMeta`; because the list is a *set* that two
 members may extend at once, it uses **its own edit function, not `editField`** (which throws `MetaConflictError` when the
-same field moved and would drop a peer's addition). On `409 stale_version` the client re-reads and **merges**: the union
+same field moved and would drop a peer's addition). On `409 stale_revision` the client re-reads and **merges**: the union
 of the stored and the editor's list, except that an id the person editing **removed** stays removed. This is the
 reversible choice about storage too: the list stays in `wrappedMeta` rather than a separate column, because the profile
 page lists Memories as level-view rows with cover, date and place and so needs the full meta anyway; moving it later is a
 client-side migration.
 
 **4. Guests do not see participants — in the interface, not cryptographically.** The header component is the same for
-a guest and a member; whether it shows the participants is a capability flag in `memoryCapabilities` (`participants`),
+a guest and a member; whether it shows the participants is a right in `memoryRights` (`participants`),
 **fail closed** like every other right there, so no share view for any role (`READ`, `READ_WRITE`, `WRITE_ONLY`, folder
 or Memory link) renders the section, its controls or a profile link. This is an exception the owner chose to the
 "share = member view" principle: rights only remove functions, but a participant list is a statement about *other

@@ -82,8 +82,8 @@ data class ScopeMemberRow(
     val userId: String,
     val username: String,
     val sealedName: String?,
-    /** The picture's version (`0` = none); the bytes never ride the directory (ADR 0084). */
-    val avatarVersion: Int,
+    /** The picture's revision (`0` = none); the bytes never ride the directory (ADR 0084). */
+    val avatarRevision: Int,
     val email: String?,
     val role: String,
     val identityPublicKey: String,
@@ -452,6 +452,8 @@ class ScopesStore(
             if (id in plan.dropped) m.admit(null) else plan.retags[id]?.let { m.admit(Admission(id, plan.newEpoch, it)) }
             m.persist()
         }
+        // A re-tagged admission is a new one to judge: the `admission_unverified` declines its old tag earned go with it.
+        tasks.liftAdmissionDeclines(rows.filter { it.admissionId != null && it.admissionId in plan.retags }.map { it.id })
         tenants.carryInvites(invites, plan.newEpoch, plan.retags, plan.dropped)
         tasks.markRotated(scopeId, granterId, plan.newEpoch)
         return decision
@@ -629,7 +631,7 @@ class ScopesStore(
         val u = VeyqUser.findById(userId) ?: return null
         val p = profiles.byUserInTenant(tenantId)[userId]
         return ScopeMemberRow(
-            userId, p?.username ?: "", p?.sealedName, p?.avatarVersion ?: 0, u.email, m.role, u.identityPublicKey, m.wrappedGrant != null,
+            userId, p?.username ?: "", p?.sealedName, p?.avatarRevision ?: 0, u.email, m.role, u.identityPublicKey, m.wrappedGrant != null,
             m.pendingConsent, m.admission(),
         )
     }
@@ -648,7 +650,7 @@ class ScopesStore(
             VeyqUser.findById(m.userId)?.let { u ->
                 val p = profileByUser[m.userId]
                 ScopeMemberRow(
-                    m.userId, p?.username ?: "", p?.sealedName, p?.avatarVersion ?: 0, u.email, m.role,
+                    m.userId, p?.username ?: "", p?.sealedName, p?.avatarRevision ?: 0, u.email, m.role,
                     u.identityPublicKey, m.wrappedGrant != null, m.pendingConsent, m.admission(),
                 )
             }

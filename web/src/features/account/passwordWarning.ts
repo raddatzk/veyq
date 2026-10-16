@@ -1,5 +1,13 @@
 import { computed, ref, watch, type Ref, type WritableComputedRef } from 'vue'
 import { pwnedCount } from '../../shared/pwned'
+import { useCapabilities } from '../../shared/state/useCapabilities'
+import { CORE_BREACHED_PASSWORD } from '../platform/capabilities'
+
+/** The breach check's range API, as the server configured it (ADR 0088 decision 7), or null while the server runs no
+ *  check (`core.breached-password` not served: unconfigured or switched off). Then nothing is asked and nothing said. */
+function breachRangeUrl(): string | null {
+  return useCapabilities().capabilityValues(CORE_BREACHED_PASSWORD)?.serviceUrl ?? null
+}
 import { MIN_PASSWORD_LENGTH } from '../../shared/passwordPolicy'
 
 /**
@@ -54,11 +62,13 @@ export function useBreachCheck(password: Ref<string>): {
 
   function checkNow(): Promise<void> {
     const pw = password.value
+    const rangeUrl = breachRangeUrl()
+    if (rangeUrl === null) return Promise.resolve() // no check on this server: no request, no notice
     if (pw.length < MIN_PASSWORD_LENGTH) return Promise.resolve()
     if (pw === about) return inFlight ?? Promise.resolve()
     about = pw
     state.value = { kind: 'checking' }
-    const query = pwnedCount(pw).then((count) => {
+    const query = pwnedCount(pw, rangeUrl).then((count) => {
       // Edited while the query was in flight: the answer is about a password no longer in the field.
       if (inFlight !== query) return
       inFlight = null
@@ -78,6 +88,7 @@ export function useBreachCheck(password: Ref<string>): {
   })
 
   async function proceed(): Promise<boolean> {
+    if (breachRangeUrl() === null) return true // nothing to check against: the check stops nothing
     const checked = password.value
     await checkNow()
     // Edited while the submit's own query was in flight: what was checked is not what would be submitted.

@@ -16,20 +16,20 @@ import java.util.TreeMap
 /** The decoded per-locale terms markdown (cr-0114). Either locale may be null; both null = no terms. */
 data class TermsContent(val de: String?, val en: String?)
 
-/** A tenant's current **public** terms for an accountless reader (uc.sharing.share-accept): the version + the
- *  decoded per-locale markdown. No caller, no acceptedVersion — an accountless visitor has no account. */
-data class GuestTerms(val version: Int, val terms: TermsContent?)
+/** A tenant's current **public** terms for an accountless reader (uc.sharing.share-accept): the revision + the
+ *  decoded per-locale markdown. No caller, no acceptedRevision — an accountless visitor has no account. */
+data class GuestTerms(val revision: Int, val terms: TermsContent?)
 
-/** Result of reading a tenant's terms + the caller's accepted version (cr-0114). */
+/** Result of reading a tenant's terms + the caller's accepted revision (cr-0114). */
 sealed interface TermsReadOutcome {
-    data class Ok(val version: Int, val acceptedVersion: Int, val terms: TermsContent?) : TermsReadOutcome
+    data class Ok(val revision: Int, val acceptedRevision: Int, val terms: TermsContent?) : TermsReadOutcome
     data object Suspended : TermsReadOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : TermsReadOutcome, HttpFailure by Failures.tenantNotFound // no such tenant, or the caller is not a member (indistinguishable)
 }
 
 /** Result of an owner setting/replacing a tenant's terms (cr-0114). */
 sealed interface TermsUpdateOutcome {
-    data class Ok(val version: Int, val acceptedVersion: Int, val terms: TermsContent?) : TermsUpdateOutcome
+    data class Ok(val revision: Int, val acceptedRevision: Int, val terms: TermsContent?) : TermsUpdateOutcome
     data object Suspended : TermsUpdateOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : TermsUpdateOutcome, HttpFailure by Failures.tenantNotFound // no such tenant, or the caller is not a member (indistinguishable)
     data object NotOwner : TermsUpdateOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
@@ -37,18 +37,18 @@ sealed interface TermsUpdateOutcome {
 
 /** Result of a member accepting the tenant's current terms (cr-0114). */
 sealed interface TermsAcceptOutcome {
-    data class Ok(val version: Int, val acceptedVersion: Int, val terms: TermsContent?) : TermsAcceptOutcome
+    data class Ok(val revision: Int, val acceptedRevision: Int, val terms: TermsContent?) : TermsAcceptOutcome
     data object Suspended : TermsAcceptOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : TermsAcceptOutcome, HttpFailure by Failures.tenantNotFound
-    data object VersionChanged : TermsAcceptOutcome, HttpFailure by httpFailure("terms_version_changed", FailureStatus.CONFLICT) // the operator bumped the terms since they were shown
+    data object RevisionChanged : TermsAcceptOutcome, HttpFailure by httpFailure("terms_revision_changed", FailureStatus.CONFLICT) // the space owner bumped the terms since they were shown
 }
 
 /**
- * Server terms of service (uc.admin.tenant-terms + uc.account.accept-terms, ADR 0035). The tenant **owner**
- * sets per-locale (DE+EN) markdown terms; the server normalizes them and bumps `terms_version` only on a real
- * change (an idempotent re-save doesn't). A **member** reads the current terms + their accepted version and
- * accepts the current version to clear the gate; a later bump re-stales them. Operator-blind: the terms are
- * the operator's public policy and acceptance is coarse operational metadata — no content key is involved, so
+ * Space terms of service (uc.admin.tenant-terms + uc.account.accept-terms, ADR 0035). The tenant **owner**
+ * sets per-locale (DE+EN) markdown terms; the server normalizes them and bumps `terms_revision` only on a real
+ * change (an idempotent re-save doesn't). A **member** reads the current terms + their accepted revision and
+ * accepts the current revision to clear the gate; a later bump re-stales them. Operator-blind: the terms are
+ * the space owner's public policy and acceptance is coarse operational metadata — no content key is involved, so
  * this handler does no crypto. The owner/membership gates are code checks here (ADR 0008), like the member
  * invite handler; the Resource is a thin adapter.
  */
@@ -59,32 +59,32 @@ class TenantTermsHandler(
     private val access: ScopeAccess,
 ) {
 
-    /** Read the tenant's current terms + the caller's accepted version — gated to **members** (else NotFound). */
+    /** Read the tenant's current terms + the caller's accepted revision — gated to **members** (else NotFound). */
     fun read(callerId: String, tenantId: String): TermsReadOutcome {
         access.check(callerId, tenantId, READ)
             .refusal(TermsReadOutcome.NotFound, TermsReadOutcome.Suspended)?.let { return it }
         val row = store.termsFor(tenantId, callerId) ?: return TermsReadOutcome.NotFound
-        return TermsReadOutcome.Ok(row.version, row.acceptedVersion, decode(row.markdownByLocale))
+        return TermsReadOutcome.Ok(row.revision, row.acceptedRevision, decode(row.markdownByLocale))
     }
 
     /**
-     * The tenant's current **public** terms for an **accountless** reader (uc.sharing.share-accept) — version +
+     * The tenant's current **public** terms for an **accountless** reader (uc.sharing.share-accept) — revision +
      * decoded per-locale markdown, with **no** membership check, **no** userId, and **no** acceptance recorded.
      * The accountless half of the two-tier gate is client-side (ADR 0035 §3): the server keeps no record of an
      * accountless visitor, so this read is deliberately caller-free (contrast [read], member-gated). Null only
-     * when the tenant id itself does not resolve; a tenant with no published terms reads back version 0 / null.
+     * when the tenant id itself does not resolve; a tenant with no published terms reads back revision 0 / null.
      */
     fun guestTerms(tenantId: String): GuestTerms? {
         val row = store.guestTermsFor(tenantId) ?: return null
-        return GuestTerms(row.version, decode(row.markdownByLocale))
+        return GuestTerms(row.revision, decode(row.markdownByLocale))
     }
 
     /**
      * The **owner** sets/replaces the terms. Membership-gated first, like the sibling [read]/[accept] (a
      * non-member gets the same 404 as a bogus tenant id, ADR 0042), then owner-gated.
      * Normalizes both locales; an **all-blank** update is a no-op (v1 has
-     * no "remove terms" — you can't publish an empty gated version). Otherwise stores the canonical serialized map
-     * and bumps `terms_version` only if it actually changed.
+     * no "remove terms" — you can't publish an empty gated revision). Otherwise stores the canonical serialized map
+     * and bumps `terms_revision` only if it actually changed.
      */
     @Transactional
     fun update(callerId: String, tenantId: String, de: String?, en: String?): TermsUpdateOutcome {
@@ -95,22 +95,22 @@ class TenantTermsHandler(
         val normalized = normalize(de, en)
         if (normalized.isNotEmpty()) store.updateTerms(tenantId, mapper.writeValueAsString(normalized))
         val row = store.termsFor(tenantId, callerId)!!
-        return TermsUpdateOutcome.Ok(row.version, row.acceptedVersion, decode(row.markdownByLocale))
+        return TermsUpdateOutcome.Ok(row.revision, row.acceptedRevision, decode(row.markdownByLocale))
     }
 
     /**
-     * The **member** accepts the version they were shown — recorded only if it still equals the current version,
-     * else VersionChanged (the operator bumped the terms meanwhile → the client re-reads + re-presents).
+     * The **member** accepts the revision they were shown — recorded only if it still equals the current revision,
+     * else RevisionChanged (the space owner bumped the terms meanwhile → the client re-reads + re-presents).
      */
     @Transactional
-    fun accept(callerId: String, tenantId: String, version: Int): TermsAcceptOutcome {
+    fun accept(callerId: String, tenantId: String, revision: Int): TermsAcceptOutcome {
         access.check(callerId, tenantId, WRITE)
             .refusal(TermsAcceptOutcome.NotFound, TermsAcceptOutcome.Suspended)?.let { return it }
         val row = store.termsFor(tenantId, callerId) ?: return TermsAcceptOutcome.NotFound
-        if (version != row.version) return TermsAcceptOutcome.VersionChanged
-        store.recordAcceptance(callerId, tenantId, version)
+        if (revision != row.revision) return TermsAcceptOutcome.RevisionChanged
+        store.recordAcceptance(callerId, tenantId, revision)
         val updated = store.termsFor(tenantId, callerId)!!
-        return TermsAcceptOutcome.Ok(updated.version, updated.acceptedVersion, decode(updated.markdownByLocale))
+        return TermsAcceptOutcome.Ok(updated.revision, updated.acceptedRevision, decode(updated.markdownByLocale))
     }
 
     /** A canonical (sorted-key, blank-dropped, newline-normalized) locale→markdown map for stable comparison. */

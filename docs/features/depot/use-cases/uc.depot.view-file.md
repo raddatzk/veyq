@@ -77,22 +77,12 @@
   layer of plain text spans over it (no frame, no link, no script, no eval, no WebAssembly, no network but the app's origin); no `<iframe>`, `<object>` or inline
   SVG; the blob URL's type is the sniffed one; the media route sets `Content-Type` from the sniffed container.
 - **Memory is bounded per kind** (image 64 MiB, PDF 64 MiB and 1000 pages, text 1 MiB, media streamed); a larger file is never pulled whole.
-- **A share looks like the member view:** the same component and the same capability rules for every role.
+- **A share looks like the member view:** the same component and the same rights rules for every role.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** Open a picture, a text file, a video or a sound file and it is simply shown on its page — the same for you and
-for anyone you shared it with. Members of the space also see who uploaded the file's current version; people you share a
-link with do not. It is decrypted on your device while you look; nothing is saved besides the file itself.
-A PDF opens on its page too, page by page, and you can select and copy its text; a password-protected PDF asks for its
-password on the page. A format your browser cannot show comes with a clear note and the download instead.
-
-**DE —** Öffne ein Bild, eine Textdatei, ein Video oder eine Audiodatei, und sie wird einfach auf ihrer Seite angezeigt
-— für dich genauso wie für alle, denen du sie freigegeben hast. Mitglieder des Bereichs sehen außerdem, wer die aktuelle
-Fassung der Datei hochgeladen hat; wer nur einen Link hat, sieht das nicht. Sie wird auf deinem Gerät entschlüsselt, während du sie
-ansiehst; außer der Datei selbst wird nichts gespeichert. Auch eine PDF-Datei öffnet sich auf ihrer Seite, Seite für Seite, und ihren Text kannst du markieren und kopieren;
-eine passwortgeschützte PDF fragt direkt auf der Seite nach ihrem Passwort. Bei einem Format, das dein Browser nicht
-anzeigen kann, bekommst du stattdessen einen klaren Hinweis und den Download.
+You see what a file is — picture, text, PDF, video or sound — right in the browser without downloading it first, and
+so does anyone you share it with.
 
 ## Related
 

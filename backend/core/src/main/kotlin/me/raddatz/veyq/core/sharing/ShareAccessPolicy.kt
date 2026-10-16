@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.sharing.ShareEntity
 
 /**
@@ -20,4 +21,17 @@ object ShareAccessPolicy {
 
     /** Roles that accept anonymous contributions (identity + upload + delete-own): READ_WRITE/WRITE_ONLY. */
     fun canUpload(role: String) = role == ShareEntity.READ_WRITE || role == ShareEntity.WRITE_ONLY
+
+    /**
+     * The instance capability a link of [role] needs (ADR 0032, ADR 0088): one register leaf per role. Not a right of
+     * the role but the switch over it, read by both halves of a share switch — publishing a link (create, reactivate,
+     * reissue, a role change) and serving one ([ShareGuestGate.activeShare], ADR 0088 decision 5). READ_WRITE and
+     * WRITE_ONLY are children of [CapabilityIds.PUBLIC_SHARES], so through the registry's AND along the path they also
+     * need it; READ, and any role this build does not know, needs the parent alone.
+     */
+    fun capabilityFor(role: String): String = when (role) {
+        ShareEntity.READ_WRITE -> CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
+        ShareEntity.WRITE_ONLY -> CapabilityIds.PUBLIC_SHARES_DROP_BOX
+        else -> CapabilityIds.PUBLIC_SHARES
+    }
 }

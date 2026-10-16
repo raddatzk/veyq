@@ -233,6 +233,8 @@ A refined CR nails **decisions, not keystrokes**:
   finding made unreadable by a rename nobody pointed at it. **And a CR that narrows what is accepted greps the tests
   — web e2e included — for the input it newly refuses**: cr-guests-create-no-application-nodes refused a guest's
   Memory, and its locator (the rule's own names) missed a slice test and an e2e that created one through a helper.
+  **And it names the site pages the change touches** — a change to what a reader sees or does has published pages
+  to update in the same CR ([`changes/README.md`](../../changes/README.md) § The published docs move with the change).
 - **Name the control an input arrives through, per surface, and cite the line behind "as X does".** A refine that
   adds an input names where the user gives it: cr-download-is-the-export decided a picked directory and a drop box's
   ZIP without saying where the picker sits or reconciling the use case's E5, and both came back as owner questions.
@@ -302,10 +304,12 @@ A refined CR nails **decisions, not keystrokes**:
 - **Published** (`site/`): the Use area in plain language, **EN+DE**, for the **non-technical end user** and the
   space owner who want to know *what they can do* and *why their data is safe*; the Run area (English) for Server
   Owners; the Security area (English) for researchers.
-- **Hand-written pages that name their source.** Each use-case carries a short plain-language
-  "What this means for you / Was das für dich bedeutet" section (EN+DE), the material a Use page draws on.
-  The pages are written by hand, one per topic, and each declares the docs it speaks for, which link it back
+- **Hand-written pages that name their source.** User-facing prose lives only on the site. A use-case keeps one
+  English `## User impact` line on why it exists for the user; the Use pages are written by hand, one per topic,
+  and each declares the docs it speaks for, which link it back
   ([`../features/README.md`](../features/README.md) § use-case format).
+- **Kept current by every CR.** A change to what a reader sees or does updates its site pages in the same CR
+  ([`changes/README.md`](../../changes/README.md) § The published docs move with the change).
 
 ## What counts as verified
 
@@ -336,6 +340,8 @@ failed this rule:
 **Nothing enters the coverage model before a CI run executes it.** The claim follows the build, never the
 intention — and "the test exists" is an intention.
 
+Published for readers outside the project, stage by stage and with what has run: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
+
 ## The verification layer — a map, not a copy
 
 The pipeline above is what we *do*; this is what **checks** it. Every item has exactly one canonical home and
@@ -346,8 +352,9 @@ this section only points at it (rule 2) — assembling this picture by hand each
   guard runs the moment it lands, with nothing to register — which is why no list of them exists here or
   anywhere else. **`scripts/` is the list**; each module docstring is that guard's whole documentation, and
   what it must carry is defined once in [`../../changes/README.md`](../../changes/README.md) § trust-chain
-  guards. Run the chain locally exactly as CI does:
-  `for f in scripts/validate_*.py; do python3 "$f"; done`.
+  guards. Run the chain locally as CI does:
+  `for f in scripts/validate_*.py; do python3 "$f"; done` — with one difference, `validate_guard_gaps.py`, which
+  skips locally while no guard changed (`--force` runs it; CI never skips).
 - **Three CI runs, three triggers.** [`trust-chain.yml`](../../.github/workflows/trust-chain.yml) —
   deliberately unfiltered and buildless, the whole guard glob; a docs-only change is validated **there and
   nowhere else**, because [`ci.yml`](../../.github/workflows/ci.yml) `paths-ignore`s `docs/**`.

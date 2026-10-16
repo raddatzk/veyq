@@ -46,8 +46,8 @@ class ShareNodesSliceTest {
         val (t, link) = tree()
         place(link, t.memory, t.right).statusCode(204)
         assertEquals(t.right, parentOf(t.memory))
-        // a rename: the same parent, the next placement version
-        place(link, t.memory, t.right, placementVersion = 1).statusCode(204)
+        // a rename: the same parent, the next placement revision
+        place(link, t.memory, t.right, placementRevision = 1).statusCode(204)
         assertEquals(2L, versionOf(t.memory))
     }
 
@@ -102,5 +102,5 @@ class ShareNodesSliceTest {
     }
 
     private fun parentOf(id: String): String = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.parentId }
-    private fun versionOf(id: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.placementVersion }
+    private fun versionOf(id: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.placementRevision }
 }

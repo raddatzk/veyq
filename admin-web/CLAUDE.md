@@ -22,7 +22,8 @@ The Server-Owner administration surface, extracted from `web/` by
 The line that actually holds:
 
 - **Here:** what only the **Server Owner** does — tenant CRUD (create/list/resend/reassign/revoke/
-  change-domain/suspend/reactivate), each tenant's storage quota (ADR 0073 §1), release info, first-run setup.
+  change-domain/suspend/reactivate), each tenant's storage quota (ADR 0073 §1), release info, the config-secret
+  state, the object store and its check (ADR 0089), the capability switches (ADR 0088), first-run setup.
 - **In `web/`:** what an **ordinary or anonymous user** does — accepting a tenant invite, accepting terms —
   *and* what a **tenant OWNER** does for their own tenant: terms authoring, per-tenant mail settings, and the
   per-link storage limit (which the owner distributes below the quota, and reads the quota beside).
@@ -49,12 +50,13 @@ the CLI signs in through the app's own `login()` and that reaches `app/session.t
 1.5 MB of dead weight traded for there being exactly one sign-in path, which is the trade ADR 0065 wants.
 
 ## Run it locally
-IntelliJ **`Run Admin`** (`.run/Run Admin.run.xml`), or `npm run dev` here: Vite on `VITE_ADMIN_PORT` (5174)
-with `/api` proxied to `VEYQ_API_TARGET` (`http://127.0.0.1:8090`, the backend's **admin listener** — its public
-port 404s every Server-Owner operation) — the same single-origin shape nginx gives the container, so the refresh
-cookie behaves identically either way. **On a fresh instance this is the surface you open first**: first-run
-setup lives here, so the app at `veyq.localhost` has no Server Owner to log in as yet (ADR 0065). `Bootstrap Admin (generate OpenAPI)` regenerates this package's untracked client after a
-contracts change.
+`./gradlew admin:run` from the repo root (the launcher, [`infra/README.md`](../infra/README.md)), or `npm run dev`
+here: Vite on `VITE_ADMIN_PORT` (5174) with `/api` proxied to `VEYQ_API_TARGET` (`http://127.0.0.1:8090`, the
+backend's **admin listener** — its public port 404s every Server-Owner operation) — the same single-origin shape
+nginx gives the container, so the refresh cookie behaves identically either way. **On a fresh instance this is the
+surface you open first**: first-run setup lives here, so the app at `veyq.localhost` has no Server Owner to log in
+as yet (ADR 0065). `./gradlew admin:bootstrap` (`npm run generate:api`) regenerates this package's untracked client
+after a contracts change.
 
 ## Prove your work
 - `npm run check` (lint + typecheck + test + build + build:cli). `npm ci` runs from the **repo root** (npm

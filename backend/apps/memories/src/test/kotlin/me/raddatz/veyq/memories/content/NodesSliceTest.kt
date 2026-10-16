@@ -166,7 +166,7 @@ class NodesSliceTest {
 
         // a partial update that SETS wrappedMeta replaces it
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"bWV0YS12Mg==","metaVersion":0}""")
+            .body("""{"wrappedMeta":"bWV0YS12Mg==","metaRevision":0}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory")
             .then().statusCode(204)
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
@@ -175,7 +175,7 @@ class NodesSliceTest {
     }
 
     /**
-     * B1 (ADR 0077, uc.memory.concurrent-curation): a meta write states the version it was built from, and a stale
+     * B1 (ADR 0077, uc.memory.concurrent-curation): a meta write states the revision it was built from, and a stale
      * one is refused with the current blob. Two members write from the same read: the first lands at 1, the second
      * — still stating 0 — must not replace the first one's blob. Before the compare-and-set it answered 204 and
      * replaced it. The control at the end is what keeps a server that refuses everything from passing.
@@ -184,31 +184,31 @@ class NodesSliceTest {
     fun staleMetaWriteIs409WithTheCurrentBlobAndWritesNothing() {
         val (userId, scopeId) = seedMemberScope()
         val memory = createMemory(userId, scopeId, meta = "djA=")
-        metaVersionOf(userId, scopeId, memory, expect = 0)
+        metaRevisionOf(userId, scopeId, memory, expect = 0)
 
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaVersion":0}""").then().statusCode(204)
-        metaVersionOf(userId, scopeId, memory, expect = 1)
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaRevision":0}""").then().statusCode(204)
+        metaRevisionOf(userId, scopeId, memory, expect = 1)
 
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"Yi12MQ==","metaVersion":0}""")
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"Yi12MQ==","metaRevision":0}""")
             .then().statusCode(409)
-            .body("code", equalTo("stale_version"))
+            .body("code", equalTo("stale_revision"))
             .body("wrappedMeta", equalTo("YS12MQ=="))
-            .body("metaVersion", equalTo(1))
+            .body("metaRevision", equalTo(1))
         listed(userId, scopeId, memory).body("find { it.id == '$memory' }.wrappedMeta", equalTo("YS12MQ=="))
-        metaVersionOf(userId, scopeId, memory, expect = 1)
+        metaRevisionOf(userId, scopeId, memory, expect = 1)
 
         // control: the loser re-applies on what the 409 handed it, states 1, and lands at 2
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"Yi12Mg==","metaVersion":1}""").then().statusCode(204)
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"Yi12Mg==","metaRevision":1}""").then().statusCode(204)
         listed(userId, scopeId, memory).body("find { it.id == '$memory' }.wrappedMeta", equalTo("Yi12Mg=="))
-        metaVersionOf(userId, scopeId, memory, expect = 2)
+        metaRevisionOf(userId, scopeId, memory, expect = 2)
     }
 
     /**
-     * B2: `wrappedMeta` without its version is malformed — an old client cannot slip past the check by leaving it
-     * out. A rename alone needs no version, and does not move it: only a meta write does.
+     * B2: `wrappedMeta` without its revision is malformed — an old client cannot slip past the check by leaving it
+     * out. A rename alone needs no revision, and does not move it: only a meta write does.
      */
     @Test
-    fun metaWithoutVersionIs400AndARenameLeavesTheVersionUnmoved() {
+    fun metaWithoutRevisionIs400AndARenameLeavesTheRevisionUnmoved() {
         val (userId, scopeId) = seedMemberScope()
         val memory = createMemory(userId, scopeId, meta = "djA=")
 
@@ -217,10 +217,10 @@ class NodesSliceTest {
         listed(userId, scopeId, memory).body("find { it.id == '$memory' }.wrappedMeta", equalTo("djA="))
 
         patchNode(userId, scopeId, memory, """{"encryptedName":"bmV3","slugToken":"cmVuYW1lZA==",$REWRAP}""").then().statusCode(204)
-        metaVersionOf(userId, scopeId, memory, expect = 0)
-        // control: the same blob with its version is accepted
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaVersion":0}""").then().statusCode(204)
-        metaVersionOf(userId, scopeId, memory, expect = 1)
+        metaRevisionOf(userId, scopeId, memory, expect = 0)
+        // control: the same blob with its revision is accepted
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaRevision":0}""").then().statusCode(204)
+        metaRevisionOf(userId, scopeId, memory, expect = 1)
     }
 
     /**
@@ -231,16 +231,16 @@ class NodesSliceTest {
     fun staleMetaWriteThatAlsoRenamesLeavesTheNameUnchanged() {
         val (userId, scopeId) = seedMemberScope()
         val memory = createMemory(userId, scopeId, meta = "djA=")
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaVersion":0}""").then().statusCode(204)
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaRevision":0}""").then().statusCode(204)
 
-        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","metaVersion":0}""")
-            .then().statusCode(409).body("code", equalTo("stale_version"))
+        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","metaRevision":0}""")
+            .then().statusCode(409).body("code", equalTo("stale_revision"))
         listed(userId, scopeId, memory)
             .body("find { it.id == '$memory' }.encryptedName", equalTo("bWVt"))
             .body("find { it.id == '$memory' }.slugToken", equalTo("bWV0YS1z"))
-            .body("find { it.id == '$memory' }.placementVersion", equalTo(0))
-        // control: the same rename at the current version lands, name and meta together
-        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","metaVersion":1}""")
+            .body("find { it.id == '$memory' }.placementRevision", equalTo(0))
+        // control: the same rename at the current revision lands, name and meta together
+        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","metaRevision":1}""")
             .then().statusCode(204)
         listed(userId, scopeId, memory)
             .body("find { it.id == '$memory' }.encryptedName", equalTo("c3RhbGU="))
@@ -250,14 +250,14 @@ class NodesSliceTest {
     // --- helpers ---
 
     private companion object {
-        /** The rest of a placement write at the scope root, built on a new node's version (ADR 0080 Decision 3). */
-        const val REWRAP = """"wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementVersion":0"""
+        /** The rest of a placement write at the scope root, built on a new node's revision (ADR 0080 Decision 3). */
+        const val REWRAP = """"wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":0"""
     }
 
-    /** A rename of a scope-root node in place, built on placement version 0 — the store's own input. */
+    /** A rename of a scope-root node in place, built on placement revision 0 — the store's own input. */
     private fun rootRename(scopeId: String, name: String) = NodesStore.Placement(
         parentSlot = scopeId, encryptedName = name, slugToken = "cmVuYW1lLXNsdWc=", wrappedContentKey = "cmUtd3JhcA==",
-        epoch = null, expectedVersion = 0,
+        epoch = null, expectedRevision = 0,
     )
 
     private fun createMemory(userId: String, scopeId: String, meta: String): String = createNode(
@@ -273,8 +273,8 @@ class NodesSliceTest {
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200).body("find { it.id == '$nodeId' }", notNullValue())
 
-    private fun metaVersionOf(userId: String, scopeId: String, nodeId: String, expect: Int) {
-        listed(userId, scopeId, nodeId).body("find { it.id == '$nodeId' }.metaVersion", equalTo(expect))
+    private fun metaRevisionOf(userId: String, scopeId: String, nodeId: String, expect: Int) {
+        listed(userId, scopeId, nodeId).body("find { it.id == '$nodeId' }.metaRevision", equalTo(expect))
     }
 
     private fun createNode(userId: String, scopeId: String, body: String): String =

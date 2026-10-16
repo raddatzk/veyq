@@ -3,6 +3,8 @@ package me.raddatz.veyq.core.account.login
 import me.raddatz.veyq.core.auth.AccessTokenResolver
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirements
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -50,7 +52,10 @@ data class SessionFamilyView(
  * **hash matches** a stored superseded row, which cannot be forged without the token itself.
  */
 @ApplicationScoped
-class SessionService(private val accounts: AccountStore) : AccessTokenResolver {
+class SessionService(
+    private val accounts: AccountStore,
+    private val capabilities: CapabilityRegistry,
+) : AccessTokenResolver {
 
     /** Issue a fresh nameless session family for a user. */
     @Transactional
@@ -130,6 +135,7 @@ class SessionService(private val accounts: AccountStore) : AccessTokenResolver {
             .setParameter(1, hash).resultList.firstOrNull() ?: return null
         val family = SessionFamilyEntity.findById(familyId, LockModeType.PESSIMISTIC_WRITE) ?: return null
         if (family.status != SessionFamilyEntity.ACTIVE) return null
+        if (pastPasswordMaxDays(family)) return null
         // The token row is still locked, second; the family lock already queues two refreshes of this same token.
         val row = RefreshTokenEntity.find("tokenHash", hash)
             .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() ?: return null
@@ -168,6 +174,18 @@ class SessionService(private val accounts: AccountStore) : AccessTokenResolver {
         family.lastUsedAt = now
         val (access, refresh) = mint(family.id, generation, now)
         return RotatedTokens(access, refresh, family.id)
+    }
+
+    /**
+     * The `passwordMaxDays` requirement (ADR 0088 decision 8, instance level only): a family that began more than that
+     * many days ago is not renewed, so the device signs in with the password again, and a remembered device then opens
+     * as before. A family begins at a sign-in, which proves the password, or at a device linking (counted from then).
+     * Refused like any failed renewal, without revoking anything: clearing the requirement renews the family again, and
+     * the refusal writes nothing for a replayed token to tell apart.
+     */
+    private fun pastPasswordMaxDays(family: SessionFamilyEntity): Boolean {
+        val days = capabilities.requirements(null)[CapabilityRequirements.PASSWORD_MAX_DAYS] ?: return false
+        return family.createdAt.isBefore(Instant.now().minus(days.toLong(), ChronoUnit.DAYS))
     }
 
     /** The family's live refresh token — the one row per family whose status is CURRENT (see [mint]) — locked. */

@@ -5,10 +5,17 @@ sources:
   - docs/features/admin/use-cases/uc.admin.switch-capabilities.md
   - docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md
   - docs/decisions/0032-capability-discovery-version-gating.md
+  - docs/features/admin/use-cases/uc.admin.tenant-switch-capabilities.md
+  - docs/features/admin/use-cases/uc.admin.capability-requirements.md
+  - docs/features/admin/use-cases/uc.admin.configure-external-services.md
   - contracts/platform/capabilities.json
 ---
 
 import catalog from '../../../../../contracts/platform/capabilities.json';
+
+export const requirements = Object.entries(catalog.capabilities).flatMap(([id, entry]) =>
+  Object.entries(entry.requirements ?? {}).map(([name, r]) => ({ entry: id, name, ...r })),
+);
 
 export const entries = Object.entries(catalog.capabilities).map(([id, entry]) => ({
   id,
@@ -17,7 +24,8 @@ export const entries = Object.entries(catalog.capabilities).map(([id, entry]) =>
 }));
 
 A capability is a switch over what this instance offers at all: public links, groups, devices that unlock without the
-Secret Key. You decide it once, for every tenant and every member
+Secret Key. You decide it for every tenant and every member, and a tenant owner can switch some of them off further for
+their own tenant
 ([ADR 0088](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)).
 
 ## What a capability is
@@ -33,9 +41,14 @@ path, and no client works it out itself. Switching a parent off therefore switch
 its own switch while that happens: a child you switched off yourself stays off when its parent comes back on, and a
 child you left on comes back with it.
 
-**There are two levels.** You switch for the whole instance; that is built. A tenant owner is meant to switch for
-their own tenant as well, in the tenant settings of the web client, and can then only narrow what you allow, never
-widen it. That level is designed and not built (inbox #439).
+**There are two levels.** You switch for the whole instance. A tenant owner switches for their own tenant as well, in
+the tenant settings of the web client (**Settings → Capabilities**), and can only narrow what you allow, never widen it:
+an entry is on in a tenant only when it is on for you and for them, along the whole path. Which entries a tenant owner
+may switch is the catalog's `levels`, marked below and in the console. Entries the web client offers on the sign-in
+screen (remembered devices, unlocking without a password, adding a device from another one) are yours alone, because
+the sign-in screen reads your list before any tenant is known. The list before sign-in (`GET /api/setup`) is your level;
+after sign-in each member's client reads their tenant's (`GET /api/tenants/{tenantId}/capabilities`), and the gates
+refuse per tenant.
 
 **Switching off never deletes stored data.** What a switch does to what already exists is
 [below](#what-acts-at-once-and-what-only-on-new-data).
@@ -69,6 +82,72 @@ A switch is stored in the database, so a database backup carries it. It acts on 
 the application reads the switches through an in-process cache that each write clears, which holds for the single
 replica both recipes run.
 
+## External services
+
+Three entries are outside services a member's browser calls directly, never through your server: the map tiles
+(`memories.map`), the geocoder that names places (`memories.places`) and the breached-password check
+(`core.breached-password`). Their addresses are yours to set, in **Server → External services** or with the CLI:
+
+```sh
+veyq-admin services list
+veyq-admin services set memories.map --url 'https://tiles.example.com/{z}/{x}/{y}.png' --attribution '© Example'
+veyq-admin services set memories.places --url https://geocoder.example.com
+veyq-admin services unset core.breached-password
+```
+
+A new instance starts with OpenStreetMap's tiles, Nominatim and the Have I Been Pwned range API. A service is used only
+while it has an address **and** its entry is on: the members' clients read the address from the capabilities, and the
+Content Security Policy the server sends allows the service's origin only then, so a browser refuses any other. An
+instance without internet runs with all three unset (or switched off): no map, place names typed by hand, no check of
+new passwords against known leaks. Map tiles take a `{z}/{x}/{y}` template and the attribution your provider asks
+for; the geocoder takes a Nominatim-compatible base address; the breach check the prefix the first five characters of
+a hash are appended to. A tenant owner may switch the maps and place names off for their own space; the policy follows
+your level only. The admin console's own first-run screen reaches only the default breach-check address.
+
+## Requirements
+
+A requirement tightens an entry instead of switching it off
+([ADR 0088](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+decision 8). In the console each entry lists its requirements with **Require** and **Clear**; a requirement of days takes
+a number from 1 to 3650 first. Setting one shows what it does to what exists and asks you to confirm. The CLI:
+
+```sh
+veyq-admin capabilities require core.public-shares --requirement linkMaxDays --value 30
+veyq-admin capabilities require core.public-shares --requirement linkPassword --value 1
+veyq-admin capabilities require core.public-shares --requirement linkMaxDays --value off
+```
+
+`capabilities list` prints each entry's requirements with their value. A tenant owner can set the requirements of the
+entries they may switch for their own tenant; the value in effect is the stricter one (a flag set at either level, the
+smaller number of days), so a tenant tightens yours and never loosens it. Every member's client reads the values with
+the capability, before sign-in yours, after it the tenant's.
+
+<table>
+  <thead>
+    <tr>
+      <th>Requirement</th>
+      <th>What it does</th>
+    </tr>
+  </thead>
+  <tbody>
+    {requirements.map((r) => (
+      <tr>
+        <td>
+          <strong>{r.title.en}</strong>
+          <br />
+          <code>{r.entry}</code> <code>{r.name}</code> ({r.kind})
+        </td>
+        <td>{r.whenSet.en}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+A requirement acts at once, on what exists too: a link that misses one answers its guests like an unknown link until
+its owner fixes it or you clear the requirement; nothing is written onto it. `passwordMaxDays` is yours alone, like the
+remembered-device switches, and counts from a session's sign-in, or from the moment a device was added from another
+one: switch `core.device-linking` off if a device must never get a session without the password.
+
 ## The built entries
 
 This table is generated from the catalog every client reads its words from
@@ -90,6 +169,7 @@ so it says what the console and the CLI say. Children are indented under their p
             <strong>{e.title.en}</strong>
             <br />
             <code>{e.id}</code>
+            {e.levels.includes('tenant') && <><br /><em>tenant owners too</em></>}
           </div>
         </td>
         <td>
@@ -113,10 +193,12 @@ switch refuses only what is new.
   Emergency Kit, and the sign-in screen says why. The password with the Secret Key always works, so nobody is locked
   out, and switching back on lets every device unlock as before. Tell your members before you switch one off.
   `core.device-linking` off also stops an addition that is under way; devices added before are not affected.
-- **Share switches refuse only new links, for now.** They are meant to stop existing links too, but that is not
-  built (inbox #442): today a switch refuses making, renewing and switching back on a link of its kind, and every
-  link that already exists keeps working. To stop those links now, take the tenant offline
-  ([Moderation](/veyq/run/moderation/#take-a-tenant-offline)).
+- **Share switches act at once, on existing links too.** With a share switch off, no link of its kind can be made,
+  renewed or switched back on, and every link of its kind that already exists stops working: a guest sees the same
+  "This link isn't available" page as for an expired link, and nothing tells them the instance switched it off.
+  `core.public-shares` stops every kind, its two children only their own. Nothing is deleted, so switching back on
+  brings every link back as it was. A download or upload address the server signed just before stays usable until it
+  expires, ten minutes by default, as after a member turns a link off.
 - **Feature switches refuse only what is new.** With `core.group-space` off no group can be created, and every
   existing group stays fully usable.
 
@@ -135,7 +217,6 @@ names what the server would see in order to refuse it: a switch exists only wher
 | `core.personal-space` | the personal scope; off means no new content in it, while the scope itself (keys, favorites) stays |
 | `core.member-invites` | the member-invite endpoint |
 | `core.self-registration` (idea) | a new sign-up endpoint, off by default |
-| `core.breached-password` | the call to the breached-password service, through the CSP the server sends |
 | `core.push` (native apps) | the push services' wake-up, which carries no content |
 
 **Memories.**
@@ -147,8 +228,6 @@ names what the server would see in order to refuse it: a switch exists only wher
 | `memories.journal` (planned) | a node kind or blob role the server would then see |
 | `memories.gpx` (planned) | a blob role for tracks: the server would learn *that* a Memory has a track, never where |
 | `memories.faces` (idea) | a role for the face index, which is biometric data |
-| `memories.places` | the reverse geocoder, through the CSP; a place still works with a name typed by hand |
-| `memories.map` | the map tiles, through the CSP; independent of `places` |
 | `memories.public-shares`, `.contribute`, `.drop-box` | inherit from `core.public-shares`, so core switches every application's links off at once |
 | `memories.public-shares.download-originals` | the original file's blob role. Waits on a measurement: if guests stream video from the original, this switch would also stop their video playback |
 
@@ -156,15 +235,11 @@ names what the server would see in order to refuse it: a switch exists only wher
 `.contribute` and `.drop-box` would inherit from core, and its drop box would also gate creating a drop box, which
 `core.public-shares.drop-box` does for the whole instance today.
 
-An external service that is switched off would be left out of the Content Security Policy the server sends, so the
-browser blocks it. Its address would become your configuration instead of a build setting.
-
 **Beyond the entries.**
 
-- **The tenant level** (inbox #439): a tenant owner switches within what you allow, and a member's client receives
-  the effective set for their tenant after sign-in.
-- **Requirements**, values on an entry where the strictest wins: a link needs a password, a link expires within N
-  days, joining a group needs the member's consent, a remembered device asks for the password again after N days.
+- **Two more requirements**: sharing only with verified identities (not buildable as specified: there is no verified
+  identity the server could check), and keeping no decrypted data on a native device (only the app could keep it, the
+  server cannot enforce it).
 - **Configuration as code** (inbox #444): declaring switches in the compose file or the Helm values instead of
   switching them in the console.
 

@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { nextTick, ref } from 'vue'
 import { useBreachCheck } from './passwordWarning'
+import { setBreachUrl } from '../../test/services'
 
 // The oracle is computed outside the code under test:
 // SHA-1("correct horse battery staple") = ABF7AAD6438836DBE526AA231ABDE2D0EEF74D42.
@@ -200,5 +201,24 @@ describe('useBreachCheck', () => {
     answer(ok(CLEAN_BODY))
     expect(await verdict).toBe(false)
     expect(state.value).toEqual({ kind: 'idle' })
+  })
+
+  it('asks the range API the server configured, and nothing at all where it runs no check (ADR 0088 decision 7)', async () => {
+    setBreachUrl('https://hibp.mirror.example/range/')
+    answers(CLEAN_BODY)
+    const password = ref(FINAL)
+    const check = useBreachCheck(password)
+    await check.checkNow()
+    expect(fetchMock.mock.calls[0]![0]).toBe(`https://hibp.mirror.example/range/${PREFIX}`)
+
+    // `core.breached-password` not served (unconfigured or switched off): no request, no notice, and no blocked submit.
+    setBreachUrl('')
+    fetchMock.mockClear()
+    const other = ref('another long finished password')
+    const off = useBreachCheck(other)
+    await off.checkNow()
+    expect(await off.proceed()).toBe(true)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(off.state.value.kind).toBe('idle')
   })
 })

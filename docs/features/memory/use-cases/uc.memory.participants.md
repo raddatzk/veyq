@@ -8,7 +8,7 @@
 - **Preconditions:** The Memory's `K_node` is held and its `wrappedMeta` exists
   ([en.memory.node-meta](../enablers/en.memory.node-meta.md)); the Memory lives in a tenant or group scope (a personal
   scope has no participants); the scope's member directory is readable (`listScopeMembers`).
-- **Postconditions (success):** The Memory's sealed `wrappedMeta.participants` holds the chosen user ids, one version
+- **Postconditions (success):** The Memory's sealed `wrappedMeta.participants` holds the chosen user ids, one revision
   later; the header shows them; a profile page lists the Memories its person is on. The server stored one opaque blob and
   nothing else ([ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)).
 
@@ -21,14 +21,14 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 1. With a Memory open, a member chooses **Participants**, an action button in the header's action bar beside share,
    rename, move and delete (core's `NodeHeader`, a `NodeHeaderAction` with `pi-users`; owner decision 2026-10-14 —
-   it used to be a link in the line under the title). Its capability is `memoryCapabilities` `participants`, true for a
+   it used to be a link in the line under the title). Its right is `memoryRights` `participants`, true for a
    member only and fail-closed, so a guest gets the same header without it.
 2. The dialog lists the members of the Memory's scope — tenant members for a tenant Memory, group members for a group
    Memory — from `listScopeMembers`, each by display name (real name when it opens, else username).
 3. The member ticks and unticks; the client accepts only ids the directory returned (the server cannot check: the list
    is sealed).
 4. On save the client writes the `participants` sub-object (user ids only) into the Memory's `wrappedMeta` under `K_node`
-   with the node-meta compare-and-set, stating the `metaVersion` it read.
+   with the node-meta compare-and-set, stating the `metaRevision` it read.
 5. The line under the title shows the participants as overlapping avatars; **with no participant it shows nothing** —
    no "nobody yet" text, the action button is the way in. The header re-renders with the participants as overlapping avatars (the member's profile picture, else the letter): up to three, and past three the third slot is a "+N" (two avatars and "+2" for four people). Hovering the
    group, focusing it by keyboard or tapping it opens a popover with everyone — avatar and display name — and Escape
@@ -38,9 +38,9 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 1. A member creating a Memory in a tenant or group scope sees **"I was there"** in the create dialog, ticked by
    default (owner decision 2026-10-14). Ticked, the Memory's first `wrappedMeta` already carries
-   `participants: { userIds: [<own id>] }`: no second write, no version bump. Unticked, it carries no participants.
+   `participants: { userIds: [<own id>] }`: no second write, no revision bump. Unticked, it carries no participants.
 2. It is offered only where the participants are: not in a personal scope (no participants there), never to a share
-   guest (no user id to record, and the capability is false for every share role). It means "who was there", like
+   guest (no user id to record, and the right is false for every share role). It means "who was there", like
    every participant — not "who created it" — which is why it is a choice and not automatic.
 3. Existing Memories are left as they are.
 
@@ -68,12 +68,12 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 - **A1 — a participant left the scope:** the id stays and renders greyed as "former member", no link, no auto-prune. A
   member may remove it by hand in the dialog.
-- **A2 — a concurrent meta write landed first** (`409 stale_version`): the client re-reads the blob and **merges** (the union
+- **A2 — a concurrent meta write landed first** (`409 stale_revision`): the client re-reads the blob and **merges** (the union
   of both lists; an id the editing person removed stays removed) through its own edit function, not the same-field
   conflict of date and place ([uc.memory.concurrent-curation](uc.memory.concurrent-curation.md)).
 - **A3 — the meta does not open:** the participants are not shown and the blob is never rebuilt from empty.
 - **A4 — an id the directory does not know:** treated as a former member.
-- **E1 — a guest:** the interface shows a guest **no participants**: the capability is false for every share role, so
+- **E1 — a guest:** the interface shows a guest **no participants**: the right is false for every share role, so
   there is no section, no control and no profile link, and a guest never reaches `#/people/<userId>`. This is an
   interface boundary, **not a cryptographic one**: a share serves the node's `wrappedMeta` unchanged and the guest holds
   `K_node`, so a link holder with developer tools could read the **count and the opaque ids** — but no names (the list
@@ -107,23 +107,15 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 - **Routing:** the profile is a fragment route handled only in `core/node/location.ts`; `people` is a reserved route
   segment (an application cannot claim it, and a folder, file or drop box called "People" at a scope root is numbered `people-2`). A history-mode path would reach the server's access log.
 
-## What this means for you / Was das für dich bedeutet
+## User impact
 
-**EN —** You can say who was there: add the people of your space to a memory, and they show in its header as a row of avatars. Hover or tap them for the names, click a name
-to see that person and every memory of theirs you can open - as tiles, as a list, or on a map where they have a place. People who later leave the space stay listed, greyed out as
-"former member". Only members see this; the page of someone who gets a memory through a link shows nobody. The server
-never learns who was on which memory — the list is sealed with the memory. The list holds only anonymous ids, never names.
-
-**DE —** Du kannst festhalten, wer dabei war: Füge Personen deines Bereichs zu einer Erinnerung hinzu, sie erscheinen in
-deren Kopfzeile als Reihe von Avataren. Fahre darüber oder tippe darauf, um die Namen zu sehen; mit einem Klick auf einen Namen siehst du die Person und alle ihre Erinnerungen, die du öffnen darfst – als Kacheln, als Liste oder auf einer Karte, wo sie einen Ort haben.
-Wer den Bereich später verlässt, bleibt eingetragen und wird grau als „ehemaliges Mitglied“ gezeigt. Das sehen nur
-Mitglieder; wer eine Erinnerung über einen Link bekommt, bekommt keine Personen angezeigt. Die Liste enthält nur anonyme IDs, nie Namen. Der Server erfährt nie, wer bei
-welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
+You record who was at an occasion and find every Memory a person took part in, while the server never learns who was
+together with whom.
 
 ## Where it is built (web)
 
 - Model and write: `web/src/features/memory/memoryParticipants.ts` (`participants: { userIds }`, cap 100, the merging edit);
-  `editParticipantsOf` in `core/node/nodeMeta.ts`; the capability `participants` in `capabilities.ts`; the door
+  `editParticipantsOf` in `core/node/nodeMeta.ts`; the right `participants` in `features/memory/rights.ts`; the door
   `NodeMetaDoor.setParticipants` in `source.ts`.
 - At creation: "I was there" in Memories' create dialog `components/MemoryNodeDialog.vue`, sealed at birth by `createMemory`'s
   `participants` (`memoryNodes.ts`).
@@ -141,9 +133,9 @@ welcher Erinnerung dabei war – die Liste ist mit der Erinnerung versiegelt.
 - Feature: [Memory](../_index.md)
 - End-user view (docs site): [People in your Memories](../../../../site/src/content/docs/memories/people-in-your-memories.md)
 - Enablers: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta`)
-- Use-cases: [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md) (the versioned meta write),
+- Use-cases: [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md) (the revision-checked meta write),
   [uc.memory.buckets](uc.memory.buckets.md) (the uploader axis), [uc.memory.gallery](uc.memory.gallery.md) (the lightbox)
-- Applications: [docs/apps/memories.md](../../../apps/memories.md) (the capability matrix)
+- Applications: [docs/apps/memories.md](../../../apps/memories.md) (the rights matrix)
 - Decisions: [ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md),
-  [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) (the versioned write),
+  [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) (the revision-checked write),
   [ADR 0081](../../../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md) (revalidated tree reads)

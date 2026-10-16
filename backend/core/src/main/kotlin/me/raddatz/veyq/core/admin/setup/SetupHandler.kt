@@ -1,6 +1,9 @@
 package me.raddatz.veyq.core.admin.setup
 
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.platform.capabilities.ExternalServiceAddresses
+import me.raddatz.veyq.core.platform.capabilities.ServiceAddress
+import me.raddatz.veyq.core.platform.capabilities.PlatformMajor
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.instance.InstanceStore
 import me.raddatz.veyq.core.persistence.createOrConflict
@@ -14,6 +17,10 @@ data class SetupState(
     val versionMajor: Int,
     val versionBuild: Int,
     val capabilities: List<String>,
+    /** The instance level's requirements, by name (ADR 0088 decision 8); a client reads them with each capability. */
+    val requirements: Map<String, Int>,
+    /** The configured external services' addresses (ADR 0088 decision 7), carried on their entries while active. */
+    val services: Map<String, ServiceAddress>,
 )
 
 /** The owner registration payload, mapped from the API request at the resource boundary. */
@@ -42,11 +49,12 @@ class SetupHandler(
     private val store: SetupStore,
     private val instanceStore: InstanceStore,
     private val capabilities: CapabilityRegistry,
+    private val services: ExternalServiceAddresses,
     config: VeyqConfig,
 ) {
-    // Build-set version (ADR 0032). `major` is the ONLY hard gate — bump it exclusively when a capability is
-    // removed; everything additive bumps `build`. Defaulted so a fresh instance/config still advertises 1.1.
-    private val versionMajor: Int = config.version().major()
+    // The advertised version (ADR 0032). `major` is the ONLY hard gate and the platform's one major, generated from
+    // the repository's VERSION (ADR 0085 decision 1) — never configured; `build` is a hand-kept diagnostic.
+    private val versionMajor: Int = PlatformMajor.MAJOR
     private val versionBuild: Int = config.version().build()
     private val supportedSuites = listOf("v1")
 
@@ -57,6 +65,8 @@ class SetupHandler(
         versionMajor = versionMajor,
         versionBuild = versionBuild,
         capabilities = capabilities.active,
+        requirements = capabilities.requirements(null),
+        services = services.configured(),
     )
 
     fun createOwner(registration: OwnerRegistration): String {

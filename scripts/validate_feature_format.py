@@ -20,10 +20,13 @@ What it asserts, and why each one is worth a check:
   D. **A main flow has numbered steps.** This is the one that earns the guard: a use-case's job is to say *how
      something runs*, and prose paragraphs describing a mechanism are not that. `uc.memory.place` had a rich,
      correct, entirely un-followable flow for months, and nobody could point at what was wrong with it.
-  E. A use-case carries the bilingual end-user section with **both** an `**EN —**` and a `**DE —**` block —
-     it is the plain-language account of the use-case that a hand-written wiki page draws on, and the
-     published wiki is bilingual, so a missing half is a missing translation. Enablers must NOT carry one
-     (they have no standalone end-user story).
+  E. A use-case carries `## User impact`: **one** English paragraph saying why the feature exists for the
+     user ([ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)
+     decision 5). The user-facing prose lives only on the docs site's Use pages, so the section is a single
+     paragraph, carries no `**EN —**` / `**DE —**` blocks, and the former bilingual heading
+     (`What this means for you`) is refused wherever it reappears. Enablers carry neither (they have no
+     standalone end-user story). Bought by the move to the site: 74 bilingual sections held German text that
+     `docs/` no longer keeps, and nothing would have stopped the next use-case from growing one again.
 
 **Why an enabler owes no `## Main flow`.** `docs/features/README.md` says an enabler carries "the same
 Main-flow / exceptions" as a use-case. Measured against the 13 that exist, that is not true and never was:
@@ -48,7 +51,8 @@ UC_HEADERS = ["ID", "Primary actor", "Goal", "Preconditions", "Postconditions"]
 EN_HEADERS = ["ID", "Type", "Provides", "Serves", "Depends on"]
 UC_SECTIONS = ["Main flow", "Alternate / exception flows", "Related"]
 EN_SECTIONS = ["Related"]          # a flow is optional on an enabler — see the module docstring
-BILINGUAL = "What this means for you"
+IMPACT = "User impact"
+FORMER = "What this means for you"  # the bilingual section ADR 0087 decision 5 replaced
 
 errors: list[str] = []
 
@@ -100,21 +104,23 @@ def check(doc: pathlib.Path, is_uc: bool) -> None:
                       f"runs, step by step; prose paragraphs about the mechanism belong in `## Quality notes` "
                       f"or in the enabler that owns them")
 
-    # E — the bilingual section: required on a use-case, forbidden on an enabler
-    bil = section(text, BILINGUAL)
+    # E — one English line of user impact on a use-case; neither it nor the former bilingual section on an enabler
+    if section(text, FORMER) is not None:
+        errors.append(f"{rel(doc)}: carries the former `## {FORMER}` section — a use-case states its "
+                      f"`## {IMPACT}` in one English line, and the user-facing prose lives on the site's Use pages "
+                      f"(ADR 0087 decision 5)")
+    impact = section(text, IMPACT)
     if is_uc:
-        if bil is None:
-            errors.append(f"{rel(doc)}: missing `## {BILINGUAL} / Was das für dich bedeutet` — it is the "
-                          f"plain-language account a wiki page draws on")
-        else:
-            for lang in ("EN", "DE"):
-                if not re.search(r"\*\*" + lang + r"\s*[—-]", bil):
-                    errors.append(f"{rel(doc)}: the bilingual section has no `**{lang} —**` block "
-                                  f"(both languages are the format; the wiki needs the pair)")
-    elif bil is not None:
-        errors.append(f"{rel(doc)}: an enabler must not carry a `## {BILINGUAL}` section — its value reaches "
+        body = (impact or "").strip()
+        if impact is None or not body:
+            errors.append(f"{rel(doc)}: missing `## {IMPACT}` — one English line on why the feature exists "
+                          f"for the user (docs/features/README.md § use-case format)")
+        elif "\n\n" in body or re.search(r"\*\*(EN|DE)\s*[—-]", body):
+            errors.append(f"{rel(doc)}: `## {IMPACT}` must be one English paragraph, with no language blocks — "
+                          f"the plain-language text belongs on the site's Use pages")
+    elif impact is not None:
+        errors.append(f"{rel(doc)}: an enabler must not carry a `## {IMPACT}` section — its value reaches "
                       f"the user through the use-cases it serves (docs/features/README.md § enabler format)")
-
 
 ucs = sorted(FEATURES.glob("*/use-cases/uc.*.md"))
 ens = sorted(FEATURES.glob("*/enablers/en.*.md"))
@@ -130,4 +136,4 @@ if errors:
     sys.exit(1)
 
 print(f"feature format OK: {len(ucs)} use-case(s) + {len(ens)} enabler(s) — headers, ids, sections, "
-      f"numbered flows, bilingual pairs")
+      f"numbered flows, one line of user impact")

@@ -20,7 +20,13 @@ vi.mock('../rememberMe/deviceKeyWrap', () => ({
 }))
 // Off by default; a test puts the ids it is about into `switchedOn`, so each leaf is read on its own (ADR 0088 decision 3).
 const { switchedOn } = vi.hoisted(() => ({ switchedOn: new Set<string>() }))
-vi.mock('../../../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: (id: string) => switchedOn.has(id) }) }))
+vi.mock('../../../shared/state/useCapabilities', () => ({
+  useCapabilities: () => ({
+    hasCapability: (id: string) => switchedOn.has(id),
+    // The breach check's address, as a new instance's manifest carries it (uc.admin.configure-external-services).
+    capabilityValues: (id: string) => (id === 'core.breached-password' ? { id, serviceUrl: 'https://api.pwnedpasswords.com/range/' } : undefined),
+  }),
+}))
 // The breach lookup is the only thing stubbed of the check: the dialog's real guard runs, which is what the wiring
 // cases below pin. Clean by default — the check is automatic, so every submit here passes through it.
 vi.mock('../../../shared/pwned', () => ({ pwnedCount: vi.fn() }))
@@ -129,7 +135,7 @@ describe('ChangePasswordPanel — the password floor', () => {
     await pw[1].trigger('blur')
     await flushPromises()
     expect(pwnedCount).toHaveBeenCalledOnce()
-    expect(pwnedCount).toHaveBeenCalledWith('a long enough new password')
+    expect(pwnedCount).toHaveBeenCalledWith('a long enough new password', 'https://api.pwnedpasswords.com/range/')
   })
 
   it('a hit blocks the submit until "Use it anyway" — pressing submit again is not the acceptance', async () => {

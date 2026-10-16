@@ -1,0 +1,45 @@
+---
+title: "Share with people who have no account"
+sources:
+  - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
+  - docs/features/depot/use-cases/uc.depot.share-folder-files.md
+  - docs/features/depot/use-cases/uc.depot.share-file.md
+  - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+You can hand something to anyone, a grandparent, a friend, a group chat, as a **link**. They open it in a browser: no
+account, nothing to install. The link shows only what you shared, never the rest of your space, and you can switch it
+off at any time.
+
+## What you can share
+
+- **A folder**, with everything in it: files, Memories, further folders.
+- **A single file.** The folder it sits in stays private.
+- **A Memory**, or one of its chapters.
+
+## Three kinds of links
+
+- **View only**: they can look and download, and change nothing.
+- **View + contribute** (on a Memory: **View + add photos**): they can look and add their own things. Whether you see
+  this choice depends on your server.
+- **Add only**: they can hand things in, but see nothing. On a Memory this is **Request upload**; for files it is a
+  [drop box](/veyq/depot/drop-boxes/).
+
+## What you can do
+
+- [Create a link](/veyq/sharing/create-a-link/), with a note, a password or an expiry date
+- [Ask people to add photos](/veyq/sharing/request-uploads/) without letting them see anything
+- [Change, switch off, renew and delete links](/veyq/sharing/manage-links/)
+- [See what a guest sees](/veyq/sharing/what-guests-see/)
+
+The key that opens a link sits in the part of the address after the `#`, which a browser never sends to a server. So
+people with the link can open what you shared, and the person running the server still cannot. A link cannot be
+unseen, though: switching it off stops future access, but not what someone already saved:
+[Is my data safe?](/veyq/privacy/is-my-data-safe/#when-you-share)
+
+One honest limit: the page that opens a link comes from the veyq server each time, so a link is only as private as
+your trust in whoever runs that server. Someone who runs it honestly cannot read along; someone set on it could change
+that page. If you run the server yourself, nobody else is in that position: [Known
+limitations](/veyq/security/known-limitations/#the-operator-served-web-client-is-passive-operator-only)

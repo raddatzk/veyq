@@ -15,8 +15,9 @@ import javax.inject.Inject
  * `:core` → the specs at the top level of `contracts/api/`, `:apps:<app>` → those in `contracts/api/<app>/`) and
  * registers its tasks:
  * `openApiGenerate<Owner>`, the aggregate `openApiGenerateSpecs` (`./gradlew openApiGenerateSpecs` from `backend/` runs
- * every owner's) and, for core, `generateAdminChannelOperations` and `generateCapabilityRegister` (the capability ids and
- * their texts, from `contracts/platform/capabilities.json`). A method, not a property: the task names depend on
+ * every owner's) and, for core, `generateAdminChannelOperations`, `generateCapabilityRegister` (the capability ids and
+ * their texts, from `contracts/platform/capabilities.json`) and `generatePlatformMajor` (the major `/api/setup` advertises,
+ * from the repository's `VERSION`). A method, not a property: the task names depend on
  * the owner, so it is read once, while the project is configured — never in an `afterEvaluate`.
  */
 abstract class VeyqOpenApiExtension @Inject constructor(private val project: Project) {
@@ -46,6 +47,7 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
             val modelsDir = generated.map { it.dir("models") }
             val channelDir = project.layout.buildDirectory.dir("generated/admin-channel")
             val capabilitiesDir = project.layout.buildDirectory.dir("generated/capabilities")
+            val platformMajorDir = project.layout.buildDirectory.dir("generated/platform-major")
 
             if (isCore) {
                 // A module the settings include whose build never calls `generateOwnSpecs()` would leave its directory's
@@ -107,6 +109,13 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
                     catalog.set(project.rootDir.resolve("../contracts/platform/capabilities.json"))
                     outputDir.set(capabilitiesDir)
                 }
+                project.tasks.register<GeneratePlatformMajor>("generatePlatformMajor") {
+                    group = "openapi tools"
+                    description = "Generate the platform's one major from the repository's VERSION (ADR 0085 decision 1)."
+                    // From the Gradle root like the catalog; absent during the Dockerfile's warm-up, which only configures.
+                    versionFile.set(project.rootDir.resolve("../VERSION"))
+                    outputDir.set(platformMajorDir)
+                }
             }
 
             project.extensions.getByType<SourceSetContainer>().named("main") {
@@ -117,6 +126,7 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
                 if (isCore) {
                     kotlin.srcDir(channelDir.map { it.dir("src/main/kotlin") })
                     kotlin.srcDir(capabilitiesDir.map { it.dir("src/main/kotlin") })
+                    kotlin.srcDir(platformMajorDir.map { it.dir("src/main/kotlin") })
                 }
             }
 
@@ -125,6 +135,7 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
                 if (isCore) {
                     dependsOn(project.tasks.named("generateAdminChannelOperations"))
                     dependsOn(project.tasks.named("generateCapabilityRegister"))
+                    dependsOn(project.tasks.named("generatePlatformMajor"))
                 }
             }
             project.tasks.named("compileJava") { dependsOn(project.tasks.named("openApiGenerateSpecs")) }

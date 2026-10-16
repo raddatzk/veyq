@@ -1,0 +1,27 @@
+---
+title: "Storage and upload links"
+sources:
+  - docs/features/sharing/use-cases/uc.sharing.share-link-storage-limit.md
+  - docs/features/admin/use-cases/uc.admin.tenant-storage-quota.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+1. Open the menu at the bottom of the sidebar, choose **Settings**, then **Storage** under **Shared space**.
+2. **In use** shows how much your space takes on the server, the trash included. If the person who runs the server
+   set a limit for your space, it shows under **Storage limit of this space**; only they can change it.
+3. Under **Limit per upload link (GiB)**, set how much a single link may add: every link through which guests can add
+   photos or files gets this limit, counted per link. **0** switches uploads through links off.
+4. Choose **Save storage settings**.
+
+<Screenshot id="owners-storage" shows="The Storage panel with In use and the Limit per upload link field" />
+
+The limit keeps a link that travels further than you meant from filling the server. It applies from a link's next
+upload; nothing already stored is removed.
+
+Until you change it, each link may add 10 GiB, enough for a party or a wedding. When a link is full, whoever uses it
+is told it isn't taking more uploads right now, and nothing of the refused upload is kept. Photos you delete from what
+guests added free their room on the link only once they leave the trash.
+
+The server counts sizes, because it has to store the bytes; it never sees what they are:
+[Is my data safe?](/veyq/privacy/is-my-data-safe/)
