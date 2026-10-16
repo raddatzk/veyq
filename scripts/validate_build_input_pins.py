@@ -241,7 +241,7 @@ def check_verification(files: list[str]) -> None:
             fail(f"{rel}: <verify-metadata> is not `true` — the file is there and checks nothing")
         # An EMPTY component list is allowed: with <verify-metadata> on, it makes Gradle refuse every artifact, so
         # it is the strictest file there is, not one that checks nothing. The root launcher's is empty on purpose
-        # (it resolves nothing; changes/cr-root-gradle-launcher.md) — measured: a plugin added to it fails the build
+        # (it resolves nothing; settings.gradle.kts) — measured: a plugin added to it fails the build
         # on verification. A build that does resolve dependencies cannot go green with one, which is the failure
         # that then sends someone to --write-verification-metadata.
         for trust in tree.iter(f"{NS}trust"):

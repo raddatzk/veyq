@@ -1418,6 +1418,12 @@ in its source, and the entrypoint hook's switch values were a one-shot run of th
 Where a refine leaves a tool's semantics "believed, not measured", it reads the tool's source then, and it splits
 the proof so the part that needs no daemon is done by whoever implements.
 
+**And a step only the owner can take is named as theirs in the done-when.** `cr-root-gradle-launcher` marked
+`infra:wipe` as the owner's, so it never stood as an agent's open item. It did not mark the two other steps only the
+owner could unblock — recreating the shared dev database its browser upload needed, and a start and stop from
+IntelliJ's Gradle tool window — and both surfaced only at close, as "not proven". A done-when says per live step who
+runs it, and an owner's step is asked for when its phase starts, not discovered when the CR closes.
+
 ### A live proof that names a screen names the instance state that screen needs
 
 cr-app-shell-served-by-backend's Definition of done said *"the app boots to sign-in with zero CSP violations"* and
@@ -1444,6 +1450,10 @@ dev data to get. A database of its own on the same compose stack leaves theirs a
 any more, so a boot that sets it signs for the store's own endpoint and the seeder's store check fails), then `npm run bootstrap:user` — which writes `.run/.env`
 back, so that file is snapshotted first and restored byte-equal after. A CR that changes a stored format names this
 instance in its browser pass.
+So does a migration baseline reset on `main` that the shared dev database has not followed yet:
+`cr-root-gradle-launcher`'s upload met `Unknown column 'meta_revision'` on a database a few hours behind `main`'s
+baseline, and the proof waited on the owner's wipe. A browser pass planned on the dev database first compares the head
+of its `flyway_schema_history` with `main`'s newest migration.
 Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused even a scratchpad snapshot on
 2026-10-15), the instance gets a principal of its own instead: the seeder's `ENV_FILE` is a constant, so a temporary
 copy of `web/scripts/bootstrap-user.mts` that reads an env file of generated test values outside the repo seeds it, the
