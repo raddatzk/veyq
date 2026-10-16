@@ -1,6 +1,9 @@
 # ADR 0096 — `veyqctl` manages an instance from immutable releases
 
-- Status: Accepted 2026-10-16; nothing of it is built
+- Status: Accepted 2026-10-16; built: `veyqctl` (decisions 1, 2, 4–7), the producer of a release's assets, and no
+  image carries a recipe (`scripts/veyqctl.py`, `scripts/release_assets.py`); the stack lane installs every candidate
+  through it. Not built: decision 5 step 1's entry into a major from its predecessor's last release, the publish
+  creating the GitHub Release (decision 3), the Run pages around `veyqctl`
 - Date: 2026-10-16
 
 ## Context

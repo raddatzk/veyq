@@ -1,7 +1,7 @@
 # The bundled object store (ADR 0013, ADR 0067). Deployed RUNNING; the app brings it to USABLE itself on first
 # start over the admin API — layout, bucket, key, grant and the CORS policy — so there is no init container.
 #
-# garage.toml as a ConfigMap (the compose recipe bind-mounts the repository's copy, which a chart cannot).
+# garage.toml as a ConfigMap (the compose recipe bind-mounts the copy its release ships beside it, which a chart cannot).
 # Same file, two differences: `rpc_public_addr` names this chart's Service, and the comments live here. It
 # carries NO secret — the RPC secret and the admin token come from the environment, as under compose.
 apiVersion: v1

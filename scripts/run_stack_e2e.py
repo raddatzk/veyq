@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
-"""Boot the release candidate as a Server Owner would, from the recipe inside its image, and drive it in a browser (ADR 0090, lane L1 of ADR 0091).
+"""Install the release candidate as a Server Owner would, through `veyqctl install`, and drive it in a browser (ADR 0090, lane L1 of ADR 0091).
 
 **What it does — phases 1–3 of `changes/cr-stack-e2e.md`: a boot, first run and a Memory round trip in a browser,
 and the stack swept for every value the browser typed.** Takes the two candidate images (`--app`,
-`--admin`: a registry reference pinned by digest, or a local tag for a local run) and from there follows the Run area
-of the docs site rather than this repository:
+`--admin`: a local build's bare `name:tag` — `veyqctl --unsigned-local` refuses anything else) and from there
+installs it the way the Run area does, through the release's own `veyqctl`, never through this repository's copy of
+the recipe:
 
-  1. **extract** — the recipe comes out of the app image (`/opt/veyq/deploy/`, ADR 0057 §3), never
-     `infra/docker-compose.prod.yml` from this checkout: what is tested is the file that ships. One file still comes
-     from the checkout, `garage.toml`, because the image does not carry it — the limit `run/new-instance.mdx` states
-     for every operator; the summary says so on every run. Pebble's minica root is copied out of the overlay's
-     pinned Pebble image, for Traefik's ACME client to trust Pebble's listener.
-  2. **env** — the run's `.env` is the image's own `.env.example`, line by line, with every value this run knows
-     filled in and every secret random. A key the template gains and this script does not fill is LEFT as the
-     template has it, so a required one fails the `up` with the recipe's own `${VAR:?…}` message, named — the drift
-     shows up as a red run, not a silent default. The other direction is refused here: a value this script fills
-     that the template no longer names is red at this stage.
-  3. **pebble** — Pebble alone first, under a project of its own, `veyq-e2e-<stamp>`, so it cannot address an
-     instance on this host. Its root is generated when it starts, and the app must trust it before IT starts: this
-     stage reads the root off Pebble's management port and writes the app's truststore with it — Pebble's root and
-     nothing else, written by the candidate image's own `keytool` (the overlay says why the app needs it).
-  4. **up** — `docker compose up -d --wait` with `infra/e2e/docker-compose.e2e.yml` laid over the recipe (Pebble,
-     the browser behind a profile, and the DNS name and CA trust the internet would give the instance).
+  1. **assets** — the candidate becomes a release: `scripts/release_assets.py` (the publish's producer) writes it into
+     the run's mirror directory `src/` — the recipe set it derives from the compose file (`garage.toml` included),
+     `veyqctl`, `instance_backup.py` and the manifest naming both images. What is installed is what a release ships.
+     A value this run gives as a template value (`VEYQ_DOMAIN`, `VEYQ_ACME_EMAIL`) that the release's `.env.example`
+     no longer assigns is red here.
+  2. **pebble** — Pebble alone first, under the run's own project, `veyq-e2e-<stamp>`, so it cannot address an
+     instance on this host. Its root is generated when it starts, and the app must trust it before IT starts, while
+     `veyqctl install` starts everything at once: so this stage brings Pebble up from the release's recipe and the
+     overlay before there is an instance (`pebble.env`: the run's values, and a placeholder for each secret and image
+     line `install` writes later, none of which Pebble or its network reads), reads the root off Pebble's management
+     port and writes the app's truststore with it — Pebble's root and nothing else, written by the candidate image's
+     own `keytool` (the overlay says why the app needs it). Pebble's minica root is copied out of the overlay's pinned
+     Pebble image first, for Traefik's ACME client to trust Pebble's listener.
+  3. **install** — `veyqctl install --unsigned-local --source src/` into the run's `home/`, the release's own
+     `veyqctl` as the operator fetches it, with `infra/e2e/docker-compose.e2e.yml` as the instance's override file
+     `compose.override.yml` (Pebble, the browser behind a profile, and the DNS name and CA trust the internet would
+     give the instance) and the run's values through `--set`; `veyqctl` generates the secrets, writes `.env` from the
+     release's template and the image lines from its manifest, and waits until every service is healthy. stdin is
+     closed, so a key the template gains that this run does not give is refused by name, not asked for. Red unless
+     `veyqctl` named the run's project and left Pebble's container as the pebble stage started it.
   5. **certificate** — opens TLS to `:443` for `veyq.test` (SNI, no `/etc/hosts`) with the run's Pebble root as the
      ONLY trusted CA; then `GET /api/setup` over the
      verified connection must answer 200. Traefik serves its default certificate until ACME has finished, so this
@@ -47,14 +52,16 @@ of the docs site rather than this repository:
      since the run began, and every statement the database received in the window — each sensor armed by a positive
      control, and every spec file that executed a test must have recorded canaries. [sweep] lists what is not swept.
   9. **evidence** — `compose.log` (every container, timestamped) and `ps.json` into the run directory, always.
-  10. **teardown** — `docker compose down -v` (unless `--keep`).
+  10. **teardown** — `docker compose down -v` by the run's project name (unless `--keep`).
   11. **host** — the run touched nothing that is not its own: every container that existed before it still exists
      with the same state and start time, every volume still exists, and nothing of the run's project is left.
 
-The summary prints each stage's wall time — the budget ADR 0091 decision 1 holds the lane to — and the verdict.
+The summary prints each stage's wall time — the budget ADR 0091 decision 1 holds the lane to —, the release and the
+assets `veyqctl` installed, and the verdict.
 
-**The run directory survives the run** (`.e2e-stack-out/<stamp>/`, gitignored): the extracted recipe, the `.env`
-(every secret of an instance that no longer exists), Pebble's root, `up.log`, `compose.log`, `ps.json`, and the
+**The run directory survives the run** (`.e2e-stack-out/<stamp>/`, gitignored): the release (`src/`, `assets.log`),
+the instance's home (`home/`: `.env` with every secret of an instance that no longer exists, `state.json`, the
+override file, `releases/<release>/`), `pebble.env`, Pebble's root, `install.log`, `compose.log`, `ps.json`, and the
 browser's: `stack.json`, `browser.log`, `junit.xml`, `report/` (Playwright's HTML report), `playwright/` (a trace per
 test, `npx playwright show-trace <zip>`), `instance.json` (the owner's credentials and Secret Key, the invite link);
 and the sweeps': `canaries-<spec>.json` and their union `swept-canaries.json`, `database-veyq.sql` (the dump the
@@ -62,7 +69,9 @@ database sweep read), `container-<service>.log`, `mariadb-general.log` (the wind
 bucket only where the store sweep found something.
 
 **Not a `validate_*` guard.** It needs Docker, two images, host ports 80 and 443 and the root `npm ci`, so it
-cannot join the buildless trust-chain glob; lane L1 calls it directly.
+cannot join the buildless trust-chain glob; lane L1 calls it directly. Nothing is verified: the images are local
+builds, so `install` runs `--unsigned-local` and says so on every line — a published candidate's signatures are
+`veyqctl verify`'s, which this lane does not exercise.
 
 **Its limits — what a green run does NOT prove.** Pebble is told every challenge is valid (the overlay says why), so
 Traefik's HTTP-01 router on :80 is not exercised. The certificate stage asserts the bootstrap domain; the tenant's
@@ -80,7 +89,7 @@ Usage:
     python3 scripts/run_stack_e2e.py --app veyq:local --admin veyq-admin:local [--keep] [-- <playwright test args>]
 
 Environment (all optional):
-    VEYQ_STACK_WAIT_SECS   `up --wait` timeout. Default: 300
+    VEYQ_STACK_WAIT_SECS   How long `veyqctl install` waits for a healthy stack (its VEYQ_WAIT_SECS). Default: 300
     VEYQ_STACK_CERT_SECS   How long the certificate stage polls for Pebble's certificate. Default: 120
 """
 from __future__ import annotations
@@ -89,7 +98,7 @@ import argparse
 import json
 import os
 import re
-import secrets
+import shutil
 import socket
 import ssl
 import subprocess
@@ -111,11 +120,9 @@ import e2e_sweeps as sweeps  # noqa: E402 - after the PyYAML check, which it nee
 
 ROOT = Path(__file__).resolve().parent.parent
 OVERLAY = ROOT / "infra" / "e2e" / "docker-compose.e2e.yml"
-# The one file the image's recipe mounts and does not carry (site/src/content/docs/run/new-instance.mdx).
-GARAGE_TOML = ROOT / "infra" / "garage.toml"
+# The publish's producer: the candidate becomes a release in the mirror layout `veyqctl --source` reads (ADR 0096).
+RELEASE_ASSETS = ROOT / "scripts" / "release_assets.py"
 RUN_ROOT = ROOT / ".e2e-stack-out"
-RECIPE_DIR = "/opt/veyq/deploy"
-RECIPE_FILES = ("docker-compose.prod.yml", ".env.example")
 E2E_PACKAGE = ROOT / "e2e" / "package.json"
 INSTALLED_PLAYWRIGHT = ROOT / "node_modules" / "@playwright" / "test" / "package.json"
 # What the browser container is told it may reach (e2e/src/stack.ts). Paths are the container's: the run directory
@@ -137,7 +144,9 @@ HOST_PORTS = (80, 443, ADMIN_PORT)
 WAIT_SECS = int(os.environ.get("VEYQ_STACK_WAIT_SECS", "300"))
 CERT_SECS = int(os.environ.get("VEYQ_STACK_CERT_SECS", "120"))
 ASSIGNMENT = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
-MISSING_VARIABLE = re.compile(r"required variable (\w+) is missing a value")
+# The operator's values the release's template assigns and this run gives (`--set`); `veyqctl` generates the secrets
+# and writes the image lines from the manifest. A template that stops assigning one of these is red at `assets`.
+TEMPLATE_VALUES = {"VEYQ_DOMAIN": DOMAIN, "VEYQ_ACME_EMAIL": f"e2e@{DOMAIN}"}
 # What the sweeps read in the recipe's instance. The database is the one the recipe names (`MARIADB_DATABASE: veyq`,
 # the app's JDBC URL); the bucket is the backend's default `veyq.bundled-store.bucket`, which the recipe does not
 # override; the store is reached the way the backup tool reaches it, by its internal name on the network the recipe
@@ -223,7 +232,7 @@ def ports_free() -> None:
                   f"is {ADMIN_PORT}")
 
 
-# ---------------------------------------------------------------- extract, env
+# ---------------------------------------------------------------- assets, pebble, install
 
 
 def copy_out(image: str, files: dict[str, Path]) -> None:
@@ -259,81 +268,120 @@ def browser_pins() -> None:
     print(f"browser: Playwright {installed} (library and image agree)", flush=True)
 
 
-def extract(app_image: str, workdir: Path) -> Path:
-    recipe = workdir / "recipe"
-    recipe.mkdir(parents=True)
-    copy_out(app_image, {f"{RECIPE_DIR}/{name}": recipe / name for name in RECIPE_FILES})
-    (recipe / "garage.toml").write_bytes(GARAGE_TOML.read_bytes())
-    print(f"recipe: {', '.join(RECIPE_FILES)} from {app_image}; garage.toml from this checkout (the image does not "
-          "carry it — run/new-instance.mdx's stated limit)", flush=True)
-    minica = workdir / "pebble-minica.pem"
-    copy_out(pebble_image(), {PEBBLE_MINICA_PATH: minica})
-    minica.chmod(0o644)  # Traefik reads it as uid 65532
-    return recipe
+class Release(NamedTuple):
+    """The candidate as files: the mirror directory `release_assets.py` wrote, and the one release in it."""
+    source: Path
+    tag: Path  # <source>/<tag>/, the release's assets
 
 
-def write_env(recipe: Path, app_image: str, admin_image: str, minica: Path) -> Path:
-    """The template, filled: every value this run knows, every secret random; anything else left as the template has it."""
-    fill = {
-        "VEYQ_DOMAIN": DOMAIN,
-        "VEYQ_IMAGE": app_image,
-        "VEYQ_ADMIN_IMAGE": admin_image,
-        "MARIADB_PASSWORD": secrets.token_urlsafe(24),
-        "MARIADB_ROOT_PASSWORD": secrets.token_urlsafe(24),
-        "GARAGE_RPC_SECRET": secrets.token_hex(32),
-        "GARAGE_ADMIN_TOKEN": secrets.token_urlsafe(32),
-        "VEYQ_ACME_EMAIL": f"e2e@{DOMAIN}",
-    }
-    # The template's commented-out optionals this run sets, and the overlay's own variable.
-    own = {
+def assets(app_image: str, admin_image: str, workdir: Path) -> Release:
+    """The candidate's release, produced by the publish's own producer into a mirror directory of the run."""
+    source = workdir / "src"
+    result = run(sys.executable, str(RELEASE_ASSETS), str(source), "--app", app_image, "--admin", admin_image,
+                 check=False)
+    (workdir / "assets.log").write_text(result.stdout + result.stderr, encoding="utf-8")
+    if result.returncode != 0:
+        raise Red(f"release_assets.py exited {result.returncode}: {result.stderr.strip()[-2000:]}")
+    listed = json.loads((source / "releases.json").read_text(encoding="utf-8"))["releases"]
+    if len(listed) != 1:
+        raise Red(f"the run's mirror lists {len(listed)} releases, not the one it just produced")
+    tag = source / listed[0]["tag"]
+    template = {m.group(1) for m in map(ASSIGNMENT.match, (tag / ".env.example").read_text().splitlines()) if m}
+    gone = sorted(set(TEMPLATE_VALUES) - template)
+    if gone:
+        raise Red(f"this run gives {gone} as template values, which the release's .env.example no longer assigns — "
+                  "the recipe moved on")
+    names = sorted(json.loads((tag / "manifest.json").read_text(encoding="utf-8"))["assets"])
+    print(f"assets: {tag.name} in {source.relative_to(ROOT)}: {', '.join(names)}", flush=True)
+    return Release(source, tag)
+
+
+def run_values(project: str, workdir: Path) -> dict[str, str]:
+    """What this run gives the instance's `.env` through `veyqctl install --set`: the operator's values the template
+    asks for, its commented-out optionals this run sets, the project, and the overlay's own variables."""
+    return {
+        **TEMPLATE_VALUES,
+        "COMPOSE_PROJECT_NAME": project,
         "ADMIN_PORT": str(ADMIN_PORT),
         "VEYQ_ACME_CASERVER": "https://pebble:14000/dir",
-        "VEYQ_E2E_PEBBLE_MINICA": str(minica),
-        "VEYQ_E2E_APP_TRUSTSTORE": str(minica.parent / APP_TRUSTSTORE),
+        "VEYQ_E2E_PEBBLE_MINICA": str(workdir / "pebble-minica.pem"),
+        "VEYQ_E2E_APP_TRUSTSTORE": str(workdir / APP_TRUSTSTORE),
         "VEYQ_E2E_REPO": str(ROOT),
-        "VEYQ_E2E_RUN_DIR": str(minica.parent),
+        "VEYQ_E2E_RUN_DIR": str(workdir),
         "VEYQ_E2E_UID": str(os.getuid()),
         "VEYQ_E2E_GID": str(os.getgid()),
     }
-    lines, named, left = [], set(), []
-    for line in (recipe / ".env.example").read_text(encoding="utf-8").splitlines():
-        m = ASSIGNMENT.match(line)
-        if m and m.group(1) in fill:
-            named.add(m.group(1))
-            line = f"{m.group(1)}={fill[m.group(1)]}"
-        elif m and m.group(1) not in own:
-            left.append(m.group(1) if m.group(2) else f"{m.group(1)} (empty)")
-        lines.append(line)
-    gone = sorted(set(fill) - named)
-    if gone:
-        raise Red(f"this run fills {gone}, which the image's .env.example no longer names — the recipe moved on")
-    lines += ["", "# ---- set by scripts/run_stack_e2e.py, not by the template ----"]
-    lines += [f"{k}={v}" for k, v in own.items()]
-    env = recipe / ".env"
-    env.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    env.chmod(0o600)
-    if left:
-        print(f"env: left as the template has them: {', '.join(left)}", flush=True)
-    return env
 
 
-# ---------------------------------------------------------------- up, certificate
+def pebble_compose(release: Release, workdir: Path, values: dict[str, str]) -> list[str]:
+    """Pebble's own command: the release's recipe and the overlay, under the run's project, BEFORE there is a `.env`.
 
+    Compose interpolates the whole model even to start one service, so every variable the two files require gets a
+    value: the run's own, and for the image lines and the secrets `veyqctl install` writes later a placeholder —
+    nothing Pebble's service or the `edge` network reads, so `install`'s `up` finds both as this stage left them (the
+    install stage holds it to that: Pebble's container must survive it, or its root is not the one the app trusts).
+    """
+    import veyqctl  # the one reading of which variables a compose file requires
 
-def compose_cmd(project: str, recipe: Path, env: Path) -> list[str]:
-    return ["docker", "compose", "-p", project, "-f", str(recipe / "docker-compose.prod.yml"), "-f", str(OVERLAY),
+    recipe = release.tag / "docker-compose.prod.yml"
+    required = veyqctl.required_names(recipe.read_text(encoding="utf-8"), OVERLAY.read_text(encoding="utf-8"))
+    env = workdir / "pebble.env"
+    env.write_text("".join(f"{k}={values.get(k, 'unused-by-the-pebble-stage')}\n"
+                           for k in dict.fromkeys([*values, *required])), encoding="utf-8")
+    return ["docker", "compose", "-p", values["COMPOSE_PROJECT_NAME"], "-f", str(recipe), "-f", str(OVERLAY),
             "--env-file", str(env)]
 
 
-def up(compose: list[str], workdir: Path) -> None:
-    result = run(*compose, "up", "-d", "--wait", "--wait-timeout", str(WAIT_SECS), check=False)
-    (workdir / "up.log").write_text(result.stdout + result.stderr, encoding="utf-8")
-    if result.returncode != 0:
-        missing = MISSING_VARIABLE.search(result.stderr)
-        if missing:
-            raise Red(f"required variable {missing.group(1)} has no value — the image's .env.example asks for "
-                      f"something this run does not fill: {result.stderr.strip().splitlines()[-1]}")
-        raise Red(f"`up --wait` exited {result.returncode}: {result.stderr.strip()[-2000:]}")
+def pebble_container(project: str, workdir: Path) -> str:
+    return run(*by_name(project), "ps", "-q", "pebble", cwd=workdir, env=name_only_env()).stdout.strip()
+
+
+class Installed(NamedTuple):
+    """What `veyqctl install` left: the instance's home, the release it runs, and the command that addresses it."""
+    home: Path
+    release: str
+    assets: list[str]
+    env: Path
+    compose: list[str]
+
+
+def install(release: Release, workdir: Path, values: dict[str, str], pebble_id: str) -> Installed:
+    """`veyqctl install --unsigned-local` with the release's own `veyqctl`, as a Server Owner runs it (ADR 0096).
+
+    The overlay is the instance's operator override file (`compose.override.yml`), so every command `veyqctl` runs
+    lays it over the recipe; the run's values go in through `--set`; the secrets are `veyqctl`'s. stdin is closed,
+    so a value the template asks for that this run does not give is refused by name instead of asked for.
+    """
+    home = workdir / "home"
+    project = values["COMPOSE_PROJECT_NAME"]
+    home.mkdir(mode=0o700)
+    shutil.copyfile(OVERLAY, home / "compose.override.yml")
+    cmd = [sys.executable, str(release.tag / "veyqctl"), "--home", str(home), "--source", str(release.source),
+           "install", "--unsigned-local", *(f"--set={k}={v}" for k, v in values.items())]
+    print("+", " ".join(cmd), flush=True)
+    with (workdir / "install.log").open("w", encoding="utf-8") as log:
+        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, env={**os.environ, "VEYQ_WAIT_SECS": str(WAIT_SECS)})
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            print(f"  | {line}", end="", flush=True)
+            log.write(line)
+        status = proc.wait()
+    if status != 0:
+        raise Red(f"`veyqctl install` exited {status} — install.log in the run directory says why")
+    state = json.loads((home / "state.json").read_text(encoding="utf-8"))
+    if state["project"] != project:
+        raise Red(f"veyqctl named the instance's project {state['project']!r}, not the run's {project!r}")
+    if pebble_container(project, workdir) != pebble_id:
+        raise Red("`veyqctl install` recreated Pebble: the root the app trusts is not the one Pebble now issues under")
+    installed = home / "releases" / state["release"]
+    names = sorted(json.loads((installed / "manifest.json").read_text(encoding="utf-8"))["assets"])
+    compose = ["docker", "compose", "-p", project, "-f", str(installed / "docker-compose.prod.yml"),
+               "-f", str(home / "compose.override.yml"), "--env-file", str(home / ".env")]
+    return Installed(home, state["release"], names, home / ".env", compose)
+
+
+# ---------------------------------------------------------------- certificate
 
 
 def by_name(project: str) -> list[str]:
@@ -402,7 +450,12 @@ def served_certificate() -> str:
         return f"nothing ({error})"
 
 
-def pebble(compose: list[str], workdir: Path, app_image: str) -> None:
+def pebble(release: Release, workdir: Path, values: dict[str, str], app_image: str) -> str:
+    """Pebble first, alone: its root is generated when it starts, and the app must trust it before IT starts."""
+    minica = workdir / "pebble-minica.pem"
+    copy_out(pebble_image(), {PEBBLE_MINICA_PATH: minica})
+    minica.chmod(0o644)  # Traefik reads it as uid 65532
+    compose = pebble_compose(release, workdir, values)
     run(*compose, "up", "-d", "--wait", "pebble")
     root = pebble_root(compose, workdir)
     # The candidate's own keytool, as the uid of this run, writing into the run directory; no network.
@@ -411,6 +464,7 @@ def pebble(compose: list[str], workdir: Path, app_image: str) -> None:
         "-importcert", "-noprompt", "-alias", "veyq-e2e-pebble-root", "-file", f"/w/{root.name}",
         "-keystore", f"/w/{APP_TRUSTSTORE}", "-storetype", "PKCS12", "-storepass", APP_TRUSTSTORE_PASSWORD)
     print(f"pebble: the app trusts {describe(ssl.PEM_cert_to_DER_cert(root.read_text()))} and nothing else", flush=True)
+    return pebble_container(values["COMPOSE_PROJECT_NAME"], workdir)
 
 
 def certificate(workdir: Path) -> None:
@@ -653,18 +707,19 @@ def main() -> int:
             return None
 
     before = stage("preflight", lambda: (ports_free(), browser_pins(), host_snapshot())[2])
-    recipe = stage("extract", extract, args.app, workdir)
-    env = stage("env", write_env, recipe, args.app, args.admin, workdir / "pebble-minica.pem") if recipe else None
-    compose = compose_cmd(project, recipe, env) if env else None
+    release = stage("assets", assets, args.app, args.admin, workdir)
+    values = run_values(project, workdir)
     started = False
     opened = None
+    installed = None
     try:
-        if compose:
+        if release:
             started = not red
-            stage("pebble", pebble, compose, workdir, args.app)
-            stage("up", up, compose, workdir)
+            pebble_id = stage("pebble", pebble, release, workdir, values, args.app)
+            installed = stage("install", install, release, workdir, values, pebble_id)
             stage("certificate", certificate, workdir)
-            stack = sweep_stack(compose, project, env)
+            compose = installed.compose if installed else []
+            stack = sweep_stack(compose, project, installed.env) if installed else None
             opened = stage("window", window, stack, stamp, workdir, since)
             stage("browser", browser, compose, workdir, selection)
             stage("sweep", sweep, stack, workdir, opened)
@@ -683,6 +738,9 @@ def main() -> int:
     for name, secs, verdict in stages:
         print(f"  {name:<12} {secs:7.1f}s  {verdict}")
     print(f"  {'total':<12} {sum(s for _, s, _ in stages):7.1f}s")
+    if installed:
+        print(f"installed by veyqctl --unsigned-local (NOTHING VERIFIED): release {installed.release} into "
+              f"{installed.home.relative_to(ROOT)}, assets {', '.join(installed.assets)}")
     if red:
         print("RED\n  " + "\n  ".join(red))
         return 1

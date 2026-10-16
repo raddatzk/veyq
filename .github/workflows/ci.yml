@@ -294,6 +294,11 @@ jobs:
       - name: Backup tool self-test (the restored key's owner)
         run: python3 scripts/instance_backup_selftest.py
 
+      # Docker-free: veyqctl's resolver against a mirror it writes, the manifest parse, the template merge, `upgrade`'s
+      # order and every refusal (ADR 0096). Beside the backup tool's, which veyqctl runs from a release's directory.
+      - name: veyqctl self-test
+        run: python3 scripts/veyqctl_selftest.py
+
       # Docker-free: the upgrade proof's pure parts (which predecessor, both builds' migrations, Flyway's refusal named,
       # the record both builds share). The proof itself is `upgrade-proof` below, disabled until a release.
       - name: Upgrade proof self-test

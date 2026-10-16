@@ -5,8 +5,8 @@
 
 ## Context
 
-veyq ships one deployment artifact today: `infra/docker-compose.prod.yml`, travelling inside the signed app
-image ([ADR 0057 §3](0057-release-identity-and-deployment-recipe.md)). A **V1 scope cut recorded 2026-08-06**
+veyq ships one deployment artifact today: `infra/docker-compose.prod.yml`, a release's asset beside its signed
+images ([ADR 0057 §3](0057-release-identity-and-deployment-recipe.md)). A **V1 scope cut recorded 2026-08-06**
 ([inbox #26](../inbox.md)) explicitly dropped Helm: *"zero k8s artefacts in the tree and the §10
 self-hostability bar is literally one `docker compose up` + a JVM."* That reasoning held while veyq's
 deployment story was single-host, single-tenant. It no longer fully does: [ADR 0063](0063-database-driven-tenant-ingress.md)
@@ -32,7 +32,7 @@ Forces:
   a different Traefik Helm chart are not guaranteed to preserve it.
 - **The release-identity story ([ADR 0057](0057-release-identity-and-deployment-recipe.md)) is
   image-specific.** A Helm chart is a different artifact type and needs its own equivalent, not a
-  reinterpretation of "travels inside the image."
+  reinterpretation of the compose recipe's.
 - **The backup guard is explicitly compose-only.** [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)
   names this directly: *"that guard sees compose files in this tree only: for Kubernetes ... the obligation
   is the operator's, and the `veyq_instance` fingerprint tripwire is the only detection."* A Kubernetes
@@ -257,7 +257,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
 - **Two deployment targets to keep honest against each other.** Every infra-level decision (routing, TLS,
   config-secret persistence) now has a compose *and* a Helm answer; a future ADR/CR that changes one must
   check the other — the same discipline [ADR 0057](0057-release-identity-and-deployment-recipe.md) already
-  keeps between the compose file's two homes (repo + inside the image).
+  keeps between the compose file's two homes (the tree + the release's assets).
 - **`docs/inbox.md` #26 is corrected in place** to record the reversal and point here — the 2026-08-06
   reasoning is superseded, not silently contradicted.
 - **The upgrade runbook has its Kubernetes equivalent** — the Run area's [Upgrade](../../site/src/content/docs/run/upgrade.mdx)

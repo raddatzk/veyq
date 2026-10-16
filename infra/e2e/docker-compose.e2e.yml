@@ -1,11 +1,12 @@
 # The ONLY differences between an end-to-end run and a Server Owner's instance: the ACME server standing in for Let's
 # Encrypt, the DNS name and CA trust the public internet would give the instance, and the browser that drives it
-# (ADR 0090 § Decisions 1 and 3). It is laid OVER the production recipe extracted from the candidate image
-# (never over this checkout's copy) by scripts/run_stack_e2e.py, which also writes the `.env` both files are
-# interpolated from:
+# (ADR 0090 § Decisions 1 and 3). scripts/run_stack_e2e.py installs the candidate with `veyqctl install` and makes
+# this file the instance's operator override (`<home>/compose.override.yml`), so it is laid OVER the release's own
+# recipe (never over this checkout's copy) on every command veyqctl runs, interpolated from the `.env` veyqctl writes
+# (the run's own `${VEYQ_E2E_*}` values go in through `--set`):
 #
-#     docker compose -p veyq-e2e-<stamp> -f <run>/recipe/docker-compose.prod.yml -f infra/e2e/docker-compose.e2e.yml \
-#         --env-file <run>/recipe/.env up -d --wait
+#     docker compose -p veyq-e2e-<stamp> -f <home>/releases/<release>/docker-compose.prod.yml \
+#         -f <home>/compose.override.yml --env-file <home>/.env up -d --wait
 #
 # Pebble is Let's Encrypt's own test ACME server, so Traefik walks the real issuance path — resolver, account, order,
 # and the /acme volume it must be able to write (ADR 0071's silent failure: an unwritable /acme keeps Traefik up and
