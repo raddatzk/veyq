@@ -117,8 +117,8 @@ contracts phase and no web phase.
 
 ### Decisions this CR takes that the ADR leaves to the build (stated, not silent)
 
-- **Resolution is one pure function**, `ClientAddress.resolve(peer, xffLines, trusted)` → an `InetAddress` or none,
-  in `backend/core/.../core/http/ClientAddress.kt`. Beside it sits a thin request accessor over
+- **Resolution is one pure function**, `ClientAddress.resolve(peer, xffLines, trusted)` → an `(ip, port?)` or none
+  (O3 (c): `port == null` means the port is unknown), in `backend/core/.../core/http/ClientAddress.kt`. Beside it sits a thin request accessor over
   `request.connection().remoteAddress()` and `request.headers().getAll("X-Forwarded-For")`. The pure function is
   what the unit test and the mutation gate (if the owner says so, O2) see. The accessor holds no decision.
 - **Parsing never resolves a name.** An entry is a literal or nothing, exactly as `AdminChannel.literal` parses one
@@ -143,9 +143,11 @@ contracts phase and no web phase.
 ## Decided with the owner, and what is still open
 
 Owner 2026-10-16 ("Bei den drei offenen Punkten gehe ich überall mit"): **O1 (a)** and **O2 (a)** as recommended.
-**O3 is reopened**: the owner also decided "Carrier-Grade-NAT sollten wir beachten" — behind CGNAT an address names no
-one without its source port, so (a)'s dropping of a proxy-written `ip:port` loses exactly the part that attributes.
-O3 is settled by the source-port research (orchestrator, in flight) before phase 1 starts; until then phase 1 waits.
+**O3 was reopened** by the owner's "Carrier-Grade-NAT sollten wir beachten" — behind CGNAT an address names no one
+without its source port, so (a)'s dropping of a proxy-written `ip:port` loses exactly the part that attributes. The
+source-port research settled it: **O3 (c)**, decided by the orchestrator under that direction, and ADR 0094 decision 3
+was amended in place. Every other port source (the PROXY protocol, a trusted header, a local Traefik plugin, chart
+values) is inbox #472, a follow-up before the moderation CR.
 
 - **O1 — Should a guard hold decision 1 ("one resolver, both consumers")?**
   - (a) Extend `scripts/validate_lookup_single_home.py` with a rule D: a string literal naming `X-Forwarded-For`
@@ -171,10 +173,12 @@ O3 is settled by the source-port research (orchestrator, in flight) before phase
   - (a) Strict, as ADR 0094 decision 3 reads: it is not an IP address, so there is no address. The limiter keys on
     the peer and the record stores nothing.
   - (b) Strip one port suffix before parsing.
-  - **Recommendation: (a) for this CR, and the Run docs name it.** The entry at the stop is proxy-written, so (b)
-    would not open a forgery. But the ADR's text is explicit, and the only reason for (b) is remembered, not
-    measured: that some cloud application gateways append `ip:port`. If an operator meets it, it becomes an inbox
-    row and an ADR edit, not a silent widening here.
+  - (c) Parse the port and **keep** it: IPv4 `a.b.c.d:p`, IPv6 only bracketed `[v6]:p`, a bare IPv6 never split,
+    a port 1–65535. The resolver returns `(ip, port?)` from the start, so its API breaks once, not twice. The limiter
+    keys on the IP alone. `Forwarded` stays ignored.
+  - **Decided: (c).** The entry is proxy-written, so its port opens no forgery; AWS ALB (on request) and Azure
+    Application Gateway (always) are measured to write it (ADR 0094 M7); and it is the part that attributes behind
+    CGNAT (M8).
 
 ## Phases
 
@@ -216,7 +220,11 @@ O3 is settled by the source-port research (orchestrator, in flight) before phase
       - Every row of ADR 0094's topology table, with the "Arrives at the app" column as the input.
       - No header.
       - Two header lines (order kept).
-      - A non-IP entry at the stop (`unknown`, a hostname, an empty entry, `203.0.113.77:51234` per O3) → none.
+      - A non-IP entry at the stop (`unknown`, a hostname, an empty entry, `1.2.3.4:0`, `1.2.3.4:`) → none.
+      - The port forms (O3 (c)): `203.0.113.77:51234` → (…, 51234); `[2001:db8::1]:443` → (…, 443);
+        `[2001:db8::1]` → (…, unknown); a bare `2001:db8::1` is never split; `198.51.100.66:4711, 203.0.113.77` →
+        (203.0.113.77, unknown), the port left of the stop never read; a listed hop with a port is skipped.
+      - The limiter's key unchanged by a port (a slice: `203.0.113.77:1111` and `:2222` at the stop share one bucket).
       - A non-IP entry left of the stop → ignored.
       - Every entry listed → the leftmost.
       - IPv4-mapped normalisation on both sides.
@@ -302,7 +310,7 @@ O3 is settled by the source-port research (orchestrator, in flight) before phase
       - The shared-bucket consequence behind an appending chain without `trusted-proxies`.
       - Keeping the client's source address in front of the gateway (R3: `externalTrafficPolicy: Local` or the
         PROXY protocol, worded as the setting to check).
-      - O3's ported entry.
+      - The port column (ADR 0094's table), "port unknown" as the normal case, the AppGW IPv6 caveat (R4), and NTP.
       - Its "A proxy of your own in front" bullet stays true (Traefik replaces).
     - `run/hardening.md`: the section and its anchor, renamed together with the `run/configuration.md:74` link.
     - `run/kubernetes.md`: the `app.trustedProxies` sentence, plus decision 6 where `networkPolicy.enabled: false`
@@ -335,7 +343,7 @@ O3 is settled by the source-port research (orchestrator, in flight) before phase
 - **No CI run exists in this repository** (no remote). "Green" means the local run over the committed tree:
   `python3 scripts/run_pipeline.py`, or the per-phase commands above.
 
-Implementation has the owner's go (2026-10-16); phase 1 waits for O3 only.
+Implementation has the owner's go (2026-10-16).
 
 ## Retrospective
 
