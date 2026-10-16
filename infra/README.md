@@ -162,13 +162,16 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
 
 For the maintainer; an operator starts at the [Run area](https://raddatzk.github.io/veyq/run/) of the docs site. **Nothing is published by a push**
 ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) §1): a push to `main` or
-`release/**`, and every pull request, runs `.github/workflows/container.yml` as a **dry run** — the test gate (the
-chart's `scripts/chart_meta_check.py` and `scripts/chart_upgrade_check.py` included) and both image builds, with no registry login and no push. A publish
-is started by hand, from `main` or `release/<major>.x`, and is one of two kinds:
+`release/**`, and every pull request, runs `.github/workflows/ci.yml` — the one pipeline per commit
+([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)) — as a **dry
+run**: every stage (the guards, the surface checks with the chart's `scripts/chart_meta_check.py` and
+`scripts/chart_upgrade_check.py`, the races, the API end-to-end run) and, beside them, both image builds, with no
+registry login and no push. A publish is started by hand, from `main` or `release/<major>.x`, runs the same stages,
+publishes only when every one is green, and is one of two kinds:
 
 ```sh
-gh workflow run container.yml --ref main                    # a snapshot: <major>.<minor>-SNAPSHOT
-gh workflow run container.yml --ref main -f release=true    # a release:  <major>.<minor>
+gh workflow run ci.yml --ref main                    # a snapshot: <major>.<minor>-SNAPSHOT
+gh workflow run ci.yml --ref main -f release=true    # a release:  <major>.<minor>
 ```
 
 - **A snapshot** publishes both images and the chart as `<major>.<minor>-SNAPSHOT` (and the images as
@@ -184,7 +187,7 @@ gh workflow run container.yml --ref main -f release=true    # a release:  <major
   owner's GHCR packages. Make all three public, or every operator needs registry credentials — and the chart has no
   `imagePullSecrets` value, so public is the state it supports.
 - **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
-  at the top of `container.yml`, checked against the published `.sha256sum` and the GitHub release notes.
+  at the top of `ci.yml`, checked against the published `.sha256sum` and the GitHub release notes.
 - **The first `1.x` release is one commit, then a release dispatch:** `VERSION` set to `1` **and** the `release:`
   line of `scripts/applied_migrations.sha256` set to the highest migration that release ships, together. From then
   on a released migration is never edited ([backend/CLAUDE.md](../backend/CLAUDE.md) § Migrations).

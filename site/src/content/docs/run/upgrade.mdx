@@ -34,7 +34,7 @@ one under test until the first release, the last release (`v<major>.<minor>`) fr
 names another one, and a ref older than the seeder is refused. The run's summary ends with the predecessor, both
 builds' highest migration, the migrations changed or removed between them, and the outcome with its cause — a Flyway
 refusal (a changed baseline's checksum above all) is named as such. Before the first release a red proof informs and
-gates nothing; `container.yml`'s `upgrade-proof` job, which `publish` needs, is disabled until then
+gates nothing; `ci.yml`'s `upgrade-proof` job, which `publish` needs, is disabled until then
 ([backend/CLAUDE.md](https://github.com/raddatzk/veyq/blob/main/backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
 images, so the pull, the recipe diff and the `up` of steps 4–6 and the rollback stay unrehearsed; and it says nothing
 about the chart — `helm upgrade` from the predecessor's chart to the candidate's runs in no cluster; its immutable
@@ -130,7 +130,7 @@ to this target.
   the claim templates whole (name, order, access modes, class, size, their labels), a claim's access modes,
   class or a shrinking size, a RoleBinding's `roleRef`, a kind changed under a name, a StatefulSet or claim gone. It
   also renders this chart with the predecessor's `ci/` values: values you already run must still pass the schema.
-  `container.yml`'s `test` job runs it; before the first release its findings inform, from it they fail the build.
+  `ci.yml`'s `chart` job runs it; before the first release its findings inform, from it they block the publish.
   **It renders and installs nothing**, so it does not see a missing StorageClass or one that cannot expand a growing
   claim, admission, image pulls, your data surviving the upgrade, a `mariadbPassword` changed on upgrade (MariaDB keeps
   the old one), a value path no `ci/` file

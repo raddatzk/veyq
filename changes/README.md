@@ -588,10 +588,11 @@ Confirm the commit path works **before** phase 1 — it is one throwaway commit,
 discovering it at the point where you have the most to lose.
 **Where a CR's done-when says "green in CI", know which jobs can even run.** Two independent gates, and both bit
 during cr-e2e-orchestrator:
-- **Branch filters.** [`ci.yml`](../.github/workflows/ci.yml) triggers only on `main` and on PRs *targeting*
-  `main`, so pushing a feature branch runs **nothing**. That CR's Phase 5 said "push the branch so the job runs";
-  the push produced zero runs. `ci.yml` carries `workflow_dispatch`, so `gh workflow run ci.yml --ref <branch>`
-  is how a branch gets a real run.
+- **Branch filters.** [`ci.yml`](../.github/workflows/ci.yml) triggers only on `main`, `release/**` and PRs
+  *targeting* them, so pushing a feature branch runs **nothing**. That CR's Phase 5 said "push the branch so the job
+  runs"; the push produced zero runs. A pull request is how a branch gets a real run: `ci.yml`'s `workflow_dispatch`
+  is the **publish** since it absorbed `container.yml` (ADR 0091), and its version step refuses a dispatch on any
+  branch but `main` and `release/<major>.x`.
 - **`workflow_dispatch` resolves against the DEFAULT branch.** A workflow file that exists only on the feature
   branch cannot be dispatched at all — `HTTP 404: not found on the default branch`. This once described
   `trust-chain.yml`, `mutation*.yml` and `wiki-sync.yml`, which lived on a feature branch and not on `main`; that

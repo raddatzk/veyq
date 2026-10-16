@@ -10,7 +10,7 @@ bucket, no access key and no grant. Today `infra/garage-init.sh` closes that gap
 and it needs a container of its own for a reason that has nothing to do with the work — the official Garage
 image is `scratch`-based and has no shell, so `infra/garage-init.Dockerfile` exists purely to put the `garage`
 CLI on an Alpine that has one. That image carries `build:` in `infra/docker-compose.prod.yml` and is not one of
-the two images `.github/workflows/container.yml` publishes.
+the two images the publish workflow (then `container.yml`, `ci.yml` since ADR 0091) publishes.
 
 Forces:
 
@@ -145,7 +145,7 @@ customer's infrastructure, never their data.
 
 ## Consequences
 
-- **`.github/workflows/container.yml` keeps its two images.** The alternative was a third, published, signed
+- **The publish workflow (`.github/workflows/ci.yml` since ADR 0091) keeps its two images.** The alternative was a third, published, signed
   and versioned forever to serve a one-shot.
 - **The backend gains Garage-specific code, deliberately and behind the type.** That is the honest cost of
   Decision 1, and it is bounded **structurally rather than by care**: under `type: s3` no provisioner is

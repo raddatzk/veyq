@@ -110,7 +110,7 @@ acceptanceCriteria:
 gaps:
   admin-web: >-
     Act 1 — the Server Owner's — lives here (ADR 0065), and its suites exist and pass locally, but `admin-web`'s
-    job (`container.yml` → `test` → "Admin surface checks") has never executed, so ADR 0040 admits none of them:
+    job (`ci.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR 0040 admits none of them:
     a declared run is enough only on a job a run has already executed. They are mocked-client unit tests on two
     callers — the console by hand, `veyq-admin` from a script (cr-admin-cli) — and each pins the call and its
     arguments, never the server's answer (201/204/409/400 stay the backend refs' sentences). On the first run
