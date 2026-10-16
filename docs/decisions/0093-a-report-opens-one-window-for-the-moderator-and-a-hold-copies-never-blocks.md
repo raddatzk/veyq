@@ -1,7 +1,7 @@
 # ADR 0093 — A report opens one window for the moderator, and a hold copies, never blocks
 
-- Status: Accepted 2026-10-16; nothing of it is built. When it is built is the inbox's call: the V1 line puts share
-  moderation out of V1 ([inbox](../inbox.md) § V1, row #462 asks again).
+- Status: Accepted 2026-10-16; nothing of it is built. It is on the V1 line (owner 2026-10-16,
+  [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
 Provenance: **(M)** is measured in this worktree (file and line named); **(S)** comes from a read-only sweep of the
