@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Boot the release candidate as a Server Owner would, from the recipe inside its image (ADR 0090, lane L1 of ADR 0091).
+"""Boot the release candidate as a Server Owner would, from the recipe inside its image, and drive it in a browser (ADR 0090, lane L1 of ADR 0091).
 
-**What it does — phase 1 of `changes/cr-stack-e2e.md`, a bare boot.** Takes the two candidate images (`--app`,
+**What it does — phases 1 and 2 of `changes/cr-stack-e2e.md`: a boot, then first run in a browser.** Takes the two candidate images (`--app`,
 `--admin`: a registry reference pinned by digest, or a local tag for a local run) and from there follows the Run area
 of the docs site rather than this repository:
 
@@ -15,30 +15,46 @@ of the docs site rather than this repository:
      template has it, so a required one fails the `up` with the recipe's own `${VAR:?…}` message, named — the drift
      shows up as a red run, not a silent default. The other direction is refused here: a value this script fills
      that the template no longer names is red at this stage.
-  3. **up** — `docker compose up -d --wait` with `infra/e2e/docker-compose.e2e.yml` laid over the recipe (Pebble,
-     nothing else) under a project of its own, `veyq-e2e-<stamp>`, so it cannot address an instance on this host.
-  4. **certificate** — reads the run's Pebble root off Pebble's management port and opens TLS to `:443` for
-     `veyq.test` (SNI, no `/etc/hosts`) with that root as the ONLY trusted CA; then `GET /api/setup` over the
+  3. **pebble** — Pebble alone first, under a project of its own, `veyq-e2e-<stamp>`, so it cannot address an
+     instance on this host. Its root is generated when it starts, and the app must trust it before IT starts: this
+     stage reads the root off Pebble's management port and writes the app's truststore with it — Pebble's root and
+     nothing else, written by the candidate image's own `keytool` (the overlay says why the app needs it).
+  4. **up** — `docker compose up -d --wait` with `infra/e2e/docker-compose.e2e.yml` laid over the recipe (Pebble,
+     the browser behind a profile, and the DNS name and CA trust the internet would give the instance).
+  5. **certificate** — opens TLS to `:443` for `veyq.test` (SNI, no `/etc/hosts`) with the run's Pebble root as the
+     ONLY trusted CA; then `GET /api/setup` over the
      verified connection must answer 200. Traefik serves its default certificate until ACME has finished, so this
      polls until `VEYQ_STACK_CERT_SECS`; at the deadline it names the certificate Traefik served instead. A Traefik
      that cannot write `/acme` (ADR 0071's silent failure) is red here, not up.
-  5. **evidence** — `compose.log` (every container, timestamped) and `ps.json` into the run directory, always.
-  6. **teardown** — `docker compose down -v` (unless `--keep`).
-  7. **host** — the run touched nothing that is not its own: every container that existed before it still exists
+  6. **browser** — `e2e/`'s Playwright suite, whole, in the Playwright image the overlay pins, started with
+     `docker compose run --rm browser` on the run's own `edge` and `admin` networks — never on the host, so a laptop
+     runs what CI runs. The container first trusts the run's Pebble root (and nothing more) in Chromium's NSS db
+     (`infra/e2e/nss_trust_root.py`); the suite reaches the domain through Traefik and the admin console through an
+     in-container loopback tunnel to `admin:8080` (`e2e/src/tunnel.ts`), and everything it may reach is named in
+     `stack.json`, which this stage writes. Its exit code is the verdict; the JUnit report's tests and times are
+     printed. Preflight refuses a run whose installed `@playwright/test` is not exactly the image's version (the
+     browser is baked into the image; a library one patch apart fails at launch) or is not installed at all.
+  7. **evidence** — `compose.log` (every container, timestamped) and `ps.json` into the run directory, always.
+  8. **teardown** — `docker compose down -v` (unless `--keep`).
+  9. **host** — the run touched nothing that is not its own: every container that existed before it still exists
      with the same state and start time, every volume still exists, and nothing of the run's project is left.
 
 The summary prints each stage's wall time — the budget ADR 0091 decision 1 holds the lane to — and the verdict.
-No browser runs yet: Playwright, the NSS trust store it needs and the sweeps are later phases of the CR.
+The sweeps of ADR 0053 are a later phase of the CR.
 
 **The run directory survives the run** (`.e2e-stack-out/<stamp>/`, gitignored): the extracted recipe, the `.env`
-(every secret of an instance that no longer exists), Pebble's root, `up.log`, `compose.log`, `ps.json`.
+(every secret of an instance that no longer exists), Pebble's root, `up.log`, `compose.log`, `ps.json`, and the
+browser's: `stack.json`, `browser.log`, `junit.xml`, `report/` (Playwright's HTML report), `playwright/` (a trace per
+test, `npx playwright show-trace <zip>`), `instance.json` (the owner's credentials and Secret Key, the invite link).
 
-**Not a `validate_*` guard.** It needs Docker, two images and host ports 80 and 443, so it cannot join the
-buildless trust-chain glob; lane L1 calls it directly.
+**Not a `validate_*` guard.** It needs Docker, two images, host ports 80 and 443 and the root `npm ci`, so it
+cannot join the buildless trust-chain glob; lane L1 calls it directly.
 
 **Its limits — what a green run does NOT prove.** Pebble is told every challenge is valid (the overlay says why), so
-Traefik's HTTP-01 router on :80 is not exercised. The certificate is asserted for the bootstrap domain only; a
-tenant's domain gets its router at run time and is a later phase's. The host check compares before and after: it
+Traefik's HTTP-01 router on :80 is not exercised. The certificate stage asserts the bootstrap domain; the tenant's
+domain is asserted by the browser, which opens the invite link over it. The browser reaches Traefik on the run's
+`edge` network, not through the host's published :443 — the published ports themselves are exercised by the
+certificate stage only. The host check compares before and after: it
 cannot tell this run's touch from another process's on the same host in the same window, so a red there names the
 container and leaves the attribution to the reader; and a container created AND removed by someone during the run is
 invisible to it.
@@ -63,6 +79,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 try:
@@ -78,6 +95,16 @@ GARAGE_TOML = ROOT / "infra" / "garage.toml"
 RUN_ROOT = ROOT / ".e2e-stack-out"
 RECIPE_DIR = "/opt/veyq/deploy"
 RECIPE_FILES = ("docker-compose.prod.yml", ".env.example")
+E2E_PACKAGE = ROOT / "e2e" / "package.json"
+INSTALLED_PLAYWRIGHT = ROOT / "node_modules" / "@playwright" / "test" / "package.json"
+# What the browser container is told it may reach (e2e/src/stack.ts). Paths are the container's: the run directory
+# is mounted at /out.
+ADMIN_UPSTREAM = "admin:8080"
+TRAEFIK_SERVICE = "traefik"
+CONTAINER_OUT = "/out"
+APP_TRUSTSTORE = "app-truststore.p12"
+# Not a secret: the store holds one public certificate, and Java asks for a password (the overlay names it too).
+APP_TRUSTSTORE_PASSWORD = "veyq-e2e"
 PEBBLE_MINICA_PATH = "/test/certs/pebble.minica.pem"
 PEBBLE_MANAGEMENT_PORT = 15000
 DOMAIN = "veyq.test"
@@ -178,8 +205,27 @@ def copy_out(image: str, files: dict[str, Path]) -> None:
         run("docker", "rm", cid, check=False)
 
 
+def overlay_image(service: str) -> str:
+    return yaml.safe_load(OVERLAY.read_text(encoding="utf-8"))["services"][service]["image"]
+
+
 def pebble_image() -> str:
-    return yaml.safe_load(OVERLAY.read_text(encoding="utf-8"))["services"]["pebble"]["image"]
+    return overlay_image("pebble")
+
+
+def browser_pins() -> None:
+    """The browser is baked into the pinned Playwright image; the library that drives it is the host's install."""
+    pinned = json.loads(E2E_PACKAGE.read_text(encoding="utf-8"))["devDependencies"]["@playwright/test"]
+    if not INSTALLED_PLAYWRIGHT.is_file():
+        raise Red("@playwright/test is not installed — run `python3 scripts/npm_ci_no_deprecated.py` at the repository "
+                  "root first (the browser container installs nothing; it mounts that install read-only)")
+    installed = json.loads(INSTALLED_PLAYWRIGHT.read_text(encoding="utf-8"))["version"]
+    image = overlay_image("browser")
+    tag = re.search(r":v(\d+\.\d+\.\d+)-", image)
+    versions = {"e2e/package.json": pinned, "node_modules": installed, "the overlay's image": tag.group(1) if tag else image}
+    if len(set(versions.values())) != 1:
+        raise Red(f"Playwright versions disagree: {versions} — the library must be exactly the image's browser's")
+    print(f"browser: Playwright {installed} (library and image agree)", flush=True)
 
 
 def extract(app_image: str, workdir: Path) -> Path:
@@ -212,6 +258,11 @@ def write_env(recipe: Path, app_image: str, admin_image: str, minica: Path) -> P
         "ADMIN_PORT": str(ADMIN_PORT),
         "VEYQ_ACME_CASERVER": "https://pebble:14000/dir",
         "VEYQ_E2E_PEBBLE_MINICA": str(minica),
+        "VEYQ_E2E_APP_TRUSTSTORE": str(minica.parent / APP_TRUSTSTORE),
+        "VEYQ_E2E_REPO": str(ROOT),
+        "VEYQ_E2E_RUN_DIR": str(minica.parent),
+        "VEYQ_E2E_UID": str(os.getuid()),
+        "VEYQ_E2E_GID": str(os.getgid()),
     }
     lines, named, left = [], set(), []
     for line in (recipe / ".env.example").read_text(encoding="utf-8").splitlines():
@@ -320,8 +371,19 @@ def served_certificate() -> str:
         return f"nothing ({error})"
 
 
-def certificate(compose: list[str], workdir: Path) -> None:
+def pebble(compose: list[str], workdir: Path, app_image: str) -> None:
+    run(*compose, "up", "-d", "--wait", "pebble")
     root = pebble_root(compose, workdir)
+    # The candidate's own keytool, as the uid of this run, writing into the run directory; no network.
+    run("docker", "run", "--rm", "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}",
+        "-v", f"{workdir}:/w", "--entrypoint", "keytool", app_image,
+        "-importcert", "-noprompt", "-alias", "veyq-e2e-pebble-root", "-file", f"/w/{root.name}",
+        "-keystore", f"/w/{APP_TRUSTSTORE}", "-storetype", "PKCS12", "-storepass", APP_TRUSTSTORE_PASSWORD)
+    print(f"pebble: the app trusts {describe(ssl.PEM_cert_to_DER_cert(root.read_text()))} and nothing else", flush=True)
+
+
+def certificate(workdir: Path) -> None:
+    root = workdir / "pebble-root.pem"
     # cafile given → the default trust store is NOT loaded: the run's Pebble root is the only CA.
     ctx = ssl.create_default_context(cafile=str(root))
     deadline = time.monotonic() + CERT_SECS
@@ -345,6 +407,49 @@ def certificate(compose: list[str], workdir: Path) -> None:
     if " 200 " not in f"{status} ":
         raise Red(f"the certificate verifies, but GET https://{DOMAIN}/api/setup answered `{status}`, not 200")
     print(f"GET https://{DOMAIN}/api/setup: {status}", flush=True)
+
+
+# ---------------------------------------------------------------- browser
+
+
+def browser(compose: list[str], workdir: Path) -> None:
+    (workdir / "stack.json").write_text(json.dumps({
+        "domain": DOMAIN,
+        "appOrigin": f"https://{DOMAIN}",
+        "traefikHost": TRAEFIK_SERVICE,
+        # The same port number an operator's tunnel listens on, inside the container (e2e/src/tunnel.ts).
+        "adminOrigin": f"http://localhost:{ADMIN_PORT}",
+        "adminUpstream": ADMIN_UPSTREAM,
+        "outDir": CONTAINER_OUT,
+    }, indent=2) + "\n", encoding="utf-8")
+    cmd = [*compose, "run", "--rm", "--no-deps", "-T", "browser"]
+    print("+", " ".join(cmd), flush=True)
+    with (workdir / "browser.log").open("w", encoding="utf-8") as log:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            print(f"  | {line}", end="", flush=True)
+            log.write(line)
+        status = proc.wait()
+    tests = junit(workdir / "junit.xml")
+    for name, secs, verdict in tests:
+        print(f"browser: {secs:6.1f}s  {verdict:<7} {name}", flush=True)
+    if status != 0:
+        failed = [name for name, _, verdict in tests if verdict == "failed"]
+        raise Red(f"Playwright exited {status}" + (f"; failed: {'; '.join(failed)}" if failed else "")
+                  + " — browser.log, report/ and the traces under playwright/ in the run directory say where")
+
+
+def junit(path: Path) -> list[tuple[str, float, str]]:
+    """Every test case the JUnit report names, with its time and verdict — empty when there is no report."""
+    if not path.is_file():
+        return []
+    cases = []
+    for case in ElementTree.parse(path).getroot().iter("testcase"):
+        verdict = ("failed" if case.find("failure") is not None or case.find("error") is not None
+                   else "skipped" if case.find("skipped") is not None else "passed")
+        cases.append((case.get("name", "?"), float(case.get("time", "0")), verdict))
+    return cases
 
 
 # ---------------------------------------------------------------- the run
@@ -380,7 +485,7 @@ def main() -> int:
             print(f"RED at {name}: {error}", flush=True)
             return None
 
-    before = stage("preflight", lambda: (ports_free(), host_snapshot())[1])
+    before = stage("preflight", lambda: (ports_free(), browser_pins(), host_snapshot())[2])
     recipe = stage("extract", extract, args.app, workdir)
     env = stage("env", write_env, recipe, args.app, args.admin, workdir / "pebble-minica.pem") if recipe else None
     compose = compose_cmd(project, recipe, env) if env else None
@@ -388,8 +493,10 @@ def main() -> int:
     try:
         if compose:
             started = not red
+            stage("pebble", pebble, compose, workdir, args.app)
             stage("up", up, compose, workdir)
-            stage("certificate", certificate, compose, workdir)
+            stage("certificate", certificate, workdir)
+            stage("browser", browser, compose, workdir)
     finally:
         if started:
             stage("evidence", evidence, project, workdir)
