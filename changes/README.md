@@ -613,6 +613,14 @@ during cr-e2e-orchestrator:
   strongest available proof — `python3 scripts/run_pipeline.py` runs `ci.yml`'s jobs on a commit and names every
   job and step it did not run — and a done-when must say exactly that rather than "green in CI". The two gates
   above stay because they are what bites *after* the remote exists.
+- **With no remote, a check only one CI job runs is a check nobody runs — so a done-when names that job.** The
+  surface checks and the glob do not cover `ci.yml`'s `web-e2e`, and that job carries more than the API suites: the
+  tool self-tests of the backup, `veyqctl` and the upgrade proof, which read the backend's migrations and
+  `scripts/`. On 2026-10-16 two migrations that seed rows each landed green past `./gradlew check` and the glob, and
+  each made every restore onto a fresh install refuse; the first `run_pipeline.py --job web-e2e` was red in its
+  backup self-test within 1.5 minutes (cr-one-pipeline-per-commit's close). A CR whose change reaches what such a
+  job reads runs that job (`run_pipeline.py --job <job>`, which pins the shared compose stack's infra directory, so a
+  worktree may run it) and says so in its record.
 
 Then **read the job's log, not its tick**: a job that ran nothing and a job whose suites all passed render
 identically, which is why `scripts/validate_e2e_discovery.py` exists at all.
