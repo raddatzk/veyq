@@ -207,3 +207,4 @@ fügst es erneut hinzu.
   [unlock](uc.account.unlock.md) (the Secret-Key path this exists to avoid needing)
 - End-user view (docs site): [Adding another device](../../../../site/src/content/docs/account/adding-another-device.mdx)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
+- End-user view (docs site): [Lost Emergency Kit](../../../../site/src/content/docs/help/lost-emergency-kit.mdx)

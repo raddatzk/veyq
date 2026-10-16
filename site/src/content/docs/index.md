@@ -1,23 +1,21 @@
 ---
 title: veyq
-description: A plain-language guide to what veyq does and why your memories stay private.
+description: Step-by-step guides to veyq, and why what you keep in it stays private.
 ---
 
-A plain-language guide to what veyq does and why your memories stay private. No technical background needed.
+Step-by-step guides to veyq, in plain language: how to get in, keep your things, share them, and why they stay
+private. No technical background needed.
 
-## For you
+## Using veyq
 
-- [Is my data safe?](/veyq/privacy/is-my-data-safe/)
-- [Depot](/veyq/depot/)
-- [Sharing with people who have no account](/veyq/sharing/)
-- [Applications: Memories and Depot](/veyq/applications/)
-- [Memories](/veyq/memories/)
-- [Download and import](/veyq/spaces/download-and-import/)
-- [Getting started](/veyq/getting-started/)
-- [Devices and sessions](/veyq/account/devices-and-sessions/)
-- [Who gets into your space](/veyq/space-owners/who-gets-into-your-space/)
-- [Add another device](/veyq/account/adding-another-device/)
-- [Quantum computers & your photos](/veyq/privacy/quantum-computers-and-your-photos/)
+- [Getting started](/veyq/getting-started/): what veyq is, accepting an invitation, your Emergency Kit, signing in
+- [Your account](/veyq/account/devices-and-sessions/): devices, password, email address, keys, profile
+- [Spaces](/veyq/spaces/): your spaces, folders, groups, the trash, download and import
+- [Applications](/veyq/applications/): [Memories](/veyq/memories/) for photos and videos, [Depot](/veyq/depot/) for files
+- [Sharing](/veyq/sharing/): links for people who have no account
+- [For space owners](/veyq/space-owners/who-gets-into-your-space/): members, terms, email, storage
+- [Privacy](/veyq/privacy/is-my-data-safe/): is my data safe?
+- [Help](/veyq/help/): a forgotten password, a lost kit or device, and more
 
 ## Running an instance
 

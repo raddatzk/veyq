@@ -110,3 +110,4 @@ man etwas meldet). Du akzeptierst einmal pro Server; ein Neuladen fragt nicht er
   shared via `_common`).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md) (terms are public operational
   content; the decryptable-on-report / review-and-removal path is the operator's real remedy, not this prompt).
+- End-user view (docs site): [What a guest sees](../../../../site/src/content/docs/sharing/what-guests-see.mdx)

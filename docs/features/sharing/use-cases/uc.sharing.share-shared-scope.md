@@ -142,3 +142,4 @@ endgültig **löschen**: Was er enthielt, verschwindet; die Fotos, die Gäste hi
   [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) (the `sharing.*` capability gate)
 - Cross-cutting: [Security Model](../../../crosscutting/security-model.md),
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md)
+- End-user view (docs site): [Change, switch off, renew and delete links](../../../../site/src/content/docs/sharing/manage-links.mdx)

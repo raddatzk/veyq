@@ -244,3 +244,4 @@ Icon zeigt einfach seinen Anfangsbuchstaben; ausgewählt wird nie etwas für dic
   for the icon-key derivation), [ADR 0042](../../../decisions/0042-http-failure-projection.md) (membership
   guard first)
 - End-user view (docs site): [Rename, decorate and delete a group](../../../../site/src/content/docs/spaces/manage-a-group.mdx)
+- End-user view (docs site): [Invite and manage members](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)

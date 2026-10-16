@@ -81,3 +81,4 @@ Server, deine Regeln — veyq kann die privaten Inhalte trotzdem nicht lesen.
   (the DE terms voice).
 - **Decisions:** [ADR 0035](../../../decisions/0035-server-terms-of-service.md) (the terms + acceptance model),
   [ADR 0007](../../../decisions/0007-membership-role-grant-relation.md) (the owner/membership relation).
+- End-user view (docs site): [Terms of use](../../../../site/src/content/docs/space-owners/terms.mdx)

@@ -1,0 +1,25 @@
+---
+title: "Speicher und Upload-Links"
+sources:
+  - docs/features/sharing/use-cases/uc.sharing.share-link-storage-limit.md
+  - docs/features/admin/use-cases/uc.admin.tenant-storage-quota.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+1. Öffne das Menü unten in der Seitenleiste, wähle **Einstellungen**, dann **Speicher** unter **Geteilter Bereich**.
+2. **Belegt** zeigt, wie viel dein Bereich auf dem Server einnimmt, den Papierkorb eingeschlossen. Hat die Person, die
+   den Server betreibt, eine Grenze für deinen Bereich gesetzt, steht sie unter **Speichergrenze dieses Bereichs**; nur
+   sie kann sie ändern.
+3. Leg unter **Grenze pro Upload-Link (GiB)** fest, wie viel ein einzelner Link hinzufügen darf: Jeder Link, über den
+   Gäste Fotos oder Dateien hinzufügen können, bekommt diese Grenze, einzeln gezählt. **0** schaltet Uploads über Links
+   ab.
+4. Wähle **Speichereinstellungen speichern**.
+
+<Screenshot id="owners-storage" shows="Der Bereich Speicher mit Belegt und dem Feld Grenze pro Upload-Link" />
+
+Die Grenze verhindert, dass ein Link, der weiter wandert als gedacht, den Server füllt. Sie gilt ab dem nächsten Upload
+eines Links; bereits Gespeichertes wird nicht entfernt.
+
+Der Server zählt Größen, weil er die Bytes speichern muss; was sie sind, sieht er nie:
+[Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

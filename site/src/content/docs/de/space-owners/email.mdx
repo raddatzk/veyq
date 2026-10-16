@@ -1,0 +1,28 @@
+---
+title: "E-Mail für deinen Bereich"
+sources:
+  - docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Dein Bereich verschickt zwei Arten von Mails: Einladungen, und die Links, mit denen Mitglieder ein vergessenes Passwort
+zurücksetzen oder ihre Adresse bestätigen. Solange du keine E-Mail eingerichtet hast, geht beides nicht raus. E-Mail
+richtet für jeden Bereich die Person ein, der er gehört, nicht wer den Server betreibt.
+
+1. Öffne das Menü unten in der Seitenleiste, wähle **Einstellungen**, dann **E-Mail** unter **Geteilter Bereich**.
+2. Gib **SMTP-Host** und **Port** deines Mailservers ein, die **Absenderadresse** sowie **Benutzername** und **Passwort**
+   dafür. Lass **STARTTLS verwenden** an, außer dein Mailserver sagt etwas anderes.
+3. Schalte **Einladungen per E-Mail senden** ein.
+4. Wenn du magst, schreib unter **Einladungs-E-Mail** einen eigenen **Betreff** und **Text** für die Einladung. Du
+   kannst `{{link}}`, `{{domain}}` und `{{expiry}}` verwenden; lass beide leer für den Standardtext.
+5. Wähle **E-Mail-Einstellungen speichern**.
+
+<Screenshot id="owners-email" shows="Der Bereich E-Mail mit der Zeile Versandbereit, den SMTP-Feldern, Einladungen per E-Mail senden und der Vorlage für die Einladung" />
+
+Oben steht dann **Versandbereit**; sonst listet die Seite, was noch fehlt. Um zu prüfen, dass Mails wirklich ankommen,
+schick dir selbst eine Bestätigung über das Angebot, das nach dem Speichern erscheint.
+
+Das Mail-Passwort wird verschlossen auf dem Server gespeichert und nie wieder angezeigt; lass das Feld leer, um es zu
+behalten. Die Mails selbst tragen nur Links, nie etwas, das du in deinem Bereich aufbewahrst:
+[Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

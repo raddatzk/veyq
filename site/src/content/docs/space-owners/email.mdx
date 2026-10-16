@@ -1,0 +1,28 @@
+---
+title: "Email for your space"
+sources:
+  - docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+Your space sends two kinds of mail: invitations, and the links that let members reset a forgotten password or confirm
+their address. Until you set up email, neither can go out. Email is set up per space, by its owner, not by whoever
+runs the server.
+
+1. Open the menu at the bottom of the sidebar, choose **Settings**, then **Email** under **Shared space**.
+2. Enter your mail server's **SMTP host** and **Port**, the **From address**, and the **Username** and **Password** for
+   it. Leave **Use STARTTLS** on unless your mail server says otherwise.
+3. Turn on **Send invitations by email**.
+4. If you like, write your own **Subject** and **Body** for the invitation under **Invitation email**. You can use
+   `{{link}}`, `{{domain}}` and `{{expiry}}`; leave both empty for the standard text.
+5. Choose **Save email settings**.
+
+<Screenshot id="owners-email" shows="The Email panel with the line Ready to send email, the SMTP fields, Send invitations by email and the invitation template" />
+
+The top of the panel then says **Ready to send email**; otherwise it lists what is still missing. To check that mail
+really arrives, send yourself a confirmation from the offer that appears after saving.
+
+The mail password is stored locked on the server and never shown again; leave the field empty to keep it. The mails
+themselves carry only links, never anything you keep in your space:
+[Is my data safe?](/veyq/privacy/is-my-data-safe/)

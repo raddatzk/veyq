@@ -82,7 +82,8 @@ Sharing is the one moment you **choose** to lower the wall — always by your ex
   a link that lets guests add photos, their app first has to prove it holds the secret, so someone who
   only has the address (say, from a copy of our database) cannot upload anything through it.
 
-How the different links work — view only, view and add, drop box — is in [Sharing](/veyq/sharing/).
+How the different links work — view only, view and add, drop box — is in [Sharing](/veyq/sharing/); switching
+them off and renewing them in [Change, switch off, renew and delete links](/veyq/sharing/manage-links/).
 
 Three honest limits:
 - **Un-sharing doesn't un-download.** Revoking access stops *future* access; it can't reach back and
@@ -103,8 +104,8 @@ point. A **public share** is different: whoever reports one hands over the link,
 it can be opened and judged. There is no report button in veyq — reporting means writing to whoever runs
 your instance.
 
-Who acts on it is that person. There is no central moderation team, because there is no central service —
-and veyq ships no moderation tooling today. The operator **cannot switch off a single share**: only the
+Who acts on it is that person. There is no central moderation team, because there is no central service.
+The operator **cannot switch off a single share**: only the
 person who created it can. What the operator can do is take a **whole space** on their server offline — for
 its members and for every share in it. They still cannot read anything private, which is the whole design.
 
@@ -132,7 +133,8 @@ you can compare them over a call, and then you accept the new key or refuse it. 
 **Checking before anything changes.** Remembering only helps from the first key your app saw: if the server
 handed you a wrong key from the very start, nothing would look wrong. So you can check it yourself. Your own
 profile shows *your* safety number and a code; open a friend's profile, scan the code on their screen or read the
-digits to each other, and if it matches they are marked **"Verified"** — on their profile and in every member list.
+digits to each other, and if it matches they are marked **"Verified"** — on their profile and in every member list
+(step by step: [Verify a person](/veyq/account/verify-a-person/)).
 If a verified friend's key ever changes, the app says so more loudly, and you compare again.
 
 **The honest part:** the comparing is up to you. Accepting a changed key is a single tap, and the app cannot tell
@@ -149,7 +151,13 @@ otherwise.
   your kit. Neither works alone — see [Forgot your password](/veyq/account/forgot-password/).
 - **Lost everything** — no signed-in device and no Emergency Kit? Then it's **gone.** There is
   **no backdoor and no escrow**: the same thing that stops *us* from reading your data stops us from
-  rescuing it. That's the deal, stated up front.
+  rescuing it. That's the deal, stated up front. More situations, and what to do: [Help](/veyq/help/).
 
 > **Self-hosting note:** if *you* run your own veyq server, *you* are the operator — so the "can the
 > operator be trusted" question doesn't apply to your own instance.
+
+## For the technically curious
+
+The Security area explains all of this in depth, in English: [Start here](/veyq/security/start-here/),
+[What the server sees](/veyq/security/what-the-server-sees/), [Threat model](/veyq/security/threat-model/) and
+[Known limitations](/veyq/security/known-limitations/).

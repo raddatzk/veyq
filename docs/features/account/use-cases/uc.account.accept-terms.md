@@ -62,3 +62,4 @@ akzeptiert") — nie etwas über deine Fotos.
   operational metadata; the terms text is public).
 - **Decisions:** [ADR 0035](../../../decisions/0035-server-terms-of-service.md) (the acceptance model + the
   member-server-side / anonymous-client-side split).
+- End-user view (docs site): [Terms of use](../../../../site/src/content/docs/space-owners/terms.mdx)

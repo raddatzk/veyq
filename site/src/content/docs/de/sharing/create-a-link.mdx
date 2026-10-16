@@ -1,0 +1,40 @@
+---
+title: "Einen Link erstellen"
+sources:
+  - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
+  - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
+  - docs/features/sharing/use-cases/uc.sharing.share-password.md
+  - docs/features/sharing/use-cases/uc.sharing.share-note.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+1. Öffne den Ordner, die Datei oder die Erinnerung und wähle oben auf der Seite **Teilen**.
+2. Wähle **Neuer Link**.
+3. Gib dem Link einen **Name**, wenn du magst; nur du siehst ihn.
+4. Wähle unter **Was dürfen andere?** **Nur ansehen** oder **Ansehen + mitwirken** (bei einer Erinnerung: **Ansehen +
+   Fotos hinzufügen**).
+5. Füge, wenn du magst, etwas davon hinzu:
+   - **Hinweis**: eine Nachricht für alle, die den Link öffnen. Schreib sie je Sprache mit **Bearbeiten**. Setze den
+     Haken bei **Muss vor dem Öffnen akzeptiert werden**, wenn man sie zuerst lesen und akzeptieren soll.
+   - **Passwortschutz**: Der Link öffnet sich nur mit einem Passwort ab 10 Zeichen. Gib es auf einem anderen Weg weiter
+     als den Link selbst.
+   - **Ablaufdatum**: Der Link funktioniert nach diesem Tag nicht mehr.
+6. Wähle **Link erstellen**, dann **Link kopieren**, und schick ihn weiter.
+
+<Screenshot id="sharing-create-link" shows="Das Formular Neuer Link mit der Auswahl der Rolle, den Abschnitten Hinweis, Passwortschutz und Ablaufdatum und der Schaltfläche Link erstellen" />
+
+## Was „Ansehen + mitwirken“ erlaubt
+
+- **Bei einem Ordner:** Gäste können Ordner anlegen und Dateien hochladen, eine neuere Fassung über eine Datei legen
+  (veyq warnt, dass es keinen Versionsverlauf gibt) und Dinge innerhalb des geteilten Ordners verschieben. Löschen oder
+  umbenennen können sie nichts, und eine Erinnerung oder einen Briefkasten können sie nicht anlegen.
+- **Bei einer Erinnerung:** Gäste können Fotos und Videos hinzufügen und ihre eigenen wieder löschen.
+
+Gäste, die etwas hinzufügen, nennen einmal ihren Namen, damit du siehst, wer was hinzugefügt hat. Andere Gäste sehen ihn
+nie. Was Gäste hinzufügen, zählt zum Speicher deines Bereichs, bis zu einer Grenze pro Link, die die Person festlegt, der
+der Bereich gehört ([Speicher](/veyq/de/space-owners/storage/)).
+
+Alles, was du schreibst, auch der Hinweis, wird verschlossen, bevor es dein Gerät verlässt; nur wer den Link hat, kann es
+lesen, und der Server weiß nicht einmal, ob ein Link um Zustimmung zu einem Hinweis bittet:
+[Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

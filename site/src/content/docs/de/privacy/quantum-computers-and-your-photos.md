@@ -44,3 +44,6 @@ deiner *Anmeldung* sind bewusst getrennt.
 Niemand kann Versprechen über die ferne Zukunft geben. Aber veyq ist für **Jahrzehnte** gebaut — mit
 quantenfestem Schutz für deine Daten **schon jetzt** und einem Entwurf, der Raum für **stärkere Schlösser
 später** lässt. So wird eine heute abgegriffene Kopie morgen nicht zum Problem.
+
+Die Kryptografie dahinter, ausführlich und auf Englisch: [Cryptography](/veyq/security/cryptography/) und die
+[Roadmap](/veyq/security/roadmap/) für das, was entworfen, aber nicht gebaut ist.

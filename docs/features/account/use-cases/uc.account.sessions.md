@@ -317,3 +317,4 @@ bleibt es unbenannt.
   [onboard-device](uc.account.onboard-device.md) (the flow whose locked entry E3 hosts, and whose grants this
   screen contains)
 - End-user view (docs site): [Devices and sessions](../../../../site/src/content/docs/account/devices-and-sessions.mdx)
+- End-user view (docs site): [Lost device](../../../../site/src/content/docs/help/lost-device.mdx)

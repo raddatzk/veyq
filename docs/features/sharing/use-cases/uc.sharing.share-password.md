@@ -102,7 +102,7 @@ dicht); es ist ein Schloss an der Tür, und deine Fotos selbst sind ohnehin vers
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - **Feature:** [sharing](../_index.md)
 - **Decisions:** [ADR 0037](../../../decisions/0037-password-protected-shares.md) (this gate + the honest
   access-control vs crypto tradeoff), [ADR 0030](../../../decisions/0030-contributor-public-share.md) (the
@@ -111,3 +111,4 @@ dicht); es ist ein Schloss an der Tür, und deine Fotos selbst sind ohnehin vers
   [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the trust tiers that bound it).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md),
   [cc.security.rate-limit](../../../crosscutting/cc.security.rate-limit.md).
+- End-user view (docs site): [Create a link](../../../../site/src/content/docs/sharing/create-a-link.mdx)
