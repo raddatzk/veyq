@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.scope.MembershipEraser
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.GuestCreatableKinds
+import me.raddatz.veyq.core.sharing.GuestPlaceholders
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import me.raddatz.veyq.core.sharing.GuestNodeOp
 import me.raddatz.veyq.core.sharing.GuestNodeRules
@@ -85,6 +86,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var guestNodeRules: MutableList<GuestNodeRules>
     @Inject @All lateinit var writeOnlyGuestKinds: MutableList<WriteOnlyGuestKinds>
     @Inject @All lateinit var guestCreatableKinds: MutableList<GuestCreatableKinds>
+    @Inject @All lateinit var guestPlaceholders: MutableList<GuestPlaceholders>
     @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
 
     @Inject lateinit var quota: StorageQuota
@@ -104,6 +106,7 @@ class ModuleCompositionTest {
         GuestNodeRules::class.java to guestNodeRules,
         WriteOnlyGuestKinds::class.java to writeOnlyGuestKinds,
         GuestCreatableKinds::class.java to guestCreatableKinds,
+        GuestPlaceholders::class.java to guestPlaceholders,
         MemberBlobRoles::class.java to memberRoles,
     )
 

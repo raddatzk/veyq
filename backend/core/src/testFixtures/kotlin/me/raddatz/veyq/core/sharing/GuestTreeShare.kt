@@ -13,7 +13,7 @@ import java.util.UUID
 /**
  * A share link with one named guest, seeded as rows (so any role on any kind — a `WRITE_ONLY` folder share
  * included, which [ShareRoots] refuses to create), and the guest's tree operations over HTTP (`createShareNode`,
- * `updateShareNode`, ADR 0080 decisions 6 and 10).
+ * `updateShareNode`, `abandonShareNode`, ADR 0080 decisions 6 and 10).
  */
 object GuestTreeShare {
 
@@ -62,4 +62,8 @@ object GuestTreeShare {
                     """"wrappedContentKey":"$wrappedContentKey","placementRevision":$placementRevision}""",
             )
             .`when`().patch("/api/shares/${link.shareId}/nodes/$nodeId").then()
+
+    /** Take back the empty upload placeholder [nodeId] (`abandonShareNode`). */
+    fun abandon(link: Link, nodeId: String): ValidatableResponse =
+        given().header("X-Contributor-Token", link.token).`when`().delete("/api/shares/${link.shareId}/nodes/$nodeId").then()
 }
