@@ -1,6 +1,6 @@
 {
   "registry": "platform-capabilities",
-  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core` today; an application's own entries hang from the application, ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the Server Owner switches it off through the Admin API, PUT /api/instance/capabilities/{capabilityId}, stored in the database and applied without a restart, and the endpoint refuses with 422 capability_disabled) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, ADR 0032 §5). `levels` names who may switch an entry off: `instance` (the Server Owner, `*` in ADR 0088's register) always, and `tenant` (a tenant owner, for their tenant, through PUT /api/tenants/{tenantId}/capability-switches/{capabilityId}, `+`) where listed. The effective state is the AND along the path at both levels, so a tenant only narrows. An entry a client offers before sign-in is instance-only, because the client cannot know a tenant's choice there (ADR 0088 decision 12). `requirements` are the entry's values that tighten it instead of switching it off (ADR 0088 decision 8): each a `flag` or a number of `days`, settable at the entry's levels, the strictest of both in effect (a flag set at either level, the smaller number of days). Each name is unique in the catalog, because it is a property of the wire's `Capability` (contracts/api/_common.openapi.yaml), and each carries its `title` and `whenSet`, what it refuses and what it does to what exists. `title`, `purpose` and `whenOff` are the entry's words for whoever switches it, each in English and German: what it is, what it is for, and what switching it off does to what is new and to what exists, as built (ADR 0088 decision 13). The catalog is the one place they are written; the backend generates its ids and these texts from it (buildSrc's GenerateCapabilityRegister), the API serves them and every client renders them from there. `description` is the dev-facing note and is not served. scripts/validate_capabilities.py checks the tree, that every `serves` resolves to a built use-case, and that every entry carries its three texts in both languages.",
+  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core`, or an application's own name, `memories`; ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the Server Owner switches it off through the Admin API, PUT /api/instance/capabilities/{capabilityId}, stored in the database and applied without a restart, and the endpoint refuses with 422 capability_disabled) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, ADR 0032 §5) vs external-service (an outside service the browser calls: active only while the Server Owner configured its address, PUT /api/instance/external-services/{capabilityId}, and its switches are on; both deliveries carry the address as `serviceUrl`, and the served CSP names its origin only then, ADR 0088 decision 7). `levels` names who may switch an entry off: `instance` (the Server Owner, `*` in ADR 0088's register) always, and `tenant` (a tenant owner, for their tenant, through PUT /api/tenants/{tenantId}/capability-switches/{capabilityId}, `+`) where listed. The effective state is the AND along the path at both levels, so a tenant only narrows. An entry a client offers before sign-in is instance-only, because the client cannot know a tenant's choice there (ADR 0088 decision 12). `requirements` are the entry's values that tighten it instead of switching it off (ADR 0088 decision 8): each a `flag` or a number of `days`, settable at the entry's levels, the strictest of both in effect (a flag set at either level, the smaller number of days). Each name is unique in the catalog, because it is a property of the wire's `Capability` (contracts/api/_common.openapi.yaml), and each carries its `title` and `whenSet`, what it refuses and what it does to what exists. `title`, `purpose` and `whenOff` are the entry's words for whoever switches it, each in English and German: what it is, what it is for, and what switching it off does to what is new and to what exists, as built (ADR 0088 decision 13). The catalog is the one place they are written; the backend generates its ids and these texts from it (buildSrc's GenerateCapabilityRegister), the API serves them and every client renders them from there. `description` is the dev-facing note and is not served. scripts/validate_capabilities.py checks the tree, that every `serves` resolves to a built use-case, and that every entry carries its three texts in both languages.",
   "capabilities": {
     "core.public-shares": {
       "title": {
@@ -177,6 +177,60 @@
       "source": "operator-policy",
       "levels": ["instance"],
       "description": "Linking a device from one that is already unlocked (ADR 0059): the Master Key reaches the new device from the other one instead of from the password and the Secret Key. Off => every /api/pairing/* endpoint (open, answer, delegate, seal, collect) is refused with 422 capability_disabled, which also stops a pairing in flight; the client hides \"sign in with code\" and the add-device entry. Independent of core.remember-device (ADR 0088 decision 11)."
+    },
+    "core.breached-password": {
+      "title": {
+        "en": "Breached-password check",
+        "de": "Prüfung auf geleakte Passwörter"
+      },
+      "purpose": {
+        "en": "When someone chooses a password, the browser asks a breached-password service whether it appears in a known leak, sending only the first five characters of its hash, never the password, and warns them if it does. The service’s address is a setting of this instance.",
+        "de": "Wählt jemand ein Passwort, fragt der Browser einen Dienst für geleakte Passwörter, ob es in einem bekannten Leck vorkommt – er schickt nur die ersten fünf Zeichen seines Hashes, nie das Passwort – und warnt, wenn ja. Die Adresse des Dienstes ist eine Einstellung dieser Instanz."
+      },
+      "whenOff": {
+        "en": "Nobody’s new password is checked against known leaks any more, and the browser is no longer allowed to reach the service at all. Passwords already chosen are not affected. The same holds while no address is set.",
+        "de": "Neue Passwörter werden nicht mehr gegen bekannte Lecks geprüft, und der Browser darf den Dienst gar nicht mehr erreichen. Bereits gewählte Passwörter sind nicht betroffen. Dasselbe gilt, solange keine Adresse gesetzt ist."
+      },
+      "serves": ["uc.account.change-password", "uc.account.recover-access"],
+      "source": "external-service",
+      "levels": ["instance"],
+      "description": "The k-anonymity range check of a chosen password (security-model.md § the breached-password check): the browser fetches <serviceUrl><first five hex of SHA-1> and compares the suffixes locally. Instance-only, because the join and recover screens run it before sign-in. Active only while a URL is configured (veyq_external_service) and the entry is on; the served CSP names its origin in connect-src only then."
+    },
+    "memories.places": {
+      "title": {
+        "en": "Place names",
+        "de": "Ortsnamen"
+      },
+      "purpose": {
+        "en": "A Memory’s place is named from its coordinates by a geocoding service the browser asks directly, so the name appears without typing. The service’s address is a setting of this instance.",
+        "de": "Der Ort einer Erinnerung bekommt seinen Namen aus den Koordinaten von einem Geocoding-Dienst, den der Browser direkt fragt, sodass der Name ohne Tippen erscheint. Die Adresse des Dienstes ist eine Einstellung dieser Instanz."
+      },
+      "whenOff": {
+        "en": "No place is named by the service any more: members type a place’s name, and the browser is no longer allowed to reach the service. Places already named keep their names. The same holds while no address is set.",
+        "de": "Kein Ort wird mehr vom Dienst benannt: Mitglieder tippen den Namen eines Orts selbst, und der Browser darf den Dienst nicht mehr erreichen. Bereits benannte Orte behalten ihre Namen. Dasselbe gilt, solange keine Adresse gesetzt ist."
+      },
+      "serves": ["uc.memory.place"],
+      "source": "external-service",
+      "levels": ["instance", "tenant"],
+      "description": "The reverse geocoder (ADR 0016): Nominatim-compatible /reverse, fetched by the browser. Active only while a URL is configured and the entry is on at both levels; the served CSP names its origin in connect-src while it is on at the instance level. Independent of memories.map (ADR 0088 § The register)."
+    },
+    "memories.map": {
+      "title": {
+        "en": "Maps",
+        "de": "Karten"
+      },
+      "purpose": {
+        "en": "Memories and spaces show a map of their places, drawn from map tiles the browser loads from a tile service. The service’s address and its attribution are settings of this instance.",
+        "de": "Erinnerungen und Bereiche zeigen eine Karte ihrer Orte, gezeichnet aus Kartenkacheln, die der Browser von einem Kacheldienst lädt. Adresse und Namensnennung des Dienstes sind Einstellungen dieser Instanz."
+      },
+      "whenOff": {
+        "en": "No map is shown any more and no pin can be dropped on one; places stay, with their names, and can still be named by hand. The browser is no longer allowed to load tiles. The same holds while no address is set.",
+        "de": "Es wird keine Karte mehr gezeigt, und auf keiner lässt sich eine Nadel setzen; Orte bleiben mit ihren Namen und lassen sich weiter von Hand benennen. Der Browser darf keine Kacheln mehr laden. Dasselbe gilt, solange keine Adresse gesetzt ist."
+      },
+      "serves": ["uc.memory.place"],
+      "source": "external-service",
+      "levels": ["instance", "tenant"],
+      "description": "The map tiles (ADR 0018): a {z}/{x}/{y} URL template loaded as images. Active only while a URL is configured and the entry is on at both levels; the served CSP names its origin in img-src while it is on at the instance level. Independent of memories.places."
     }
   }
 }

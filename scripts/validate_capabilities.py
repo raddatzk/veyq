@@ -10,12 +10,14 @@ guarantee validate_feature_wiring gives the feature graph:
     - built — its coverage YAML carries no `status: planned` (a capability is advertised active only once its
               use-case(s) are built, ADR 0032 §6).
 
-It also checks the catalog is well-formed: a lowercase-dotted id, a non-empty `serves`, and a known `source`.
+It also checks the catalog is well-formed: a lowercase-dotted id, a non-empty `serves`, and a known `source`
+(`operator-policy`, `infra-preflight`, or `external-service`: an outside service the browser calls, active only while
+its address is configured).
 
 And it checks the catalog is a TREE (ADR 0088 decisions 1 and 2):
-    - root  — every id's first segment is in `ROOTS`. Today that is `core` alone, a deliberate list of one: the CR
-              that adds the first `<application>.*` entry widens it and names the source the application set is
-              derived from, rather than typing application names here.
+    - root  — every id's first segment is in `ROOTS`: `core`, and every application the backend composes, derived
+              from its module directories (`backend/apps/<name>` with a `build.gradle.kts`), never typed here. The
+              first application entries (`memories.places`, `memories.map`) came with cr-external-services-as-settings.
     - parent — every id of three or more segments has its parent (the id minus its last segment) as a catalog
               entry. The server's effective state is an AND along the path, and an entry whose parent is missing
               has nothing to AND with. A root (`core`) is not an entry, so a two-segment id has no parent to need.
@@ -78,15 +80,17 @@ COVERAGE = ROOT / "docs" / "coverage" / "features"
 
 ID_RE = re.compile(r"^[a-z0-9]+(\.[a-z0-9-]+)+$")
 UC_RE = re.compile(r"^uc\.([a-z0-9-]+)\.[a-z0-9-]+$")
-KNOWN_SOURCES = {"operator-policy", "infra-preflight"}
+KNOWN_SOURCES = {"operator-policy", "infra-preflight", "external-service"}
 # Who may switch an entry off (ADR 0088 decisions 2 and 12): the Server Owner always, a tenant owner where listed.
 LEVELS = ("instance", "tenant")
 # A requirement's kind (ADR 0088 decision 8) and the type its property has on the wire's `Capability`.
 REQUIREMENT_KINDS = {"flag": "boolean", "days": "integer"}
 REQUIREMENT_TEXTS = ("title", "whenSet")
 COMMON = ROOT / "contracts" / "api" / "_common.openapi.yaml"
-# The roots an id may hang from (ADR 0088 decision 1). `core` alone until the first application entry; see the docstring.
-ROOTS = {"core"}
+# The roots an id may hang from (ADR 0088 decision 1): `core`, and every application the backend composes, derived from
+# its module directories (`backend/apps/<name>`, the `:apps:<name>` projects) rather than typed here.
+APPS = ROOT / "backend" / "apps"
+ROOTS = {"core"} | {d.name for d in APPS.iterdir() if d.is_dir() and (d / "build.gradle.kts").exists()}
 # The words every entry carries for the Server Owner (ADR 0088 decision 13), each in every language below.
 TEXT_FIELDS = ("title", "purpose", "whenOff")
 LANGUAGES = ("en", "de")

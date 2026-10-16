@@ -192,6 +192,23 @@ components:
           minimum: 1
           maximum: 3650
           example: 14
+        serviceUrl:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            On an external-service entry only (`memories.map`, `memories.places`, `core.breached-password`; the
+            catalog's `source`), and only while it is active: the address the Server Owner configured, which the
+            browser calls directly (ADR 0088 decision 7). The tiles' URL is a `{z}/{x}/{y}` template, the geocoder's a
+            Nominatim-compatible base, the breach check's the range API's prefix. The served CSP names its origin.
+          maxLength: 512
+          example: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+        serviceAttribution:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            On `memories.map` only, while active: the tile provider's attribution, shown on every map.
+          maxLength: 256
+          example: © OpenStreetMap contributors
 
     ErrorResponse:
       type: object

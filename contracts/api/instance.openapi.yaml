@@ -732,6 +732,151 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: requirement_not_found }
 
+  /api/instance/external-services:
+    get:
+      tags: [instance]
+      operationId: listInstanceExternalServices
+      x-veyq-channel: admin
+      summary: List the external services the browser may call, with their configured addresses.
+      description: >
+        The outside services a member's browser calls directly (ADR 0088 decision 7, ADR 0089): the map tiles
+        (`memories.map`), the geocoder (`memories.places`) and the breached-password check (`core.breached-password`),
+        each keyed by its register entry. A service with no `url` is not configured: its entry is not active and the
+        served CSP leaves its origin out, which is how an instance without internet runs. A new instance starts with
+        today's defaults (OpenStreetMap tiles, Nominatim, the HIBP range API). Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Every external service, in catalog order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InstanceExternalService" }
+              example:
+                - id: memories.map
+                  title: { en: "Maps", de: "Karten" }
+                  url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution: "© OpenStreetMap contributors"
+                  takesAttribution: true
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+  /api/instance/external-services/{capabilityId}:
+    put:
+      tags: [instance]
+      operationId: setInstanceExternalService
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the write carries one service's address, never the set, and the later write
+          on the same service is the one the owner made last.
+      x-veyq-channel: admin
+      summary: Configure one external service's address.
+      description: >
+        Stores the address (and, for the map tiles, the attribution) and applies it at once, without a restart: the
+        manifest carries it to every client as the entry's `serviceUrl`, and the served CSP names its origin while the
+        entry is on. `url` is an `https://` or `http://` URL; the map tiles' holds `{z}`, `{x}` and `{y}`. An
+        attribution is accepted for the map tiles only. Server-Owner only. Returns the service as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          description: The service's register entry.
+          schema: { type: string, maxLength: 64, example: memories.map }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceExternalServiceUpdate" }
+            example: { url: "https://tiles.example.com/{z}/{x}/{y}.png", attribution: "© Example tiles" }
+      responses:
+        "200":
+          description: Stored and applied; the service as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceExternalService" }
+        "400":
+          description: >
+            The request was malformed: not an http(s) URL, a tile template without `{z}`, `{x}` or `{y}`, or an
+            attribution for a service that takes none (`invalid_request`). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No external service has this register entry (`service_not_found`). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: service_not_found }
+    delete:
+      tags: [instance]
+      operationId: clearInstanceExternalService
+      x-veyq-channel: admin
+      summary: Unconfigure one external service.
+      description: >
+        Removes the address: the entry stops being active at once, no client is told an address, and the served CSP
+        leaves the origin out. Unconfiguring one that has no address changes nothing and answers the same.
+        Server-Owner only. Returns the service as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          description: The service's register entry.
+          schema: { type: string, maxLength: 64, example: memories.map }
+      responses:
+        "200":
+          description: Unconfigured; the service as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceExternalService" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No external service has this register entry (`service_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: service_not_found }
+
 components:
   schemas:
     InstanceRelease:
@@ -1202,6 +1347,60 @@ components:
           maximum: 3650
           example: 30
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(3650)'
+
+    InstanceExternalService:
+      type: object
+      description: >
+        One outside service a member's browser calls (ADR 0088 decision 7), keyed by its register entry, with the
+        address the Server Owner configured. Instance configuration; nothing here is member data.
+      required: [id, title, takesAttribution]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: The service's register entry (`memories.map`, `memories.places`, `core.breached-password`).
+          maxLength: 64
+          example: memories.map
+        title:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        url:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The configured address; null while the service is not configured (its entry then is not active).
+          maxLength: 512
+          example: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+        attribution:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The map tiles' attribution, shown on every map; null for the other services or while none is set.
+          maxLength: 256
+          example: © OpenStreetMap contributors
+        takesAttribution:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the service takes an attribution (the map tiles only).
+          example: true
+
+    InstanceExternalServiceUpdate:
+      type: object
+      description: One external service's address to store.
+      required: [url]
+      properties:
+        url:
+          x-veyq-visibility: public
+          type: string
+          description: An http(s) URL; the map tiles' a template holding `{z}`, `{x}` and `{y}`.
+          minLength: 1
+          maxLength: 512
+          example: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        attribution:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The map tiles' attribution, plain text; refused for any other service.
+          maxLength: 256
+          example: © OpenStreetMap contributors
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 256)'
 
     InstanceCapabilityUpdate:
       type: object

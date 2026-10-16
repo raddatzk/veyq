@@ -56,6 +56,9 @@ handling of reported shares.
 - ★ [Set requirements on capabilities](use-cases/uc.admin.capability-requirements.md) — **built (backend + web +
   admin-web)** (ADR 0088 decision 8): a link needs a password, a link lives at most N days, being added
   to a group needs a yes, a device asks for the password again after N days; the strictest of both levels
+- ★ [Configure the external services a browser calls](use-cases/uc.admin.configure-external-services.md) — **in progress**
+  (cr-external-services-as-settings; ADR 0088 decision 7, ADR 0089): the map tiles, the geocoder and the
+  breached-password check as Server-Owner settings and register entries; the served policy follows them
 - ★ [A tenant's storage quota](use-cases/uc.admin.tenant-storage-quota.md) — **built** (backend, web, admin-web)
   ([ADR 0073](../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md); the ceiling belongs to
   whoever pays for the store — for the instance's store the Server Owner, on the admin channel; none by default;

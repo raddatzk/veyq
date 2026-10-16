@@ -205,7 +205,8 @@ abstract class GenerateAdminChannelOperations : DefaultTask() {
  * Every entry is advertised, because `scripts/validate_capabilities.py` holds every catalog entry to a built use-case
  * (ADR 0032 §6); the lifecycle that reserves an id ahead of its use-cases would add the skip here and there together.
  * `TENANT_SWITCHABLE` is every entry whose `levels` name `tenant` (ADR 0088 decision 12), and `CapabilityRequirements`
- * every entry's `requirements` with their kind and words (decision 8), each name unique in the catalog. The build refuses an id that
+ * every entry's `requirements` with their kind and words (decision 8), each name unique in the catalog, and
+ * `EXTERNAL_SERVICES` every entry whose `source` is `external-service` (decision 7). The build refuses an id that
  * is not lowercase-dotted, two ids that name one constant, an entry without its six texts and one without its levels,
  * rather than generate a register with a hole in it; the guard says the same about the catalog before any build.
  */
@@ -245,7 +246,10 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
                 }
                 Requirement(name, kind, reqTexts)
             }
-            Entry(id, constantName(id), entry.path("description").asText(""), texts, "tenant" in levels, requirements)
+            Entry(
+                id, constantName(id), entry.path("description").asText(""), texts, "tenant" in levels, requirements,
+                entry.path("source").asText("") == "external-service",
+            )
         }
         register.groupBy { it.constant }.filterValues { it.size > 1 }.forEach { (name, clash) ->
             problems += "${clash.joinToString { it.id }}: all name the constant $name"
@@ -278,6 +282,11 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
             |     *  every other entry is the Server Owner's alone. */
             |    val TENANT_SWITCHABLE: Set<String> = setOf(
             |${register.filter { it.tenant }.joinToString("") { "        ${it.constant},\n" }}    )
+            |
+            |    /** The entries that are an outside service the browser calls (the catalog's `source: external-service`, ADR 0088
+            |     *  decision 7): active only while their address is configured. */
+            |    val EXTERNAL_SERVICES: Set<String> = setOf(
+            |${register.filter { it.external }.joinToString("") { "        ${it.constant},\n" }}    )
             |}
             |""".trimMargin(),
         )
@@ -327,7 +336,7 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
 
     private data class Entry(
         val id: String, val constant: String, val description: String, val texts: Map<String, Map<String, String>>, val tenant: Boolean,
-        val requirements: List<Requirement>,
+        val requirements: List<Requirement>, val external: Boolean,
     )
 
     private data class Requirement(val name: String, val kind: String, val texts: Map<String, Map<String, String>>)
