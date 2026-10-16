@@ -16,7 +16,9 @@ import me.raddatz.veyq.core.generated.model.PendingMemberInvite
 import me.raddatz.veyq.core.generated.model.ReassignOwnerRequest
 import me.raddatz.veyq.core.generated.model.InvitePreview
 import me.raddatz.veyq.core.generated.model.RegisterAndAcceptRequest
-import me.raddatz.veyq.core.generated.model.Capability
+import me.raddatz.veyq.core.generated.model.TenantCapabilityRequirement
+import me.raddatz.veyq.core.generated.model.TenantCapabilityRequirementUpdate
+import me.raddatz.veyq.core.platform.capabilities.capabilityWire
 import me.raddatz.veyq.core.generated.model.CapabilityText
 import me.raddatz.veyq.core.generated.model.TenantCapabilities
 import me.raddatz.veyq.core.generated.model.TenantCapabilitySwitch
@@ -305,7 +307,7 @@ class TenantsResource(
     @Authenticated
     override fun getTenantCapabilities(tenantId: UUID): Response =
         when (val o = capabilitiesHandler.effective(identity.principal.name, tenantId.toString())) {
-            is TenantCapabilitiesOutcome.Ok -> Response.ok(TenantCapabilities(o.ids.map { Capability(id = it) })).build()
+            is TenantCapabilitiesOutcome.Ok -> Response.ok(TenantCapabilities(o.ids.map { capabilityWire(it, o.requirements) })).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -327,10 +329,35 @@ class TenantsResource(
             is HttpFailure -> httpError(o)
         }
 
+    @Authenticated
+    override fun setTenantCapabilityRequirement(
+        tenantId: UUID, capabilityId: String, requirement: String, tenantCapabilityRequirementUpdate: TenantCapabilityRequirementUpdate,
+    ): Response = requirementAnswer(
+        capabilitiesHandler.setRequirement(
+            identity.principal.name, tenantId.toString(), capabilityId, requirement, tenantCapabilityRequirementUpdate.value,
+        ),
+    )
+
+    @Authenticated
+    override fun clearTenantCapabilityRequirement(tenantId: UUID, capabilityId: String, requirement: String): Response =
+        requirementAnswer(capabilitiesHandler.setRequirement(identity.principal.name, tenantId.toString(), capabilityId, requirement, null))
+
+    private fun requirementAnswer(o: TenantCapabilitySetOutcome): Response = when (o) {
+        is TenantCapabilitySetOutcome.Stored -> Response.ok(o.view.toDto()).build()
+        is HttpFailure -> httpError(o)
+    }
+
     private fun TenantCapabilityView.toDto() = TenantCapabilitySwitch(
         id = state.id,
         title = texts.title.toDto(), purpose = texts.purpose.toDto(), whenOff = texts.whenOff.toDto(),
         off = state.off, serverOff = state.serverOff, effective = state.effective,
+        requirements = requirements.map {
+            TenantCapabilityRequirement(
+                name = it.def.name, kind = TenantCapabilityRequirement.Kind.valueOf(it.def.kind.name.lowercase()),
+                title = it.def.title.toDto(), whenSet = it.def.whenSet.toDto(),
+                value = it.value, serverValue = it.serverValue, effective = it.effective,
+            )
+        },
     )
 
     private fun me.raddatz.veyq.core.platform.capabilities.CapabilityText.toDto() = CapabilityText(en = en, de = de)

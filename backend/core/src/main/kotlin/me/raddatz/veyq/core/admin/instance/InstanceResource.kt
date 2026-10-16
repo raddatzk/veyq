@@ -4,6 +4,8 @@ import me.raddatz.veyq.core.crypto.ConfigSecretKeyGuard
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
 import me.raddatz.veyq.core.generated.api.InstanceApi
 import me.raddatz.veyq.core.generated.model.InstanceCapability
+import me.raddatz.veyq.core.generated.model.InstanceCapabilityRequirement
+import me.raddatz.veyq.core.generated.model.InstanceCapabilityRequirementUpdate
 import me.raddatz.veyq.core.generated.model.InstanceCapabilityText
 import me.raddatz.veyq.core.generated.model.InstanceCapabilityUpdate
 import me.raddatz.veyq.core.generated.model.InstanceConfigSecret
@@ -97,6 +99,18 @@ class InstanceResource(
 
     override fun listInstanceCapabilities(): Response = Response.ok(capabilities.list().map { it.toWire() }).build()
 
+    override fun setInstanceCapabilityRequirement(
+        capabilityId: String, requirement: String, instanceCapabilityRequirementUpdate: InstanceCapabilityRequirementUpdate,
+    ): Response = capabilityAnswer(capabilities.setRequirement(capabilityId, requirement, instanceCapabilityRequirementUpdate.value))
+
+    override fun clearInstanceCapabilityRequirement(capabilityId: String, requirement: String): Response =
+        capabilityAnswer(capabilities.setRequirement(capabilityId, requirement, null))
+
+    private fun capabilityAnswer(outcome: CapabilitySetOutcome): Response = when (outcome) {
+        is CapabilitySetOutcome.Stored -> Response.ok(outcome.view.toWire()).build()
+        is HttpFailure -> httpError(outcome)
+    }
+
     override fun setInstanceCapability(capabilityId: String, instanceCapabilityUpdate: InstanceCapabilityUpdate): Response =
         when (val outcome = capabilities.set(capabilityId, instanceCapabilityUpdate.off.validated())) {
             is CapabilitySetOutcome.Stored -> Response.ok(outcome.view.toWire()).build()
@@ -132,6 +146,12 @@ class InstanceResource(
         title = texts.title.toWire(), purpose = texts.purpose.toWire(), whenOff = texts.whenOff.toWire(),
         off = state.off, effective = state.effective,
         tenantSwitchable = state.id in CapabilityIds.TENANT_SWITCHABLE,
+        requirements = requirements.map {
+            InstanceCapabilityRequirement(
+                name = it.def.name, kind = InstanceCapabilityRequirement.Kind.valueOf(it.def.kind.name.lowercase()),
+                title = it.def.title.toWire(), whenSet = it.def.whenSet.toWire(), value = it.value,
+            )
+        },
     )
 
     private fun CapabilityText.toWire() = InstanceCapabilityText(en = en, de = de)

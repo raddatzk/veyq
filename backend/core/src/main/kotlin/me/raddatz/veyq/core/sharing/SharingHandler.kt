@@ -44,6 +44,9 @@ sealed interface CreateShareOutcome {
     object Deleting : CreateShareOutcome, HttpFailure by Failures.scopeDeleting
     /** The sharing capability this role needs is disabled instance-wide (ADR 0032) — a 422, instance policy. */
     object CapabilityDisabled : CreateShareOutcome, HttpFailure by Failures.capabilityDisabled
+    /** The link misses a requirement in effect for its tenant (ADR 0088 decision 8, [LinkRequirements]) — a 422. */
+    object LinkPasswordRequired : CreateShareOutcome, HttpFailure by Failures.linkPasswordRequired
+    object LinkExpiryRequired : CreateShareOutcome, HttpFailure by Failures.linkExpiryRequired
     /** No such node, or the caller holds no grant for its scope (a 404, no reveal). */
     object NoNode : CreateShareOutcome, HttpFailure by Failures.nodeNotFound
     /** The node's kind may not be the root of a share of this role ([ShareRoots], ADR 0080 decision 6) — a 422. */
@@ -163,6 +166,9 @@ sealed interface UpdateShareOutcome {
     object InvalidRole : UpdateShareOutcome, HttpFailure by httpFailure("invalid_role_change", UNPROCESSABLE)
     /** A change into a role whose instance capability is not active (ADR 0088) — the 422 `create` answers. */
     object CapabilityDisabled : UpdateShareOutcome, HttpFailure by Failures.capabilityDisabled
+    /** The link misses a requirement in effect for its tenant (ADR 0088 decision 8, [LinkRequirements]) — a 422. */
+    object LinkPasswordRequired : UpdateShareOutcome, HttpFailure by Failures.linkPasswordRequired
+    object LinkExpiryRequired : UpdateShareOutcome, HttpFailure by Failures.linkExpiryRequired
 }
 
 sealed interface SetShareSealedNameOutcome {
@@ -193,6 +199,9 @@ sealed interface ReissueShareOutcome {
     object NotFound : ReissueShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     /** The capability the old share's role needs is off (ADR 0032) — a re-issue publishes a link. */
     object CapabilityDisabled : ReissueShareOutcome, HttpFailure by Failures.capabilityDisabled
+    /** The link misses a requirement in effect for its tenant (ADR 0088 decision 8, [LinkRequirements]) — a 422. */
+    object LinkPasswordRequired : ReissueShareOutcome, HttpFailure by Failures.linkPasswordRequired
+    object LinkExpiryRequired : ReissueShareOutcome, HttpFailure by Failures.linkExpiryRequired
     /** The keys do not match the old share's role — a 400, as on create. */
     object InvalidRequest : ReissueShareOutcome, HttpFailure by Failures.invalidRequest
     /** The recovery copy is not sealed at the scope's current epoch (ADR 0024 Decision 6) — a 409, nothing written. */
@@ -272,6 +281,10 @@ class SharingHandler(
         // anyway, and learns nothing of another tenant's policy.
         if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(role), node.scopeId)) {
             return CreateShareOutcome.CapabilityDisabled
+        }
+        // The tenant's link requirements (ADR 0088 decision 8): a new link is made now.
+        linkRefusal(node.scopeId, passwordRequired && pwVerifier != null, Instant.now(), expiresAt)?.let {
+            return if (it === Failures.linkPasswordRequired) CreateShareOutcome.LinkPasswordRequired else CreateShareOutcome.LinkExpiryRequired
         }
         // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a node whose kind's owner
         // declares this role for a share root ([ShareRoots], ADR 0080 decision 6). Whether a guest may then upload
@@ -414,6 +427,16 @@ class SharingHandler(
         if (role != null && role != share.role && !capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(role), share.scopeId)) {
             return UpdateShareOutcome.CapabilityDisabled
         }
+        // The link requirements (ADR 0088 decision 8) on the link as the edit leaves it: the password tri-state (null
+        // keeps the stored one) and the end date, a full replace, measured from the link's own start.
+        val keepsPassword = when (passwordRequired) {
+            null -> share.pwVerifier != null
+            true -> pwVerifier != null
+            false -> false
+        }
+        linkRefusal(share.scopeId, keepsPassword, share.createdAt, expiresAt)?.let {
+            return if (it === Failures.linkPasswordRequired) UpdateShareOutcome.LinkPasswordRequired else UpdateShareOutcome.LinkExpiryRequired
+        }
         return when (store.updateShare(userId, shareId, sealedNote, sealedShareName, role, expiresAt, passwordRequired, pwSalt, pwVerifier, sealedPassword)) {
             SharingStore.UpdateResult.DONE -> UpdateShareOutcome.Done
             SharingStore.UpdateResult.NOT_FOUND -> UpdateShareOutcome.NotFound
@@ -513,6 +536,10 @@ class SharingHandler(
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
         if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(old.role), old.scopeId)) return ReissueShareOutcome.CapabilityDisabled
+        // A re-issue makes a new link now, so it meets the requirements as a new one does.
+        linkRefusal(old.scopeId, passwordRequired && pwVerifier != null, Instant.now(), expiresAt)?.let {
+            return if (it === Failures.linkPasswordRequired) ReissueShareOutcome.LinkPasswordRequired else ReissueShareOutcome.LinkExpiryRequired
+        }
         // No drop private key: the old WRITE_ONLY share proves the node already holds one (it is set once and
         // never cleared), and every upload so far is sealed to it (ADR 0031 point 7).
         val keys = shareKeys(old.role, wrap, sealedDropPublicKey, null) ?: return ReissueShareOutcome.InvalidRequest
@@ -539,6 +566,10 @@ class SharingHandler(
             }
         }
     }
+
+    /** The link requirements in effect for [scopeId]'s tenant, asked of a link with these properties ([LinkRequirements]). */
+    private fun linkRefusal(scopeId: String, hasPassword: Boolean, createdAt: Instant, expiresAt: Instant?): HttpFailure? =
+        LinkRequirements.refusal(capabilities.requirementsInScope(scopeId), hasPassword, createdAt, expiresAt)
 
     /** A re-issue's refusals that a removal, a delete or an adoption can turn: the caller's membership, a deleted
      *  share, an enabled one that is not the caller's. The store's compare-and-set decides "deleted" again. */

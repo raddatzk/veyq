@@ -15,6 +15,8 @@ data class SetupState(
     val versionMajor: Int,
     val versionBuild: Int,
     val capabilities: List<String>,
+    /** The instance level's requirements, by name (ADR 0088 decision 8); a client reads them with each capability. */
+    val requirements: Map<String, Int>,
 )
 
 /** The owner registration payload, mapped from the API request at the resource boundary. */
@@ -58,6 +60,7 @@ class SetupHandler(
         versionMajor = versionMajor,
         versionBuild = versionBuild,
         capabilities = capabilities.active,
+        requirements = capabilities.requirements(null),
     )
 
     fun createOwner(registration: OwnerRegistration): String {

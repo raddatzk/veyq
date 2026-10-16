@@ -231,6 +231,13 @@ class OperatorBlindProbeTest {
         "setTenantCapabilitySwitch" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/capability-switches/core.group-space", """{"off":false}""")
         },
+        // The control clears a requirement that is not set: it changes nothing and answers 200, past the gate.
+        "clearTenantCapabilityRequirement" to Probe(Address.TENANT) { s ->
+            Call("DELETE", "/api/tenants/${s.tenantId}/capability-switches/core.public-shares/requirements/linkMaxDays")
+        },
+        "setTenantCapabilityRequirement" to Probe(Address.TENANT) { s ->
+            Call("PUT", "/api/tenants/${s.tenantId}/capability-switches/core.public-shares/requirements/linkMaxDays", """{"value":3650}""")
+        },
         "getTenantStorage" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/storage") },
         "checkTenantStorageFit" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/storage-fit", """{"bytes":1}""") },
         "updateTenantStorage" to Probe(Address.TENANT) { s ->
@@ -264,6 +271,7 @@ class OperatorBlindProbeTest {
             "getInstanceConfigSecret",
             "getInstanceStore", "setInstanceStore", "discardPendingInstanceStore", "checkInstanceStore",
             "listInstanceCapabilities", "setInstanceCapability",
+            "setInstanceCapabilityRequirement", "clearInstanceCapabilityRequirement",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +

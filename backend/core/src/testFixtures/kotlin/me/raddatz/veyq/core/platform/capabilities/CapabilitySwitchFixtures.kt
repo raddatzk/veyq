@@ -70,3 +70,44 @@ object TenantCapabilitySwitchFixtures {
     private fun switches(): StoredTenantCapabilitySwitches =
         Arc.container().instance(StoredTenantCapabilitySwitches::class.java).get()
 }
+
+/**
+ * Requirement values set the way production sets them (ADR 0088 decision 8): rows written through
+ * [CapabilityRequirementStore] and followed by [StoredCapabilityRequirementValues.invalidate] once committed — what the
+ * two `setRequirement` handlers do behind their `PUT`, minus the HTTP and the owner gates. Restored in a `finally`.
+ */
+object CapabilityRequirementFixtures {
+
+    /** Runs [block] with [instance] set at the instance level and [tenant] for [tenantId], then clears every value. */
+    fun <T> with(
+        instance: Map<String, Int> = emptyMap(), tenantId: String? = null, tenant: Map<String, Int> = emptyMap(), block: () -> T,
+    ): T {
+        val left = QuarkusTransaction.requiringNew().call {
+            CapabilityRequirementEntity.count() + TenantCapabilityRequirementEntity.count()
+        }
+        check(left == 0L) { "a previous test left $left requirement row(s)" }
+        instance.forEach { (name, value) -> QuarkusTransaction.requiringNew().run { store().setInstance(name, value) } }
+        if (tenantId != null) {
+            tenant.forEach { (name, value) -> QuarkusTransaction.requiringNew().run { store().setTenant(tenantId, name, value) } }
+        }
+        values().invalidate()
+        try {
+            return block()
+        } finally {
+            clear()
+        }
+    }
+
+    /** Clears every value at both levels — for a class that sets them through the API and must not leave a row. */
+    fun clear() {
+        QuarkusTransaction.requiringNew().run {
+            CapabilityRequirementEntity.deleteAll()
+            TenantCapabilityRequirementEntity.deleteAll()
+        }
+        values().invalidate()
+    }
+
+    private fun store(): CapabilityRequirementStore = Arc.container().instance(CapabilityRequirementStore::class.java).get()
+    private fun values(): StoredCapabilityRequirementValues =
+        Arc.container().instance(StoredCapabilityRequirementValues::class.java).get()
+}

@@ -142,7 +142,8 @@ components:
         `GET /api/setup`, and the tenant's set a member reads after sign-in (`GET /api/tenants/{tenantId}/capabilities`).
         Both are one type and carry the entry's requirements in effect as values, `[{ id, …values }]` (ADR 0088
         decision 8): each value property belongs to one entry (the catalog's `requirements`, whose names
-        `scripts/validate_capabilities.py` holds to these properties) and is present only on it and only while set. The
+        `scripts/validate_capabilities.py` holds to these properties) and carries a value only on it and only while set
+        (null otherwise). The
         pre-auth manifest carries the instance level's, the tenant's set the strictest of both. Additive, no `major`
         bump.
       required: [id]

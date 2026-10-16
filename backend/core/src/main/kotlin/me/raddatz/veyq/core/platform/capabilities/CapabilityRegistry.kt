@@ -31,6 +31,7 @@ import jakarta.enterprise.context.ApplicationScoped
 class CapabilityRegistry(
     private val switches: CapabilitySwitches,
     private val tenantSwitches: TenantCapabilitySwitches,
+    private val requirementValues: CapabilityRequirementValues,
 ) {
     /** The instance's active capability ids, in [CapabilityIds.ADVERTISED] order — the pre-auth manifest. */
     val active: List<String>
@@ -75,6 +76,46 @@ class CapabilityRegistry(
         }
     }
 
+    /**
+     * The requirements in effect (ADR 0088 decision 8), by name: for [tenantId] the strictest of the instance's value and
+     * the tenant's — a flag (`1`) set at either level, the smaller number of days — and for null the instance's alone.
+     * A tenant value of a requirement whose entry is not tenant-switchable is never stored, and would be ignored here.
+     */
+    fun requirements(tenantId: String?): Map<String, Int> {
+        val instance = requirementValues.instance()
+        val tenant = tenantId?.let { requirementValues.tenant(it) } ?: emptyMap()
+        return CapabilityRequirements.ALL.mapNotNull { def ->
+            strictest(def, instance[def.name], tenant[def.name].takeIf { def.capabilityId in CapabilityIds.TENANT_SWITCHABLE })
+                ?.let { def.name to it }
+        }.toMap()
+    }
+
+    /** [requirements] for the tenant [scopeId] lives in, as [isActiveInScope] asks it. */
+    fun requirementsInScope(scopeId: String): Map<String, Int> = requirements(ScopeEntity.findById(scopeId)?.tenantId)
+
+    /** [capabilityId]'s requirements as the Server Owner reads them: each with the instance's value. */
+    fun instanceRequirements(capabilityId: String): List<RequirementState> {
+        val instance = requirementValues.instance()
+        return CapabilityRequirements.ALL.filter { it.capabilityId == capabilityId }.map { RequirementState(it, instance[it.name]) }
+    }
+
+    /** [capabilityId]'s requirements as [tenantId]'s owner reads them: the tenant's value, the instance's, and the one
+     *  in effect. */
+    fun tenantRequirements(tenantId: String, capabilityId: String): List<TenantRequirementState> {
+        val instance = requirementValues.instance()
+        val tenant = requirementValues.tenant(tenantId)
+        return CapabilityRequirements.ALL.filter { it.capabilityId == capabilityId }.map {
+            TenantRequirementState(it, tenant[it.name], instance[it.name], strictest(it, instance[it.name], tenant[it.name]))
+        }
+    }
+
+    private fun strictest(def: CapabilityRequirement, a: Int?, b: Int?): Int? = when {
+        a == null -> b
+        b == null -> a
+        def.kind == RequirementKind.FLAG -> 1
+        else -> minOf(a, b)
+    }
+
     private fun offSets(tenantId: String?): Pair<Set<String>, Set<String>> =
         switches.switchedOff() to (tenantId?.let { tenantSwitches.switchedOff(it) } ?: emptySet())
 
@@ -92,6 +133,12 @@ class CapabilityRegistry(
 
 /** One register entry's state: [off] is its own switch, [effective] the AND along its path (what the gates follow). */
 data class CapabilityState(val id: String, val off: Boolean, val effective: Boolean)
+
+/** One requirement at the instance level: [value] is the instance's, null while it sets none. */
+data class RequirementState(val def: CapabilityRequirement, val value: Int?)
+
+/** One requirement as a tenant owner reads it: their own [value], the instance's [serverValue], and the [effective] one. */
+data class TenantRequirementState(val def: CapabilityRequirement, val value: Int?, val serverValue: Int?, val effective: Int?)
 
 /** One tenant-switchable entry as a tenant owner reads it: [off] the tenant's own switch, [serverOff] the instance level's
  *  AND along the path, [effective] the AND of both levels (what the tenant's gates follow). */

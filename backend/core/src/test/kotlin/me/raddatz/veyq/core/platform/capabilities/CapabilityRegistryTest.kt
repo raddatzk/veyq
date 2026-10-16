@@ -27,11 +27,11 @@ class CapabilityRegistryTest {
 
     private val catalogIds: List<String> = catalog.fieldNames().asSequence().toList()
 
-    private fun registry(vararg off: String) = CapabilityRegistry({ off.toSet() }, { emptySet() })
+    private fun registry(vararg off: String) = CapabilityRegistry({ off.toSet() }, { emptySet() }, CapabilityRequirementValues.NONE)
 
     /** A registry with nothing off at the instance level and [tenantOff] off in tenant `t1` only. */
     private fun tenantRegistry(instanceOff: Set<String>, vararg tenantOff: String) =
-        CapabilityRegistry({ instanceOff }, { tenant -> if (tenant == "t1") tenantOff.toSet() else emptySet() })
+        CapabilityRegistry({ instanceOff }, { tenant -> if (tenant == "t1") tenantOff.toSet() else emptySet() }, CapabilityRequirementValues.NONE)
 
     @Test
     fun theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords() {
@@ -96,7 +96,7 @@ class CapabilityRegistryTest {
     @Test
     fun theSwitchesAreAskedOnEveryCall() {
         var off = emptySet<String>()
-        val registry = CapabilityRegistry({ off }, { emptySet() })
+        val registry = CapabilityRegistry({ off }, { emptySet() }, CapabilityRequirementValues.NONE)
         assertTrue(registry.isActive(DEVICE_LINKING, null))
         off = setOf(DEVICE_LINKING)
         assertFalse(registry.isActive(DEVICE_LINKING, null), "a switch acts without a new registry, so without a restart")
@@ -141,5 +141,44 @@ class CapabilityRegistryTest {
         assertEquals(tenantLevel, registry.tenantRegister("t1").map { it.id })
         val contribute = registry.tenantRegister("t1").single { it.id == PUBLIC_SHARES_CONTRIBUTE }
         assertEquals(TenantCapabilityState(PUBLIC_SHARES_CONTRIBUTE, off = true, serverOff = false, effective = false), contribute)
+    }
+
+    private fun requirementRegistry(instance: Map<String, Int>, t1: Map<String, Int>) = CapabilityRegistry(
+        { emptySet() }, { emptySet() },
+        object : CapabilityRequirementValues {
+            override fun instance() = instance
+            override fun tenant(tenantId: String) = if (tenantId == "t1") t1 else emptyMap()
+        },
+    )
+
+    @Test
+    fun theStrictestOfBothLevelsIsInEffectAndATenantOnlyTightens() {
+        val days = CapabilityRequirements.LINK_MAX_DAYS
+        val flag = CapabilityRequirements.LINK_PASSWORD
+        val registry = requirementRegistry(mapOf(days to 30), mapOf(days to 60, flag to 1))
+        // The tenant's looser 60 days is not in effect; its password flag is, in t1 only.
+        assertEquals(mapOf(days to 30, flag to 1), registry.requirements("t1"))
+        assertEquals(mapOf(days to 30), registry.requirements("t2"))
+        assertEquals(mapOf(days to 30), registry.requirements(null))
+        assertEquals(mapOf(days to 7), requirementRegistry(mapOf(days to 30), mapOf(days to 7)).requirements("t1"))
+        val listed = registry.tenantRequirements("t1", PUBLIC_SHARES).associate { it.def.name to Triple(it.value, it.serverValue, it.effective) }
+        assertEquals(mapOf(flag to Triple(1, null, 1), days to Triple(60, 30, 30)), listed)
+    }
+
+    @Test
+    fun aTenantValueOfAnInstanceOnlyRequirementIsIgnored() {
+        val registry = requirementRegistry(emptyMap(), mapOf(CapabilityRequirements.PASSWORD_MAX_DAYS to 1))
+        assertEquals(emptyMap<String, Int>(), registry.requirements("t1"))
+    }
+
+    @Test
+    fun theGeneratorReadTheCatalogsRequirements() {
+        val fromCatalog = catalogIds.flatMap { id -> catalog.path(id).path("requirements").fieldNames().asSequence().map { it to id }.toList() }
+        assertTrue(fromCatalog.isNotEmpty(), "the catalog declares requirements")
+        assertEquals(fromCatalog, CapabilityRequirements.ALL.map { it.name to it.capabilityId })
+        CapabilityRequirements.ALL.forEach { r ->
+            assertEquals(catalog.path(r.capabilityId).path("requirements").path(r.name).path("whenSet").path("de").asText(), r.whenSet.de)
+            assertEquals(catalog.path(r.capabilityId).path("requirements").path(r.name).path("kind").asText().uppercase(), r.kind.name)
+        }
     }
 }
