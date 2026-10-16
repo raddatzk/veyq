@@ -1,0 +1,36 @@
+useCase: uc.admin.install-and-upgrade-instance
+feature: admin
+title: Install an instance and keep it on the release line its operator chose
+status: planned
+# Refined 2026-10-16 with ADR 0096 (cr-veyqctl). Its client is `veyqctl`, a host-side Python tool, and a Python
+# operator tool is not a coverage surface (ADR 0040) — the same shape as uc.admin.back-up-and-restore-instance's
+# store leg. So this file stays `planned` even once built: its criteria are proven by `scripts/veyqctl_selftest.py`
+# (no Docker) and by the stack lane booting the candidate through `veyqctl install` (ADR 0090), never by a ref here.
+acceptanceCriteria:
+  - id: install-from-a-verified-release
+    text: >-
+      `veyqctl install` brings an instance up from the recipe a release carries and the images it names by digest,
+      after both signatures verified, with every secret in `.env` generated and none taken from the template.
+  - id: the-release-line-picks-what-upgrade-takes
+    text: >-
+      `VEYQ_RELEASE` decides: an exact release is never left, a major takes its newest release, `latest` crosses
+      majors; a snapshot is never taken.
+  - id: a-missing-value-is-refused-before-anything-stops
+    text: >-
+      When the new release's template requires a variable `.env` lacks, the upgrade names it and stops before any
+      container is stopped.
+  - id: an-unverified-release-is-never-started
+    text: >-
+      A release whose images do not verify by the manifest's digests is neither pulled nor started, and nothing on
+      the host changes.
+  - id: an-upgrade-backs-up-before-it-migrates
+    text: >-
+      An upgrade takes a three-leg backup, the key to a separate medium, before the new release's app starts and
+      migrates the schema.
+  - id: the-previous-release-stays-on-disk
+    text: >-
+      After an upgrade, successful or not, the previous release's recipe is still in `releases/`, so the way back is
+      a restore onto it rather than a download.
+gaps:
+  backend: "Not a backend use-case: the instance is managed from the host by `veyqctl`, a Python operator tool, which is not a coverage surface (ADR 0040)."
+  web: "No client surface: the operator works at the shell with `veyqctl`; the Server Owner's console is unchanged by this use-case."
