@@ -85,12 +85,14 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      halves are one assertion, not two: dropping the flag is safe only *because* the file carries what the
      flag used to say, and re-introducing the flag beside the key is how the two start to disagree.
   7. **The operator's documented signature check is exactly as narrow as what signs** (ADR 0057 §3). Every
-     `cosign verify` on `site/src/content/docs/run/verify-a-release.md` pins GitHub's OIDC issuer and one certificate identity; that identity
+     `cosign verify` and `cosign verify-blob` (the one for `veyqctl` itself, ADR 0096 decision 3) on
+     `site/src/content/docs/run/verify-a-release.md` pins GitHub's OIDC issuer and one certificate identity; that identity
      **accepts** the signing identity of every branch assertion 2's scenarios turn into a publish, and
      **rejects** every other workflow in `.github/workflows/`, non-release branches (which the version step must
      refuse as well), pull-request and tag refs, another owner, a repository whose name only starts with ours,
      and the right identity quoted inside another URL. Every image the build matrix publishes is verified, by
-     digest and never by tag, and the workflow states no identity of its own. The upstream is the chart's
+     digest and never by tag, `veyqctl` itself is verified with `cosign verify-blob`, and the workflow states no identity
+     of its own. The upstream is the chart's
      `home`, not the workflow's `github.repository_owner`, which is whoever runs it — a fork included. The
      operator's tool runs the same check (`veyqctl verify`, `install`, `upgrade`, ADR 0096): `scripts/veyqctl.py`'s
      `COSIGN_OIDC_ISSUER` and `COSIGN_IDENTITY_REGEXP` are held to the same accepts and rejects, and to be exactly
@@ -200,8 +202,9 @@ no-remote limit above).
 Assertion 6 adds two limits of its own, and the first is the one that matters. **It reads the file, so it says
 nothing about the project the operator actually brought their stack up under.** `docker compose -p something-else
 -f infra/docker-compose.prod.yml up -d` overrides the declared name, and so does `COMPOSE_PROJECT_NAME` — a
-green here means the *procedure* can no longer be wrong by default, never that a given host is right. Only a
-tool that owns the operator's shell can close that, which is inbox #121's job and explicitly not this guard's.
+green here means the *procedure* can no longer be wrong by default, never that a given host is right. `veyqctl`
+closes that for an instance it manages — it records the project at `install` and names it on every command — which
+is the tool's job and explicitly not this guard's.
 Second, the flag scan covers **durable state only**: `changes/` and `docs/inbox.md` are the flow surfaces
 (`docs/ai/README.md` § State vs. flow) and necessarily go on naming a retired rule in order to record that it
 was retired, so an instruction hidden in a work order is out of reach. The line drawn is the repository's own,
@@ -1294,7 +1297,8 @@ def veyqctl_identity() -> tuple[str | None, str | None]:
 
 
 def verify_commands(markdown: str) -> list[list[str]]:
-    """Every documented signature verification, as argv, from the fenced blocks of a markdown file."""
+    """Every documented signature verification, as argv from the subcommand on, from the fenced blocks of a markdown
+    file: `cosign verify` (an image, the chart) and `cosign verify-blob` (`veyqctl` itself, ADR 0096 decision 3)."""
     commands = []
     for block in FENCE.findall(markdown):
         for line in block.replace("\\\n", " ").splitlines():
@@ -1306,8 +1310,8 @@ def verify_commands(markdown: str) -> list[list[str]]:
             except ValueError as e:
                 fail(f"{VERIFY_PAGE.relative_to(ROOT)}: cannot parse the command `{line[:80]}…`: {e}")
                 continue
-            if argv[:2] == ["cosign", "verify"]:
-                commands.append(argv[2:])
+            if argv[:2] in (["cosign", "verify"], ["cosign", "verify-blob"]):
+                commands.append(argv[1:])
     return commands
 
 
@@ -1387,13 +1391,13 @@ else:
             f"documents {sorted(page_identities)} — the operator's tool and the operator's page state one identity, "
             f"or one of them accepts what the other refuses"
         )
-    tool_argv = ([] if tool_issuer is None else ["--certificate-oidc-issuer", tool_issuer]) + (
+    tool_argv = ["verify"] + ([] if tool_issuer is None else ["--certificate-oidc-issuer", tool_issuer]) + (
         [] if tool_identity is None else ["--certificate-identity-regexp", tool_identity])
     sources = [(VERIFY_PAGE.relative_to(ROOT), argv) for argv in commands]
     if tool_identity is not None and tool_issuer is not None:
         sources.append((VEYQCTL.relative_to(ROOT), tool_argv))
     verify_summary = (
-        f", and {len(commands)} documented `cosign verify` command(s) and `veyqctl`'s each accept the "
+        f", and {len(commands)} documented `cosign verify`/`verify-blob` command(s) and `veyqctl`'s each accept the "
         f"{len(accepted)} publishing branch identities and reject {len(rejected)} others"
     )
     for where, argv in sources:
@@ -1401,7 +1405,7 @@ else:
         issuers = flag_values(argv, "--certificate-oidc-issuer")
         if flag_values(argv, "--certificate-oidc-issuer-regexp") or issuers != [OIDC_ISSUER]:
             fail(
-                f"{where}: `cosign verify {shown}` must pin exactly "
+                f"{where}: `cosign {shown}` must pin exactly "
                 f"`--certificate-oidc-issuer {OIDC_ISSUER}` — GitHub's OIDC issuer is what makes the identity "
                 f"below mean `a GitHub workflow run`, and any other issuer lets someone else mint that string"
             )
@@ -1409,7 +1413,7 @@ else:
         patterns = flag_values(argv, "--certificate-identity-regexp")
         if len(exact) + len(patterns) != 1:
             fail(
-                f"{where}: `cosign verify {shown}` must carry exactly one certificate "
+                f"{where}: `cosign {shown}` must carry exactly one certificate "
                 f"identity (found {len(exact) + len(patterns)})"
             )
             continue
@@ -1427,13 +1431,13 @@ else:
         for what, subject in accepted.items():
             if not matches(subject):
                 fail(
-                    f"{where}: `cosign verify {shown}` rejects {what} ({subject}) — the "
+                    f"{where}: `cosign {shown}` rejects {what} ({subject}) — the "
                     f"workflow publishes and signs from that branch, so a genuine release fails to verify"
                 )
         for what, subject in rejected.items():
             if matches(subject):
                 fail(
-                    f"{where}: `cosign verify {shown}` accepts {what} ({subject}). A "
+                    f"{where}: `cosign {shown}` accepts {what} ({subject}). A "
                     f"verification is only as narrow as the identity it pins (ADR 0057 §3) — this one "
                     f"accepts a signature the veyq release never made."
                 )
@@ -1444,7 +1448,7 @@ else:
             if match:
                 if match.group(2) == ":":
                     fail(
-                        f"{where}: `cosign verify {shown}` verifies a TAG. A tag can move "
+                        f"{where}: `cosign {shown}` verifies a TAG. A tag can move "
                         f"between the verify and the pull; verify the digest the tag resolved to, and deploy "
                         f"that digest (ADR 0057 §3)."
                     )
@@ -1457,6 +1461,13 @@ else:
                 f"signs every image it ships, and an operator told to verify one of a pair runs the other on "
                 f"trust — and the pair includes the higher-privilege admin image (ADR 0065)."
             )
+    if commands and not any(argv[0] == "verify-blob" and "veyqctl" in argv[1:] for argv in commands):
+        fail(
+            f"{VERIFY_PAGE.relative_to(ROOT)} never runs `cosign verify-blob` on `veyqctl`. The publish signs it with "
+            f"`cosign sign-blob` (ADR 0096 decision 3) because an operator fetches it by hand before anything else "
+            f"is checked — a signature nobody is told to check protects nobody, and that `veyqctl` is what checks "
+            f"every image after it."
+        )
     chart_ref = f"charts/{(yaml.safe_load(CHART.read_text()) or {}).get('name') or ''}"
     if commands and chart_ref not in verified_images:
         fail(

@@ -176,7 +176,9 @@ free of implementation context.
     machine hints marked as such**. A machine hint can hold only for the CR's planned
     form, so the implementer re-derives it against what it actually builds. Nothing else. Anything the implementer needs that the brief would have to explain belongs
     in the CR, so write it there and not into the prompt. A brief that carries knowledge the CR lacks voids the
-    clean-room proof, exactly as a warm session did.
+    clean-room proof, exactly as a warm session did. A brief that keeps a file off limits names every done-when
+    that file defeats as overridden: cr-veyqctl's phase 2 brief closed `ci.yml` to it, its done-when wanted a step
+    there, and the implementer found the contradiction instead of being told.
   - **Questions.** The subagent cannot ask the user. A decision the CR does not settle is **handed back**, never
     decided in place: commit what is finished, then return the question with a recommendation.
   - **Output.** Code, proof, a filled retrospective, and a report back to the conversation.
@@ -235,6 +237,8 @@ A refined CR nails **decisions, not keystrokes**:
   Memory, and its locator (the rule's own names) missed a slice test and an e2e that created one through a helper.
   **And it names the site pages the change touches** — a change to what a reader sees or does has published pages
   to update in the same CR ([`changes/README.md`](../../changes/README.md) § The published docs move with the change).
+  A CR that removes something greps `site/` for it at refine and assigns each hit to a phase: cr-veyqctl's phase 4
+  wanted the in-image recipe's path gone from the tree while phase 6 owned the two Run pages that still carried it.
 - **Name the control an input arrives through, per surface, and cite the line behind "as X does".** A refine that
   adds an input names where the user gives it: cr-download-is-the-export decided a picked directory and a drop box's
   ZIP without saying where the picker sits or reconciling the use case's E5, and both came back as owner questions.

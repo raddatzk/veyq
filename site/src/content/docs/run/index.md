@@ -51,7 +51,8 @@ Kubernetes the application may manage Ingresses in its own namespace and nothing
 
 **There is no supported production deployment yet.** veyq is pre-V1, and no release has been published. There
 is a production Compose recipe (the application, its separate administration surface, MariaDB, the Garage object
-store and a Traefik that terminates TLS in front of them) and a Helm chart for Kubernetes. Without the store there
+store and a Traefik that terminates TLS in front of them), installed and upgraded by `veyqctl`, and a Helm chart for
+Kubernetes. Without the store there
 is no media, and a space whose owner has not set up email can invite nobody and none of its members can reset a
 password, so neither is optional in a real instance.
 
@@ -59,10 +60,11 @@ Every procedure in this area says how far it has been proven. In short:
 
 | Procedure | Rehearsed | Not rehearsed |
 |---|---|---|
-| [Backup and restore](/veyq/run/backup-and-restore/) | Capture, destroy, restore and a test suite against the result, on every run of the end-to-end orchestrator; a root restore from the production key volume once, in containers | The `sudo -E` form on a Linux host; a capture or restore under Helm |
-| [Upgrade](/veyq/run/upgrade/) | The data half: the upgrade proof seals content with the previous build, restores it under this one, lets it migrate and reads it back — from jars, not images | Pulling a published image, the recipe diff, the `up`, a rollback; `helm upgrade` in a cluster |
+| [Set up a new instance](/veyq/run/new-instance/) | `veyqctl install` of a release produced from the tree, images built on the host and unverified, on every run of the stack lane | An install from a published release |
+| [Backup and restore](/veyq/run/backup-and-restore/) | Capture, destroy, restore and a test suite against the result, on every run of the end-to-end orchestrator; `veyqctl`'s capture inside an upgrade and its restore onto a fresh install, once | `veyqctl backup` on its own; a capture or restore under Helm |
+| [Upgrade](/veyq/run/upgrade/) | `veyqctl upgrade` between two releases produced from the tree, once, with a Memory open after it; the data half: the upgrade proof seals content with the previous build, restores it under this one, lets it migrate and reads it back — from jars, not images | Pulling a published image, an upgrade that migrates through `veyqctl`, a rollback; `helm upgrade` in a cluster |
 | [Kubernetes](/veyq/run/kubernetes/) | The rendered chart, and what a chart upgrade could not apply (`chart_meta_check.py`, `chart_upgrade_check.py`) | An install, an upgrade or a backup in a cluster |
-| [Verify a release](/veyq/run/verify-a-release/) | The commands against another keyless-signed image, and the chart half against a local registry | A real veyq release |
+| [Verify a release](/veyq/run/verify-a-release/) | The commands against another keyless-signed image, the chart half against a local registry, `cosign verify-blob` with a key of its own | A real veyq release |
 
 None of this has run in CI: the repository has no remote yet, so every rehearsal above is a run on a developer
 machine. The shape of the risk is fixed: veyq migrates its database on start with no way back, so moving to a
@@ -117,13 +119,14 @@ every [upgrade](/veyq/run/upgrade/).
 ## The procedures
 
 - [Plan your instance](/veyq/run/plan/) — Compose or Kubernetes, sizing, storage growth and quotas, the domains.
-- [Verify a release](/veyq/run/verify-a-release/) — before anything runs it: the signatures, and the digests you
-  deploy.
-- [Set up a new instance](/veyq/run/new-instance/) — the production compose recipe or the Helm chart, and the Server
-  Owner created before DNS and TLS exist.
+- [Verify a release](/veyq/run/verify-a-release/) — `veyqctl` itself once, then what it checks before anything runs:
+  the signatures, the digests you deploy, the release's files.
+- [Set up a new instance](/veyq/run/new-instance/) — `veyqctl install` on Docker Compose or the Helm chart, and the
+  Server Owner created before DNS and TLS exist.
+- [Upgrade](/veyq/run/upgrade/) — `veyqctl upgrade`, with the backup as the way back.
 - [Kubernetes](/veyq/run/kubernetes/) — what is specific to the Helm chart.
-- [Upgrade](/veyq/run/upgrade/) — with the backup as the way back.
-- [Backup and restore](/veyq/run/backup-and-restore/) — the three legs, captured cold and checked.
+- [Backup and restore](/veyq/run/backup-and-restore/) — the three legs, captured cold and checked: `veyqctl backup`
+  and `restore`.
 - [Hardening](/veyq/run/hardening/) — what is hardened by default, and what is yours to keep that way.
 - [Moderation](/veyq/run/moderation/) — a reported public share, and taking a tenant offline.
 
