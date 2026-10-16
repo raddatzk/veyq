@@ -67,7 +67,7 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
   - *The manifest marks an unscheduled major* (`"unscheduled": true`), from a publish input that defaults to false
     and is refused on a release that does not change the major. The backend's release check reads it
     (`core/admin/instance/ReleaseFeed`, ADR 0097 — built: through the GitHub source it reads each new major's
-    `manifest.json` release asset, so the publish of phase 2 must upload it); this CR only writes it.
+    `manifest.json` release asset, so phase 5's publish must upload it among the assets); this CR only writes it.
 
 ### Inventory — the locators
 
