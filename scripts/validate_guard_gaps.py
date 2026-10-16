@@ -329,10 +329,28 @@ allocated number, so there is no number to reuse and nothing to guard. See `chan
 
 A `validate_*.py`, so the trust-chain glob runs it on every push with no build. Runnable locally:
 
-    python3 scripts/validate_guard_gaps.py
+    python3 scripts/validate_guard_gaps.py            # skipped when no guard changed since the last green run
+    python3 scripts/validate_guard_gaps.py --force    # the full run, whatever the stamp says
+    python3 scripts/validate_guard_gaps.py --case 35  # only the named case(s), never skipped, writes no stamp
+
+**Skipped locally when no guard changed.** It is 90 % of the glob's time (998 s of it, 901 here, measured
+2026-10-16: 79 copies of the tree and a subprocess each), and what it proves is about the GUARDS. So a full green
+run writes the SHA-256 of every file under `scripts/` and `.claude/skills/trust-chain/` (the guards, their helpers
+and the gap map, as git lists them) to `.trust-chain-cache/guard_gaps.json` (gitignored, one per checkout), and a
+later run whose inputs hash the same prints `SKIPPED` and exits 0 without copying anything. A red run writes no
+stamp, so it runs again until it is green. **In CI it never skips** (`CI` is set on every GitHub Actions runner): a
+fresh checkout has no stamp, and one restored from a cache would vouch for a tree it never saw.
+
+**What a skip does not see — its limit.** A verdict also rests on its forgery's ANCHORS, and many live outside
+`scripts/`: a test a coverage file cites, a coverage file's path, an ADR's wording. Renaming one turns this guard
+red ("could not apply forgery"), and a skip hides that until the next full run. So a change that renames or moves
+what a guard anchors on runs `--force` (`changes/README.md` § Coverage is part of the work, the renaming rule).
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import pathlib
 import re
 import shutil
@@ -344,6 +362,11 @@ import textwrap
 import backend_tree  # where the backend's test and fixture roots live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# The skip (module docstring § Skipped locally). The stamp sits outside every input and is gitignored, so it is
+# neither hashed nor copied into a forged tree.
+SKIP_INPUTS = ("scripts/", ".claude/skills/trust-chain/")
+STAMP = ROOT / ".trust-chain-cache" / "guard_gaps.json"
 
 # Anchors the forgeries edit. If one drifts (a coverage file relocated, a test class renamed), the forgery
 # fails to apply and the case reports red with a "could not forge" message — deliberately loud, because a
@@ -1511,11 +1534,33 @@ def source_files() -> list[str]:
     return files
 
 
-def snapshot() -> pathlib.Path:
+def inputs_digest(files: list[str]) -> str:
+    """SHA-256 over the path and bytes of every skip input, in `source_files()` order (sorted, so stable)."""
+    digest = hashlib.sha256()
+    for rel in files:
+        if rel.startswith(SKIP_INPUTS):
+            digest.update(rel.encode() + b"\0" + (ROOT / rel).read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def stamped_digest() -> str | None:
+    """The inputs' digest of the last green full run in this checkout, or None (no stamp, or one that does not parse)."""
+    try:
+        return json.loads(STAMP.read_text(encoding="utf-8"))["inputs"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def write_stamp(digest: str, cases: int) -> None:
+    STAMP.parent.mkdir(parents=True, exist_ok=True)
+    STAMP.write_text(json.dumps({"inputs": digest, "cases": cases}) + "\n", encoding="utf-8")
+
+
+def snapshot(files: list[str]) -> pathlib.Path:
     """Copy the source tree once; every case copies this, so all of them see the same tree."""
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="guardgap_snapshot_"))
     made: set[pathlib.Path] = set()
-    for rel in source_files():
+    for rel in files:
         dst = tmp / rel
         if dst.parent not in made:
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1568,12 +1613,24 @@ def check_case(snap: pathlib.Path, verdicts: dict[str, bool],
 
 def main() -> int:
     # `--case ID` (repeatable) runs only the named cases: a narrow loop while writing a forgery. The full run, with
-    # no argument, is what CI and the trust-chain loop do.
-    wanted = {a for a in sys.argv[2:]} if sys.argv[1:2] == ["--case"] else None
+    # no argument, is what CI and the trust-chain loop do; locally it is skipped while the stamp matches, and
+    # `--force` runs it anyway.
+    args = sys.argv[1:]
+    force = args[:1] == ["--force"]
+    wanted = set(args[1:]) if args[:1] == ["--case"] else None
+    if args and not force and wanted is None:
+        raise SystemExit(f"GUARD-GAP VALIDATION FAILED: unknown arguments {args} (use --force or --case ID …)")
     cases = [c for c in CASES if wanted is None or c[0] in wanted]
     if wanted is not None and {c[0] for c in cases} != wanted:
         raise SystemExit(f"GUARD-GAP VALIDATION FAILED: unknown case id(s) {sorted(wanted - {c[0] for c in cases})}")
-    snap = snapshot()
+    files = source_files()
+    digest = inputs_digest(files)
+    if wanted is None and not force and not os.environ.get("CI") and stamped_digest() == digest:
+        print(f"guard gaps SKIPPED: nothing under {' or '.join(SKIP_INPUTS)} changed since this checkout's last green "
+              f"full run, so its {len(cases)} case(s) were NOT re-checked. A renamed or moved anchor outside them is not "
+              "seen by a skip: run `python3 scripts/validate_guard_gaps.py --force` after one.")
+        return 0
+    snap = snapshot(files)
     try:
         verdicts: dict[str, bool] = {}
         errors = [e for c in cases if (e := check_case(snap, verdicts, *c))]
@@ -1584,6 +1641,8 @@ def main() -> int:
         for e in errors:
             print("  -", e)
         return 1
+    if wanted is None:
+        write_stamp(digest, len(cases))
     print(f"guard gaps OK: {len(cases)} pinned case(s) hold (closed holes stay rejected, open gaps stay open)")
     return 0
 
