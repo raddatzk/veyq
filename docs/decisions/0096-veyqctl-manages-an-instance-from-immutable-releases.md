@@ -61,13 +61,17 @@ release carries can change after it is published. Snapshots get no GitHub Releas
 |---|---|
 | `1.1234` | exactly that release — pinned; `upgrade` does nothing |
 | `1` | the newest release of major 1 |
-| `latest` | the newest release, crossing majors |
+| `latest` | the newest release, crossing majors one at a time (decision 5) |
 
 "Release", not "version": [ADR 0086](0086-one-word-per-meaning.md) keeps "version" for compatibility.
 
 **5. `upgrade` runs only by hand.** No timer, no unattended mode: an upgrade replaces the web client that holds the
 keys, so it stays a deliberate act. In order, and nothing is stopped before step 4:
-1. resolve the release `VEYQ_RELEASE` selects; stop if it is the running one;
+1. resolve the release `VEYQ_RELEASE` selects; stop if it is the running one. **A major is entered only from the
+   last release of the one before:** when the selected release lies in a later major and the running release is not
+   the newest of its own, this run upgrades to that newest release instead and says that the next `upgrade` enters
+   the next major — and no run crosses more than one major. That entry is a path the lanes test (ADR 0091 decision
+   6), so a jump from an older release across a major's removals is never taken;
 2. download its assets into `releases/<version>/` and verify both images' cosign signatures by the manifest's digests;
 3. refuse if the new `.env.example` requires a value `.env` lacks, naming it — with `latest` this is what stops a
    major whose removals need the operator;
@@ -98,6 +102,8 @@ and keeps current with its own GitOps tooling; veyq ships no in-cluster operator
   verify-a-release). Each page keeps what the tool runs, so an operator can do any step by hand.
 - **Immutable releases are a repository setting** the owner switches on once the repository has its remote (inbox #26
   item 1); until then nothing is published and nothing here can run against GitHub.
+- **ADR 0091's L3 archive holds the previous major's last release too** — the one release a new major is entered
+  from (decision 5); within a major, every archived backup still opens.
 - **Where `instance_backup.py` goes** — folded into `veyqctl` or shipped beside it — is the CR's call.
 - **Rejected — keep the recipe in the image and add `garage.toml`.** Closes the gap, keeps an unusual shape, and
   still leaves the operator needing the repository for backups. Refined as a CR first, then dropped by the owner.
@@ -107,6 +113,12 @@ and keeps current with its own GitOps tooling; veyq ships no in-cluster operator
 - **Rejected — a managing container (Nextcloud AIO's shape).** Easiest for the operator, but it needs the Docker
   socket (root on the host) beside a recipe that is otherwise read-only, non-root and capability-free, and it has no
   Kubernetes form.
+- **Rejected — step through every intermediate release.** Within a major Flyway applies every missing migration in
+  order whatever the starting release, and L3 restores every archived backup of the major into the candidate, so a
+  skip is a tested path; stepping would only multiply downloads, backups and restarts.
+- **Rejected — any release straight into a newer major.** One run fewer, but no lane covers the data path from an
+  arbitrary older release across a major's removals; entering through the previous major's last release costs one
+  upgrade and keeps every path tested.
 - **Rejected — unattended upgrades.** Convenient, and they roll a compromised publish out with nobody looking.
 - **Rejected — Bash.** Asked for first; the upgrade logic (signatures, template check, backup) is not thin glue, and
   the backup tool is already Python.
