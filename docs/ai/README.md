@@ -313,8 +313,10 @@ A refined CR nails **decisions, not keystrokes**:
 
 ## What counts as verified
 
-**The coverage surfaces are `backend` and `web` — that is the whole set.** CR phases follow the dependency
-order **contracts → backend → web**.
+**Every use-case owes `backend` and `web`** — covered, or a gap with its reason. The whole surface set (also
+`crypto`, `admin-web` and `stack`, which a use-case may claim but does not owe) is `SURFACES` in
+`scripts/validate_coverage.py`, with `OWED` and `ADMITTED` beside it; read it there, never from a list in prose.
+CR phases follow the dependency order **contracts → backend → web**.
 
 The rule underneath, from [ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md): **a test that
 no CI run executes makes no coverage claim.** It is not about which directories exist, or even which surfaces —
