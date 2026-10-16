@@ -154,7 +154,13 @@ The pipes below belong to the commands themselves (ERE alternation, shell pipes)
    - set-profile-picture, whose sealed length changes.
    - The property itself ("one field, one revision, one key") gets a model enabler in the docs phase, `en.platform.field-key`, the sibling of `en.platform.field-editor` (§ 8's model). It does not exist yet, so it is not cited above.
 
-## Open for the owner
+## Decided with the owner
+
+Owner 2026-10-16 ("Bei den drei offenen Punkten gehe ich überall mit"): every recommendation below is taken —
+1 (a) the salt inside the envelope; 2 sixteen bytes; 3 (a) `media-meta` and `media-exif` join `FIELD_PURPOSES`;
+4 (a) `group-name` and `space-icon` stay per epoch, § 9's sentence is corrected; 5 the share fields stay purpose-only,
+§ 9's wording is corrected. The three ADR 0093 § 9 corrections land in phase 4. The options are kept below as the record
+of what was weighed.
 
 1. **Where the salt lives.**
    - **(a) Inside the envelope** (Decision 2): no contract field, no column, and no Kotlin change. The server's
@@ -300,7 +306,7 @@ phase.
   under Open 1(a) no salt either.
 - `packages/crypto`, `web/`, `admin-web/`, `backend/` and `site/` checks are green; both mutation gates have run with
   their exit codes recorded; the trust-chain guards are green; the docs in phase 4 say what was built.
-- Implementation waits for the owner's go, and for the answers to § Open for the owner.
+- The owner's go and the answers are given (§ Decided with the owner, 2026-10-16).
 
 ## Retrospective
 
@@ -308,4 +314,4 @@ _Filled at implementation._
 
 ---
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-16).
