@@ -117,6 +117,9 @@ export interface MemoryUpload {
   prepare(): Promise<boolean>
   /** The upload-queue target of a batch into `nodeId` sealed under `key`, or null when the session cannot send now. */
   target(nodeId: string, key: Uint8Array): UploadTarget | null
+  /** The uploads go through a link: a `quota_exceeded` refusal then reads as the link being full — never which limit
+   *  was reached — and offers no retry, because none can help (ADR 0073 §6). */
+  readonly viaLink: boolean
 }
 
 /** Which media a delete reaches, and how: a member's trash (reversible, undo) or a guest's purge of its own
@@ -264,6 +267,7 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       ready: () => true,
       prepare: async () => true,
       target: (nodeId, key) => ({ scopeId: scope(), nodeId, memoryKey: key }),
+      viaLink: false,
     },
     deleteMedia: {
       reach: 'any',
@@ -374,6 +378,7 @@ function guestWrites(
     upload: {
       ready: () => !!session.value,
       prepare: async () => !!(await access().requestGuest()),
+      viaLink: true,
       target(nodeId, key) {
         const s = session.value
         if (!s) return null
