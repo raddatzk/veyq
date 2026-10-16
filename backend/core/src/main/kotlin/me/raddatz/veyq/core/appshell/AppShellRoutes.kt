@@ -61,7 +61,9 @@ class AppShellRoutes(
     @Volatile
     private var emitted: Emitted? = null
 
-    /** The policy for the store the backend signs against right now: the base policy plus that store's origin. */
+    /** The policy for the store the backend signs against right now: the base policy plus that store's origin.
+     *  [emitted] is a memo checked against the current origin on every call, so a racing response that stores the
+     *  policy of an older origin costs the next one a rebuild, never a stale header (inbox #445). */
     private fun cspNow(): String {
         val origin = blobStore.storeOrigin
         emitted?.let { if (it.storeOrigin == origin) return it.csp }

@@ -20,6 +20,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * The object-store setting (ADR 0089): at most two rows, by [id] — [ACTIVE_ID], the setting in use (the backend signs
@@ -350,6 +351,12 @@ data class BundledStoreCredentials(val accessKey: String, val secretKey: String)
  * follow (ADR 0089 decision 5). Resolved once and cached; [invalidate] after a committed change makes the next read
  * resolve again. One backend process serves an instance (the recipes run one; the chart's `Recreate` strategy keeps
  * it one), so an in-process invalidation reaches every reader.
+ *
+ * **A cached resolution is tagged with the generation it was resolved under**, and served only while that generation
+ * is current — the same guard as `StoredCapabilitySwitches`. A reader that read the row just before a write committed
+ * would otherwise store the old resolution after the write's [invalidate] had run, and the instance would sign against
+ * the previous store until the next write or a restart (inbox #445; `StoreSettingsCacheSliceTest` forces that
+ * interleaving).
  */
 @ApplicationScoped
 class StoreSettings(
@@ -360,16 +367,24 @@ class StoreSettings(
 ) {
     private val hermetic = LaunchMode.current() == LaunchMode.TEST
 
-    @Volatile
-    private var cached: StoreResolution? = null
+    private val generation = AtomicLong()
 
-    fun current(): StoreResolution = cached ?: resolve().also { cached = it }
+    @Volatile
+    private var cached: Cached? = null
+
+    fun current(): StoreResolution {
+        val current = generation.get()
+        cached?.takeIf { it.generation == current }?.let { return it.resolution }
+        return resolve().also { cached = Cached(current, it) }
+    }
 
     /** Forget the cached resolution. Call after the transaction that changed the setting has COMMITTED — before it,
-     *  a concurrent reader could resolve and cache the old row again. */
+     *  a reader could resolve and cache the old row under the new generation. */
     fun invalidate() {
-        cached = null
+        generation.incrementAndGet()
     }
+
+    private class Cached(val generation: Long, val resolution: StoreResolution)
 
     /**
      * The precondition for creating a tenant (ADR 0089 decision 6): a store is set, usable, and its last check passed.
