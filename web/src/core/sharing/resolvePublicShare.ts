@@ -195,7 +195,7 @@ const TERMS_ACCEPTED_KEY_PREFIX = 'veyq:terms-accepted:'
 /**
  * The owning tenant's public terms for a share (a guest read keyed on the non-enumerable `shareId`, so unknown/
  * disabled/expired is the same non-enumerable 404 as `resolvePublicShare` — no `tenantId` existence oracle). Returns
- * `{ tenantId, termsRevision, terms }`; `termsRevision` 0 means the operator published no terms (the client never
+ * `{ tenantId, termsRevision, terms }`; `termsRevision` 0 means the space owner published no terms (the client never
  * gates). No auth, no password — terms are public.
  */
 export async function fetchShareTerms(shareId: string): Promise<ShareTerms> {

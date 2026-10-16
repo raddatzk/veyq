@@ -100,8 +100,9 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
   **before** login (alongside the branding/`/api/setup`-style pre-auth data) and on an **authed tenant endpoint**
   for editing + a member **accept** endpoint.
 - **The clause template gives a legally-meaningful starting ToS** (esp. the CSAM/illegal-content + review-removal
-  clauses) matching the pre-E2EE product; self-hosted operators own their terms, the central infra ships a
-  default. DE strings follow [cc.inclusive-language](../crosscutting/cc.inclusive-language.md).
+  clauses) matching the pre-E2EE product. No server ships default terms: a new tenant has none (revision 0) until
+  its owner writes them, the template inserted only on request. DE strings follow
+  [cc.inclusive-language](../crosscutting/cc.inclusive-language.md).
 - **Anonymous client-side acceptance is honest about its limits** (no server non-repudiation for an accountless
   visitor) — a stated property of the deferred share slice.
 - **Ties into the T&S "decryptable-on-report" corollary** — the terms are where the operator states that a

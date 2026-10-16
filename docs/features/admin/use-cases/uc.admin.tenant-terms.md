@@ -1,8 +1,8 @@
 # UC: Tenant terms — the space owner sets the space's legal terms (a new revision on each change)
 
 - **ID:** uc.admin.tenant-terms
-- **Primary actor:** The **tenant owner** (the space owner — not the Server Owner who runs the server), signed in — a
-  session, no unlocked vault needed (terms are operational, not content).
+- **Primary actor:** The **tenant owner** (the space owner — not the Server Owner who runs the server), signed in —
+  a session, no unlocked vault needed (terms are operational, not content).
 - **Goal:** Set and edit the tenant's **legal terms** (acceptable use, prohibited/illegal content, review &
   removal, contact, an Impressum) as **per-locale markdown**, written per language — **the languages the terms
   carry are the languages the owner added**, and a starter template can fill any one of them on request; a
@@ -27,8 +27,8 @@ the numbering. Absent a template insert, a language is free markdown from the fi
 
 This is where the space owner states policy + the honest-operator caveat
 + the public-share **decryptable-on-report** ([security-model](../../../crosscutting/security-model.md),
-[ADR 0035](../../../decisions/0035-server-terms-of-service.md)). Self-hosted operators own their terms; the central
-infra ships a default.
+[ADR 0035](../../../decisions/0035-server-terms-of-service.md)). Every space writes its own terms, on any server: no
+server ships default terms (a new tenant has none, revision 0), only the starter template the owner may insert.
 
 ## Main flow
 
