@@ -55,6 +55,19 @@ sequenceDiagram
 
 - **A1 — passkey (deferred):** a registered passkey is an alternate auth method (its signature
   authenticates); covered by a **separate use-case**, not this flow.
+- **A2 — the sign-in finds a live session (web, inbox #454):** boot revives a session from the refresh cookie and
+  may not open the vault (a convenience wrap withheld or gone, a session vault lost with its tab, a sign-out that did
+  not reach the server — [sign-out](uc.account.sign-out.md) E4), so the device reaches the sign-in screen with a
+  session. Typing the address ends nothing; the submit asks the server whose session it is
+  (`GET /api/account/email`, the server's own copy) and compares it with the typed or prefilled address under the
+  one normalization (trim, lower-case). The **same account** unlocks inside that session: no challenge, no verify,
+  no new family ([unlock](uc.account.unlock.md) A2). **Another account**, or a submit that turns "remember me" on
+  (a refresh never raises a cookie's lifetime, ADR 0004, and the client cannot read which one the restored session
+  has), first **ends** the found family with a logout and then runs this flow. The logout comes first because it
+  clears the browser's refresh cookies, so after the login it would clear the new one; a logout that does not reach
+  the server stops the sign-in, so no new family is minted beside a live one. A session the server refuses ends
+  through the one ending ([sign-out](uc.account.sign-out.md) § The ending). The same rule holds for a session this
+  screen's own login made: a Secret-Key retry stays on it, a changed address ends it.
 - **E1 — wrong password:** the derived keypair does not match the stored `authPublicKey`; signature
   verification fails → **generic auth failure**, indistinguishable from an unknown account.
 - **E2 — unknown account:** the server still issues a nonce and still fails verification identically →
