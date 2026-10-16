@@ -71,8 +71,9 @@ neither of them is ever written to a log line. A log may name a moderation case 
 The record itself (triggers, shape, switch, hold, disclosure) is the moderation ADR's. This ADR fixes two things
 it depends on:
 
-- **Which address is recorded is decided elsewhere.** Quarkus takes the leftmost `X-Forwarded-For` entry and, with
-  no `trusted-proxies`, trusts every peer (M18), so the address a client sends can be the one recorded. A forged
+- **Which address is recorded is decided elsewhere.** Quarkus's forwarding takes the leftmost `X-Forwarded-For`
+  entry and, with no `trusted-proxies`, trusts every peer (M18), so an address taken from it can be the one a
+  client sent. A forged
   address in an evidence record can name an innocent third party. How veyq resolves a client address it can
   stand behind, on both targets and for the rate limiter too, is
   [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md)'s; this ADR only requires that the
@@ -113,7 +114,7 @@ only through the database, which the operator holds under its own retention.
   path, the copy-link fallback, the unknown-wrap warning (a crafted value with a newline and an email address).
   Each asserts the line **is** emitted (the positive control) and does not carry the value.
 - **The guest-write slice test** makes a guest write from a known address (`203.0.113.77`) and asserts the address
-  is in the record (the control) and in no captured log record. ADR 0094's inventory sharpens it to a two-entry
+  is in the record (the control) and in no captured log record. ADR 0094 § For the moderation CR sharpens it to a two-entry
   `X-Forwarded-For` whose forged leftmost entry must be in no record and no log.
 - **A catch-all exception mapper** logs the exception and the route **template**, never the URI and never its
   query, and answers `internal_error`.

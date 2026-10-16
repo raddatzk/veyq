@@ -287,6 +287,11 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      literals at the call. **Left open on purpose** — following a constant to its use is data flow, which a
      buildless grep does not have, and the realistic regression (a hand parse copied from an old resource) is a
      literal and is caught. Pinned so the limit in that guard's docstring is executable rather than a sentence.
+  83 a client's forwarded-for header read through a name assembled from two literals, in the rate-limit filters,
+     passes `validate_lookup_single_home` rule D, which matches the header's name as one literal wherever it
+     stands. **Left open on purpose** — the same data-flow gap as 25: a constant holding the whole name IS caught,
+     and the realistic regression (a hand parse in the moderation CR's guest-write path) spells the name. Pinned so
+     the limit in that guard's docstring is executable rather than a sentence.
   30 a `web/src` comment citing a use-case id under a feature directory that does not exist passes
      `validate_doc_citations`, which reads an id only under a real feature directory. **Left open on purpose** —
      that anchor is what keeps attribute chains (`.parent.parent`, `.value.trim()`) from reading as ids; without
@@ -432,6 +437,10 @@ DERIVATIVE_ARM_LINE = '            MediaDerivativeEntity.find("mediaId = ?1", m.
 # bought validate_lookup_single_home used to live, so it is where a copy of it would plausibly come back.
 RECOVERY_RESOURCE = "backend/core/src/main/kotlin/me/raddatz/veyq/core/account/recovery/RecoveryResource.kt"
 RECOVERY_RESOURCE_ANCHOR = "class RecoveryResource("
+# Where a forwarded-for read through an assembled name is forged: the rate limiter is the resolver's first consumer,
+# so a hand parse beside it is where one would plausibly come back.
+RATE_LIMIT_FILTERS = "backend/core/src/main/kotlin/me/raddatz/veyq/core/ratelimit/RateLimitFilters.kt"
+RATE_LIMIT_FILTERS_ANCHOR = "@Provider\n@RateLimit(key = RateLimitKey.IP)"
 TRASH_PURGE_BODY_ANCHOR = "        store.purgeTrashedBefore(Instant.now().minus(retention))\n"
 
 
@@ -1165,6 +1174,22 @@ def forge_host_read_through_an_alias(root: pathlib.Path) -> str:
     return "a Host header read through an alias constant (the data-flow open gap)"
 
 
+def forge_forwarded_for_read_through_an_assembled_name(root: pathlib.Path) -> str:
+    # validate_lookup_single_home rule D matches the forwarded-for header's name as ONE literal, wherever it stands.
+    # Build the name from two literals at the call and no spelling matches. This file writes neither the name nor
+    # its Kotlin spelling whole, so it carries no copy of what rule D forbids.
+    f = root / RATE_LIMIT_FILTERS
+    if not f.is_file():
+        raise ForgeError(f"{RATE_LIMIT_FILTERS} is missing — the rate-limit filters moved or were deleted")
+    probe = (
+        "/** A guard-gap probe: a forwarded-for read through a name assembled from two literals. */\n"
+        "private fun assembledForwardedFor(req: io.vertx.core.http.HttpServerRequest): List<String> =\n"
+        '    req.headers().getAll("X-Forwarded-" + "For")\n\n'
+    )
+    f.write_text(_sub(f.read_text(), RATE_LIMIT_FILTERS_ANCHOR, probe + RATE_LIMIT_FILTERS_ANCHOR))
+    return "a forwarded-for read through a name assembled from two literals (the data-flow open gap)"
+
+
 def forge_dead_class_inside_a_selector(root: pathlib.Path) -> str:
     # validate_stylesheet_anchors judges a selector's ANCHOR compound and nothing deeper, so a class no markup
     # applies is green wherever it sits behind a combinator. The live anchor is read out of the sheet rather
@@ -1502,6 +1527,7 @@ CASES = [
     ("80", "validate_request_bounds.py", forge_request_list_elements_unbounded, False),
     ("81", "validate_stylesheet_anchors.py", forge_class_anchored_only_by_a_test, False),
     ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
+    ("83", "validate_lookup_single_home.py", forge_forwarded_for_read_through_an_assembled_name, True),
 ]
 
 

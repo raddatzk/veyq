@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.adminchannel
 
 import io.vertx.core.http.HttpServerRequest
 import io.vertx.core.net.SocketAddress
+import me.raddatz.veyq.core.http.ClientAddress
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -26,7 +27,7 @@ object AdminChannel {
 
     fun isAdminChannel(local: SocketAddress?, peer: SocketAddress?, adminPort: Int): Boolean {
         if (local == null || !local.isInetSocket || local.port() != adminPort) return false
-        val peerAddress = peer?.takeIf { it.isInetSocket }?.hostAddress()?.let(::literal) ?: return false
+        val peerAddress = peer?.takeIf { it.isInetSocket }?.hostAddress()?.let(ClientAddress::literal) ?: return false
         return !isGloballyRoutable(peerAddress)
     }
 
@@ -47,14 +48,4 @@ object AdminChannel {
     private fun isSharedAddressSpace(b: ByteArray) = b[0].toInt() and 0xFF == 100 && b[1].toInt() and 0xC0 == 64
 
     private fun isUniqueLocal(b: ByteArray) = b[0].toInt() and 0xFE == 0xFC
-
-    private val IPV4_LITERAL = Regex("""\d{1,3}(\.\d{1,3}){3}""")
-
-    /**
-     * An IP literal, parsed without a DNS lookup — or null. `InetAddress.getByName` resolves a name, so it is only
-     * handed a dotted quad or a string containing `:`, both of which it parses as literals. A socket peer is always
-     * a literal; anything else is not recognised, and an unrecognised peer is the public channel.
-     */
-    fun literal(text: String): InetAddress? =
-        if (IPV4_LITERAL.matches(text) || ':' in text) runCatching { InetAddress.getByName(text) }.getOrNull() else null
 }

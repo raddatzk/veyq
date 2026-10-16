@@ -14,8 +14,9 @@ import java.time.Duration
  * Verifies [IpRateLimitFilter]'s bucket **actually refills**: a drained IP is throttled, and once enough time has
  * passed for a token to accrue its requests are allowed again. Split out from [AuthRateLimitTest] because it needs
  * a **1-second** window (3 per second → a token every ~333 ms, observable in real time without a long wait) — a
- * different build-time/runtime config, hence its own profile. Proxy-address-forwarding is on so this test keys its
- * own client IP, isolated from everything else.
+ * different build-time/runtime config, hence its own profile. It keys its own client IP, isolated from everything
+ * else, by a single-entry `X-Forwarded-For` from loopback: with an empty trust list that entry is the client
+ * (ADR 0094).
  *
  * This is the *runtime* half of ADR 0052's gradual-refill consequence: there is no window edge to wait for any
  * more, so what is asserted is not "the counter cleared" but "one token came back". The arithmetic behind it is
@@ -29,8 +30,6 @@ class AuthRateLimitRefillTest {
         override fun getConfigOverrides() = mapOf(
             "veyq.ratelimit.auth.max-requests" to "3",
             "veyq.ratelimit.auth.window-seconds" to "1",
-            "quarkus.http.proxy.proxy-address-forwarding" to "true",
-            "quarkus.http.proxy.allow-x-forwarded" to "true",
         )
     }
 

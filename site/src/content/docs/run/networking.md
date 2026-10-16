@@ -5,6 +5,7 @@ sources:
   - docs/decisions/0063-database-driven-tenant-ingress.md
   - docs/features/admin/use-cases/uc.admin.tenant-reachability.md
   - docs/crosscutting/cc.security.rate-limit.md
+  - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
 ---
 
 ## How requests reach the instance
@@ -76,12 +77,48 @@ sets the header. A browser that saw it keeps it for 180 days.
 
 The public sign-in, sign-up and recovery endpoints are rate-limited per client address
 ([cc.security.rate-limit](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.rate-limit.md)).
-The application takes that address from the proxy's forwarded header, so who may send that header matters:
+The application works that address out itself ([ADR 0094](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)). It reads every `X-Forwarded-For` line and takes
+the **rightmost** entry that the trusted-proxies list does not name. That entry was written by a proxy the request
+really passed, so a client cannot choose it. The proxy that hands the request to the application is trusted because
+of the network, never because of a header: on Docker Compose only Traefik reaches the application's public port, and
+on Kubernetes the NetworkPolicy admits only your gateway. `Forwarded` and `X-Real-Ip` are ignored. If the entry it
+stops at is not an IP address, the rate limit keys on the proxy that connected.
 
-- **Docker Compose** sets no list of trusted proxies; the container networks decide who can reach the application at
-  all, and only Traefik can on the public side.
-- **Kubernetes:** `app.trustedProxies` stays empty unless your proxy has a stable address. The NetworkPolicy then
-  decides who reaches the application.
+The list is one setting, `VEYQ_HTTP_TRUSTED_PROXIES`, which the chart renders from `app.trustedProxies`. It names the
+hops **in front of** your gateway, such as a load balancer, as IP addresses and CIDR ranges. Leave it empty when the
+gateway is the first hop. Never list the gateway itself or its pods: a range that survives a pod restart trusts every
+pod in it. A hostname or a malformed entry stops the application at startup. Docker Compose has no such setting,
+because a proxy in front of Traefik is outside the recipe (below).
+
+What arrives, and what the rate limit keys on, by how each hop treats the header it receives:
+
+| In front of the application | `X-Forwarded-For` as it arrives | Key | Source port |
+|---|---|---|---|
+| Traefik (Docker Compose, or Traefik as your gateway) | `203.0.113.77` | the client | unknown |
+| A gateway that appends to what the client sent | `198.51.100.66, 203.0.113.77` | the client | unknown |
+| A load balancer, then a gateway that replaces the header | `10.0.0.5` | the load balancer | unknown |
+| A load balancer, then a gateway that appends, `app.trustedProxies: "10.0.0.5"` | `198.51.100.66, 203.0.113.77, 10.0.0.5` | the client | unknown |
+| The same without `app.trustedProxies` | the same | the load balancer | unknown |
+| A load balancer that writes `ip:port`, then a gateway that appends, listed | `198.51.100.66, 203.0.113.77:51234, 10.0.0.5` | the client | `51234` |
+
+Traefik replaces the header from a peer it does not trust and adds no port; that much is measured. Whether your
+gateway and load balancer replace or append, check in their documentation. Where the key is your load balancer, every
+client behind it shares one bucket: list the load balancer.
+
+- **The source port.** The application keeps it only where the entry it stops at carries one: an AWS Application
+  Load Balancer writes it when `routing.http.xff_client_port.enabled` is set, and an Azure Application Gateway
+  always does. An entry with a port reads `203.0.113.77:51234`, or `[2001:db8::1]:443` for IPv6. A bare IPv6
+  address is never read as having a port, so a load balancer that writes `2001:db8::1:4711` without brackets hands
+  the application a different address. The Application Gateway's IPv6 form is not documented: with IPv6 behind
+  one, look at the header it sends. Everywhere else the port is unknown, which is the normal case. The rate limit
+  keys on the address alone.
+- **Keep the client's address up to the gateway.** A layer-4 load balancer in front of your gateway that rewrites
+  the source address makes the gateway see a node, not the client, and no setting in veyq can repair that. Check
+  the setting that keeps it: for a Kubernetes `LoadBalancer` Service, `externalTrafficPolicy: Local`, or the PROXY
+  protocol where your load balancer and gateway support it.
+- **Kubernetes without an enforced NetworkPolicy.** With `networkPolicy.enabled: false`, or a CNI that enforces no
+  NetworkPolicy, any pod can reach the application and write the whole header. Nothing then tells it apart from your
+  gateway, and the rate limit can key on a forged address. The chart's install notes say so.
 
 The buckets live in memory, per application instance, and a restart clears them. Behind a NAT every client shares
 one bucket.

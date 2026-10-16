@@ -336,13 +336,17 @@ in its concept doc.
 The public authentication endpoints are rate-limited per IP with a token bucket (`429 rate_limited`). It is
 defence-in-depth against online brute force, credential stuffing and denial of service, and honestly limited: every
 bucket is in memory and per instance, so replicas behind a load balancer count independently and a restart clears
-every bucket. Behind a proxy the key is the forwarded address, which a peer inside the trusted proxy set can forge,
-and a NAT'd source shares one bucket. It raises the cost of automated abuse; it does not make it impossible.
+every bucket. The key is the rightmost `X-Forwarded-For` entry that the trusted-proxies list does not name, which a
+proxy the request passed wrote; a client's own entries to its left are never read. That holds only as far as the
+network confines who reaches the application: on Kubernetes without an enforced NetworkPolicy any pod can write the
+whole header and forge the key. A NAT'd source, carrier-grade NAT included, shares one bucket. It raises the cost of automated abuse; it does not make it impossible.
 Offline brute force of a password is a separate property, answered cryptographically by the Secret Key.
 
 **Decided in:** [cc.security.rate-limit § Known limits](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.rate-limit.md#known-limits-honest-defense-in-depth--not-a-hard-guarantee).
 
-**Closed by:** deferred hardening named there (a distributed store, an address-based trusted-proxies default).
+**Closed by:** a distributed store, the deferred hardening named there. The forgeable key is not closed by a setting:
+on Kubernetes it closes only with a NetworkPolicy the cluster enforces
+([ADR 0094](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md) decision 6).
 
 ## Assurance: one implementation, no external audit
 

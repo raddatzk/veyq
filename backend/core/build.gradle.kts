@@ -80,6 +80,14 @@ pitest {
     // with no fix available. Mirrors web's break=95 (ADR 0045 §4). At the current mutant count it tolerates
     // exactly one such survivor; a second collapses the score below 95.
     mutationThreshold.set(95)
+    // Kotlin hands PIT equivalent mutants a test cannot kill, so a pure class here is written around them
+    // (ClientAddress, ADR 0094, met all three): an inline stdlib call (`any`, `none`, `mapIndexed`) inlines its
+    // `is Collection` and index-overflow branches into the class; a Java platform-typed value passed to a non-null
+    // parameter (`InetAddress.address`) gets a null-check intrinsic whose removal changes nothing; and `indexOf` < 0
+    // has a boundary twin where index 0 cannot occur. Use a plain loop, a non-inline call (`drop`, `substringBefore`,
+    // `max`) or move the Java call into a holder class outside the scope. `avoidCallsTo("kotlin.jvm.internal")` is
+    // NOT the fix: PIT then skips every LINE that calls the package, `==` on objects included, and the scope lost a
+    // third of its mutants (MembershipPolicy all of them) when it was tried.
     // Incremental analysis: PIT re-tests only mutants whose code OR covering tests changed since the cached
     // history, so a weakened assertion (a test edit, no source change) is still caught. The history file is the
     // CI cache (mutation-backend.yml), mirroring Stryker's incremental report (ADR 0045 §4). Same path in/out:

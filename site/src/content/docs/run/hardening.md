@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0050-operator-config-secret-encryption.md
   - docs/crosscutting/cc.security.csp.md
   - docs/crosscutting/cc.security.rate-limit.md
+  - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
 ---
 
 Most of veyq's hardening is in the recipes and needs nothing from you except not undoing it. This page lists it by
@@ -50,12 +51,14 @@ local.
   cannot guess your gateway's data-plane pods, so the install fails until you set `networkPolicy.ingressFrom`. **A CNI that
   does not enforce NetworkPolicy renders the policies and enforces none of them.**
 
-## Trust only a stable proxy address
+## List only the hops in front of the gateway
 
-The application reads the client address from the proxy's forwarded header, and the rate limits key on it. On
-Compose the network separation decides who can send that header. On Kubernetes, `app.trustedProxies` stays empty
-unless your proxy has a stable address (a host-network controller, an external load balancer); a pod-IP range wide
-enough to survive a controller restart trusts every pod beside it.
+The application takes the client address from the rightmost `X-Forwarded-For` entry that its trusted-proxies list does
+not name, and the rate limits key on it
+([Networking](/veyq/run/networking/#the-client-address-and-the-rate-limits)). Who may hand it that header is decided
+by the network: on Compose the network separation, on Kubernetes the NetworkPolicy. So `app.trustedProxies` lists
+only the hops **in front of** your gateway, such as an external load balancer, and stays empty when there are none.
+Never list the gateway's own pods: a pod-IP range wide enough to survive a restart trusts every pod beside it.
 
 ## Keep the config-secret key apart
 
