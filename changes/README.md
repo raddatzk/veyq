@@ -448,7 +448,9 @@ coverage file that gaps every target surface.)
 `docs/coverage/`.** `cr-store-connection-in-admin-web` renamed four test methods in its phase 2 commit with a Done-when
 that named only `./gradlew check`; `validate_coverage.py` and `validate_guard_gaps.py` (which goes red on a copy it
 cannot forge) stayed red through phases 3 and 4 and were first measured in phase 5. The locator is the refs, not
-the test sources: `git grep -n "<old test name>" -- docs/coverage`.
+the test sources: `git grep -n "<old test name>" -- docs/coverage`. Such a phase runs `validate_guard_gaps.py
+--force`, too: locally that guard skips while no file under `scripts/` changed, and a renamed anchor is exactly what
+a skip does not see.
 
 **Where a CR may not name its use-cases yet, a phase owns writing them.** A new application cannot name use-cases
 before its concept settles, so `cr-files-application` started with `satisfies: []` and *"written with F1"* — and
@@ -531,7 +533,9 @@ no file restates it, because a restated list drifts out of step with the one tha
 *"point at a canonical source, don't restate it"*, applied to itself. A red guard means the CR isn't done.
 (The glob sees files, not commits: CI runs it over the **committed** tree, so an *untracked* guard — or an
 untracked file a guard would have rejected — is green locally and unchecked in CI. Commit before believing a
-local green.)
+local green.) One guard runs less locally than in CI: `validate_guard_gaps.py` prints `SKIPPED` while nothing under
+`scripts/` or the trust-chain skill changed since the checkout's last green full run, and never skips in CI — its
+docstring says what a skip does not see.
 
 **In a wave of parallel CRs the glob gates the MERGED tree, once — not each branch.** A branch is not the tree
 that lands, so its green says nothing about the merge, and the price of running it anyway is real: on 2026-09-24

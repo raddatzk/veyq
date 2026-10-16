@@ -346,8 +346,9 @@ this section only points at it (rule 2) — assembling this picture by hand each
   guard runs the moment it lands, with nothing to register — which is why no list of them exists here or
   anywhere else. **`scripts/` is the list**; each module docstring is that guard's whole documentation, and
   what it must carry is defined once in [`../../changes/README.md`](../../changes/README.md) § trust-chain
-  guards. Run the chain locally exactly as CI does:
-  `for f in scripts/validate_*.py; do python3 "$f"; done`.
+  guards. Run the chain locally as CI does:
+  `for f in scripts/validate_*.py; do python3 "$f"; done` — with one difference, `validate_guard_gaps.py`, which
+  skips locally while no guard changed (`--force` runs it; CI never skips).
 - **Three CI runs, three triggers.** [`trust-chain.yml`](../../.github/workflows/trust-chain.yml) —
   deliberately unfiltered and buildless, the whole guard glob; a docs-only change is validated **there and
   nowhere else**, because [`ci.yml`](../../.github/workflows/ci.yml) `paths-ignore`s `docs/**`.

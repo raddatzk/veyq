@@ -79,7 +79,9 @@ the one working-check it pins, still rejects); its docstring is the enumeration.
 always-current list, so this skill does not restate it: a restated list is a *remembered* claim that drifts
 the moment a validator is tightened — the very failure this section is about, one level up. The coupling is
 deliberate — closing a gap flips a documented pass/fail and turns that guard red, forcing the closure to be
-recorded here, not landed silently.
+recorded here, not landed silently. **Read its line before citing a local green as evidence:** locally it prints
+`SKIPPED` while no guard changed since the checkout's last green full run (CI never skips), and a skip re-checks
+nothing — after renaming what a forgery anchors on, run it with `--force`.
 
 Four documented gaps sit **outside** that guard, on purpose:
 
