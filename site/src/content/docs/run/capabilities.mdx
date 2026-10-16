@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0032-capability-discovery-version-gating.md
   - docs/features/admin/use-cases/uc.admin.tenant-switch-capabilities.md
   - docs/features/admin/use-cases/uc.admin.capability-requirements.md
+  - docs/features/admin/use-cases/uc.admin.configure-external-services.md
   - contracts/platform/capabilities.json
 ---
 
@@ -80,6 +81,28 @@ An id the instance does not know is refused (`capability_not_found`, exit `1`), 
 A switch is stored in the database, so a database backup carries it. It acts on the next request, without a restart:
 the application reads the switches through an in-process cache that each write clears, which holds for the single
 replica both recipes run.
+
+## External services
+
+Three entries are outside services a member's browser calls directly, never through your server: the map tiles
+(`memories.map`), the geocoder that names places (`memories.places`) and the breached-password check
+(`core.breached-password`). Their addresses are yours to set, in **Server → External services** or with the CLI:
+
+```sh
+veyq-admin services list
+veyq-admin services set memories.map --url 'https://tiles.example.com/{z}/{x}/{y}.png' --attribution '© Example'
+veyq-admin services set memories.places --url https://geocoder.example.com
+veyq-admin services unset core.breached-password
+```
+
+A new instance starts with OpenStreetMap's tiles, Nominatim and the Have I Been Pwned range API. A service is used only
+while it has an address **and** its entry is on: the members' clients read the address from the capabilities, and the
+Content Security Policy the server sends allows the service's origin only then, so a browser refuses any other. An
+instance without internet runs with all three unset (or switched off): no map, place names typed by hand, no check of
+new passwords against known leaks. Map tiles take a `{z}/{x}/{y}` template and the attribution your provider asks
+for; the geocoder takes a Nominatim-compatible base address; the breach check the prefix the first five characters of
+a hash are appended to. A tenant owner may switch the maps and place names off for their own space; the policy follows
+your level only. The admin console's own first-run screen reaches only the default breach-check address.
 
 ## Requirements
 
@@ -194,7 +217,6 @@ names what the server would see in order to refuse it: a switch exists only wher
 | `core.personal-space` | the personal scope; off means no new content in it, while the scope itself (keys, favorites) stays |
 | `core.member-invites` | the member-invite endpoint |
 | `core.self-registration` (idea) | a new sign-up endpoint, off by default |
-| `core.breached-password` | the call to the breached-password service, through the CSP the server sends |
 | `core.push` (native apps) | the push services' wake-up, which carries no content |
 
 **Memories.**
@@ -206,17 +228,12 @@ names what the server would see in order to refuse it: a switch exists only wher
 | `memories.journal` (planned) | a node kind or blob role the server would then see |
 | `memories.gpx` (planned) | a blob role for tracks: the server would learn *that* a Memory has a track, never where |
 | `memories.faces` (idea) | a role for the face index, which is biometric data |
-| `memories.places` | the reverse geocoder, through the CSP; a place still works with a name typed by hand |
-| `memories.map` | the map tiles, through the CSP; independent of `places` |
 | `memories.public-shares`, `.contribute`, `.drop-box` | inherit from `core.public-shares`, so core switches every application's links off at once |
 | `memories.public-shares.download-originals` | the original file's blob role. Waits on a measurement: if guests stream video from the original, this switch would also stop their video playback |
 
 **Depot.** `depot` would gate its file node kind and the file content's blob role. Its own `public-shares`,
 `.contribute` and `.drop-box` would inherit from core, and its drop box would also gate creating a drop box, which
 `core.public-shares.drop-box` does for the whole instance today.
-
-An external service that is switched off would be left out of the Content Security Policy the server sends, so the
-browser blocks it. Its address would become your configuration instead of a build setting.
 
 **Beyond the entries.**
 

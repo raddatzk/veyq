@@ -1,8 +1,8 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
 - Status: Accepted 2026-10-15; the instance level and the tenant level are built, share switches reaching existing
-  links included (inbox #442, #439 step 2), and so are four requirements (#439 step 3); external services are not
-  (§ Consequences; inbox #439). It replaces
+  links included (inbox #442, #439 step 2), and so are four requirements (#439 step 3) and the three external
+  services (#439 step 4) (§ Consequences). It replaces
   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
   [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match.
 - Date: 2026-10-15
@@ -59,7 +59,7 @@ instance and tenant layers.
 7. **External services are entries.** When one is switched off, the CSP the backend serves
    ([ADR 0069](0069-backend-serves-the-web-app-shell.md)) leaves its origin out, so the browser blocks it, and the
    manifest hides it from native clients. The services' URLs become operator configuration instead of build
-   variables (`VITE_VEYQ_MAP_*` today).
+   variables (they were `VITE_VEYQ_MAP_*` until #439 step 4).
 8. **Requirements are values on a node, and the strictest wins.** A tenant can tighten and never loosen. On the
    wire `[{ id }]` grows to `[{ id, …values }]`, the extension ADR 0032 already left room for.
 9. **Presence ids retire.** Once every major in the client window serves an id, the client stops checking it, and
@@ -110,7 +110,7 @@ core/
   *+  public-shares                → share role READ
     *+  contribute                 → share role READ_WRITE
     *+  drop-box                   → share role WRITE_ONLY
-  *+  breached-password            → external (HIBP); CSP connect-src
+  *   breached-password            → external (HIBP); CSP connect-src (instance only: checked before sign-in)
   *+  push                [native] → external (APNs/FCM); a content-free wake-up
   ○   kept-shares (#435), search, live-collab, notifications   [later]
 *+ memories/                       → node kinds MEMORY / CHAPTER
@@ -207,8 +207,19 @@ both off a place still works, named by hand. The user's own consent to the two
   it into a request and removing it would delete a membership. What the gates read is what the server already held: that
   a link has a password verifier, its dates, a session family's start. Not built: the verified-identities requirement
   and `offline-cache` (above), and a member's share list saying that a link serves no guest while a requirement or a
-  switch stops it.
-- **Not built:** external services as entries (decision 7); configuration as code (#444); a member's share list saying
+  switch stops it (inbox #457).
+- **The external services are entries** (decision 7, measured: `ExternalServicesHandler`, `ExternalServiceOrigins`,
+  `AppShellRoutes.cspNow`): `memories.map` and `memories.places` (`*+`) and `core.breached-password` (`*`, because the
+  join and recover screens check before sign-in, decision 12). Source `external-service`: an entry is active only while
+  the Server Owner configured its address (`veyq_external_service`, seeded with OSM tiles, Nominatim and the HIBP range
+  API; admin-web's **External services**, `veyq-admin services`). Both deliveries carry the address as `serviceUrl`
+  (and the tiles' `serviceAttribution`), the web reads only that, and the served CSP names an origin only while its
+  entry is active at the instance level: the origins are a snapshot recomputed after each write, because the header is
+  written on the event loop, so a tenant's own switch acts through its set and not through the policy. `memories` is
+  the first application root of the tree. Not built: a place named by hand with no map at all (the location editor
+  needs the tiles, so without `memories.map` no place is set; inbox #458), and admin-web's own policy, a static `<meta>`, which
+  keeps the default HIBP origin.
+- **Not built:** configuration as code (#444); a member's share list saying
   that a link serves no guest while its switch is off (the list shows it as on, and the share dialogs only hide what
   the switch refuses, or ask for what a requirement needs). The off states have not yet been seen in a real browser.
 - **The two enforcement gaps of the flat ids are closed.** The server gated `core.group-space` only at group creation

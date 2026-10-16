@@ -56,3 +56,6 @@ check, or that it talks to none.
   [ADR 0089](../../../decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md),
   [ADR 0069](../../../decisions/0069-backend-serves-the-web-app-shell.md) (the served policy),
   [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md), [ADR 0018](../../../decisions/0018-map-tiles-provider-neutrality.md)
+- **On the docs site:** [Capabilities § External services](../../../../site/src/content/docs/run/capabilities.mdx)
+  (the console, the CLI, the defaults) and [Set the location](../../../../site/src/content/docs/memories/set-the-location.mdx)
+  (what a member sees without a map).
