@@ -69,7 +69,7 @@ du den Link abschaltest.
 
 ## Related
 
-- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing.md)
+- End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.member-files](uc.depot.member-files.md),
   [uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md) (core's link, gate and guest

@@ -9,8 +9,8 @@
 // Memories' map). It owns the DATA a row needs (Depot's blob listing, Memories' covers) and the flows behind its actions
 // (Depot's upload and replace); it draws nothing of the list itself. Several kinds may name one factory: it is called once.
 //
-// **An action is already a capability answer.** The factory builds the action list from its application's fail-closed
-// capability function (`core/access.ts`, `capabilities.ts`): an action it was not granted is `shown: false` or left out,
+// **An action is already a rights answer.** The factory builds the action list from its application's fail-closed
+// rights function (`core/access.ts`, `rights.ts`): an action it was not granted is `shown: false` or left out,
 // and core decides nothing of its own. A share guest gets this very row with fewer actions (inbox #401), never a
 // guest-only one. Core may add its own actions next to the application's (`coreActions`, merged by
 // {@link mergeRowActions}): the favourite heart of inbox #409 will be one, with no change to any application.
@@ -79,7 +79,7 @@ export interface LevelRow {
   /** The row's primary click: what a plain click on the row does (open, or download). `label` is its accessible name. */
   primary: { label: string; onClick: () => void; disabled?: boolean }
   actions: readonly LevelRowAction[]
-  /** What a selection of the level may do with THIS node (inbox #421): its application's capability answer, as its actions
+  /** What a selection of the level may do with THIS node (inbox #421): its application's rights answer, as its actions
    *  are. Omitted: nothing - the node can be selected, but no action of the selection reaches it (fail closed). */
   selection?: LevelRowSelection
 }

@@ -167,10 +167,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      standing — rejected: `validate_request_bounds` reads a `$ref`'d scalar's bounds as the property's, because the
      generator inlines it as a String and emits none of them. Before that, this property took any tag (measured:
      `9F3A1C04` was enqueued, 201) while its schema said lowercase hex of at most 64
-  59 one of `updateNode`'s version declarations dropped, its field still on the request — rejected:
-     `validate_write_concurrency` requires every version-shaped request property to be the `field` of a declaration.
-     ADR 0080 gave the operation a second, independent version, which is why `x-veyq-concurrency.fields` became a list
-  60 a second version-shaped property added to `UpdateNodeRequest` with no declaration — rejected: the reverse angle
+  59 one of `updateNode`'s revision declarations dropped, its field still on the request — rejected:
+     `validate_write_concurrency` requires every counter-shaped request property to be the `field` of a declaration.
+     ADR 0080 gave the operation a second, independent revision, which is why `x-veyq-concurrency.fields` became a list
+  60 a second counter-shaped property added to `UpdateNodeRequest` with no declaration — rejected: the reverse angle
      holds per field, not per operation, so a declared neighbour does not cover it
   61 `updateNode`'s `409` no longer naming a declared conflict code — rejected: each declaration's `conflictCode` must
      appear in the operation's `409` text, so a client meeting it finds it documented
@@ -1238,8 +1238,12 @@ def forge_wiki_pair_declares_fewer(root: pathlib.Path) -> str:
 def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
     # Every markdown link from the first declared docs/ source back to its English page is unlinked (kept as
     # text): one link left standing would keep the guard green, which is a bite that never landed.
-    for page in sorted((root / SITE_PAGES).glob("*.md")):
-        if page.name == "index.md":
+    # Every English page, in any section folder and of either suffix: the Use area keeps its pages in folders
+    # (cr-use-area-content), so a root-only glob ran out of pages once the last one moved into its section.
+    pages = (root / SITE_PAGES)
+    english = (p for p in pages.rglob("*") if p.suffix in {".md", ".mdx"} and not p.relative_to(pages).parts[0] == "de")
+    for page in sorted(english):
+        if page.relative_to(pages).as_posix() == "index.md":
             continue  # the landing page declares nothing
         for s in _site_sources(page):
             doc = root / s
@@ -1254,9 +1258,9 @@ def forge_wiki_backlink_removed(root: pathlib.Path) -> str:
             text = doc.read_text()
             stripped = link.sub(unlink, text)
             if stripped == text:
-                raise ForgeError(f"{s} carries no link to {SITE_PAGES}/{page.name} to remove")
+                raise ForgeError(f"{s} carries no link to {page.relative_to(root)} to remove")
             doc.write_text(stripped)
-            return f"{s} no longer links back to {SITE_PAGES}/{page.name}"
+            return f"{s} no longer links back to {page.relative_to(root)}"
     raise ForgeError(f"no English page under {SITE_PAGES} declares a docs/ source — re-anchor this forgery")
 
 
@@ -1295,17 +1299,17 @@ def _in_operation(root: pathlib.Path, spec: str, operation_id: str, old: str, ne
 def forge_concurrency_declaration_dropped(root: pathlib.Path) -> str:
     # The second declaration, so the first still stands: one declared field must not cover another.
     _in_operation(root, "content.openapi.yaml", "updateNode",
-                  "          - field: placementVersion\n"
+                  "          - field: placementRevision\n"
                   "            requiredWith: [encryptedName, parentId, wrappedContentKey, slugToken]\n"
                   "            conflictCode: stale_placement\n", "")
-    return "updateNode's placementVersion declaration dropped, metaVersion's kept (must be REJECTED)"
+    return "updateNode's placementRevision declaration dropped, metaRevision's kept (must be REJECTED)"
 
 
 def forge_second_version_field_undeclared(root: pathlib.Path) -> str:
-    _in_request_property(root, "content.openapi.yaml", "UpdateNodeRequest", "metaVersion",
-                         "        metaVersion:\n", "        shadowVersion:\n          type: integer\n"
-                         "          format: int64\n          example: 0\n        metaVersion:\n")
-    return "UpdateNodeRequest gains a version-shaped shadowVersion no declaration names (must be REJECTED)"
+    _in_request_property(root, "content.openapi.yaml", "UpdateNodeRequest", "metaRevision",
+                         "        metaRevision:\n", "        shadowRevision:\n          type: integer\n"
+                         "          format: int64\n          example: 0\n        metaRevision:\n")
+    return "UpdateNodeRequest gains a counter-shaped shadowRevision no declaration names (must be REJECTED)"
 
 
 def forge_conflict_code_unnamed(root: pathlib.Path) -> str:

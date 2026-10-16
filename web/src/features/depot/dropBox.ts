@@ -110,7 +110,7 @@ export async function nameDropGuest(
 }
 
 /** A guest's identity folder as it opened: its id, its key `K_F` and the epoch its entry is sealed at. */
-export type DropFolder = { nodeId: string; key: Uint8Array; epoch: number; placementVersion: number; created: boolean }
+export type DropFolder = { nodeId: string; key: Uint8Array; epoch: number; placementRevision: number; created: boolean }
 
 /**
  * The guest's own folder in the drop box: created on the first call — a fresh id and key `K_F`, the folder's name (the
@@ -124,7 +124,7 @@ export async function ensureDropFolder(
   const { shareId, scopeId } = head
   const dropBoxId = head.share.nodeId!
   const identityKey = fromB64std(session.identityKey)
-  const address = { scopeId, nodeId: crypto.randomUUID(), epoch: 0, placementVersion: 0 }
+  const address = { scopeId, nodeId: crypto.randomUUID(), epoch: 0, placementRevision: 0 }
   const folderKey = v1.randomBytes(32)
   const res = await publicShareFilesApi().ensureShareDropFolder({
     shareId,
@@ -139,9 +139,9 @@ export async function ensureDropFolder(
     },
   })
   const key = openContentKey(scopeId, identityKey, {
-    id: res.nodeId, epoch: res.epoch, placementVersion: res.placementVersion, wrappedContentKey: res.wrappedContentKey,
+    id: res.nodeId, epoch: res.epoch, placementRevision: res.placementRevision, wrappedContentKey: res.wrappedContentKey,
   })
-  return { nodeId: res.nodeId, key, epoch: res.epoch, placementVersion: res.placementVersion, created: res.created }
+  return { nodeId: res.nodeId, key, epoch: res.epoch, placementRevision: res.placementRevision, created: res.created }
 }
 
 /**
@@ -150,7 +150,7 @@ export async function ensureDropFolder(
  * pre-checked: a taken one is the server's `slug_taken`. Nothing is ever re-resolved (the guest places nothing).
  */
 export function dropGuestContext(head: PublicShareHead, session: DropGuestSession, folder: DropFolder, pwToken?: string): GuestTreeContext {
-  const row: ShareNode = { id: folder.nodeId, kind: FOLDER_KIND, parentId: head.share.nodeId, orderIndex: 0, epoch: folder.epoch, placementVersion: folder.placementVersion }
+  const row: ShareNode = { id: folder.nodeId, kind: FOLDER_KIND, parentId: head.share.nodeId, orderIndex: 0, epoch: folder.epoch, placementRevision: folder.placementRevision }
   const parts = {
     head,
     rootId: folder.nodeId,

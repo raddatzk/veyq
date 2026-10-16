@@ -53,7 +53,7 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n } from '../../../test/i18n'
-import { mediaItem, treeNode, memberMemoryCaps } from '../../../test/models'
+import { mediaItem, treeNode, memberMemoryRights } from '../../../test/models'
 import { computed } from 'vue'
 import { MEMORY_VIEW, memberMemorySource } from '../source'
 
@@ -78,7 +78,7 @@ const bucket = (bucketId: string, ownerKey: string, mediaCount: number, sealedNa
 
 /** The member's Memory view the organizer reads its doors from (`useMemoryView`), as `MemoryDetail` provides it. */
 const memberView = (scopeId: string) => ({
-  [MEMORY_VIEW as symbol]: { source: memberMemorySource({ scopeId: () => scopeId }), caps: computed(() => memberMemoryCaps()) },
+  [MEMORY_VIEW as symbol]: { source: memberMemorySource({ scopeId: () => scopeId }), rights: computed(() => memberMemoryRights()) },
 })
 
 function mountBuckets(mediaItems: MediaItem[]) {
@@ -113,9 +113,9 @@ describe('MemoryBuckets — a guest named above this node (cr-node-key-hierarchy
     const scopeKey = v1.randomBytes(32)
     const folderKey = v1.randomBytes(32)
     const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
-      b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+      b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 }, kek, k))
     const node = (id: string, parentId: string | null, wrappedContentKey: string): TreeNode =>
-      treeNode({ id, parentId, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+      treeNode({ id, parentId, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
     const memoryKey = v1.randomBytes(32)
     space.epochs = epochsOf(scopeKey)
     treeStore.nodes = [node(FOLDER, null, wrap(scopeKey, FOLDER, folderKey)), node(MEMORY, FOLDER, wrap(folderKey, MEMORY, memoryKey))]

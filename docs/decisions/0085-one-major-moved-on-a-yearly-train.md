@@ -1,6 +1,6 @@
 # ADR 0085 — One major for the platform, moved on a yearly train; a client speaks every major since the train before last
 
-- Status: Accepted; not built (§ Consequences lists what is open)
+- Status: Accepted; decision 1 is built (2026-10-15, inbox #436), the train and the client window are not (§ Consequences)
 - Date: 2026-10-15
 
 ## Context
@@ -90,15 +90,21 @@ database migrations. They answer other questions and stay independent of the maj
 
 ## Consequences
 
-- **Not built.** Measured, and each is open work tracked in the inbox:
-  - the two majors are still two (`VERSION` `0`, `veyq.version.major=1`);
-  - the web gate compares for equality (`grep -n 'EXPECTED_MAJOR' web/src/shared/state/useCapabilities.ts` →
-    lines 24-25), which stays right for the web client (decision 6), so no web change is due;
-  - the `setup.openapi.yaml` `Version.major` text still describes the removal-only rule without train or window;
-    the manifest's deprecation lifecycle stays deferred (ADR 0032 § Consequences) and is not needed for this;
+- **Built: one major (decision 1).** buildSrc's `GeneratePlatformMajor` compiles `VERSION` into `:core`'s
+  `PlatformMajor.MAJOR`, which `GET /api/setup` advertises; there is no `veyq.version.major` setting any more, so no
+  instance can be configured to advertise a major its code does not speak, and neither runtime target needs a value.
+  The web client's `EXPECTED_MAJOR` is read from the same file at build time (`web/vite.config.ts`); its gate still
+  compares for equality (decision 6). `CapabilityManifestSliceTest` and `web/src/shared/state/capabilities.test.ts`
+  each read `VERSION` from disk and hold the served and the compiled major to it. The `setup.openapi.yaml`
+  `Version.major` text names the train and the window.
+- **Not built.** Each is open work tracked in the inbox (#436):
+  - the 1 May train and its release order (clients that speak the new major published before the server major) in
+    the release procedure; the manifest's deprecation lifecycle stays deferred (ADR 0032 § Consequences) and is not
+    needed for this;
   - no CI job runs a client against older server majors. None can be needed before a native client exists.
 - **Major 0 is pre-release** (ADR 0057). The window counts released majors only, so no client carries a `0`
-  adapter, and at V1 `VERSION` and the advertised major both become `1`.
+  adapter, and at V1 `VERSION` and the advertised major both become `1`. Until then the advertised major is `0`,
+  not floored to `1`: a floor would be a second rule, the two counters this decision removes.
 - **An operator-breaking change is major-level too.** A deployment change that needs the operator to act (a new
   required variable, a removed service) waits for the train like a protocol removal, or forces an unscheduled
   major. When the protocol is unchanged, that major's adapter is an alias of the previous one and costs nothing.

@@ -12,7 +12,8 @@ sources:
 
 Media are stored, encrypted, in an S3-compatible object store. Browsers upload to it and download from it directly,
 through short-lived presigned links; the application never carries the bytes. Which store is a setting of the admin
-console, **Server → Object store**, and it applies at once, without a restart
+console, **Server → Object store**. A saved setting waits beside the one in use until it passes its check, and then
+applies at once, without a restart — so a mistyped key never reaches your media
 ([ADR 0089](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
 How to set it and its check: [First-run setup](/veyq/run/first-run/#connect-the-object-store).
 

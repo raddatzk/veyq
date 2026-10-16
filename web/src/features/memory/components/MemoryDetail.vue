@@ -11,14 +11,14 @@
 // rename and delete, the cover, date and place. Journal, tracks and playlists are not built.
 //
 // **One view for a member and a share guest** (inbox #401). It reads and writes only through `source` — Memories' data
-// source (`../source.ts`), the member's or the guest's, fixed by the host at mount — and offers what `caps` grants
-// (Memories' fail-closed matrix, `../capabilities.ts`) narrowed to the doors the source carries (`sourceCapabilities`):
+// source (`../source.ts`), the member's or the guest's, fixed by the host at mount — and offers what `rights` grants
+// (Memories' fail-closed matrix, `../rights.ts`) narrowed to the doors the source carries (`sourceRights`):
 // `can`. Every control, tab and member-only effect — the item marks' load, the automatic date/place reconcile that
 // writes the node's meta, the cover's save — reads `can`; nothing here checks a role, a pending deletion or an instance
-// capability itself, and nothing calls an API but through the source. The children that need the source get it by
+// right itself, and nothing calls an API but through the source. The children that need the source get it by
 // injection (`provideMemoryView`: the organizer). The delete differs honestly by door: a member's trash with undo, a
 // guest's purge of its own media, asked first — on the tile and in the lightbox alike. The lightbox is handed the
-// source's loaders and each write per capability (`canSetCover`, `canDelete`, the source's `mediaMeta` door). A guest
+// source's loaders and each write per right (`canSetCover`, `canDelete`, the source's `mediaMeta` door). A guest
 // mounts this through core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and chapter of its link: it
 // sees the date and place sealed in the node's meta, but never reconciles them (that writes the node's meta, `editMeta`).
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
@@ -58,8 +58,8 @@ import Dialog from 'primevue/dialog'
 import Menu from 'primevue/menu'
 import { useViewMode } from '../../../shared/state/useViewMode'
 import type { NodeMetaUpdate } from '../useMetaWriteFeedback'
-import type { MemoryCapabilities } from '../capabilities'
-import { provideMemoryView, sourceCapabilities, type MemorySource } from '../source'
+import type { MemoryRights } from '../rights'
+import { provideMemoryView, sourceRights, type MemorySource } from '../source'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 
@@ -75,7 +75,7 @@ const props = defineProps<{
   personalScope?: boolean
   chapters?: TreeNode[] // child CHAPTER nodes of this Memory/chapter (cr-0060)
   /** What the matrix grants whoever looks (see the header). Required: there is no default that grants anything. */
-  caps: MemoryCapabilities
+  rights: MemoryRights
   /** The session's data source (see the header). Required: there is no default door to fall back to. */
   source: MemorySource
   /** Core's actions of the header (the favorite heart, inbox #409), built by the host from its `access`. */
@@ -104,8 +104,8 @@ const { ask } = useConfirm()
 const toast = useToast()
 
 /** What this view offers: the matrix's grant AND the source's door (see the header). */
-const can = computed(() => sourceCapabilities(props.caps, props.source))
-provideMemoryView({ source: props.source, caps: can })
+const can = computed(() => sourceRights(props.rights, props.source))
+provideMemoryView({ source: props.source, rights: can })
 /** The participants row under the title (who was there): it owns the picker the header's action opens. */
 const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null)
 
@@ -307,7 +307,7 @@ const { storedCover, coverSrc, coverMediaId, coverSourceOf } = useMemoryCover({
 })
 
 // The cover is EDITED in core's dialog (inbox #411), mounted by the host: the tile asks for it, and the lightbox's "Set as
-// cover" hands it the picked photo as the Memory's extra source. Only where the capability grants it.
+// cover" hands it the picked photo as the Memory's extra source. Only where the right grants it.
 function onSetCoverFromPhoto(payload: { mediaId: string }) {
   if (!can.value.setCover) return
   emit('coverFromPhoto', coverSourceOf(payload.mediaId))
@@ -315,7 +315,7 @@ function onSetCoverFromPhoto(payload: { mediaId: string }) {
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
  *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the
- *  node's sealed meta, so they run only where the meta may be edited (`caps.editMeta`). */
+ *  node's sealed meta, so they run only where the meta may be edited (`rights.editMeta`). */
 async function settle() {
   if (!can.value.editMeta) return
   await reconcileAuto()
@@ -323,7 +323,7 @@ async function settle() {
 }
 
 // The Beiträge tab (the media organizer, MemoryBuckets.vue) — where a member creates sub-buckets and files their own
-// uploads (cr-0113); a member's only (`caps.buckets`: it reads the scope's members and the bucket API). Its own
+// uploads (cr-0113); a member's only (`rights.buckets`: it reads the scope's members and the bucket API). Its own
 // state/loading live in that component; here we only host it + wire the lightbox/upload/reload it emits.
 const showBeitraege = computed(() => can.value.buckets)
 
@@ -451,7 +451,7 @@ watch(
 <template>
   <div class="memory-route-surface memory-detail">
     <!-- Core's header (`NodeHeader`, inbox #406): the cover is the leading visual — it IS the "set / edit cover" button —
-         the count is the subtitle, the date and place chips the meta row, and the actions are the capability answers
+         the count is the subtitle, the date and place chips the meta row, and the actions are the rights answers
          below (`headerActions`), the same list a share guest gets with fewer entries. -->
     <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :level="1" :actions="headerActions" :core-actions="coreActions">
       <template #leading>

@@ -70,7 +70,7 @@ const N = '5c09e000-0000-4000-8000-0000000000e2'
 const P = '5c09e000-0000-4000-8000-0000000000e3'
 const M = '5c09e000-0000-4000-8000-0000000000e4'
 const node = (id: string, kind: string, name: string, over: Partial<TreeNode> = {}): TreeNode => treeNode({
-  id, kind, name, parentId: D, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over,
+  id, kind, name, parentId: D, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over,
 })
 const keyFor = (id: string) => {
   if (!keys.has(id)) keys.set(id, v1.randomBytes(32))
@@ -734,7 +734,7 @@ describe('Depot rows', () => {
   // Inbox #397: a file's facts are its blob's and nothing else's.
   describe('a row\'s facts come from its blob', () => {
     it('a stale node meta is not read: the blob\'s date shows, not what the node payload says', async () => {
-      const legacy = node(R, FILE_KIND, 'Report.pdf', { wrappedMeta: 'bm90IGEgbWV0YQ==', metaVersion: 7 })
+      const legacy = node(R, FILE_KIND, 'Report.pdf', { wrappedMeta: 'bm90IGEgbWV0YQ==', metaRevision: 7 })
       const h = mountSection({ nodes: [legacy] })
       await flushPromises()
       expect(metaOf(h, 'Report.pdf')).toBe(fileMeta(`${formatBytes(123_456, 'en')} · ${t('depot.modified', { date: dateOf(MODIFIED) })}`))

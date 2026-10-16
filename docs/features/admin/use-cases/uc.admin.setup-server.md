@@ -49,7 +49,11 @@ sequenceDiagram
 
 - **A1 — already set up:** after setup completes, the setup endpoint is **closed**; there is no second
   bootstrap.
-- **E1 — kit not confirmed:** if the Emergency Kit backup is not confirmed, setup is **not finalized**.
+- **E1 — kit not confirmed:** if the Emergency Kit backup is not confirmed, setup is **not finalized**: nothing
+  has been sent, so a tab closed on the kit screen leaves setup open and the keys minted for it are simply gone.
+  The owner is posted only after the confirmation (admin-web's `SetupView`, the order web's member registration
+  already keeps). If someone else finishes setup in between, the post is refused (A1) and the console says the
+  kit belongs to no account.
 
 ## Setup state
 

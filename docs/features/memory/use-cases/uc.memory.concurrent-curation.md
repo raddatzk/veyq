@@ -8,25 +8,25 @@
   **that same thing** on purpose.
 - **Preconditions:** Both members hold the Memory's `K_node`. Each client holds a copy of the Memory's sealed
   `wrappedMeta` (from the tree it loaded) and of each photo's sealed `wrappedMeta` (from the gallery list), each
-  with the `metaVersion` it was listed at.
+  with the `metaRevision` it was listed at.
 - **Postconditions (success):** Every sealed meta blob on the server is the result of each writer applying
   **only its own change** to the newest blob. A member whose own field was changed meanwhile is shown the
   current value instead of silently replacing it.
 
 ## Main flow
 
-1. A writer starts from its copy of the blob and its `metaVersion`. The writers are the three Memory editors
+1. A writer starts from its copy of the blob and its `metaRevision`. The writers are the three Memory editors
    (date, place, cover — [uc.memory.date](uc.memory.date.md), [uc.memory.place](uc.memory.place.md),
    [uc.memory.cover](uc.memory.cover.md)), the two self-heals that run when a Memory opens or its media list
    refreshes (the `auto` date range and the `auto` place medoid), the lightbox's capture-time editor, and the
    photo backfill of the resolved place name. (A second backfill, of a sniffed media type, is gone: the type is the
    original's write-once blob meta since inbox #397.)
-2. It opens the blob, applies its one change, re-seals the whole blob and sends it with the `metaVersion` it
+2. It opens the blob, applies its one change, re-seals the whole blob and sends it with the `metaRevision` it
    started from ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)).
-3. If nobody wrote in between, the server stores it at `metaVersion + 1`, and the client updates its copy to the
-   blob it sent and that version.
+3. If nobody wrote in between, the server stores it at `metaRevision + 1`, and the client updates its copy to the
+   blob it sent and that revision.
 4. If somebody wrote in between, the server stores nothing and answers `409 stale_version` with the current blob
-   and its version. The client re-runs step 2 on that blob — at most five times — and the change of the member
+   and its revision. The client re-runs step 2 on that blob — at most five times — and the change of the member
    who wrote first survives.
 5. The client's copy (the tree, the gallery item) is replaced by what the server last told it, whether or not the
    retry ended in a write.
@@ -54,12 +54,12 @@
 
 ## Quality notes
 
-- **Operator-blind.** The `409` body carries ciphertext the caller can already list; the server sees a version
+- **Operator-blind.** The `409` body carries ciphertext the caller can already list; the server sees a revision
   number per blob and that two writes raced, nothing inside.
 - **Which writes are not covered, and why.** A role change carries only the value the member typed, and a share,
   a profile or a pin set has one writer; those stay last-writer-wins, declared per operation in the contract
   ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) point 6). A rename and a move are
-  version-checked on a version of their own, `placementVersion` — not because of a lost edit, but because the
+  revision-checked on a revision of their own, `placementRevision` — not because of a lost edit, but because the
   name and key wrap they seal are bound to it, so one sealed for the old parent must never land after a move
   ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 3).
 
@@ -78,8 +78,8 @@ neu, statt es stillschweigend zu überschreiben.
 ## Related
 
 - Feature: [Memory](../_index.md)
-- Enablers: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the node blob and its `metaVersion`),
-  [en.memory.media](../enablers/en.memory.media.md) (the media blob and its `metaVersion`),
+- Enablers: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the node blob and its `metaRevision`),
+  [en.memory.media](../enablers/en.memory.media.md) (the media blob and its `metaRevision`),
   [en.memory.favorites](../enablers/en.memory.favorites.md) (the toggles of E7)
 - Use-cases: [uc.memory.date](uc.memory.date.md), [uc.memory.place](uc.memory.place.md),
   [uc.memory.cover](uc.memory.cover.md), [uc.memory.gallery](uc.memory.gallery.md) (the lightbox writers)

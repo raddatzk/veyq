@@ -139,7 +139,7 @@ class DepotNodeSliceTest {
     private fun place(userId: String, scopeId: String, node: String, to: String?, name: String, version: Long): ValidatableResponse {
         val parentField = to?.let { "\"parentId\":\"$it\"," } ?: ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{$parentField"encryptedName":"$name","slugToken":"${slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementVersion":$version}""")
+            .body("""{$parentField"encryptedName":"$name","slugToken":"${slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":$version}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$node").then()
     }
 
@@ -154,8 +154,8 @@ class DepotNodeSliceTest {
 
     private fun ValidatableResponse.extractId(): String = extract().path("nodeId")
 
-    /** The node's kind, parent, sealed name and placement version, read in a transaction of its own. */
+    /** The node's kind, parent, sealed name and placement revision, read in a transaction of its own. */
     private fun row(node: String): List<Any> = QuarkusTransaction.requiringNew().call {
-        NodeEntity.findById(node)!!.let { listOf(it.kind, it.parentId, it.encryptedName, it.placementVersion) }
+        NodeEntity.findById(node)!!.let { listOf(it.kind, it.parentId, it.encryptedName, it.placementRevision) }
     }
 }

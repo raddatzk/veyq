@@ -37,6 +37,9 @@ COPY web/package.json web/openapitools.json ./
 # scripts/validate_npm_installs_gated.py holds both premises — keep `npm ci` (never `npm install`) and the COPY.
 RUN npm ci
 COPY web/ ./
+# The platform's one major: vite.config.ts compiles the web gate's EXPECTED_MAJOR from `../VERSION` (ADR 0085
+# decision 1), so the build fails without it. After the install, so a new major does not bust that layer.
+COPY VERSION /src/VERSION
 # verify:no-backdoor is the prod guard from `npm run check` that asserts the dev auto-unlock seam
 # (__dev/seed-credentials) never reaches dist/. A release image is exactly where that must hold. verify:csp is
 # its sibling for ADR 0069: the policy file exists and index.html has no CSP <meta> — the two things the
@@ -71,6 +74,9 @@ COPY contracts/api ../contracts/api
 # The capability catalog: buildSrc's `generateCapabilityRegister` builds :core's CapabilityIds and their EN/DE texts
 # from it (ADR 0088 decision 13), so without it the compile has no register.
 COPY contracts/platform/capabilities.json ../contracts/platform/capabilities.json
+# The platform's one major: buildSrc's `generatePlatformMajor` compiles :core's PlatformMajor from it, the major
+# GET /api/setup advertises (ADR 0085 decision 1), so without it the compile has no major.
+COPY VERSION ../VERSION
 COPY backend/src ./src
 COPY backend/core/src ./core/src
 COPY backend/apps/memories/src ./apps/memories/src

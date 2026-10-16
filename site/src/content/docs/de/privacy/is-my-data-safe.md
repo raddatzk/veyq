@@ -87,7 +87,9 @@ ausdrückliche Handlung:
   App erst beweisen, dass sie den Schlüssel hat. Wer nur die Adresse kennt (etwa aus einer Kopie unserer
   Datenbank), kann darüber nichts hochladen.
 
-Wie die verschiedenen Links funktionieren — nur ansehen, ansehen und mitmachen, Briefkasten — steht unter [Teilen](/veyq/de/sharing/).
+Wie die verschiedenen Links funktionieren — nur ansehen, ansehen und mitwirken, Briefkasten — steht unter
+[Teilen](/veyq/de/sharing/); wie du sie abschaltest und erneuerst, unter
+[Links ändern, abschalten, erneuern und löschen](/veyq/de/sharing/manage-links/).
 
 Drei ehrliche Grenzen:
 - **Entteilen macht das Heruntergeladene nicht rückgängig.** Ein Entzug stoppt den *künftigen* Zugriff;
@@ -110,7 +112,7 @@ den Link weiter und damit auch den Schlüssel — sie lässt sich also öffnen u
 Melde-Knopf gibt es in veyq nicht; melden heißt, der Person zu schreiben, die deine Instanz betreibt.
 
 Reagieren kann dann nur diese Person. Eine zentrale Moderationsstelle gibt es nicht, weil es keinen
-zentralen Dienst gibt — und Moderationswerkzeuge bringt veyq heute nicht mit. **Eine einzelne Freigabe
+zentralen Dienst gibt. **Eine einzelne Freigabe
 abschalten kann der Betrieb nicht**; das kann nur, wer sie erstellt hat. Was der Betrieb kann: einen
 **ganzen Bereich** auf seinem Server offline nehmen — für dessen Mitglieder und mit jeder Freigabe darin.
 Private Inhalte bleiben trotzdem unlesbar — genau das ist der Entwurf.
@@ -142,7 +144,8 @@ harmlos (die Person hat ihre Schlüssel ersetzt), sie kann aber auch heißen, da
 Hätte der Server dir von Anfang an einen falschen geliefert, sähe nichts verdächtig aus. Deshalb kannst du selbst
 prüfen. Dein eigenes Profil zeigt *deine* Sicherheitsnummer und einen Code; öffne das Profil der anderen Person,
 scanne den Code auf ihrem Bildschirm oder lest euch die Ziffern vor, und stimmt sie überein, wird die Person als
-**„Verifiziert"** markiert — im Profil und in jeder Mitgliederliste. Ändert sich der Schlüssel einer verifizierten
+**„Verifiziert"** markiert — im Profil und in jeder Mitgliederliste (Schritt für Schritt:
+[Eine Person verifizieren](/veyq/de/account/verify-a-person/)). Ändert sich der Schlüssel einer verifizierten
 Person einmal, sagt die App das deutlicher, und ihr vergleicht erneut.
 
 **Der ehrliche Teil:** Ob ihr wirklich vergleicht, liegt bei dir. Einen geänderten Schlüssel anzunehmen ist ein
@@ -160,7 +163,14 @@ Schlüssel gar nicht lügen kann, ist **geplant, aber nicht gebaut** — und das
   dazu in [Passwort vergessen](/veyq/de/account/forgot-password/).
 - **Alles verloren** — kein angemeldetes Gerät und kein Notfall-Kit? Dann ist es **weg.**
   Es gibt **keine Hintertür und keine Schlüsselhinterlegung**: Dasselbe, was *uns* am Lesen deiner
-  Daten hindert, hindert uns auch daran, sie zu retten. Das sagen wir von vornherein.
+  Daten hindert, hindert uns auch daran, sie zu retten. Das sagen wir von vornherein. Weitere Situationen und was
+  zu tun ist: [Hilfe](/veyq/de/help/).
 
 > **Hinweis fürs Self-Hosting:** Betreibst *du* deinen eigenen veyq-Server, liegt der Betrieb bei *dir* —
 > dann stellt sich die Frage, ob man der betreibenden Person vertrauen kann, für deine eigene Instanz gar nicht.
+
+## Für technisch Interessierte
+
+Der Bereich Sicherheit erklärt das alles ausführlich, auf Englisch: [Start here](/veyq/security/start-here/),
+[What the server sees](/veyq/security/what-the-server-sees/), [Threat model](/veyq/security/threat-model/) und
+[Known limitations](/veyq/security/known-limitations/).

@@ -1,5 +1,5 @@
 // What a viewer may do about favorites on a node (en.memory.favorites, ADR 0068; core's since inbox #409): ONE fail-closed
-// capability function for EVERY kind - a folder, a file, a Memory, a drop box, whatever an application registers - because
+// rights function for EVERY kind - a folder, a file, a Memory, a drop box, whatever an application registers - because
 // a pin is a preference about a node, not an application's data.
 //
 // - **Member only.** The pin set is sealed under the member's Master Key (ADR 0068 section 2): a share guest has no key to seal
@@ -14,15 +14,15 @@ import type { Access } from '../access'
 import { registry } from '../applications/registry'
 import type { NodeKind } from '../node/kind'
 
-export interface FavoriteCapabilities {
+export interface FavoriteRights {
   /** Pin or unpin the node. */
   favorite: boolean
 }
 
-const NONE: FavoriteCapabilities = Object.freeze({ favorite: false })
+const NONE: FavoriteRights = Object.freeze({ favorite: false })
 
-/** The favorite capabilities of `access` for `node` (null: the scope root). Every right defaults to false. */
-export function favoriteCapabilities(access: Access, node: { id: string; kind: NodeKind } | null): FavoriteCapabilities {
+/** The favorite rights of `access` for `node` (null: the scope root). Every right defaults to false. */
+export function favoriteRights(access: Access, node: { id: string; kind: NodeKind } | null): FavoriteRights {
   if (!node || access.mode !== 'member') return NONE
   return registry.kind(node.kind).supported ? { favorite: true } : NONE
 }

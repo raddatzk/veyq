@@ -50,7 +50,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     const location = { name: 'Teneriffa Süd', nameSource: 'manual' as const, derivedMode: 'fixed' as const }
     const cover = memoryPhotoSource.seal('smoke-media-id', { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }) as MemoryCover // the dialog's seam: the stored shape
 
-    let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaVersion: 0 })
+    let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaRevision: 0 })
     meta = await setMemoryLocation(scopeId, nodeId, memoryKey, location, meta)
     await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: meta, cover })
 
@@ -79,8 +79,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
 
     // Remove the cover (read-modify-write against the live blob) — only the cover drops; date + location remain.
     // The live blob is at version 3 (three meta writes), and the server says so on the listing.
-    expect(withCover.metaVersion).toBe(3)
-    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: { wrappedMeta: withCover.wrappedMeta, metaVersion: withCover.metaVersion }, cover: null })
+    expect(withCover.metaRevision).toBe(3)
+    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: { wrappedMeta: withCover.wrappedMeta, metaRevision: withCover.metaRevision }, cover: null })
     const withoutCover = await readBack()
     expect(unsealMemoryCover(scopeId, memoryKey, withoutCover)).toBeNull()
     expect(unsealMemoryDate(scopeId, memoryKey, withoutCover)).toEqual(date)

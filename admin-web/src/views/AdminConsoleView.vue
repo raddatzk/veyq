@@ -79,6 +79,13 @@ async function onCreated() {
   await loadTenants().catch(() => {})
 }
 
+/** A revoked tenant is gone: close its panel and read the list again (inbox #451 — the panel used to push a route
+ *  this surface does not have, which redirected to the page it was on and left both stale). */
+async function onRevoked() {
+  selected.value = null
+  await loadTenants().catch(() => {})
+}
+
 async function signOut() {
   await logout().catch(() => {})
   await router.replace({ name: 'login' })
@@ -180,7 +187,7 @@ async function signOut() {
         <StorePanel v-else-if="serverPanel === 'store'" @changed="store = $event" />
         <ConfigSecretPanel v-else-if="serverPanel === 'configSecret'" />
         <CapabilitiesPanel v-else-if="serverPanel === 'capabilities'" />
-        <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" />
+        <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" @revoked="onRevoked" />
       </section>
     </div>
 

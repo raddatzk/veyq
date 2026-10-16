@@ -75,7 +75,7 @@ blob for that Memory; the `PUT` writes only the caller's.
    set. There is no branch on scope type: the seal is the same in a personal and in a group scope.
 2. Toggling a node's heart - in its row of a level, or in its own header - updates the in-memory set at once, then
    re-seals it and `PUT`s the new blob. A failure reverts the optimistic change. The heart is **core's action**, the
-   same for every kind (`favoriteCapabilities`: a member only, fail closed); a share guest has none and the server has
+   same for every kind (`favoriteRights`: a member only, fail closed); a share guest has none and the server has
    no guest route.
 3. The sidebar resolves the pinned ids against the **local decrypted tree** to render the Favorites section - every
    kind, each entry with **its kind's icon** (the registry's descriptor) and its decrypted name, opened by the

@@ -1,0 +1,33 @@
+---
+title: "Start a list over"
+sources:
+  - docs/features/account/enablers/en.account.device-register.md
+  - docs/features/account/enablers/en.account.identity-pinning.md
+---
+
+Your device keeps two lists for your account: **the keys you trust** and **your device names**. Both are locked and kept
+on the server, and your device checks every copy it gets back. If the server returns an older copy than your device
+has already seen, or one that cannot be opened, your device refuses it. Then you see a warning, for example that device
+names are unavailable, with a link **Start this list over**.
+
+## Wait first
+
+Often the list comes back by itself. Only start over if it does not. The server cannot start a list over for you, but
+it could hold one back until you do, so do not let a warning hurry you.
+
+## Start it over
+
+1. Open **Settings → Start a list over**. It is listed only while this device refuses a list.
+2. Choose **Start over…** next to the list.
+3. Read what it costs, tick **I understand what starting over costs.** and choose **Start over**.
+
+What starting over costs:
+
+- **The keys you trust:** every contact is new to you again. Every safety number you compared is forgotten, and a key
+  that changed in the meantime is accepted as new, without the warning that would have told you. Compare the
+  important ones again: [Verify a person](/veyq/account/verify-a-person/).
+- **Your device names:** every device is unnamed until it next signs in, and removing another device's saved key is
+  not offered until then. Every session is still listed and can still be ended.
+
+These lists are why a server cannot quietly roll back what your device has learnt; refusing an old copy is the device
+doing its job: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

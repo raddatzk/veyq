@@ -145,8 +145,8 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await btn(w, 'Take offline').trigger('click')
     await flushPromises()
     expect(suspendTenant).toHaveBeenCalledWith('t-2')
-    // Stays on the panel (unlike revoke, which routes away) and re-renders in the new state.
-    expect(push).not.toHaveBeenCalledWith('/settings')
+    // Stays on the panel (unlike revoke, which hands back to the console) and re-renders in the new state.
+    expect(w.emitted('revoked')).toBeUndefined()
     expect(w.text()).toContain('Suspended')
   })
 
@@ -189,7 +189,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     expect(w.find('input[readonly]').exists()).toBe(true) // the invite-link field
   })
 
-  it('revoke is confirm-gated, delegates to the facade, and routes back to the hub', async () => {
+  it('revoke is confirm-gated, delegates to the facade, and hands the gone tenant back to the console', async () => {
     const w = mountPanel()
     await flushPromises()
 
@@ -201,7 +201,9 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await btn(w, 'Revoke').trigger('click')
     await flushPromises()
     expect(revokeTenant).toHaveBeenCalledWith('t-1')
-    expect(push).toHaveBeenCalledWith('/settings')
+    expect(w.emitted('revoked')).toEqual([['t-1']])
+    // The bite: the old panel pushed `/settings`, a route admin-web does not have.
+    expect(push).not.toHaveBeenCalled()
   })
 
   it('moves an ACTIVE tenant to a new address, confirm-gated, and reloads in place', async () => {

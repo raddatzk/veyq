@@ -3,7 +3,7 @@
 // (`ShareTreePage`, the real one — real router, real registry with Depot registered, real PrimeVue) rooted at a `FILE`,
 // which renders FILE's registered `detail`, the member's `FileDetail`, handed the guest's access and the tree the link
 // opened (`guestTreeSource` over real crypto). No guest-only page exists: the file's facts, its download and — for a
-// contributor — its replace are the member view with the functions the matrix removes (`depotCapabilities`).
+// contributor — its replace are the member view with the functions the matrix removes (`depotRights`).
 //
 // Nothing of the member's world is touched: every authenticated client throws (`test/guestMode.ts`), the member's
 // `activeSpace` records any read, and core's member node operations and `treeStore` are stubs that must stay uncalled.

@@ -71,17 +71,18 @@ On a fresh instance the console opens on **Set up this instance**
 1. Enter an **Email** and a **Password** of at least 10 characters. When you leave the password field, the first 5
    characters of a hash of it go from your browser to Have I Been Pwned; a hit asks you to choose another or tick
    **Use it anyway**. If the check cannot run, setup goes ahead.
-2. **Confirm.** Your browser generates every key of the account — the server only ever sees ciphertext — and the
-   account is created. From this moment the instance is set up: the setup screen does not open again.
+2. **Continue.** Your browser generates every key of the account — the server only ever sees ciphertext. Nothing has
+   been sent yet.
 3. **Save your Emergency Kit.** **Download Emergency Kit (PDF)**, tick **I have saved my Emergency Kit somewhere
-   safe.**, then **Continue to sign in**. The kit holds your email and your **Secret Key** (and a QR code of both);
-   it does not hold your password.
+   safe.**, then **Create the account and sign in**. Only now is the account created, and from this moment the
+   instance is set up: the setup screen does not open again. The kit holds your email and your **Secret Key** (and a
+   QR code of both); it does not hold your password.
 4. **Sign in** with your email and password.
 
 :::caution[The Emergency Kit is shown once]
-The account exists as soon as you confirm, before the kit screen. Download the kit there and keep it: it carries
-the Secret Key, the server holds no key material, and there is no operator-side recovery. If the screen closes
-before you saved it, the kit cannot be shown again.
+The account is created only after you confirmed the kit, so a screen closed before that leaves setup open: start
+again, and discard any kit you saved from the first attempt — it belongs to no account. Once the account exists, keep
+the kit: it carries the Secret Key, the server holds no key material, and there is no operator-side recovery.
 :::
 
 ## Connect the object store
@@ -98,13 +99,18 @@ environment ([ADR 0089](https://github.com/raddatzk/veyq/blob/main/docs/decision
      on a store you brought), **Region**, **Access key ID**, **Secret key**.
    - **Garage** — a Garage of your own: the same fields plus **Garage admin endpoint** and **Garage admin token**;
      veyq creates the bucket and sets the store up.
-2. **Save.** The setting applies at once, without a restart. The secret key and admin token are sealed on the server
-   under its config-secret key and never shown again; keep them in your password manager, because a backup run and a
-   lost config-secret key both ask for them again.
+2. **Save.** The setting is saved but not used yet: it waits until it passes its check. The secret key and admin
+   token are sealed on the server under its config-secret key and never shown again; keep them in your password
+   manager, because a backup run and a lost config-secret key both ask for them again.
 3. **Check store.** The check runs in order and stops at the first failure: **Credentials can be opened**, **Store
    set up** (Garage only), **Bucket exists**, **Upload a test object**, **Read it back**, **Browser access (CORS)**
    (skipped where the store is served from the instance's own origin). It changes no store configuration; its test
-   object lives under `veyq-check/` and is overwritten by every check.
+   object lives under `veyq-check/` and is overwritten by every check. When every step passes, the saved setting is
+   in use at once, without a restart.
+
+A later change works the same way: it is saved beside the setting in use and replaces it only once its own check
+passes. Until then the console shows it as a saved change; a failed one changes nothing for your media — correct it
+and save again, or **Discard change**.
 
 Once media are stored, the store's type, endpoint and bucket are fixed; credentials and the public endpoint can
 still change.
@@ -181,10 +187,11 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `tenant quota --tenant-id <id> --gib <GiB\|none>` | Set or clear a tenant's storage quota |
 | `release` | Print the running release |
 | `config-secret` | Print the config-secret key's state (`OK`, `ABSENT` or `MISMATCH`); changes nothing |
-| `store show` | Print the store setting, whether a bundled store is offered, and the last check; never a secret |
-| `store set --bundled` | Use the bundled store |
-| `store set --endpoint <url> --bucket <bucket> --region <region> --access-key <id> [--type S3\|GARAGE] [--public-endpoint <url>] [--garage-admin-endpoint <url>]` | Set a store of your own; the secret key comes from `VEYQ_STORE_SECRET_KEY` and the Garage token from `VEYQ_STORE_GARAGE_ADMIN_TOKEN`, never from a flag |
-| `store check` | Run the store's check and print every step; exits `1` if it failed |
+| `store show` | Print the store setting in use and its last check, a saved change still waiting for its check, and whether a bundled store is offered; never a secret |
+| `store set --bundled` | Save the bundled store; `store check` puts it in use |
+| `store set --endpoint <url> --bucket <bucket> --region <region> --access-key <id> [--type S3\|GARAGE] [--public-endpoint <url>] [--garage-admin-endpoint <url>]` | Save a store of your own; `store check` puts it in use. The secret key comes from `VEYQ_STORE_SECRET_KEY` and the Garage token from `VEYQ_STORE_GARAGE_ADMIN_TOKEN`, never from a flag |
+| `store check` | Check the saved change (else the store in use) and print every step; a passing saved change is put in use; exits `1` if it failed |
+| `store discard` | Drop a saved change that has not passed its check; the store in use stays |
 | `capabilities list` / `capabilities off <id>` / `capabilities on <id>` | Print the switches as a tree, switch one off or on; prints text, not JSON ([Capabilities](/veyq/run/capabilities/#switch-an-entry)) |
 
 Output is JSON on standard output. A failure prints one line, `veyq-admin: <reason>`, to standard error and exits

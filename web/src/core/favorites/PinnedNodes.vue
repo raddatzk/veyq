@@ -8,7 +8,7 @@
 // **A pinned id whose node does not resolve is skipped**: purged, trashed (the tree lists live nodes only; a restore brings the
 // row back), or in a scope this session cannot read. The server cannot read the set, so nothing prunes it there - the id is
 // inert, never a broken row. A node of a kind this client does not draw (`registry.kind(...).supported === false`) is skipped
-// too: the heart is not offered on it (`favoriteCapabilities`), and a row the rail could not open would be a dead link.
+// too: the heart is not offered on it (`favoriteRights`), and a row the rail could not open would be a dead link.
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'

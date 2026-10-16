@@ -50,7 +50,7 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
   return {
     default: defineComponent({
       name: 'MemoryDetailStub',
-      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'caps', 'source'],
+      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'rights', 'source'],
       emits: ['rename'],
       setup: (p, { emit }) => () =>
         h('div', { class: 'detail-stub' }, [h('h1', p.node.name), h('button', { class: 'detail-rename', onClick: () => emit('rename') }, 'rename')]),
@@ -185,7 +185,7 @@ describe('a restore that renumbers an ancestor of the open node', () => {
       node('trips', FOLDER_KIND, null, 'Trips', 1), node('xyfolder', FOLDER_KIND, 'trips', 'x-y', 5), node('deep', FOLDER_KIND, 'xyfolder', 'Deep', 6),
     ]
     const trashed: TrashedNode = {
-      id: 'xyold', parentId: 'trips', kind: FOLDER_KIND, epoch: 0, placementVersion: 0, name: 'x_y',
+      id: 'xyold', parentId: 'trips', kind: FOLDER_KIND, epoch: 0, placementRevision: 0, name: 'x_y',
       deletedAt: new Date(0), purgeAfter: new Date(0),
     } as TrashedNode
     vi.mocked(listTrash).mockResolvedValueOnce([trashed]).mockResolvedValue([])

@@ -15,21 +15,22 @@
 
 ## Main flow
 
-1. The Server Owner opens **Server → Store** in the admin console. With no store set, it says so, and says that
+1. The Server Owner opens **Server → Object store** in the admin console. With no store set, it says so, and says that
    tenants cannot be created until a store has passed its check.
 2. The Server Owner picks a **type**: *S3-compatible* (the default) or *Garage*. Where the recipe passed a
    bundled-store hint, the console also offers **Use the bundled store**.
 3. For *S3-compatible* they enter the endpoint, the public endpoint browsers reach, the bucket, the region, the
    access key and the secret key; for *Garage* also its admin endpoint and admin token; for the bundled store
    nothing — the setting refers to the hint.
-4. The Server Owner **saves**. The secrets are sealed under the config-secret key with that key's fingerprint and
-   never returned; the console shows only that they are set.
-5. The Server Owner **checks** the store. For Garage, veyq provisions it first (layout, bucket, key, grant,
+4. The Server Owner **saves**. The setting is stored as **pending**: nothing the instance does changes yet. The
+   secrets are sealed under the config-secret key with that key's fingerprint and never returned; the console shows
+   only that they are set.
+5. The Server Owner **checks** the store — the pending setting. For Garage, veyq provisions it first (layout, bucket, key, grant,
    CORS). The check then confirms the bucket exists, writes one fixed probe object under `veyq-check/` through a
    presigned PUT against the public endpoint and reads it back through a presigned GET, and sends a CORS preflight
    with the instance's public origin.
-6. The console shows each step's result. When all pass, the setting is **checked**, tenants can be created, and
-   the backend uses the store at once.
+6. The console shows each step's result. When all pass, the pending setting is **in use**: tenants can be created,
+   and the backend uses the store at once, without a restart.
 
 ## Alternate / exception flows
 
@@ -37,11 +38,14 @@
   public endpoint unreachable, CORS not answered with the origin) and keeps tenant creation closed. Nothing about
   the store's configuration was changed by the check.
 - **A2 — The setting changes after it was checked.** The new setting replaces the old one only once it passes its
-  own check; until then the instance keeps using the checked one.
+  own check; until then the instance keeps using the checked one, and the console shows the change as pending
+  beside it. A failed check leaves it pending; the Server Owner corrects it and saves again, or **discards** it.
+  Saving the setting in use unchanged leaves nothing pending.
 - **A3 — Blobs already exist.** The store type, endpoint and bucket can no longer be changed; credentials can
   (a rotated key). Moving an instance's blobs to another store is out of scope.
 - **A4 — The config-secret key is absent, or is not the one that sealed the store's credentials.** The console
-  says the store's credentials cannot be opened and asks for them again; media are unreachable until then.
+  says the store's credentials cannot be opened and asks for them again; media are unreachable until the
+  re-entered credentials pass their check (A2's path: saved as pending, then put in use).
   The bundled store is unaffected, because its setting refers to the hint and seals nothing.
 - **A5 — No store is set.** The instance runs and answers `/api/setup`; uploads are refused with a reason. The
   in-memory store is never used outside tests.

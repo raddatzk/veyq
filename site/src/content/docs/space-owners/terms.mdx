@@ -1,0 +1,28 @@
+---
+title: "Terms of use"
+sources:
+  - docs/features/admin/use-cases/uc.admin.tenant-terms.md
+  - docs/features/account/use-cases/uc.account.accept-terms.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+As the owner of a shared space you can set terms that every member, and everyone who opens a link to something in
+the space, agrees to before they go on.
+
+1. Open the menu at the bottom of the sidebar, choose **Settings**, then **Terms** under **Shared space**.
+2. Choose **Add English** or **Add Deutsch** for each language you want.
+3. Write the terms with **Edit**, or start from **Insert template**: a draft to adapt before you save. Markdown works
+   for headings and lists. The template contains the placeholder `{contact}`; replace it with how people reach you.
+4. Check the **Preview** and choose **Save terms**. The page says which version is now in force.
+
+<Screenshot id="owners-terms" shows="The Terms panel with the Deutsch language, the Insert template and Edit buttons, the Save terms button and the preview" />
+
+Every member, you included, now sees **Please review the terms** the next time they open the space and continues with
+**I agree**. Guests opening a link see **Please accept the terms of use** first. Each time you save a change, everyone
+is asked again.
+
+Members who are not owners can read the terms here but not change them.
+
+The terms are shown to people before they see anything else, but they are not a lock on your data; that is the
+encryption: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

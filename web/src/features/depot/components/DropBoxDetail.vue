@@ -4,7 +4,7 @@
 // files each holds. A folder opens to core's level view, read-only there (a member places nothing in a guest's identity
 // folder) but for a delete per file (inbox #391); a member deletes a folder here, or the drop box, and shares it
 // (`DropBoxShareDialog`) from core's header card, the one a folder opens with (`NodeHeader`, inbox #385 (b), #406) — each
-// where Depot's capability matrix says so (`../capabilities.ts`, inbox #401: the share with
+// where Depot's rights matrix says so (`../rights.ts`, inbox #401: the share with
 // the instance's public links, the deletes not during a pending deletion). Two guests of one name are told apart at
 // display time, never stored ("Anna", "Anna (2)",
 // in the order the server made their folders, a same-millisecond pair by id) — core's `displayNamesOf` in
@@ -43,9 +43,9 @@ import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import NodeCoverImage from '../../../core/node/cover/components/NodeCoverImage.vue'
 import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
 import { useTrashUndo } from '../../../core/node/trashUndo'
-import { depotCapabilities } from '../capabilities'
+import { depotRights } from '../rights'
 import { targetOf, type GuestAccess } from '../../../core/access'
-import { guestDepotSource, memberDepotSource, sourceCapabilities, type DepotSource } from '../source'
+import { guestDepotSource, memberDepotSource, sourceRights, type DepotSource } from '../source'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
@@ -80,13 +80,13 @@ const source: DepotSource = guest
       keyOf: (id) => props.tree.keyOf(id),
       move: (node) => emit('move', node),
     })
-const caps = computed(() => sourceCapabilities(depotCapabilities(props.access, targetOf(props.tree, props.node)), source))
-/** The header's actions: share, move, delete — each only where the capability matrix grants it (a drop box is never renamed here). */
+const rights = computed(() => sourceRights(depotRights(props.access, targetOf(props.tree, props.node)), source))
+/** The header's actions: share, move, delete — each only where the rights matrix grants it (a drop box is never renamed here). */
 const headerActions = computed(() =>
   standardNodeActions(
     t,
-    { share: caps.value.share, move: caps.value.moveNode, remove: caps.value.deleteNode, shareLabel: t('depot.dropBox.share'), deleteLabel: t('depot.dropBox.delete') },
-    { share: () => emit('share', { contribute: caps.value.shareContribute }), move: () => source.move?.(props.node), remove: () => emit('delete') },
+    { share: rights.value.share, move: rights.value.moveNode, remove: rights.value.deleteNode, shareLabel: t('depot.dropBox.share'), deleteLabel: t('depot.dropBox.delete') },
+    { share: () => emit('share', { contribute: rights.value.shareContribute }), move: () => source.move?.(props.node), remove: () => emit('delete') },
   ),
 )
 
@@ -106,7 +106,7 @@ const folders = computed(() => {
 
 async function removeFolder(folder: TreeNode, label: string) {
   const deleteFile = source.deleteFile
-  if (!deleteFile || !caps.value.deleteFile) return
+  if (!deleteFile || !rights.value.deleteFile) return
   const accepted = await ask({
     header: t('depot.dropBox.deleteFolder', { name: label }),
     message: t('depot.dropBox.deleteFolderConfirm', { name: label }),
@@ -152,7 +152,7 @@ async function removeFolder(folder: TreeNode, label: string) {
           </button>
           <span class="veyq-action-group veyq-action-group-icons">
             <Button
-              v-if="caps.moveFile"
+              v-if="rights.moveFile"
               v-tooltip.bottom="t('depot.dropBox.moveFolder', { name: row.label })"
               type="button"
               class="veyq-icon-button veyq-prime-icon-button"
@@ -164,7 +164,7 @@ async function removeFolder(folder: TreeNode, label: string) {
               @click="source.move?.(row.folder)"
             />
             <Button
-              v-if="caps.deleteFile"
+              v-if="rights.deleteFile"
               type="button"
               class="veyq-icon-button veyq-prime-icon-button"
               icon="pi pi-trash"

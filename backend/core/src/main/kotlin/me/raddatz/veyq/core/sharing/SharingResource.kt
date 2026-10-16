@@ -284,7 +284,7 @@ class SharingResource(
         epoch = n.epoch,
         wrappedContentKey = n.wrappedContentKey,
         encryptedName = n.encryptedName,
-        placementVersion = n.placementVersion,
+        placementRevision = n.placementRevision,
         wrappedMeta = n.wrappedMeta,
         sealedDropPrivateKey = n.sealedDropPrivateKey,
         shareIdentityId = n.shareIdentityId?.let(UUID::fromString),
@@ -393,7 +393,7 @@ class SharingResource(
     @PermitAll
     @RateLimitExempt(
         reason = "A placement adds no row: it rewrites one node's entry inside the shared subtree, compare-and-set on " +
-            "its placement version, so its volume is bounded by the nodes the subtree already holds — which members " +
+            "its placement revision, so its volume is bounded by the nodes the subtree already holds — which members " +
             "and the create budget bound. Raw call volume by a link holder stays open, as for the guest reads " +
             "(cc.security.rate-limit § Unbounded by decision).",
     )
@@ -407,7 +407,7 @@ class SharingResource(
             encryptedName = updateShareNodeRequest.encryptedName,
             slugToken = updateShareNodeRequest.slugToken,
             wrappedContentKey = updateShareNodeRequest.wrappedContentKey,
-            placementVersion = updateShareNodeRequest.placementVersion.validated(),
+            placementRevision = updateShareNodeRequest.placementRevision.validated(),
         )) {
             UpdateShareNodeOutcome.Updated -> Response.noContent().build()
             is HttpFailure -> httpError(o)

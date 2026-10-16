@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-// What `MemoryDetail` offers follows `caps` (inbox #401), and nothing else: the member's caps show exactly the controls
+// What `MemoryDetail` offers follows `rights` (inbox #401), and nothing else: the member's rights show exactly the controls
 // the detail always showed a member (the S1 promise: no change for members), the empty set shows none of them, and the
-// member-only EFFECTS stay off without their capability — the item marks are not read, the automatic date/place
+// member-only EFFECTS stay off without their right — the item marks are not read, the automatic date/place
 // reconcile writes no node meta. Real DOM, real clicks; the media API is the in-memory gallery fake.
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 
@@ -16,7 +16,7 @@ import * as v1 from '@veyq/crypto/v1'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
 import { addMedia, type MediaDeriver } from '../media'
-import { NO_MEMORY_CAPABILITIES, memoryCapabilities, type MemoryCapabilities } from '../capabilities'
+import { NO_MEMORY_RIGHTS, memoryRights, type MemoryRights } from '../rights'
 import { ShareRole } from '../../../api/generated/sharing'
 import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { blobApi, contentApi } from '../../../api/client'
@@ -25,7 +25,7 @@ import type { ContentApi } from '../../../api/generated/content'
 import { fakeApi, stubApi } from '../../../test/apiMock'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
-import { treeNode, memberMemoryCaps, guestAccessOf } from '../../../test/models'
+import { treeNode, memberMemoryRights, guestAccessOf } from '../../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -41,7 +41,7 @@ let updateNode: Mock<ContentApi['updateNode']>
 let getItemFavorites: Mock
 beforeEach(() => {
   vi.clearAllMocks()
-  updateNode = vi.fn(async () => ({ metaVersion: 1 })) as unknown as Mock<ContentApi['updateNode']>
+  updateNode = vi.fn(async () => ({ metaRevision: 1 })) as unknown as Mock<ContentApi['updateNode']>
   fakeApi(contentApi, { updateNode })
   getItemFavorites = stubApi(itemFavoritesApi, { getItemFavorites: [] }).getItemFavorites
   const store = galleryFakeStore()
@@ -62,9 +62,9 @@ async function seedDated(memoryKey: Uint8Array) {
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, deriver)
 }
 
-async function mountDetail(caps: MemoryCapabilities, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean } = {}) {
+async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean } = {}) {
   const w = mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: o.personalScope ?? false, chapters: [chapter], caps },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: o.personalScope ?? false, chapters: [chapter], rights },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
     ...(o.attach ? { attachTo: document.body } : {}),
   })
@@ -79,9 +79,9 @@ const header = (w: Awaited<ReturnType<typeof mountDetail>>) =>
 const tabs = (w: Awaited<ReturnType<typeof mountDetail>>) => w.findAll('[role="tab"]').map((tab) => tab.text().replace(/\d+$/, ''))
 const disabled = (w: Awaited<ReturnType<typeof mountDetail>>, selector: string) => w.find(selector).attributes('disabled') !== undefined
 
-describe('MemoryDetail follows caps', () => {
-  it("a member's caps: every header action, all four tabs, the chapter card, the editable cover/date/place, the marks", async () => {
-    const w = await mountDetail(memberMemoryCaps())
+describe('MemoryDetail follows rights', () => {
+  it("a member's rights: every header action, all four tabs, the chapter card, the editable cover/date/place, the marks", async () => {
+    const w = await mountDetail(memberMemoryRights())
     expect(header(w)).toEqual([...HEADER])
     expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.buckets.title'), t('memory.trash.title')])
     expect(w.find('input[type="file"]').exists()).toBe(true)
@@ -94,8 +94,8 @@ describe('MemoryDetail follows caps', () => {
     expect(w.find('.memory-create-card-memory').text()).toBe(t('memory.addChapter'))
   })
 
-  it('no caps: none of them — the gallery alone, nothing editable, no marks read', async () => {
-    const w = await mountDetail(NO_MEMORY_CAPABILITIES)
+  it('no rights: none of them — the gallery alone, nothing editable, no marks read', async () => {
+    const w = await mountDetail(NO_MEMORY_RIGHTS)
     expect(header(w)).toEqual([])
     expect(tabs(w)).toEqual([t('memory.gallery')])
     expect(w.find('input[type="file"]').exists()).toBe(false)
@@ -109,7 +109,7 @@ describe('MemoryDetail follows caps', () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
     mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, caps: { ...memberMemoryCaps(), editMeta: false } },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false } },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
     })
     await flushPromises()
@@ -117,7 +117,7 @@ describe('MemoryDetail follows caps', () => {
     expect(updateNode).not.toHaveBeenCalled()
     // control: the same Memory with editMeta self-heals its date on open
     mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps() },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights() },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
     })
     await flushPromises()
@@ -126,8 +126,8 @@ describe('MemoryDetail follows caps', () => {
   })
 
   // The cover is edited in core's dialog, which the host mounts (inbox #411): this page only ASKS for it, and only where the
-  // capabilities grant `setCover` - the lightbox offers "set as cover" exactly there (S5 split its one `readonly` per
-  // capability), and even a pick forced from it without `setCover` asks for nothing and reaches no write.
+  // rights grant `setCover` - the lightbox offers "set as cover" exactly there (S5 split its one `readonly` per
+  // right), and even a pick forced from it without `setCover` asks for nothing and reaches no write.
   it('a cover picked in the lightbox asks for the dialog only with setCover; the tile likewise', async () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
@@ -135,7 +135,7 @@ describe('MemoryDetail follows caps', () => {
     for (const setCover of [false, true]) {
       updateNode.mockClear()
       const w = mount(MemoryDetail, {
-        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, caps: { ...memberMemoryCaps(), editMeta: false, setCover } },
+        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false, setCover } },
         global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaLightbox: LightboxStub } },
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
@@ -154,7 +154,7 @@ describe('MemoryDetail follows caps', () => {
   // uc.memory.participants (owner decision 2026-10-14): "Participants" is a header action, a member's alone, and the way into
   // the picker; the line under the title has no link of its own.
   it('the "Participants" action is shown for a member on a Memory and opens the picker', async () => {
-    const w = await mountDetail(memberMemoryCaps(), MEMORY_KIND, { attach: true })
+    const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, { attach: true })
     const action = w.find('.veyq-node-header-actions button[data-action="participants"]')
     expect(action.attributes('aria-label')).toBe(t('memory.participants.title'))
     // its own icon: "Request uploads" is `pi-user-plus`, and two actions of one bar never share one (inbox #425)
@@ -171,22 +171,22 @@ describe('MemoryDetail follows caps', () => {
 
   it('the "Participants" action is absent for every share role, in a personal scope and on a chapter', async () => {
     for (const role of Object.values(ShareRole)) {
-      const w = await mountDetail(memoryCapabilities(guestAccessOf(role), { kind: MEMORY_KIND, inIdentityFolder: false, shareable: true }))
+      const w = await mountDetail(memoryRights(guestAccessOf(role), { kind: MEMORY_KIND, inIdentityFolder: false, shareable: true }))
       expect(w.find('[data-action="participants"]').exists(), role).toBe(false)
       w.unmount()
     }
     // the `participants` gate on its own, with the meta writable: a role that may write the meta still gets no action
-    const writerWithout = await mountDetail({ ...memberMemoryCaps(), participants: false })
+    const writerWithout = await mountDetail({ ...memberMemoryRights(), participants: false })
     expect(header(writerWithout), 'participants off, editMeta on').not.toContain('memory.participants.title')
-    const personal = await mountDetail(memberMemoryCaps(), MEMORY_KIND, { personalScope: true })
+    const personal = await mountDetail(memberMemoryRights(), MEMORY_KIND, { personalScope: true })
     expect(header(personal), 'personal scope').not.toContain('memory.participants.title')
     expect(header(personal), 'control: the rest of the header is there').toContain('node.rename')
-    const onChapter = await mountDetail(memberMemoryCaps({}, CHAPTER_KIND), CHAPTER_KIND)
+    const onChapter = await mountDetail(memberMemoryRights({}, CHAPTER_KIND), CHAPTER_KIND)
     expect(header(onChapter), 'chapter').not.toContain('memory.participants.title')
   })
 
   it('a pending deletion: share stays, every write goes', async () => {
-    const w = await mountDetail(memberMemoryCaps({ readonly: true }))
+    const w = await mountDetail(memberMemoryRights({ readonly: true }))
     expect(header(w)).toEqual(['share.share', 'share.uploadRequest'])
     expect(disabled(w, '.memory-date-chip')).toBe(true)
     await w.findAll('[role="tab"]')[1].trigger('click')
@@ -194,17 +194,17 @@ describe('MemoryDetail follows caps', () => {
     expect(w.find('.memory-create-card-memory').exists()).toBe(false)
   })
 
-  // inbox #358: the move is the host's (core's move dialog), asked for through `move`; offered only with caps.move.
+  // inbox #358: the move is the host's (core's move dialog), asked for through `move`; offered only with rights.move.
   it('Move to… asks the host for core\'s move dialog, and only with move', async () => {
-    const w = await mountDetail(memberMemoryCaps())
+    const w = await mountDetail(memberMemoryRights())
     await w.find(`.veyq-node-header-actions button[aria-label="${t('node.move.action')}"]`).trigger('click')
     expect(w.emitted('move')).toHaveLength(1)
-    const only = await mountDetail({ ...NO_MEMORY_CAPABILITIES, move: true })
+    const only = await mountDetail({ ...NO_MEMORY_RIGHTS, move: true })
     expect(header(only)).toEqual(['node.move.action'])
   })
 
   it('a chapter offers no "Add chapter" (a chapter lives only directly in a Memory)', async () => {
-    const w = await mountDetail(memberMemoryCaps({}, CHAPTER_KIND), CHAPTER_KIND)
+    const w = await mountDetail(memberMemoryRights({}, CHAPTER_KIND), CHAPTER_KIND)
     await w.findAll('[role="tab"]')[1].trigger('click')
     await flushPromises()
     expect(w.find('.memory-card-grid').exists(), 'control: the chapters grid renders').toBe(true)

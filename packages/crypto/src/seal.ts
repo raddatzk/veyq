@@ -48,12 +48,12 @@ type Schema = Readonly<Record<string, readonly (readonly [string, FieldKind])[]>
 
 /** Symmetric purposes (`seal`/`open`), each with its binding fields in canonical order. */
 export const SEAL_PURPOSES = {
-  // A node's directory entry and key wrap bind the placement version the wire stores them at (ADR 0080 Decision 3):
-  // 0 at birth, `n + 1` for a move or rename built on `n`, so a name or wrap served at another version — one a move
+  // A node's directory entry and key wrap bind the placement revision the wire stores them at (ADR 0080 Decision 3):
+  // 0 at birth, `n + 1` for a move or rename built on `n`, so a name or wrap served at another revision — one a move
   // superseded — does not open. Added before V1 (ADR 0072: a stored-format change, so a code change and a reset,
   // not a suite v2); the parent stays unbound (ADR 0072 Decision 4) — the parent's key is the binding.
-  'node-name': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementVersion', 'uint']],
-  'content-key': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementVersion', 'uint']],
+  'node-name': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
+  'content-key': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
   'node-meta': [['scopeId', 'id'], ['nodeId', 'id']],
   // ownerId is the media id for a media's blobs, the node id for a cover or a file's content; the role names which.
   'blob-key': [['scopeId', 'id'], ['ownerId', 'id'], ['blobId', 'id'], ['role', 'role']],

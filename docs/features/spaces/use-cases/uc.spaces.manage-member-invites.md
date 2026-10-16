@@ -86,4 +86,4 @@ Sie ist an sie adressiert, also nicht deine, um sie weiterzugeben.
 - [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) — the owner-invite management this
   mirrors (resend / reassign / revoke).
 - [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) — admission vs. delivery; additive-only.
-- End-user view (docs site): [Who gets into your space](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.md)
+- End-user view (docs site): [Who gets into your space](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)

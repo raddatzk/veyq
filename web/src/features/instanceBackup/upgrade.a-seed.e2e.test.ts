@@ -91,7 +91,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
     const { mediaId: chapterMediaId } = await addMedia(scopeId, chapter.nodeId, chapter.chapterKey, { blob: new Blob([chapterData as BlobPart]), mediaType: '' })
     const chapterMedia: SealedMedia[] = [{ mediaId: chapterMediaId, ...(await sealedBytes(chapterData)) }]
 
-    let meta = await setMemoryDate(scopeId, memory.nodeId, memory.memoryKey, DATE, { wrappedMeta: null, metaVersion: 0 })
+    let meta = await setMemoryDate(scopeId, memory.nodeId, memory.memoryKey, DATE, { wrappedMeta: null, metaRevision: 0 })
     meta = await setMemoryLocation(scopeId, memory.nodeId, memory.memoryKey, { name: PLACE, nameSource: 'manual', derivedMode: 'fixed' }, meta)
     const cover = memoryPhotoSource.seal(memoryMedia[0].mediaId, CROP) as MemoryCover
     await writeNodeCover({ scopeId, nodeId: memory.nodeId, nodeKey: memory.memoryKey, current: meta, cover })

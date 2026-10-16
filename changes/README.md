@@ -61,7 +61,7 @@ phase that reshapes a request is red in `web/` and `admin-web/` until the client
 phase; the Done-when for it is `generate:api` plus the contracts guards. **A removed *response* field is the
 other way round: it reddens only code that reads it and fixtures typed against the model.** **An added *required*
 response field reddens the server that builds it**: `cr-meta-writes-carry-the-version-they-read` predicted "backend
-green" for a contracts phase that added `metaVersion` to `NodeSummary`, and `ContentResource`'s
+green" for a contracts phase that added `metaVersion` (now `metaRevision`) to `NodeSummary`, and `ContentResource`'s
 `NodeSummary(...)` construction stopped compiling.
 `cr-guest-names-for-members-only` predicted a red at the fixture that served the removed field and got a green,
 because that fixture reached the code cast `as unknown as` (165 such casts, inbox #195). So a phase that predicts
@@ -604,6 +604,12 @@ the sibling the reshape breaks. #103 nearly re-homed the role enum into a shared
 the *drift* guard (`validate_contracts_common.py`) was named; `validate_scope_model_vocabulary.py` silently
 anchors on `SetMemberRoleRequest.role.enum`, and a `$ref` would have broken it. Enumerate the guards on the
 symbol first, then choose the shape — the shape that keeps every anchor green is a constraint, not an afterthought.
+
+**A guard can anchor on a symbol's SHAPE, and a rename moves it out of the shape.** Grep `scripts/` for the pattern a
+guard matches as well as for the literal. `validate_write_concurrency.py` found a write's counter by the regex `…Version`;
+inbox #437 renamed `metaVersion` / `placementVersion` to `…Revision`, and the guard, run on the renamed contract, went red
+on `removeNodeCover` (a write that only its counter makes a subject) and would have passed an undeclared `placementRevision`.
+A literal grep for the old names finds nothing in that guard, so only running it on the renamed tree shows the break.
 
 **The mutation manifests anchor on FILES, and a green gate does not say you broke one.** `web/stryker.mutate.json`,
 `packages/crypto/stryker.mutate.json` and `backend/core/pitest.scope.json` admit a file only while it is pure.
@@ -1405,7 +1411,8 @@ browser pass needed a fresh instance — which the done-when never said, and a `
 dev data to get. A database of its own on the same compose stack leaves theirs alone: `CREATE DATABASE` beside `veyq`
 (root credential as in `scripts/run_web_e2e.py`), boot the fast-jar under `-Dquarkus.profile=e2e` with
 `QUARKUS_DATASOURCE_JDBC_URL` pointed at it, its own `VEYQ_SECURITY_CONFIG_SECRET_FILE`, and
-`VEYQ_BLOB_STORE_PUBLIC_ENDPOINT` set to the browsed origin, then `npm run bootstrap:user` — which writes `.run/.env`
+`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` set to the browsed origin (the old `VEYQ_BLOB_STORE_…` name is read by nothing
+any more, so a boot that sets it signs for the store's own endpoint and the seeder's store check fails), then `npm run bootstrap:user` — which writes `.run/.env`
 back, so that file is snapshotted first and restored byte-equal after. A CR that changes a stored format names this
 instance in its browser pass.
 Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused even a scratchpad snapshot on
@@ -1413,6 +1420,11 @@ Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused
 copy of `web/scripts/bootstrap-user.mts` that reads an env file of generated test values outside the repo seeds it, the
 copy is deleted after, and the login goes through the form (`?devlogin` reads only `.run/.env`). Boot a COPY of the
 fast-jar, too: a neighbour's `./gradlew` rebuilds `backend/build/` under a running pass.
+Two devices are two HOSTS, not two ports: cookies ignore the port, so `capx.localhost:8087` and `capx.localhost:8085`
+share one refresh cookie and the second "device" opens on the first one's session (inbox #447's pass). A second Vite with
+`VEYQ_SMOKE_HOST=<tenant domain>` serves the same tenant under another `*.localhost` name with cookies and storage of
+its own. And the instance takes its own ports (`QUARKUS_HTTP_PORT`, `VEYQ_ADMIN_CHANNEL_PORT`) when a neighbour holds
+8080/8090, with admin-web's Vite pointed at that admin port (`VEYQ_API_TARGET`, `VITE_ADMIN_PORT`).
 
 ### A UI phase's done-when names its browser pass
 

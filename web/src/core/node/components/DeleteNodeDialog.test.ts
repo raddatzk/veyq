@@ -21,7 +21,7 @@ const stubs = {
 const SCOPE = '11111111-1111-1111-1111-111111111111'
 
 function nodeOf(kind: string): TreeNode {
-  return { id: 'n1', parentId: null, kind, epoch: 0, placementVersion: 0, name: 'Rom 2026' } as TreeNode
+  return { id: 'n1', parentId: null, kind, epoch: 0, placementRevision: 0, name: 'Rom 2026' } as TreeNode
 }
 
 function mountDialog(kind: string) {

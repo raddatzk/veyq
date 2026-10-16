@@ -40,7 +40,7 @@ const fileOf = (n: number) => new File([new Uint8Array(n).map((_, i) => i % 251)
 
 function context(): GuestTreeContext {
   const root: ShareNode = { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 2 }
-  const existing: ShareNode = { id: EXISTING, parentId: ROOT, kind: FILE_KIND, epoch: 2, placementVersion: 0 }
+  const existing: ShareNode = { id: EXISTING, parentId: ROOT, kind: FILE_KIND, epoch: 2, placementRevision: 0 }
   return {
     head: {} as GuestTreeContext['head'],
     rootId: ROOT,
@@ -125,7 +125,7 @@ describe("a guest's new file on the wire", () => {
     const created = requests[0].json!
     expect(created).toMatchObject({ parentId: ROOT, kind: FILE_KIND, epoch: 2 })
     const nodeKey = v1.open(
-      { purpose: 'content-key', scopeId: SCOPE, nodeId: node, epoch: 2, placementVersion: 0 }, rootKey, fromB64std(created.wrappedContentKey as string),
+      { purpose: 'content-key', scopeId: SCOPE, nodeId: node, epoch: 2, placementRevision: 0 }, rootKey, fromB64std(created.wrappedContentKey as string),
     )
 
     // The upload: target = the new node, role FILE_CONTENT, owner = the node, `K_blob` under the NODE's key.

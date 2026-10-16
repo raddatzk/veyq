@@ -23,7 +23,7 @@ import ShareDialog from './components/ShareDialog.vue'
 import MemoryShareBody from './components/MemoryShareBody.vue'
 import PersonMemories from './components/PersonMemories.vue'
 import { memoriesLifecycle } from './lifecycle'
-import { memoryCapabilities } from './capabilities'
+import { memoryRights } from './rights'
 import { targetOf } from '../../core/access'
 import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_CONTENT_SCHEMA } from './exportImport'
 
@@ -60,11 +60,11 @@ export function registerMemories(registry: Registry): void {
   }
   // Where each may be moved (core's move dialog, inbox #358) mirrors the backend's `MemoryNodeKindRules`: a Memory at the
   // root or in a folder, a chapter only directly in a Memory.
-  // Only a Memory is created from a level (core's "New" menu, inbox #406): the entry shows where Memories' capability
+  // Only a Memory is created from a level (core's "New" menu, inbox #406): the entry shows where Memories' rights
   // matrix lets a Memory be created, and is greyed while the scope's keys are locked. A chapter is created inside its Memory.
   const newMemory = {
     label: 'memory.create', icon: 'pi pi-images', order: 10,
-    allowed: (ctx: LevelActionContext) => memoryCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).createMemory,
+    allowed: (ctx: LevelActionContext) => memoryRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createMemory,
     enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
   }
   registry.registerKind({

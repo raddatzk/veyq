@@ -46,7 +46,7 @@ import type { TreeNode } from '../../../core/node/tree'
 import { galleryFakeStore } from './galleryFakeStore'
 import { fakeApi, stubApi } from '../../../test/apiMock'
 import { realI18n, t } from '../../../test/i18n'
-import { treeNode, memberMemoryCaps } from '../../../test/models'
+import { treeNode, memberMemoryRights } from '../../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -55,7 +55,7 @@ const OLD = Date.UTC(2019, 2, 3)
 const NEW = Date.UTC(2024, 8, 9)
 
 const node = (name: string): TreeNode => treeNode({
-  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0,
 })
 
 function stubDeriver(): MediaDeriver {
@@ -100,7 +100,7 @@ function pushBatch(files: unknown[], nodeId = NODE_ID) {
 
 function mountDetail(memoryKey: Uint8Array) {
   return mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps() },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights() },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
 }

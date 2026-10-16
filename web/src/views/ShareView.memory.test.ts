@@ -100,8 +100,8 @@ const keys = { memory: v1.randomBytes(32), chapter: v1.randomBytes(32) }
 const GUEST: GuestIdentity = { identityId: 'id-g', contributorToken: 'tok-g', displayName: 'Oma' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementVersion: 0 }
-  return { id, parentId, kind, epoch: 0, placementVersion: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
+  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A link rooted at the Memory "Rom 2026" (its chapter "Tag 1" below), or — `chapterRoot` — at the chapter itself. */
 function head(role: ShareRole, o: { chapterRoot?: boolean } = {}): PublicShareHead {

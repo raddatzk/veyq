@@ -37,13 +37,13 @@ class ShareNodeBudgetCoreSliceTest {
         val link = GuestTreeShare.seed(userId, scopeId, root)
 
         // three placements first: none spends a token, or the creates below would run out early
-        place(link, a, b, placementVersion = 0).statusCode(204)
-        place(link, a, root, placementVersion = 1).statusCode(204)
-        place(link, a, b, placementVersion = 2).statusCode(204)
+        place(link, a, b, placementRevision = 0).statusCode(204)
+        place(link, a, root, placementRevision = 1).statusCode(204)
+        place(link, a, b, placementRevision = 2).statusCode(204)
         create(link, root, NodeEntity.FOLDER).statusCode(201)
         create(link, root, NodeEntity.FOLDER).statusCode(201)
         create(link, root, NodeEntity.FOLDER).statusCode(429).body("code", equalTo("rate_limited"))
         // a spent budget stops no placement
-        place(link, a, root, placementVersion = 3).statusCode(204)
+        place(link, a, root, placementRevision = 3).statusCode(204)
     }
 }

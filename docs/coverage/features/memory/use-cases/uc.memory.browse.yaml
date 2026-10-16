@@ -108,7 +108,7 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [NodesSliceTest.crossScopeDeleteIsRejected] }
   - id: select-several-nodes
-    text: "Select in the level's toolbar (not in an application's own presentation, and only where some node of the level allows an action) puts a labelled checkbox on every row - the row's own click still opens it - and a bar with All / None, an announced count and Move to… / Delete. The selection is the level's: a tab switch keeps it (All / None act on the tab shown, the count says how many of the selected the tab hides), leaving the mode or the folder clears it, a node that leaves the level drops out. What a node allows is its application's capability answer per node (a folder's core's), an action is enabled where a selected node allows it and says \"n of m\" for the rest; a READ_WRITE guest is offered Move and no Delete (inbox #421)."
+    text: "Select in the level's toolbar (not in an application's own presentation, and only where some node of the level allows an action) puts a labelled checkbox on every row - the row's own click still opens it - and a bar with All / None, an announced count and Move to… / Delete. The selection is the level's: a tab switch keeps it (All / None act on the tab shown, the count says how many of the selected the tab hides), leaving the mode or the folder clears it, a node that leaves the level drops out. What a node allows is its application's rights answer per node (a folder's core's), an action is enabled where a selected node allows it and says \"n of m\" for the rest; a READ_WRITE guest is offered Move and no Delete (inbox #421)."
     coverage:
       web:
         unit:

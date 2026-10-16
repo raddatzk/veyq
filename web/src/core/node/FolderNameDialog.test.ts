@@ -51,7 +51,7 @@ function mountDialog(props: Omit<DialogProps, 'scopeId' | 'epochs'>) {
   })
 }
 const nodeOf = (kind: string, parentId: string | null = 'p1'): TreeNode =>
-  treeNode({ id: 'n9', parentId, kind, name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+  treeNode({ id: 'n9', parentId, kind, name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 
 beforeEach(() => {
   vi.clearAllMocks()

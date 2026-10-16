@@ -18,7 +18,7 @@
 //
 // **Who looks** (inbox #401, `core/access.ts`): the host builds the member's `Access` (the scope, its epoch keys, its
 // pending deletion, the instance's sharing capabilities) and its `TreeSource` (the decrypted tree, fragment links) and
-// hands both to the level view and to an opened node's detail. What a view offers is its application's capability
+// hands both to the level view and to an opened node's detail. What a view offers is its application's rights
 // function over them; the host decides no control itself.
 import { computed, ref, shallowRef, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -120,7 +120,7 @@ const shareDialog = computed(() => {
   return info.supported ? (info.shareDialog ?? null) : null
 })
 // A share dialog opens only for a node whose kind descriptor says it is shareable AND brings a share dialog (cr-0104; the
-// backend refuses a share root of a kind no application declares). Whether the share BUTTON shows is the capability
+// backend refuses a share root of a kind no application declares). Whether the share BUTTON shows is the rights
 // function's (the `core.public-shares` register leaves, ADR 0032/0088: an operator can turn public sharing off instance-wide,
 // and the server then rejects createShare with 422); this is the host's second gate on what it mounts.
 const kindShareable = computed(() => {
@@ -131,7 +131,7 @@ const kindShareable = computed(() => {
 
 // Who looks: the member (see the header). A pending deletion (cr-0090) takes every write away — the server refuses them
 // during the grace window (uc.spaces.scope-access); a guest's identity folder in a drop box (ADR 0080 decision 11,
-// `TreeNode.shareIdentityId`) takes placement away, which the capability functions read from the tree.
+// `TreeNode.shareIdentityId`) takes placement away, which the rights functions read from the tree.
 const access = computed(() =>
   memberAccess({
     scopeId: activeSpace.scopeId ?? '',
@@ -150,8 +150,8 @@ const tree = memberTreeSource({
   scope: () => currentScope.value,
 })
 const shareVisible = ref(false)
-// What the capability function that showed the share button grants the dialog beyond sharing at all (`NodeShareOffer`):
-// handed to the dialog as props, so no dialog reads a capability itself. Fail closed until a `share` emit sets it.
+// What the rights function that showed the share button grants the dialog beyond sharing at all (`NodeShareOffer`):
+// handed to the dialog as props, so no dialog reads a right itself. Fail closed until a `share` emit sets it.
 const shareOffer = ref<NodeShareOffer>({ contribute: false })
 function openShare(offer: NodeShareOffer) {
   shareOffer.value = offer

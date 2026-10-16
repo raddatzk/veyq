@@ -78,8 +78,8 @@ const PARTICIPANTS = ['aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-400
 const GUEST: GuestIdentity = { identityId: 'id-g', contributorToken: 'tok-g' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementVersion: 0 }
-  return { id, parentId, kind, epoch: 0, placementVersion: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
+  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A folder link: the folder, a Memory in it, a chapter in the Memory. */
 function head(role: ShareRole): PublicShareHead {
@@ -266,7 +266,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     w.unmount()
   })
 
-  // S5: the lightbox's one `readonly` split per capability — a contributor deletes its OWN photo there too (asked first,
+  // S5: the lightbox's one `readonly` split per right — a contributor deletes its OWN photo there too (asked first,
   // purged), never another's, and is offered no "set as cover".
   it('READ_WRITE: in the lightbox, its own photo carries the delete — asked first, then purged — and no other does', async () => {
     saveGuestSession(SHARE, GUEST)

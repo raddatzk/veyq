@@ -49,11 +49,11 @@ class NodePlacementSliceTest {
         val parent = to?.let { "\"parentId\":\"$it\"," } ?: ""
         val slug = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().toByteArray())
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{$parent"encryptedName":"bW92ZWQ=","slugToken":"$slug","wrappedContentKey":"$wrap","epoch":0,"placementVersion":0}""")
+            .body("""{$parent"encryptedName":"bW92ZWQ=","slugToken":"$slug","wrappedContentKey":"$wrap","epoch":0,"placementRevision":0}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$node").then()
     }
 
     private fun row(node: String): List<Any> = QuarkusTransaction.requiringNew().call {
-        NodeEntity.findById(node)!!.let { listOf(it.parentId, it.encryptedName, it.wrappedContentKey, it.placementVersion) }
+        NodeEntity.findById(node)!!.let { listOf(it.parentId, it.encryptedName, it.wrappedContentKey, it.placementRevision) }
     }
 }

@@ -19,6 +19,13 @@ acceptanceCriteria:
         integration: [CapabilityManifestSliceTest.theDefaultProfileWiresTheProductionSwitchesAndServesEveryAdvertisedId, CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller]
       web:
         unit: [src/shared/state/useCapabilities.test.ts]
+  - id: one-major
+    text: The advertised version.major is the platform's one major (ADR 0085 decision 1) - the repository's VERSION when the server was built, generated into PlatformMajor and never configured; 0 before V1 is advertised as 0. The web client's compiled major is read from the same file, so a server and the web client built from one tree cannot disagree. Nothing more precise than the major is advertised pre-auth.
+    coverage:
+      backend:
+        integration: [CapabilityManifestSliceTest.theAdvertisedMajorIsTheVersionFilesMajor, InstanceReleaseSliceTest.releaseVersionNeverAppearsOnThePreAuthSurface]
+      web:
+        unit: [src/shared/state/capabilities.test.ts]
   - id: major-hard-gate
     text: A client whose compiled major differs from server.version.major shows a BLOCKING incompatibility state (direction-specific — update-app when server>client, update-server when server<client) BEFORE login; an equal major proceeds. build is informational and never gates.
     coverage:
@@ -45,7 +52,7 @@ acceptanceCriteria:
       backend:
         integration: [CapabilityDisabledSliceTest.aSwitchedOffDropBoxRefusesWriteOnlyAndLeavesReadWriteThrough, CapabilityDisabledSliceTest.aSwitchedOffChildRefusesItsRoleAndLeavesTheParentsRoleThrough]
       web:
-        unit: [src/features/memory/components/ShareCreateDialog.test.ts, src/features/memory/capabilities.test.ts, src/features/depot/capabilities.test.ts, src/core/access.test.ts]
+        unit: [src/features/memory/components/ShareCreateDialog.test.ts, src/features/memory/rights.test.ts, src/features/depot/rights.test.ts, src/core/access.test.ts]
   - id: catalog-serves-usecases
     text: A capability is a coarser projection over use-cases, not a 1:1 rename (ADR 0032 §6). Each catalog entry in contracts/platform/capabilities.json declares a serves [uc.…] back-ref (catalog-only, NOT on the wire), and a validator enforces every serves resolves to a real use-case — so the catalog can't be a typo or drift from the graph. The catalog is append-only; an id may be reserved ahead of first advertisement and is advertised active only once its use-cases are built. The catalog file is the list; the entries and the use-cases each serves are not counted here.
     coverage:
@@ -60,7 +67,7 @@ acceptanceCriteria:
         unit: [CapabilityRegistryTest.aSwitchedOffParentSwitchesOffItsChildrenAndNotItsSiblings, CapabilityRegistryTest.aSwitchedOffChildLeavesItsParentAndItsSiblingActive, CapabilityRegistryTest.anAdvertisedIdsParentEntryIsAdvertisedToo]
         integration: [CapabilityDisabledSliceTest.aSwitchedOffParentDropsEveryShareIdAndRefusesADropBoxLink, DropBoxCapabilitySliceTest.aSwitchedOffParentRefusesANewDropBoxThroughThePath]
       web:
-        unit: [src/features/platform/capabilities.test.ts, src/features/memory/capabilities.test.ts, src/features/depot/capabilities.test.ts]
+        unit: [src/features/platform/capabilities.test.ts, src/features/memory/rights.test.ts, src/features/depot/rights.test.ts]
   - id: feature-switch-refuses-only-new
     text: A feature switch refuses what is new and leaves what exists usable (ADR 0088 decision 5) - with core.group-space off a new group is refused while an existing group is renamed; with core.remember-device.passwordless off a DEVICE_KEY wrap is refused while a DEVICE wrap is still enrolled; with the drop-box leaf off a new drop box is refused while an existing one is renamed. An existing contributor link keeps its role on screen when contribute is off.
     coverage:

@@ -276,3 +276,4 @@ by design rather than by accident.
   repairs the register), [uc.account.trust-device](../use-cases/uc.account.trust-device.md) +
   [uc.account.remember-this-device](../use-cases/uc.account.remember-this-device.md) (the wraps a device
   carries, whose ids this register joins to their device)
+- End-user view (docs site): [Start a list over](../../../../site/src/content/docs/help/start-a-list-over.mdx)

@@ -112,7 +112,7 @@ const en = {
     "unreadable": "These stored credentials can no longer be opened with this server's config-secret key: {secrets}. Nothing is lost — enter them again to seal them under the current key. Until then media stay unreachable.",
     "fixed": "Media are already stored, so the store's type, endpoint and bucket are fixed. Credentials and the public endpoint can still change.",
     "save": "Save",
-    "saved": "Object store saved — check it next.",
+    "saved": "Saved — check it next. Until it passes, nothing changes for the media.",
     "saveInvalid": "These fields do not form a store. Check that none is empty and that the endpoints are http(s) addresses.",
     "saveNoBundled": "This deployment does not bring a bundled store.",
     "saveInUse": "Media are already stored: the type, endpoint and bucket cannot change.",
@@ -120,6 +120,14 @@ const en = {
     "saveFailed": "Couldn’t save the object store.",
     "check": "Check store",
     "checkTitle": "Check",
+    "checkTitlePending": "Check of the saved change",
+    "pendingNote": "A changed setting is saved but not in use: the store above it stays in use until this one passes its check, which puts it in use at once. Run the check, or discard the change.",
+    "pendingFirst": "This setting is saved but not in use yet: it is put in use once it passes its check. Until then nothing can be uploaded and no tenant can be created.",
+    "pendingUnchecked": "The saved change has not been checked. The store in use stays until it passes.",
+    "pendingCheckFailedAt": "The saved change failed its check, so it is not in use — the store in use is unchanged. Fix the setting and save again, or discard the change.",
+    "discard": "Discard change",
+    "discarded": "The saved change was discarded.",
+    "discardFailed": "Couldn’t discard the saved change.",
     "checkNotConfigured": "No store is set yet, so there is nothing to check.",
     "checkFailed": "Couldn’t run the check.",
     "notSet": "No store is set yet. Tenants cannot be created until one is saved and has passed its check.",
@@ -151,7 +159,7 @@ const en = {
     "notAttempted": "This server does not set its object store up, and is not meant to. The store is configured as one you brought yourself, so its bucket, key and CORS rule are yours to manage — nothing is missing here.",
     "inProgress": "Setting the object store up. This normally takes a few seconds after a start; uploads may fail until it finishes. Reload to see where it got to.",
     "provisioned": "The object store is ready. Its bucket, access key and browser rule are in place, so media can be uploaded and shown.",
-    "failed": "The object store could not be set up, and this server has stopped trying. Media will not work until the store is reachable again and this server is restarted. The server log names the step that failed."
+    "failed": "The object store could not be set up, and this server has stopped trying. Media will not work until the store is reachable again and its check passes — the check sets it up again — or this server is restarted. The server log names the step that failed."
   },
   "configSecret": {
     "navTitle": "Config-secret key",
@@ -182,12 +190,15 @@ const en = {
   "setup": {
     "title": "Set up this instance",
     "sub": "Create the first owner account. All keys are generated on this device — the server only ever sees ciphertext.",
-    "submit": "Confirm",
-    "submitting": "Confirming…",
+    "submit": "Continue",
+    "submitting": "Generating your keys…",
     "failed": "Setup failed. Please try again.",
     "kitTitle": "Save your Emergency Kit",
-    "kitSub": "Your Secret Key recovers your account if you ever forget your password. Save the kit somewhere safe before continuing.",
-    "kitProceed": "Continue to sign in"
+    "kitSub": "Your Secret Key recovers your account if you ever forget your password. Save the kit somewhere safe — the account is created only once you have.",
+    "kitProceed": "Create the account and sign in",
+    "creating": "Creating the account…",
+    "createFailed": "The account could not be created. Your kit is still valid — try again.",
+    "alreadyComplete": "This instance was set up by someone else in the meantime, so no account was created for you. Discard this kit; it belongs to no account."
   },
   "members": {
     "copied": "Copied",
@@ -339,7 +350,7 @@ const de: typeof en = {
     "unreadable": "Diese gespeicherten Zugangsdaten lassen sich mit dem Konfigurationsschlüssel dieses Servers nicht mehr öffnen: {secrets}. Es geht nichts verloren — gib sie erneut ein, damit sie unter dem aktuellen Schlüssel versiegelt werden. Bis dahin bleiben Medien unerreichbar.",
     "fixed": "Es sind bereits Medien gespeichert, deshalb sind Typ, Endpunkt und Bucket des Speichers festgelegt. Zugangsdaten und öffentlicher Endpunkt lassen sich weiterhin ändern.",
     "save": "Speichern",
-    "saved": "Objektspeicher gespeichert — als Nächstes prüfen.",
+    "saved": "Gespeichert — als Nächstes prüfen. Bis die Prüfung besteht, ändert sich für die Medien nichts.",
     "saveInvalid": "Diese Angaben ergeben keinen Speicher. Prüfe, dass nichts leer ist und die Endpunkte http(s)-Adressen sind.",
     "saveNoBundled": "Dieses Deployment bringt keinen mitgelieferten Speicher mit.",
     "saveInUse": "Es sind bereits Medien gespeichert: Typ, Endpunkt und Bucket lassen sich nicht ändern.",
@@ -347,6 +358,14 @@ const de: typeof en = {
     "saveFailed": "Der Objektspeicher konnte nicht gespeichert werden.",
     "check": "Speicher prüfen",
     "checkTitle": "Prüfung",
+    "checkTitlePending": "Prüfung der gespeicherten Änderung",
+    "pendingNote": "Eine geänderte Einstellung ist gespeichert, aber nicht in Gebrauch: Der bisherige Speicher bleibt in Gebrauch, bis diese ihre Prüfung besteht — dann gilt sie sofort. Prüfe sie, oder verwirf die Änderung.",
+    "pendingFirst": "Diese Einstellung ist gespeichert, aber noch nicht in Gebrauch: Sie gilt, sobald sie ihre Prüfung besteht. Bis dahin lässt sich nichts hochladen und kein Tenant anlegen.",
+    "pendingUnchecked": "Die gespeicherte Änderung wurde noch nicht geprüft. Der Speicher in Gebrauch bleibt, bis sie besteht.",
+    "pendingCheckFailedAt": "Die gespeicherte Änderung hat ihre Prüfung nicht bestanden und ist deshalb nicht in Gebrauch — der Speicher in Gebrauch ist unverändert. Korrigiere die Einstellung und speichere erneut, oder verwirf die Änderung.",
+    "discard": "Änderung verwerfen",
+    "discarded": "Die gespeicherte Änderung wurde verworfen.",
+    "discardFailed": "Die gespeicherte Änderung ließ sich nicht verwerfen.",
     "checkNotConfigured": "Es ist noch kein Speicher gesetzt, also gibt es nichts zu prüfen.",
     "checkFailed": "Die Prüfung konnte nicht ausgeführt werden.",
     "notSet": "Es ist noch kein Speicher gesetzt. Tenants lassen sich erst anlegen, wenn einer gespeichert ist und die Prüfung bestanden hat.",
@@ -378,7 +397,7 @@ const de: typeof en = {
     "notAttempted": "Dieser Server richtet seinen Objektspeicher nicht ein und soll das auch nicht. Der Speicher ist als einer konfiguriert, den du selbst mitbringst — Bucket, Zugriffsschlüssel und Browser-Regel liegen bei dir. Hier fehlt nichts.",
     "inProgress": "Der Objektspeicher wird eingerichtet. Das dauert nach einem Start normalerweise ein paar Sekunden; bis dahin können Uploads fehlschlagen. Lade neu, um den Stand zu sehen.",
     "provisioned": "Der Objektspeicher ist bereit. Bucket, Zugriffsschlüssel und Browser-Regel sind vorhanden, Medien lassen sich hochladen und anzeigen.",
-    "failed": "Der Objektspeicher konnte nicht eingerichtet werden, und dieser Server hat es aufgegeben. Medien funktionieren erst wieder, wenn der Speicher erreichbar ist und dieser Server neu gestartet wurde. Das Server-Log nennt den fehlgeschlagenen Schritt."
+    "failed": "Der Objektspeicher konnte nicht eingerichtet werden, und dieser Server hat es aufgegeben. Medien funktionieren erst wieder, wenn der Speicher erreichbar ist und seine Prüfung besteht — die Prüfung richtet ihn neu ein — oder dieser Server neu gestartet wurde. Das Server-Log nennt den fehlgeschlagenen Schritt."
   },
   "configSecret": {
     "navTitle": "Konfigurationsschlüssel",
@@ -409,12 +428,15 @@ const de: typeof en = {
   "setup": {
     "title": "Diese Instanz einrichten",
     "sub": "Lege das erste Konto an, dem diese Instanz gehört. Alle Schlüssel entstehen auf diesem Gerät — der Server sieht nur Chiffretext.",
-    "submit": "Bestätigen",
-    "submitting": "Wird bestätigt…",
+    "submit": "Weiter",
+    "submitting": "Deine Schlüssel werden erzeugt…",
     "failed": "Einrichtung fehlgeschlagen. Bitte erneut versuchen.",
     "kitTitle": "Notfall-Kit sichern",
-    "kitSub": "Dein Secret Key stellt dein Konto wieder her, falls du dein Passwort vergisst. Sichere das Kit, bevor du fortfährst.",
-    "kitProceed": "Weiter zur Anmeldung"
+    "kitSub": "Dein Secret Key stellt dein Konto wieder her, falls du dein Passwort vergisst. Sichere das Kit an einem sicheren Ort — das Konto wird erst angelegt, wenn du das getan hast.",
+    "kitProceed": "Konto anlegen und anmelden",
+    "creating": "Konto wird angelegt…",
+    "createFailed": "Das Konto konnte nicht angelegt werden. Dein Kit bleibt gültig — versuch es erneut.",
+    "alreadyComplete": "Diese Instanz wurde inzwischen von jemand anderem eingerichtet, für dich wurde kein Konto angelegt. Verwirf dieses Kit; es gehört zu keinem Konto."
   },
   "members": {
     "copied": "Kopiert",

@@ -35,4 +35,4 @@ acceptanceCriteria:
   - id: the-member-opens-and-shares-a-file
     text: A member opens a file from a folder's list and sees its facts; its header carries the file's actions — download, replace (after the question; no standing sentence about it, owner decision 2026-10-14), share, rename, move and delete — each where the matrix grants it (not during a pending deletion, not for a guest's file in an identity folder); a READ_WRITE guest's header carries the download and the replace.
     coverage:
-      web: { unit: [src/features/depot/components/FileDetail.test.ts, src/features/depot/components/FileDetail.guest.test.ts, src/features/depot/capabilities.test.ts, src/features/depot/register.test.ts, src/features/depot/levelRows.test.ts] }
+      web: { unit: [src/features/depot/components/FileDetail.test.ts, src/features/depot/components/FileDetail.guest.test.ts, src/features/depot/rights.test.ts, src/features/depot/register.test.ts, src/features/depot/levelRows.test.ts] }

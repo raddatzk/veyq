@@ -86,7 +86,7 @@ class SubtreeBoundaryCoreSliceTest {
     }
 
     private fun place(t: Tree, node: String, to: String?, version: Long = 0): UpdateNodeOutcome =
-        handler.updateInScope(t.scopeId, node, placementTo(to, placementVersion = version), null, null, null, SubtreeBoundary(t.root))
+        handler.updateInScope(t.scopeId, node, placementTo(to, placementRevision = version), null, null, null, SubtreeBoundary(t.root))
 
     private fun create(t: Tree, parent: String?): Pair<String, CreateNodeOutcome> {
         val id = UUID.randomUUID().toString()
@@ -99,7 +99,7 @@ class SubtreeBoundaryCoreSliceTest {
 
     private fun parentOf(node: String): String = QuarkusTransaction.requiringNew().call { NodeEntity.findById(node)!!.parentId }
 
-    private fun versionOf(node: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.findById(node)!!.placementVersion }
+    private fun versionOf(node: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.findById(node)!!.placementRevision }
 
     private fun deletedAt(node: String) = QuarkusTransaction.requiringNew().call { NodeEntity.findById(node)!!.deletedAt }
 }

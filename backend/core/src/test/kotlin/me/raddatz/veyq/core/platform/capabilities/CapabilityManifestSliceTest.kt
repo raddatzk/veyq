@@ -10,6 +10,14 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
+import java.io.File
+
+/**
+ * The repository's `VERSION` file, read from disk (tests run from `backend/`), never through the build's
+ * `PlatformMajor`: the assertions below hold the served major to the file itself, so a derivation that stops
+ * deriving — a hand-set number anywhere between the two — is red here (ADR 0085 decision 1).
+ */
+internal val VERSION_FILE_MAJOR: Int = File("../VERSION").readText().trim().toInt()
 
 /**
  * Slice test for the capability-discovery manifest on GET /api/setup (uc.platform.capability-discovery
@@ -36,9 +44,19 @@ class CapabilityManifestSliceTest {
         )
         given().`when`().get("/api/setup")
             .then().statusCode(200)
-            .body("version.major", equalTo(1))
+            .body("version.major", equalTo(VERSION_FILE_MAJOR))
             .body("version.build", equalTo(1))
             .body("capabilities.id", equalTo(CapabilityIds.ADVERTISED))
+    }
+
+    @Test
+    fun theAdvertisedMajorIsTheVersionFilesMajor() {
+        // One major (ADR 0085 decision 1): the protocol major a client gates on is the release major in VERSION —
+        // `0` before V1 is advertised as `0`, never floored — and still nothing more precise than the major.
+        given().`when`().get("/api/setup")
+            .then().statusCode(200)
+            .body("version.major", equalTo(VERSION_FILE_MAJOR))
+            .body("version.keySet()", equalTo(setOf("major", "build")))
     }
 
     @Test

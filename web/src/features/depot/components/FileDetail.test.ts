@@ -65,7 +65,7 @@ const keyFor = (id: string) => {
   return keys.get(id)!
 }
 const node = (id: string, kind: string, name: string, over: Partial<TreeNode> = {}): TreeNode => treeNode({
-  id, kind, name, parentId: D, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over,
+  id, kind, name, parentId: D, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over,
 })
 const MODIFIED = Date.UTC(2026, 9, 1, 12)
 const DOCS = node(D, FOLDER_KIND, 'Docs', { parentId: null })

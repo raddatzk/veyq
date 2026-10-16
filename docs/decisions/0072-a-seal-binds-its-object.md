@@ -65,7 +65,7 @@ stored at — the write's `version + 1` — because that is the one the reader's
 parent would turn every move into a re-seal of everything below it. The harm a parent binding would prevent is
 already closed by the two things above: a node's own ciphertexts are bound to its id, and a node's key wrap moved
 under a different parent meets a different parent key and does not open. What a move does bind is the node's own
-`placement_version` (`node-name`, `content-key`, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+`placement_revision` (`node-name`, `content-key`, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
 Decision 3): a move re-seals the moved node's own entry and key once, never its subtree.
 
 **5. Binding makes an epoch or version *authentic*; it does not make it *fresh*.** Which epoch's grant and which

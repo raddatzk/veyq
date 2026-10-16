@@ -81,7 +81,7 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
 - [uc.memory.concurrent-curation](use-cases/uc.memory.concurrent-curation.md) — **built**
   ([ADR 0077](../../decisions/0077-a-write-carries-the-version-it-read.md)): two members curate one Memory at once —
   every write of a sealed meta blob (a Memory's date/place/cover, a photo's date/place name/type) states the
-  `metaVersion` it read, a stale one answers `409 stale_version` with the current blob, and the writer re-applies
+  `metaRevision` it read, a stale one answers `409 stale_version` with the current blob, and the writer re-applies
   only its own change; a blob that does not open is never rebuilt from empty
 - [uc.memory.live-updates](use-cases/uc.memory.live-updates.md) — **built (web)** (cr-0107, ADR 0033): an open
   gallery reflects others' media adds/removes live; core's per-node item revision (ADR 0033) → conditional-GET `304` +

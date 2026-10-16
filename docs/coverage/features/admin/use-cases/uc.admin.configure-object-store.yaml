@@ -7,18 +7,18 @@ title: Connect and check the instance's object store
 acceptanceCriteria:
   - id: server-owner-sets-and-checks-the-store
     text: >-
-      A signed-in Server Owner saves an S3-compatible or Garage store setting and checks it; a passing check marks
-      the setting checked and the backend signs against it without a restart.
+      A signed-in Server Owner saves an S3-compatible or Garage store setting and checks it; a passing check puts
+      the setting in use and the backend signs against it without a restart.
     coverage:
       backend:
         unit: [StoreCheckTest.aPassingCheckWritesOneProbeAndDeletesNothing, StoreCheckTest.theProbeIsOverwrittenByTheNextCheckSoNothingAccumulates, StoreCheckTest.aGarageStoreIsProvisionedFirstAndAFailedBringUpStopsTheCheck]
-        integration: [InstanceStoreSliceTest.anS3StoreIsStoredAndItsSecretIsNeverReturned, InstanceStoreSliceTest.aCheckAgainstAStoreNobodyAnswersFailsAtItsStepAndIsRemembered, InstanceStoreSliceTest.theBundledStoreIsRefusedWhereTheDeploymentOffersNone, AppShellStoreOriginSliceTest.thePolicyAllowsTheOriginOfAUrlThisAppSigns, StoreOriginPresignSliceTest.theSignedUrlIsARealPresignedUrlForTheConfiguredBucket]
+        integration: [InstanceStoreSliceTest.anS3StoreIsSavedAsPendingAndItsSecretIsNeverReturned, InstanceStoreSliceTest.aPassingCheckPutsThePendingSettingInUse, InstanceStoreSliceTest.aCheckAgainstAStoreNobodyAnswersFailsAtItsStepAndIsRemembered, InstanceStoreSliceTest.theBundledStoreIsRefusedWhereTheDeploymentOffersNone, AppShellStoreOriginSliceTest.thePolicyAllowsTheOriginOfAUrlThisAppSigns, StoreOriginPresignSliceTest.theSignedUrlIsARealPresignedUrlForTheConfiguredBucket]
     gaps:
       - surface: backend
         reason: >-
           No backend test drives a PASSING check through the endpoint against a live store: the passing path is proven
-          against a stub HTTP server (`StoreCheckTest`), the endpoint's check only against a store nobody answers. The
-          real one is the web e2e suites' `birthInstance` (bundled store chosen and checked against Garage), which
+          against local stub HTTP servers (`StoreCheckTest`, and `InstanceStoreSliceTest`'s fake S3 through the
+          endpoint), which ignore the signature. The real one is the web e2e suites' `birthInstance` (bundled store chosen and checked against Garage), which
           `run_web_e2e.py` runs and no backend ref names. "Without a restart" is the setting-follows-the-store
           wiring (`SwitchingBlobStore`) that `AppShellStoreOriginSliceTest` and `StoreOriginPresignSliceTest` observe
           through the CSP and the signed URL.
@@ -29,13 +29,20 @@ acceptanceCriteria:
     coverage:
       backend:
         unit: [StoreCheckTest.aMissingBucketFailsAtItsStepAndCreatesNone, StoreCheckTest.aCorsRuleThatDoesNotNameTheOriginFailsTheCorsStep, StoreCheckTest.theResultRoundTripsThroughItsStoredJson]
-        integration: [InstanceStoreSliceTest.aCheckAgainstAStoreNobodyAnswersFailsAtItsStepAndIsRemembered, InstanceStoreSliceTest.aTenantIsRefusedUntilTheCurrentSettingHasPassedItsCheck]
+        integration: [InstanceStoreSliceTest.aCheckAgainstAStoreNobodyAnswersFailsAtItsStepAndIsRemembered, InstanceStoreSliceTest.aTenantIsRefusedUntilASettingHasPassedItsCheck]
+  - id: a-changed-setting-waits-for-its-own-check
+    text: >-
+      A saved setting is pending and changes nothing the instance does until it passes its own check, which puts it
+      in use; a failed one leaves the setting in use untouched, and a pending one can be discarded.
+    coverage:
+      backend:
+        integration: [InstanceStoreSliceTest.aChangedSettingIsNotUsedUntilItsCheckPassesAndAFailingOneLeavesTheOldInUse, InstanceStoreSliceTest.aPendingSettingCanBeDiscardedAndTheOneInUseStays, InstanceStoreSliceTest.aWriteEqualToTheSettingInUseLeavesNothingPending, InstanceStoreSliceTest.withNothingPendingTheCheckRunsAgainstTheSettingInUse, InstanceStoreSliceTest.aPassingCheckPutsThePendingSettingInUse]
   - id: no-tenant-without-a-checked-store
     text: >-
       Creating a tenant is refused with a reason until the current store setting has passed its check.
     coverage:
       backend:
-        integration: [InstanceStoreSliceTest.aTenantIsRefusedUntilTheCurrentSettingHasPassedItsCheck, InstanceStoreSliceTest.changingTheSettingClearsItsCheck]
+        integration: [InstanceStoreSliceTest.aTenantIsRefusedUntilASettingHasPassedItsCheck, InstanceStoreSliceTest.changingTheSettingStartsThePendingOneUnchecked]
   - id: the-store-secrets-are-sealed-and-write-only
     text: >-
       The access key secret and the Garage admin token are sealed under the config-secret key with that key's
@@ -43,7 +50,7 @@ acceptanceCriteria:
     coverage:
       backend:
         unit: [ConfigSecretKeyGuardTest.aValueSealedUnderAnotherKeyIsDetectedPerValue, ConfigSecretKeyGuardTest.aStoreSecretReEnteredUnderTheNewKeyLeavesTheSmtpSecretUnreadable]
-        integration: [InstanceStoreSliceTest.anS3StoreIsStoredAndItsSecretIsNeverReturned, InstanceStoreSliceTest.aSecretOmittedOnALaterWriteKeepsTheStoredOne, InstanceStoreSliceTest.aFirstWriteWithoutASecretIsRefused, InstanceStoreSliceTest.aMemberIsNotTheServerOwnerAndIsRefusedOnEveryOperation]
+        integration: [InstanceStoreSliceTest.anS3StoreIsSavedAsPendingAndItsSecretIsNeverReturned, InstanceStoreSliceTest.aSecretOmittedOnALaterWriteKeepsTheStoredOne, InstanceStoreSliceTest.aFirstWriteWithoutASecretIsRefused, InstanceStoreSliceTest.aMemberIsNotTheServerOwnerAndIsRefusedOnEveryOperation]
   - id: a-lost-key-asks-for-the-store-credentials-again
     text: >-
       With the config-secret key absent or not the one that sealed them, the store's credentials are reported as
@@ -75,7 +82,8 @@ acceptanceCriteria:
           pinned by the many slice tests that run on a store which cannot presign.
 gaps:
   admin-web: >-
-    The console's Store page, the create-tenant dialog's closed state and `veyq-admin store show | set | check` live
+    The console's Object store page, the create-tenant dialog's closed state and `veyq-admin store show | set | check |
+    discard` live
     in `admin-web` (ADR 0065), and their suites (`StorePanel.test.ts`, `store.test.ts`, `cli.test.ts`,
     `CreateTenantDialog.test.ts`, `AdminConsoleView.test.ts`) exist and pass locally, but `admin-web`'s job
     (`container.yml` → `test` → "Admin surface checks") has never executed, so ADR 0040 admits none of them. They

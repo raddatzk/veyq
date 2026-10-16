@@ -159,7 +159,7 @@ class ShareFilesSliceTest {
         assertEquals(null to 0L, metaOf(file), "no completion writes the node's payload")
 
         // The guest renames its file (core's placement; a FOLDER lets a READ_WRITE guest rename any kind).
-        GuestTreeShare.place(link, file, t.folder, placementVersion = 0).statusCode(204)
+        GuestTreeShare.place(link, file, t.folder, placementRevision = 0).statusCode(204)
         // A member's file is the guest's to replace too (the role applies to every node below the root).
         completeShare(link, t.file, guestStartStaged(link, t.file), expected = blobOf(t.file)).statusCode(200)
     }
@@ -392,7 +392,7 @@ class ShareFilesSliceTest {
         NodeAttachmentEntity.find("nodeId = ?1 and slot = ?2", node, DepotBlobRoles.FILE_CONTENT).firstResult()?.shareIdentityId
     }
 
-    private fun metaOf(node: String): Pair<String?, Long> = tx { NodeEntity.findById(node)!!.let { it.wrappedMeta to it.metaVersion } }
+    private fun metaOf(node: String): Pair<String?, Long> = tx { NodeEntity.findById(node)!!.let { it.wrappedMeta to it.metaRevision } }
 
     private fun identityOf(link: GuestTreeShare.Link): String = tx { ShareIdentityEntity.find("shareId", link.shareId).firstResult()!!.id }
 

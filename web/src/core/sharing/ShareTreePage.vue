@@ -10,8 +10,8 @@
 // registry (Memories' rows with their covers and dates, Depot's files and drop boxes), an unsupported row for a kind nobody
 // lists (inbox #407). At any other node — the link's root included — it renders that kind's registered `detail`
 // (`NodeDetailProps`: Memories' `MemoryDetail`, Depot's `DropBoxDetail`), as the member's host does. Both are handed the
-// guest's `access` and `tree`, so every control is the capability functions' answer for a guest (`folderCapabilities`,
-// `memoryCapabilities`, `depotCapabilities`) and every byte the applications' guest data sources'. What stays this
+// guest's `access` and `tree`, so every control is the rights functions' answer for a guest (`folderRights`,
+// `memoryRights`, `depotRights`) and every byte the applications' guest data sources'. What stays this
 // page's own is what only a guest's page has: the breadcrumb up to the share root, the share's note (once), the role
 // badge. A kind without a detail is a local empty state here, never the page's.
 //
@@ -19,7 +19,7 @@
 // from it on every re-resolve), and every breadcrumb a real link (web/CLAUDE.md, the breadcrumb trap). An id the walk
 // did not open falls back to the root.
 //
-// **Writes (READ_WRITE only)** are what the capabilities grant on screen: at a folder a new folder, created as the guest
+// **Writes (READ_WRITE only)** are what the rights grant on screen: at a folder a new folder, created as the guest
 // under the current folder (`createShareNodeAsGuest`) after the shell named it (`access.requestGuest`), and what an
 // application's own level action offers (Depot: an upload, whose files it creates itself). A guest creates no Memory, no
 // drop box and no other application's node (owner decision 2026-10-14: the server admits a folder and the kinds their
@@ -29,7 +29,7 @@
 // chapter on screen, the delete of the guest's own media). Inside a guest's identity folder nothing is placed but by its
 // own identity, so no create is offered there (the server refuses it: `illegal_structure`), nor any section's write.
 // A MOVE (inbox #358) is core's `MoveNodeDialog` through the guest's door (`nodeMover`: `placeShareNodeAsGuest` after the
-// naming flow), offered where the capability functions grant it — a node a `FOLDER` of the subtree holds, never the
+// naming flow), offered where the rights functions grant it — a node a `FOLDER` of the subtree holds, never the
 // link's root, never in or of an identity folder — and its destinations are the subtree's folders only; the level's
 // selection of several (inbox #421) moves through core's `MoveNodesDialog` by the same door, and a guest is offered no
 // delete of a selection (it deletes no node). A `READ` link has no door, so nothing it renders can move anything. A DOWNLOAD (ADR 0082 decision 5) is core's `ExportSubtreeDialog` over the
@@ -218,7 +218,7 @@ function createError(e: unknown): string {
       @move-nodes="movingMany = $event"
       @download-node="downloading = $event"
     />
-    <!-- The member's detail of the node's kind, for a guest: what it offers is its capabilities and its data source. -->
+    <!-- The member's detail of the node's kind, for a guest: what it offers is its rights and its data source. -->
     <component
       :is="detail"
       v-else-if="detail && current"

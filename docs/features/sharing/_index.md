@@ -51,7 +51,7 @@ member renames a shared node, their client re-seals the name of every share on i
   `updateShare` — the link stays valid. **cr-0116** made the note **per-locale** (`{de,en}`, viewer picks locale),
   added an optional **private share name** (`sealed_share_name`, management-only), and **redesigned the dialogs**
   — list-only manage + separate create, copy-only links, with the **uploader as its own
-  capability-gated memory action + dialog** (the same `ShareDialog`/`ShareCreateDialog` reused via an `uploader`
+  rights-gated memory action + dialog** (the same `ShareDialog`/`ShareCreateDialog` reused via an `uploader`
   flag — identical by construction, its only difference the absent role switcher). The anonymous acceptance gate is
   its own use-case now ([uc.sharing.share-accept](use-cases/uc.sharing.share-accept.md)), not the curator note;
   [ADR 0036](../../decisions/0036-editable-share-note-recoverable-share-key.md))

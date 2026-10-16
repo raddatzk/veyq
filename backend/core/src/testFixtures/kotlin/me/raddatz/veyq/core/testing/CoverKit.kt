@@ -37,18 +37,18 @@ object CoverKit {
 
     fun set(
         userId: String, scopeId: String, nodeId: String, uploadId: String, expectedBlobId: String?,
-        wrappedMeta: String = "bWV0YQ==", metaVersion: Long = 0,
+        wrappedMeta: String = "bWV0YQ==", metaRevision: Long = 0,
     ): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$uploadId","expectedBlobId":${expectedBlobId?.let { "\"$it\"" }},"wrappedMeta":"$wrappedMeta","metaVersion":$metaVersion}""")
+            .body("""{"uploadId":"$uploadId","expectedBlobId":${expectedBlobId?.let { "\"$it\"" }},"wrappedMeta":"$wrappedMeta","metaRevision":$metaRevision}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/cover")
             .then()
 
     fun remove(
-        userId: String, scopeId: String, nodeId: String, blobId: String, wrappedMeta: String = "bWV0YQ==", metaVersion: Long = 0,
+        userId: String, scopeId: String, nodeId: String, blobId: String, wrappedMeta: String = "bWV0YQ==", metaRevision: Long = 0,
     ): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"blobId":"$blobId","wrappedMeta":"$wrappedMeta","metaVersion":$metaVersion}""")
+            .body("""{"blobId":"$blobId","wrappedMeta":"$wrappedMeta","metaRevision":$metaRevision}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/cover/removal")
             .then()
 
@@ -64,5 +64,5 @@ object CoverKit {
 
     /** The node's sealed meta and version as stored now. */
     fun meta(nodeId: String): Pair<String?, Long> =
-        QuarkusTransaction.requiringNew().call { NodeEntity.findById(nodeId)!!.let { it.wrappedMeta to it.metaVersion } }
+        QuarkusTransaction.requiringNew().call { NodeEntity.findById(nodeId)!!.let { it.wrappedMeta to it.metaRevision } }
 }

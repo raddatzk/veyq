@@ -155,6 +155,13 @@ function devSeedCredentialsPlugin(): Plugin {
   }
 }
 
+// `VERSION` holds the major alone (ADR 0057 §1); anything else fails the build rather than compile a client against NaN.
+function platformMajor(): number {
+  const text = readFileSync(fileURLToPath(new URL('../VERSION', import.meta.url)), 'utf8').trim()
+  if (!/^[0-9]+$/.test(text)) throw new Error(`VERSION must hold the major alone, got: ${text}`)
+  return Number(text)
+}
+
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
@@ -163,6 +170,9 @@ export default defineConfig(({ command, mode }) => {
       __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
       // The release identity the build was made for (informational: an export names it in its manifest); `dev` outside a release.
       __APP_VERSION__: JSON.stringify(env.VEYQ_RELEASE ?? 'dev'),
+      // The platform's one major (ADR 0085 decision 1), read from the repository's VERSION as the backend's build reads
+      // it, so the web gate and the server built from the same tree cannot disagree. The Dockerfile copies VERSION in.
+      __VEYQ_MAJOR__: JSON.stringify(platformMajor()),
     },
     test: {
       // Provide the PrimeVue toast service to every mounted component (cr-0157) — see src/test/setup.ts.

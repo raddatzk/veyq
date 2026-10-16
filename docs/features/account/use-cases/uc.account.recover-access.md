@@ -138,3 +138,4 @@ Secret Key dort also noch einmal ein.
 - End-user view (docs site): [Forgot your password](../../../../site/src/content/docs/account/forgot-password.mdx)
 - Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)
 - End-user view (docs site): [Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx)
+- End-user view (docs site): [Help](../../../../site/src/content/docs/help/index.mdx)

@@ -24,7 +24,7 @@ const FILE = '44444444-4444-4444-8444-444444444444'
 const IDENTITY = '55555555-5555-4555-8555-555555555555'
 const scopeKey = v1.randomBytes(32)
 const epochs = epochsOf(scopeKey)
-const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 })
+const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 })
 
 /** The world: a member's drop box at the root with a drop key, a guest's folder under its K_up, a file in the folder. */
 function world({ folderNameKey }: { folderNameKey?: Uint8Array } = {}) {
@@ -35,7 +35,7 @@ function world({ folderNameKey }: { folderNameKey?: Uint8Array } = {}) {
   const folderKey = v1.randomBytes(32)
   const fileKey = v1.randomBytes(32)
   const row = (id: string, parentId: string | null, kind: string, entryKey: Uint8Array, key: Uint8Array, name: string, extra: Partial<NodeSummary> = {}): NodeSummary => ({
-    id, parentId: parentId ?? undefined, kind, orderIndex: 0, epoch: 0, metaVersion: 0, placementVersion: 0, createdAt: new Date(0),
+    id, parentId: parentId ?? undefined, kind, orderIndex: 0, epoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0),
     encryptedName: sealName(entryKey, at(id), name), slugToken: 'c2x1Zw==', wrappedContentKey: wrapContentKey(entryKey, at(id), key), ...extra,
   })
   const rows = [
@@ -91,7 +91,7 @@ describe('a guest identity folder in the member tree', () => {
   it('the trash opens a trashed identity folder through the same chain', async () => {
     const w = world()
     serve([w.rows[0]], [{
-      id: FOLDER, parentId: BOX, kind: 'FOLDER', encryptedName: w.rows[1].encryptedName, epoch: 0, placementVersion: 0,
+      id: FOLDER, parentId: BOX, kind: 'FOLDER', encryptedName: w.rows[1].encryptedName, epoch: 0, placementRevision: 0,
       deletedAt: new Date(), purgeAfter: new Date(), attached: false, shareIdentityId: IDENTITY, wrappedIdentityKey: w.wrappedIdentityKey,
     }])
     const tree = await listTree(SCOPE, epochs)

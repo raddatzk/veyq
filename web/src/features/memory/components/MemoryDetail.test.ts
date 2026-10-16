@@ -37,7 +37,7 @@ import { fakeApi } from '../../../test/apiMock'
 import type { TreeNode } from '../../../core/node/tree'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
-import { treeNode, memberMemoryCaps } from '../../../test/models'
+import { treeNode, memberMemoryRights } from '../../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -45,7 +45,7 @@ const NODE_ID = '22222222-2222-2222-2222-222222222222'
 const THIS_NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
 
 const node = (name: string, wrappedMeta: string | null = null): TreeNode => treeNode({
-  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta, metaVersion: 0, placementVersion: 0,
+  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta, metaRevision: 0, placementRevision: 0,
 })
 
 /** A stub deriver: a tiny "JPEG" tagged by the requested maxEdge so each tier's bytes are distinct. */
@@ -61,7 +61,7 @@ function stubDeriver(): MediaDeriver {
 
 function mountDetail(memoryKey: Uint8Array, props: Partial<Record<string, unknown>> = {}) {
   return mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicShares: false }), ...props },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }), ...props },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
 }
@@ -309,7 +309,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const chapters: TreeNode[] = [
-      treeNode({ id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }),
+      treeNode({ id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 }),
     ]
 
     const wrapper = mountDetail(v1.randomBytes(32), { chapters })
@@ -434,7 +434,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
       template: `<button class="stub-save" @click="$emit('save', { mode: 'single', from: '2026-06-15', to: '2026-06-15' })" />`,
     }
     const wrapper = mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicShares: false }) },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryDateEditor: DateEditorStub } },
     })
     await flushPromises()
@@ -471,7 +471,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   function mountWithLocationStub(memoryKey: Uint8Array, wrappedMeta: string | null) {
     setMapsConsent(true) // skip the consent dialog — go straight into the (stubbed) editor
     return mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicShares: false }) },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub } },
     })
   }
@@ -552,8 +552,8 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   })
 
   /** A `409 stale_version` carrying the server's current node blob (ADR 0077), as the generated client throws it. */
-  const staleNode = (wrappedMeta: string, metaVersion: number) => ({
-    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaVersion }), { status: 409 }),
+  const staleNode = (wrappedMeta: string, metaRevision: number) => ({
+    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaRevision }), { status: 409 }),
   })
 
   /**
@@ -577,11 +577,11 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     await flushPromises()
     await flushPromises()
 
-    expect(updateNode.mock.calls[0][0].updateNodeRequest.metaVersion).toBe(0)
-    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaVersion).toBe(1)
+    expect(updateNode.mock.calls[0][0].updateNodeRequest.metaRevision).toBe(0)
+    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaRevision).toBe(1)
     expect(lastPatchedDate(memoryKey)).toMatchObject({ mode: 'auto', from: '2026-03-03' })
     expect(lastPatchedLocation(memoryKey)).toMatchObject({ name: 'Teneriffa', derivedMode: 'fixed' }) // A's place
-    expect(wrapper.emitted('metaUpdated')?.at(-1)?.[0]).toMatchObject({ nodeId: NODE_ID, metaVersion: 2 })
+    expect(wrapper.emitted('metaUpdated')?.at(-1)?.[0]).toMatchObject({ nodeId: NODE_ID, metaRevision: 2 })
   })
 
   /**
@@ -665,7 +665,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     setMapsConsent(false)
     const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dlg"><slot /></div>' }
     const wrapper = mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), caps: memberMemoryCaps({ publicShares: false }) },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), rights: memberMemoryRights({ publicShares: false }) },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub, Dialog: DialogStub } },
     })
     await flushPromises()
@@ -677,12 +677,12 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
 })
 
 // ADR 0080 Decision 13: a chapter is a share root of its own, so its detail — the same `MemoryDetail` — offers both
-// share actions where its capabilities say so (the instance's public and uploader links, `../capabilities.ts`), and
-// offers none where they do not: the button follows `caps`, never the node's kind.
+// share actions where its rights say so (the instance's public and uploader links, `../rights.ts`), and
+// offers none where they do not: the button follows `rights`, never the node's kind.
 describe('share actions on a chapter', () => {
   const chapter: TreeNode = treeNode({
     id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==',
-    wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+    wrappedMeta: null, metaRevision: 0, placementRevision: 0,
   })
   beforeEach(() => {
     const store = galleryFakeStore()
@@ -692,7 +692,7 @@ describe('share actions on a chapter', () => {
   })
 
   it('shows the share and the uploader-link buttons on a shareable chapter and emits each', async () => {
-    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, caps: memberMemoryCaps({}, CHAPTER_KIND) })
+    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, rights: memberMemoryRights({}, CHAPTER_KIND) })
     await flushPromises()
     const share = wrapper.find(`button[aria-label="${t('share.share')}"]`)
     const upload = wrapper.find(`button[aria-label="${t('share.uploadRequest')}"]`)
@@ -705,7 +705,7 @@ describe('share actions on a chapter', () => {
   })
 
   it('shows neither when the instance offers no public links (live control above)', async () => {
-    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, caps: memberMemoryCaps({ publicShares: false, publicSharesDropBox: false }, CHAPTER_KIND) })
+    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, rights: memberMemoryRights({ publicShares: false, publicSharesDropBox: false }, CHAPTER_KIND) })
     await flushPromises()
     expect(wrapper.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
     expect(wrapper.find(`button[aria-label="${t('share.uploadRequest')}"]`).exists()).toBe(false)

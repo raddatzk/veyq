@@ -263,9 +263,9 @@ describe('the Memories upload pipeline on the wire (characterisation, cr-files-a
       uploadCoverImage(
         SCOPE_ID, NODE_ID, memoryKey(), imageSource(5000, 3), fixedDeriver({ preview: 0, thumbnail: 0, cover: 2 * CHUNK_SIZE + 5 }),
       ).then((up) => writeNodeCover({
-        scopeId: SCOPE_ID, nodeId: NODE_ID, nodeKey: memoryKey(), current: { wrappedMeta: null, metaVersion: 0 },
+        scopeId: SCOPE_ID, nodeId: NODE_ID, nodeKey: memoryKey(), current: { wrappedMeta: null, metaRevision: 0 },
         cover: uploadedCover(up.plan, { ...FULL_FRAME }), uploadId: up.uploadId, surfaceConflict: false,
-      })).then((r) => ({ wrappedMeta: r.wrappedMeta, metaVersion: r.metaVersion })),
+      })).then((r) => ({ wrappedMeta: r.wrappedMeta, metaRevision: r.metaRevision })),
     )
     expect(wire.requests.filter((r) => r.bytes).length, 'the three frames of the blob, then the write (also a PUT)').toBe(3)
     expect(wire.putCount).toBe(4)
@@ -277,8 +277,8 @@ describe('the Memories upload pipeline on the wire (characterisation, cr-files-a
     expect(declared).toMatchObject({ ownerId: NODE_ID, role: 'COVER' })
     const write = wire.requests[wire.requests.length - 1]
     expect(write).toMatchObject({ method: 'PUT', path: `/api/scopes/${SCOPE_ID}/nodes/${NODE_ID}/cover` })
-    const body = write.body as { uploadId: string; expectedBlobId: string | null; wrappedMeta: string; metaVersion: number }
-    expect(body).toMatchObject({ uploadId: 'upload-1', expectedBlobId: null, metaVersion: 0 })
+    const body = write.body as { uploadId: string; expectedBlobId: string | null; wrappedMeta: string; metaRevision: number }
+    expect(body).toMatchObject({ uploadId: 'upload-1', expectedBlobId: null, metaRevision: 0 })
     const cover = unsealNodeMeta(memoryKey(), { scopeId: SCOPE_ID, nodeId: NODE_ID }, body.wrappedMeta).cover as { source: { kind: string; ref: { blobId: string; ownerId: string; role: string } } }
     expect(cover.source).toMatchObject({ kind: 'upload', ref: { blobId: declared.blobId, ownerId: NODE_ID, role: 'COVER' } })
     expect(unsealNodeMeta(memoryKey(), { scopeId: SCOPE_ID, nodeId: '6e5a0000-0000-4000-8000-0000000000b2' }, body.wrappedMeta).cover, 'another node cannot open it').toBeUndefined()

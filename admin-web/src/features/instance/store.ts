@@ -7,6 +7,7 @@ export type {
   InstanceStore,
   InstanceStoreCheck,
   InstanceStoreCheckStep,
+  InstanceStorePending,
   InstanceStoreSetting,
   InstanceStoreUpdate,
 } from '../../api/generated/instance'
@@ -19,8 +20,9 @@ export {
 
 /**
  * The object-store setting (ADR 0089) — Server-Owner only, the one instance SETTING beside the reads of
- * `release.ts`, `storeProvisioning.ts` and `configSecret.ts`. The setting, whether the deployment offers a bundled
- * store, whether blobs already exist (after which type, endpoint and bucket are fixed), and the last check.
+ * `release.ts`, `storeProvisioning.ts` and `configSecret.ts`. The setting in use with its last check, a changed
+ * setting saved but not yet in use (`pending`, decision 5) with its own, whether the deployment offers a bundled
+ * store, and whether blobs already exist (after which type, endpoint and bucket are fixed).
  * Secrets are never returned: only whether one is stored, and which stored ones cannot be opened.
  */
 export function getInstanceStore(): Promise<InstanceStore> {
@@ -28,18 +30,29 @@ export function getInstanceStore(): Promise<InstanceStore> {
 }
 
 /**
- * Store and apply a setting at once, without a restart (ADR 0089 decision 5). A changed setting clears
- * `lastCheck`, so tenant creation waits for a passed check again. Refusals: 400 `invalid_request`,
- * 409 `no_bundled_store` / `store_in_use`, 503 `store_secret_unavailable`.
+ * Save a setting as `pending` (ADR 0089 decision 5): nothing the instance does changes until its check passes,
+ * which then puts it in use at once, without a restart. A setting equal to the one in use discards the pending one.
+ * Refusals: 400 `invalid_request`, 409 `no_bundled_store` / `store_in_use`, 503 `store_secret_unavailable`.
  */
 export function setInstanceStore(update: InstanceStoreUpdate): Promise<InstanceStore> {
   return instanceApi().setInstanceStore({ instanceStoreUpdate: update })
 }
 
-/** Run the step-by-step check of the current setting; the result is also what `lastCheck` reads from then on.
- *  409 `store_not_configured` when no store is set. */
+/** Run the step-by-step check of the pending setting, or with none pending the one in use. A pending setting that
+ *  passes is put in use; read the store again afterwards to see which. 409 `store_not_configured` when nothing is
+ *  set or pending. */
 export function checkInstanceStore(): Promise<InstanceStoreCheck> {
   return instanceApi().checkInstanceStore()
+}
+
+/** Drop the pending setting; the one in use stays. Idempotent. */
+export function discardPendingInstanceStore(): Promise<InstanceStore> {
+  return instanceApi().discardPendingInstanceStore()
+}
+
+/** The setting the form edits: what the owner last saved — the pending one, else the one in use. */
+export function editedSetting(store: InstanceStore | null | undefined) {
+  return store?.pending?.setting ?? store?.setting ?? null
 }
 
 /** Choose the store the deployment brings: a reference to its hint, and every other field absent. */
@@ -86,8 +99,8 @@ export function ownStoreUpdate(f: OwnStoreFields): InstanceStoreUpdate {
   return update
 }
 
-/** Whether a tenant can be created as far as the store goes: the current setting passed its last check
- *  (ADR 0089 decision 6). A courtesy over the server, which refuses with 409 `store_not_ready` on its own. */
+/** Whether a tenant can be created as far as the store goes: the setting in use passed its last check
+ *  (ADR 0089 decision 6); a pending one does not count. A courtesy over the server, which refuses with 409 `store_not_ready` on its own. */
 export function storeReady(store: InstanceStore | null | undefined): boolean {
   return store?.lastCheck?.passed === true
 }

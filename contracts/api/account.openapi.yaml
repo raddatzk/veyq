@@ -345,7 +345,7 @@ paths:
       tags: [account-identity-pins]
       operationId: putIdentityPins
       x-veyq-concurrency:
-        mode: version
+        mode: revision
         fields:
           - field: version
       summary: Store the caller's sealed identity-pin store (optimistic concurrency).
@@ -424,7 +424,7 @@ paths:
       tags: [account-device-register]
       operationId: putDeviceRegister
       x-veyq-concurrency:
-        mode: version
+        mode: revision
         fields:
           - field: version
       summary: Store the caller's sealed device register (optimistic concurrency).

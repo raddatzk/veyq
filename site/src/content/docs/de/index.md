@@ -1,24 +1,23 @@
 ---
 title: veyq
-description: Eine verständliche Einführung, was veyq kann und warum deine Erinnerungen privat bleiben.
+description: Anleitungen zu veyq, und warum das, was du darin aufbewahrst, privat bleibt.
 ---
 
-Eine verständliche Einführung, was veyq kann und warum deine Erinnerungen privat bleiben. Kein technisches
-Vorwissen nötig.
+Anleitungen zu veyq, Schritt für Schritt und in einfachen Worten: wie du hineinkommst, deine Dinge aufbewahrst und
+teilst, und warum sie privat bleiben. Kein technisches Vorwissen nötig.
 
-## Für dich
+## veyq benutzen
 
-- [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)
-- [Depot](/veyq/de/depot/)
-- [Teilen mit Menschen ohne Konto](/veyq/de/sharing/)
-- [Anwendungen: Erinnerungen und Depot](/veyq/de/applications/)
-- [Erinnerungen](/veyq/de/memories/)
-- [Herunterladen und Importieren](/veyq/de/spaces/download-and-import/)
-- [Erste Schritte](/veyq/de/getting-started/)
-- [Geräte und Sitzungen](/veyq/de/account/devices-and-sessions/)
-- [Wer in deinen Bereich kommt](/veyq/de/space-owners/who-gets-into-your-space/)
-- [Ein weiteres Gerät hinzufügen](/veyq/de/account/adding-another-device/)
-- [Quantencomputer & deine Fotos](/veyq/de/privacy/quantum-computers-and-your-photos/)
+- [Erste Schritte](/veyq/de/getting-started/): was veyq ist, eine Einladung annehmen, dein Notfall-Kit, anmelden
+- [Dein Konto](/veyq/de/account/devices-and-sessions/): Geräte, Passwort, E-Mail-Adresse, Schlüssel, Profil
+- [Bereiche](/veyq/de/spaces/): deine Bereiche, Ordner, Gruppen, der Papierkorb, Herunterladen und Importieren
+- [Anwendungen](/veyq/de/applications/): [Erinnerungen](/veyq/de/memories/) für Fotos und Videos, [Depot](/veyq/de/depot/)
+  für Dateien
+- [Teilen](/veyq/de/sharing/): Links für Menschen ohne Konto
+- [Wenn dir der Bereich gehört](/veyq/de/space-owners/who-gets-into-your-space/): Mitglieder, Bedingungen, E-Mail,
+  Speicher
+- [Privatsphäre](/veyq/de/privacy/is-my-data-safe/): Sind meine Daten sicher?
+- [Hilfe](/veyq/de/help/): vergessenes Passwort, verlorenes Kit oder Gerät und mehr
 
 ## Eine Instanz betreiben
 

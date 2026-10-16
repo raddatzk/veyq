@@ -36,9 +36,9 @@ data class ShareNodeRow(
     val wrappedContentKey: String?,
     /** A descendant's name sealed under its parent's content key; null at the root. */
     val encryptedName: String?,
-    /** The placement version a descendant's name and wrap are sealed at (ADR 0080 Decision 3); null at the root,
+    /** The placement revision a descendant's name and wrap are sealed at (ADR 0080 Decision 3); null at the root,
      *  whose entry is not served. */
-    val placementVersion: Long?,
+    val placementRevision: Long?,
     val wrappedMeta: String?,
     /** The shared root's drop private key sealed under its content key — every reader of the subtree opens uploads through it. */
     val sealedDropPrivateKey: String?,
@@ -439,7 +439,7 @@ class SharingStore(
                 epoch = n.epoch,
                 wrappedContentKey = if (root) null else n.wrappedContentKey,
                 encryptedName = if (root) null else n.encryptedName,
-                placementVersion = if (root) null else n.placementVersion,
+                placementRevision = if (root) null else n.placementRevision,
                 wrappedMeta = n.wrappedMeta,
                 sealedDropPrivateKey = n.sealedDropPrivateKey,
                 shareIdentityId = if (root) null else n.shareIdentityId,

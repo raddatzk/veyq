@@ -37,6 +37,8 @@ import { isUnauthorized } from '../../shared/httpError'
 
 // Addressed by id (cr-0087) — the settings rail renders one panel per tenant; the tenantId watch re-loads on switch.
 const props = defineProps<{ tenantId: string }>()
+// The console owns the list and the selection, so a revoked tenant is its to drop — this surface has one route.
+const emit = defineEmits<{ revoked: [tenantId: string] }>()
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -198,7 +200,7 @@ async function revoke() {
   actionError.value = ''
   try {
     await revokeTenant(props.tenantId)
-    await router.push('/settings') // the tenant is gone → drop back to the hub default
+    emit('revoked', props.tenantId) // the tenant is gone: the console reloads its list and closes this panel
   } catch (e) {
     on401(e)
     if (!isUnauthorized(e)) actionError.value = t('tenant.actionFailed')

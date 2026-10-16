@@ -37,8 +37,8 @@ class MediaEntity : PanacheEntityBase {
 
     /** How many times [wrappedMeta] was replaced (ADR 0077): 0 at attach, bumped only by the compare-and-set in
      *  `MediaStore.setMeta`. Not the node's item revision (core's `NodeItemsRevisions`), which every attach and trash also moves. */
-    @Column(name = "meta_version", nullable = false)
-    var metaVersion: Long = 0
+    @Column(name = "meta_revision", nullable = false)
+    var metaRevision: Long = 0
 
     /**
      * The original's **lazy, panel-only** metadata bundle sealed under `K_node` (opaque base64); fetched per item

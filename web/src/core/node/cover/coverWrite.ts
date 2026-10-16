@@ -1,7 +1,7 @@
 // The WRITE side of a node's cover (inbox #411): derive the image on device, seal and upload it as the node's own `COVER`
 // blob, and write the cover with the sealed meta that names it in ONE request (`setNodeCover` / `removeNodeCover`) - so the
 // slot and the meta can never part, and a failed new cover leaves the old one exactly as it was (the server compare-and-sets
-// the blob it replaces and the meta version, and rolls both back together).
+// the blob it replaces and the meta revision, and rolls both back together).
 //
 // Operator-blind: the image is downscaled and sealed here under a fresh `K_blob`, wrapped under the NODE's own content key
 // bound to (blob, node, `COVER`) (ADR 0072, `core/blob/transport.planBlob`) - the very wrap and blob-meta purposes a Memory's
@@ -141,7 +141,7 @@ export type WriteNodeCoverResult = SealedMetaState & { replaced: unknown | null 
  *  - no `uploadId`, and the meta being replaced named an uploaded cover blob the new cover does not keep: `removeNodeCover`
  *    frees that blob and writes the meta (a switch to a photo, or no cover);
  *  - otherwise a plain `updateNode` (a moved crop, a cover without a blob of its own).
- * Version-checked like every meta write (ADR 0077); the other fields of the meta (a Memory's date and place) are preserved.
+ * Revision-checked like every meta write (ADR 0077); the other fields of the meta (a Memory's date and place) are preserved.
  * A cover slot a peer changed meanwhile is a [CoverStaleError]; nothing was written then, and the server freed this upload.
  */
 export async function writeNodeCover(a: WriteNodeCoverArgs): Promise<WriteNodeCoverResult> {
@@ -149,7 +149,7 @@ export async function writeNodeCover(a: WriteNodeCoverArgs): Promise<WriteNodeCo
   const openedWith = unsealNodeMeta(a.nodeKey, address, a.current.wrappedMeta).cover
   const edit = editField('cover', a.cover, openedWith, a.surfaceConflict ?? true)
   let replaced: unknown | null = null
-  const send = async (wrappedMeta: string | null, metaVersion: number): Promise<void> => {
+  const send = async (wrappedMeta: string | null, metaRevision: number): Promise<void> => {
     const sealed = wrappedMeta!
     const oldBlob = uploadBlobIdOf(replaced)
     const keptBlob = uploadBlobIdOf(a.cover)
@@ -158,18 +158,18 @@ export async function writeNodeCover(a: WriteNodeCoverArgs): Promise<WriteNodeCo
       if (a.uploadId) {
         await withRefresh(() =>
           contentApi().setNodeCover({
-            scopeId, nodeId, setNodeCoverRequest: { uploadId: a.uploadId!, expectedBlobId: oldBlob, wrappedMeta: sealed, metaVersion },
+            scopeId, nodeId, setNodeCoverRequest: { uploadId: a.uploadId!, expectedBlobId: oldBlob, wrappedMeta: sealed, metaRevision },
           }),
         )
       } else if (oldBlob && oldBlob !== keptBlob) {
         await withRefresh(() =>
           contentApi().removeNodeCover({
-            scopeId, nodeId, removeNodeCoverRequest: { blobId: oldBlob, wrappedMeta: sealed, metaVersion },
+            scopeId, nodeId, removeNodeCoverRequest: { blobId: oldBlob, wrappedMeta: sealed, metaRevision },
           }),
         )
       } else {
         await withRefresh(() =>
-          contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: sealed, metaVersion } }),
+          contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: sealed, metaRevision } }),
         )
       }
     } catch (e) {

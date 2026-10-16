@@ -71,10 +71,22 @@ across apps, how a link's key reaches an app safely) belong to the native client
 - **The word rules bind now**, and this change updates where they are written: the root `CLAUDE.md` and
   [`docs/apps/README.md`](../apps/README.md).
 - **Built (2026-10-15):** Files → Depot, as the Depot paragraph above sorts it.
-- **Not built**, open work tracked in the inbox. Pre-V1 there is no released client to stay compatible with, so
-  the wire renames cost no major.
-  - `…Capabilities` → `…Rights` (web only).
-  - `metaVersion` → `metaRevision` (contract → backend → web, a wire rename).
+- **Built (2026-10-15, inbox #437):** `…Capabilities` → `…Rights`, web only: `folderRights`, `memoryRights`,
+  `depotRights`, `favoriteRights`, `coverRights`, `sourceRights`, their types, the `RightsTarget` they are asked
+  about, and the files that hold them (`rights.ts`). The instance switch keeps its name everywhere (`hasCapability`,
+  `useCapabilities`, the `CORE_*` ids, the catalog). Two other senses of the word stay too, because neither is a
+  per-viewer function: a **capability token** (a bearer secret such as a contributor's, `cc.security.wire-assertion`)
+  and the worker's capability tags above.
+- **Built (2026-10-16, inbox #437):** the node counters are revisions, on the wire, in the database and in the
+  clients: `metaRevision` (was `metaVersion`, on a node and on a media) and `placementRevision` (was
+  `placementVersion`, ADR 0080 Decision 3), the columns `meta_revision` / `placement_revision`, and the
+  `x-veyq-concurrency` mode `revision`. `placementVersion` was not named above; it is the same kind of counter on the
+  same row and in the same `updateNode` request, so it moved too. Pre-V1, so no major and no alias. No sealed byte
+  changed: the `node-name` and `content-key` seals bind the placement revision by position, never by name, and the
+  conformance vectors only renamed their key.
+- **Not built**, tracked as inbox #452: the rest of "version" that this table makes a revision — the conflict code
+  `stale_version`, the identity pins' and the device register's `version`, `avatarVersion` (ADR 0084) — and whether
+  the terms' `termsVersion` is a revision or an edition.
 - **The cost:** one more word for a reader to learn ("rights" next to "permission"). It pays for itself where
   ADR 0032 §3 needs it most: in a review, "capability" now always means the operator's switch.
 

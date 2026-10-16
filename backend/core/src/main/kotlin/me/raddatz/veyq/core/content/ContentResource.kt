@@ -80,12 +80,12 @@ class ContentResource(
                 slugToken = updateNodeRequest.slugToken,
                 wrappedContentKey = updateNodeRequest.wrappedContentKey,
                 epoch = updateNodeRequest.epoch,
-                placementVersion = updateNodeRequest.placementVersion,
+                placementRevision = updateNodeRequest.placementRevision,
             ),
-            updateNodeRequest.orderIndex, updateNodeRequest.wrappedMeta, updateNodeRequest.metaVersion,
+            updateNodeRequest.orderIndex, updateNodeRequest.wrappedMeta, updateNodeRequest.metaRevision,
         )) {
             UpdateNodeOutcome.Updated -> Response.noContent().build()
-            is UpdateNodeOutcome.StaleMeta -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaVersion)
+            is UpdateNodeOutcome.StaleMeta -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaRevision)
             is HttpFailure -> httpError(o)
         }
 
@@ -94,7 +94,7 @@ class ContentResource(
             covers.set(
                 identity.principal.name, scopeId.toString(), nodeId.toString(), setNodeCoverRequest.uploadId.toString(),
                 setNodeCoverRequest.expectedBlobId?.toString(), setNodeCoverRequest.wrappedMeta,
-                setNodeCoverRequest.metaVersion.validated(),
+                setNodeCoverRequest.metaRevision.validated(),
             ),
         )
 
@@ -102,7 +102,7 @@ class ContentResource(
         coverResponse(
             covers.remove(
                 identity.principal.name, scopeId.toString(), nodeId.toString(), removeNodeCoverRequest.blobId.toString(),
-                removeNodeCoverRequest.wrappedMeta, removeNodeCoverRequest.metaVersion.validated(),
+                removeNodeCoverRequest.wrappedMeta, removeNodeCoverRequest.metaRevision.validated(),
             ),
         )
 
@@ -114,7 +114,7 @@ class ContentResource(
                 .entity(NodeCoverConflict(code = o.code, currentBlobId = o.currentBlobId?.let(UUID::fromString))).build()
         is NodeCoverOutcome.StaleMeta ->
             Response.status(o.status.httpStatus)
-                .entity(NodeCoverConflict(code = o.code, wrappedMeta = o.wrappedMeta, metaVersion = o.metaVersion)).build()
+                .entity(NodeCoverConflict(code = o.code, wrappedMeta = o.wrappedMeta, metaRevision = o.metaRevision)).build()
         is HttpFailure -> httpError(o)
     }
 
@@ -146,7 +146,7 @@ class ContentResource(
         kind = kind,
         encryptedName = encryptedName,
         epoch = epoch,
-        placementVersion = placementVersion,
+        placementRevision = placementRevision,
         deletedAt = OffsetDateTime.ofInstant(deletedAt, ZoneOffset.UTC),
         purgeAfter = OffsetDateTime.ofInstant(deletedAt.plus(trashRetention), ZoneOffset.UTC),
         parentId = if (parentId == scopeId) null else UUID.fromString(parentId),
@@ -171,8 +171,8 @@ class ContentResource(
         wrappedContentKey = wrappedContentKey,
         wrappedMeta = wrappedMeta,
         sealedDropPrivateKey = sealedDropPrivateKey,
-        metaVersion = metaVersion,
-        placementVersion = placementVersion,
+        metaRevision = metaRevision,
+        placementRevision = placementRevision,
         shareIdentityId = shareIdentityId?.let(UUID::fromString),
         wrappedIdentityKey = wrappedIdentityKey,
         createdAt = OffsetDateTime.ofInstant(createdAt, ZoneOffset.UTC),

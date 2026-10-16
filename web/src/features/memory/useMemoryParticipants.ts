@@ -2,8 +2,8 @@
 // edited in a picker over the scope's CURRENT members. The ids are the sealed `participants` of the Memory's meta
 // (`memoryParticipants.ts`); the names come from the member directory on this device (`core/people/directory.ts`, real name
 // else username). An id the directory does not list is a FORMER MEMBER: greyed, no link, and removable by hand - nothing
-// prunes it. Shown only where the capability says so (`show`, a member's) and edited only where the meta may be written
-// (`write`, the node-meta door the capabilities grant); a guest's view passes neither, and so loads and renders nothing.
+// prunes it. Shown only where the right says so (`show`, a member's) and edited only where the meta may be written
+// (`write`, the node-meta door the rights grant); a guest's view passes neither, and so loads and renders nothing.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { loadScopePeople, type Person } from '../../core/people/directory'
@@ -19,7 +19,7 @@ export interface MemoryParticipantsContext {
   scopeId: () => string
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
-  /** Whether the section is shown at all (the `participants` capability, and not a personal scope). */
+  /** Whether the section is shown at all (the `participants` right, and not a personal scope). */
   show: () => boolean
   /** The node-meta writes this view may make, or null (read-only: a pending deletion, a guest). */
   write: () => NodeMetaDoor | null

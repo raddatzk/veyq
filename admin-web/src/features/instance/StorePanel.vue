@@ -8,8 +8,10 @@
 //   - secrets are write-only: a field left empty means "keep the stored one", never "empty" — except where nothing
 //     usable is stored (first entry, a switch from the bundled store, or a value the current config-secret key
 //     cannot open), where the field is required and the page says why;
-//   - saving applies the store at once and clears the last check; only a passed check opens tenant creation, and
-//     the check's every step is shown, because "failed" alone does not say what to fix.
+//   - saving changes nothing the instance does: the setting waits as PENDING beside the one in use until its check
+//     passes, which puts it in use (decision 5) — so a typo never reaches the media. The form edits what was last
+//     saved (the pending setting, else the one in use); only a passed check of the setting in use opens tenant
+//     creation, and the check's every step is shown, because "failed" alone does not say what to fix.
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -20,6 +22,8 @@ import Select from 'primevue/select'
 import {
   BUNDLED_STORE_UPDATE,
   checkInstanceStore,
+  discardPendingInstanceStore,
+  editedSetting,
   getInstanceStore,
   InstanceStoreCheckStepOutcomeEnum,
   InstanceStoreSecret,
@@ -59,7 +63,7 @@ const error = ref('')
 
 function show(s: InstanceStore) {
   store.value = s
-  const setting = s.setting
+  const setting = editedSetting(s)
   // A fresh install of a bundled recipe starts on the bundled store: choosing it is all that recipe asks for.
   source.value = setting ? (setting.bundled ? 'BUNDLED' : setting.type) : s.bundledAvailable ? 'BUNDLED' : InstanceStoreType.S3
   form.endpoint = setting?.endpoint ?? ''
@@ -76,7 +80,11 @@ function show(s: InstanceStore) {
 const { pending: loading, error: loadErr } = useAsyncData(async () => show(await getInstanceStore()), { onError: on401 })
 const loadError = computed(() => loadErrorKind(loadErr.value))
 
+/** The setting in use — what the backend signs against. */
 const setting = computed(() => store.value?.setting ?? null)
+/** The setting the form edits: the pending one, else the one in use. */
+const edited = computed(() => editedSetting(store.value))
+const pending = computed(() => store.value?.pending ?? null)
 const isBundled = computed(() => source.value === 'BUNDLED')
 const isGarage = computed(() => source.value === InstanceStoreType.Garage)
 /** Once blobs exist the type, endpoint and bucket are fixed (ADR 0089 decision 6); the server refuses a change. */
@@ -88,18 +96,18 @@ const sources = computed(() => [
   { value: InstanceStoreType.Garage as Source, label: t('store.sourceGarage') },
 ])
 
-const unreadable = computed(() => setting.value?.unreadable ?? [])
+const unreadable = computed(() => edited.value?.unreadable ?? [])
 /** A secret has to be typed when nothing usable is stored: none yet, a bundled setting (whose secrets are the
  *  deployment's), or one the current config-secret key cannot open. */
 const needsSecretKey = computed(
-  () => !setting.value || setting.value.bundled || !setting.value.secretKeySet || unreadable.value.includes(InstanceStoreSecret.SecretKey),
+  () => !edited.value || edited.value.bundled || !edited.value.secretKeySet || unreadable.value.includes(InstanceStoreSecret.SecretKey),
 )
 const needsGarageToken = computed(
   () =>
-    !setting.value ||
-    setting.value.bundled ||
-    setting.value.type !== InstanceStoreType.Garage ||
-    !setting.value.garageAdminTokenSet ||
+    !edited.value ||
+    edited.value.bundled ||
+    edited.value.type !== InstanceStoreType.Garage ||
+    !edited.value.garageAdminTokenSet ||
     unreadable.value.includes(InstanceStoreSecret.GarageAdminToken),
 )
 const unreadableNames = computed(() => unreadable.value.map((s) => t(`store.secret.${s}`)).join(', '))
@@ -146,8 +154,9 @@ function save() {
 
 const { run: runCheck, pending: checking } = useAsyncAction(
   async () => {
-    const result = await checkInstanceStore()
-    if (store.value) adoptCheck({ ...store.value, lastCheck: result })
+    await checkInstanceStore()
+    // Read the store again rather than patching the result in: a passing check of a pending setting put it in use.
+    adoptCheck(await getInstanceStore())
   },
   {
     onError: async (e) => {
@@ -167,8 +176,27 @@ function check() {
   return runCheck()
 }
 
-const lastCheck = computed<InstanceStoreCheck | null>(() => store.value?.lastCheck ?? null)
-const busy = computed(() => saving.value || checking.value)
+const { run: runDiscard, pending: discarding } = useAsyncAction(
+  async () => {
+    show(await discardPendingInstanceStore())
+    toast.success(t('store.discarded'))
+  },
+  {
+    onError: async (e) => {
+      on401(e)
+      const { status } = await storeError(e)
+      if (status !== 401) error.value = t('store.discardFailed')
+    },
+  },
+)
+function discard() {
+  error.value = ''
+  return runDiscard()
+}
+
+/** The check shown: the pending setting's while one waits, else the setting in use's. */
+const lastCheck = computed<InstanceStoreCheck | null>(() => (pending.value ? pending.value.lastCheck : store.value?.lastCheck) ?? null)
+const busy = computed(() => saving.value || checking.value || discarding.value)
 
 const OUTCOME_ICON = {
   [InstanceStoreCheckStepOutcomeEnum.Passed]: 'pi pi-check-circle',
@@ -196,6 +224,9 @@ const OUTCOME_ICON = {
           {{ t('store.unreadable', { secrets: unreadableNames }) }}
         </Message>
         <Message v-if="fixed" severity="info" :closable="false">{{ t('store.fixed') }}</Message>
+        <Message v-if="pending" severity="warn" :closable="false" class="store-pending">
+          {{ setting ? t('store.pendingNote') : t('store.pendingFirst') }}
+        </Message>
 
         <label>
           {{ t('store.source') }}
@@ -278,22 +309,36 @@ const OUTCOME_ICON = {
             severity="secondary"
             outlined
             :loading="checking"
-            :disabled="!setting || saving"
+            :disabled="(!setting && !pending) || saving || discarding"
             class="store-check"
             @click="check"
           />
-          <Button type="submit" :label="t('store.save')" icon="pi pi-save" :loading="saving" :disabled="!canSave || checking" class="store-save" />
+          <Button
+            v-if="pending"
+            type="button"
+            :label="t('store.discard')"
+            icon="pi pi-undo"
+            severity="secondary"
+            text
+            :loading="discarding"
+            :disabled="saving || checking"
+            class="store-discard"
+            @click="discard"
+          />
+          <Button type="submit" :label="t('store.save')" icon="pi pi-save" :loading="saving" :disabled="!canSave || checking || discarding" class="store-save" />
         </div>
       </form>
     </section>
 
     <section v-if="store && !loading" class="settings-form store-result">
-      <h3>{{ t('store.checkTitle') }}</h3>
-      <Message v-if="!setting" severity="info" :closable="false">{{ t('store.notSet') }}</Message>
-      <Message v-else-if="!lastCheck" severity="warn" :closable="false" class="store-unchecked">{{ t('store.unchecked') }}</Message>
+      <h3>{{ pending ? t('store.checkTitlePending') : t('store.checkTitle') }}</h3>
+      <Message v-if="!setting && !pending" severity="info" :closable="false">{{ t('store.notSet') }}</Message>
+      <Message v-else-if="!lastCheck" severity="warn" :closable="false" class="store-unchecked">
+        {{ pending ? t('store.pendingUnchecked') : t('store.unchecked') }}
+      </Message>
       <template v-else>
         <Message :severity="lastCheck.passed ? 'success' : 'error'" :closable="false" class="store-verdict">
-          {{ lastCheck.passed ? t('store.checkPassed') : t('store.checkFailedAt') }}
+          {{ pending ? t('store.pendingCheckFailedAt') : lastCheck.passed ? t('store.checkPassed') : t('store.checkFailedAt') }}
         </Message>
         <ol class="store-steps">
           <li v-for="s in lastCheck.steps" :key="s.step" :class="`store-step store-step--${s.outcome.toLowerCase()}`" :data-step="s.step">

@@ -22,7 +22,8 @@ The Server-Owner administration surface, extracted from `web/` by
 The line that actually holds:
 
 - **Here:** what only the **Server Owner** does — tenant CRUD (create/list/resend/reassign/revoke/
-  change-domain/suspend/reactivate), each tenant's storage quota (ADR 0073 §1), release info, first-run setup.
+  change-domain/suspend/reactivate), each tenant's storage quota (ADR 0073 §1), release info, the config-secret
+  state, the object store and its check (ADR 0089), the capability switches (ADR 0088), first-run setup.
 - **In `web/`:** what an **ordinary or anonymous user** does — accepting a tenant invite, accepting terms —
   *and* what a **tenant OWNER** does for their own tenant: terms authoring, per-tenant mail settings, and the
   per-link storage limit (which the owner distributes below the quota, and reads the quota beside).

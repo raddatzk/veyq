@@ -5,7 +5,7 @@
 // CREATE collects an optional name + per-locale note, mints the share and shows the copyable link. EDIT (editShare
 // set): pre-fills name + note (decrypted via the K_SC-recoverable K_share) and saves them in place with `updateShare` —
 // the link stays valid. Operator-blind: name + note sealed under K_share; the fresh K_share rides only the returned
-// link. (The uploader-links capability is gated on the memory ACTION that opens the uploader dialog, not here.)
+// link. (The uploader-links right is gated on the memory ACTION that opens the uploader dialog, not here.)
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
@@ -45,7 +45,7 @@ const props = defineProps<{
   uploader?: boolean
   /** The shared node is a chapter: the hints say "chapter", not "Memory" (inbox #363; the parent decides by `nodeKind`). */
   chapter?: boolean
-  /** Offer the READ_WRITE (contribute) role: the capability function's `shareContribute` (`core.public-shares.contribute`),
+  /** Offer the READ_WRITE (contribute) role: the rights function's `shareContribute` (`core.public-shares.contribute`),
    *  handed down by the host, never read here. Absent: viewer only (fail closed). */
   contribute?: boolean
 }>()

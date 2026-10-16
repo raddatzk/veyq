@@ -95,7 +95,7 @@ class ShareFileCompleteRaceSliceTest {
             val keptUpload = startStaged(kept)
             assertTrue(complete(kept, keptUpload) is CompleteFileOutcome.Ok, "round $round: control")
             assertEquals(META, tx { BlobEntity.findById(blobOf(keptUpload))!!.wrappedBlobMeta }, "round $round: control meta")
-            assertEquals(0L, tx { NodeEntity.findById(kept.file)!!.metaVersion }, "round $round: the node's payload untouched")
+            assertEquals(0L, tx { NodeEntity.findById(kept.file)!!.metaRevision }, "round $round: the node's payload untouched")
         }
     }
 

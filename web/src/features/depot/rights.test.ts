@@ -1,15 +1,15 @@
-// Depot's capability matrix (`capabilities.ts`, inbox #401; the table in `docs/apps/depot.md` § Guests). Every row names
+// Depot's rights matrix (`rights.ts`, inbox #401; the table in `docs/apps/depot.md` § Guests). Every row names
 // the rights it grants; every other right must be false — a default flipped to true, a role or a kind falling through,
 // a guest deleting or renaming: each is red here.
 import { describe, it, expect } from 'vitest'
-import { canUploadFolder, depotCapabilities, NO_DEPOT_CAPABILITIES, type DepotCapabilities } from './capabilities'
+import { canUploadFolder, depotRights, NO_DEPOT_RIGHTS, type DepotRights } from './rights'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { Access, CapabilityTarget } from '../../core/access'
+import type { Access, RightsTarget } from '../../core/access'
 import { memberAccessOf, guestAccessOf } from '../../test/models'
 
-const at = (kind: string | null, o: Partial<CapabilityTarget> = {}): CapabilityTarget => ({ kind, inIdentityFolder: false, shareable: kind === DROPBOX_KIND || kind === FOLDER_KIND || kind === FILE_KIND, ...o })
-const grants = (...keys: (keyof DepotCapabilities)[]): DepotCapabilities => ({ ...NO_DEPOT_CAPABILITIES, ...Object.fromEntries(keys.map((k) => [k, true])) })
+const at = (kind: string | null, o: Partial<RightsTarget> = {}): RightsTarget => ({ kind, inIdentityFolder: false, shareable: kind === DROPBOX_KIND || kind === FOLDER_KIND || kind === FILE_KIND, ...o })
+const grants = (...keys: (keyof DepotRights)[]): DepotRights => ({ ...NO_DEPOT_RIGHTS, ...Object.fromEntries(keys.map((k) => [k, true])) })
 
 const member = memberAccessOf()
 const pending = memberAccessOf({ readonly: true })
@@ -17,7 +17,7 @@ const READ = guestAccessOf('READ')
 const RW = guestAccessOf('READ_WRITE')
 const WO = guestAccessOf('WRITE_ONLY')
 
-const rows: [string, Access, CapabilityTarget, DepotCapabilities][] = [
+const rows: [string, Access, RightsTarget, DepotRights][] = [
   // --- member at a level ---
   ['member at the scope root', member, at(null), grants('download', 'upload', 'replace', 'rename', 'deleteFile', 'createDropBox', 'moveFile')],
   ['member in a folder', member, at(FOLDER_KIND), grants('download', 'upload', 'replace', 'rename', 'deleteFile', 'createDropBox', 'moveFile')],
@@ -65,21 +65,21 @@ const rows: [string, Access, CapabilityTarget, DepotCapabilities][] = [
   ['an unknown mode', { mode: 'operator' } as unknown as Access, at(FOLDER_KIND), grants()],
 ]
 
-describe('depotCapabilities: the matrix', () => {
+describe('depotRights: the matrix', () => {
   it.each(rows)('%s', (_label, access, target, expected) => {
-    expect(depotCapabilities(access, target)).toEqual(expected)
+    expect(depotRights(access, target)).toEqual(expected)
   })
 
   it('defaults to nothing', () => {
-    for (const [k, v] of Object.entries(NO_DEPOT_CAPABILITIES)) expect(v, k).toBe(false)
-    expect(Object.isFrozen(NO_DEPOT_CAPABILITIES)).toBe(true)
+    for (const [k, v] of Object.entries(NO_DEPOT_RIGHTS)) expect(v, k).toBe(false)
+    expect(Object.isFrozen(NO_DEPOT_RIGHTS)).toBe(true)
   })
 
   it('no guest ever renames, deletes, shares or creates a drop box', () => {
     for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {
       for (const kind of [null, FOLDER_KIND, DROPBOX_KIND, FILE_KIND]) {
         for (const inIdentityFolder of [false, true]) {
-          const c = depotCapabilities(guestAccessOf(role), { kind, inIdentityFolder, shareable: true })
+          const c = depotRights(guestAccessOf(role), { kind, inIdentityFolder, shareable: true })
           expect([c.rename, c.deleteFile, c.deleteNode, c.share, c.createDropBox], `${role} at ${kind}`).toEqual([false, false, false, false, false])
         }
       }
@@ -92,7 +92,7 @@ describe('depotCapabilities: the matrix', () => {
       for (const kind of [null, FOLDER_KIND, DROPBOX_KIND, FILE_KIND]) {
         for (const inIdentityFolder of [false, true]) {
           for (const parentKind of [undefined, FOLDER_KIND]) {
-            const c = depotCapabilities(guestAccessOf(role), { kind, inIdentityFolder, shareable: true, parentKind })
+            const c = depotRights(guestAccessOf(role), { kind, inIdentityFolder, shareable: true, parentKind })
             expect(c.moveFile, `${role} at ${kind}, identity ${inIdentityFolder}`).toBe(role === 'READ_WRITE' && kind === FOLDER_KIND && !inIdentityFolder)
             // the opened file itself: only out of a folder it was read in (never the link's root), never in an identity folder
             expect(c.moveNode, `${role} at ${kind}, parent ${parentKind}, identity ${inIdentityFolder}`)
@@ -107,7 +107,7 @@ describe('depotCapabilities: the matrix', () => {
 // inbox #424: "Upload folder…" needs Depot's upload AND core's folder create at the level - a member and a READ_WRITE guest alike
 // (share view = member view), never a reader, a drop box's own guest, a guest's identity folder or a pending deletion.
 describe('canUploadFolder', () => {
-  const cases: [string, Access, CapabilityTarget, boolean][] = [
+  const cases: [string, Access, RightsTarget, boolean][] = [
     ['member at the scope root', member, at(null), true],
     ['member in a folder', member, at(FOLDER_KIND), true],
     ['member in a guest\'s identity folder', member, at(FOLDER_KIND, { inIdentityFolder: true }), false],

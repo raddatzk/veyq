@@ -5,11 +5,14 @@ import me.raddatz.veyq.core.admin.tenant.TenantMailSettingsEntity
 import me.raddatz.veyq.core.admin.tenant.TenantStore
 import me.raddatz.veyq.core.blobstore.SealedValue
 import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
+import me.raddatz.veyq.core.blobstore.StoreSettingRow
+import me.raddatz.veyq.core.config.VeyqConfig.StoreType
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
@@ -53,6 +56,24 @@ class ConfigSecretKeyGuardTest {
         } finally {
             StoreSettingFixtures.clear()
         }
+    }
+
+    @Test
+    fun aPendingStoreSettingsSecretCountsTooAndTheBootSaysSoOutLoud() {
+        // A pending setting (ADR 0089 decision 5) is restored with the rest of the table, so a secret it holds under a
+        // lost key is as unopenable as the setting in use's — and the startup log names the recovery (ADR 0050).
+        assertEquals(null, ConfigSecretStartupLog.message(committedState()), "precondition: nothing to say at boot")
+        try {
+            StoreSettingFixtures.setPending(
+                StoreSettingRow(false, StoreType.S3, "http://s3.invalid:9000", null, "blobs", "us-east-1", "access", sealedUnder("not-the-current-key"), null, null),
+            )
+            assertEquals(ConfigSecretKeyState.MISMATCH, committedState(), "the pending setting's secret, sealed under another key, is seen")
+            val said = ConfigSecretStartupLog.message(committedState())!!
+            assertTrue(said.contains("original key file back") && said.contains("veyq-admin config-secret"), said)
+        } finally {
+            StoreSettingFixtures.clear()
+        }
+        assertEquals(null, ConfigSecretStartupLog.message(ConfigSecretKeyState.ABSENT), "ABSENT is the seal's own error log")
     }
 
     @Test
