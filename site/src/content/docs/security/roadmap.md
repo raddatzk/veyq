@@ -181,7 +181,7 @@ gate is tested. **The Server Owner switches them** in the admin console and its 
 restart, and each entry describes itself in English and German. A device switch acts at once: the server withholds
 what those devices unlock with, without deleting it, so their members need the password and the Secret Key until it
 is switched back on. A share switch acts at once too: every existing link of its kind answers a guest as a link that
-never existed, until it is switched back on. The [Moderation](/veyq/run/moderation/#switch-a-feature-off) page says how. There is no
+never existed, until it is switched back on. The [Capabilities](/veyq/run/capabilities/) page says how. There is no
 tenant-owner switch.
 
 **The gap.** A tenant owner who does not want password-less devices or public links in their tenant has no way to
