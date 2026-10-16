@@ -31,7 +31,7 @@ export default defineConfig({
           label: 'Use',
           translations: { de: 'Benutzen' },
           items: [
-            { slug: 'index', label: 'Start', translations: { de: 'Start' } },
+            { slug: 'start', label: 'Start', translations: { de: 'Start' } },
             {
               label: 'Getting started',
               translations: { de: 'Erste Schritte' },

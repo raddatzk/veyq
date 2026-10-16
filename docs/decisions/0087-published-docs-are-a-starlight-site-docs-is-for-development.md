@@ -1,7 +1,7 @@
 # ADR 0087 — Published documentation is a Starlight site; `docs/` is for development only
 
 - Status: Accepted; nothing of it is built (`changes/cr-published-docs-site.md`)
-- Date: 2026-10-15
+- Date: 2026-10-15 (amended 2026-10-16: the site's root is the project website, point 7)
 
 ## Context
 
@@ -75,6 +75,16 @@ copy (the drift `validate_wiki_sources.py` was built after, inbox #120), and it 
 6. **No versioned docs before V1.** The site shows `main`. From V1, versions are built **from release tags**, one
    build per version, never as copied folders; the version granularity is decided then, against
    [ADR 0085](0085-one-major-moved-on-a-yearly-train.md).
+7. **The site's root is the project website** (amended 2026-10-16). `/` and one page per further language (`/de/`)
+   are plain Astro pages, not Starlight ones (`site/src/pages/`, words and layout in `site/src/components/website/`);
+   the Use area's start page moved to `/start/`, every other URL is unchanged. The website says what veyq is — a
+   platform, not one application —, which applications are built, why it is needed, and links into the three areas.
+   Every claim it makes is one a docs page makes, and it links that page; the build fails on a link to a docs page
+   that does not exist, since `starlight-links-validator` checks the docs' content only. It loads nothing from a
+   third party (no web font, analytics or CDN): the front door of an operator-blind product does not report its
+   readers. Its languages are one list (`languages` in `strings.ts`), each also a Starlight locale; its screenshots
+   are of the web client, one per language, `site/src/assets/website/<id>.<lang>.png`, taken of a throwaway
+   instance whose content is made up and generated, never of real people's data.
 
 ## Consequences
 

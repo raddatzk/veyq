@@ -51,7 +51,9 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 - `site/` — the **published** documentation site (Astro Starlight, GitHub Pages; its own package outside the npm
   workspace, [ADR 0087](docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)):
   **Use** (plain language, **EN+DE**, for users and space owners), **Run** (EN, for Server Owners) and
-  **Security** (EN, for researchers). Each page names the `docs/` it speaks for in `sources:`.
+  **Security** (EN, for researchers). Each page names the `docs/` it speaks for in `sources:`. Its root is the
+  **project website** (`site/src/pages/`, content in `site/src/components/website/`): what veyq is, its applications,
+  why, and the way into the three areas — every claim one a docs page makes, nothing loaded from a third party.
 - `changes/` — the **live** work order + any open review backlog; a CR is deleted once done.
 
 ## How we work
