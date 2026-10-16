@@ -1,0 +1,180 @@
+# ADR 0094 — A client's address is the hop the network vouches for
+
+- Status: Accepted 2026-10-16; nothing of it is built
+- Date: 2026-10-16
+
+## Context
+
+Two consumers need the address of the client that sent a request:
+
+- **The guest-write record** (the moderation ADR, 0093) keeps the address and time of a guest's write as evidence
+  for an abuse report. A forged address there can name an innocent third party.
+- **The per-IP rate limiter** (`RateLimitFilters.kt:80`, `request.remoteAddress()`) keys its bucket on it. A forged
+  address there opens a fresh bucket per request.
+
+Today the address comes from Quarkus. With `proxy-address-forwarding` on and no `trusted-proxies`, Quarkus honours
+`X-Forwarded-For` from any peer and takes its **leftmost** entry (M1), which is the one a client writes itself. Both
+targets turn forwarding on (M2). How far that is forgeable depends on the proxy in front of the app, which veyq
+cannot choose on Kubernetes:
+
+- A proxy that **replaces** the header from an untrusted peer leaves one entry, the real client. Traefik, as shipped
+  on Compose, deletes every incoming `X-Forwarded-*` header from a peer outside its `trustedIPs` (M3), and Compose
+  sets none (M4). **Compose is not forgeable today.**
+- A proxy that **appends** keeps the client's entries and adds the peer it saw on the right (R1: Envoy-based
+  gateways, a cloud load balancer). The leftmost entry is then the client's choice.
+- A peer that reaches the app **without a proxy** writes the whole header. Only the network stops that: Compose's
+  separate networks and the chart's NetworkPolicy ([ADR 0071](0071-runtime-hardening-on-both-targets.md)).
+
+Nothing in the backend's main code reads the forwarded scheme, host or URI through Quarkus. `TenantHostResolver`
+reads `X-Forwarded-Host` itself and `AdminChannel` reads the socket (M5). Quarkus's forwarding feeds only
+`remoteAddress()`, and through it only the rate limiter.
+
+## Decision
+
+1. **veyq resolves a client's address itself, in one resolver in core, and both consumers use it.** The rate
+   limiter and the guest-write record never read an address from anywhere else.
+2. **The socket peer is vouched for by the network, never by a header.** On Compose, the only public peer of the
+   app's port is Traefik. On Helm, the NetworkPolicy's `ingressFrom` selects the data-plane pods of the gateway
+   implementation the operator picks ([ADR 0064](0064-kubernetes-helm-deployment-target.md)). That is ADR 0071's
+   reachability, and it is the whole trust in the peer.
+3. **The client is the rightmost `X-Forwarded-For` entry that is not a trusted proxy.**
+   - The entries are every `X-Forwarded-For` line, in order, split on commas. With none, the client is the peer.
+   - `trusted-proxies` lists the hops **in front of** the gateway, such as a load balancer: IP addresses and CIDR
+     ranges, nothing else. Empty, the default on both targets, means the gateway is the only hop, and the
+     rightmost entry is the client. Each listed entry is skipped from the right. If every entry is listed, the
+     leftmost is the client.
+   - The entry the walk stops at was written by a proxy the request really passed, so no client can choose it.
+   - If that entry is not an IP address, there is **no address**. The record then stores none, and the rate
+     limiter keys on the peer. veyq never guesses.
+   - `Forwarded` (RFC 7239) and `X-Real-Ip` are ignored. Traefik does not strip `Forwarded` (M3).
+4. **Quarkus's `proxy-address-forwarding` is off on both targets.** There is one reading of the header, not two.
+   `request.remoteAddress()` then returns the peer: useless as a client address, but never forged. That is why no
+   guard forbids calling it.
+5. **The setting is veyq's, not Quarkus's:** `veyq.http.trusted-proxies` (`VEYQ_HTTP_TRUSTED_PROXIES`). The chart
+   value `app.trustedProxies` renders it. Compose ships no knob: a proxy in front of Traefik would also need
+   Traefik's `trustedIPs`, and that combination stays outside the recipe, as `networking.md` already says. A
+   malformed entry, such as a hostname, stops the app at startup.
+6. **Helm without an enforced NetworkPolicy is documented, not refused.** With `networkPolicy.enabled=false`, or
+   with a CNI that enforces none, any pod can reach the app and write the whole header, and no list can tell it
+   apart from the gateway. The chart's NOTES and the Run docs say so. Refusing to render would only push operators
+   to list a pod range, which trusts every pod (ADR 0071 § 4).
+
+What each topology yields (R1 marks the appending ones):
+
+| Topology | Arrives at the app | Leftmost (today) | This rule |
+|---|---|---|---|
+| Compose, or a Traefik gateway | `203.0.113.77` | client | client |
+| Appending gateway | `198.51.100.66, 203.0.113.77` | **forged** | client |
+| LB → replacing gateway | `10.0.0.5` | LB | LB |
+| LB → appending chain, `trusted-proxies=10.0.0.5` | `198.51.100.66, 203.0.113.77, 10.0.0.5` | **forged** | client |
+| the same, no `trusted-proxies` | the same | **forged** | LB |
+| A pod past an unenforced policy | `198.51.100.66` | **forged** | **forged** (decision 6) |
+
+The rule never does worse than today, and where it falls short it yields the operator's own load balancer, never
+a third party.
+
+## Rejected alternatives
+
+- **Quarkus's leftmost entry with `trusted-proxies`.** Its check covers the peer, not the chain, so an appending
+  edge still hands the app a forged leftmost entry.
+- **The trust list must also name the peer.** The gateway's peer address is an ephemeral pod IP. A list that
+  survives a restart covers the pod range and trusts every pod (ADR 0071 § 4). This was this refinement's own
+  first draft.
+- **Trust private ranges by default.** A LAN client behind an appending gateway is itself private, so the walk
+  would step past it to a forged entry.
+- **A live preflight** that sends a forged header to the instance's own domain at startup. It measures only the
+  hairpin path, never a pod that reaches the app directly. It fails without hairpin NAT, which is common at home,
+  and it checks once what can change at runtime.
+- **The operator attests that the topology is safe.** A wrong value yields forged evidence. What is left of
+  attestation is `trusted-proxies`, and it can only add hops, never vouch for the peer.
+- **The chart refuses `networkPolicy.enabled=false`** without a trust list. See decision 6.
+
+## Consequences
+
+- **The rate limiter changes on one topology.** Behind an appending chain without `trusted-proxies`, every client
+  shares the load balancer's bucket. Today each client gets its own bucket, forgeable. No cluster has run the chart
+  yet (`networking.md` § How far this is proven), and the Run docs name the setting.
+- **The record's address is only as strong as the network on Helm** (decision 6). On Compose it is strong by
+  construction.
+- **A layer-4 load balancer in front of the gateway that rewrites the source address** makes the gateway see a
+  node, not the client (R3). The address is then a node's: useless, harmless, and no list in veyq can fix it.
+  Keeping the client's source address is part of setting up the gateway, and the Run docs say so.
+- **ADR 0071 § 4 changes meaning.** `trustedProxies` now names the hops in front of the gateway, and its property
+  is veyq's. The selector-based policy remains what confines the peer.
+- **ADR 0092 § 2 points here,** and its R7 is now measured (M3).
+- **The tests can no longer forge an address by accident.** The rate-limit tests send `X-Forwarded-For` from
+  loopback with an empty trust list, so their single entry is the rightmost. They keep working without turning on
+  Quarkus forwarding.
+
+## Inventory for the CR (not built)
+
+This CR touches `app-deployment.yaml`, `values.yaml`, `NOTES.txt`, `networking.md` and `kubernetes.md`, and so does
+`cr-helm-gateway-api`. The two run one after the other, never side by side.
+
+- **Resolver**: `backend/core/.../http/ClientAddress.kt`. A pure function of (socket peer, `X-Forwarded-For`
+  lines, trust list) returning an address or none, plus a request-scoped accessor over the socket peer
+  (`request.connection().remoteAddress()`, as `AdminChannel.kt:25` does). IPv4-mapped IPv6 is normalised.
+- **Config**: `veyq.http.trusted-proxies`, a list of IPs and CIDRs validated at startup. The comment at
+  `application.properties:131-137` is rewritten.
+- **Rate limiter**: `RateLimitFilters.kt:80` keys on the resolver. Its class doc (`:52-56`) is rewritten.
+- **Tests**:
+  - `ClientAddressTest` (unit): every row of the table above, the no-header case, a non-IP entry at the stop, an
+    entry before a listed hop, and startup refusal of a hostname.
+  - The rate-limit slice (the bite): with a limit of 3, three requests carrying `198.51.100.66, 203.0.113.77`,
+    then one carrying `198.51.100.99, 203.0.113.77`, must get **429**, because a new forged leftmost entry opens no
+    bucket. The positive control: `198.51.100.66, 203.0.113.78` gets **200**, so the key is not one global bucket.
+  - Bite-proof both: resolve to the leftmost entry and the 429 fails; resolve to the peer and the control fails.
+  - One profile with `trusted-proxies=10.0.0.5` sends `198.51.100.66, 203.0.113.77, 10.0.0.5` and is keyed on
+    `203.0.113.77`.
+  - `AuthRateLimitTest`, `AuthRateLimitRefillTest`: drop `proxy-address-forwarding`.
+    `AdminChannelForgedHeadersSliceTest` keeps it on, because it proves the admin channel ignores forwarding.
+- **For the moderation CR, not this one**: the guest-write slice sends `198.51.100.66, 203.0.113.77`. It asserts
+  that `203.0.113.77` is recorded (the control) and that `198.51.100.66` is in no record and no log. When the
+  resolver yields no address, nothing is recorded. This replaces ADR 0092's single-address slice.
+- **Compose**: drop `QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING` (`infra/docker-compose.prod.yml:129-130`). No new
+  variable.
+- **Helm**:
+  - `app-deployment.yaml:69-76`: drop forwarding and render `VEYQ_HTTP_TRUSTED_PROXIES`.
+  - `values.yaml:50-54`: the comment says the value names the hops in front of the gateway, never its pod range.
+  - `NOTES.txt`: a line when `networkPolicy.enabled=false`.
+- **Run docs**:
+  - `networking.md` § The client address and the rate limits: the rule, the topology table, the shared-bucket
+    consequence, and keeping the client's source address in front of the gateway (R3).
+  - `hardening.md` § Trust only a stable proxy address (`:53-57`): name the hops in front of the gateway.
+  - `kubernetes.md:19` and `configuration.md:74`: the value's new meaning.
+- **State docs**:
+  - `cc.security.rate-limit.md`: the "Trusts the client IP" bullet, the deferred "address-based `trusted-proxies`
+    default" (`:164`) resolved, and § Verified by (`:171`).
+  - ADR 0071 decision 4 and its Context, edited in place.
+  - ADR 0092 § 2 points here.
+
+## Measurement ledger
+
+Substrate: branch `claude/vigorous-kepler-251ad0` at `35c1253a`, clean.
+
+- **M1** Quarkus 3.36.0 sources (`backend/gradle/libs.versions.toml:6`), measured by the logging session (ADR 0092
+  M18):
+  - `ForwardingProxyOptions.java:50` honours `X-Forwarded-For` by default.
+  - `:61-62` builds no check without `trusted-proxies`.
+  - `ForwardedParser.java:291,318-321` takes the first entry.
+- **M2** `grep -rn -i -E 'address-forwarding|ADDRESS_FORWARDING' --exclude-dir=build --exclude-dir=node_modules .`
+  finds `infra/docker-compose.prod.yml:130`, `charts/veyq/templates/app-deployment.yaml:70`, and three test
+  profiles (`AuthRateLimitTest.kt:36`, `AuthRateLimitRefillTest.kt:32`, `AdminChannelForgedHeadersSliceTest.kt:30`).
+- **M3** Traefik v3.6.0 `pkg/middlewares/forwardedheaders/forwarded_header.go` (fetched from
+  `raw.githubusercontent.com/traefik/traefik/v3.6.0/...`):
+  - `:191-195`: unless `insecure` or a trusted peer, it deletes every header in `xHeaders`.
+  - `:31-43`: `xHeaders` holds the `X-Forwarded-*` family and `X-Real-Ip`, and not `Forwarded`.
+- **M4** `grep -n -i -E 'trustedIPs|forwardedHeaders' infra/docker-compose.prod.yml` finds nothing.
+- **M5** `grep -rn -E '\.scheme\(\)|absoluteURI|isSSL|getBaseUri|getRequestUri|getAbsolutePath|\.authority\(\)' backend --include='*.kt'`,
+  over main sources, finds nothing.
+  - `grep -rn 'remoteAddress()' backend --include='*.kt'`, over main sources, finds only `RateLimitFilters.kt:80`
+    and the comment in `AdminChannel.kt:20`.
+
+## Remembered (measure before it drives code)
+
+- **R1**: Envoy and Envoy-based gateways, with no trusted hops configured, append the peer to `X-Forwarded-For`.
+  So does a cloud HTTP load balancer. The CR's unit table does not depend on it; the Run docs' wording does.
+- **R2**: Go's `httputil.ReverseProxy`, which Traefik forwards through, appends the peer to `X-Forwarded-For` after
+  the middleware in M3 has cleared it.
+- **R3**: A Kubernetes `LoadBalancer` Service with `externalTrafficPolicy: Cluster` rewrites the source address to a
+  node. `Local`, or the PROXY protocol where the implementation supports it, keeps the client's address.
