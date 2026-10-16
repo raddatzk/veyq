@@ -240,6 +240,7 @@ const en = {
     "signingIn": "Signing in…",
     "signInSub": "Sign in as the Server Owner to administer this instance.",
     "signInFailed": "Sign-in failed. Check the email and password.",
+    "sessionExpired": "Your session has ended. Sign in again — what you just did was not applied.",
     "noTenants": "No tenants yet. Create the first one.",
     "loading": "Loading…"
   }
@@ -478,6 +479,7 @@ const de: typeof en = {
     "signingIn": "Anmelden…",
     "signInSub": "Melde dich als Server-Owner an, um diese Instanz zu verwalten.",
     "signInFailed": "Anmeldung fehlgeschlagen. Bitte E-Mail und Passwort prüfen.",
+    "sessionExpired": "Deine Sitzung ist abgelaufen. Melde dich erneut an — was du gerade getan hast, wurde nicht übernommen.",
     "noTenants": "Noch keine Tenants. Lege den ersten an.",
     "loading": "Wird geladen…"
   }

@@ -6,7 +6,8 @@
 //   forbidden      -> the backend's own 403, restated for a person. Not a redirect: a Server Owner who
 //                     mistyped an account should see WHY, and a non-owner should see that the refusal is the
 //                     server's, not this page's politeness.
-//   unauthenticated-> back to sign-in (the session lapsed between boot and here)
+//   unauthenticated-> back to sign-in, saying the session ended (it lapsed between boot and here and the
+//                     rotation was refused — `app/sessionEnd.ts`)
 //   unreachable    -> say so, rather than render an empty console
 //
 // The gate is a courtesy over an authority that lives elsewhere: every call below is authorized server-side
@@ -28,6 +29,7 @@ import { listTenants, type TenantSummary } from '../features/tenants/tenants'
 import { formatBytes } from '../shared/formatBytes'
 import { probeServerRole, serverRole } from '../app/serverRole'
 import { logout } from '../features/auth/login'
+import { endExpiredSession } from '../app/sessionEnd'
 
 const router = useRouter()
 const { t, locale } = useI18n()
@@ -61,7 +63,7 @@ async function loadTenants() {
 onMounted(async () => {
   const verdict = await probeServerRole()
   if (verdict === 'unauthenticated') {
-    await router.replace({ name: 'login' })
+    await endExpiredSession(router)
     return
   }
   if (verdict === 'owner') {

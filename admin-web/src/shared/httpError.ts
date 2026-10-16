@@ -50,9 +50,9 @@ export function isHttpStatus(e: unknown, status: number): boolean {
 }
 
 /**
- * Whether a failure is a 401 (session lapsed / re-auth needed). The detection half of the login-redirect the
- * component layer performs. In `web/` it is also what `withRefresh` branches on; this surface has no such
- * wrapper (see the header of `features/auth/login.ts`), so here it only ever routes a 401 to /login.
+ * Whether a failure is a 401 (session lapsed / re-auth needed). The detection half of the session end the
+ * component layer performs (`shared/handle401.ts`). A 401 that reaches a caller has already survived the one
+ * rotation every authed call gets (`app/sessionRefresh.ts`, a fetch middleware rather than `web/`'s `withRefresh`).
  */
 export function isUnauthorized(e: unknown): boolean {
   return httpStatus(e) === HttpStatus.unauthorized

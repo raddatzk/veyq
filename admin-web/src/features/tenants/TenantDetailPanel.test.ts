@@ -10,7 +10,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 
 const push = vi.fn()
-vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+const replace = vi.fn()
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, replace }) }))
 
 // The real `GIB` and `parseQuotaGib`: the conversion is what the quota cases assert, so it must not be stubbed away.
 vi.mock('./tenants', async (importOriginal) => ({
@@ -40,6 +41,7 @@ import TenantDetailPanel from './TenantDetailPanel.vue'
 import { listTenants, revokeTenant, resendInvite, reassignInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError, setTenantStorageQuota } from './tenants'
 import type { TenantInviteState, TenantSummary } from './tenants'
 import { httpError } from '../../test/httpError'
+import { session, setTokens } from '../../app/session'
 
 const i18n = createI18n({
   legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false,
@@ -327,10 +329,12 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     expect(w.text()).not.toContain('Acme')
   })
 
-  it('redirects to login on a 401', async () => {
+  it('ends the session on a 401 — tokens dropped BEFORE the sign-in, or the router bounces it (inbox #449)', async () => {
+    setTokens('expired-access', 'dead-refresh', 'family-1')
     vi.mocked(listTenants).mockRejectedValueOnce(httpError(401))
     mountPanel()
     await flushPromises()
-    expect(push).toHaveBeenCalledWith({ name: 'login' })
+    expect(replace).toHaveBeenCalledWith({ name: 'login' })
+    expect(session.accessToken).toBeNull()
   })
 })

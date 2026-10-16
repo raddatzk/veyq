@@ -7,7 +7,7 @@
 // these cases pin — one per verdict the backend can hand back:
 //
 //   403 -> a refusal a person can read, and NO console behind it
-//   401 -> back to sign-in (the session lapsed between boot and mount)
+//   401 -> back to sign-in, saying the session ended (it lapsed between boot and mount; `app/sessionEnd.ts`)
 //   200 -> the console
 //
 // Deliberately asserted through `listTenants` rejecting, not through a stubbed verdict: the gate's whole claim
