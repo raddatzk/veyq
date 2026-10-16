@@ -8,25 +8,29 @@
 // to the backend from THIS origin, so `basePath` is the in-memory `session.apiBase` ('' → relative `/api/...`)
 // and the refresh cookie stays same-origin wherever the container is reached from.
 import { Configuration, SetupApi } from './generated'
-import { Configuration as AuthConfiguration, LoginApi, SessionApi, TokenApi } from './generated/auth'
+import { Configuration as AuthConfiguration, LoginApi, SessionApi } from './generated/auth'
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
 import { Configuration as InstanceConfiguration, InstanceApi } from './generated/instance'
 import { session } from '../app/session'
+import { refreshOnUnauthorized } from '../app/sessionRefresh'
 
 export function setupApi(): SetupApi {
   return new SetupApi(new Configuration({ basePath: session.apiBase }))
 }
 
-// The one bearer-credential contract every authed client shares: same-origin basePath + the access token from
-// the in-memory session. Each generated package has its own Configuration class but the same parameter shape.
-const bearerParams = () => ({ basePath: session.apiBase, accessToken: () => session.accessToken ?? '' })
+// The one bearer-credential contract every authed client shares: same-origin basePath, the access token from the
+// in-memory session, and the retry-on-401 that rotates an expired token once (inbox #449, `app/sessionRefresh.ts`).
+// Each generated package has its own Configuration class but the same parameter shape. Every factory below builds
+// from this, which `client.sweep.test.ts` holds; the rotation itself is not one of them (it lives beside the
+// middleware, without it).
+const bearerParams = () => ({
+  basePath: session.apiBase,
+  accessToken: () => session.accessToken ?? '',
+  middleware: [refreshOnUnauthorized],
+})
 
 export function loginApi(): LoginApi {
   return new LoginApi(new AuthConfiguration(bearerParams()))
-}
-
-export function tokenApi(): TokenApi {
-  return new TokenApi(new AuthConfiguration(bearerParams()))
 }
 
 export function sessionApi(): SessionApi {

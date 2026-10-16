@@ -423,6 +423,19 @@ members** — the one being removed, the ones being kept, and the surfaces expli
 locators are variations of one another) and self-checking: if two classes' commands overlap, the classification
 itself is wrong, which is worth finding at refine rather than in the retrospective.
 
+### The published docs move with the change, in the same CR
+
+The docs site (`site/`, [ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md))
+is how users, space owners, Server Owners and researchers learn what veyq does, so a CR that changes what one of
+them sees or does — a screen, a label, a step, an operator procedure or command, a configuration key, a security
+property or a residual — updates the site pages that speak for it **in the same CR**, as a phase or inside the
+phase that makes the change, never as a follow-up. A page left behind tells its reader something the product no
+longer does, and nobody notices until a user follows it. The locator is the pages' `sources:`: every doc the CR
+edits under `docs/` is declared by the pages that restate it (`git grep -ln "<doc path>" -- site/src/content/docs`),
+and a Use page's steps use the UI's own words (`web/src/i18n/index.ts`), so a changed label is found by grepping the
+site for the old one. A Use page changes in English and German together; a new user-facing capability gets its
+page, at the same depth as its neighbours. The CR says which pages it touched, or that it touched none and why.
+
 ### Coverage is part of the work, not a follow-up
 
 Every CR updates `docs/coverage/` for the
@@ -1784,7 +1797,9 @@ crosscutting concern(s), ADR(s), and the specific invariants at risk.
 Tests green across the listed platforms, AND `docs/coverage/` updated for each `satisfies:` use-case
 (every new acceptance criterion covered by a test or an explicit gap) with
 `python3 scripts/validate_coverage.py` green. If the CR rests on a structural invariant, its proof is
-promoted to a permanent guard (or the CR notes why a one-shot check suffices).
+promoted to a permanent guard (or the CR notes why a one-shot check suffices). The docs site's pages that speak
+for what changed are updated (EN+DE for Use pages) and `npm run check` in `site/` is green — or the CR says why no
+page was affected.
 
 ## Retrospective
 What didn't go well — in planning, execution, AND process/collaboration (did we honor the conventions
