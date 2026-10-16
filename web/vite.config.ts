@@ -19,8 +19,11 @@ const apiTarget = process.env.VEYQ_API_TARGET ?? 'http://127.0.0.1:8080'
 // `/blobs/` (presigned media) is proxied to the object store — only used with the s3 store profile. It is the
 // backend's default `veyq.blob-store.bucket`, spelled here because this file cannot read the setting.
 const storeTarget = process.env.VEYQ_STORE_TARGET ?? 'http://localhost:19000'
-// Dev-server port (the IntelliJ run config sets VITE_PORT). Default 5173.
-const port = Number(process.env.VITE_PORT) || 5173
+// Dev-server port. Default 8081, the origin the dev instance is browsed at (`veyq.localhost:8081`) and the one
+// `%dev`'s `veyq.bundled-store.public-endpoint` signs presigned URLs for — change one and change the other, or
+// uploads fail in the browser. `VITE_PORT` overrides it; the root launcher sets it from `veyq.webPort` together
+// with the backend's endpoint (launcher/backend/build.gradle.kts).
+const port = Number(process.env.VITE_PORT) || 8081
 // Force one fixed tenant Host regardless of the browser URL (used by the media live-smoke). Usually unset.
 const smokeHost = process.env.VEYQ_SMOKE_HOST
 
