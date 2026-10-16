@@ -89,7 +89,7 @@ Implementation waits for the owner's go on this CR.
     tag, so the generated interface gains methods and `InstanceResource` stops compiling until phase 2 — that red is
     predicted; run `./gradlew check` once and record that it is exactly that red (§ *phases only above real size*).
 
-- [ ] **2 backend: settings, the check, the notices.** A migration (instance mail settings singleton with sealed
+- [x] **2 backend: settings, the check, the notices.** A migration (instance mail settings singleton with sealed
   password, confirmed address and time, code hash and expiry; release-check settings defaulting to on with the GitHub
   source; notices unique on kind + release + date, with `mailed_at`); the sealed-fingerprint bean; the handlers in
   `core/admin/instance/`; `ReleaseCheck` as `@Scheduled(every = "{veyq.release-check.every}")` (default `24h`) using the
@@ -102,6 +102,11 @@ Implementation waits for the owner's go on this CR.
     planned major against ADR 0085's rule with fixed dates.
   - **Done when:** `./gradlew check` green; `OperatorBlindProbeTest`, `AdminChannelPostureSweepTest`,
     `RateLimitPostureSweepTest` green; committed.
+  - **Built:** one migration carries all three tables (the instance mail row included, so phase 3 adds none); the
+    mail-settings endpoints store and confirm already, the send is phase 3's. A sweep the CR did not list went red:
+    `EveryStoredTimeHasAReaderTest` (every `Instant` column names its reader) — five new time columns, five entries.
+    Bitten: unstamped/snapshot, switched off, the release in a request header, the body cap and the window year each
+    turned their test red.
 
 - [ ] **3 backend: instance mail.** Generalise the sender's transport so tenant and instance settings build the same
   `MailClient` (every caller from the locator keeps its behaviour — its tests are the check), add one attachment kind

@@ -11,6 +11,12 @@ import me.raddatz.veyq.core.generated.model.InstanceCapabilityUpdate
 import me.raddatz.veyq.core.generated.model.InstanceExternalService
 import me.raddatz.veyq.core.generated.model.InstanceExternalServiceUpdate
 import me.raddatz.veyq.core.generated.model.InstanceConfigSecret
+import me.raddatz.veyq.core.generated.model.InstanceMailConfirmation
+import me.raddatz.veyq.core.generated.model.InstanceMailSettings
+import me.raddatz.veyq.core.generated.model.InstanceMailSettingsUpdate
+import me.raddatz.veyq.core.generated.model.InstanceReleaseCheckUpdate
+import me.raddatz.veyq.core.generated.model.InstanceReleaseNotice
+import me.raddatz.veyq.core.generated.model.InstanceReleaseNotices
 import me.raddatz.veyq.core.generated.model.InstanceRelease
 import me.raddatz.veyq.core.generated.model.InstanceStore
 import me.raddatz.veyq.core.generated.model.InstanceStoreCheck
@@ -30,7 +36,11 @@ import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityText
 import me.raddatz.veyq.core.validation.validated
+import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitKey
+import io.quarkus.security.identity.SecurityIdentity
+import java.util.UUID
 import jakarta.annotation.security.RolesAllowed
 import jakarta.ws.rs.core.Response
 
@@ -47,15 +57,20 @@ import jakarta.ws.rs.core.Response
  * same gate for the same reason: it describes the operator's own infrastructure and what is wrong with it.
  * So does the config-secret state (ADR 0050), read through [ConfigSecretKeyGuard.readState] because a restore's
  * verification read must change nothing. The capability switches ([CapabilitySwitchHandler], ADR 0088 decision 12) are
- * the instance's other setting: the register with its catalog words, and one entry's switch per write.
+ * the instance's other setting: the register with its catalog words, and one entry's switch per write. The release
+ * check and its notices ([ReleaseNoticesHandler]) and the instance mail ([InstanceMailSettingsHandler]) are ADR 0097's.
+ * The one operation with something to guess, the mail confirmation code, carries its own `@RateLimit(USER)` on top of
+ * the handler's per-code attempt limit.
  */
 @RolesAllowed(SERVER_OWNER)
 @RateLimitExempt(
     reason = "Server-Owner-only reads of instance-wide values — a release stamp fixed at startup, the " +
         "store-provisioning state a background runner last reached, the config-secret state, and the store " +
-        "setting and the capability register — and the owner's own store write and check (the check reaches only " +
-        "the store the owner set, each step bounded by a ten-second timeout) and capability switch (one row, one " +
-        "entry of a fixed register). There is no per-caller state to enumerate and no work an " +
+        "setting and the capability register, the release check's state and notices, the instance mail settings — " +
+        "and the owner's own store write and check (the check reaches only the store the owner set, each step " +
+        "bounded by a ten-second timeout), capability switch (one row, one entry of a fixed register), release-check " +
+        "setting (one row, no request made) and mail-settings save (one row, one test mail to the owner's own " +
+        "address, bounded by a ten-second timeout). There is no per-caller state to enumerate and no work an " +
         "anonymous caller could amplify, and the role gate already bounds the caller set to one account.",
 )
 class InstanceResource(
@@ -65,10 +80,60 @@ class InstanceResource(
     private val store: StoreHandler,
     private val capabilities: CapabilitySwitchHandler,
     private val services: ExternalServicesHandler,
+    private val releaseNotices: ReleaseNoticesHandler,
+    private val mail: InstanceMailSettingsHandler,
+    private val identity: SecurityIdentity,
 ) : InstanceApi {
 
     override fun getInstanceRelease(): Response =
         Response.ok(InstanceRelease(release = release.version)).build()
+
+    override fun getInstanceReleaseNotices(): Response = Response.ok(releaseNotices.read().toWire()).build()
+
+    override fun setInstanceReleaseCheck(instanceReleaseCheckUpdate: InstanceReleaseCheckUpdate): Response =
+        when (val outcome = releaseNotices.set(instanceReleaseCheckUpdate.enabled.validated(), instanceReleaseCheckUpdate.source)) {
+            is ReleaseCheckSetOutcome.Stored -> Response.ok(outcome.view.toWire()).build()
+            is HttpFailure -> httpError(outcome)
+        }
+
+    override fun getInstanceMailSettings(): Response = Response.ok(mail.read(identity.principal.name).toWire()).build()
+
+    override fun updateInstanceMailSettings(instanceMailSettingsUpdate: InstanceMailSettingsUpdate): Response =
+        when (
+            val outcome = with(instanceMailSettingsUpdate) {
+                mail.update(identity.principal.name, host, port, from, username, password, tls.validated())
+            }
+        ) {
+            is InstanceMailUpdateOutcome.Ok -> Response.ok(outcome.view.toWire()).build()
+            is HttpFailure -> httpError(outcome)
+        }
+
+    @RateLimit(RateLimitKey.USER)
+    override fun confirmInstanceMail(instanceMailConfirmation: InstanceMailConfirmation): Response =
+        when (val outcome = mail.confirm(identity.principal.name, instanceMailConfirmation.code)) {
+            is InstanceMailConfirmOutcome.Ok -> Response.ok(outcome.view.toWire()).build()
+            is HttpFailure -> httpError(outcome)
+        }
+
+    private fun ReleaseNoticesView.toWire() = InstanceReleaseNotices(
+        releaseLine = releaseLine, enabled = enabled, source = source,
+        lastSuccessAt = lastSuccessAt?.atOffset(ZoneOffset.UTC),
+        notices = notices.map {
+            InstanceReleaseNotice(
+                id = UUID.fromString(it.id), kind = InstanceReleaseNotice.Kind.valueOf(it.kind.name),
+                release = it.release.toString(), date = it.date, daysAhead = it.daysAhead,
+                foundAt = it.foundAt.atOffset(ZoneOffset.UTC), mailedAt = it.mailedAt?.atOffset(ZoneOffset.UTC),
+            )
+        },
+    )
+
+    private fun InstanceMailSettingsView.toWire() = InstanceMailSettings(
+        host = host, port = port, from = from, username = username, tls = tls, passwordSet = passwordSet,
+        configSecretState = InstanceMailSettings.ConfigSecretState.valueOf(configSecretState.name),
+        address = address,
+        confirmation = InstanceMailSettings.Confirmation.valueOf(confirmation.name),
+        confirmedAt = confirmedAt?.atOffset(ZoneOffset.UTC),
+    )
 
     override fun getInstanceStoreProvisioning(): Response =
         Response.ok(InstanceStoreProvisioning(state = storeProvisioning.state())).build()
