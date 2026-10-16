@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.membership.MembershipEntity
@@ -237,7 +238,7 @@ class MediaBucketsSliceTest {
             val meta = "bWV0YQ==" // "meta"
             whileUncommitted(
                 change = { store.deleteBucketReparent(sub) },
-                overlapping = { assertTrue(store.setMeta(scopeId, media, meta, 0L) is MediaStore.SetMetaResult.Written) },
+                overlapping = { assertTrue(store.setMeta(scopeId, media, meta, 0L, PrincipalKey.User(userId)) is MediaStore.SetMetaResult.Written) },
             )
             QuarkusTransaction.requiringNew().run {
                 val row = MediaEntity.findById(media)!!

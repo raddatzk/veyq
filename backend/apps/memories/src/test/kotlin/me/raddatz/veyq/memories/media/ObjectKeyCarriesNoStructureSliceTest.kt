@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.UploadSessionEntity
@@ -132,7 +133,7 @@ class ObjectKeyCarriesNoStructureSliceTest {
             NodeEntity().apply {
                 id = seed.nodeId; scopeId = seed.scopeId; parentId = seed.scopeId; kind = MemoriesNodeKinds.MEMORY
                 encryptedName = "bg=="; slugToken = "c2x1Zy0${seed.nodeId}".take(120); orderIndex = 0
-                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
+                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now(); nameWrittenBy(FIXTURE_EDITOR)
             }.persist()
         }
         return seed

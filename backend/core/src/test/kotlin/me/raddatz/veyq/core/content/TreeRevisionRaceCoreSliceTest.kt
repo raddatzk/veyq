@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.content
 
+import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import me.raddatz.veyq.core.blob.AttachOutcome
 import me.raddatz.veyq.core.blob.AttachmentStore
 import me.raddatz.veyq.core.blob.AttachmentUploads
@@ -89,7 +90,7 @@ class TreeRevisionRaceCoreSliceTest {
             val status = whileUncommitted(
                 change = {
                     nodes.lockScope(scopeId)
-                    nodes.create(UUID.randomUUID().toString(), scopeId, scopeId, NodeEntity.FOLDER, "YQ==", GuestTreeShare.slug(), 0, 0, CONTENT_KEY, null)
+                    nodes.create(UUID.randomUUID().toString(), scopeId, scopeId, NodeEntity.FOLDER, "YQ==", GuestTreeShare.slug(), 0, 0, CONTENT_KEY, null, FIXTURE_EDITOR)
                 },
                 overlapping = { createFolder(userId, scopeId) },
             )

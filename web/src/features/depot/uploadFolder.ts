@@ -20,7 +20,7 @@
 // nothing are taken back (`takeBackEmptyFolders`, a guest's door only: core's `abandonShareNode`, which erases an empty
 // `FOLDER` at once - ADR 0080 decision 6): a link that refused every file (it was full) keeps none of them. Deepest first,
 // so a parent is empty by the time it is asked; a folder below which a file landed, or one a retry could still land, stays,
-// and the server keeps any folder somebody else filled meanwhile (`not_a_placeholder`).
+// and the server keeps any folder somebody else filled or renamed meanwhile (`not_a_placeholder`).
 //
 // The quota preflight (the tenant's yes or no for the tree's total bytes) is the caller's, before the first write.
 import { toRaw } from 'vue'

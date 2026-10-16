@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.TestIds
@@ -139,7 +140,7 @@ class MediaCreateRaceSliceTest {
             )
             assertEquals(200 to listOf<String?>(null), answer, "round $round: the second upload lands")
             QuarkusTransaction.requiringNew().run {
-                val primaries = BucketEntity.list("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", memory, OwnerKey.User(userId).format())
+                val primaries = BucketEntity.list("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", memory, PrincipalKey.User(userId).format())
                 assertEquals(1, primaries.size, "round $round: one uploader, ${primaries.size} primary buckets")
                 listOf(first, second).forEach {
                     assertEquals(primaries.single().id, MediaEntity.findById(it.mediaId)!!.bucketId, "round $round: ${it.mediaId}")

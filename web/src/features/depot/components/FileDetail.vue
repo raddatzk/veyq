@@ -11,9 +11,9 @@
 // (`../rights.ts`, `../source.ts`): a member everything its row offers plus share, rename, move and delete of the
 // file; a `READ` guest the download; a `READ_WRITE` guest the download and the replace — after the question that says it
 // changes the file for everyone who sees it, the owner too (inbox #383); no standing sentence says so beforehand — and,
-// for a file inside a folder link, the move
-// between the subtree's folders. A guest renames and deletes nothing (nodes store no authorship), and a `WRITE_ONLY`
-// link on a file does not exist (the backend refuses it).
+// for a file inside a folder link, the move between the subtree's folders. A guest renames and deletes nothing (whether
+// a guest may delete content of its own is inbox #467), and a `WRITE_ONLY` link on a file does not exist (the backend
+// refuses it).
 //
 // The size, type and date are the BLOB's (`download.ts` `fileFacts`): the one listing the source offers
 // (`listBlobs` — a member's reads the file's folder, a guest's the link) says which blob the file holds, and the bytes

@@ -145,6 +145,10 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   [ADR 0031](../decisions/0031-uploader-public-share.md) point 7); a Depot file's **uploader attribution** (the member
   or guest identity that uploaded its current content, on its attachment - served to members only, as `uploaderKey`
   `user:{id}` / `share:{id}`; [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Decision 8);
+  the **last editor of each sealed field group** — a node's name and meta, a share's name, note and private label, a
+  group's name and icon, a bucket's name, a medium's meta: the member or guest identity whose write the ciphertext is,
+  served to no client and never what was written ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+  § 8, [en.platform.field-editor](../features/platform/enablers/en.platform.field-editor.md));
   per-parent blinded tokens; to a **public share's guest**, the shared node's **scope id** — every `K_node` seal the
   viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared

@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.content
 
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.node.ScopeTreeRevisionEntity
@@ -61,6 +62,12 @@ data class TrashedNodeRow(
 /**
  * Persistence for the node tree (cr-0027). Operator-blind: stores ciphertext + the blinded slug token only.
  * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate.
+ *
+ * **The one writer of a node's name and meta, and so of their editors** (ADR 0093 § 8, en.platform.field-editor):
+ * [create], [createIdentityFolder], [applyUpdate] and [restoreSubtree] each take the `editor` — the authenticated
+ * caller, a member's principal or a guest's token identity, never a request field — as a required parameter, and write
+ * it beside the ciphertext it attributes ([NodeEntity.nameWrittenBy], [NodeEntity.metaWrittenBy]). No default, so a new
+ * caller states it or does not compile.
  */
 @ApplicationScoped
 class NodesStore {
@@ -182,6 +189,7 @@ class NodesStore {
     fun create(
         id: String, scopeId: String, parentSlot: String, kind: String, encryptedName: String,
         slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
+        editor: PrincipalKey,
     ): Boolean {
         if (idTaken(id)) return false
         NodeEntity().apply {
@@ -195,6 +203,8 @@ class NodesStore {
             this.epoch = epoch
             this.wrappedContentKey = wrappedContentKey
             this.wrappedMeta = wrappedMeta
+            nameWrittenBy(editor)
+            metaWrittenBy(editor.takeIf { wrappedMeta != null })
             createdAt = NodeEntity.birthInstant()
         }.persist()
         bumpTree(scopeId)
@@ -244,10 +254,11 @@ class NodesStore {
 
     /** Persist an identity folder (ADR 0080 decision 11): a `FOLDER` under [parentId] that [identityId] holds, its entry
      *  and key wrap under the identity's `K_up`. Joins its caller's transaction, which decided everything under the
-     *  scope lock (`IdentityFolders.ensure`); `ux_node_parent_identity` is the backstop of one per (parent, identity). */
+     *  scope lock (`IdentityFolders.ensure`); `ux_node_parent_identity` is the backstop of one per (parent, identity).
+     *  [editor] is the caller — the identity itself, whose guest seals the name. */
     fun createIdentityFolder(
         id: String, scopeId: String, parentId: String, identityId: String, encryptedName: String, slugToken: String,
-        epoch: Int, wrappedContentKey: String,
+        epoch: Int, wrappedContentKey: String, editor: PrincipalKey,
     ) {
         NodeEntity().apply {
             this.id = id
@@ -260,6 +271,7 @@ class NodesStore {
             this.epoch = epoch
             this.wrappedContentKey = wrappedContentKey
             this.shareIdentityId = identityId
+            nameWrittenBy(editor)
             createdAt = NodeEntity.birthInstant()
         }.persist()
         bumpTree(scopeId)
@@ -318,11 +330,14 @@ class NodesStore {
      *
      * A [boundary] ([SubtreeBoundary]) is decided here, under the lock, and only here: the node outside it is
      * [ApplyResult.Missing], the boundary's root as the node or a destination outside it [ApplyResult.IllegalMove].
+     *
+     * [editor] becomes the name's editor with a [placement] (a move re-seals the name, so it is a write of it like a
+     * rename) and the meta's with a [wrappedMeta], in the same statement; a reorder alone writes no sealed field.
      */
     @Transactional
     fun applyUpdate(
         scopeId: String, nodeId: String, placement: Placement?, orderIndex: Int?, wrappedMeta: String?, metaRevision: Long?,
-        boundary: SubtreeBoundary? = null,
+        editor: PrincipalKey, boundary: SubtreeBoundary? = null,
     ): ApplyResult {
         lockScope(scopeId)
         if (boundary != null) {
@@ -358,6 +373,7 @@ class NodesStore {
             )
             conds += "placementRevision = :placementRevision"
             p.epoch?.let { sets += "epoch = :epoch"; params["epoch"] = it }
+            sets += editorSets("name", editor, params)
         }
         orderIndex?.let { sets += "orderIndex = :orderIndex"; params["orderIndex"] = it }
         if (wrappedMeta != null) {
@@ -365,6 +381,7 @@ class NodesStore {
             sets += listOf("wrappedMeta = :wrappedMeta", "metaRevision = :nextMeta")
             params += mapOf("wrappedMeta" to wrappedMeta, "nextMeta" to expected + 1, "metaRevision" to expected)
             conds += "metaRevision = :metaRevision"
+            sets += editorSets("meta", editor, params)
         }
         if (sets.isEmpty()) return if (findInScope(scopeId, nodeId) != null) ApplyResult.Applied else ApplyResult.Missing
         val rows = NodeEntity.update("${sets.joinToString(", ")} where ${conds.joinToString(" and ")}", params)
@@ -376,6 +393,17 @@ class NodesStore {
         if (placement != null && current.placementRevision != placement.expectedRevision) return ApplyResult.StalePlacement
         if (wrappedMeta != null && current.metaRevision != metaRevision) return ApplyResult.StaleMeta(current.wrappedMeta, current.metaRevision)
         return ApplyResult.Missing
+    }
+
+    /** The bulk UPDATE's assignments that make [editor] the editor of [group] (`name` / `meta`): one column of the pair
+     *  takes the id, the other is cleared — a literal `null`, never a bound one. */
+    private fun editorSets(group: String, editor: PrincipalKey, params: MutableMap<String, Any>): List<String> {
+        val user = "${group}EditorUserId"
+        val identity = "${group}EditorIdentityId"
+        return when (editor) {
+            is PrincipalKey.User -> { params[user] = editor.userId; listOf("$user = :$user", "$identity = null") }
+            is PrincipalKey.Share -> { params[identity] = editor.identityId; listOf("$identity = :$identity", "$user = null") }
+        }
     }
 
     /**
@@ -447,9 +475,12 @@ class NodesStore {
      * wraps its own — the purge of the marker erases it whole). [RestoreResult.NOT_FOUND]
      * when there is no such trash root in the scope (unknown, already purged, still live, or under a trashed parent)
      * ⇒ a non-enumerable 404.
+     *
+     * [editor] becomes the root's name editor only with an [encryptedName] (the A1 retry's re-seal); a restore that keeps
+     * the name keeps its editor.
      */
     @Transactional
-    fun restoreSubtree(scopeId: String, nodeId: String, slugToken: String, encryptedName: String?): RestoreResult {
+    fun restoreSubtree(scopeId: String, nodeId: String, slugToken: String, encryptedName: String?, editor: PrincipalKey): RestoreResult {
         lockScope(scopeId) // the purge's lock: it erases what it selected under it, or finds this restore committed
         val all = NodeEntity.find("scopeId", scopeId).list()
         val root = all.firstOrNull { it.id == nodeId && it.deletedAt != null } ?: return RestoreResult.NOT_FOUND
@@ -473,7 +504,7 @@ class NodesStore {
         }
         root.slugToken = slugToken
         // The A1 retry re-seals the name in the SAME write as the token it is derived from.
-        encryptedName?.let { root.encryptedName = it }
+        encryptedName?.let { root.encryptedName = it; root.nameWrittenBy(editor) }
         bumpTree(scopeId) // the subtree is back in every level view (ADR 0081)
         return RestoreResult.DONE
     }

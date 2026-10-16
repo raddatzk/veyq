@@ -43,7 +43,10 @@
   2026-10-16 (the dev instance, a `READ_WRITE` folder link at a 105 KiB per-link limit filled by a guest's file): an
   "Upload folder…" of a tree two subfolders deep said per file that the link takes no more uploads, then took back
   every file and folder it had made — the guest's listing, the member's tree and the database held none of them; with
-  room on the link the same upload kept every folder and file.
+  room on the link the same upload kept every folder and file. The take-back erases only what the guest made: a node
+  whose name its identity wrote last (a member's empty file or folder, one a member renamed, another guest's are kept)
+  and on which no link is rooted ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+  decision 6; a guest that moved a member's empty node named it, and may).
 - **E6 — a name a readable sibling already holds:** a file's is the replace of step 5, after the question; a folder's,
   a Memory's or a drop box's is refused before anything is sent, the sibling named by its kind. A sibling the guest
   could not see is the server's `409 slug_taken`, said in the generic words.
@@ -55,7 +58,8 @@
 
 - A file can also be shared **on its own** ([uc.depot.share-file](uc.depot.share-file.md)); a file *inside* a folder link
   opens to the same file view (a row's info button).
-- A guest **deletes nothing** (nodes store no authorship) and the page offers no rename; a contributor moves a file
+- A guest **deletes nothing** but its own empty placeholders (E5): a node records who last wrote its name, not whose its
+  content is (inbox #467), and the page offers no rename; a contributor moves a file
   between the subtree's folders through core's move dialog ([uc.memory.move-node](../../memory/use-cases/uc.memory.move-node.md)).
 - The metadata is the blob's, declared with the upload and written in the attach transaction, for a guest as for a member (docs/apps/depot.md § How a file is stored).
 

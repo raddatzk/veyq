@@ -98,7 +98,7 @@ export function guestFileUploadJob(target: GuestFileTarget, file: File): UploadJ
   }
 
   /** Given up: take back the node this job created, and forget it, so a retry creates the file afresh. A node the
-   *  server keeps (`not_a_placeholder`: it holds the file after all, or somebody else is uploading into it) is left as it
+   *  server keeps (`not_a_placeholder`: it holds the file after all, somebody else is uploading into it, or a member renamed it) is left as it
    *  is; one it already lost (`node_not_found`: a member trashed it) is forgotten too. Anything else is thrown — the
    *  queue's abandon is best effort — and the node stays for a retry to fill. */
   async function abandon(): Promise<void> {

@@ -79,6 +79,9 @@ Sealed client-side, never readable by the server:
 - A medium's **uploader attribution and bucket structure**: an opaque owner key per medium (`user:{id}` or
   `share:{id}`), its bucket, and the buckets' shape and counts; a Depot file's uploader attribution, served to
   members only.
+- **Who last wrote each sealed field** — a folder's, file's or Memory's name and metadata, a link's name, note and label, a
+  space's name and icon, a bucket's name, a medium's metadata: the member or guest identity behind the last write,
+  served to no one and never what was written. It decides that a guest can take back only an empty upload of its own.
 - A medium's **trash state**: a flag, who trashed it and when, until the scheduled purge.
 - Job-queue and op-log offsets, presence facts, and a grant-delivery decline status.
 

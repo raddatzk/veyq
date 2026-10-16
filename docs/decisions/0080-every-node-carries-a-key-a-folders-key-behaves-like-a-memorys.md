@@ -73,22 +73,26 @@ Memory, an expense and a file side by side).
    from `ShareGuestWrites`. A move or rename is decided by the owners of the containers on **both** sides: between folders core decides
    (a `READ_WRITE` guest may), into or out of the inside of an application's container (a chapter out of a Memory)
    that application decides, and Memories declares nothing, so it is refused. **A guest may not delete a node
-   that holds anything in the first cut:** nodes store no authorship, so "delete the own" cannot be checked and a
-   contributor could remove anything in the folder; that comes with stored authorship. **What a guest may take back is
-   an empty upload placeholder** (`abandonShareNode`, owner decision 2026-10-16): the node its upload created before
+   that holds anything in the first cut:** a node records only who last wrote its name and meta
+   ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 8), not whose its
+   content is, so "delete the own" is not decided — which editor makes a node a guest's own, and where its delete goes,
+   is open ([inbox](../inbox.md) #467). **What a guest may take back is its own empty upload placeholder** (`abandonShareNode`, owner decision 2026-10-16): the node its upload created before
    the link refused the bytes (a full link: the limit is checked at the upload's start, after the create) or the guest
-   gave up, erased at once — never trashed — so nothing of a refused upload is kept. Erased only where nobody could lose
-   anything: inside the guest's reach (strictly inside the subtree and outside every identity folder for `READ_WRITE`,
-   strictly inside its own identity folder for `WRITE_ONLY`), no child, no upload a member or another identity has open
-   into it, and the owner of the node's kind declares it empty (`GuestPlaceholders`: Depot's `FILE` whose slot never
+   gave up, erased at once — never trashed — so nothing of a refused upload is kept. Erased only if the calling guest's
+   identity last wrote the node's name (its name editor, ADR 0093 § 8), so a member's empty node, one a member renamed,
+   and another guest's are none; and only where nobody could lose anything: inside the guest's reach (strictly inside
+   the subtree and outside every identity folder for `READ_WRITE`, strictly inside its own identity folder for
+   `WRITE_ONLY`), **no live link rooted on it** (a revoked one counts: the erase tombstones every link on the node,
+   `NodeSubtreePurge.erase`, so a take-back could otherwise end a member's other link — owner 2026-10-16; a guest's own
+   placeholder never carries one), no child, no upload a member or another identity has open into it, and the owner of
+   the node's kind declares it empty (`GuestPlaceholders`: Depot's `FILE` whose slot never
    held a blob; core's own `FOLDER` with no attachment and no sealed metadata — the folders a guest's folder-tree upload
-   created before every file of it was refused, owner decision 2026-10-16; a kind nobody declares never is). Since
-   authorship is not stored, any guest in reach may take back any such placeholder, a member's empty file or folder too —
-   the only thing it can remove is a name with nothing behind it, which a `READ_WRITE` guest could already rename away.
-   Until a node stores who last wrote its name, that rule stands. That attribution is decided in
-   [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 8 (the last editor
-   of every sealed field group, for reported names and metadata) but not built; once it exists, a guest takes back
-   only a placeholder its own identity named, and a member's empty node — or one a member renamed — is no longer one. A move counts as naming: a placement re-seals the name under the new parent's key, so a guest that moved a member's empty node becomes its name's last editor and may then take it back — accepted, it is the same name with nothing behind it that the guest could already rename away (owner 2026-10-16). **A node that carries a link is never a placeholder**: the erase tombstones every link on the node (`NodeSubtreePurge.erase`), so a take-back could end a member's other link (owner 2026-10-16). Neither is built; both land with the attribution (`cr-sealed-fields-record-their-last-editor`). A guest's create states the epoch it sealed with, and
+   created before every file of it was refused, owner decision 2026-10-16; a kind nobody declares never is). **A move
+   counts as naming:** a placement re-seals the name under the new parent's key and the server cannot tell a re-seal
+   from a new text, so a guest that moved a member's empty node becomes its name's last editor and may then take it
+   back — accepted (owner 2026-10-16): it is a name with nothing behind it that the guest could already rename away, and
+   the link rule keeps it from ending anybody's link. `ShareNodeAbandonCoreSliceTest` pins it, so changing it is a
+   decision. A guest's create states the epoch it sealed with, and
    the server checks it as a member's placement off the scope root (a guest never targets the scope root): above the
    scope's current epoch it is `409 stale_epoch`, at or below it the epoch is stored as sent — the `node-name` and
    `content-key` seals bind it, so the reader opens at the stored number (owner, 2026-10-07; it replaced a server-chosen
@@ -200,7 +204,8 @@ Guests of a Memory read its chapter titles (the consequence of decision 2). The 
 A share covers its subtree and nothing above. Contributors may move inside the subtree. Guest nodes in a drop box
 live in one folder per identity. The recovery copy is mandatory. Tree operations for guests are core's;
 `READ_WRITE` is interpreted per application, fail closed. **A guest deletes no node that holds anything in the first cut**
-(no stored authorship); it takes back only an empty upload placeholder, erased at once (`abandonShareNode`). **A guest's create states the epoch it sealed with**, checked as a member's placement off the root —
+(a node records who last wrote its name, not whose its content is: inbox #467); it takes back only an empty upload placeholder whose name it wrote last and
+on which no link is rooted, erased at once (`abandonShareNode`). **A guest's create states the epoch it sealed with**, checked as a member's placement off the root —
 this replaced a server-chosen current epoch, which left a name unopenable whenever it differed. **A role is
 inherited down the subtree as the share allows:** a `READ_WRITE` folder link contributes in every Memory or chapter
 below it, a `WRITE_ONLY` link writes into its root only. **A `CHAPTER` is a share root with every role.** **A Depot `FILE` is a share root with `READ` and `READ_WRITE`** (inbox #378): the file's own key goes under `K_share` (decision 1), its guest reaches that file alone and a contributor replaces its content; `WRITE_ONLY` on a file is `illegal_scope` — no key to hand out, no folder to send into ([docs/apps/depot.md](../apps/depot.md) § A single file as a share root). **The

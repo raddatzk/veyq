@@ -9,6 +9,9 @@
 -- Per-uploader buckets within a Memory (ADR 0034), keyed by an opaque owner_key ("user:{userId}" |
 -- "share:{shareIdentityId}"). One primary per (node_id, owner_key) is held by the node row's lock in code
 -- (ADR 0034), not by an index: the partial unique index it would need is outside what H2 and MariaDB both have.
+-- name_editor_user_id / name_editor_identity_id: who last wrote sealed_name (ADR 0093 § 8) - a member, or the guest
+-- identity whose display name a contributor's primary copies; at most one, null exactly while sealed_name is. No
+-- foreign key, as share_identity_id on veyq_media has none: MediaGuestIdentityUsage keeps the identity while one names it.
 CREATE TABLE veyq_bucket (
     id               UUID NOT NULL PRIMARY KEY,
     scope_id         UUID NOT NULL,
@@ -18,6 +21,8 @@ CREATE TABLE veyq_bucket (
     sealed_name      TEXT,
     is_primary       BOOLEAN     NOT NULL,
     created_at       TIMESTAMP   NOT NULL,
+    name_editor_user_id     UUID NULL,
+    name_editor_identity_id UUID NULL,
     CONSTRAINT fk_bucket_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id) ON DELETE CASCADE
 );
 CREATE INDEX ix_bucket_node_owner ON veyq_bucket (node_id, owner_key);
@@ -29,7 +34,9 @@ CREATE INDEX ix_bucket_parent ON veyq_bucket (parent_bucket_id);
 -- than the echoed cursor and be re-fetched forever. It is set at attach, so it is the medium's only time besides
 -- deleted_at: no separate created_at, which nothing read but as its fallback (#398). meta_revision is wrapped_meta's
 -- compare-and-set counter (ADR 0077) and deliberately not the node's item-list revision (core's veyq_node_items_revision). ix_media_share_identity
--- keeps a link's usage sum, taken under the tenant lock, off a table scan (ADR 0073).
+-- keeps a link's usage sum, taken under the tenant lock, off a table scan (ADR 0073). meta_editor_user_id /
+-- meta_editor_identity_id: who last wrote wrapped_meta (ADR 0093 § 8) - the uploader at attach, then the member who
+-- edits it; at most one, null exactly while wrapped_meta is; no foreign key, as share_identity_id.
 CREATE TABLE veyq_media (
     id                UUID NOT NULL PRIMARY KEY,
     scope_id          UUID NOT NULL,
@@ -44,6 +51,8 @@ CREATE TABLE veyq_media (
     bucket_id         UUID,
     created_by        VARCHAR(64),
     meta_revision     BIGINT NOT NULL DEFAULT 0,
+    meta_editor_user_id     UUID NULL,
+    meta_editor_identity_id UUID NULL,
     CONSTRAINT fk_media_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id),
     CONSTRAINT fk_media_blob FOREIGN KEY (blob_id) REFERENCES veyq_blob (id),
     CONSTRAINT fk_media_bucket FOREIGN KEY (bucket_id) REFERENCES veyq_bucket (id) ON DELETE SET NULL

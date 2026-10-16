@@ -3,6 +3,7 @@ package me.raddatz.veyq.depot.share
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.quota.StorageQuota
 import me.raddatz.veyq.core.sharing.GuestTreeShare
@@ -353,7 +354,8 @@ class ShareFilesSliceTest {
     }
 
     /** Only a `FILE` whose slot never held a blob, and that nobody else is uploading into, is a placeholder (Depot's
-     *  `DepotGuestPlaceholders`); nodes store no authorship, so an empty file a member made is one too. */
+     *  `DepotGuestPlaceholders`) — and only the guest's own: an empty file a member made is none, its name is the
+     *  member's (ADR 0093 § 8). Each seeded refusal names the guest as its name's editor, so it fails one check. */
     @Test
     fun onlyAnEmptyFileNobodyElseIsUploadingIntoIsTakenBack() {
         val t = tree()
@@ -365,20 +367,28 @@ class ShareFilesSliceTest {
         completeShare(link, sent, guestStartStaged(link, sent)).statusCode(200)
         GuestTreeShare.abandon(link, sent).statusCode(409).body("code", equalTo("not_a_placeholder"))
         // An empty file a member is uploading into is not cut off.
-        val uploading = seedNode(t.scopeId, DepotNodeKinds.FILE, parentId = t.folder, wrappedContentKey = CONTENT_KEY)
+        val uploading = seedNode(t.scopeId, DepotNodeKinds.FILE, parentId = t.folder, wrappedContentKey = CONTENT_KEY, nameEditor = guest(link))
         memberStart(t.userId, t.scopeId, uploading)
         GuestTreeShare.abandon(link, uploading).statusCode(409).body("code", equalTo("not_a_placeholder"))
         // A drop box is the owner's link-bearing node, never a placeholder.
-        val dropBox = seedNode(t.scopeId, DepotNodeKinds.DROPBOX, parentId = t.folder, wrappedContentKey = CONTENT_KEY)
+        val dropBox = seedNode(t.scopeId, DepotNodeKinds.DROPBOX, parentId = t.folder, wrappedContentKey = CONTENT_KEY, nameEditor = guest(link))
         GuestTreeShare.abandon(link, dropBox).statusCode(409).body("code", equalTo("not_a_placeholder"))
         for (id in listOf(t.file, sent, uploading, dropBox)) assertNotNull(tx { NodeEntity.findById(id) }, "a refusal writes nothing")
         assertNotNull(blobOf(t.file)); assertNotNull(blobOf(sent))
 
-        // Control: an empty file nobody is uploading into goes.
-        val bare = seedNode(t.scopeId, DepotNodeKinds.FILE, parentId = t.folder, wrappedContentKey = CONTENT_KEY)
+        // A member's empty file nobody is uploading into is no guest's placeholder (it was one before names had editors).
+        val members = seedNode(t.scopeId, DepotNodeKinds.FILE, parentId = t.folder, wrappedContentKey = CONTENT_KEY, nameEditor = PrincipalKey.User(t.userId))
+        GuestTreeShare.abandon(link, members).statusCode(409).body("code", equalTo("not_a_placeholder"))
+        assertNotNull(tx { NodeEntity.findById(members) })
+
+        // Control: the guest's own empty file, made the way its client makes it (`createShareNode`), goes.
+        val bare = UUID.randomUUID().toString()
+        GuestTreeShare.create(link, t.folder, DepotNodeKinds.FILE, nodeId = bare).statusCode(201)
         GuestTreeShare.abandon(link, bare).statusCode(204)
         assertNull(tx { NodeEntity.findById(bare) })
     }
+
+    private fun guest(link: GuestTreeShare.Link): PrincipalKey = PrincipalKey.Share(identityOf(link))
 
     @Test
     fun aDeletedLinkKeepsItsGuestsIdentityWhileItsFileNamesIt() {
