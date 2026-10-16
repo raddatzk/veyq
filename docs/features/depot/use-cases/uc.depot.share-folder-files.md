@@ -38,7 +38,8 @@
   completion is refused (`upload_not_found` / `node_not_found`), nothing is attached.
 - **E4 — a trashed file** (or one under a trashed folder): not listed, its blob `404`, an upload into it `404`.
 - **E5 — the link's storage limit is reached:** refused at the exact byte; the page says the link is full, and nothing
-  of the refused upload is kept: the file its create made is taken back and erased (`abandonShareNode`).
+  of the refused upload is kept: the file its create made is taken back and erased (`abandonShareNode`), and so are the
+  folders a refused folder upload made, once nothing below them landed or can still land.
 - **E6 — a name a readable sibling already holds:** a file's is the replace of step 5, after the question; a folder's,
   a Memory's or a drop box's is refused before anything is sent, the sibling named by its kind. A sibling the guest
   could not see is the server's `409 slug_taken`, said in the generic words.

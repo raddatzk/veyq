@@ -124,7 +124,10 @@ reads).
   `createFolders` creates the folders top-down through the session's `FilesUpload.beginTree` (a guest is named first, and
   each folder it creates joins its key chain) and hands one queue job per file to core's queue. A folder that cannot be
   created is named in a notice and nothing below it is sent; a file that fails is the queue's per-file failure. A directory
-  lists only files, so an empty directory is not created. Core's "New → Import…" is gone: upload recognises an archive
+  lists only files, so an empty directory is not created. A guest cannot trash, so once the queue settled the batch its
+  door takes back the folders that hold nothing (`takeBackEmptyFolders`, core's `abandonShareNode` on core's own empty
+  `FOLDER`), deepest first: a link that refused every file keeps none of them, and a folder below which a file landed or a
+  retry could still land one stays. A member's refused folders stay for the member to delete. Core's "New → Import…" is gone: upload recognises an archive
   itself.
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
   FILE sibling already holds by `fileNameSlug`, replace that file after the uploader confirmed (`depot.replaceConfirm`,
@@ -314,7 +317,7 @@ root). The role matrix (ADR 0080 decision 6):
 |---|---|
 | `READ` | list the files of the shared subtree, download them |
 | `READ_WRITE` | the above; create a `FILE` under a folder of the subtree (core's `createShareNode`: core's `FolderGuestNodeRules` lets a guest create a `FOLDER` and the kinds their application declares guest-creatable, and Depot declares `FILE`, `DepotGuestCreatableKinds`); upload into a file below the root, first or replacing its blob (any file below the root, a member's too); rename or move it (core's `updateShareNode`) |
-| `READ_WRITE`, `WRITE_ONLY` | take back an empty `FILE` — one whose slot never held a blob and nobody else is uploading into — of its reach (`WRITE_ONLY`: its own identity folder), erased at once (core's `abandonShareNode`, `DepotGuestPlaceholders`): what its own refused or given-up upload created; nodes store no authorship, so any such file in reach |
+| `READ_WRITE`, `WRITE_ONLY` | take back an empty `FILE` — one whose slot never held a blob and nobody else is uploading into — of its reach (`WRITE_ONLY`: its own identity folder), erased at once (core's `abandonShareNode`, `DepotGuestPlaceholders`): what its own refused or given-up upload created; `READ_WRITE` also an empty `FOLDER` (core's own, `FolderGuestPlaceholders`: no child, no cover, no sealed metadata) its folder upload left; nodes store no authorship, so any such node in reach |
 | any | **not** delete a file that holds content (nodes store no authorship), **not** upload into a `FOLDER`, **not** create a drop box (owner decision 2026-10-14: Depot declares only `FILE`, so a `DEPOT_DROPBOX` is `422 illegal_scope`, `ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox`) |
 
 **What the web offers.** One view per kind serves a member and a guest (ADR 0079 Consequences, inbox #401): what it
