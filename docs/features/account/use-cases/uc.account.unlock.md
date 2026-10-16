@@ -58,6 +58,12 @@ sequenceDiagram
   wrap) each open the **same** Master Key via their own wrap — separate use-cases, not this flow. So does the
   Secret Key alone, through the `RECOVERY` wrap, but only to reset a forgotten password
   ([recover-access](uc.account.recover-access.md)); there is no separate recovery code.
+- **A2 — unlocking on a session the sign-in found (web, inbox #454):** a device that reaches the sign-in screen
+  with a live session — one boot restored without opening the vault — unlocks **inside** that session when the
+  address entered is the session's account, as the server names it: the password is not first spent on a second
+  login, and no second session family appears in Devices and sessions. A different account first ends that family
+  and signs in ([login](uc.account.login.md) A2). The unlock itself is unchanged: the password and the Secret Key
+  are derived on the device, and the server sees no secret.
 - **E1 — wrong password or Secret Key:** the KEK fails to open the wrap (AEAD tag mismatch) → **generic
   unlock failure**; the server is **uninvolved** and learns nothing; the user retries locally.
 - **E2 — no PASSWORD wrap / not authenticated:** the wrap cannot be fetched or does not exist; the user

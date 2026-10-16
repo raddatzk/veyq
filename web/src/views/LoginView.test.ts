@@ -16,6 +16,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('../features/account/login/login', () => ({ login: vi.fn() }))
+// Whose a restored session is, and ending it, are the wire's: `LoginView.restoredSession.test.ts` runs them over a fake
+// server. Here the answer is stubbed, with the real address comparison.
+vi.mock('../features/account/login/liveSession', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/account/login/liveSession')>()),
+  liveSessionAddress: vi.fn(),
+  leaveLiveSession: vi.fn(),
+}))
 vi.mock('../features/account/login/signOut', () => ({ signOut: vi.fn(), takeSignOutNotice: vi.fn() }))
 vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn(), unlockWithDevice: vi.fn() }))
 vi.mock('../features/account/trustDevice/trustDevice', () => ({
@@ -68,6 +75,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 import LoginView from './LoginView.vue'
 import { login } from '../features/account/login/login'
 import { signOut, takeSignOutNotice } from '../features/account/login/signOut'
+import { leaveLiveSession, liveSessionAddress } from '../features/account/login/liveSession'
 import { session } from '../app/session'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
 import { trustThisDevice, untrustThisDevice, isTrusted, trustedEmails } from '../features/account/trustDevice/trustDevice'
@@ -173,6 +181,8 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     // `clearAllMocks` clears calls, not implementations, so every resolved value is restated per test.
     vi.mocked(isTrusted).mockResolvedValue(false)
     vi.mocked(login).mockResolvedValue(undefined)
+    vi.mocked(liveSessionAddress).mockResolvedValue('kevin@example.com')
+    vi.mocked(leaveLiveSession).mockResolvedValue(undefined)
     vi.mocked(signOut).mockResolvedValue(undefined)
     vi.mocked(takeSignOutNotice).mockReturnValue(null)
     session.accessToken = null
@@ -498,8 +508,9 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
   })
 
   it('the prefilled email keeps a session a boot restored: the unlock is no second login', async () => {
-    // A prefill is not "a different account": dropping the restored session for it would make every sign-in on such a
-    // device a new login (the second session that typing the email causes, which this row does not fix).
+    // A prefill of the session's own account is no different account: dropping the restored session for it would make
+    // every sign-in on such a device a new login. Typing it keeps the session too (inbox #454, on the wire in
+    // `LoginView.restoredSession.test.ts`).
     session.accessToken = 'restored'
     switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
     vi.mocked(rememberedEmail).mockResolvedValue('kevin@example.com')
@@ -512,7 +523,30 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     await flushPromises()
 
     expect(login).not.toHaveBeenCalled()
+    expect(leaveLiveSession).not.toHaveBeenCalled()
     expect(unlockMasterKey).toHaveBeenCalledWith('the-password', 'the-secret-key')
+  })
+
+  it('a restored session keeps its sign-out button while the address is typed over (inbox #454)', async () => {
+    // The card follows the session the tab holds, not the field: typing ends nothing, the submit decides.
+    session.accessToken = 'restored'
+    const w = mountView()
+    await fillCredentials(w, 'other@example.com')
+
+    expect(buttonLabelled(w, t('login.signOut'))).toBeDefined()
+    expect(buttonLabelled(w, t('recovery.forgot'))).toBeUndefined()
+  })
+
+  it('§E3’s entry on a restored session of the typed account logs in no second time, even with the toggle on', async () => {
+    session.accessToken = 'restored'
+    const w = mountView()
+    await fillCredentials(w)
+    await turnRememberOn(w)
+    await enterLocked(w)
+
+    expect(login).not.toHaveBeenCalled()
+    expect(leaveLiveSession).not.toHaveBeenCalled()
+    expect(w.text()).toContain(t('sessions.lockedTitle'))
   })
 
   it('device-linking off: no "sign in with code" entry, and a scanned pairing code is not accepted (the kit still is)', async () => {

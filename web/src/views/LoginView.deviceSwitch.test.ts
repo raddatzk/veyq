@@ -18,6 +18,7 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 vi.mock('../api/client', () => ({
   accountWrapsApi: vi.fn(),
   accountApi: vi.fn(),
+  accountEmailApi: vi.fn(),
   loginApi: vi.fn(),
   tokenApi: vi.fn(),
   sessionApi: vi.fn(),
@@ -54,7 +55,7 @@ import { rememberThisDeviceWrap } from '../features/account/deviceRegister'
 import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
 import { cacheSessionVault } from '../features/account/rememberMe/sessionVault'
 import { enrolDeviceKey, restoreDeviceKey } from '../features/account/rememberMe/deviceKeyWrap'
-import { accountWrapsApi } from '../api/client'
+import { accountEmailApi, accountWrapsApi } from '../api/client'
 import { fakeApi } from '../test/apiMock'
 import { session } from '../app/session'
 import type { AccountKeyMaterial, MasterKeyWrap } from '../api/generated/account'
@@ -124,6 +125,8 @@ beforeEach(() => {
   jar.cookie = null
   session.accessToken = null
   switchedOff.clear()
+  // The revived session belongs to this account, as the server answers for it (inbox #454).
+  fakeApi(accountEmailApi, { getAccountEmail: async () => ({ email: EMAIL, confirmed: true }) })
   fakeApi(accountWrapsApi, {
     addAccountWrap: vi.fn(async ({ addWrapRequest: r }) => {
       const id = `wrap-${server.wraps.length + 1}`
@@ -155,17 +158,9 @@ afterEach(() => {
 })
 
 describe('a remembered device signs in while passwordless is off (inbox #450)', () => {
-  it('opens directly again after the switch-on and a browser restart', async () => {
-    // Remembered earlier with the toggle on: a DEVICE_KEY wrap and a persistent cookie.
-    await enrolDeviceKey(EMAIL, MASTER_KEY)
-    jar.cookie = LoginVerifyRequestSessionScopeEnum.Persistent
-
-    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
-    restartBrowser()
-    expect(await opensDirectly()).toBe(false) // control: the switch bites — the wrap is withheld
-
-    // The sign-in screen. The member types their address even though it is prefilled, which drops the restored
-    // session (the measured path of the browser pass), so this sign-in is a new login and picks the cookie.
+  /** The sign-in screen: the member types their address even though it is prefilled (the measured path of the
+   *  browser pass), then the password and the Secret Key the withheld wrap leaves them needing. */
+  async function signIn() {
     mounted = mount(LoginView, { global: { plugins: [realI18n()], stubs } })
     const emailField = mounted.find('input[name="email"]')
     // The fake IndexedDB answers on its own timers, past a single promise flush.
@@ -178,9 +173,42 @@ describe('a remembered device signs in while passwordless is off (inbox #450)', 
     await mounted.find('input[name="secret-key"]').setValue('the-secret-key')
     await mounted.find('form').trigger('submit')
     await vi.waitFor(() => expect(cacheSessionVault).toHaveBeenCalled()) // the sign-in ran to its enrolment
-    expect(login).toHaveBeenCalledOnce() // control: the sign-in really was a new login
     expect(trustThisDevice).not.toHaveBeenCalled()
     expect(server.deletes).toEqual([])
+  }
+
+  it('a new login keeps the persistent scope, so it opens directly again after the switch-on and a restart', async () => {
+    // Remembered earlier with the toggle on: a DEVICE_KEY wrap and a persistent cookie.
+    await enrolDeviceKey(EMAIL, MASTER_KEY)
+    jar.cookie = LoginVerifyRequestSessionScopeEnum.Persistent
+
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    // The cookie ran out while the switch was off, so the restart revives no session and the sign-in is a new login,
+    // which picks the cookie the next restart keeps or loses.
+    jar.cookie = null
+    restartBrowser()
+    expect(await opensDirectly()).toBe(false) // control: no session to fetch the wrap with
+
+    await signIn()
+    expect(login).toHaveBeenCalledOnce() // control: the sign-in really was a new login
+    expect(jar.cookie).toBe(LoginVerifyRequestSessionScopeEnum.Persistent)
+
+    switchedOff.delete(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    restartBrowser()
+    expect(await opensDirectly()).toBe(true)
+  })
+
+  it('a revived session is unlocked inside (inbox #454), so its persistent cookie stays and the restart opens directly', async () => {
+    await enrolDeviceKey(EMAIL, MASTER_KEY)
+    jar.cookie = LoginVerifyRequestSessionScopeEnum.Persistent
+
+    switchedOff.add(CORE_REMEMBER_DEVICE_PASSWORDLESS)
+    restartBrowser()
+    expect(await opensDirectly()).toBe(false) // control: the switch bites — the wrap is withheld
+
+    await signIn()
+    expect(login).not.toHaveBeenCalled() // the typed address is the session's: no second login, no new cookie
+    expect(jar.cookie).toBe(LoginVerifyRequestSessionScopeEnum.Persistent)
 
     switchedOff.delete(CORE_REMEMBER_DEVICE_PASSWORDLESS)
     restartBrowser()
