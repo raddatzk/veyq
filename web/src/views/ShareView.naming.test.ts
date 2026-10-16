@@ -77,7 +77,7 @@ beforeEach(async () => {
   if (confirmRequest.value) settleConfirm(false)
   localStorage.clear()
   authenticatedCalls.length = 0
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
   stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
   stubApi(publicShareFilesApi, { listShareFiles: { items: [] } })
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:shareId', component: ShareView }] })

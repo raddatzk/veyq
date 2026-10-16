@@ -11,17 +11,17 @@ import type { LocalizedMarkdown, TenantTerms } from '../../api/generated/tenants
 
 export type { TenantTerms, LocalizedMarkdown } from '../../api/generated/tenants'
 
-/** The tenant's current terms + the caller's accepted version (member-readable; a non-member is 404). */
+/** The tenant's current terms + the caller's accepted revision (member-readable; a non-member is 404). */
 export function getTenantTerms(tenantId: string): Promise<TenantTerms> {
   return tenantsApi().getTenantTerms({ tenantId })
 }
 
-/** Member: accept the tenant's current terms at [version] — must equal the current version, else 409. */
-export function acceptTenantTerms(tenantId: string, version: number): Promise<TenantTerms> {
-  return tenantsApi().acceptTenantTerms({ tenantId, acceptTermsRequest: { version } })
+/** Member: accept the tenant's current terms at [revision] — must equal the current revision, else 409. */
+export function acceptTenantTerms(tenantId: string, revision: number): Promise<TenantTerms> {
+  return tenantsApi().acceptTenantTerms({ tenantId, acceptTermsRequest: { revision } })
 }
 
-/** Owner-only: set/replace the tenant's per-locale terms — a normalized change bumps the version (else 403). */
+/** Owner-only: set/replace the tenant's per-locale terms — a normalized change bumps the revision (else 403). */
 export function updateTenantTerms(tenantId: string, terms: LocalizedMarkdown): Promise<TenantTerms> {
   return tenantsApi().updateTenantTerms({ tenantId, tenantTermsUpdate: { terms } })
 }

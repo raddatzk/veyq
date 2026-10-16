@@ -279,7 +279,7 @@ class NodesStore {
 
     /**
      * A placement write (ADR 0080 Decision 3): every field of the node's directory entry and key wrap at once, built on
-     * [expectedVersion]. [epoch] is the epoch to store, or null to keep the stored one (a placement between two
+     * [expectedRevision]. [epoch] is the epoch to store, or null to keep the stored one (a placement between two
      * non-root parents, ADR 0080 Decision 4 — the handler decides which).
      */
     data class Placement(
@@ -288,16 +288,16 @@ class NodesStore {
         val slugToken: String,
         val wrappedContentKey: String,
         val epoch: Int?,
-        val expectedVersion: Long,
+        val expectedRevision: Long,
     )
 
     /**
      * Apply a partial update: a [placement], a reorder, a payload re-seal — each optional. A placement is written only
-     * if the node's `placementRevision` is still [Placement.expectedVersion] (ADR 0080 Decision 3), a [wrappedMeta]
+     * if the node's `placementRevision` is still [Placement.expectedRevision] (ADR 0080 Decision 3), a [wrappedMeta]
      * only if [metaRevision] is still the stored one (ADR 0077); on either miss **nothing** is written and the caller
      * learns which.
      *
-     * **One statement.** Every column the request changes, both version bumps and both version compares sit in ONE
+     * **One statement.** Every column the request changes, both revision bumps and both revision compares sit in ONE
      * bulk UPDATE, so its row count is the whole verdict: two compare-and-sets in two statements would have to undo
      * the first when the second missed. It runs before this transaction loads the node, so no managed copy holds the
      * pre-update row for a flush to write back; on a miss the node is loaded afterwards, as it now is, to tell the two
@@ -353,8 +353,8 @@ class NodesStore {
             )
             params += mapOf(
                 "parentId" to p.parentSlot, "encryptedName" to p.encryptedName, "slugToken" to p.slugToken,
-                "wrappedContentKey" to p.wrappedContentKey, "nextPlacement" to p.expectedVersion + 1,
-                "placementRevision" to p.expectedVersion,
+                "wrappedContentKey" to p.wrappedContentKey, "nextPlacement" to p.expectedRevision + 1,
+                "placementRevision" to p.expectedRevision,
             )
             conds += "placementRevision = :placementRevision"
             p.epoch?.let { sets += "epoch = :epoch"; params["epoch"] = it }
@@ -373,7 +373,7 @@ class NodesStore {
             return ApplyResult.Applied
         }
         val current = NodeEntity.findById(nodeId)?.takeIf { it.deletedAt == null } ?: return ApplyResult.Missing
-        if (placement != null && current.placementRevision != placement.expectedVersion) return ApplyResult.StalePlacement
+        if (placement != null && current.placementRevision != placement.expectedRevision) return ApplyResult.StalePlacement
         if (wrappedMeta != null && current.metaRevision != metaRevision) return ApplyResult.StaleMeta(current.wrappedMeta, current.metaRevision)
         return ApplyResult.Missing
     }

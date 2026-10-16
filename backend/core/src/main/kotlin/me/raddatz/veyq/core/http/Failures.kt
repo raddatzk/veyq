@@ -76,9 +76,9 @@ object Failures {
      *  client re-reads and rebuilds against the current epoch (ADR 0024). */
     val staleEpoch: HttpFailure = httpFailure("stale_epoch", CONFLICT)
 
-    /** A version-checked write stated a version the stored one has moved past → 409; nothing was written. The
+    /** A revision-checked write stated a revision the stored one has moved past → 409; nothing was written. The
      *  sealed-meta writes answer it with the blob's current value ([httpStaleSealedMeta], ADR 0077). */
-    val staleVersion: HttpFailure = httpFailure("stale_version", CONFLICT)
+    val staleRevision: HttpFailure = httpFailure("stale_revision", CONFLICT)
 
     /** A placement write (a move or a rename) stated a `placementRevision` the node has moved past → 409; nothing was
      *  written, and the client re-reads the node and rebuilds the placement against it (ADR 0080 Decision 3). */

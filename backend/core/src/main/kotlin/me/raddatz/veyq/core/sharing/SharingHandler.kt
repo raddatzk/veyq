@@ -217,8 +217,8 @@ sealed interface NodeSharesOutcome {
 }
 
 sealed interface ShareTermsOutcome {
-    /** The owning tenant's public terms — `termsVersion` 0 (with null `de`/`en`) when the operator published none. */
-    data class Found(val tenantId: String, val termsVersion: Int, val de: String?, val en: String?) : ShareTermsOutcome
+    /** The owning tenant's public terms — `termsRevision` 0 (with null `de`/`en`) when the operator published none. */
+    data class Found(val tenantId: String, val termsRevision: Int, val de: String?, val en: String?) : ShareTermsOutcome
     /** Unknown/disabled/expired share — the same non-enumerable 404 as [ResolveShareOutcome.NotFound]. */
     object NotFound : ShareTermsOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
 }
@@ -587,7 +587,7 @@ class SharingHandler(
      * acceptance in localStorage, which an accountless visitor can bypass (devtools / a fresh profile / resolving the
      * share directly). It records + surfaces consent; it does not *prevent* access. The legally-meaningful protection
      * is the terms' own content (CSAM/illegal-content + review-and-removal) and the decryptable-on-report path, not
-     * this prompt. A tenant with no published terms yields `termsVersion` 0, and the client then never gates.
+     * this prompt. A tenant with no published terms yields `termsRevision` 0, and the client then never gates.
      */
     fun shareTerms(shareId: String): ShareTermsOutcome {
         val share = gate.activeShare(shareId) ?: return ShareTermsOutcome.NotFound
@@ -595,7 +595,7 @@ class SharingHandler(
         // ADR 0029 §6). Defensive null (a share always has a scope+tenant by FK) → the same non-enumerable 404.
         val tenantId = scopes.scopeTenantId(share.scopeId) ?: return ShareTermsOutcome.NotFound
         val terms = tenantTerms.guestTerms(tenantId)
-        return ShareTermsOutcome.Found(tenantId, terms?.version ?: 0, terms?.terms?.de, terms?.terms?.en)
+        return ShareTermsOutcome.Found(tenantId, terms?.revision ?: 0, terms?.terms?.de, terms?.terms?.en)
     }
 
     // --- contributor / uploader (cr-0101, cr-0102) -----------------------------

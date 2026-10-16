@@ -971,7 +971,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
       new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt: Date.UTC(2021, 4, 1, 10, 0, 0), capturedAtOverride: PEER })),
     ))
     store.api.updateMediaMeta.mockRejectedValueOnce({
-      response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta: peers, metaRevision: 1 }), { status: 409 }),
+      response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta: peers, metaRevision: 1 }), { status: 409 }),
     })
 
     const wrapper = mountLightbox(memoryKey, items, 0)

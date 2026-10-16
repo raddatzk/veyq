@@ -2,11 +2,11 @@
 // ADR 0028). A client remembers each contact's identity public key the first time it wraps to them, so a later
 // *changed* key (an active operator's MITM, or a legitimate rotation) is surfaced, never silently trusted.
 //
-// The store is ONE blob sealed under the Master Key (`seal({ purpose: "identity-pins", version }, masterKey, blob)`) and synced with
-// the account: the server relays one opaque ciphertext + a monotonic `version` for optimistic concurrency, and
+// The store is ONE blob sealed under the Master Key (`seal({ purpose: "identity-pins", revision }, masterKey, blob)`) and synced with
+// the account: the server relays one opaque ciphertext + a monotonic `revision` for optimistic concurrency, and
 // never sees a userId, a pinned key, or the count. The sealed plaintext is `{ pins: { <userId>: { key, state,
-// firstSeenAt } } }`; `version` is the cleartext wire counter (the server's authority for concurrency — the
-// enabler's `{ version, pins }` shows both halves conceptually). Account-global: identity is one keypair per
+// firstSeenAt } } }`; `revision` is the cleartext wire counter (the server's authority for concurrency — the
+// enabler's `{ revision, pins }` shows both halves conceptually). Account-global: identity is one keypair per
 // account across tenants (ADR 0023), so there is one pin per contact everywhere.
 //
 // Every open — before a read and before every write — goes through this device's trust-state marks
@@ -20,9 +20,9 @@ import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey, identityPrivate } from '../../app/vault'
 import { openAccountDocument, raiseMarks, type AccountDocumentStore } from './trustMarks'
 
-/** The pin store's seal context at a stored `version` (ADR 0072, vector `seal.sym.identity-pins`): bound to the
- *  version the server stores it at, so a blob served under another version does not open. */
-const pinsContext = (version: number) => ({ purpose: 'identity-pins', version }) as const
+/** The pin store's seal context at a stored `revision` (ADR 0072, vector `seal.sym.identity-pins`): bound to the
+ *  revision the server stores it at, so a blob served under another revision does not open. */
+const pinsContext = (revision: number) => ({ purpose: 'identity-pins', revision }) as const
 
 /** A pin's trust state. `pinned` = trust-on-first-use; `verified` = an out-of-band safety-number compare
  *  succeeded (the ceremony on a member's profile, ADR 0028 Decision 3). `verified` rides inside the same Master-Key-sealed blob. */
@@ -49,9 +49,9 @@ export interface Pin {
 
 type PinMap = Record<string, Pin>
 
-/** The opened store: the server's current `version` (for the next guarded write) + the decrypted pin map. */
+/** The opened store: the server's current `revision` (for the next guarded write) + the decrypted pin map. */
 interface OpenedStore {
-  version: number
+  revision: number
   pins: PinMap
 }
 
@@ -86,54 +86,54 @@ export class IdentityMovedError extends Error {
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-/** Bounds the re-read/merge/retry loop on a `409 stale_version` — a real conflict is a concurrent device write. */
+/** Bounds the re-read/merge/retry loop on a `409 stale_revision` — a real conflict is a concurrent device write. */
 const MAX_WRITE_ATTEMPTS = 5
 
 /** Decrypt the pin map from a sealed blob. Throws on anything that is not a store this client wrote — a blob that
  *  does not open, or opens to another shape; the caller refuses it as unreadable (ADR 0028 Decision 7). */
-function unsealPins(mk: Uint8Array, blobB64: string, version: number): PinMap {
-  const parsed = JSON.parse(decoder.decode(v1.open(pinsContext(version), mk, fromB64std(blobB64)))) as { pins?: unknown }
+function unsealPins(mk: Uint8Array, blobB64: string, revision: number): PinMap {
+  const parsed = JSON.parse(decoder.decode(v1.open(pinsContext(revision), mk, fromB64std(blobB64)))) as { pins?: unknown }
   if (!parsed || typeof parsed.pins !== 'object' || parsed.pins === null) throw new Error('identity_pins_unreadable')
   return parsed.pins as PinMap
 }
 
 /** Open a served store through this device's marks — refused if rolled back, missing after a mark, or unreadable. */
-function openPins(mk: Uint8Array, served: { blob: string | null; version: number }): Promise<PinMap> {
-  return openAccountDocument('pins', mk, served, (blob) => unsealPins(mk, blob, served.version), (): PinMap => ({}))
+function openPins(mk: Uint8Array, served: { blob: string | null; revision: number }): Promise<PinMap> {
+  return openAccountDocument('pins', mk, served, (blob) => unsealPins(mk, blob, served.revision), (): PinMap => ({}))
 }
 
-/** Seal a pin map under the Master Key for the version it will be stored at — the PUT's `version + 1`, since the
- *  server bumps the version it accepts by one → the opaque base64 blob to PUT. */
-function sealPins(mk: Uint8Array, pins: PinMap, storedVersion: number): string {
+/** Seal a pin map under the Master Key for the revision it will be stored at — the PUT's `revision + 1`, since the
+ *  server bumps the revision it accepts by one → the opaque base64 blob to PUT. */
+function sealPins(mk: Uint8Array, pins: PinMap, storedRevision: number): string {
   const json = encoder.encode(JSON.stringify({ pins }))
-  return b64std(v1.seal(pinsContext(storedVersion), mk, json))
+  return b64std(v1.seal(pinsContext(storedRevision), mk, json))
 }
 
-/** Fetch + open the caller's pin store (born-empty: version 0, no pins). Requires an unlocked vault. Throws
+/** Fetch + open the caller's pin store (born-empty: revision 0, no pins). Requires an unlocked vault. Throws
  *  `TrustStateRefused` for a store this device must not accept. */
 async function loadStore(): Promise<OpenedStore> {
   const mk = masterKey()
   if (!mk) throw new Error('identity pin store requires an unlocked vault')
   try {
     const res = await withRefresh(() => accountIdentityPinsApi().getIdentityPins())
-    return { version: res.version, pins: await openPins(mk, res) }
+    return { revision: res.revision, pins: await openPins(mk, res) }
   } finally {
     mk.fill(0)
   }
 }
 
-/** Whether a failed call is a `409 stale_version` (a concurrent device advanced the store under our write). */
-function isStaleVersion(e: unknown): Promise<boolean> {
-  return isCodedError(e, HttpStatus.conflict, 'stale_version')
+/** Whether a failed call is a `409 stale_revision` (a concurrent device advanced the store under our write). */
+function isStaleRevision(e: unknown): Promise<boolean> {
+  return isCodedError(e, HttpStatus.conflict, 'stale_revision')
 }
 
 /**
- * Apply a change to the pin map and store it, version-guarded. On a `409 stale_version` (another device wrote
+ * Apply a change to the pin map and store it, revision-guarded. On a `409 stale_revision` (another device wrote
  * first) re-read the server's current store, **re-apply the same change on top of it** (client-side union-merge —
  * `apply` is written to be additive/idempotent, so a concurrent pin for another contact is preserved), and retry.
  * Starts from an already-loaded `base` to avoid a redundant GET on the common no-conflict path. `base` and every
  * re-base come from {@link loadStore}, so the open before each write meets the same marks as a read; a write that
- * lands raises the mark to the version it stored.
+ * lands raises the mark to the revision it stored.
  */
 async function mutateAndSave(base: OpenedStore, apply: (pins: PinMap) => void): Promise<void> {
   let store = base
@@ -143,14 +143,14 @@ async function mutateAndSave(base: OpenedStore, apply: (pins: PinMap) => void): 
     const mk = masterKey()
     if (!mk) throw new Error('identity pin store requires an unlocked vault')
     try {
-      const blob = sealPins(mk, next, store.version + 1)
+      const blob = sealPins(mk, next, store.revision + 1)
       await withRefresh(() =>
-        accountIdentityPinsApi().putIdentityPins({ identityPinsUpdate: { blob, version: store.version } }),
+        accountIdentityPinsApi().putIdentityPins({ identityPinsUpdate: { blob, revision: store.revision } }),
       )
-      await raiseMarks(mk, { pins: store.version + 1 })
+      await raiseMarks(mk, { pins: store.revision + 1 })
       return
     } catch (e) {
-      if (attempt + 1 < MAX_WRITE_ATTEMPTS && (await isStaleVersion(e))) {
+      if (attempt + 1 < MAX_WRITE_ATTEMPTS && (await isStaleRevision(e))) {
         store = await loadStore() // re-base on the server's current store, then re-apply + retry
         continue
       }

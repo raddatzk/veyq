@@ -13,9 +13,9 @@ import org.hibernate.annotations.DynamicUpdate
  * Master Key (`symWrap(masterKey, blob, "device-register")`) the server stores + relays verbatim and never opens.
  * It holds a stable client-side device id, its label, and the device<->session-family join — the last of which is
  * precisely what the server must not learn, since it would cluster N deliberately-unlinkable families into
- * per-device groups. Keyed by `accountId` (one row per account). `version` is the monotonic
+ * per-device groups. Keyed by `accountId` (one row per account). `revision` is the monotonic
  * optimistic-concurrency counter (born 0, bumped on each successful PUT). A born-empty account has no row and
- * reads as `{ blob: null, version: 0 }`.
+ * reads as `{ blob: null, revision: 0 }`.
  *
  * `sealed_blob` is plain `TEXT`, unlike the sibling identity-pin store: the register is small (a handful of short
  * labels and joins) and its contract cap sits inside the MariaDB `TEXT` ceiling, so it needs no widening.
@@ -31,8 +31,8 @@ class DeviceRegisterEntity : PanacheEntityBase {
     @Column(name = "sealed_blob")
     var sealedBlob: String? = null
 
-    @Column(name = "version", nullable = false)
-    var version: Long = 0
+    @Column(name = "revision", nullable = false)
+    var revision: Long = 0
 
     companion object : PanacheCompanionBase<DeviceRegisterEntity, String>
 }

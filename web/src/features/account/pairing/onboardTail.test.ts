@@ -380,11 +380,11 @@ describe('the shared tail — a linked device starts from its linker\u2019s trus
     await settle()
     return mk
   }
-  /** The pin store as the server serves it on this device's first read: a valid seal at `version`. */
-  function servePins(mk: Uint8Array, version: number) {
-    const blob = b64std(v1.seal({ purpose: 'identity-pins', version }, mk, new TextEncoder().encode(JSON.stringify({ pins: {} }))))
+  /** The pin store as the server serves it on this device's first read: a valid seal at `revision`. */
+  function servePins(mk: Uint8Array, revision: number) {
+    const blob = b64std(v1.seal({ purpose: 'identity-pins', revision }, mk, new TextEncoder().encode(JSON.stringify({ pins: {} }))))
     const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>()
-    fakeApi(accountIdentityPinsApi, { getIdentityPins: async () => ({ blob, version }), putIdentityPins })
+    fakeApi(accountIdentityPinsApi, { getIdentityPins: async () => ({ blob, revision }), putIdentityPins })
     return putIdentityPins
   }
 
@@ -401,7 +401,7 @@ describe('the shared tail — a linked device starts from its linker\u2019s trus
     // The write lands, and the store answers with what it now holds.
     put.mockImplementation(async ({ identityPinsUpdate }) => ({
       blob: identityPinsUpdate.blob,
-      version: identityPinsUpdate.version! + 1,
+      revision: identityPinsUpdate.revision! + 1,
     }))
     expect(await checkAndPin('u1', 'a2V5LW9uZQ==')).toBe('firstUse')
   })

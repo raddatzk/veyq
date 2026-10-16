@@ -79,12 +79,12 @@ const exifCtx = (mediaId: string) => ({ purpose: 'media-exif', scopeId: SCOPE_ID
 /** A listed tier sealed as the upload would — the base a meta write re-reads (ADR 0077). */
 const sealTier = (mediaId: string, key: Uint8Array, tier: object) =>
   b64std(v1.seal(metaCtx(mediaId), key, new TextEncoder().encode(JSON.stringify(tier))))
-/** A media a write targets: its listed tier (or none) at a version. */
+/** A media a write targets: its listed tier (or none) at a revision. */
 const target = (mediaId: string, key: Uint8Array, tier: object | null, metaRevision = 0) =>
   ({ mediaId, wrappedMeta: tier ? sealTier(mediaId, key, tier) : undefined, metaRevision })
-/** A thrown generated-client failure carrying `409 stale_version` with the server's current tier. */
+/** A thrown generated-client failure carrying `409 stale_revision` with the server's current tier. */
 const staleTier = (wrappedMeta: string | null, metaRevision: number) => ({
-  response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaRevision }), { status: 409 }),
+  response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta, metaRevision }), { status: 409 }),
 })
 const openJson = (ctx: v1.SealContext, key: Uint8Array, sealed: string) =>
   JSON.parse(new TextDecoder().decode(v1.open(ctx, key, fromB64std(sealed))))
@@ -872,7 +872,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
 
     const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured, 3), memoryKey, CORRECTED)
 
-    expect(store.api.updateMediaMeta.mock.calls[0][0].mediaMetaUpdate.metaRevision).toBe(3) // the version it read
+    expect(store.api.updateMediaMeta.mock.calls[0][0].mediaMetaUpdate.metaRevision).toBe(3) // the revision it read
     expect(updated.metaRevision).toBe(4)
     // the wire carries only opaque ciphertext — never the plaintext date
     const sealed = store.captured.updatedMeta

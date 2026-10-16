@@ -286,20 +286,20 @@ class RotationSliceTest {
     }
 
     @Test
-    fun aStalePinStoreVersionRollsTheWholeRotationBack() {
+    fun aStalePinStoreRevisionRollsTheWholeRotationBack() {
         // ADR 0060 § Consequences: the two Master-Key-sealed documents are re-sealed INSIDE the rotation's
         // transaction, so a rotation that cannot write them does not happen. The lever is the pin store's
-        // `version` in the request, one behind the stored one. What makes this a transaction rather than two
+        // `revision` in the request, one behind the stored one. What makes this a transaction rather than two
         // writes is the account half: the identity and both cold wraps were already rewritten when the pin write
         // found itself stale, and they must be exactly as before. The control is the same seed with the matching
-        // version — without it a rotation that refused everything would pass the negative just as well.
+        // revision — without it a rotation that refused everything would pass the negative just as well.
         val user = seedAccount()
         seedWrap(user, "DEVICE", "ZGV2aWNlLXdyYXA=")
-        seedPins(user, OLD_PINS, version = 3)
-        seedRegister(user, OLD_REGISTER, version = 2)
+        seedPins(user, OLD_PINS, revision = 3)
+        seedRegister(user, OLD_REGISTER, revision = 2)
 
-        rotate(user, pinsVersion = 2, registerVersion = 2)
-            .then().statusCode(409).body("code", equalTo("stale_version"))
+        rotate(user, pinsRevision = 2, registerRevision = 2)
+            .then().statusCode(409).body("code", equalTo("stale_revision"))
 
         assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the directory value is not published")
         assertEquals(OLD_PRIV, field(user) { it.wrappedIdentityPrivateKey })
@@ -309,42 +309,42 @@ class RotationSliceTest {
         assertEquals(OLD_PINS to 3L, pinsRow(user))
         assertEquals(OLD_REGISTER to 2L, registerRow(user))
 
-        rotate(user, pinsVersion = 3, registerVersion = 2).then().statusCode(200)
-        assertEquals(NEW_IDENTITY_PUB, field(user) { it.identityPublicKey }, "control: the matching versions rotate")
-        assertEquals(NEW_PINS to 4L, pinsRow(user), "the pin store is the request's blob, one version up")
+        rotate(user, pinsRevision = 3, registerRevision = 2).then().statusCode(200)
+        assertEquals(NEW_IDENTITY_PUB, field(user) { it.identityPublicKey }, "control: the matching revisions rotate")
+        assertEquals(NEW_PINS to 4L, pinsRow(user), "the pin store is the request's blob, one revision up")
         assertEquals(NEW_REGISTER to 3L, registerRow(user), "and so is the register")
     }
 
     @Test
-    fun aStaleRegisterVersionRollsTheWholeRotationBack() {
-        // The register is its own lever: stale there, with the pin store's version matching. The pin write has
+    fun aStaleRegisterRevisionRollsTheWholeRotationBack() {
+        // The register is its own lever: stale there, with the pin store's revision matching. The pin write has
         // already landed in the transaction when the register write finds itself stale, so the pin row being
         // untouched is what proves the rollback reaches the documents too, not only the account half.
         val user = seedAccount()
-        seedPins(user, OLD_PINS, version = 3)
-        seedRegister(user, OLD_REGISTER, version = 2)
+        seedPins(user, OLD_PINS, revision = 3)
+        seedRegister(user, OLD_REGISTER, revision = 2)
 
-        rotate(user, pinsVersion = 3, registerVersion = 1)
-            .then().statusCode(409).body("code", equalTo("stale_version"))
+        rotate(user, pinsRevision = 3, registerRevision = 1)
+            .then().statusCode(409).body("code", equalTo("stale_revision"))
 
         assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the directory value is not published")
         assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"))
         assertEquals(OLD_PINS to 3L, pinsRow(user), "the pin write rolled back with the rest")
         assertEquals(OLD_REGISTER to 2L, registerRow(user))
 
-        rotate(user, pinsVersion = 3, registerVersion = 2).then().statusCode(200)
-        assertEquals(NEW_REGISTER to 3L, registerRow(user), "control: the matching version rotates")
+        rotate(user, pinsRevision = 3, registerRevision = 2).then().statusCode(200)
+        assertEquals(NEW_REGISTER to 3L, registerRow(user), "control: the matching revision rotates")
     }
 
     @Test
     fun anAccountWithNoDocumentYetGetsBothBornInTheRotation() {
-        // An account that never wrote either document sends each sealed for version 1 against version 0 — the
+        // An account that never wrote either document sends each sealed for revision 1 against revision 0 — the
         // stores' born-empty rule — rather than leaving the field out (a required field is not a mode).
         val user = seedAccount()
         assertNull(pinsRow(user))
         assertNull(registerRow(user))
 
-        rotate(user, pinsVersion = 0, registerVersion = 0).then().statusCode(200)
+        rotate(user, pinsRevision = 0, registerRevision = 0).then().statusCode(200)
 
         assertEquals(NEW_PINS to 1L, pinsRow(user))
         assertEquals(NEW_REGISTER to 1L, registerRow(user))
@@ -367,8 +367,8 @@ class RotationSliceTest {
             {"identityPublicKey":"$NEW_IDENTITY_PUB","wrappedIdentityPrivateKey":"$NEW_PRIV",
              "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
              "secretKeyProofSignature":"${PROOF_KEY.sign(rotationStatement())}",
-             "identityPins":{"blob":"$NEW_PINS","version":0},
-             "deviceRegister":{"blob":"$NEW_REGISTER","version":0}}
+             "identityPins":{"blob":"$NEW_PINS","revision":0},
+             "deviceRegister":{"blob":"$NEW_REGISTER","revision":0}}
         """.trimIndent()
         given().header("Authorization", bearer(user))
             .contentType(ContentType.JSON).body(body)
@@ -631,28 +631,28 @@ class RotationSliceTest {
 
     // --- helpers ---------------------------------------------------------------------------------------------
 
-    /** A rotation of this fixture's account. The two document versions default to 0 — what an account that never
-     *  wrote either document sends; a test that seeds a document passes the version it seeded (or a stale one). */
+    /** A rotation of this fixture's account. The two document revisions default to 0 — what an account that never
+     *  wrote either document sends; a test that seeds a document passes the revision it seeded (or a stale one). */
     private fun rotate(
         userId: String,
         accessToken: String = sessions.issue(userId).accessToken,
         signature: String = PROOF_KEY.sign(rotationStatement()),
-        pinsVersion: Long = 0,
-        registerVersion: Long = 0,
+        pinsRevision: Long = 0,
+        registerRevision: Long = 0,
     ) = given().header("Authorization", "Bearer $accessToken").contentType(ContentType.JSON)
-        .body(rotationBody(signature, pinsVersion, registerVersion)).`when`().post("/api/account/rotation")
+        .body(rotationBody(signature, pinsRevision, registerRevision)).`when`().post("/api/account/rotation")
 
     private fun rotationBody(
         signature: String = PROOF_KEY.sign(rotationStatement()),
-        pinsVersion: Long = 0,
-        registerVersion: Long = 0,
+        pinsRevision: Long = 0,
+        registerRevision: Long = 0,
     ) = """
         {"identityPublicKey":"$NEW_IDENTITY_PUB","wrappedIdentityPrivateKey":"$NEW_PRIV",
          "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
          "recoveryWrap":{"wrappedKey":"$NEW_REC_WRAP","kdfParams":"$KDF"},
          "secretKeyProofSignature":"$signature",
-         "identityPins":{"blob":"$NEW_PINS","version":$pinsVersion},
-         "deviceRegister":{"blob":"$NEW_REGISTER","version":$registerVersion}}
+         "identityPins":{"blob":"$NEW_PINS","revision":$pinsRevision},
+         "deviceRegister":{"blob":"$NEW_REGISTER","revision":$registerRevision}}
     """.trimIndent()
 
     /** What a legitimate client signs for this fixture's rotation: from the seeded identity to the new one. */
@@ -860,27 +860,27 @@ class RotationSliceTest {
         MasterKeyWrapEntity.find("userId = ?1 and method = ?2", userId, method).firstResult()?.wrappedKey
     }
 
-    private fun seedPins(userId: String, blob: String, version: Long) = QuarkusTransaction.requiringNew().run {
+    private fun seedPins(userId: String, blob: String, revision: Long) = QuarkusTransaction.requiringNew().run {
         IdentityPinsEntity().apply {
-            accountId = userId; sealedBlob = blob; this.version = version
+            accountId = userId; sealedBlob = blob; this.revision = revision
         }.persist()
     }
 
-    private fun seedRegister(userId: String, blob: String, version: Long) = QuarkusTransaction.requiringNew().run {
+    private fun seedRegister(userId: String, blob: String, revision: Long) = QuarkusTransaction.requiringNew().run {
         DeviceRegisterEntity().apply {
-            accountId = userId; sealedBlob = blob; this.version = version
+            accountId = userId; sealedBlob = blob; this.revision = revision
         }.persist()
     }
 
-    /** The stored pin store as `blob to version`, or null when the account has no row. */
+    /** The stored pin store as `blob to revision`, or null when the account has no row. */
     private fun pinsRow(userId: String): Pair<String?, Long>? =
         QuarkusTransaction.requiringNew().call<Pair<String?, Long>?> {
-            IdentityPinsEntity.findById(userId)?.let { it.sealedBlob to it.version }
+            IdentityPinsEntity.findById(userId)?.let { it.sealedBlob to it.revision }
         }
 
     private fun registerRow(userId: String): Pair<String?, Long>? =
         QuarkusTransaction.requiringNew().call<Pair<String?, Long>?> {
-            DeviceRegisterEntity.findById(userId)?.let { it.sealedBlob to it.version }
+            DeviceRegisterEntity.findById(userId)?.let { it.sealedBlob to it.revision }
         }
 
     private fun pairingStatus(id: String): String? =

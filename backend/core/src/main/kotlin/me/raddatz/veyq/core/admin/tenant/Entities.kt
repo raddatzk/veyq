@@ -10,18 +10,18 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * One acceptance of one tenant terms version by one member (cr-0114, ADR 0035 §4). Keyed logically by
- * (user_id, tenant_id, accepted_version) — a surrogate id + a UNIQUE — so the table is the member's **history** of
- * acceptances, one row per version, never overwritten (owner decision 2026-10-10, inbox #402): acceptance is
- * evidence should a violation or dispute arise, and a dispute about an older version needs that version's row.
- * **Operational metadata** (like membership), never content. The gate reads the highest version accepted: when it
- * is below `tenant.termsVersion` the member accept gate re-fires (uc.account.accept-terms); accepting the current
- * version adds its row.
+ * One acceptance of one tenant terms revision by one member (cr-0114, ADR 0035 §4). Keyed logically by
+ * (user_id, tenant_id, accepted_revision) — a surrogate id + a UNIQUE — so the table is the member's **history** of
+ * acceptances, one row per revision, never overwritten (owner decision 2026-10-10, inbox #402): acceptance is
+ * evidence should a violation or dispute arise, and a dispute about an older revision needs that revision's row.
+ * **Operational metadata** (like membership), never content. The gate reads the highest revision accepted: when it
+ * is below `tenant.termsRevision` the member accept gate re-fires (uc.account.accept-terms); accepting the current
+ * revision adds its row.
  *
- * [acceptedAt] is the server-observed time the member accepted [acceptedVersion] — audit evidence of *when* which
- * terms version was accepted. No code path reads it and no API serves it: operators and support read it from the
+ * [acceptedAt] is the server-observed time the member accepted [acceptedRevision] — audit evidence of *when* which
+ * terms revision was accepted. No code path reads it and no API serves it: operators and support read it from the
  * database (owner decision 2026-10-09, after inbox #318 had dropped it as unread; `EveryStoredTimeHasAReaderTest`
- * names that reader). Written once per version: a re-acceptance of a version already recorded keeps its first
+ * names that reader). Written once per revision: a re-acceptance of a revision already recorded keeps its first
  * time. The client never supplies it.
  *
  * Erased with the tenant (`ON DELETE CASCADE`). The user FK has no cascade, like `veyq_tenant_profile`'s: a future
@@ -41,8 +41,8 @@ class TenantTermsAcceptanceEntity : PanacheEntityBase {
     @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
     lateinit var tenantId: String
 
-    @Column(name = "accepted_version", nullable = false)
-    var acceptedVersion: Int = 0
+    @Column(name = "accepted_revision", nullable = false)
+    var acceptedRevision: Int = 0
 
     @Column(name = "accepted_at", nullable = false)
     lateinit var acceptedAt: Instant

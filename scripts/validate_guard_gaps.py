@@ -223,6 +223,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   81 a stylesheet rule whose class only a `*.test.ts` spells — rejected: `validate_stylesheet_anchors` leaves test
      evidence (tests, `src/test/` helpers, snapshots, fixtures, goldens) out of its markup vocabulary. Until then a
      test asserting a button does NOT carry a class kept that class's hiding rule anchored (inbox #362)
+  82 `putIdentityPins` declaring and carrying its counter as `version` again, consistently on both sides — rejected:
+     `validate_write_concurrency` refuses a declared revision field with a version-shaped name (ADR 0086). Until
+     inbox #452 the pins, the register and the terms carried a bare `version`, and the guard read it as a counter
+     without asking what it was called
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1313,9 +1317,23 @@ def forge_second_version_field_undeclared(root: pathlib.Path) -> str:
 
 
 def forge_conflict_code_unnamed(root: pathlib.Path) -> str:
-    # Only the declaration's own text: the 409 still names stale_version, so one named code must not cover another.
+    # Only the declaration's own text: the 409 still names stale_revision, so one named code must not cover another.
     _in_operation(root, "content.openapi.yaml", "updateNode", "(`stale_placement`", "(`stale_plac3ment`")
     return "updateNode's 409 no longer names its declared conflict code stale_placement (must be REJECTED)"
+
+
+def forge_revision_field_named_version(root: pathlib.Path) -> str:
+    # Both sides renamed together, so every other rule still holds: only the word is wrong.
+    _in_operation(root, "account.openapi.yaml", "putIdentityPins", "          - field: revision\n",
+                  "          - field: version\n")
+    _in_request_property(root, "account.openapi.yaml", "IdentityPinsUpdate", "revision",
+                         "        revision:\n", "        version:\n")
+    f = root / "contracts" / "api" / "account.openapi.yaml"
+    head, sep, tail = f.read_text().partition("    IdentityPinsUpdate:\n")
+    if not sep or "      required: [blob, revision]\n" not in tail:
+        raise ForgeError("account.openapi.yaml IdentityPinsUpdate: required anchor not found (drifted?)")
+    f.write_text(head + sep + tail.replace("      required: [blob, revision]\n", "      required: [blob, version]\n", 1))
+    return "putIdentityPins declares and carries its counter as `version` (must be REJECTED, ADR 0086)"
 
 
 DEMO_SPEC = "contracts/api/demo/demo.openapi.yaml"
@@ -1464,6 +1482,7 @@ CASES = [
     ("79", "validate_web_contrast.py", forge_admin_web_primary_lightened, False),
     ("80", "validate_request_bounds.py", forge_request_list_elements_unbounded, False),
     ("81", "validate_stylesheet_anchors.py", forge_class_anchored_only_by_a_test, False),
+    ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
 ]
 
 

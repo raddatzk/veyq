@@ -341,7 +341,7 @@ describe('commitRotation / rotateGroupForRemoval (cr-0089 — the client-side fo
   const B = 'b0000000-0000-4000-8000-0000000000b0'
   /** A remaining member admitted to G1 by a genuine key-holder of `e0`, at epoch 0 (a group add binds the member). */
   const admittedMember = (userId: string, who: v1.Identity, e0: Uint8Array): ScopeMember => ({
-    userId, username: userId.slice(0, 1), avatarVersion: 0, role: 'MEMBER', identityPublicKey: pubOf(who), hasGrant: true,
+    userId, username: userId.slice(0, 1), avatarRevision: 0, role: 'MEMBER', identityPublicKey: pubOf(who), hasGrant: true,
     ...tagAdmission(e0, { scopeId: G1, kind: 'GROUP' }, 0, userId),
   })
 
@@ -537,7 +537,7 @@ describe('no device seals under an epoch below the highest it has held for the s
     if (opened) await createFolder(G1, opened.epochs, 'Neu')
     return opened
   }
-  const self: ScopeMember[] = [{ userId: ME, username: 'me', avatarVersion: 0, role: 'OWNER', identityPublicKey: ID_PUB, hasGrant: true }]
+  const self: ScopeMember[] = [{ userId: ME, username: 'me', avatarRevision: 0, role: 'OWNER', identityPublicKey: ID_PUB, hasGrant: true }]
 
   it('held epoch 1, then served its epoch-0 grant with a matching current epoch: awaiting the current key, nothing is written', async () => {
     const keys = [v1.randomBytes(32), v1.randomBytes(32)]
@@ -599,7 +599,7 @@ describe('commitRotation (ADR 0024 §4 — the rotation states the epoch it crea
   }
 
   /** The caller re-grants itself, so every payload's own grant opens to that attempt's new epoch key. */
-  const self: ScopeMember[] = [{ userId: ME, username: 'me', avatarVersion: 0, role: 'OWNER', identityPublicKey: ID_PUB, hasGrant: true }]
+  const self: ScopeMember[] = [{ userId: ME, username: 'me', avatarRevision: 0, role: 'OWNER', identityPublicKey: ID_PUB, hasGrant: true }]
   const newKeyOf = (call: unknown[]) => {
     const { grants } = (call[0] as { rotateScopeRequest: { grants: { wrappedGrant: string }[] } }).rotateScopeRequest
     return Array.from(openOwn(G1, (call[0] as { rotateScopeRequest: { epoch: number } }).rotateScopeRequest.epoch, grants[0].wrappedGrant, ID.priv))
@@ -859,7 +859,7 @@ describe('a grant verifies under the key its granter signed it with, not the gra
   const R = 'a0000000-0000-4000-8000-0000000000a1'
   const rOld = v1.generateIdentity()
   const rNew = v1.generateIdentity()
-  const self: ScopeMember[] = [{ userId: ME, username: 'me', avatarVersion: 0, role: 'OWNER', identityPublicKey: ID_PUB, hasGrant: true }]
+  const self: ScopeMember[] = [{ userId: ME, username: 'me', avatarRevision: 0, role: 'OWNER', identityPublicKey: ID_PUB, hasGrant: true }]
 
   /** Our G1 grant at epoch 0, signed by R's old identity, served beside `servedKey`; plus a rotation endpoint. */
   function serveRGrant(key: Uint8Array, servedKey: string) {

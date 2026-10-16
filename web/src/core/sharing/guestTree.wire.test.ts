@@ -1,6 +1,6 @@
 // A guest's tree operations on the wire (cr-node-key-hierarchy 5b.4a, ADR 0080 decisions 2, 3, 6 and 10): recorded at
 // `fetch` — the JSON and headers the real generated client sends, no mock of the API client. A create seals under the
-// PARENT's key (never the root's when the parent is below it, never `K_SC`) at the parent's served epoch and version 0;
+// PARENT's key (never the root's when the parent is below it, never `K_SC`) at the parent's served epoch and revision 0;
 // a placement re-wraps under the DESTINATION's key at served+1 and states no epoch; one `stale_placement` retry; a
 // readable sibling's name refuses before sending; every refusal maps by its code.
 import { describe, it, expect, vi, afterEach } from 'vitest'
@@ -51,13 +51,13 @@ function row(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Arra
   return { id, parentId, kind, epoch, placementRevision, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 
-// The root at epoch 5, its two subfolders at epochs 3 and 1, an item in the left one (served at version 2).
-function servedNodes(itemVersion = 2): ShareNode[] {
+// The root at epoch 5, its two subfolders at epochs 3 and 1, an item in the left one (served at revision 2).
+function servedNodes(itemRevision = 2): ShareNode[] {
   return [
     { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 5, placementRevision: 0 },
     row(LEFT, ROOT, kRoot, kLeft, 'Briefe', 3, 1),
     row(RIGHT, ROOT, kRoot, kRight, 'Fotos', 1, 0),
-    row(ITEM, LEFT, kLeft, kItem, 'Tagebuch', 4, itemVersion, ITEM_KIND),
+    row(ITEM, LEFT, kLeft, kItem, 'Tagebuch', 4, itemRevision, ITEM_KIND),
   ]
 }
 
@@ -91,7 +91,7 @@ const refused = (status: number, code: string) => () => new Response(JSON.string
 const bytes = (k: Uint8Array) => Array.from(k)
 
 describe('a guest creates a node', () => {
-  it('seals the new key, name and slug under the PARENT\'s key at the parent\'s served epoch and version 0', async () => {
+  it('seals the new key, name and slug under the PARENT\'s key at the parent\'s served epoch and revision 0', async () => {
     const sent = recordFetch(created)
     const ctx = context()
     const { nodeId, contentKey } = await createShareNodeAsGuest(ctx, { parentId: LEFT, kind: FOLDER_KIND, name: 'Urlaub 1998' })
@@ -109,7 +109,7 @@ describe('a guest creates a node', () => {
     const wrap = { id: nodeId, epoch: 3, placementRevision: 0, wrappedContentKey: json.wrappedContentKey as string }
     expect(bytes(openContentKey(SCOPE_ID, kLeft, wrap)), 'the wrap opens under the parent key to the new key').toEqual(bytes(contentKey))
     for (const other of [kRoot, kSC]) expect(() => openContentKey(SCOPE_ID, other, wrap), 'not under the root key or K_SC').toThrow(v1.OpenRefused)
-    expect(() => openContentKey(SCOPE_ID, kLeft, { ...wrap, placementRevision: 1 }), 'bound to version 0').toThrow(v1.OpenRefused)
+    expect(() => openContentKey(SCOPE_ID, kLeft, { ...wrap, placementRevision: 1 }), 'bound to revision 0').toThrow(v1.OpenRefused)
     const address = { scopeId: SCOPE_ID, nodeId, epoch: 3, placementRevision: 0 }
     expect(openName(kLeft, address, json.encryptedName as string), 'the name opens under the parent key').toBe('Urlaub 1998')
     expect(json.slugToken, 'the slug token is keyed by the parent key in the parent\'s slot').toBe(b64std(v1.slugToken(kLeft, LEFT, slugify('Urlaub 1998'))))
@@ -162,7 +162,7 @@ describe('a guest places a node', () => {
 
     const wrap = { id: ITEM, epoch: 4, placementRevision: 3, wrappedContentKey: json.wrappedContentKey as string }
     expect(bytes(openContentKey(SCOPE_ID, kRight, wrap)), 'opens under the destination key at served+1').toEqual(bytes(kItem))
-    expect(() => openContentKey(SCOPE_ID, kRight, { ...wrap, placementRevision: 2 }), 'not at the served version').toThrow(v1.OpenRefused)
+    expect(() => openContentKey(SCOPE_ID, kRight, { ...wrap, placementRevision: 2 }), 'not at the served revision').toThrow(v1.OpenRefused)
     expect(() => openContentKey(SCOPE_ID, kLeft, wrap), 'not under the source parent').toThrow(v1.OpenRefused)
     const address = { scopeId: SCOPE_ID, nodeId: ITEM, epoch: 4, placementRevision: 3 }
     expect(openName(kRight, address, json.encryptedName as string), 'the existing name, under the destination key').toBe('Tagebuch')

@@ -38,7 +38,7 @@ per login, and the name survives the family it was written during.
 
 A single **register blob**, sealed under the Master Key (`symWrap(masterKey, blob, "device-register")`) and
 synced exactly like the pin store — the server stores + relays **one opaque ciphertext** plus a cleartext
-monotonic `version`, and never interprets either
+monotonic `revision`, and never interprets either
 ([en.account.identity-pinning](en.account.identity-pinning.md) is the same shape, and the shape is deliberately
 copied rather than re-invented). The plaintext is three maps:
 
@@ -64,7 +64,7 @@ copied rather than re-invented). The plaintext is three maps:
   remember record), so no other client could ever derive this mapping; the register is the only place it can be
   shared, and it is shared sealed.
 
-**The `version` lives on the wire, not in the plaintext** — it is the optimistic-concurrency counter the
+**The `revision` lives on the wire, not in the plaintext** — it is the optimistic-concurrency counter the
 server compares, so it must be readable by a server that cannot open the blob.
 
 **Three maps, not one, because they decay at completely different rates.** A family dies at every logout,
@@ -130,7 +130,7 @@ cost of never letting the server hold a name.
 
 ## Sync & merge — union is safe here, and exactly why
 
-The blob carries a monotonic **`version`**; a write is optimistic-concurrency, and a write whose version
+The blob carries a monotonic **`revision`**; a write is optimistic-concurrency, and a write whose revision
 moved is refused so the client re-reads, merges and retries. The merge is a **union**, the same as the pin
 store's — and the reason it is safe here is worth stating precisely, because the obvious objection is
 correct in general: with devices, **deletion is real**, and a union-merge would ordinarily resurrect a

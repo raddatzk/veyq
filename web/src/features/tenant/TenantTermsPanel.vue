@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // uc.admin.tenant-terms (web, cr-0114, ADR 0035) — the "Terms" rubric of the tenant settings. The tenant OWNER
-// sets the server's terms as per-locale (DE+EN) markdown; a normalized change bumps the version server-side,
+// sets the server's terms as per-locale (DE+EN) markdown; a normalized change bumps the revision server-side,
 // re-gating members (uc.account.accept-terms). Member-readable → non-owners see it read-only; the editor + Save
 // are owner-only (the backend 403s otherwise). Operator-blind: terms are the operator's PUBLIC policy, no key.
 //
@@ -34,7 +34,7 @@ const { ask } = useConfirm()
 const on401 = handle401(useRouter())
 
 const terms = ref<LocaleMap>({})
-const version = ref(0)
+const revision = ref(0)
 const isOwner = ref(false)
 const actionError = ref('')
 
@@ -65,7 +65,7 @@ const renderedPreview = computed(() => renderMarkdown(previewBody.value))
 const { pending: loading, error: loadErr } = useAsyncData(async () => {
   if (!activeSpace.tenantId) throw new Error('no-active-tenant') // no HTTP status → classified as 'failed' below
   const current = await getTenantTerms(activeSpace.tenantId)
-  version.value = current.termsVersion
+  revision.value = current.termsRevision
   terms.value = toMap(current.terms)
   const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
   isOwner.value = mine?.role === 'OWNER'
@@ -123,9 +123,9 @@ const { run: runSave, pending: saving } = useAsyncAction(
     // That is the right server behaviour (an empty language is not a published translation) — it is written
     // here because the reply below is what the editor re-renders from, so the owner sees the server's truth.
     const updated = await updateTenantTerms(activeSpace.tenantId!, { de: terms.value.de, en: terms.value.en })
-    version.value = updated.termsVersion
+    revision.value = updated.termsRevision
     terms.value = toMap(updated.terms)
-    toast.success(t('terms.saved', { version: updated.termsVersion }))
+    toast.success(t('terms.saved', { revision: updated.termsRevision }))
   },
   {
     onError: (e) => {
@@ -150,7 +150,7 @@ async function save() {
           <h2>{{ t('terms.navTitle') }}</h2>
           <p>{{ t('terms.editorSub') }}</p>
         </div>
-        <span v-if="version > 0" class="veyq-badge">{{ t('terms.version', { version }) }}</span>
+        <span v-if="revision > 0" class="veyq-badge">{{ t('terms.revision', { revision }) }}</span>
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('terms.loading') }}</p>

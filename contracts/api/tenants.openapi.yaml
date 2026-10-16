@@ -650,7 +650,7 @@ paths:
         the one constant-length ciphertext they sealed under `K_tenant`, which any tenant member opens on the device.
         Gated on **tenant membership** like the directory: a caller who is not an accepted member of the tenant gets the
         `404 tenant_not_found` of [ADR 0042](../../docs/decisions/0042-http-failure-projection.md). Never served to a
-        guest or on a share. The `ETag` is the profile's `avatarVersion` (quoted); a client echoing it as `If-None-Match`
+        guest or on a share. The `ETag` is the profile's `avatarRevision` (quoted); a client echoing it as `If-None-Match`
         gets `304` with no body while the picture is unchanged. `Cache-Control: private`. The operator sees an opaque
         constant-size blob, never the image.
       security:
@@ -663,8 +663,8 @@ paths:
           in: header
           required: false
           description: >
-            The `ETag` of the client's cached picture (the member's `avatarVersion`, quoted). When it equals the current
-            version the server answers `304`. Omitted on a first load; one that does not parse is no match.
+            The `ETag` of the client's cached picture (the member's `avatarRevision`, quoted). When it equals the current
+            revision the server answers `304`. Omitted on a first load; one that does not parse is no match.
           schema: { type: string, maxLength: 64, example: "\"3\"" }
       responses:
         "200":
@@ -672,7 +672,7 @@ paths:
           headers:
             ETag:
               x-veyq-visibility: structure
-              description: The picture's `avatarVersion`, quoted - echo it as `If-None-Match` on the next read.
+              description: The picture's `avatarRevision`, quoted - echo it as `If-None-Match` on the next read.
               schema: { type: string, example: "\"3\"" }
             Cache-Control:
               x-veyq-visibility: structure
@@ -682,7 +682,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MemberAvatar" }
         "304":
-          description: Not Modified - the client's `If-None-Match` equals the member's current `avatarVersion`. No body.
+          description: Not Modified - the client's `If-None-Match` equals the member's current `avatarRevision`. No body.
         "401":
           description: Generic authentication failure.
           content:
@@ -836,11 +836,11 @@ paths:
     get:
       tags: [tenants]
       operationId: getTenantTerms
-      summary: Read a tenant's current terms + the caller's accepted version.
+      summary: Read a tenant's current terms + the caller's accepted revision.
       description: >
-        Returns the tenant's per-locale terms markdown, the current `termsVersion`, and the **caller's**
-        `acceptedVersion` (0 = not yet accepted). Serves the owner editor (loads the current text), the member
-        accept-gate (compare `acceptedVersion` to `termsVersion`), and the `/terms` accept view. The terms are
+        Returns the tenant's per-locale terms markdown, the current `termsRevision`, and the **caller's**
+        `acceptedRevision` (0 = not yet accepted). Serves the owner editor (loads the current text), the member
+        accept-gate (compare `acceptedRevision` to `termsRevision`), and the `/terms` accept view. The terms are
         the operator's **public** policy (operational content, not E2EE); for now this is gated to **members**
         of the tenant (a non-member is `404`, indistinguishable) — a pre-auth public-serving path is a later
         slice. `@Authenticated`, enforced by code (ADR 0008, ADR 0035).
@@ -850,13 +850,13 @@ paths:
         - $ref: "#/components/parameters/TenantId"
       responses:
         "200":
-          description: The tenant's current terms + the caller's accepted version.
+          description: The tenant's current terms + the caller's accepted revision.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TenantTerms" }
               example:
-                termsVersion: 3
-                acceptedVersion: 2
+                termsRevision: 3
+                acceptedRevision: 2
                 terms:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
@@ -881,11 +881,11 @@ paths:
         reason: >-
           One writer: the tenant owner (the root membership is born with one OWNER, and roles change only in
           groups); the form shows the whole document it sends.
-      summary: Set/replace a tenant's terms (owner-gated; bumps the version on a real change).
+      summary: Set/replace a tenant's terms (owner-gated; bumps the revision on a real change).
       description: >
         The tenant **owner** replaces the per-locale terms markdown. The server **normalizes** the markdown
-        and, **only if it changed**, stores it and **bumps `terms_version`** (an idempotent re-save returns the
-        same version — the pre-E2EE logic). The higher version re-gates every member (uc.account.accept-terms).
+        and, **only if it changed**, stores it and **bumps `terms_revision`** (an idempotent re-save returns the
+        same revision — the pre-E2EE logic). The higher revision re-gates every member (uc.account.accept-terms).
         Membership-gated first (a non-member gets `404 tenant_not_found`, ADR 0042), then gated on the caller
         holding the tenant **OWNER** membership (a code check, `403 not_tenant_owner`).
         Operator-blind: terms are public operational content, never a key.
@@ -909,8 +909,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TenantTerms" }
               example:
-                termsVersion: 3
-                acceptedVersion: 3
+                termsRevision: 3
+                acceptedRevision: 3
                 terms:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
@@ -948,14 +948,14 @@ paths:
       x-veyq-concurrency:
         mode: revision
         fields:
-          - field: version
-            conflictCode: terms_version_changed
+          - field: revision
+            conflictCode: terms_revision_changed
       summary: Accept the tenant's current terms (member gate; re-accept on a bump).
       description: >
-        The signed-in **member** accepts the tenant's terms at the version they were shown. The server records
-        `accepted_terms_version = version` for `(caller, tenant)` — **only if** `version` equals the current
-        `terms_version`, else `409 terms_version_changed` (the operator bumped them meanwhile → the client
-        re-reads and re-presents). Acceptance — which version, and when, to the second — is **operational
+        The signed-in **member** accepts the tenant's terms at the revision they were shown. The server records
+        `accepted_terms_revision = revision` for `(caller, tenant)` — **only if** `revision` equals the current
+        `terms_revision`, else `409 terms_revision_changed` (the operator bumped them meanwhile → the client
+        re-reads and re-presents). Acceptance — which revision, and when, to the second — is **operational
         metadata** (like membership), never
         content. `@Authenticated`; a non-member is `404` (uc.account.accept-terms, ADR 0035).
       security:
@@ -967,21 +967,21 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/AcceptTermsRequest" }
-            example: { version: 3 }
+            example: { revision: 3 }
       responses:
         "200":
-          description: Accepted; the current terms state (with the updated acceptedVersion) is returned.
+          description: Accepted; the current terms state (with the updated acceptedRevision) is returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TenantTerms" }
               example:
-                termsVersion: 3
-                acceptedVersion: 3
+                termsRevision: 3
+                acceptedRevision: 3
                 terms:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
         "400":
-          description: The request was malformed (missing/invalid version).
+          description: The request was malformed (missing/invalid revision).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1000,11 +1000,11 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
         "409":
-          description: The terms version changed since it was shown — re-read and re-present before accepting.
+          description: The terms revision changed since it was shown — re-read and re-present before accepting.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: terms_version_changed }
+              example: { code: terms_revision_changed }
 
   /api/tenants/{tenantId}/mail-settings:
     get:
@@ -1985,20 +1985,20 @@ components:
 
     TenantTerms:
       type: object
-      required: [termsVersion, acceptedVersion]
+      required: [termsRevision, acceptedRevision]
       properties:
-        termsVersion:
+        termsRevision:
           x-veyq-visibility: structure
           type: integer
           format: int32
-          description: The tenant's current terms version. 0 = no terms set (nothing to accept, the gate never fires).
+          description: The tenant's current terms revision. 0 = no terms set (nothing to accept, the gate never fires).
           example: 3
-        acceptedVersion:
+        acceptedRevision:
           x-veyq-visibility: structure
           type: integer
           format: int32
           description: >
-            The **caller's** accepted version. 0 = not yet accepted; anything below `termsVersion` = the accept
+            The **caller's** accepted revision. 0 = not yet accepted; anything below `termsRevision` = the accept
             gate fires (uc.account.accept-terms).
           example: 2
         terms:
@@ -2018,13 +2018,13 @@ components:
 
     AcceptTermsRequest:
       type: object
-      required: [version]
+      required: [revision]
       properties:
-        version:
+        revision:
           x-veyq-visibility: structure
           type: integer
           format: int32
-          description: The terms version the member is accepting — must equal the current termsVersion, else 409.
+          description: The terms revision the member is accepting — must equal the current termsRevision, else 409.
           minimum: 1
           example: 3
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
@@ -2433,7 +2433,7 @@ components:
             OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under `K_tenant` with the
             `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
             the join only on the OWNER path, where the invitee holds `K_tenant` at accept; stored verbatim with
-            `avatarVersion` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
+            `avatarRevision` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
             or null = no picture.
           contentEncoding: base64
           maxLength: 21884
@@ -2588,7 +2588,7 @@ components:
             OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under `K_tenant` with the
             `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
             the join only on the OWNER path, where the invitee holds `K_tenant` at accept; stored verbatim with
-            `avatarVersion` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
+            `avatarRevision` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
             or null = no picture.
           contentEncoding: base64
           maxLength: 21884

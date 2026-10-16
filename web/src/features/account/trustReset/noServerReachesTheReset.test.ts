@@ -62,17 +62,17 @@ const TARGET_PUB = b64std(v1.serializeIdentityPublic(TARGET.pub))
 const S1 = '5c09e000-0000-4000-8000-0000000000c2'
 
 type Doc = 'pins' | 'register'
-const sealedAt = (doc: Doc, version: number) => {
+const sealedAt = (doc: Doc, revision: number) => {
   const plain = doc === 'pins' ? { pins: {} } : { devices: {}, families: {}, wraps: {} }
   const purpose = doc === 'pins' ? 'identity-pins' : 'device-register'
-  return b64std(v1.seal({ purpose, version }, MK, enc.encode(JSON.stringify(plain))))
+  return b64std(v1.seal({ purpose, revision }, MK, enc.encode(JSON.stringify(plain))))
 }
 
 /** The two documents' endpoints, recording every PUT; the PUT itself always lands (and is then what is served),
  *  so a write is never masked by a conflict. */
 function fakeServer(served: { pins: IdentityPins; register: DeviceRegister }) {
   const land = <D extends Doc>(doc: D, update: IdentityPinsUpdate | DeviceRegisterUpdate): (typeof served)[D] => {
-    served[doc] = { blob: update.blob, version: update.version! + 1 }
+    served[doc] = { blob: update.blob, revision: update.revision! + 1 }
     return { ...served[doc] }
   }
   const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>(async ({ identityPinsUpdate }) =>
@@ -134,9 +134,9 @@ beforeEach(() => {
 describe('no server response reaches a write of a refused document (ADR 0028 Decision 7)', () => {
   const garbage = () => b64std(v1.randomBytes(64))
   it.each([
-    ['trust_state_unreadable', 'both documents', { pins: 3, register: 3 }, () => ({ pins: { blob: garbage(), version: 3 }, register: { blob: garbage(), version: 3 } })],
-    ['trust_state_rolled_back', 'both documents (older copy)', { pins: 7, register: 7 }, () => ({ pins: { blob: sealedAt('pins', 4), version: 4 }, register: { blob: sealedAt('register', 4), version: 4 } })],
-    ['trust_state_rolled_back', 'both documents (missing after a mark)', { pins: 2, register: 2 }, () => ({ pins: { blob: null, version: 0 }, register: { blob: null, version: 0 } })],
+    ['trust_state_unreadable', 'both documents', { pins: 3, register: 3 }, () => ({ pins: { blob: garbage(), revision: 3 }, register: { blob: garbage(), revision: 3 } })],
+    ['trust_state_rolled_back', 'both documents (older copy)', { pins: 7, register: 7 }, () => ({ pins: { blob: sealedAt('pins', 4), revision: 4 }, register: { blob: sealedAt('register', 4), revision: 4 } })],
+    ['trust_state_rolled_back', 'both documents (missing after a mark)', { pins: 2, register: 2 }, () => ({ pins: { blob: null, revision: 0 }, register: { blob: null, revision: 0 } })],
   ] as const)('%s, %s: every path is refused, and nothing is written', async (_code, _what, marks, served) => {
     await raiseMarks(MK, marks)
     const srv = fakeServer(served())
@@ -151,8 +151,8 @@ describe('no server response reaches a write of a refused document (ADR 0028 Dec
   it('control: the same paths against readable documents DO write — the recorder sees a write when there is one', async () => {
     await raiseMarks(MK, { pins: 3, register: 3 })
     const srv = fakeServer({
-      pins: { blob: sealedAt('pins', 3), version: 3 },
-      register: { blob: sealedAt('register', 3), version: 3 },
+      pins: { blob: sealedAt('pins', 3), revision: 3 },
+      register: { blob: sealedAt('register', 3), revision: 3 },
     })
 
     await driveEveryPath(srv.K_SC)

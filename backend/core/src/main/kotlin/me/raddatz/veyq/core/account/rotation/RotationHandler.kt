@@ -46,7 +46,7 @@ sealed interface RotationOutcome {
      * so nothing was published and there is nothing to repair. The client re-reads, re-seals and resubmits with
      * the same new keys and the same signature (the documents are not part of the proof's statement).
      */
-    data object TrustStateStale : RotationOutcome, HttpFailure by httpFailure("stale_version", CONFLICT)
+    data object TrustStateStale : RotationOutcome, HttpFailure by httpFailure("stale_revision", CONFLICT)
 
     /** The caller's session was revoked by a reset, a password change or another rotation this request waited
      *  for — nothing was written. */
@@ -66,8 +66,8 @@ sealed interface RequeueRotationOutcome {
 }
 
 /** One Master-Key-sealed account document as the rotation re-sealed it: the blob under `MK'`, guarded by the
- *  version the client read. */
-data class ResealedDocument(val blob: String, val expectedVersion: Long)
+ *  revision the client read. */
+data class ResealedDocument(val blob: String, val expectedRevision: Long)
 
 /**
  * The account-side half of key rotation after a compromise (ADR 0060, uc.account.rotate-keys).
@@ -105,9 +105,9 @@ class RotationHandler(
      * The account rewrite runs next and can still refuse; everything
      * after it is a consequence that must not happen for an account that was never rewritten. The pin store and
      * the device register, re-sealed under the new Master Key, are written next through their own
-     * compare-and-set stores (ADR 0060 § Consequences): a stale version on either is **not** a partial success —
+     * compare-and-set stores (ADR 0060 § Consequences): a stale revision on either is **not** a partial success —
      * the transaction is rolled back, so the account rewrite above is undone with it and the answer is
-     * `409 stale_version`. Written after the publish instead, a failed re-seal left a document under a key that
+     * `409 stale_revision`. Written after the publish instead, a failed re-seal left a document under a key that
      * no longer exists, which every device then refuses (ADR 0028 Decision 7). Then the live
      * pairing channels are superseded (their envelopes carry the *old* Master Key and a live delegated session,
      * so a later collect would hand a device a dead key and a working login), then the scope rotations are
@@ -179,8 +179,8 @@ class RotationHandler(
         // writes above are still pending — the throw is what rolls them back, not a compensating write.
         // (`setRollbackOnly` + returning an outcome does not work here: `call` then tries to commit and fails
         // with a RollbackException, which reached the client as a 500.)
-        val pinsStale = identityPins.put(userId, pins.blob, pins.expectedVersion) is PinsPut.Stale
-        if (pinsStale || deviceRegister.put(userId, register.blob, register.expectedVersion) is RegisterPut.Stale) {
+        val pinsStale = identityPins.put(userId, pins.blob, pins.expectedRevision) is PinsPut.Stale
+        if (pinsStale || deviceRegister.put(userId, register.blob, register.expectedRevision) is RegisterPut.Stale) {
             throw StaleDocumentRollback()
         }
 

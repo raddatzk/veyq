@@ -315,18 +315,18 @@ class MediaStore(
 
     /**
      * Overwrite a media's sealed `wrappedMeta` verbatim (opaque; e.g. a re-sealed corrected date) — only if
-     * [expectedVersion] is still the stored `metaRevision` (ADR 0077). A miss writes nothing and moves no counter, so
+     * [expectedRevision] is still the stored `metaRevision` (ADR 0077). A miss writes nothing and moves no counter, so
      * no open gallery re-fetches a media that did not change.
      *
      * The compare-and-set is a bulk UPDATE that runs before this transaction loads the entity — the order
      * `NodesStore.applyUpdate` explains: the entity read afterwards holds the row as it now is.
      */
     @Transactional
-    fun setMeta(scopeId: String, mediaId: String, wrappedMeta: String?, expectedVersion: Long): SetMetaResult {
+    fun setMeta(scopeId: String, mediaId: String, wrappedMeta: String?, expectedRevision: Long): SetMetaResult {
         // cr-0107: the edit advances updatedAt (the keyset cursor), so the live poll re-fetches it. Panache binds no
         // null parameter, so a cleared tier (null) is spelled into the statement rather than bound.
         val guard = "metaRevision = ?1, updatedAt = ?2 where id = ?3 and scopeId = ?4 and metaRevision = ?5"
-        val bound = arrayOf<Any>(expectedVersion + 1, Instant.now(), mediaId, scopeId, expectedVersion)
+        val bound = arrayOf<Any>(expectedRevision + 1, Instant.now(), mediaId, scopeId, expectedRevision)
         val rows = if (wrappedMeta == null) {
             MediaEntity.update("wrappedMeta = null, $guard", *bound)
         } else {

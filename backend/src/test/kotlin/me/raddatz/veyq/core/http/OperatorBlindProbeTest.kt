@@ -219,8 +219,8 @@ class OperatorBlindProbeTest {
         "updateTenantTerms" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/terms", """{"terms":{"de":"Bedingungen","en":"Terms"}}""")
         },
-        // The live tenant publishes no terms, so the control's accept answers `409 terms_version_changed` — past the gate.
-        "acceptTenantTerms" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/terms/accept", """{"version":1}""") },
+        // The live tenant publishes no terms, so the control's accept answers `409 terms_revision_changed` — past the gate.
+        "acceptTenantTerms" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/terms/accept", """{"revision":1}""") },
         "getTenantMailSettings" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/mail-settings") },
         "updateTenantMailSettings" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/mail-settings", """{"tls":false,"enabled":false}""")

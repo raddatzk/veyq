@@ -11,12 +11,12 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 
 /**
- * The `ETag` of a member's picture (ADR 0084): the profile's `avatarVersion`, quoted. Lenient on the way in like the
+ * The `ETag` of a member's picture (ADR 0084): the profile's `avatarRevision`, quoted. Lenient on the way in like the
  * node listing's ([me.raddatz.veyq.core.content.TreeETag]): a weak marker and the quotes are stripped, and anything
  * that is no number is "no match" (null => a plain `200`), never an error.
  */
 object AvatarETag {
-    fun of(version: Int): String = "\"$version\""
+    fun of(revision: Int): String = "\"$revision\""
 
     fun parse(raw: String?): Int? =
         raw?.trim()?.removePrefix("W/")?.trim()?.trim('"')?.toIntOrNull()?.takeIf { it >= 0 }
@@ -24,9 +24,9 @@ object AvatarETag {
 
 /** Result of reading a tenant member's sealed picture (ADR 0084). */
 sealed interface MemberAvatarOutcome {
-    data class Found(val sealedAvatar: String, val version: Int) : MemberAvatarOutcome
-    /** The caller's `If-None-Match` is the picture's current version: a `304`, no body. */
-    data class NotModified(val version: Int) : MemberAvatarOutcome
+    data class Found(val sealedAvatar: String, val revision: Int) : MemberAvatarOutcome
+    /** The caller's `If-None-Match` is the picture's current revision: a `304`, no body. */
+    data class NotModified(val revision: Int) : MemberAvatarOutcome
     data object Suspended : MemberAvatarOutcome, HttpFailure by Failures.tenantSuspended
     /** No such tenant, or the caller is not an accepted member of it (indistinguishable, ADR 0042). */
     data object NotFound : MemberAvatarOutcome, HttpFailure by Failures.tenantNotFound
@@ -49,7 +49,7 @@ class TenantMemberAvatarHandler(
             .refusal(MemberAvatarOutcome.NotFound, MemberAvatarOutcome.Suspended)?.let { return it }
         val profile = profiles.find(memberId, tenantId) ?: return MemberAvatarOutcome.NoAvatar
         val sealed = profile.sealedAvatar ?: return MemberAvatarOutcome.NoAvatar
-        return if (ifNoneMatch == profile.avatarVersion) MemberAvatarOutcome.NotModified(profile.avatarVersion)
-        else MemberAvatarOutcome.Found(sealed, profile.avatarVersion)
+        return if (ifNoneMatch == profile.avatarRevision) MemberAvatarOutcome.NotModified(profile.avatarRevision)
+        else MemberAvatarOutcome.Found(sealed, profile.avatarRevision)
     }
 }

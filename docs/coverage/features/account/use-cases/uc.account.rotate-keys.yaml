@@ -69,12 +69,12 @@ acceptanceCriteria:
     # the publish in its own PUT, and a PUT that failed left the pin store under the retired key — refused by every
     # device as unreadable. The backend's stale cases were red on the untouched handler, and the rollback was bitten
     # by returning the conflict without undoing the transaction (the identity stayed published).
-    text: The identity-pin store and the device register are re-sealed under the new Master Key inside the rotation's one request and written in its one transaction — a stale version on either rolls the whole rotation back (409 stale_version, nothing published) and the client re-reads, re-seals and resubmits the same keys under the same signature, bounded. A document this device refuses (rolled back, missing after a mark, unreadable) refuses the rotation before any write, so a rotation can neither strand a document under a retired key nor launder a rollback into the new one.
+    text: The identity-pin store and the device register are re-sealed under the new Master Key inside the rotation's one request and written in its one transaction — a stale revision on either rolls the whole rotation back (409 stale_revision, nothing published) and the client re-reads, re-seals and resubmits the same keys under the same signature, bounded. A document this device refuses (rolled back, missing after a mark, unreadable) refuses the rotation before any write, so a rotation can neither strand a document under a retired key nor launder a rollback into the new one.
     coverage:
       backend:
         integration:
-          - RotationSliceTest.aStalePinStoreVersionRollsTheWholeRotationBack
-          - RotationSliceTest.aStaleRegisterVersionRollsTheWholeRotationBack
+          - RotationSliceTest.aStalePinStoreRevisionRollsTheWholeRotationBack
+          - RotationSliceTest.aStaleRegisterRevisionRollsTheWholeRotationBack
           - RotationSliceTest.anAccountWithNoDocumentYetGetsBothBornInTheRotation
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: nothing-outlives-the-rotation-it-raced

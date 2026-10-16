@@ -132,7 +132,7 @@ class MediaSliceTest {
     }
 
     /**
-     * B3 (ADR 0077): the media tier's write is compare-and-set like the node's. A stale write is `409 stale_version`
+     * B3 (ADR 0077): the media tier's write is compare-and-set like the node's. A stale write is `409 stale_revision`
      * with the current tier, writes nothing, and — because nothing changed — does NOT move `media_revision`, so no
      * open gallery re-fetches a media that did not change. Before the compare-and-set it answered 200 and replaced
      * the tier. The control lands at the current revision and moves both counters.
@@ -149,7 +149,7 @@ class MediaSliceTest {
 
         putMeta(userId, scopeId, media, """{"wrappedMeta":"Yi12MQ==","metaRevision":0}""")
             .then().statusCode(409)
-            .body("code", equalTo("stale_version"))
+            .body("code", equalTo("stale_revision"))
             .body("wrappedMeta", equalTo("YS12MQ=="))
             .body("metaRevision", equalTo(1))
         listedMedia(userId, scopeId, memory)
@@ -166,7 +166,7 @@ class MediaSliceTest {
             .body("mediaRevision", equalTo(3))
     }
 
-    /** B3, the wire half: an update with no version is malformed, and nothing is written. */
+    /** B3, the wire half: an update with no revision is malformed, and nothing is written. */
     @Test
     fun mediaMetaWithoutRevisionIs400() {
         val (userId, scopeId) = seedMemberScope()

@@ -65,7 +65,7 @@ class NodeEntity : PanacheEntityBase {
 
     /** How many times the node was moved or renamed (ADR 0080 Decision 3): 0 at birth, bumped only by the
      *  compare-and-set in `NodesStore.applyUpdate`, which every placement write (parent, name, slug, key wrap) goes
-     *  through. The `node-name` and `content-key` seals bind it, so a wrap or a name is valid at exactly one version. */
+     *  through. The `node-name` and `content-key` seals bind it, so a wrap or a name is valid at exactly one revision. */
     @Column(name = "placement_revision", nullable = false)
     var placementRevision: Long = 0
 
