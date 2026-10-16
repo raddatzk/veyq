@@ -328,11 +328,10 @@ describe('ShareCreateDialog — a stopped link gets its password on the same lin
     try {
       updateShare.mockClear()
       createShare.mockClear()
+      // The edit handed over as the other mounts here hand it (a row built by `editShareWith`, not a whole ManagedShare).
+      const edit: Record<string, unknown> = { editShare: editShareWith({ shareId: 's-stopped', guestStops: [{ reason: 'linkPassword' }] }) }
       const w = mount(ShareCreateDialog, {
-        props: {
-          scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', contribute: true,
-          editShare: editShareWith({ shareId: 's-stopped', guestStops: [{ reason: 'linkPassword' }] }),
-        },
+        props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...edit },
         global: { plugins: [realI18n()], stubs: typing },
       })
       await flushPromises()
