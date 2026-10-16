@@ -76,7 +76,10 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      refuse as well), pull-request and tag refs, another owner, a repository whose name only starts with ours,
      and the right identity quoted inside another URL. Every image the build matrix publishes is verified, by
      digest and never by tag, and the workflow states no identity of its own. The upstream is the chart's
-     `home`, not the workflow's `github.repository_owner`, which is whoever runs it — a fork included.
+     `home`, not the workflow's `github.repository_owner`, which is whoever runs it — a fork included. The
+     operator's tool runs the same check (`veyqctl verify`, `install`, `upgrade`, ADR 0096): `scripts/veyqctl.py`'s
+     `COSIGN_OIDC_ISSUER` and `COSIGN_IDENTITY_REGEXP` are held to the same accepts and rejects, and to be exactly
+     the identity the page documents, so the page and the tool can never state two.
 
 **The defect that bought it.** All of it was live when this guard was written (2026-08-11), and the first run
 was the discovery: there was no `VERSION` file at all, so the publish workflow's (then `container.yml`) first command
@@ -179,10 +182,13 @@ signed from a GitHub workflow on `main`, with that image's identity). It judges 
 fails here as it would there. The two engines agree on what the pattern uses (anchors, classes, alternation); a
 construct where they diverge would be judged by the wrong one. The rejected identities are a probe list of the
 ways a pattern is too wide, not a proof that no other string is accepted; the accepted ones are derived. The
-registry (`ghcr.io`) is a constant here. And it cannot see whether an operator runs the command at all.
+registry (`ghcr.io`) is a constant here. And it cannot see whether an operator runs the command at all. For
+`veyqctl` it reads the two constants, not the `cosign verify` call that passes them: `scripts/veyqctl_selftest.py`
+holds that call to exactly those two values.
 """
 from __future__ import annotations
 
+import ast
 import pathlib
 import re
 import shlex
@@ -1026,6 +1032,23 @@ OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 REGISTRY = "ghcr.io"
 UPSTREAM = re.compile(r"^https://github\.com/([^/\s]+)/([^/\s]+?)/?$")
 FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
+# The operator's tool runs the same verification (ADR 0096): the identity it hands cosign is two module-level string
+# constants, read here without importing it.
+VEYQCTL = ROOT / "scripts/veyqctl.py"
+VEYQCTL_ISSUER = "COSIGN_OIDC_ISSUER"
+VEYQCTL_IDENTITY = "COSIGN_IDENTITY_REGEXP"
+
+
+def veyqctl_identity() -> tuple[str | None, str | None]:
+    """`veyqctl`'s pinned issuer and identity pattern, or None for one it does not assign as a string literal."""
+    if not VEYQCTL.is_file():
+        return None, None
+    found: dict[str, str] = {}
+    for node in ast.parse(VEYQCTL.read_text()).body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
+            found[node.targets[0].id] = node.value.value
+    return found.get(VEYQCTL_ISSUER), found.get(VEYQCTL_IDENTITY)
 
 
 def verify_commands(markdown: str) -> list[list[str]]:
@@ -1107,16 +1130,36 @@ else:
             f"published image, pinned to `{workflow_file}` in {owner}/{repo} on its release branches."
         )
     verified_images: set[str] = set()
+    # `veyqctl verify` runs the same check for an operator (ADR 0096): its pinned pair is one more verification held
+    # to the same accepts and rejects, and to the page's own identity, so the two can never state different ones.
+    tool_issuer, tool_identity = veyqctl_identity()
+    page_identities = {p for argv in commands for p in flag_values(argv, "--certificate-identity-regexp")}
+    if tool_identity is None or tool_issuer is None:
+        fail(
+            f"{VEYQCTL.relative_to(ROOT)} assigns no `{VEYQCTL_ISSUER}` / `{VEYQCTL_IDENTITY}` string constant — "
+            f"they are where this guard reads the identity `veyqctl verify` hands cosign, so it checked NOTHING there"
+        )
+    elif page_identities and page_identities != {tool_identity}:
+        fail(
+            f"{VEYQCTL.relative_to(ROOT)} verifies against `{tool_identity}`, and {VERIFY_PAGE.relative_to(ROOT)} "
+            f"documents {sorted(page_identities)} — the operator's tool and the operator's page state one identity, "
+            f"or one of them accepts what the other refuses"
+        )
+    tool_argv = ([] if tool_issuer is None else ["--certificate-oidc-issuer", tool_issuer]) + (
+        [] if tool_identity is None else ["--certificate-identity-regexp", tool_identity])
+    sources = [(VERIFY_PAGE.relative_to(ROOT), argv) for argv in commands]
+    if tool_identity is not None and tool_issuer is not None:
+        sources.append((VEYQCTL.relative_to(ROOT), tool_argv))
     verify_summary = (
-        f", and {len(commands)} documented `cosign verify` command(s) each accept the {len(accepted)} publishing "
-        f"branch identities and reject {len(rejected)} others"
+        f", and {len(commands)} documented `cosign verify` command(s) and `veyqctl`'s each accept the "
+        f"{len(accepted)} publishing branch identities and reject {len(rejected)} others"
     )
-    for argv in commands:
+    for where, argv in sources:
         shown = " ".join(argv)[:120]
         issuers = flag_values(argv, "--certificate-oidc-issuer")
         if flag_values(argv, "--certificate-oidc-issuer-regexp") or issuers != [OIDC_ISSUER]:
             fail(
-                f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` must pin exactly "
+                f"{where}: `cosign verify {shown}` must pin exactly "
                 f"`--certificate-oidc-issuer {OIDC_ISSUER}` — GitHub's OIDC issuer is what makes the identity "
                 f"below mean `a GitHub workflow run`, and any other issuer lets someone else mint that string"
             )
@@ -1124,7 +1167,7 @@ else:
         patterns = flag_values(argv, "--certificate-identity-regexp")
         if len(exact) + len(patterns) != 1:
             fail(
-                f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` must carry exactly one certificate "
+                f"{where}: `cosign verify {shown}` must carry exactly one certificate "
                 f"identity (found {len(exact) + len(patterns)})"
             )
             continue
@@ -1136,19 +1179,19 @@ else:
                 # `re.fullmatch`, is the faithful model. A pattern without `^…$` is exactly what it lets through.
                 compiled = re.compile(patterns[0])
             except re.error as e:
-                fail(f"{VERIFY_PAGE.relative_to(ROOT)}: the identity pattern `{patterns[0]}` does not compile: {e}")
+                fail(f"{where}: the identity pattern `{patterns[0]}` does not compile: {e}")
                 continue
             matches = lambda subject, rx=compiled: rx.search(subject) is not None  # noqa: E731
         for what, subject in accepted.items():
             if not matches(subject):
                 fail(
-                    f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` rejects {what} ({subject}) — the "
+                    f"{where}: `cosign verify {shown}` rejects {what} ({subject}) — the "
                     f"workflow publishes and signs from that branch, so a genuine release fails to verify"
                 )
         for what, subject in rejected.items():
             if matches(subject):
                 fail(
-                    f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` accepts {what} ({subject}). A "
+                    f"{where}: `cosign verify {shown}` accepts {what} ({subject}). A "
                     f"verification is only as narrow as the identity it pins (ADR 0057 §3) — this one "
                     f"accepts a signature the veyq release never made."
                 )
@@ -1159,7 +1202,7 @@ else:
             if match:
                 if match.group(2) == ":":
                     fail(
-                        f"{VERIFY_PAGE.relative_to(ROOT)}: `cosign verify {shown}` verifies a TAG. A tag can move "
+                        f"{where}: `cosign verify {shown}` verifies a TAG. A tag can move "
                         f"between the verify and the pull; verify the digest the tag resolved to, and deploy "
                         f"that digest (ADR 0057 §3)."
                     )

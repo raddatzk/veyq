@@ -99,7 +99,7 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
     the files and `cmp` matches each recipe file against the tree; `python3 scripts/validate_release_identity.py`
     green; committed.
 
-- [ ] **2 `veyqctl` installs, runs and verifies.** `scripts/veyqctl.py` (the asset is `veyqctl`): Python 3.9, stdlib,
+- [x] **2 `veyqctl` installs, runs and verifies.** `scripts/veyqctl.py` (the asset is `veyqctl`): Python 3.9, stdlib,
   one file. `install`, `start`, `stop`, `status`, `logs`, `verify`, `check`; `--home` (default `/opt/veyq`), `--source`
   (default the GitHub Releases of `raddatzk/veyq`; a URL or a directory in the mirror layout). Resolution of
   `VEYQ_RELEASE` (`<major>.<minor>` | `<major>` | `latest`; prereleases never), signature verification through the
@@ -197,3 +197,29 @@ The spelling bites (long-form bind, `env_file`) can only be red while the file t
 the producer share one derivation, so with the file present it is carried and green. Each was run both ways — red
 on the derivation's message naming the spelling and its location, green with the file present and the OK line
 listing it (the positive control). The guard's docstring states the shared derivation as its limit.
+
+**Phase 2.** Decided in the build, each in `veyqctl.py`'s docstring:
+- *The manifest lists every asset with its sha256* (`release_assets.py` writes it): an HTTP mirror cannot be listed,
+  so the list is what `veyqctl` fetches, and each file is checked before it lands in `releases/<release>/`, the
+  manifest kept there verbatim. It binds the files to the manifest, not the manifest to veyq — the images' signatures
+  do that, and for the recipe only the source does (an immutable GitHub Release, or a mirror the operator trusts).
+- *The project is named once.* `install` reads it from `docker compose config` (the recipe's `name:`, or a
+  `COMPOSE_PROJECT_NAME` in `.env`, which beats it), records it in `state.json`, and every later command passes `-p`;
+  a `COMPOSE_*` in the operator's shell is dropped and every command runs in the home. The live run set the project
+  through `--set COMPOSE_PROJECT_NAME=…`, so the overlay stayed a verbatim copy.
+- *Assertion 7 reads `veyqctl`'s `COSIGN_OIDC_ISSUER` and `COSIGN_IDENTITY_REGEXP`* (by AST, without importing it),
+  holds them to the page's one identity and to the same accepts and rejects; the self-test holds the `cosign verify`
+  call to exactly those two. Bitten by snapshot-and-restore, each red on its own message, the untouched tree green:
+  the `^` dropped, `master` added, another issuer, the constant renamed away.
+- *Not done here: the self-test is not in `ci.yml`.* The implementing run's brief kept the workflows off limits
+  (cr-one-pipeline-per-commit edits `ci.yml` in parallel); the step belongs beside `instance_backup_selftest.py`'s.
+- *Live*, measured (log in the implementing session, not committed): `veyq:ctl-p2` and `veyq-admin:ctl-p2` built from
+  the tree; `release_assets.py` → `v0.528`, six assets, the three recipe files byte-identical to `infra/`; the stack
+  lane's own `pebble()` under the run's project first (Pebble's root must be in the app's truststore before the app
+  starts — `install` brings everything up at once, so phase 4 meets the same ordering); `veyqctl install
+  --unsigned-local` with every line prefixed `NOTHING VERIFIED`, `.env` and `state.json` `0600`, every service
+  healthy, the stack lane's certificate check green through Traefik (`GET https://veyq.test/api/setup` → 200);
+  `stop` → `status` exit 1, `start` → healthy again; `verify` without the flag refused the local build; teardown by
+  project name, the host's 5 containers and 4 volumes unchanged.
+- **Next time:** a Done-when the brief overrides (here `ci.yml`) is named in the brief as overridden, so the
+  implementer does not have to find the contradiction.
