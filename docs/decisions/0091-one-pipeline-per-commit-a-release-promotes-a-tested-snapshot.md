@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1) and the one workflow (decision 2, `ci.yml`); the rest is not (§ Consequences)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`) and every job's budget (decision 1); the rest is not (§ Consequences)
 - Date: 2026-10-16
 
 ## Context
@@ -51,7 +51,14 @@ Three structural costs sit on top of those numbers:
    | **API end-to-end** (`run_web_e2e.py`) | real crypto against a live backend, fresh per file; backup and restore groups; the wire sweeps | 15 min |
    | **Image build** | both images, both architectures, once per commit | 15 min |
    | **Stack lanes** (ADR 0090's harness, on the built image) | see 3 | 15 min each, in parallel |
-   | **Mutation** (ADR 0045) | assertion strength of the scoped files | as today, path-gated |
+   | **Mutation** (ADR 0045) | assertion strength of the scoped files | 30 min per gate, path-gated |
+
+   The jobs that are no stage carry a budget too, so that no job runs on GitHub's 360-minute default: reading the
+   version 5 min; the dispatch publish 15; the jar-level upgrade proof 15, the API end-to-end run's; a path-filter job
+   5; CodeQL's analysis 30; the site's check 10 and its deploy 5. Every value outside the measured stages above is an
+   estimate (mutation: ADR 0045 puts an incremental run at 1–3 min and a cold one at minutes), and the first CI run
+   replaces it. `scripts/validate_pipeline_shape.py` holds that every job of every workflow has a budget; this table
+   is where the values live.
 
 2. **One pipeline per commit, and nothing waits that need not.** `ci.yml` and `container.yml` become one workflow.
    The guards, the surface checks, the races, the API end-to-end run **and the image build start together**; the
@@ -163,6 +170,10 @@ Three structural costs sit on top of those numbers:
   [Verify a release](../../site/src/content/docs/run/verify-a-release.md) pins `.github/workflows/ci.yml`; no image
   had ever been published under the old one. The pipeline's `guards` job runs the glob minus `validate_guard_gaps.py`,
   which stays in `trust-chain.yml` until decision 4's filtered job.
+- **Every job runs on its budget** (2026-10-16, `cr-one-pipeline-per-commit` phase 3): `timeout-minutes` on all 17
+  jobs of the six workflows, the values of decision 1; `scripts/validate_pipeline_shape.py` reds a job, or a whole new
+  workflow, without one. `trust-chain.yml`'s one job runs the guards and the guard gaps together until decision 4's
+  filtered job splits them, so it carries the sum of both stages, 13 min.
 - **The remote comes when the owner judges veyq ready to publish, and it will be public** (owner, 2026-10-16). Until
   then every stage's only run is local, so the pipeline must run locally from the workflow file itself, by one command
   (`changes/cr-one-pipeline-per-commit.md` phase 5); the first public push is also the first CI run.

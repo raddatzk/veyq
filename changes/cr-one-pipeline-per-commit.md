@@ -128,9 +128,21 @@ restored by snapshot-and-restore.
       compose stack's services from a worktree unless pinned, and a parallel session runs Docker-heavy e2e on it);
       the amd64 image leg and Buildx's provenance/SBOM (no `docker/build-push-action` locally); `upgrade-proof`
       (disabled); `publish` (registry writes and keyless signing exist only in GitHub). No CI run exists.
-- [ ] 3 **Budgets.** Every job of every workflow declares `timeout-minutes`, the values ADR 0091's table gives; a new
+- [x] 3 **Budgets.** Every job of every workflow declares `timeout-minutes`, the values ADR 0091's table gives; a new
       guard holds the presence (every job, every workflow) and names the ADR as the values' home — it does not keep a
       second copy of the table. Bites: a job without `timeout-minutes` → red; a workflow added without any → red.
+      **Built 2026-10-16:** `scripts/validate_pipeline_shape.py` (named for the shape ADR 0091 gives the pipeline, so
+      phase 4's assertion joins it): every job of every `.github/workflows/*.y(a)ml` in the directory — globbed, so an
+      untracked new file counts — declares a positive whole-number `timeout-minutes`; a reusable-workflow call is
+      exempt (GitHub refuses the key there). Run on the untouched tree first: red on all 17 jobs of the six workflows.
+      The table gave no value for the jobs that are no stage, and mutation's row said "as today" (that is, GitHub's
+      360-minute default), so ADR 0091 decision 1 now carries them, marked as estimates: mutation 30 per gate, the
+      version 5, the publish 15, the upgrade proof 15, a path filter 5, CodeQL's analysis 30, the site's check 10 and
+      deploy 5. `trust-chain.yml`'s one job carries 13 (guards 3 + guard gaps 10) until phase 4 splits it. **Bites**
+      (snapshot-and-restore of `ci.yml`, restore confirmed by byte comparison and an unchanged `git status
+      --porcelain`): `chart`'s `timeout-minutes` removed → red naming `ci.yml › chart`; a new `bite-new.yml` with two
+      jobs and no budget → red naming both. Glob green; `validate_guard_gaps.py --force` green (79 cases, 6 workers,
+      166 s, load 30 → 24).
 - [ ] 4 **Guard gaps in CI.** `trust-chain.yml`'s loop runs every guard but `validate_guard_gaps.py`; a second job
       runs that one when `scripts/**` or `.claude/skills/trust-chain/**` change (`dorny/paths-filter`, pinned as
       `codeql.yml` pins it) and on a nightly `schedule` on `main`, always in full there. `changes/README.md`

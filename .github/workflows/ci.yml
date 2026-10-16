@@ -74,6 +74,7 @@ jobs:
     # cheap guards, about a minute and a half. `validate_guard_gaps.py` is not run here: it tests the guards, not the
     # commit, and is its own stage (ADR 0091 decisions 1 and 4) — trust-chain.yml runs it.
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -103,6 +104,7 @@ jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -128,6 +130,7 @@ jobs:
     # race classes from the code and starts its own throwaway MariaDB from the image infra/docker-compose.yml pins
     # (tag + digest), so the pin keeps one home — which is why this job declares no `services:`, as web-e2e does not.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -148,6 +151,7 @@ jobs:
   frontend:
     name: Frontend checks (crypto, web, admin-web)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -187,6 +191,7 @@ jobs:
   chart:
     name: Chart checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # The whole history: the chart upgrade check below reads its predecessor's chart out of git (HEAD^1, or the
       # last release tag once there is one).
@@ -232,6 +237,7 @@ jobs:
     # stack (MariaDB + Garage), then per e2e file gives it its own database and a fresh %e2e backend boot. That
     # is why this job declares no `services:` and no `env:` — adding either would split the truth in two.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -300,6 +306,7 @@ jobs:
   version:
     name: Read the veyq version from the tree
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read # the version is a function of the checkout; this job reaches no network at all
     outputs:
@@ -384,6 +391,7 @@ jobs:
   build:
     name: Build ${{ matrix.image }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     # Only the version, not the tests (ADR 0091 decision 2): the build starts beside the surface checks instead of
     # after them. The Docker build compiles but runs no tests (-x test), and that is safe only because nothing it
     # builds becomes a published name until `publish`, which needs every stage green. On a dispatch it does push the
@@ -470,6 +478,7 @@ jobs:
   upgrade-proof:
     name: Upgrade proof (the predecessor's backup, restored onto and read by this build)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: false
     permissions:
       contents: read
@@ -515,6 +524,7 @@ jobs:
   publish:
     name: Publish the release (both images and the chart)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Every other job of this file is a stage, and a publish waits for each to be green (ADR 0091 decision 2) — it is
     # the only thing that makes it safe for `build` to start beside the tests. validate_release_identity.py holds the
     # list to the file: a job added and not needed here is red.
