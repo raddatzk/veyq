@@ -38,7 +38,7 @@ import { titlesOf } from '../../test/levelRows'
 import type { LevelRowSelection } from './levelRow'
 
 function node(id: string, kind: NodeKind, parentId: string | null = 'Trips'): TreeNode {
-  return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+  return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 }
 const TRIPS = node('Trips', FOLDER_KIND, null)
 const OTHER = node('Other', FOLDER_KIND, null)

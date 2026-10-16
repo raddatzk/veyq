@@ -113,9 +113,9 @@ describe('MemoryBuckets — a guest named above this node (cr-node-key-hierarchy
     const scopeKey = v1.randomBytes(32)
     const folderKey = v1.randomBytes(32)
     const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
-      b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+      b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 }, kek, k))
     const node = (id: string, parentId: string | null, wrappedContentKey: string): TreeNode =>
-      treeNode({ id, parentId, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+      treeNode({ id, parentId, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
     const memoryKey = v1.randomBytes(32)
     space.epochs = epochsOf(scopeKey)
     treeStore.nodes = [node(FOLDER, null, wrap(scopeKey, FOLDER, folderKey)), node(MEMORY, FOLDER, wrap(folderKey, MEMORY, memoryKey))]

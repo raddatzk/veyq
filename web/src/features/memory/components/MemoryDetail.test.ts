@@ -45,7 +45,7 @@ const NODE_ID = '22222222-2222-2222-2222-222222222222'
 const THIS_NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
 
 const node = (name: string, wrappedMeta: string | null = null): TreeNode => treeNode({
-  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta, metaVersion: 0, placementVersion: 0,
+  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta, metaRevision: 0, placementRevision: 0,
 })
 
 /** A stub deriver: a tiny "JPEG" tagged by the requested maxEdge so each tier's bytes are distinct. */
@@ -309,7 +309,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const chapters: TreeNode[] = [
-      treeNode({ id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }),
+      treeNode({ id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 }),
     ]
 
     const wrapper = mountDetail(v1.randomBytes(32), { chapters })
@@ -552,8 +552,8 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   })
 
   /** A `409 stale_version` carrying the server's current node blob (ADR 0077), as the generated client throws it. */
-  const staleNode = (wrappedMeta: string, metaVersion: number) => ({
-    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaVersion }), { status: 409 }),
+  const staleNode = (wrappedMeta: string, metaRevision: number) => ({
+    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaRevision }), { status: 409 }),
   })
 
   /**
@@ -577,11 +577,11 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     await flushPromises()
     await flushPromises()
 
-    expect(updateNode.mock.calls[0][0].updateNodeRequest.metaVersion).toBe(0)
-    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaVersion).toBe(1)
+    expect(updateNode.mock.calls[0][0].updateNodeRequest.metaRevision).toBe(0)
+    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaRevision).toBe(1)
     expect(lastPatchedDate(memoryKey)).toMatchObject({ mode: 'auto', from: '2026-03-03' })
     expect(lastPatchedLocation(memoryKey)).toMatchObject({ name: 'Teneriffa', derivedMode: 'fixed' }) // A's place
-    expect(wrapper.emitted('metaUpdated')?.at(-1)?.[0]).toMatchObject({ nodeId: NODE_ID, metaVersion: 2 })
+    expect(wrapper.emitted('metaUpdated')?.at(-1)?.[0]).toMatchObject({ nodeId: NODE_ID, metaRevision: 2 })
   })
 
   /**
@@ -682,7 +682,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
 describe('share actions on a chapter', () => {
   const chapter: TreeNode = treeNode({
     id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==',
-    wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+    wrappedMeta: null, metaRevision: 0, placementRevision: 0,
   })
   beforeEach(() => {
     const store = galleryFakeStore()

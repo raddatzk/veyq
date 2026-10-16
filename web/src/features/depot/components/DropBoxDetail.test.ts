@@ -40,7 +40,7 @@ import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const node = (id: string, kind: string, name: string, parentId: string | null, over: Partial<TreeNode> = {}): TreeNode => treeNode({
-  id, kind, name, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over,
+  id, kind, name, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over,
 })
 const BOX = node('b0000000-0000-4000-8000-000000000000', DROPBOX_KIND, 'Einsendungen', null)
 // The Annas' ids sort against the order the server made their folders in, so the numbering below is the creation order's.
@@ -171,7 +171,7 @@ describe('DropBoxDetail', () => {
 describe('DropBoxDetail - its cover', () => {
   const KEY = v1.randomBytes(32)
   const withCover = (): TreeNode => node(BOX.id, DROPBOX_KIND, 'Einsendungen', null, {
-    metaVersion: 2,
+    metaRevision: 2,
     wrappedMeta: b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: BOX.id }, KEY, new TextEncoder().encode(JSON.stringify({
       v: 1, cover: uploadedCover({ blobId: 'b-1', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: BOX.id }),
     })))),

@@ -36,9 +36,9 @@ const keys = {
 const HASH = `#k=${b64url(K_SHARE)}`
 
 function child(id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string, extra: Partial<ShareNode> = {}): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }
+  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
   return {
-    id, parentId, kind, epoch: 0, placementVersion: 0, orderIndex: 0,
+    id, parentId, kind, epoch: 0, placementRevision: 0, orderIndex: 0,
     encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key), ...extra,
   }
 }
@@ -74,7 +74,7 @@ describe('guestTreeSource', () => {
     const tree = guestTreeSource(head(), { hash: HASH })
     expect(tree.rootId).toBe(ROOT)
     expect(tree.node(ROOT)).toMatchObject({ id: ROOT, parentId: null, kind: FOLDER_KIND, name: 'Familie', wrappedMeta: 'bWV0YQ==', createdAt: 0 })
-    expect(tree.node(NESTED)).toMatchObject({ parentId: LETTERS, name: 'Feldpost', wrappedMeta: 'c2VhbGVk', metaVersion: 0, placementVersion: 0 })
+    expect(tree.node(NESTED)).toMatchObject({ parentId: LETTERS, name: 'Feldpost', wrappedMeta: 'c2VhbGVk', metaRevision: 0, placementRevision: 0 })
     expect(tree.children(ROOT).map((n) => n.id).sort()).toEqual([DROP, LETTERS].sort())
     expect(Array.from(tree.keyOf(NESTED)!), "a node's key, as the chain opened it").toEqual(Array.from(keys.nested))
     expect(tree.nameOf(ROOT)).toBe('Familie')

@@ -102,7 +102,7 @@ no separate `K_chapter` type:
 - **Every node (FOLDER, MEMORY *and* CHAPTER) has its own random key,** wrapped under the **content key of its
   parent**: a scope-root node's under `K_SC`; a chapter's `K_node` under its **parent Memory's `K_node`** (the same
   `content-key` purpose one level deeper, bound like every wrap to the node it belongs to and to its placement
-  version — [ADR 0072](0072-a-seal-binds-its-object.md), [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+  revision — [ADR 0072](0072-a-seal-binds-its-object.md), [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   Decisions 1 and 3).
 - **`K_blob` is wrapped under the `K_node` of the media's *direct* parent node** — media on a chapter under the
   chapter's `K_node`, media on the Memory under the Memory's `K_node`.
@@ -112,7 +112,7 @@ no separate `K_chapter` type:
   share never leaks upward.
 - **Moves are a single re-wrap, never a data re-encrypt:** moving media chapter↔Memory re-wraps only its
   `K_blob`. A node's move or rename is one placement write: its key re-wrapped under the (new) parent's key, its
-  name re-sealed and its slug token recomputed there, stated against its `placement_version` (`409 stale_placement`,
+  name re-sealed and its slug token recomputed there, stated against its `placement_revision` (`409 stale_placement`,
   [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 3); its subtree is
   untouched.
 

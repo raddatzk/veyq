@@ -61,7 +61,7 @@ function sealMeta(key: Uint8Array, mediaId: string, meta: object): string {
 
 /** A node's name sealed under the key its directory entry lives under — its parent's (ADR 0080 Decision 2). */
 function nodeName(parentKey: Uint8Array, nodeId: string, name: string): string {
-  return b64std(v1.seal({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementVersion: 0 }, parentKey, v1.utf8(name)))
+  return b64std(v1.seal({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, parentKey, v1.utf8(name)))
 }
 
 /** A create endpoint that answers as an honest server does: with the share id the client minted. */
@@ -199,7 +199,7 @@ describe('resolveShare (anonymous viewer)', () => {
     // a chapter's K_node is wrapped under the Memory's K_node (purpose `content-key`, bound to the chapter + its epoch)
     const chapterKey = v1.randomBytes(32)
     const wrappedContentKey = b64std(
-      v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: CHAPTER_ID, epoch: 0, placementVersion: 0 }, kNode, chapterKey),
+      v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: CHAPTER_ID, epoch: 0, placementRevision: 0 }, kNode, chapterKey),
     )
     const chapterMeta = sealMeta(chapterKey, MEDIA_2, { v: 1, w: 800, h: 600 })
     mockGuest({
@@ -210,7 +210,7 @@ describe('resolveShare (anonymous viewer)', () => {
       sealedName,
       nodes: [
         { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
-        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementVersion: 0, wrappedContentKey, encryptedName: nodeName(kNode, CHAPTER_ID, 'Day 1') },
+        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey, encryptedName: nodeName(kNode, CHAPTER_ID, 'Day 1') },
       ],
     }, {
       media: [{ nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: chapterMeta }],
@@ -237,15 +237,15 @@ describe('resolveShare (anonymous viewer)', () => {
     const STALE = '5c09e000-0000-4000-8000-00000000ce03'
     const chapterKey = v1.randomBytes(32)
     const contentKey = (kek: Uint8Array, nodeId: string, k = v1.randomBytes(32)) =>
-      b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+      b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, kek, k))
     mockGuest({
       role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName,
       nodes: [
         { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
-        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementVersion: 0, wrappedContentKey: contentKey(kNode, CHAPTER_ID, chapterKey), encryptedName: nodeName(kNode, CHAPTER_ID, 'Day 1') },
-        { id: NESTED, parentId: CHAPTER_ID, kind: 'CHAPTER', epoch: 0, placementVersion: 0, wrappedContentKey: contentKey(chapterKey, NESTED), encryptedName: nodeName(chapterKey, NESTED, 'Morning') },
+        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(kNode, CHAPTER_ID, chapterKey), encryptedName: nodeName(kNode, CHAPTER_ID, 'Day 1') },
+        { id: NESTED, parentId: CHAPTER_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(chapterKey, NESTED), encryptedName: nodeName(chapterKey, NESTED, 'Morning') },
         // the pre-ADR-0080 entry: a chapter title sealed under a scope key the guest does not hold
-        { id: STALE, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementVersion: 0, wrappedContentKey: contentKey(kNode, STALE), encryptedName: nodeName(v1.randomBytes(32), STALE, 'Hidden') },
+        { id: STALE, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(kNode, STALE), encryptedName: nodeName(v1.randomBytes(32), STALE, 'Hidden') },
       ],
     })
     const head = await resolvePublicShare(minted.shareId, b64url(minted.kShare))
@@ -255,25 +255,25 @@ describe('resolveShare (anonymous viewer)', () => {
     expect(Object.fromEntries(chapterNames)).toEqual({ [CHAPTER_ID]: 'Day 1', [NESTED]: 'Morning' })
   })
 
-  // ADR 0080 Decision 3 / bite test 4, the guest's half: a chapter's name and wrap open at the placement version
+  // ADR 0080 Decision 3 / bite test 4, the guest's half: a chapter's name and wrap open at the placement revision
   // served WITH them. A chapter renamed to version 2 opens there; the same entry served at version 1 (a replay of the
   // row a rename superseded) opens neither its title nor its key — and nothing below it.
-  it('opens a chapter at the placement version it is served with, and nothing at another', async () => {
+  it('opens a chapter at the placement revision it is served with, and nothing at another', async () => {
     const create = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-pv' })
     mockCurator(create)
     const kNode = v1.randomBytes(32)
     const minted = await createShare(SCOPE_ID, NODE_ID, kNode, EPOCHS, 'Trip')
     const { wrap, sealedName } = posted(create)
     const chapterKey = v1.randomBytes(32)
-    const sealedAt = (purpose: 'content-key' | 'node-name', placementVersion: number, payload: Uint8Array) =>
-      b64std(v1.seal({ purpose, scopeId: SCOPE_ID, nodeId: CHAPTER_ID, epoch: 0, placementVersion }, kNode, payload))
+    const sealedAt = (purpose: 'content-key' | 'node-name', placementRevision: number, payload: Uint8Array) =>
+      b64std(v1.seal({ purpose, scopeId: SCOPE_ID, nodeId: CHAPTER_ID, epoch: 0, placementRevision }, kNode, payload))
     const entry = { wrappedContentKey: sealedAt('content-key', 2, chapterKey), encryptedName: sealedAt('node-name', 2, v1.utf8('Tag 2')) }
-    const servedAt = async (placementVersion: number) => {
+    const servedAt = async (placementRevision: number) => {
       mockGuest({
         role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName,
         nodes: [
           { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
-          { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementVersion, ...entry },
+          { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision, ...entry },
         ],
       })
       return openGuestTreeParts(await resolvePublicShare(minted.shareId, b64url(minted.kShare))).names
@@ -292,7 +292,7 @@ describe('resolveShare (anonymous viewer)', () => {
     const chapterKey = v1.randomBytes(32)
     const OTHER_CHAPTER = '5c09e000-0000-4000-8000-00000000ce99'
     // sealed for OTHER_CHAPTER, served on CHAPTER_ID's row
-    const movedWrap = b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: OTHER_CHAPTER, epoch: 0, placementVersion: 0 }, kNode, chapterKey))
+    const movedWrap = b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: OTHER_CHAPTER, epoch: 0, placementRevision: 0 }, kNode, chapterKey))
     mockGuest({
       role: 'READ',
       passwordRequired: false,
@@ -301,7 +301,7 @@ describe('resolveShare (anonymous viewer)', () => {
       sealedName,
       nodes: [
         { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
-        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementVersion: 0, wrappedContentKey: movedWrap },
+        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: movedWrap },
       ],
     }, {
       media: [{ nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }],
@@ -741,7 +741,7 @@ describe('reissueShare (ADR 0075, W1)', () => {
     const drop = v1.generateDropKey()
     const sealedDropPrivateKey = b64std(v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kNode, v1.serializeDropKey(drop)))
     stubApi(contentApi, {
-      listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey, metaVersion: 0, placementVersion: 0, createdAt: new Date(0) }],
+      listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey, metaRevision: 0, placementRevision: 0, createdAt: new Date(0) }],
     })
     const { old, reissue } = await oldShare(kNode, ShareRole.WriteOnly, '')
 
@@ -819,7 +819,7 @@ describe('shareChunkProvider (Slice 2 SW range seam for the anonymous viewer, AD
 describe('a chapter share (ADR 0080 Decision 13)', () => {
   const NESTED = '5c09e000-0000-4000-8000-00000000ce11'
   const contentKey = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
-    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, kek, k))
 
   it("a viewer link opens the chapter's own K_node and title and the chapters below it", async () => {
     const create = echoCreate()
@@ -836,7 +836,7 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
       nodes: [
         { id: CHAPTER_ID, parentId: null, kind: 'CHAPTER', epoch: 0 }, // the root: no entry, no parent served
         {
-          id: NESTED, parentId: CHAPTER_ID, kind: 'CHAPTER', epoch: 0, placementVersion: 0,
+          id: NESTED, parentId: CHAPTER_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0,
           wrappedContentKey: contentKey(chapterKey, NESTED, nestedKey), encryptedName: nodeName(chapterKey, NESTED, 'Morning'),
         },
       ],
@@ -865,7 +865,7 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
     mockCurator(create)
     const chapterKey = v1.randomBytes(32)
     stubApi(contentApi, {
-      listNodes: [{ id: CHAPTER_ID, epoch: 0, parentId: NODE_ID, kind: 'CHAPTER', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey: null, metaVersion: 0, placementVersion: 0, createdAt: new Date(0) }],
+      listNodes: [{ id: CHAPTER_ID, epoch: 0, parentId: NODE_ID, kind: 'CHAPTER', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey: null, metaRevision: 0, placementRevision: 0, createdAt: new Date(0) }],
     })
 
     const minted = await createShare(SCOPE_ID, CHAPTER_ID, chapterKey, EPOCHS, 'Day 1', ShareRole.WriteOnly)
@@ -896,14 +896,14 @@ describe('openSharedMemory on a folder link (cr-node-key-hierarchy 5b.4b)', () =
   const SIBLING = '5c09e000-0000-4000-8000-0000000f0002'
   const MEDIA_3 = '5c09e000-0000-4000-8000-00000000ae03'
   const contentKey = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
-    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, kek, k))
   const kShare = v1.randomBytes(32)
   const folderKey = v1.randomBytes(32)
   const memoryKey = v1.randomBytes(32)
   const chapterKey = v1.randomBytes(32)
   const siblingKey = v1.randomBytes(32)
   const child = (id: string, parentId: string, kind: string, parentKey: Uint8Array, key: Uint8Array, name: string) =>
-    ({ id, parentId, kind, epoch: 0, placementVersion: 0, wrappedContentKey: contentKey(parentKey, id, key), encryptedName: nodeName(parentKey, id, name) })
+    ({ id, parentId, kind, epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(parentKey, id, key), encryptedName: nodeName(parentKey, id, name) })
   const head = {
     shareId: 'S'.repeat(43), kShare, scopeId: SCOPE_ID, name: 'Familie', noteByLocale: { en: 'Hello' }, role: ShareRole.ReadWrite, rootKind: 'FOLDER',
     share: {

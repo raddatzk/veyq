@@ -337,7 +337,7 @@ here; the server is blind.
   `children`, `keyOf`, `nameOf`, `inIdentityFolder`, `linkTo`: every navigation goes through it, so a guest's link keeps
   `#k=`); the member's come from `memberAccess`/`memberTreeSource`, built by the host, the guest's tree from
   `guestTreeSource` (`core/sharing/guestAccess.ts`: a served `ShareNode` as a `TreeNode` — `createdAt` 0, so equal
-  names number by node id; `metaVersion` 0; `wrappedMeta` as served). A row factory built for a guest reads nothing of
+  names number by node id; `metaRevision` 0; `wrappedMeta` as served). A row factory built for a guest reads nothing of
   the member's world (`treeStore`, `activeSpace`, the cover and pin stores) — Memories' rows read their dates, covers
   and map from the guest's tree (the covers are core's, `core/node/cover/`, resolved by the level), Depot's rows read and write through Depot's data
   source (`features/depot/source.ts`: the member's or the guest's, fixed at mount; a write is offered where the matrix

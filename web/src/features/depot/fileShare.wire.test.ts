@@ -33,10 +33,10 @@ const keyTop = v1.randomBytes(32)
 const keyFile = v1.randomBytes(32)
 const keyOther = v1.randomBytes(32)
 const wrapUnder = (kek: Uint8Array, id: string, k: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }, kek, k))
+  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }, kek, k))
 const node = (id: string, parentId: string | null, kind: string, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
   id, parentId, kind, orderIndex: 0, epoch: 0, name, wrappedContentKey: wrapUnder(kek, id, k),
-  wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+  wrappedMeta: null, metaRevision: 0, placementRevision: 0,
 })
 const TREE: TreeNode[] = [
   node(TOP, null, FOLDER_KIND, k0, keyTop, 'Reisen'),

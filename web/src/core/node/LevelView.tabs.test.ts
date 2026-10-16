@@ -34,7 +34,7 @@ import { titlesOf } from '../../test/levelRows'
 import { isDisabled, openNewMenu } from '../../test/newMenu'
 
 function node(id: string, kind: NodeKind, parentId: string | null = null): TreeNode {
-  return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+  return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 }
 const TRIPS = node('Trips', FOLDER_KIND)
 const SUB = node('Sub', FOLDER_KIND, 'Trips')

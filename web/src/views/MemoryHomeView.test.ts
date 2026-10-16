@@ -139,7 +139,7 @@ import { setViewMode, useViewMode } from '../shared/state/useViewMode'
 import { setLevelTab } from '../shared/state/useLevelTab'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
-  return treeNode({ parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over })
+  return treeNode({ parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over })
 }
 const TREE: TreeNode[] = [
   node({ id: 'trips', kind: FOLDER_KIND, name: 'Trips' }),

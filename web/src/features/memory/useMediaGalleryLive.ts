@@ -202,11 +202,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   }
   /** A date correction from the lightbox → patch the item's sealed tier so the grid re-sorts (no refetch). The item
    *  object is shared with the open lightbox's snapshot, so the reopened detail stays consistent too. */
-  function onCapturedAtUpdated(payload: { mediaId: string; wrappedMeta: string | null; metaVersion: number }) {
+  function onCapturedAtUpdated(payload: { mediaId: string; wrappedMeta: string | null; metaRevision: number }) {
     const item = items.value.find((it) => it.mediaId === payload.mediaId)
     if (!item) return
     item.wrappedMeta = payload.wrappedMeta ?? undefined
-    item.metaVersion = payload.metaVersion // the base of the next meta write on this item (ADR 0077)
+    item.metaRevision = payload.metaRevision // the base of the next meta write on this item (ADR 0077)
     items.value = [...items.value] // reassign so sortedItems recomputes and the grid re-sorts
   }
 
@@ -309,7 +309,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       skip: (id) => pendingDelete.has(id), // cr-0111: don't re-add an optimistically-trashed media (a stale pre-commit read)
       patch: (existing, m) => {
         existing.wrappedMeta = m.wrappedMeta // a meta edit re-sealed the tier; patch in place (shared with the lightbox snapshot)
-        existing.metaVersion = m.metaVersion // …and the version it is at, or the next write from here would 409 once
+        existing.metaRevision = m.metaRevision // …and the version it is at, or the next write from here would 409 once
         existing.updatedAt = m.updatedAt
       },
       onIds: (listed) => {

@@ -38,7 +38,7 @@ const E = 'ffffffff-0000-4000-8000-000000000006'
 const people = vi.mocked(loadScopePeople)
 
 const nodeWith = (ids: string[], version = 3) =>
-  treeNode({ id: NODE, wrappedMeta: ids.length ? sealNodeMeta(key, { scopeId: SCOPE, nodeId: NODE }, { v: 1, participants: { userIds: ids } }) : null, metaVersion: version })
+  treeNode({ id: NODE, wrappedMeta: ids.length ? sealNodeMeta(key, { scopeId: SCOPE, nodeId: NODE }, { v: 1, participants: { userIds: ids } }) : null, metaRevision: version })
 
 const mounted: VueWrapper[] = []
 async function mountRow(opts: { ids?: string[]; show?: boolean; write?: NodeMetaDoor | null } = {}) {
@@ -211,11 +211,11 @@ describe('MemoryParticipants: the picker', () => {
 
     expect(updateNode).toHaveBeenCalledTimes(1)
     const sent = updateNode.mock.calls[0][0].updateNodeRequest
-    expect(sent.metaVersion).toBe(3)
+    expect(sent.metaRevision).toBe(3)
     const stored = unsealNodeMeta(key, { scopeId: SCOPE, nodeId: NODE }, sent.wrappedMeta).participants
     expect(stored).toEqual({ userIds: [A, C, B] }) // opaque ids only, in the order picked - no name anywhere
     expect(Object.keys(stored as object)).toEqual(['userIds'])
-    expect(w.emitted('metaUpdated')?.[0]?.[0]).toMatchObject({ nodeId: NODE, metaVersion: 4 })
+    expect(w.emitted('metaUpdated')?.[0]?.[0]).toMatchObject({ nodeId: NODE, metaRevision: 4 })
   })
 
   it('the search narrows the members by name, ignoring case and diacritics, and says so when nothing matches', async () => {

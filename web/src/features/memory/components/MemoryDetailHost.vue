@@ -71,8 +71,8 @@ function onCoverFromPhoto(p: { mediaId: string; src: string | null }) {
   else cover.save(props.node, { kind: 'media', mediaId: p.mediaId, crop: { ...FULL_FRAME } })
 }
 
-function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVersion: number }) {
-  if (!guest) patchNodeMeta(e.nodeId, e.wrappedMeta, e.metaVersion)
+function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevision: number }) {
+  if (!guest) patchNodeMeta(e.nodeId, e.wrappedMeta, e.metaRevision)
 }
 </script>
 

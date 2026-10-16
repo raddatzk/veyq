@@ -17,7 +17,7 @@ const registry = createRegistry()
 registerMemories(registry)
 registerDepot(registry)
 
-const FOLDER = treeNode({ id: 'f1', kind: FOLDER_KIND, name: 'Trips', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+const FOLDER = treeNode({ id: 'f1', kind: FOLDER_KIND, name: 'Trips', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 
 function ctx(access: Access, over: { identity?: boolean; epochs?: boolean } = {}): LevelActionContext {
   const epochs = over.epochs === false ? null : epochsOf(v1.randomBytes(32))

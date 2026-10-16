@@ -10,7 +10,7 @@
   [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 3).
 - **Postconditions (success):** the node lists under its new parent, its own content key unchanged — so every key, name
   and blob below it opens as before — its key re-wrapped and its name and slug token re-sealed under the destination's
-  key at the next placement version. A drop-box guest's folder moved out by a member is an ordinary folder from then on.
+  key at the next placement revision. A drop-box guest's folder moved out by a member is an ordinary folder from then on.
 
 ## Main flow
 
@@ -33,10 +33,10 @@
    it cannot be moved back into the drop box.
 5. The client re-wraps the node's own content key under the destination's key (`K_SC` at the current epoch at the scope
    root, else the destination node's key), re-seals its name and slug token there, binds all of it to the next
-   placement version and sends one placement write stating the version it was built on — a member's `updateNode`, a
+   placement revision and sends one placement write stating the revision it was built on — a member's `updateNode`, a
    guest's `updateShareNode` after the page's naming flow.
 6. The server checks structure only (the destination live and in the scope or subtree, the kind's placement rule, no
-   cycle, nothing into a guest's folder, the guest rules of both containers), compare-and-sets the version and stores
+   cycle, nothing into a guest's folder, the guest rules of both containers), compare-and-sets the revision and stores
    the ciphertext; a member's move out of a drop box ends the folder's identity.
 7. The tree is re-read; a node on screen is followed to its new path. A toast says where it went, with **Undo**, which
    moves it back the same way — not after a guest's folder left a drop box.
@@ -89,7 +89,7 @@ a `READ_WRITE` guest of a folder link moved a folder, a file and a Memory into a
 - **The picker is a hint, the server the authority.** The client mirrors `NodeKindRules` and the guest rules so it
   offers only what would be taken; a disagreement surfaces as the server's refusal, explained by its code — never a
   silently different result.
-- **Operator-blind, unchanged.** The server sees the node id, the new parent id, the epoch number, the version and
+- **Operator-blind, unchanged.** The server sees the node id, the new parent id, the epoch number, the revision and
   ciphertext — the same class of metadata every create and rename already discloses.
 
 ## What this means for you / Was das für dich bedeutet

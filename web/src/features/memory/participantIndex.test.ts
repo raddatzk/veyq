@@ -27,9 +27,9 @@ const BEN = 'bbbbbbbb-0000-4000-8000-000000000002'
 
 /** One scope's sealed rows: a root folder `Trips` holding the given Memories (name, participants, date). */
 function scopeRows(scopeId: string, epochKey: Uint8Array, memories: { id: string; name: string; users?: string[]; date?: unknown; place?: string; at?: { lat: number; lng: number } }[]) {
-  const addr = (nodeId: string) => ({ scopeId, nodeId, epoch: 0, placementVersion: 1 })
+  const addr = (nodeId: string) => ({ scopeId, nodeId, epoch: 0, placementRevision: 1 })
   const folderKey = v1.randomBytes(32)
-  const base = { createdAt: new Date(0), placementVersion: 1, epoch: 0, slugToken: 's', orderIndex: 0, metaVersion: 0 }
+  const base = { createdAt: new Date(0), placementRevision: 1, epoch: 0, slugToken: 's', orderIndex: 0, metaRevision: 0 }
   const rows: NodeSummary[] = [{
     ...base, id: FOLDER, parentId: null, kind: FOLDER_KIND,
     encryptedName: sealName(epochKey, addr(FOLDER), 'Trips'), wrappedContentKey: wrapContentKey(epochKey, addr(FOLDER), folderKey),
@@ -143,7 +143,7 @@ describe('loadParticipantIndex', () => {
     const t1 = scopeRows(T1, epochKey, [{ id: M1, name: 'Rome', users: [ANNA] }])
     const g1 = scopeRows(G1, epochKey, [{ id: M3, name: 'Camping', users: [ANNA] }])
     // the group Memory's key is wrapped under a key the viewer does not hold: the chain does not reach it
-    g1.rows[1] = { ...g1.rows[1], wrappedContentKey: wrapContentKey(v1.randomBytes(32), { scopeId: G1, nodeId: M3, epoch: 0, placementVersion: 1 }, v1.randomBytes(32)) }
+    g1.rows[1] = { ...g1.rows[1], wrappedContentKey: wrapContentKey(v1.randomBytes(32), { scopeId: G1, nodeId: M3, epoch: 0, placementRevision: 1 }, v1.randomBytes(32)) }
     mocked.fetchTree.mockImplementation(async (id) => ({ rows: id === T1 ? t1.rows : g1.rows, etag: '"1"' }))
     const index = await loadParticipantIndex()
     expect([...index.byUser.get(ANNA)!]).toEqual([`${T1}/${M1}`]) // what cannot be opened is absent

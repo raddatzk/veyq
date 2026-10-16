@@ -55,7 +55,7 @@ const OLD = Date.UTC(2019, 2, 3)
 const NEW = Date.UTC(2024, 8, 9)
 
 const node = (name: string): TreeNode => treeNode({
-  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0,
 })
 
 function stubDeriver(): MediaDeriver {

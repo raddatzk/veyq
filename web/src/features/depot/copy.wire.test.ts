@@ -159,7 +159,7 @@ describe('a folder with a file copied to the scope root, on the wire', () => {
     const creates = writes.filter((r) => r.path === `/api/scopes/${SCOPE}/nodes`).map((r) => r.json!)
     expect(creates.map((c) => [c.kind, c.parentId])).toEqual([[FOLDER_KIND, undefined], [FILE_KIND, result.nodeIds[0]]])
     const [folder, file] = creates
-    const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 })
+    const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 })
     const newFolderKey = v1.open({ purpose: 'content-key', ...at(folder.nodeId as string) }, scopeKey, fromB64std(folder.wrappedContentKey as string))
     expect(new TextDecoder().decode(v1.open({ purpose: 'node-name', ...at(folder.nodeId as string) }, scopeKey, fromB64std(folder.encryptedName as string)))).toBe('Projekte (2)')
     expect(Array.from(newFolderKey)).not.toEqual(Array.from(folderKey))

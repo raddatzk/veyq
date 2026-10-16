@@ -140,7 +140,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
   async function writeFailed(node: TreeNode, e: unknown): Promise<void> {
     if (e instanceof MetaConflictError) {
       // A peer changed the cover field itself: take what the server holds, re-open the dialog on it and say so.
-      patchNodeMeta(node.id, e.current.wrappedMeta, e.current.metaVersion)
+      patchNodeMeta(node.id, e.current.wrappedMeta, e.current.metaRevision)
       open(node)
       report('cover_stale')
       return
@@ -149,7 +149,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
     else if (e instanceof MetaUnreadableError) report('meta_unreadable')
     else {
       const fresh = await staleMetaOf(e)
-      if (fresh) patchNodeMeta(node.id, fresh.wrappedMeta, fresh.metaVersion)
+      if (fresh) patchNodeMeta(node.id, fresh.wrappedMeta, fresh.metaRevision)
       report('failed')
     }
   }
@@ -173,7 +173,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
               scopeId, nodeId: node.id, nodeKey: key, current: nodeMetaState(latest(node)),
               cover: uploadedCover(up.plan, crop), uploadId: up.uploadId, surfaceConflict: false,
             })
-            patchNodeMeta(node.id, state.wrappedMeta, state.metaVersion)
+            patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
             onProgress(1)
           },
         },
@@ -191,7 +191,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
   async function writeSealed(node: TreeNode, key: Uint8Array, scopeId: string, cover: unknown | null, surfaceConflict: boolean): Promise<void> {
     try {
       const state = await writeNodeCover({ scopeId, nodeId: node.id, nodeKey: key, current: nodeMetaState(latest(node)), cover, surfaceConflict })
-      patchNodeMeta(node.id, state.wrappedMeta, state.metaVersion)
+      patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
     } catch (e) {
       await writeFailed(node, e)
     }

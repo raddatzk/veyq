@@ -12,7 +12,7 @@ operator must not learn), and a **share is the member view** with rights removed
 principle of 2026-10-09), which raises what a guest may see of it.
 
 A Memory already has the right home for sealed per-Memory facts: the `wrappedMeta` blob under `K_node` (purpose
-`node-meta`) that carries its date, place and cover, written with a compare-and-set on `metaVersion`
+`node-meta`) that carries its date, place and cover, written with a compare-and-set on `metaRevision`
 ([ADR 0077](0077-a-write-carries-the-version-it-read.md), [en.memory.node-meta](../features/memory/enablers/en.memory.node-meta.md)).
 
 ## Decision
@@ -27,7 +27,7 @@ it**, because the list is sealed.
 
 **2. Storage: a sealed `participants` sub-object in the Memory's `wrappedMeta`.** It holds **user ids only**, sits next
 to `date`, `location` and `cover` under `K_node` (purpose `node-meta`), and is written through the same
-compare-and-set write as the rest (`writeNodeMeta`, stating the `metaVersion` it read). **No server-visible relation**:
+compare-and-set write as the rest (`writeNodeMeta`, stating the `metaRevision` it read). **No server-visible relation**:
 no `veyq_node_participant` table. Such a table would hand the operator who was on which trip.
 
 **3. Leaving the scope does not remove a participant.** The id stays; it renders greyed as "former member" with **no

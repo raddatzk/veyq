@@ -41,7 +41,7 @@ let updateNode: Mock<ContentApi['updateNode']>
 let getItemFavorites: Mock
 beforeEach(() => {
   vi.clearAllMocks()
-  updateNode = vi.fn(async () => ({ metaVersion: 1 })) as unknown as Mock<ContentApi['updateNode']>
+  updateNode = vi.fn(async () => ({ metaRevision: 1 })) as unknown as Mock<ContentApi['updateNode']>
   fakeApi(contentApi, { updateNode })
   getItemFavorites = stubApi(itemFavoritesApi, { getItemFavorites: [] }).getItemFavorites
   const store = galleryFakeStore()

@@ -89,7 +89,7 @@ async function zipBytes(write: (w: ZipWriter) => Promise<unknown>, zip64At?: num
 }
 const zipOf = (bytes: Uint8Array | Blob): ImportInput => ({ kind: 'zip', file: new File([bytes as BlobPart], 'download.zip') })
 const node = (id: string, parentId: string | null, kind: string, name: string, orderIndex = 0) =>
-  ({ id, parentId, kind, name, orderIndex, epoch: 1, placementVersion: 0, wrappedContentKey: '', wrappedMeta: null, metaVersion: 0, createdAt: new Date(0) }) as unknown as TreeNode
+  ({ id, parentId, kind, name, orderIndex, epoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt: new Date(0) }) as unknown as TreeNode
 const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
   rootId: null,
   node: (id) => nodes.find((n) => n.id === id) ?? null,

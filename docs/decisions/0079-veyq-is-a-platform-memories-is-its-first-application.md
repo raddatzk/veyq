@@ -148,7 +148,7 @@ on their own.
   `PublicShare` for its own read there, a wire change). Core's spec texts and its main comments describe what core
   does.
 - **The node's payload slot and content key are core's** (decided 2026-10-06, cr-platform-contract-split). Core
-  gives every node one sealed, versioned payload (`wrappedMeta`, `metaVersion`): core stores it, compare-and-sets
+  gives every node one sealed, versioned payload (`wrappedMeta`, `metaRevision`): core stores it, compare-and-sets
   it ([ADR 0077](0077-a-write-carries-the-version-it-read.md)) and lists it with the tree, and never opens it. Its
   plaintext format is the node kind's application's, versioned per Decision 7. `wrappedContentKey` is the content
   key of every node, `FOLDER` included ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
@@ -329,7 +329,7 @@ on their own.
   **Built** (inbox #401, five steps, 2026-10-09 to 2026-10-11). Core: `web/src/core/access.ts` (`Access`, `TreeSource`,
   the member's factories, `targetOf`, `folderRights`) and the guest's half, `core/sharing/guestAccess.ts`
   (`guestAccess`, `guestTreeSource` over the opened subtree — a served `ShareNode` as a `TreeNode`, `createdAt` 0 so equal
-  names number by node id, `metaVersion` 0, `wrappedMeta` as served, every `linkTo` keeping `#k=`). The shell
+  names number by node id, `metaRevision` 0, `wrappedMeta` as served, every `linkTo` keeping `#k=`). The shell
   (`views/ShareView.vue`) runs the gates, builds the access and owns the page's one naming flow (`requestGuest`, core's
   `GuestNaming` with "Not you?"); then a `READ` or `READ_WRITE` link of any root kind gets core's page
   (`core/sharing/ShareTreePage.vue`): core's `LevelView` at a folder, the kind's `detail` at any other node — the link's

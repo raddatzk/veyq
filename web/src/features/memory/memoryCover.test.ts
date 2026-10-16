@@ -176,7 +176,7 @@ describe('setMemoryCover', () => {
     const { updateNode } = stubApi(contentApi, { updateNode: undefined })
 
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28 } }
-    const { wrappedMeta: sealed } = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaVersion: 0 })
+    const { wrappedMeta: sealed } = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaRevision: 0 })
 
     const req = updateNode.mock.calls[0][0]
     expect(req.scopeId).toBe(SCOPE_ID)
@@ -193,7 +193,7 @@ describe('setMemoryCover', () => {
     const withSiblings = sealMeta({ v: 1, date, location })
 
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME }
-    const sealed = (await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: withSiblings, metaVersion: 0 })).wrappedMeta!
+    const sealed = (await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: withSiblings, metaRevision: 0 })).wrappedMeta!
 
     const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
     expect(blob.cover).toEqual(cover)
@@ -208,7 +208,7 @@ describe('setMemoryCover', () => {
     const location = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed' }
     const withCover = sealMeta({ v: 1, date, location, cover: { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME } })
 
-    const sealed = (await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: withCover, metaVersion: 0 })).wrappedMeta!
+    const sealed = (await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: withCover, metaRevision: 0 })).wrappedMeta!
 
     const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
     expect(blob.cover).toBeUndefined()
@@ -216,8 +216,8 @@ describe('setMemoryCover', () => {
     expect(blob.date).toEqual(date)
     expect(blob.location).toEqual(location)
   })
-  const staleWith = (wrappedMeta: string, metaVersion: number) => ({
-    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaVersion }), { status: 409 }),
+  const staleWith = (wrappedMeta: string, metaRevision: number) => ({
+    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaRevision }), { status: 409 }),
   })
 
   /** W5 (ADR 0077): a cover save from a stale tree meets a 409 whose blob holds a peer's place — the retry keeps it. */
@@ -227,9 +227,9 @@ describe('setMemoryCover', () => {
     fakeApi(contentApi, { updateNode })
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME }
 
-    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaVersion: 1 })
+    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaRevision: 1 })
 
-    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaVersion).toBe(2)
+    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaRevision).toBe(2)
     const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(state.wrappedMeta!))))
     expect(blob.cover).toEqual(cover)
     expect(blob.location).toEqual(location)
@@ -243,13 +243,13 @@ describe('setMemoryCover', () => {
 
     const surfaced = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
     fakeApi(contentApi, { updateNode: surfaced })
-    const err = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaVersion: 1 }).catch((e) => e)
+    const err = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaRevision: 1 }).catch((e) => e)
     expect(err).toBeInstanceOf(MetaConflictError)
     expect(surfaced).toHaveBeenCalledTimes(1)
 
     const reapplied = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
     fakeApi(contentApi, { updateNode: reapplied })
-    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaVersion: 1 }, false)
+    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaRevision: 1 }, false)
     expect(reapplied).toHaveBeenCalledTimes(2)
     expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(mine)
   })
@@ -265,17 +265,17 @@ describe('setMemoryCover', () => {
     fakeApi(contentApi, { updateNode, removeNodeCover })
     const mine: MemoryCover = { source: { kind: 'media', mediaId: 'mine' }, crop: FULL_FRAME }
 
-    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: mineOld, metaVersion: 1 }, false)
+    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: mineOld, metaRevision: 1 }, false)
 
     expect(state.replaced).toEqual(normalizeMemoryCover(peersUpload, NODE_ID))
     expect(state.replaced?.source.kind).toBe('upload')
     // inbox #411: the peer's uploaded blob is freed in the SAME write that replaces it, decided from the blob the 409 handed
     // back (the first attempt, built on a copy that named no upload, was a plain meta write)
     expect(updateNode).toHaveBeenCalledTimes(1)
-    expect(removeNodeCover.mock.calls[0][0].removeNodeCoverRequest).toMatchObject({ blobId: 'peer-blob', metaVersion: 2 })
+    expect(removeNodeCover.mock.calls[0][0].removeNodeCoverRequest).toMatchObject({ blobId: 'peer-blob', metaRevision: 2 })
 
     stubApi(contentApi, { updateNode: undefined, removeNodeCover: undefined })
-    const plain = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: mineOld, metaVersion: 1 })
+    const plain = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: mineOld, metaRevision: 1 })
     expect(plain.replaced).toEqual({ source: { kind: 'media', mediaId: 'mine-old' }, crop: FULL_FRAME })
   })
 })

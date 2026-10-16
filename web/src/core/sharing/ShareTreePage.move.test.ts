@@ -5,7 +5,7 @@
 // click. The registry is a fresh one (FOLDER is core's) with one kind "an application" registers, its row factory exposing
 // a move action per node where its right says (as Depot's rows do; inbox #407: a folder's own move is its NodeHeader
 // action once it is open, not an action on its list item). Pinned: a READ_WRITE guest moves within its subtree only, through its link, the
-// request carrying the re-wrapped key and the version it was built on; a READ guest, and the link's root, offer none.
+// request carrying the re-wrapped key and the revision it was built on; a READ guest, and the link's root, offer none.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -57,9 +57,9 @@ const keys = { root: v1.randomBytes(32), letters: v1.randomBytes(32), nested: v1
 const HASH = `#k=${b64url(K_SHARE)}`
 const NOTE_KIND = 'NOTE'
 
-function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string, placementVersion = 0): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion }
-  return { id, parentId, kind, epoch: 0, placementVersion, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string, placementRevision = 0): ShareNode {
+  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision }
+  return { id, parentId, kind, epoch: 0, placementRevision, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 // Familie/ ─ Briefe/ ─ Feldpost/ (version 2)    Notizen, Zettel (NOTE, nodes a contributor added)
 function head(role: ShareRole): PublicShareHead {
@@ -142,9 +142,9 @@ describe('a READ_WRITE guest moves inside its share', () => {
     const call = updateShareNode.mock.calls[0][0]
     expect(call).toMatchObject({ shareId: SHARE_ID, nodeId: NESTED, xContributorToken: 'contributor-token' })
     const req = call.updateShareNodeRequest
-    expect(req).toMatchObject({ parentId: ROOT, placementVersion: 2 })
+    expect(req).toMatchObject({ parentId: ROOT, placementRevision: 2 })
     expect('epoch' in req && req.epoch !== undefined, 'a guest states no epoch').toBe(false)
-    const at3 = { purpose: 'content-key', scopeId: SCOPE_ID, nodeId: NESTED, epoch: 0, placementVersion: 3 } as const
+    const at3 = { purpose: 'content-key', scopeId: SCOPE_ID, nodeId: NESTED, epoch: 0, placementRevision: 3 } as const
     expect(Array.from(v1.open(at3, keys.root, fromB64std(req.wrappedContentKey)))).toEqual(Array.from(keys.nested))
     expect(reload, 're-resolved after the move').toHaveBeenCalled()
     expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.moved', { name: 'Feldpost', to: 'Familie' }) }))
@@ -158,7 +158,7 @@ describe('a READ_WRITE guest moves inside its share', () => {
     expect(crumbs()).toEqual(['Familie'])
     expect(whyNotHere(), 'where it is now').toBe(t('node.move.here.current'))
     await moveHere('Briefe')
-    expect(updateShareNode.mock.calls[0][0].updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementVersion: 0 })
+    expect(updateShareNode.mock.calls[0][0].updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementRevision: 0 })
     expect(authenticatedCalls).toEqual([])
   })
 
@@ -199,7 +199,7 @@ describe('a READ_WRITE guest moves a selection of its level', () => {
     expect(updateShareNode.mock.calls.map((c) => c[0].nodeId).sort()).toEqual([NOTE, SLIP].sort())
     for (const [call] of updateShareNode.mock.calls) {
       expect(call).toMatchObject({ shareId: SHARE_ID, xContributorToken: 'contributor-token' })
-      expect(call.updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementVersion: call.nodeId === SLIP ? 1 : 0 })
+      expect(call.updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementRevision: call.nodeId === SLIP ? 1 : 0 })
     }
     expect(reload, 're-resolved once, after the last').toHaveBeenCalledTimes(1)
     expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.many.moved', { count: 2, to: 'Briefe' }) }))

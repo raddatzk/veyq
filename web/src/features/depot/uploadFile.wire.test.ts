@@ -156,7 +156,7 @@ describe('a new file on the wire', () => {
     // the node: kind FILE under the folder, its key wrap and name under the PARENT's key at version 0, the FILE folding
     const create = requests[0].json!
     expect(create).toMatchObject({ nodeId: result.nodeId, parentId: FOLDER, kind: FILE_KIND, epoch: 0 })
-    const address = { scopeId: SCOPE, nodeId: result.nodeId, epoch: 0, placementVersion: 0 }
+    const address = { scopeId: SCOPE, nodeId: result.nodeId, epoch: 0, placementRevision: 0 }
     const nodeKey = v1.open({ purpose: 'content-key', ...address }, folderKey, fromB64std(create.wrappedContentKey as string))
     expect(() => v1.open({ purpose: 'content-key', ...address }, scopeKey, fromB64std(create.wrappedContentKey as string))).toThrow(v1.OpenRefused)
     expect(new TextDecoder().decode(v1.open({ purpose: 'node-name', ...address }, folderKey, fromB64std(create.encryptedName as string)))).toBe(NAME)
@@ -190,7 +190,7 @@ describe('a new file on the wire', () => {
     const { nodeId } = await fileUploadJob({ scopeId: SCOPE, epochs: epochsOf(scopeKey), parent: null }, fileOf(10)).run(ctx())
     const create = requests[0].json!
     expect(create.parentId).toBeUndefined()
-    const address = { scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }
+    const address = { scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 }
     expect(() => v1.open({ purpose: 'content-key', ...address }, scopeKey, fromB64std(create.wrappedContentKey as string))).not.toThrow()
     expect(create.slugToken).toBe(b64std(v1.slugToken(scopeKey, SCOPE, fileNameSlug(NAME))))
   })

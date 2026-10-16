@@ -140,7 +140,7 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
 - **A live poll also tightens the `auto`-date self-heal window** ([uc.memory.date](../features/memory/use-cases/uc.memory.date.md)):
   the reconcile sees others' new media sooner. **The item revision is a read-cache validator, never a write
   precondition** — it moves on every attach, trash, restore, move and meta change, so a compare-and-set on it would
-  turn every concurrent upload into a date-edit conflict. The sealed meta blobs carry their own `metaVersion` for
+  turn every concurrent upload into a date-edit conflict. The sealed meta blobs carry their own `metaRevision` for
   that ([ADR 0077](0077-a-write-carries-the-version-it-read.md)).
 - **New server state:** a `revision INT` + a `delete_revision INT` per node (columns on `veyq_node` then;
   Memories' `veyq_media_revision` from inbox #341 to #410; core's `veyq_node_items_revision` now, with a foreign key

@@ -373,7 +373,7 @@ function startCapturedAtEdit() {
 }
 
 /** A write landed (or a conflict handed back the current tier): show it, and let the grid patch its item — the
- *  item's `wrappedMeta` + `metaVersion` are the base of the next write from here. */
+ *  item's `wrappedMeta` + `metaRevision` are the base of the next write from here. */
 function applyMetaState(target: MediaItem, state: SealedMetaState, tier: MediaMeta | null) {
   if (item.value === target) captured.value = tier
   emit('updated', { mediaId: target.mediaId, ...state })

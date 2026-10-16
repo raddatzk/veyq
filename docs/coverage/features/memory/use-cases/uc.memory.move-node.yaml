@@ -9,10 +9,10 @@ title: Move a node — put a folder, a Memory, a chapter, a file or a drop box s
 # decrypts; a guest's folder moved out takes no more files) is written but has not run in CI, so it is cited nowhere here.
 acceptanceCriteria:
   - id: a-move-keeps-the-subtree-readable
-    text: "A move re-wraps only the moved node's own content key under the destination's key (K_SC at the current epoch at the scope root, the destination node's key elsewhere) and re-seals its name and slug token there at the next placement version, stating the version it was built on; every key below opens as before. A move into or out of the scope root seals at the current epoch, a move between two folders at the node's stored one."
+    text: "A move re-wraps only the moved node's own content key under the destination's key (K_SC at the current epoch at the scope root, the destination node's key elsewhere) and re-seals its name and slug token there at the next placement revision, stating the version it was built on; every key below opens as before. A move into or out of the scope root seals at the current epoch, a move between two folders at the node's stored one."
     coverage:
       backend:
-        integration: [NodePlacementCoreSliceTest.theEpochIsCheckedOnlyAtTheRoot, NodePlacementCoreSliceTest.theListingServesThePlacementVersionAndOnlyAPlacementMovesIt, NodePlacementRaceCoreSliceTest.twoMovesOfOneNodeToDifferentParentsLandOne]
+        integration: [NodePlacementCoreSliceTest.theEpochIsCheckedOnlyAtTheRoot, NodePlacementCoreSliceTest.theListingServesThePlacementRevisionAndOnlyAPlacementMovesIt, NodePlacementRaceCoreSliceTest.twoMovesOfOneNodeToDifferentParentsLandOne]
       web:
         unit: [src/core/node/move.wire.test.ts, src/core/node/tree.wire.test.ts]
 

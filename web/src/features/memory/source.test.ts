@@ -76,8 +76,8 @@ const keys = { memory: v1.randomBytes(32), chapter: v1.randomBytes(32) }
 const GUEST: GuestIdentity = { identityId: 'id-1', contributorToken: 'tok-1' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementVersion: 0 }
-  return { id, parentId, kind, epoch: 0, placementVersion: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
+  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A Memory link with one chapter. */
 function head(role: ShareRole): PublicShareHead {
@@ -246,7 +246,7 @@ describe("the member's source is today's calls, with its scope", () => {
   const S = 'scope-m'
   const key = v1.randomBytes(32)
   const item = mediaItem({ mediaId: 'm-1' })
-  const state = { wrappedMeta: null, metaVersion: 0 }
+  const state = { wrappedMeta: null, metaRevision: 0 }
   const src = memberMemorySource({ scopeId: () => S })
   const edit = () => null
   // [what the view calls, the module function it must reach, the arguments it must reach it with]

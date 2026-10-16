@@ -61,7 +61,7 @@ phase that reshapes a request is red in `web/` and `admin-web/` until the client
 phase; the Done-when for it is `generate:api` plus the contracts guards. **A removed *response* field is the
 other way round: it reddens only code that reads it and fixtures typed against the model.** **An added *required*
 response field reddens the server that builds it**: `cr-meta-writes-carry-the-version-they-read` predicted "backend
-green" for a contracts phase that added `metaVersion` to `NodeSummary`, and `ContentResource`'s
+green" for a contracts phase that added `metaVersion` (now `metaRevision`) to `NodeSummary`, and `ContentResource`'s
 `NodeSummary(...)` construction stopped compiling.
 `cr-guest-names-for-members-only` predicted a red at the fixture that served the removed field and got a green,
 because that fixture reached the code cast `as unknown as` (165 such casts, inbox #195). So a phase that predicts
@@ -604,6 +604,12 @@ the sibling the reshape breaks. #103 nearly re-homed the role enum into a shared
 the *drift* guard (`validate_contracts_common.py`) was named; `validate_scope_model_vocabulary.py` silently
 anchors on `SetMemberRoleRequest.role.enum`, and a `$ref` would have broken it. Enumerate the guards on the
 symbol first, then choose the shape — the shape that keeps every anchor green is a constraint, not an afterthought.
+
+**A guard can anchor on a symbol's SHAPE, and a rename moves it out of the shape.** Grep `scripts/` for the pattern a
+guard matches as well as for the literal. `validate_write_concurrency.py` found a write's counter by the regex `…Version`;
+inbox #437 renamed `metaVersion` / `placementVersion` to `…Revision`, and the guard, run on the renamed contract, went red
+on `removeNodeCover` (a write that only its counter makes a subject) and would have passed an undeclared `placementRevision`.
+A literal grep for the old names finds nothing in that guard, so only running it on the renamed tree shows the break.
 
 **The mutation manifests anchor on FILES, and a green gate does not say you broke one.** `web/stryker.mutate.json`,
 `packages/crypto/stryker.mutate.json` and `backend/core/pitest.scope.json` admit a file only while it is pure.

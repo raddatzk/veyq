@@ -46,7 +46,7 @@ function memorySink() {
   return { sink, state, blob: () => new Blob(parts as BlobPart[]) }
 }
 const node = (id: string, parentId: string | null, kind: string, name: string, orderIndex = 0): TreeNode =>
-  ({ id, parentId, kind, name, orderIndex, epoch: 1, placementVersion: 0, wrappedContentKey: '', wrappedMeta: null, metaVersion: 0, createdAt: new Date(0) }) as unknown as TreeNode
+  ({ id, parentId, kind, name, orderIndex, epoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt: new Date(0) }) as unknown as TreeNode
 /** A tree as a session reads it, every key open. */
 const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
   rootId: null,

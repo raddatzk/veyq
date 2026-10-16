@@ -100,8 +100,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     const afterCreate = await listTree(scopeId, epochs)
     const byId = (tree: typeof afterCreate, id: string) => tree.find((n) => n.id === id)
     const folderRow = byId(afterCreate, folderId)!
-    expect(byId(afterCreate, createdId), "the guest's folder, under the root").toMatchObject({ parentId: folderId, name: CREATED_NAME, kind: FOLDER_KIND, placementVersion: 0 })
-    expect(byId(afterCreate, nestedId), 'the nested folder, under it').toMatchObject({ parentId: createdId, name: NESTED_NAME, kind: FOLDER_KIND, placementVersion: 0 })
+    expect(byId(afterCreate, createdId), "the guest's folder, under the root").toMatchObject({ parentId: folderId, name: CREATED_NAME, kind: FOLDER_KIND, placementRevision: 0 })
+    expect(byId(afterCreate, nestedId), 'the nested folder, under it').toMatchObject({ parentId: createdId, name: NESTED_NAME, kind: FOLDER_KIND, placementRevision: 0 })
     expect(byId(afterCreate, createdId)!.epoch, "stored at the parent's epoch, as the guest sealed").toBe(folderRow.epoch)
     expect(nodeContentKey(scopeId, epochs, afterCreate, nestedId), "the nested folder's key opens through the chain").not.toBeNull()
     // The raw resolve carries the new rows as ciphertext: no plaintext name of what the guest created.
@@ -111,12 +111,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
 
     // --- (b) anonymous: move the Memory from the left subfolder to the right one -----------------------------------
     const beforeMove = await contextNow()
-    expect(beforeMove.nodes.get(memory.nodeId)?.placementVersion).toBe(0)
+    expect(beforeMove.nodes.get(memory.nodeId)?.placementRevision).toBe(0)
     await placeShareNodeAsGuest(beforeMove, { nodeId: memory.nodeId, newParentId: rightId })
 
     // A: the Memory sits under the right subfolder, its name and key open, its chapter and photo with them.
     const afterMove = await listTree(scopeId, epochs)
-    expect(byId(afterMove, memory.nodeId), 'the Memory moved, at the next placement version').toMatchObject({ parentId: rightId, name: MEMORY_NAME, placementVersion: 1 })
+    expect(byId(afterMove, memory.nodeId), 'the Memory moved, at the next placement revision').toMatchObject({ parentId: rightId, name: MEMORY_NAME, placementRevision: 1 })
     expect(Array.from(nodeContentKey(scopeId, epochs, afterMove, memory.nodeId) ?? []), "the Memory's own key opens under its new parent").toEqual(Array.from(memory.memoryKey))
     expect(Array.from(nodeContentKey(scopeId, epochs, afterMove, chapter.nodeId) ?? []), 'and its chapter below it').toEqual(Array.from(chapter.chapterKey))
     const media = (await listMedia(scopeId, memory.nodeId)).find((i) => i.mediaId === inMemory.mediaId)
@@ -149,13 +149,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     const rootPlaced = await failure(placeShareNodeAsGuest(ctx, { nodeId: folderId, newParentId: leftId }))
     expect(rootPlaced instanceof GuestTreeError && rootPlaced.code, 'the client never places the root').toBe('illegal_structure')
     const rootKey = ctx.keys.get(folderId)!
-    const rootAt = { scopeId, nodeId: folderId, epoch: folderRow.epoch, placementVersion: 1 }
+    const rootAt = { scopeId, nodeId: folderId, epoch: folderRow.epoch, placementRevision: 1 }
     const rootRenamed = await failure(
       publicSharesApi().updateShareNodeRaw({
         shareId, nodeId: folderId, xContributorToken: identity.contributorToken,
         updateShareNodeRequest: {
           parentId: leftId, encryptedName: sealName(rootKey, rootAt, 'Umbenannt'), slugToken: slugTokenFor(rootKey, leftId, FOLDER_KIND, 'Umbenannt'),
-          wrappedContentKey: wrapContentKey(rootKey, rootAt, rootKey), placementVersion: 0,
+          wrappedContentKey: wrapContentKey(rootKey, rootAt, rootKey), placementRevision: 0,
         },
       }),
     )
@@ -163,17 +163,17 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     // A placement built on the version before the move (0; the Memory is at 1 now): 409 stale_placement, raw.
     const memoryKey = ctx.keys.get(memory.nodeId)!
     const leftKeyGuest = ctx.keys.get(leftId)!
-    const staleAt = { scopeId, nodeId: memory.nodeId, epoch: ctx.nodes.get(memory.nodeId)!.epoch, placementVersion: 1 }
+    const staleAt = { scopeId, nodeId: memory.nodeId, epoch: ctx.nodes.get(memory.nodeId)!.epoch, placementRevision: 1 }
     const stale = await failure(
       publicSharesApi().updateShareNodeRaw({
         shareId, nodeId: memory.nodeId, xContributorToken: identity.contributorToken,
         updateShareNodeRequest: {
           parentId: leftId, encryptedName: sealName(leftKeyGuest, staleAt, MEMORY_NAME), slugToken: slugTokenFor(leftKeyGuest, leftId, MEMORY_KIND, MEMORY_NAME),
-          wrappedContentKey: wrapContentKey(leftKeyGuest, staleAt, memoryKey), placementVersion: 0,
+          wrappedContentKey: wrapContentKey(leftKeyGuest, staleAt, memoryKey), placementRevision: 0,
         },
       }),
     )
-    expect(await isCodedError(stale, HttpStatus.conflict, 'stale_placement'), 'a stale placement version is 409 stale_placement').toBe(true)
+    expect(await isCodedError(stale, HttpStatus.conflict, 'stale_placement'), 'a stale placement revision is 409 stale_placement').toBe(true)
     expect(byId(await listTree(scopeId, epochs), memory.nodeId)?.parentId, 'the Memory stays where the guest moved it').toBe(rightId)
 
     // A READ link of the same folder: the guest may read, never write.

@@ -28,9 +28,9 @@ const scopeKey = v1.randomBytes(32)
 const keyA = v1.randomBytes(32)
 const keyF = v1.randomBytes(32)
 const sealWrap = (kek: Uint8Array, id: string, k: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 3 }, kek, k))
+  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 3 }, kek, k))
 const row = (id: string, parentId: string | null, kind: string, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
-  id, parentId, kind, orderIndex: 0, epoch: 0, name, wrappedContentKey: sealWrap(kek, id, k), wrappedMeta: null, metaVersion: 0, placementVersion: 3,
+  id, parentId, kind, orderIndex: 0, epoch: 0, name, wrappedContentKey: sealWrap(kek, id, k), wrappedMeta: null, metaRevision: 0, placementRevision: 3,
 })
 
 const stubs = {

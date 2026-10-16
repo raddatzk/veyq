@@ -48,8 +48,8 @@ const keys = { root: v1.randomBytes(32), sub: v1.randomBytes(32), doc: v1.random
 const DOC_KIND = 'DOC'
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }
-  return { id, parentId, kind, epoch: 0, placementVersion: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
+  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 
 function head(role: ShareRole): PublicShareHead {

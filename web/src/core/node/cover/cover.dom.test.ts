@@ -60,7 +60,7 @@ const sealCover = (nodeId: string, blobId: string) =>
     v: 1, cover: uploadedCover({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId }),
   }))))
 const node = (n: number, kind: string, name: string, parentId: string | null, wrappedMeta: string | null = null): TreeNode =>
-  treeNode({ id: id(n), kind, name, parentId, wrappedMeta, metaVersion: wrappedMeta ? 4 : 0 })
+  treeNode({ id: id(n), kind, name, parentId, wrappedMeta, metaRevision: wrappedMeta ? 4 : 0 })
 
 const TRIPS = node(1, FOLDER_KIND, 'Trips', null)
 const ROME = node(2, MEMORY_KIND, 'Rome', TRIPS.id)
@@ -118,7 +118,7 @@ beforeEach(() => {
   vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
   vi.mocked(openBlobFromUrls).mockResolvedValue(new Uint8Array([4, 5, 6]))
   vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'up-1', plan: { blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: SUB.id } })
-  vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaVersion: 5, replaced: null })
+  vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaRevision: 5, replaced: null })
   stubApi(filesApi, { listFiles: { items: [] } satisfies FileListPage })
 })
 afterEach(() => vi.restoreAllMocks())
@@ -203,7 +203,7 @@ describe('the cover dialog, by a real click: choose, crop, Save - the derive and
     expect(deriver, 'the existing derive pipeline, its default').toBeUndefined()
     expect(opts).toMatchObject({ strict: true }) // an unreadable image is refused, never sealed as a cover
     const write = vi.mocked(writeNodeCover).mock.calls[0][0]
-    expect(write).toMatchObject({ scopeId: SCOPE, nodeId: target.id, uploadId: 'up-1', surfaceConflict: false, current: { wrappedMeta: target.wrappedMeta, metaVersion: target.metaVersion } })
+    expect(write).toMatchObject({ scopeId: SCOPE, nodeId: target.id, uploadId: 'up-1', surfaceConflict: false, current: { wrappedMeta: target.wrappedMeta, metaRevision: target.metaRevision } })
     const stored = uploadedCover({ blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: SUB.id })
     expect(write.cover).toMatchObject({ source: stored.source })
     const crop = (write.cover as { crop: { x: number; y: number; width: number; height: number } }).crop
@@ -360,7 +360,7 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
 
     // the write landed: the tree now holds the node's new (cover-less) meta, as `patchNodeMeta` leaves it
     withCover.wrappedMeta = b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: id(5) }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1 }))))
-    withCover.metaVersion = 5
+    withCover.metaRevision = 5
     await w.setProps({ level: childrenOf([...TREE], TRIPS.id) })
     await vi.waitFor(() => expect(visual(w, 'Sub').find('img').exists()).toBe(false))
     expect(visual(w, 'Sub').find('.pi-folder').exists()).toBe(true)

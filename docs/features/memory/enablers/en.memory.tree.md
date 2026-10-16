@@ -89,7 +89,7 @@ sequenceDiagram
 - **Move and rename are one placement write** ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   Decision 3; a rename is a move to the same parent): the node's own key is **re-wrapped** under the destination
   parent's key, its name re-sealed and its **slug token recomputed** under that key, all bound to the next
-  `placementVersion`, which the request states it was built on. The server compare-and-sets it
+  `placementRevision`, which the request states it was built on. The server compare-and-sets it
   (`409 stale_placement`: the client re-reads and rebuilds once) and checks structure only — a live destination in
   the same scope, the kind's placement rule, no cycle, a free slug — under the tree's scope lock. An entry at the
   scope root is sealed at the **current** epoch (`409 stale_epoch` otherwise); between two non-root parents the
