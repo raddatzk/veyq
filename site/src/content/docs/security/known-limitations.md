@@ -260,7 +260,7 @@ once.
 ## Guest names and an operator holding a link
 
 No share link is served the name any guest gave; members read the names. But the names stay sealed as they are — a
-contributor's under `K_node`, an uploader's under its own key, which a link opens through the Memory's drop key. So a
+contributor's under a field key derived from `K_node`, an uploader's from its own key, which a link opens through the Memory's drop key. So a
 viewer or contributor link **plus a database dump** reads every guest's name; in practice, that is an operator
 holding a link. Accepted: that link already decrypts every medium of the Memory, and a name is less than the photos
 it is attached to. A key only members hold would close it and was rejected as more machinery than that difference is

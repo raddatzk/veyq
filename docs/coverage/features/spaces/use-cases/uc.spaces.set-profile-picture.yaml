@@ -7,7 +7,7 @@ title: Set your profile picture in a space
 # picture draws in the header, the popover, the profile page, the members list and the user menu were never seen by eye.
 acceptanceCriteria:
   - id: picture-sealed-on-device-constant-length
-    text: The picture is cropped 1:1, encoded to a 256 px WebP, padded to a constant length and sealed on the device under `K_tenant` with the `member-avatar` purpose at (tenant scope, own user id); the server stores the blob verbatim, every blob has the same length, and the contract `maxLength` equals that sealed constant.
+    text: The picture is cropped 1:1, encoded to a 256 px WebP, padded to a constant length and sealed on the device under a field key derived from `K_tenant` with the `member-avatar` purpose at (tenant scope, own user id); the server stores the blob verbatim, every blob has the same length, and the contract `maxLength` equals that sealed constant.
     coverage:
       backend:
         integration:

@@ -30,7 +30,7 @@ primary grouping**: each uploader's **primary bucket** (everything they contribu
 UI** (create/rename/move/delete folders) followed on the same table + endpoints (cr-0122).
 
 Uploaders span **members** (`owner_key = user:{userId}`, display name = the per-tenant **username**) and anonymous
-**public contributors** (`owner_key = share:{shareIdentityId}`, display name = the **`K_node`-sealed** name from
+**public contributors** (`owner_key = share:{shareIdentityId}`, display name = the **sealed** name from
 [ADR 0030](../../../decisions/0030-contributor-public-share.md)), shown marked as a guest's — "Ben (guest)" (inbox #433):
 a contributor names itself freely and could pick a member's name; a sub-bucket's name is a member's and stays as it is.
 One's own bucket reads **"Deine Beiträge"**.
@@ -39,7 +39,7 @@ One's own bucket reads **"Deine Beiträge"**.
 
 1. Open a Memory and switch to the **Beiträge** tab.
 2. The client lists the Memory's buckets (or groups its already-loaded media by `owner_key` / `bucket_id`) and
-   **unseals** the bucket names under `K_node`.
+   **unseals** the bucket names with `K_node` (each under a field key derived from it).
 3. It renders an **uploader picker** — **"Deine Beiträge"** first, then each fellow member / contributor with a
    **count**.
 4. Selecting an uploader filters the existing **`MediaGrid`** to that uploader's **primary bucket**; opening an
@@ -61,7 +61,7 @@ One's own bucket reads **"Deine Beiträge"**.
 ## Quality notes
 
 - **Operator-blind.** The grouping reads the **opaque `owner_key`** + the bucket structure the operator already
-  relays, and **unseals** the names **client-side** under `K_node`. The operator learns **no cleartext name and no
+  relays, and **unseals** the names **client-side** with `K_node`. The operator learns **no cleartext name and no
   content**; a personal Memory with no share exposes only the account owner's `owner_key`.
 - **A guest's name is for the members.** The member bucket list is the one read that serves a guest's sealed name.
   No guest read of a share link does (the resolve, the media read), and none serves a contributor's identity or

@@ -190,7 +190,7 @@ export async function createContributorIdentity(
   if (access.kind === 'read') return createGuestIdentity({ shareId, scopeId }, access.memoryKey, { name: displayName, fragmentKey, pwToken })
   const identityId = crypto.randomUUID() // client-minted: the name and the key wrap are sealed bound to it (ADR 0072)
   const minted = mintUploaderKey(scopeId, access.nodeId, identityId, access.dropPublicKey)
-  const sealedDisplayName = b64std(v1.seal(identityNameContext(scopeId, shareId, identityId), minted.uploaderKey, v1.utf8(displayName)))
+  const sealedDisplayName = b64std(v1.sealField(identityNameContext(scopeId, shareId, identityId), minted.uploaderKey, v1.utf8(displayName)))
   const { contributorToken } = await publicSharesApi().createShareIdentity({
     shareId,
     createShareIdentityRequest: { identityId, sealedDisplayName, wrappedIdentityKey: minted.wrappedIdentityKey },

@@ -56,7 +56,7 @@ export function kemEncap(pk: HybridPublic, opts: { eseed?: Uint8Array } = {}): {
 /** X-Wing decapsulation: the combiner binds `pk_X`, which the seed re-derives, so no public key is passed. */
 export const kemDecap = (sk: HybridSecret, ct: Uint8Array): Uint8Array => xwing.decapsulate(ct, sk)
 
-// AAD binds the envelope TYPE byte (0x02 sym / 0x01 asym) alongside the suite marker and the context bytes, so a
+// AAD binds the envelope TYPE byte (0x02 sym / 0x01 asym / 0x03 field, below) alongside the suite marker and the context bytes, so a
 // ciphertext authenticated for one wrap type can never be reinterpreted as the other (defense in depth vs
 // confusion). The context bytes are the canonical encoding of a typed seal context (./seal.ts).
 const SYM_TYPE = 0x02
@@ -70,6 +70,40 @@ export function symWrap(kek: Uint8Array, targetKey: Uint8Array, context: Uint8Ar
 }
 export function symUnwrap(kek: Uint8Array, blob: Uint8Array, context: Uint8Array): Uint8Array {
   return aeadOpen(kek, blob.slice(1, 13), blob.slice(13), wrapAad(SYM_TYPE, context))
+}
+
+// The field envelope (ADR 0093 § 9): a text or icon field seals under a key of its own, derived per write from the key
+// it would otherwise have been sealed under, so the key that opens one revision of one field opens nothing else.
+//   K_field = HKDF-SHA256(ikm = K_parent, salt, info = utf8("veyq/v1/field/" + purpose), 32)
+// The salt is drawn fresh per write and travels inside the envelope, as the nonce does: the server stores the envelope
+// as the opaque ciphertext it already was, and a copy the server makes between columns carries the salt with it. Its
+// own type byte (0x03) sits in the AAD as 0x01/0x02 do, so a field envelope never opens as a plain seal under its
+// K_field, nor a plain seal as a field envelope. The salt is not in the AAD: another salt derives another key.
+const FIELD_TYPE = 0x03
+export const FIELD_SALT_BYTES = 16
+const FIELD_HEAD = 1 + FIELD_SALT_BYTES
+
+export const fieldKey = (parentKey: Uint8Array, salt: Uint8Array, purpose: string): Uint8Array =>
+  hkdf(sha256, parentKey, salt, utf8(`veyq/v1/field/${purpose}`), 32)
+
+/** The salt a field envelope was sealed with. */
+export const fieldSaltOf = (envelope: Uint8Array): Uint8Array => envelope.slice(1, FIELD_HEAD)
+
+/** The field envelope: 0x03 || salt(16) || nonce(12) || aead */
+export function fieldWrap(
+  key: Uint8Array,
+  plaintext: Uint8Array,
+  context: Uint8Array,
+  salt: Uint8Array,
+  nonce: Uint8Array,
+): Uint8Array {
+  return concat(Uint8Array.of(FIELD_TYPE), salt, nonce, aeadSeal(key, nonce, plaintext, wrapAad(FIELD_TYPE, context)))
+}
+export function fieldUnwrap(key: Uint8Array, envelope: Uint8Array, context: Uint8Array): Uint8Array {
+  // The AAD carries the type the OPENER expects, not the envelope's own first byte, so that byte is checked here: an
+  // envelope relabelled 0x02 must not open as a field.
+  if (envelope[0] !== FIELD_TYPE) throw new TypeError()
+  return aeadOpen(key, envelope.slice(FIELD_HEAD, FIELD_HEAD + 12), envelope.slice(FIELD_HEAD + 12), wrapAad(FIELD_TYPE, context))
 }
 
 const asymKek = (ss: Uint8Array, context: Uint8Array): Uint8Array =>

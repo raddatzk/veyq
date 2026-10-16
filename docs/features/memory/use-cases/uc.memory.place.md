@@ -4,7 +4,7 @@
 - **Primary actor:** A member with an **unlocked vault** who has a Memory (or chapter) open and wants to give it
   a **place**.
 - **Goal:** Curate a Memory's **place** — **one named location**: a map position derived from the Memory's own
-  photo GPS, plus a name that is either typed or reverse-geocoded — **sealed under the Memory's `K_node`** and
+  photo GPS, plus a name that is either typed or reverse-geocoded — **sealed under a field key derived from the Memory's `K_node`** and
   shown on the Memory's detail header and on the **places map** — **operator-blind** (the veyq server never
   sees a coordinate or a place name).
 - **Preconditions:** The vault is unlocked and the Memory is open (its **`K_node`** is held). The node's
@@ -30,7 +30,7 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
    - **framed on the map**, if the reverse lookup is enabled → its centre + zoom become the `nameAnchor`, the
      provider returns a name at that resolution → `geocoded`, still editable.
    On a server without a map the editor is the name field alone (A4).
-4. On save the client seals `{ v, …, location }` under `K_node` and PATCHes `wrappedMeta`. The Memory's detail
+4. On save the client seals `{ v, …, location }` into `wrappedMeta` and PATCHes `wrappedMeta`. The Memory's detail
    header shows the named location, and it appears as a pin on the places map.
 
 ## Alternate / exception flows
@@ -101,7 +101,7 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   reads GPS **list-level**, the way date-`auto` reads `capturedAt` — GPS is promoted into the always-listed
   capture tier rather than left in the per-item EXIF blob. The lazy alternative (fetch each media's sealed EXIF
   on demand) was rejected: it would make `derivedMode: 'auto'` re-medoid an N-fetch operation on every upload.
-  Still sealed under `K_node`, still operator-blind; no backfill — older media without the listed tier don't
+  Still sealed (under a field key derived from `K_node`), still operator-blind; no backfill — older media without the listed tier don't
   contribute to the medoid (exactly as they don't to date-`auto`).
 - **A per-PHOTO place name is a different shape, and does not reopen the rejection above.** What was rejected is
   N per-item fetches to compute **one** answer (the medoid), repeated on **every open**. The detail panel

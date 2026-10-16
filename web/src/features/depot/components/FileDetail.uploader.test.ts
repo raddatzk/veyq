@@ -167,7 +167,7 @@ function dropBoxWorld(folderIdentity: string): World {
 
 /** The guest's display name as `createGuestIdentity` seals it: under `key`, bound to (scope, share, identity). */
 const sealedAs = (key: Uint8Array, name: string, shareId = SHARE): FileUploaderName =>
-  ({ sealedName: b64std(v1.seal(identityNameContext(SCOPE, shareId, GUEST_IDENTITY), key, v1.utf8(name))), shareId })
+  ({ sealedName: b64std(v1.sealField(identityNameContext(SCOPE, shareId, GUEST_IDENTITY), key, v1.utf8(name))), shareId })
 
 describe('a guest\'s upload is named by the name the guest gave itself (inbox #431)', () => {
   it('a guest who took a member\'s name is still told apart: the guest\'s is marked, the member\'s is not (inbox #433)', async () => {

@@ -612,7 +612,7 @@ components:
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         encryptedName:
           type: string
-          description: The folder's name (the guest's display name) sealed under `K_up` (seal purpose `node-name`, bound to scope, node, `epoch` and placement revision 0; opaque base64).
+          description: The folder's name (the guest's display name) sealed under a field key derived from `K_up` (seal purpose `node-name`, bound to scope, node, `epoch` and placement revision 0; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=

@@ -168,7 +168,7 @@ paths:
       summary: Fetch the caller's identity profile in the active tenant.
       description: >
         Returns the authenticated caller's per-tenant profile — their `username` (plaintext) + `sealedName`
-        (their real name sealed under `K_tenant`, or null if not yet sealed) — in the tenant resolved from the
+        (their real name sealed under a field key derived from `K_tenant`, or null if not yet sealed) — in the tenant resolved from the
         Host (ADR 0023). Only the caller's own profile; no id/email in the request.
       security:
         - bearerAuth: []
@@ -201,7 +201,7 @@ paths:
       summary: Update the caller's username and/or sealed real name in the active tenant.
       description: >
         Updates the caller's per-tenant profile in the Host tenant: change the `username` (re-checked unique in
-        the tenant → `409 username_taken`) and/or store the `sealedName` blob (real name sealed under `K_tenant`,
+        the tenant → `409 username_taken`) and/or store the `sealedName` blob (real name sealed under a field key derived from `K_tenant`,
         opaque ciphertext). Either field may be omitted to leave it unchanged. Operator-blind: the server never
         sees the plaintext name.
       security:
@@ -258,7 +258,7 @@ paths:
       description: >
         Stores the caller's profile picture in the tenant resolved from the Host (uc.spaces.set-profile-picture,
         [ADR 0084](../../docs/decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)):
-        one opaque, constant-length ciphertext (a 256 px WebP padded to 16 KiB, sealed under `K_tenant` with the
+        one opaque, constant-length ciphertext (a 256 px WebP padded to 16 KiB, sealed under a field key derived from `K_tenant` with the
         `member-avatar` purpose bound to the tenant scope and the caller's own user id). The server stores it verbatim,
         overwrites any earlier one and bumps the profile's `avatarRevision`; it never sees the image, its size or its
         type. Other tenants' profiles of the same account are untouched.
@@ -1115,7 +1115,7 @@ components:
         sealedName:
           type: [string, "null"]
           description: >
-            The caller's real name (first + last) sealed under `K_tenant` (opaque base64), or null when not yet
+            The caller's real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64), or null when not yet
             sealed. Decrypted only on-device.
           contentEncoding: base64
           maxLength: 8192
@@ -1164,7 +1164,7 @@ components:
         sealedName:
           type: string
           description: >
-            The real name (first + last) sealed under `K_tenant` (opaque base64 ciphertext the server stores
+            The real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64 ciphertext the server stores
             verbatim). Omit to leave the current name unchanged.
           contentEncoding: base64
           maxLength: 8192
@@ -1186,15 +1186,16 @@ components:
         sealedAvatar:
           type: string
           description: >
-            The profile picture: a 256 px WebP **padded to a constant 16 KiB plaintext**, sealed under `K_tenant` with
-            the `member-avatar` purpose bound to (tenant scope, the caller's user id) (`0x02 || nonce(12) || aead`,
-            base64). Opaque base64 the server stores verbatim and never interprets. Its length is a **constant** - the
-            exact base64 length of the sealed padded plaintext (16384 + 29 bytes -> 21884 chars, the tenant icon's number) - so a photo and a
-            drawing are indistinguishable and the value is provably inside the `TEXT` column (65 535).
+            The profile picture: a 256 px WebP **padded to a constant 16 KiB plaintext**, sealed under a field key
+            derived from `K_tenant` with the `member-avatar` purpose bound to (tenant scope, the caller's user id)
+            (`0x03 || salt(16) || nonce(12) || aead`, base64; ADR 0093 § 9). Opaque base64 the server stores verbatim and
+            never interprets. Its length is a **constant** - the exact base64 length of the sealed padded plaintext
+            (16384 + 45 bytes -> 21908 chars) - so a photo and a drawing are indistinguishable and the value is provably
+            inside the `TEXT` column (65 535).
           contentEncoding: base64
-          maxLength: 21884
+          maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 21884) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     IdentityPins:
       type: object

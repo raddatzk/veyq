@@ -127,6 +127,10 @@ here; the server is blind.
   (originals backed up to `.stryker-tmp/backup-*`, restored on exit), so mid-run `git status` shows hundreds of
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
+  **A change to the bytes a seal writes** (another envelope, a salt, one more random draw) also moves
+  `features/memory/uploadWire.characterisation.test.ts`'s snapshots, whose randomness is ONE pinned stream: re-bless
+  them with `-u` and read the diff against what its header says may move (the field seal's salt shifted every later
+  wrap and digest, ADR 0093 § 9).
 - **Core and application ([ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
   The applications are `src/features/memory/` (Memories) and `src/features/depot/` (Depot: the `FILE` and `DEPOT_DROPBOX` kinds, their rows in
   the level list, upload, download, the drop box — [docs/apps/depot.md](../docs/apps/depot.md)) — the guard's `APPLICATIONS`, keyed by owner;
@@ -157,8 +161,8 @@ here; the server is blind.
   `people` is in `RESERVED_ROUTE_SEGMENTS` and numbered away from a root folder's name); core draws `core/people/PersonProfile.vue` and an application adds a
   section with `registry.claimPersonSection` (Memories: `PersonMemories.vue` over `participantIndex.ts`, which holds Memory keys and so is dropped on
   every scope reset). A share view never links to a profile.
-  **A member's profile picture (ADR 0084, `uc.spaces.set-profile-picture`).** A sealed attribute of the per-tenant profile row, `member-avatar`
-  purpose under `K_tenant` (`features/account/profile/memberAvatar.ts`: 256 px WebP in the tenant icon's constant 16 KiB pad (shown at 128 px on the profile page), 21884 base64 chars = the contract's
+  **A member's profile picture (ADR 0084, `uc.spaces.set-profile-picture`).** A sealed attribute of the per-tenant profile row, a `member-avatar`
+  field under `K_tenant` (`sealField`, ADR 0093 § 9; `features/account/profile/memberAvatar.ts`: 256 px WebP in the tenant icon's constant 16 KiB pad (shown at 128 px on the profile page), 21908 base64 chars = the contract's
   `maxLength`, pinned by a test that reads the YAML). The directory carries only `avatarRevision`; `core/people/avatarCache.ts` fetches
   `getMemberAvatar` ONLY for a non-zero revision it does not hold, keeps ONE object URL per user (revoked on a new revision, a 404, `resetPeopleDirectory`)
   and shows the letter for anything that does not open or is no image - **never fetch or draw a member's picture on a share page**

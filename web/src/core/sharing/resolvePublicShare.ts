@@ -34,7 +34,7 @@ export type OpenedShareNote = { note: ShareNote; digest: string }
 export function openShareNote(kShare: Uint8Array, sealed: string): OpenedShareNote | null {
   let plaintext: Uint8Array
   try {
-    plaintext = v1.open(SHARE_NOTE, kShare, fromB64std(sealed))
+    plaintext = v1.openField(SHARE_NOTE, kShare, fromB64std(sealed))
   } catch {
     return null
   }
@@ -118,7 +118,7 @@ function headOf(shareId: string, kShare: Uint8Array, share: PublicShare): Public
 
   let name: string
   try {
-    name = textDecoder.decode(v1.open(SHARE_MEMORY_NAME, kShare, fromB64std(share.sealedName)))
+    name = textDecoder.decode(v1.openField(SHARE_MEMORY_NAME, kShare, fromB64std(share.sealedName)))
   } catch {
     throw new ShareUnavailableError('bad_fragment_key') // the id was valid but the fragment key doesn't match
   }

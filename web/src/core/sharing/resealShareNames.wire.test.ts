@@ -51,6 +51,6 @@ describe('resealShareNames on the wire', () => {
     expect(calls[1].url).toMatch(new RegExp(`/api/shares/${minted.shareId}/sealed-name$`))
     const body = calls[1].body as Record<string, unknown>
     expect(Object.keys(body)).toEqual(['sealedName'])
-    expect(new TextDecoder().decode(v1.open(SHARE_MEMORY_NAME, minted.kShare, fromB64std(body.sealedName as string)))).toBe('Neu')
+    expect(new TextDecoder().decode(v1.openField(SHARE_MEMORY_NAME, minted.kShare, fromB64std(body.sealedName as string)))).toBe('Neu')
   })
 })

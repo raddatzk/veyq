@@ -20,7 +20,7 @@
    exists yet, it is **auto-birthed** first (operator-blind: a fresh `K_SC` sealed to the user's own
    identity).
 2. The client **lists the whole tree** ([en.memory.tree](../enablers/en.memory.tree.md)) and **decrypts
-   names** on device down the key chain — a scope-root entry under `K_SC`, every other under its parent's key
+   names** on device down the key chain — a scope-root entry with `K_SC`, every other with its parent's key
    ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)) — assembling
    the tree from the opaque rows (`id`, `parentId`, `kind`).
 3. The **shell** renders: a sidebar (the personal space + profile menu), a **breadcrumb** built
@@ -34,7 +34,7 @@
    folder's card ([Application tabs](#application-tabs-a-facet-of-browsing)).
 4. **Navigate:** clicking a folder drills into it (new level + breadcrumb); clicking a Memory opens it (its
    detail view, [uc.memory.gallery](uc.memory.gallery.md)). The breadcrumb walks back up the local tree.
-5. **Organize:** *create folder* / *create Memory* seal the name + blinded slug under the parent's key (`K_SC` at
+5. **Organize:** *create folder* / *create Memory* seal the name (under a field key derived from the parent's key) + blinded slug (under the parent's key) (`K_SC` at
    the scope root, the folder's key inside one) and POST only ciphertext (every node, a folder too, births its random
    key wrapped under the same parent key — ADR 0080); *rename* re-seals the name + recomputes the slug under it; *delete* takes the node and its whole subtree into the space's recoverable trash
    ([uc.memory.delete-node](uc.memory.delete-node.md)). All via [en.memory.tree](../enablers/en.memory.tree.md).

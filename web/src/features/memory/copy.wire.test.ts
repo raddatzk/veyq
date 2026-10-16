@@ -80,9 +80,9 @@ const M1_TIER = {
 }
 const M1_EXIF = { v: 1, make: 'Fujifilm', model: 'X-T5', fNumber: 4 }
 const seal = (purpose: string, mediaId: string, key: Uint8Array, value: unknown) =>
-  b64std(v1.seal({ purpose, scopeId: SCOPE, mediaId } as v1.SealContext, key, new TextEncoder().encode(JSON.stringify(value))))
+  b64std(v1.sealField({ purpose, scopeId: SCOPE, mediaId } as v1.FieldContext, key, new TextEncoder().encode(JSON.stringify(value))))
 const open = (purpose: string, mediaId: string, key: Uint8Array, sealed: string) =>
-  JSON.parse(new TextDecoder().decode(v1.open({ purpose, scopeId: SCOPE, mediaId } as v1.SealContext, key, fromB64std(sealed)))) as unknown
+  JSON.parse(new TextDecoder().decode(v1.openField({ purpose, scopeId: SCOPE, mediaId } as v1.FieldContext, key, fromB64std(sealed)))) as unknown
 
 const summary = (mediaId: string, original: Stored, tiers: [string, Stored][], wrappedMeta?: string) => ({
   mediaId, ...original.ref, ownerKey: 'user:me', updatedAt: '2026-10-14T10:00:00Z', metaRevision: 3, wrappedMeta,
@@ -255,7 +255,7 @@ describe('a folder holding a Memory with a chapter, copied to the scope root, on
     const newMemoryKey = keyOf(memory, newFolderKey)
     const newChapterKey = keyOf(chapter, newMemoryKey)
     for (const [fresh, old] of [[newFolderKey, folderKey], [newMemoryKey, memoryKey], [newChapterKey, chapterKey]]) expect(Array.from(fresh)).not.toEqual(Array.from(old))
-    expect(new TextDecoder().decode(v1.open({ purpose: 'node-name', ...at(folder.nodeId) }, scopeKey, fromB64std(folder.encryptedName as string)))).toBe('Reisen (2)')
+    expect(new TextDecoder().decode(v1.openField({ purpose: 'node-name', ...at(folder.nodeId) }, scopeKey, fromB64std(folder.encryptedName as string)))).toBe('Reisen (2)')
     const bornMeta = unsealNodeMeta(newMemoryKey, { scopeId: SCOPE, nodeId: memory.nodeId as string }, memory.wrappedMeta as string)
     expect(bornMeta.date).toEqual(DATE)
     expect((bornMeta.location as { name: string }).name).toBe('Lissabon')

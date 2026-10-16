@@ -10,7 +10,7 @@
 [ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decision 6 and the participant chips
 show a **letter** for a person; a picture was split out as inbox #414. The server is **operator-blind**, a member's
 identity is **per tenant** ([ADR 0023](0023-per-tenant-member-identity.md): a plaintext `username`, the real name sealed
-under `K_tenant`), and a share is the member view with rights removed. The question is where a picture lives and what
+under a field key derived from `K_tenant`), and a share is the member view with rights removed. The question is where a picture lives and what
 the operator learns from it. The nearest precedent is the space icon
 ([uc.spaces.set-space-icon](../features/spaces/use-cases/uc.spaces.set-space-icon.md)): one sealed, constant-length
 field on a row rather than a blob.
@@ -37,18 +37,20 @@ would need a new owner kind and new erasers. It is also **not** part of `GET /ap
   only when it is non-zero and caches by revision. Directory reads select the revision only, never the bytes.
   The stored counter only ever moves up (one guarded `UPDATE`, so overlapping writes cannot lose a bump or reuse a
   revision), but the wire shows `0` whenever there is no picture, so a cleared member reads `0`, not the counter a clear
-  left behind; the `ETag` is the stored counter, quoted. The constant: a 16 KiB padded plaintext seals to 16413 bytes,
-  **21884** base64 characters - the very number of the tenant icon's `SetScopeIconRequest.sealedIcon`, because the picture
-  uses the icon's pad - which is the `maxLength` of `SetAvatarRequest.sealedAvatar`, `MemberAvatar.sealedAvatar` and
+  left behind; the `ETag` is the stored counter, quoted. The constant: a 16 KiB padded plaintext seals as a field envelope to 16429 bytes
+  (1 type + 16 salt + 12 nonce + 16384 + 16 tag), **21908** base64 characters - the icon's pad, but no longer the icon's
+  number (21884): the icon is a plain seal under its per-epoch `K_icon`, the picture a field - which is the `maxLength` of `SetAvatarRequest.sealedAvatar`, `MemberAvatar.sealedAvatar` and
   the accept bodies' `sealedAvatar` (`MemberAvatarSliceTest` pins the arithmetic and the wire bound).
 
-**3. Sealing.** Under `K_tenant` with a **new AEAD purpose `member-avatar`** bound to `[scopeId, userId]`: a new entry in
-the `packages/crypto` seal purposes and a conformance vector in `contracts/crypto/vectors/v1.json`
+**3. Sealing.** Under a field key derived from `K_tenant`
+([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 9) with a **new AEAD
+purpose `member-avatar`** bound to `[scopeId, userId]`: a new entry in the `packages/crypto` field purposes and a
+`field_seal` conformance vector in `contracts/crypto/vectors/v1.json`
 ([ADR 0072](0072-a-seal-binds-its-object.md)). `member-name` is **not reused**, so a blob sealed for one purpose can
 never be interpreted as the other. The plaintext is a **256 px WebP padded to a constant length** with the tenant icon's
 pad/unpad (`web/src/features/spaces/spaceIcon.ts`; the picture takes the icon's 16 KiB pad and 256 px edge, about 22 KB of
 base64; the largest place it is drawn is 128 px, the profile page, so it stays sharp on a 2x screen). `sealed_avatar` is a
-`TEXT` column and 21884 < 65532, so the raise needed no schema change. A picture sealed with the earlier 8 KiB pad is not
+`TEXT` column and 21908 < 65532, so the raise needed no schema change. A picture sealed with the earlier 8 KiB pad is not
 one of ours: the client's `openAvatar` refuses any plaintext of another length and shows the letter, so the operator cannot tell
 a photo from a drawing. The contract `maxLength` equals the sealed constant's exact base64 length and is pinned by a test
 and by `validate_maxlength_storage.py`, so it provably fits the `TEXT` column.

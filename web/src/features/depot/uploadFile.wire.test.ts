@@ -159,7 +159,7 @@ describe('a new file on the wire', () => {
     const address = { scopeId: SCOPE, nodeId: result.nodeId, epoch: 0, placementRevision: 0 }
     const nodeKey = v1.open({ purpose: 'content-key', ...address }, folderKey, fromB64std(create.wrappedContentKey as string))
     expect(() => v1.open({ purpose: 'content-key', ...address }, scopeKey, fromB64std(create.wrappedContentKey as string))).toThrow(v1.OpenRefused)
-    expect(new TextDecoder().decode(v1.open({ purpose: 'node-name', ...address }, folderKey, fromB64std(create.encryptedName as string)))).toBe(NAME)
+    expect(new TextDecoder().decode(v1.openField({ purpose: 'node-name', ...address }, folderKey, fromB64std(create.encryptedName as string)))).toBe(NAME)
     expect(create.slugToken).toBe(b64std(v1.slugToken(folderKey, FOLDER, fileNameSlug(NAME))))
     expect(create.slugToken).not.toBe(b64std(v1.slugToken(folderKey, FOLDER, slugify(NAME))))
 

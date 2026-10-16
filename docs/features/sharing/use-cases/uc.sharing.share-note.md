@@ -7,16 +7,17 @@
   share and editable in place afterward**, shown E2EE on the share page to whoever opens the link. One-way
   (curator → viewer).
 - **Preconditions:** A node the curator can share (a Memory or a folder, in any scope the curator is a member of); for an edit, an existing share of theirs.
-  The curator holds the scope's epoch keys (the Memory is open) — the note seals under **`K_share`**, and `K_share`
+  The curator holds the scope's epoch keys (the Memory is open) — the note seals under a field key derived from **`K_share`**, and `K_share`
   is recovered through `K_SC` for a later edit ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
-- **Postconditions (success):** the share carries a **`sealed_note`** (sealed under `K_share`) + a
+- **Postconditions (success):** the share carries a **`sealed_note`** (sealed under a field key derived from `K_share`) + a
   **`sealed_share_key`** (`K_share` under `K_SC` at the scope's current epoch, stored with that epoch); the
   anonymous share page decrypts and **renders** the note
   (markdown). Editing swaps the ciphertext — **the link stays valid**.
 
 ## The mechanism here
 
-The note is sealed under the share's own key **`K_share`** (AAD `share-note`) — per-share, least-privilege, only
+The note is sealed under a field key derived from the share's own key **`K_share`**, fresh per write (AAD
+`share-note`, [en.platform.field-key](../../platform/enablers/en.platform.field-key.md)) — per-share, least-privilege, only
 that link's holders read it (mirrors the Memory-name seal `sealedName`). Because `K_share` is minted once and
 never stored in the clear, the share also carries a **recoverable copy** — **`sealed_share_key`**, `K_share`
 sealed under the scope key **`K_SC` at the scope's current epoch** (AAD `share-key-recovery` bound to scope,
@@ -36,7 +37,7 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 
 1. The curator opens the node's **share dialog** and mints a share (READ / READ_WRITE / WRITE_ONLY), optionally
    typing a **note** and, with a note, optionally ticking **"must be accepted before opening"** (off by default; a
-   greeting needs no acceptance). The client seals the note, the switch inside it, under `K_share` and stores
+   greeting needs no acceptance). The client seals the note, the switch inside it, under a field key derived from `K_share` and stores
    `sealed_note` + `sealed_share_key` with the share.
 2. A visitor opens `/s/{shareId}#k=<K_share>` → the anonymous `resolveShare` returns `sealed_note`; the share page
    unwraps it with the fragment `K_share` and **renders it** — a banner under the title (READ/READ_WRITE) or the

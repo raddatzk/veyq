@@ -647,7 +647,7 @@ paths:
       summary: Read a tenant member's sealed profile picture.
       description: >
         A member's profile picture (uc.spaces.set-profile-picture, [ADR 0084](../../docs/decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)):
-        the one constant-length ciphertext they sealed under `K_tenant`, which any tenant member opens on the device.
+        the one constant-length ciphertext they sealed under a field key derived from `K_tenant`, which any tenant member opens on the device.
         Gated on **tenant membership** like the directory: a caller who is not an accepted member of the tenant gets the
         `404 tenant_not_found` of [ADR 0042](../../docs/decisions/0042-http-failure-projection.md). Never served to a
         guest or on a share. The `ETag` is the profile's `avatarRevision` (quoted); a client echoing it as `If-None-Match`
@@ -2865,7 +2865,7 @@ components:
         sealedName:
           type: [string, "null"]
           description: >
-            OPTIONAL real name (first + last) sealed under `K_tenant` (opaque base64) — the same blob the profile
+            OPTIONAL real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64) — the same blob the profile
             op stores (ADR 0023). Submitted **at the join** when the invitee already holds `K_tenant` at accept
             (owner cold-birth / grant-sealed accept); omitted ⇒ username-only, the name added/edited later in the
             profile (a grant-less accept always omits it). Stored verbatim; the server never decrypts it.
@@ -2876,15 +2876,15 @@ components:
         sealedAvatar:
           type: [string, "null"]
           description: >
-            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under `K_tenant` with the
+            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under a field key derived from `K_tenant` with the
             `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
             the join only on the OWNER path, where the invitee holds `K_tenant` at accept; stored verbatim with
             `avatarRevision` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
             or null = no picture.
           contentEncoding: base64
-          maxLength: 21884
+          maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21884) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     MemberAvatar:
       type: object
@@ -2893,10 +2893,10 @@ components:
         sealedAvatar:
           type: string
           description: >
-            The member's profile picture sealed under `K_tenant` with the `member-avatar` purpose bound to (tenant
+            The member's profile picture sealed under a field key derived from `K_tenant` with the `member-avatar` purpose bound to (tenant
             scope, that member's user id): opaque, constant-length base64 the server stores and relays verbatim.
           contentEncoding: base64
-          maxLength: 21884
+          maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
 
     TenantActivated:
@@ -3020,7 +3020,7 @@ components:
         sealedName:
           type: [string, "null"]
           description: >
-            OPTIONAL real name (first + last) sealed under `K_tenant` (opaque base64) — the same blob the profile
+            OPTIONAL real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64) — the same blob the profile
             op stores (ADR 0023). Submitted **at the join** when the invitee already holds `K_tenant` at accept
             (owner cold-birth / grant-sealed accept); omitted ⇒ username-only, the name added/edited later in the
             profile (a grant-less accept always omits it). Stored verbatim; the server never decrypts it.
@@ -3031,15 +3031,15 @@ components:
         sealedAvatar:
           type: [string, "null"]
           description: >
-            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under `K_tenant` with the
+            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under a field key derived from `K_tenant` with the
             `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
             the join only on the OWNER path, where the invitee holds `K_tenant` at accept; stored verbatim with
             `avatarRevision` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
             or null = no picture.
           contentEncoding: base64
-          maxLength: 21884
+          maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21884) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     AccountRegistration:
       type: object

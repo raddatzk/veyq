@@ -238,7 +238,7 @@ export function unsealMeta(scopeId: string, memoryKey: Uint8Array, item: MediaIt
   if (!item.wrappedMeta) return null
   try {
     const key = mediaKey(scopeId, memoryKey, item)
-    const json = new TextDecoder().decode(v1.open(mediaMetaContext(scopeId, item.mediaId), key, fromB64std(item.wrappedMeta)))
+    const json = new TextDecoder().decode(v1.openField(mediaMetaContext(scopeId, item.mediaId), key, fromB64std(item.wrappedMeta)))
     const parsed = JSON.parse(json) as unknown
     if (parsed && typeof parsed === 'object') return normalizeMediaMeta(parsed as RawMediaMeta)
   } catch {
@@ -294,7 +294,7 @@ function openMediaMetaForWrite(scopeId: string, memoryKey: Uint8Array, media: Me
   let parsed: unknown
   try {
     const key = mediaKey(scopeId, memoryKey, media)
-    parsed = JSON.parse(new TextDecoder().decode(v1.open(mediaMetaContext(scopeId, media.mediaId), key, fromB64std(wrappedMeta))))
+    parsed = JSON.parse(new TextDecoder().decode(v1.openField(mediaMetaContext(scopeId, media.mediaId), key, fromB64std(wrappedMeta))))
   } catch {
     throw new MetaUnreadableError()
   }
@@ -356,10 +356,10 @@ export async function readCaptureTime(file: Blob, mediaType: string, lastModifie
 
 // --- add-media -------------------------------------------------------------
 
-/** Seal a small JSON payload under `K_node` as the object `context` names (a short AEAD blob) → opaque base64. */
-function sealJson(memoryKey: Uint8Array, value: unknown, context: v1.SealContext): string {
+/** Seal a small JSON payload as the field `context` names, under a field key derived from `K_node` → opaque base64. */
+function sealJson(memoryKey: Uint8Array, value: unknown, context: v1.FieldContext): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value))
-  return b64std(v1.seal(context, memoryKey, bytes))
+  return b64std(v1.sealField(context, memoryKey, bytes))
 }
 
 function finiteNum(n: unknown): number | undefined {
@@ -530,7 +530,7 @@ export const EXIF_TEXT_MAX_BYTES = 1024
  * numbers alone is a few hundred bytes. The string set is read off the value, not listed, so a text field added
  * to [MediaExif] later is clamped without anyone remembering to add it here.
  */
-function sealExifTier(memoryKey: Uint8Array, context: v1.SealContext, exif: MediaExif): string {
+function sealExifTier(memoryKey: Uint8Array, context: v1.FieldContext, exif: MediaExif): string {
   const tier: Record<string, unknown> = { ...exif }
   const textKeys = () => Object.keys(tier).filter((k) => typeof tier[k] === 'string')
   for (const k of textKeys()) tier[k] = clampUtf8(tier[k] as string, EXIF_TEXT_MAX_BYTES)
@@ -863,7 +863,7 @@ export async function loadMediaExif(scopeId: string, media: MediaRef, memoryKey:
   if (!exif.wrappedExif) return null
   try {
     const key = mediaKey(scopeId, memoryKey, media)
-    const json = new TextDecoder().decode(v1.open(mediaExifContext(scopeId, mediaId), key, fromB64std(exif.wrappedExif)))
+    const json = new TextDecoder().decode(v1.openField(mediaExifContext(scopeId, mediaId), key, fromB64std(exif.wrappedExif)))
     const parsed = JSON.parse(json) as unknown
     return parsed && typeof parsed === 'object' ? (parsed as MediaExif) : null
   } catch {

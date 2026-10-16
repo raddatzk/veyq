@@ -30,7 +30,7 @@ member renames a shared node, their client re-seals the name of every share on i
   [share-shared-scope](use-cases/uc.sharing.share-shared-scope.md) and ADR 0080)
 - [uc.sharing.share-contributor](use-cases/uc.sharing.share-contributor.md) — **built (web)** (cr-0101: a
   **READ_WRITE** link where an anonymous visitor can **view + add photos** after naming themselves — the name
-  **sealed under `K_node`** → an anonymous share identity, the buckets hook; direct-append (personal-scope only until share-shared-scope);
+  **sealed under a field key derived from `K_node`** → an anonymous share identity, the buckets hook; direct-append (personal-scope only until share-shared-scope);
   [ADR 0030](../../decisions/0030-contributor-public-share.md))
 - [uc.sharing.share-uploader](use-cases/uc.sharing.share-uploader.md) — **built (web)** (cr-0102: a **WRITE_ONLY**
   write-only drop-box — add photos but **cannot see** the Memory or others'; the resolve returns no media (the
@@ -45,7 +45,7 @@ member renames a shared node, their client re-seals the name of every share on i
   is the honest-server revocation; [ADR 0029](../../decisions/0029-public-viewer-share.md) §6)
 
 - [uc.sharing.share-note](use-cases/uc.sharing.share-note.md) — **built (web, cr-0115 + cr-0116)** (an optional
-  **editable curator note** on a share, sealed under `K_share` + rendered (markdown) on the share page; **editable
+  **editable curator note** on a share, sealed under a field key derived from `K_share` + rendered (markdown) on the share page; **editable
   in place** via a member-recoverable share key `sealed_share_key` (`K_share` under `K_SC(epoch)`, which no link
   carries — ADR 0036 point 4) + an owner-gated
   `updateShare` — the link stays valid. **cr-0116** made the note **per-locale** (`{de,en}`, viewer picks locale),

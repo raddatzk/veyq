@@ -59,8 +59,8 @@ keypair** (authorizes credential changes).
 ## Why it is layered this way
 
 **Cheap grants.** A member is admitted by sealing one key, the scope's current epoch key, to their identity.
-From it they open the whole tree down the chain: every node's key and name sits under its parent's key, `K_SC`
-at the root ([ADR 0012](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0012-content-key-hierarchy.md),
+From it they open the whole tree down the chain: every node's key is wrapped under its parent's key and its name
+sealed under a field key derived from it, `K_SC` at the root ([ADR 0012](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0012-content-key-hierarchy.md),
 [ADR 0080](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
 Decision 2). Adding a member never touches content.
 
@@ -246,13 +246,26 @@ In Memories the key of a Memory or a chapter is called `K_node`.
 | **Chunk frames** | The blob's bytes, encrypted in frames under `K_blob` with AES-256-GCM | — | — | — | — |
 
 A node's **directory entry** (its sealed name and its blinded slug token) lives under its **parent's** key, so
-whoever holds a folder's key reads every name and opens every key below it, and nothing beside or above it.
+whoever holds a folder's key reads every name and opens every key below it, and nothing beside or above it. The
+name, like every field, seals under a key of its own derived from that key (below).
 `K_blob` also seals the blob's type, upload name and modification time (`blob-meta`). Because each `K_blob` is
 random, identical bytes become different ciphertexts. Content dedup is declined
 ([ADR 0013](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)),
 so the server learns no content equality. Frame layout:
 `sealFrame` / `openFrame` in [`v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts),
 vector `chunk_frame`.
+
+**Field keys.** Every text or icon field (a node's name and meta, a medium's metadata, a bucket's, a guest's or a
+share's name, a share's note, a member's name and picture) seals under `K_field = HKDF-SHA256(K_parent, salt,
+"veyq/v1/field/" + purpose)`. `K_parent` is the key the field belongs under: the parent's key for a name, the node's
+own for its meta, `K_share` for a share's fields, a guest's identity key for its own, the tenant's scope key for a
+member's.
+The 16-byte salt is fresh on every write and travels inside the ciphertext, so one revision's `K_field` opens that
+revision of that one field and nothing else, and reveals nothing of `K_parent`. It is the key a report of one field
+will hand over
+([ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+§ 9). A group's name and a space's icon are not fields: each keeps a key per scope epoch (a pending invitee is handed
+the name's).
 
 :::caution[Node keys do not rotate, and a removal does not change that]
 A rotation moves only `K_SC`. A removed member or former guest who kept a node's key, **and** obtains its later
@@ -271,7 +284,7 @@ server.
 
 | Key | How it is made | What wraps it | Who holds it | When it rotates | What losing or leaking it means |
 |---|---|---|---|---|---|
-| **`K_share`** | 32 random bytes, minted by the client per share | Not wrapped for the link: it travels in the URL fragment. Members recover it from the recovery copy below. Under it sit the share root's node key (`symWrap(K_share, K_node)`, viewer and contributor links only), the root's name, the note, the private label and the password's reveal copy | Anyone with the link; every member of the scope | **Never** for the life of a link. Cutting someone off a link means **re-issuing** it: a new id and a fresh `K_share` ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | Leaked: the shared subtree. Revoking the share stops new access on an honest server; what was already downloaded stays read |
+| **`K_share`** | 32 random bytes, minted by the client per share | Not wrapped for the link: it travels in the URL fragment. Members recover it from the recovery copy below. Under it sit the share root's node key (`symWrap(K_share, K_node)`, viewer and contributor links only), the field keys of the root's name, the note and the private label, and the password's reveal copy | Anyone with the link; every member of the scope | **Never** for the life of a link. Cutting someone off a link means **re-issuing** it: a new id and a fresh `K_share` ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | Leaked: the shared subtree. Revoking the share stops new access on an honest server; what was already downloaded stays read |
 | **Recovery copy** (`sealed_share_key`) | `K_share` sealed under `K_SC` at the scope's **current** epoch, bound to scope, node, share and epoch; mandatory on every share | `K_SC` | Every scope member; **no link** | Not re-sealed by a rotation: a copy older than the scope's current epoch makes its link re-issue-only ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | — |
 | **Drop keypair** (hybrid post-quantum KEM) | Minted by the owner's client when a Memory's first uploader link is created; one per Memory (a chapter has its own), not per share | Private half: under the node's key. Public half: under `K_share` on each uploader share | Private: everyone who reads the node. Public: uploader guests | No rotation is defined | Private half leaked: what uploaders added to that node |
 | **Uploader identity key** | Random, minted by an uploader guest's client | Wrapped to the drop public key | That guest, and every reader of the node | — | That identity's uploads: their blob keys, metadata and display name |

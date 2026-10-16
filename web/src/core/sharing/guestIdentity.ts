@@ -36,7 +36,7 @@ export function openIdentityName(
   const context = identityNameContext(scopeId, shareId, identityId)
   for (const key of keys) {
     try {
-      return new TextDecoder().decode(v1.open(context, key, sealed))
+      return new TextDecoder().decode(v1.openField(context, key, sealed))
     } catch {
       /* not under this key — the next one up */
     }
@@ -74,7 +74,7 @@ export async function createGuestIdentity(
 ): Promise<GuestIdentity> {
   const { shareId, scopeId } = head
   const identityId = crypto.randomUUID() // client-minted: the name is sealed bound to it (ADR 0072)
-  const sealedDisplayName = b64std(v1.seal(identityNameContext(scopeId, shareId, identityId), rootKey, v1.utf8(name)))
+  const sealedDisplayName = b64std(v1.sealField(identityNameContext(scopeId, shareId, identityId), rootKey, v1.utf8(name)))
   const { contributorToken } = await publicSharesApi().createShareIdentity({
     shareId,
     createShareIdentityRequest: { identityId, sealedDisplayName },

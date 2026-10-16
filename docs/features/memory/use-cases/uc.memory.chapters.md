@@ -20,7 +20,7 @@ in [ADR 0012](../../../decisions/0012-content-key-hierarchy.md).
 
 1. With a Memory open, the user **adds a chapter** (a titled section). The client **births a fresh random
    `K_node`** for the chapter, wraps it under the **parent Memory's `K_node`**, and creates a `CHAPTER` node
-   under the Memory (ciphertext name + slug token under the **Memory's `K_node`**, its parent's key, like any node
+   under the Memory (ciphertext name + slug token under the **Memory's `K_node`**, its parent's key — the name under a field key derived from it — like any node
    below the scope root — ADR 0080 Decision 2; so a guest of the Memory's share reads the chapter titles).
 2. The Memory view **lists its chapters** (decrypted titles) alongside its own media.
 3. **Open a chapter** → it behaves like a Memory: its own gallery of media, and it may nest further chapters.

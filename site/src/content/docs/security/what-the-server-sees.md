@@ -56,6 +56,11 @@ Sealed client-side, never readable by the server:
   type (photo, video or PDF) live there, so the operator learns neither;
 - bucket and uploader names, a share's note and private name, and the identity pin store.
 
+Each text or icon field (a name, a node's or a medium's metadata, a share's note and label, a member's name and
+picture) seals under a key of its own, derived per write. Inside its ciphertext the server stores the 16-byte random
+salt that key was derived with, one per write and 16 bytes of length more, and learns nothing about any key from it
+([Cryptography](/veyq/security/cryptography/#what-a-seal-binds)).
+
 ## What is server-visible
 
 ### Identity and membership

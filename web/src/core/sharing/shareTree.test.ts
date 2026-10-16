@@ -22,7 +22,7 @@ function entry(parentKey: Uint8Array, nodeId: string, name: string, key: Uint8Ar
   return {
     placementRevision,
     wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', ...ctx }, parentKey, key)),
-    encryptedName: b64std(v1.seal({ purpose: 'node-name', ...ctx }, parentKey, v1.utf8(name))),
+    encryptedName: b64std(v1.sealField({ purpose: 'node-name', ...ctx }, parentKey, v1.utf8(name))),
   }
 }
 

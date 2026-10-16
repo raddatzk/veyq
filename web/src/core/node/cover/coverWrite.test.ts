@@ -78,7 +78,7 @@ describe('uploadCoverImage - the node\'s own COVER blob', () => {
 
 // --- the one write ------------------------------------------------------------------------------------------------------
 
-const sealMeta = (blob: object) => b64std(v1.seal(metaCtx, key, new TextEncoder().encode(JSON.stringify(blob))))
+const sealMeta = (blob: object) => b64std(v1.sealField(metaCtx, key, new TextEncoder().encode(JSON.stringify(blob))))
 const openMeta = (wrappedMeta: string) => unsealNodeMeta(key, { scopeId: SCOPE, nodeId: NODE }, wrappedMeta)
 const plan = (blobId: string) => ({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: NODE })
 const uploadedMeta = (blobId: string, extra: object = {}) => sealMeta({ v: 1, ...extra, cover: uploadedCover(plan(blobId)) })

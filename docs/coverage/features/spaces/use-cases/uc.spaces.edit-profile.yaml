@@ -13,7 +13,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/account/profile/ProfilePanel.test.ts]
   - id: name-sealed-on-device-at-its-address
-    text: The real name is unsealed on the device on load and sealed on the device on save, under `K_tenant` at (tenant scope, the member's own user id); the server stores the blob verbatim and never opens it.
+    text: The real name is unsealed on the device on load and sealed on the device on save, under a field key derived from `K_tenant` at (tenant scope, the member's own user id); the server stores the blob verbatim and never opens it.
     coverage:
       backend:
         integration: [MemberIdentitySliceTest.profileOpRoundTripsUsernameAndSealedName]

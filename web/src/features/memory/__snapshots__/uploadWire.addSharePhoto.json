@@ -16,8 +16,8 @@
             "chunkCount": 5,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "ORIGINAL",
-            "wrappedBlobKey": "AmpnKrZh0NicShCXeuhfLLyYXelR6N+Z7d5q/J6ZjxtnAkD/+krh+e937LGGbnSgW3c/3/vtGOtw6iGcbQ==",
-            "wrappedBlobMeta": "AhZAvSrjMqNoYztGfqyVW6HYZda5htgMC+3JVpbCRD93lLiAeS+0pOW+EuvOHwYcKhqi7GOjcU9ZqpnJqXS21WwPB2pvapNLXPeQ48Ses37MU17+GJ9IEfTq2/N88iy6stFczDQlAll/b/S+a7RE8jmUF5vq4I+R9mSPLYx6WnRUaZyvOrzSfASqL9dgSDBvHuPmEHELB8DyKIQNQgZA1WIfJvu4hjVbehXbaRoxwTyTGWrHzAZbxzL5nrqE6IQbJFaOsbu6tFHEoVu2I8XXDB2a4rIdKD23xVg1vNgTDn9rbUmSysyqxYc5j0+qsc/lgI6IaFZ+IbwfPAZpO5Mwy6LResuwl3ej5DDC16BpDSJu5yqKMwWm2j7D3+ze"
+            "wrappedBlobKey": "AuMyo2hjO0Z+g0oD/rEZRpkNZFcLBFhLYq+zpuE7tXrpULcF81pjg+PidQdOINOwJArhvkPOUMDQXVNX/g==",
+            "wrappedBlobMeta": "AtKSgQOUcMPCt+72pIkFbqlEaHxz3tkYlaHnacnFSVdsRHbRfYE5wC2h7tNjSiJ9jMXcuNLoe/txsUcs8tYaEDIrtEtJvKUXlpri1jF6Nwir04inNpAOMgm4gEyLrZxFnTgsdbORzWI10sorXtAdOuLLrq5P4eycwS/3xZEai9ZLpYmHgLmXucmKfST+6OLGghBnUohmOUbN7cQbLAXsvOiDj8VFkVUZVgqHoAfodv4sgl8Bl0dqhtkYeKWUj7C/pk1DMU+8qN1SyOcO0P2mhcg8EA6kVOpzQB7lN0zZdYW61sxyxLhBvdkEwKbxntgobcie6HkynjDKpjN9ClqAkqEveMFmkW/pRNxBjXgFefMUOR96W4DtKOadXT98"
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000003",
@@ -25,8 +25,8 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "THUMBNAIL",
-            "wrappedBlobKey": "AsWfhngjAKOZ7TrEFaW96S3mEuE9IVLI0cbYBIV1kjSf7rwGZYp5p4wImui9Zq90IQE1uptf14YI4aB40w==",
-            "wrappedBlobMeta": "AgfSq7y1q9WyvzLPbO1qhUd1y/M4FC6av39XSeMLoSmBkiKkA5Q4/PHCs/hYXXs9LutyvGgvit/ACxoXW9pkTAJ7tmi+BTEz/Kkom7Dl02ewjk0DsJZyyzpPv09fLOjF1ECqc95YVR1YWPLiGO0Vfqf27AfbjdJNihMV25lQaPXyZZpEZAFAAkwxAs+Jc7nmERTH1HK1MT0JCVu38CetsoSv24PkTj1Ccy3zgoInapeDTchXE3LN6mBXe+Ptwv141YJgl6KeAYveFV3/IjhowCVpmdR7qyzil6/W0CLtG/aHIAv4q40V0eI3E4orjWz63tOb/ial5rl8M8q1zjGMpa+tkB2kkUHCTfvu4XUNqTqhL4ASAYmOUC7PsX7R"
+            "wrappedBlobKey": "ArWr1bK/Ms9sO0NOd7WQaNxnV4tHBJeyyNN0tJJhXgOToR0o1pjS8e0ufGEiVCtQhkRIyjuKVungH9Khrg==",
+            "wrappedBlobMeta": "ApHNTzoK7vwuuya40732+jx+FQtypqbjC3kYMI/XuWYYwA9Bqueblw3TvVawBMCnu3qlK7LxyAwlvBX21ABgcbar9p2YePgAZcXR1qEf2Al+OcR9sWHK+xC73qpAueYcjaCdcnspbqxsezjiek2k1WDmyi1T4uys6EWaVDbCDHqiJaOeGZR2KtBbbQOAQ2BrVHLleOizDZlnBhCnvNWRPpz3C2jVDbr1T8NUHyv/FhJvoVX7wFG2IM+xprkbUyOAjV4xTArdysntWhPYxj/r4uX4L6DUYg01fhRsRF6GWddNcU/oJ6rY2r8llwiKQV8IorecQ9a+YWx54deJxazykm4HYPkwAdi4+01F3tnRZIqNfInjrGBOcmneYBiS"
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000004",
@@ -34,8 +34,8 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "PREVIEW",
-            "wrappedBlobKey": "ArR9MDeUZdZ3u9Lc8rFNm0G0UyrOoO/RnZmlZRc46wj/r023NBnwwq3bGpMvUvKaVcNU5oAwao6A9ordsw==",
-            "wrappedBlobMeta": "AjdLx7EfmUoi3dkwmsqXK0cTQrRFJvPJ4p9SMFVbSRFM25kVei0v5gemTDTtB9AUR1gyY5AzaCA6Z+DKO4XUgXMDYsvpNKEjWNp41CaQSUnhRVrSZm41S4CmZ7J1TNfoxVw+m2zrKNJXZ2y9DTmbisU89y/wIbrabDFSkuIq4aNHBrXfl2tm2bzTuu7bw/FeOUr+O62uywOJUN+v729JQEzZUKV/vwabsWLFsuFIpHIR9pQyE8B2rDaoZ1uNN3biWjjKo4PJ9AtnO8yz3ZZ34ekh0p7SaV6zkJlR9WcNAKglENGBXnnQIuwl4vuFysVnl+7eO4g5/Q/iitZXtb7+rD87o8d7B+LFectmrjA+aDna96wFRaKgp9/Ibo3G"
+            "wrappedBlobKey": "Ah+ZSiLd2TCaFxu3HqpyjGXTXwBUaynMiyIIUyg3Gi8U6DwLESyzRbCuXB80hxkTpmPoT2PXDNS0UaKiOA==",
+            "wrappedBlobMeta": "AiXJZl0zJHO4FL5rSlCdprUN7DqkB0/jFfrm7Boc1seCDHE2S1MJ+JNL2MwKz5KrjZAa3RFDNcZlTCukuc57XYeokcPZqUV8L8XO2qQ4rkwLwVNrlROb3VMp6K4tCn3cj1J46HLUGMT86oqpoAwSqqe2Xqg5BuqN5bIjt64aJdoFBzaCpkj+NmMcbDjR8YJC3+MnXNLRtheOdh0OSB4k2zWBghUIReerah+DXICv0Ae7urWp6Mej/iDaeL9CXdiioteQCyyxI0utjSkQPNWpmSwSsw4fwKwUREgOTfZZXAP+XPPE2p12NIfNF0erkVb2ddXdsZlY7i3SD31vFFHABrwBJ/524e5qPgE2swYGm5CXbgp8hheJNVLjprnK"
           }
         ],
         "nodeId": "6e5a0000-0000-4000-8000-0000000000b1"
@@ -67,7 +67,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "3e42430221d48ad1bc14e1b23ab81db23a235ba8b02682ea9f23af75740f37c3"
+        "sha256": "4af8b54111b282e5d927c961d14770115183ff972793c49dcf7978e642da82f1"
       }
     },
     {
@@ -78,7 +78,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "11abb86eec8dc9c573e1ae585a71e633c9954c1eb9bd18163dbf63b8e5823888"
+        "sha256": "2b5828fbd867e89d1137fbfc1393928ea7a2d960ac81fde89b30a6ea443cfacd"
       }
     },
     {
@@ -89,7 +89,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "f770410afe9bd19ec25c0bfad320f0a21109c8292adcecf1cb47e73c4442070b"
+        "sha256": "844c90daaf009ae562590429e0b137e33b8e6e66bf2aa0f4820d197e20257611"
       }
     },
     {
@@ -100,7 +100,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "0a0a2af2500687a142ffc749c6e7cbb7ba27d1b6f11982c419655bf1ba5f5b85"
+        "sha256": "57269aee67f9c7e9c53f7410a30d93779b4376629e2c66242f9ffedd047113da"
       }
     },
     {
@@ -111,7 +111,7 @@
       },
       "bytes": {
         "length": 45,
-        "sha256": "cc65ae1ef213cc802a7e4012ab889d6f24a68c3f22678a87ad6162dc716e8ef1"
+        "sha256": "c2f41b19e811494f7eae4dc11032283214c076fdc2aba374dd0ca2703464b9bf"
       }
     },
     {
@@ -122,7 +122,7 @@
       },
       "bytes": {
         "length": 278,
-        "sha256": "75f3089498e10ffb937e7d4d0959a294a23cdc0a96918f12b12e1c3d6b161fc2"
+        "sha256": "9a40bedf2c6983efb41368a360748f8cd01ba3a919e2049c4e03fbdb397bbe60"
       }
     },
     {
@@ -133,7 +133,7 @@
       },
       "bytes": {
         "length": 828,
-        "sha256": "e91ede35e18e31344869d9280cbb96f2d63f7bb3d2b1fe8e8b6d56e352784712"
+        "sha256": "d49509d7f3806a38bb5fd51e6acb018631a63a4c817a145b881962481f72d2a5"
       }
     },
     {
@@ -160,7 +160,7 @@
             "mediaId": "00000000-0000-4000-8000-000000000001",
             "originalUploadId": "upload-1",
             "wrappedExif": null,
-            "wrappedMeta": "AoQEBAw0Z/lToEX87oXWBN9RrKK+z/e33EbVJIZk80m4Pl+L5LQ+l+laVyOpGq07qX9PX9QIc/Ekj1pX8D0iJffgwQVIdBQ+OTuL3pKaROA3Ry6qnv+McLdy5FexvMgtARIsquZkb06XmdQ="
+            "wrappedMeta": "A4QEBAw0Z/lToEX87it0jnpaLZipiyEyDokINYZ+75kswntPyGYIlfet2yEXpE+LcUfw1B1BHAbf5bG+oCT7WFL98i8yIyZ4ZodRFjkSgFsrfcF8aq3aDkQhiFa2av3bH0/SfHTjQdKbyICBPtTqhuyINvn32JfWmd10"
           }
         ],
         "nodeId": "6e5a0000-0000-4000-8000-0000000000b1"

@@ -11,7 +11,7 @@ title: Memory participants — opaque ids in the sealed meta, a profile that lis
 # level's own SpaceMap; its unit tests stub Leaflet, so the drawn map on the profile was not seen in a real browser here.
 acceptanceCriteria:
   - id: participants-sealed-in-node-meta
-    text: A Memory's participants are a `participants` sub-object of opaque user ids (`{ userIds }`, unique, at most 100) inside its `wrappedMeta` under K_node, written read-modify-write with the metaRevision compare-and-set; nothing but ids is stored (no name, no snapshot), unknown siblings are kept, an empty list drops the sub-object, and the server stores one opaque blob and no participant relation.
+    text: A Memory's participants are a `participants` sub-object of opaque user ids (`{ userIds }`, unique, at most 100) inside its `wrappedMeta` (under a field key derived from K_node), written read-modify-write with the metaRevision compare-and-set; nothing but ids is stored (no name, no snapshot), unknown siblings are kept, an empty list drops the sub-object, and the server stores one opaque blob and no participant relation.
     coverage:
       web:
         unit:

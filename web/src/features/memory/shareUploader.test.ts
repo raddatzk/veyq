@@ -61,7 +61,7 @@ function uploaderShare() {
     passwordRequired: false,
     scopeId: SCOPE_ID,
     nodeId: NODE_ID,
-    sealedName: b64std(v1.seal({ purpose: 'share-memory-name' }, kShare, v1.utf8('Hochzeit'))),
+    sealedName: b64std(v1.sealField({ purpose: 'share-memory-name' }, kShare, v1.utf8('Hochzeit'))),
     sealedDropPublicKey: b64std(
       v1.seal({ purpose: 'drop-public-key' }, kShare, v1.serializeHybridPublic(v1.dropKeyPublic(drop))),
     ),
@@ -166,8 +166,8 @@ describe('a WRITE_ONLY guest never holds K_node (ADR 0031 point 7)', () => {
     expect(v1.open(blobKeyCtx, kUp, wrappedBlobKey)).toHaveLength(32)
     // and the display name is the guest's too, not the Memory's
     const nameCtx = { purpose: 'share-identity-name', scopeId: SCOPE_ID, shareId: UPLOADER_SHARE, identityId: identity.identityId } as const
-    expect(() => v1.open(nameCtx, kNode, fromB64std(identity.sealedDisplayName))).toThrow(new v1.OpenRefused('share-identity-name'))
-    expect(new TextDecoder().decode(v1.open(nameCtx, kUp, fromB64std(identity.sealedDisplayName)))).toBe('Gast')
+    expect(() => v1.openField(nameCtx, kNode, fromB64std(identity.sealedDisplayName))).toThrow(new v1.OpenRefused('share-identity-name'))
+    expect(new TextDecoder().decode(v1.openField(nameCtx, kUp, fromB64std(identity.sealedDisplayName)))).toBe('Gast')
   })
 
   it('the curator\'s gallery and a viewer link both open the guest\'s upload, and a member edit keeps its path', async () => {
@@ -204,7 +204,7 @@ describe('a WRITE_ONLY guest never holds K_node (ADR 0031 point 7)', () => {
     // a member edits its capture time: the re-seal is under the guest's key, never K_node — no media changes path
     const edited = await setMediaMeta(SCOPE_ID, item, kNode, 1_700_000_000_000)
     const metaCtx = { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: item.mediaId } as const
-    expect(() => v1.open(metaCtx, kNode, fromB64std(edited.wrappedMeta!))).toThrow(new v1.OpenRefused('media-meta'))
+    expect(() => v1.openField(metaCtx, kNode, fromB64std(edited.wrappedMeta!))).toThrow(new v1.OpenRefused('media-meta'))
     expect(unsealMeta(SCOPE_ID, kNode, { ...item, wrappedMeta: edited.wrappedMeta! })?.capturedAtOverride).toBe(1_700_000_000_000)
 
     // the curator's buckets: the guest's primary carries its wrapped key, and its name opens through it
@@ -227,7 +227,7 @@ describe('a WRITE_ONLY guest never holds K_node (ADR 0031 point 7)', () => {
     const viewerResolve = {
       role: ShareRole.Read, passwordRequired: false, scopeId: SCOPE_ID, nodeId: NODE_ID,
       wrap: b64std(v1.seal({ purpose: 'share-key' }, kViewer, kNode)),
-      sealedName: b64std(v1.seal({ purpose: 'share-memory-name' }, kViewer, v1.utf8('Hochzeit'))),
+      sealedName: b64std(v1.sealField({ purpose: 'share-memory-name' }, kViewer, v1.utf8('Hochzeit'))),
       nodes: [{ id: NODE_ID, kind: MEMORY_KIND, epoch: 0, sealedDropPrivateKey }],
     } satisfies PublicShare
     const viewerMedia = {

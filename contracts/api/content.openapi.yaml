@@ -164,7 +164,7 @@ paths:
         0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision
         3). It carries all of: the destination `parentId` (null/absent = the scope root; a rename sends the
         current parent), the node's content key re-wrapped under the destination parent's key
-        (`wrappedContentKey`), the name re-sealed under that key (`encryptedName`), the slug token recomputed under
+        (`wrappedContentKey`), the name re-sealed under a field key derived from that key (`encryptedName`), the slug token recomputed under
         it (`slugToken`), the `epoch` the entry was sealed at, and the `placementRevision` it was built on. Sending
         any of `encryptedName`, `slugToken`, `wrappedContentKey` or a `parentId` without the rest is `400
         invalid_request`. The wrap and the name are sealed bound to the revision the server will store,
@@ -533,7 +533,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under its parent's content key — `K_SC` at the node's epoch for a scope-root node (ADR 0080 Decision 2) — bound to scope, node, epoch and placement revision 0 (a new node's; ADR 0072; opaque base64).
+          description: The node name, AEAD-sealed under a field key derived from its parent's content key — `K_SC` at the node's epoch for a scope-root node (ADR 0080 Decision 2) — bound to scope, node, epoch and placement revision 0 (a new node's; ADR 0072; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -574,7 +574,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedMeta:
           type: [string, "null"]
-          description: The node's sealed payload, with its own revision — AEAD-sealed under this node's content key (seal purpose `node-meta`, bound to scope + node; opaque base64). Its plaintext format is the kind's application's, versioned by that application; absent = the node has none yet. The server never inspects it.
+          description: The node's sealed payload, with its own revision — AEAD-sealed under a field key derived from this node's content key (seal purpose `node-meta`, bound to scope + node; opaque base64). Its plaintext format is the kind's application's, versioned by that application; absent = the node has none yet. The server never inspects it.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -590,7 +590,7 @@ components:
         encryptedName:
           type: string
           description: >
-            Placement write: the name re-sealed under the destination parent's content key (`K_SC` at `epoch` at
+            Placement write: the name re-sealed under a field key derived from the destination parent's content key (`K_SC` at `epoch` at
             the scope root), seal purpose `node-name` bound to scope, node, `epoch` and `placementRevision + 1` (ADR
             0072, ADR 0080 Decision 3; opaque base64).
           contentEncoding: base64
@@ -650,7 +650,7 @@ components:
           example: 1
         wrappedMeta:
           type: [string, "null"]
-          description: The node's sealed payload, re-sealed under its content key (see NodeSummary.wrappedMeta). Partial semantics — a non-null value replaces it; an omitted/null one leaves it unchanged. Opaque base64.
+          description: The node's sealed payload, re-sealed under a field key derived from its content key (see NodeSummary.wrappedMeta). Partial semantics — a non-null value replaces it; an omitted/null one leaves it unchanged. Opaque base64.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -689,7 +689,7 @@ components:
           example: null
         wrappedMeta:
           type: string
-          description: The node's sealed payload, re-sealed under its content key with the cover ref (see `NodeSummary.wrappedMeta`). Opaque base64.
+          description: The node's sealed payload, re-sealed under a field key derived from its content key with the cover ref (see `NodeSummary.wrappedMeta`). Opaque base64.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -843,7 +843,7 @@ components:
           type: [string, "null"]
           contentEncoding: base64
           maxLength: 8192
-          description: The node's sealed payload, with its own revision, sealed under this node's content key (AAD context `node-meta`); null when unset. Its plaintext format is the kind's application's. Listed with the tree so a client can show and sort nodes by it without a second read. Opaque to the server.
+          description: The node's sealed payload, with its own revision, sealed under a field key derived from this node's content key (AAD context `node-meta`); null when unset. Its plaintext format is the kind's application's. Listed with the tree so a client can show and sort nodes by it without a second read. Opaque to the server.
           example: d3JhcHBlZC1tZXRh
         metaRevision:
           x-veyq-visibility: structure
@@ -908,7 +908,7 @@ components:
             name is retried under a different one, exactly as a create is, and the name and the token it is
             derived from have to land **together**: sent apart, the node is briefly live carrying a slug its own
             name does not produce, and a failure in between leaves it that way. Absent = the stored name is
-            untouched (the ordinary restore). Sealed under the key the entry lives under (the live parent's
+            untouched (the ordinary restore). Sealed under a field key derived from the key the entry lives under (the live parent's
             content key, `K_SC` at the node's epoch at the scope root), bound to the node's epoch and its current
             `placementRevision` — a restore does not move the revision (opaque base64).
           contentEncoding: base64
@@ -959,7 +959,7 @@ components:
           $ref: "#/components/schemas/NodeKind"
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under its parent's content key (`K_SC` at the node's epoch at the scope root; opaque base64) — the trash renders it by decrypting client-side with the live tree's key chain, exactly as the tree does.
+          description: The node name, AEAD-sealed under a field key derived from its parent's content key (`K_SC` at the node's epoch at the scope root; opaque base64) — the trash renders it by decrypting client-side with the live tree's key chain, exactly as the tree does.
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=

@@ -6,14 +6,23 @@
 // (Decision 1). Where the key is unique to one object, the key is the binding and the context names the purpose
 // only (Decision 2). Parents are not bound (Decision 4). Binding makes an epoch AUTHENTIC, not FRESH (Decision 5).
 //
-// The union below is data, not only a type: the encoder walks it (so the field ORDER is the table's order), and
-// the conformance test compares its purposes with `contracts/crypto/vectors/v1.json#seal` in both directions.
+// A text or icon field is sealed by a seal of its own (`sealField`, below, ADR 0093 § 9): under a key derived per write
+// from the key it would otherwise be sealed under, so a key handed over for one field opens that one revision of it.
+//
+// The unions below are data, not only types: the encoder walks them (so the field ORDER is the table's order), and
+// the conformance test compares their purposes with `contracts/crypto/vectors/v1.json#seal` and `#field_seal` in both
+// directions, and asserts that no purpose sits in two tables.
 // Adding a purpose after V1 is additive (a new row + its vector); changing a row's fields changes bytes that are
 // already stored, which is a suite v2.
 import {
   asymUnwrap,
   asymWrap,
   concat,
+  fieldKey,
+  fieldSaltOf,
+  fieldUnwrap,
+  fieldWrap,
+  FIELD_SALT_BYTES,
   lp,
   symUnwrap,
   symWrap,
@@ -48,19 +57,13 @@ type Schema = Readonly<Record<string, readonly (readonly [string, FieldKind])[]>
 
 /** Symmetric purposes (`seal`/`open`), each with its binding fields in canonical order. */
 export const SEAL_PURPOSES = {
-  // A node's directory entry and key wrap bind the placement revision the wire stores them at (ADR 0080 Decision 3):
-  // 0 at birth, `n + 1` for a move or rename built on `n`, so a name or wrap served at another revision — one a move
-  // superseded — does not open. Added before V1 (ADR 0072: a stored-format change, so a code change and a reset,
-  // not a suite v2); the parent stays unbound (ADR 0072 Decision 4) — the parent's key is the binding.
-  'node-name': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
+  // A node's key wrap binds the placement revision the wire stores it at (ADR 0080 Decision 3): 0 at birth, `n + 1`
+  // for a move or rename built on `n`, so a wrap served at another revision — one a move superseded — does not open.
+  // Added before V1 (ADR 0072: a stored-format change, so a code change and a reset, not a suite v2); the parent stays
+  // unbound (ADR 0072 Decision 4) — the parent's key is the binding.
   'content-key': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
-  'node-meta': [['scopeId', 'id'], ['nodeId', 'id']],
   // ownerId is the media id for a media's blobs, the node id for a cover or a file's content; the role names which.
   'blob-key': [['scopeId', 'id'], ['ownerId', 'id'], ['blobId', 'id'], ['role', 'role']],
-  'media-meta': [['scopeId', 'id'], ['mediaId', 'id']],
-  'media-exif': [['scopeId', 'id'], ['mediaId', 'id']],
-  'bucket-name': [['scopeId', 'id'], ['nodeId', 'id'], ['bucketId', 'id']],
-  'share-identity-name': [['scopeId', 'id'], ['shareId', 'shareId'], ['identityId', 'id']],
   // A share's K_share, recoverable by the Memory's scope members only: sealed under K_SC at the epoch stored beside
   // it — a key no share link carries (ADR 0036 point 4), where K_node is one every viewer/contributor link does.
   'share-key-recovery': [['scopeId', 'id'], ['nodeId', 'id'], ['shareId', 'shareId'], ['epoch', 'uint']],
@@ -72,9 +75,6 @@ export const SEAL_PURPOSES = {
   // WHOSE an entry is rides inside the plaintext instead, as the `item-mark-self` statement's tag below (ADR 0068 §9).
   'item-favorites': [['scopeId', 'id'], ['nodeId', 'id']],
   favorites: [['scopeId', 'id']],
-  'member-name': [['scopeId', 'id'], ['userId', 'id']],
-  // A member's profile picture (ADR 0084): its own purpose, so a blob sealed for the name never opens as the picture.
-  'member-avatar': [['scopeId', 'id'], ['userId', 'id']],
   'scope-epoch': [['scopeId', 'id'], ['epoch', 'uint']],
   'group-name': [['scopeId', 'id'], ['nameEpoch', 'uint']],
   'space-icon': [['scopeId', 'id'], ['iconEpoch', 'uint']],
@@ -82,9 +82,6 @@ export const SEAL_PURPOSES = {
   'device-register': [['revision', 'uint']],
   // Purpose only: sealed under the share's own K_share (ADR 0072 Decision 2).
   'share-key': [],
-  'share-memory-name': [],
-  'share-note': [],
-  'share-name': [],
   'share-password': [],
   // The Memory's drop PUBLIC key on a WRITE_ONLY share: the guest seals to it, so the server can neither read nor
   // substitute it.
@@ -96,6 +93,34 @@ export const SEAL_PURPOSES = {
   // Purpose only: under a KEK with a fresh salt, or under the account's own Master Key.
   'master-key': [],
   'identity-priv': [],
+} as const satisfies Schema
+
+/**
+ * Field purposes (`sealField`/`openField`, ADR 0093 § 9): every text or icon field a member writes and a report may
+ * have to hand over one of. Each seals under `K_field = HKDF(K_parent, salt, "veyq/v1/field/<purpose>")` with a salt
+ * drawn per write, where K_parent is the key the field's object hands its fields: the parent's key for a node's name
+ * (the directory entry, ADR 0080 Decision 2), the node's own key for its meta, `K_node` or a guest's `K_up` for a
+ * medium's tiers, a bucket's name and a guest's display name, `K_share` for a share's fields, `K_tenant` for a member's
+ * name and picture. The AAD binds the object as it would for a plain seal (ADR 0072 Decision 1); the share's three
+ * fields stay purpose-only, because `K_share` — and so each `K_field` under it — is unique to one share (Decision 2).
+ * `group-name` and `space-icon` are not here: they derive their key per (scope, epoch), not per write, because a pending
+ * invitee is handed that key (`group-name-key`).
+ */
+export const FIELD_PURPOSES = {
+  // The directory entry binds the placement revision the wire stores it at (ADR 0080 Decision 3), as the key wrap
+  // beside it does; its K_parent is the entry key — the parent's K_node, K_SC at the node's epoch for a scope root.
+  'node-name': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
+  'node-meta': [['scopeId', 'id'], ['nodeId', 'id']],
+  'media-meta': [['scopeId', 'id'], ['mediaId', 'id']],
+  'media-exif': [['scopeId', 'id'], ['mediaId', 'id']],
+  'bucket-name': [['scopeId', 'id'], ['nodeId', 'id'], ['bucketId', 'id']],
+  'share-identity-name': [['scopeId', 'id'], ['shareId', 'shareId'], ['identityId', 'id']],
+  'member-name': [['scopeId', 'id'], ['userId', 'id']],
+  // A member's profile picture (ADR 0084): its own purpose, so a blob sealed for the name never opens as the picture.
+  'member-avatar': [['scopeId', 'id'], ['userId', 'id']],
+  'share-memory-name': [],
+  'share-note': [],
+  'share-name': [],
 } as const satisfies Schema
 
 /** Asymmetric purposes (`sealTo`/`openAs`) — a seal to one X-Wing encapsulation key. */
@@ -129,8 +154,11 @@ type ContextOf<S extends Schema> = {
 export type SealContext = ContextOf<typeof SEAL_PURPOSES>
 /** An asymmetric seal's context. */
 export type SealToContext = ContextOf<typeof SEAL_TO_PURPOSES>
+/** A field seal's context. */
+export type FieldContext = ContextOf<typeof FIELD_PURPOSES>
 export type SealPurpose = SealContext['purpose']
 export type SealToPurpose = SealToContext['purpose']
+export type FieldPurpose = FieldContext['purpose']
 
 /** A context that does not describe an object: an unknown purpose, a missing/extra field, a non-canonical id. */
 export class SealContextInvalid extends Error {
@@ -243,6 +271,7 @@ function encode(schema: Schema, context: { purpose: string }): Uint8Array {
  */
 export const encodeSealContext = (context: SealContext): Uint8Array => encode(SEAL_PURPOSES, context)
 export const encodeSealToContext = (context: SealToContext): Uint8Array => encode(SEAL_TO_PURPOSES, context)
+export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(FIELD_PURPOSES, context)
 
 /**
  * Statements a key MACs or signs rather than seals — in the same canonical encoding, so their label domain-separates
@@ -310,4 +339,38 @@ export function openAs(context: SealToContext, sk: HybridSecret, blob: Uint8Arra
   } catch {
     throw new OpenRefused(context.purpose)
   }
+}
+
+/**
+ * Seal one revision of a field as the object `context` names, under a key of its own: a fresh salt and nonce are drawn,
+ * `K_field` is derived from `parentKey` and the salt, and the envelope `0x03 ‖ salt ‖ nonce ‖ aead` carries both.
+ */
+export function sealField(context: FieldContext, parentKey: Uint8Array, plaintext: Uint8Array): Uint8Array {
+  const aad = encodeFieldContext(context)
+  const salt = crypto.getRandomValues(new Uint8Array(FIELD_SALT_BYTES))
+  return fieldWrap(fieldKey(parentKey, salt, context.purpose), plaintext, aad, salt, randomNonce())
+}
+
+/** Open a field with its own `K_field` — what a moderator holds once a report hands that one key over. */
+export function openFieldWith(context: FieldContext, key: Uint8Array, envelope: Uint8Array): Uint8Array {
+  const aad = encodeFieldContext(context)
+  try {
+    return fieldUnwrap(key, envelope, aad)
+  } catch {
+    throw new OpenRefused(context.purpose)
+  }
+}
+
+/** Open a field as a member or guest does: with the key it was sealed under, the context built from the ADDRESS. */
+export const openField = (context: FieldContext, parentKey: Uint8Array, envelope: Uint8Array): Uint8Array =>
+  openFieldWith(context, fieldKey(parentKey, fieldSaltOf(envelope), context.purpose), envelope)
+
+/**
+ * The `K_field` of this one revision of this one field — the key a reporter's client hands over. It opens the envelope
+ * before it is returned, so a key that does not open what it is handed over for is never handed over.
+ */
+export function fieldKeyOf(context: FieldContext, parentKey: Uint8Array, envelope: Uint8Array): Uint8Array {
+  const key = fieldKey(parentKey, fieldSaltOf(envelope), context.purpose)
+  openFieldWith(context, key, envelope)
+  return key
 }

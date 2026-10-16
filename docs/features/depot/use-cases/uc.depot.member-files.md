@@ -15,7 +15,7 @@
 
 1. The member picks one or more files (the section's upload button, or a drop onto Depot's section of the level view).
    Each file becomes one job of core's upload queue; the status menu in the top bar shows its progress.
-2. Per file the client creates a `FILE` node under the folder (its name and slug sealed under the folder's key, the
+2. Per file the client creates a `FILE` node under the folder (its name sealed under a field key derived from the folder's key and its slug keyed by it, the
    slug folded as a file name: `Foto.JPG` and `foto.jpg` are the same name), plans its blob under the file node's own
    key, and pumps the chunks straight to the store.
 3. The client completes the upload (`completeFile`, no expected blob: the slot is empty) — the server attaches the

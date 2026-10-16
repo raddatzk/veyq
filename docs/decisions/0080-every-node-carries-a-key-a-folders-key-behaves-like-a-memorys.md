@@ -25,13 +25,15 @@ Memory, an expense and a file side by side).
 1. **Every node has a random content key**, `FOLDER` included, wrapped under its parent's content key, or under
    `K_SC` at the node's epoch for a scope-root node. `wrapped_content_key` becomes `NOT NULL`. One key type,
    recursively, as ADR 0012's *Recursive `K_node`*.
-2. **A node's directory entry lives under its parent's key.** The `node-name` seal and the slug key
-   (`HKDF(parentKey, "veyq/v1/slug-token:" + parentSlot)`) take the parent's content key, `K_SC` at the root.
+2. **A node's directory entry lives under its parent's key.** The `node-name` seal's field key
+   ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 9, fresh per
+   write) and the slug key (`HKDF(parentKey, "veyq/v1/slug-token:" + parentSlot)`) derive from the parent's content
+   key, `K_SC` at the root.
    Whoever holds a folder's key reads every name and opens every key below it. The slug key is stable per parent key
    below the root; at the scope root it is `K_SC` at the entry's epoch (`tree.ts:87,97`), so uniqueness there holds
    within an epoch, exactly as today (stated, not fixed).
-3. **Move is O(1).** One request: new parent, the key re-wrapped under the new parent's key, the name re-sealed,
-   a new slug token. Each node carries a `placement_revision`; move and rename state the revision they were built
+3. **Move is O(1).** One request: new parent, the key re-wrapped under the new parent's key, the name re-sealed
+   under a field key derived from it, a new slug token. Each node carries a `placement_revision`; move and rename state the revision they were built
    on and the server compares-and-sets it (`409 stale_placement`, the [ADR 0077](0077-a-write-carries-the-version-it-read.md)
    shape), so a rename sealed for the old parent cannot land after a move. Because the `content-key` seal binds the placement
    revision, **a rename re-wraps the key too**: rename and move are the same request shape (a rename is a move to the
@@ -88,7 +90,7 @@ Memory, an expense and a file side by side).
    the node's kind declares it empty (`GuestPlaceholders`: Depot's `FILE` whose slot never
    held a blob; core's own `FOLDER` with no attachment and no sealed metadata — the folders a guest's folder-tree upload
    created before every file of it was refused, owner decision 2026-10-16; a kind nobody declares never is). **A move
-   counts as naming:** a placement re-seals the name under the new parent's key and the server cannot tell a re-seal
+   counts as naming:** a placement re-seals the name under a field key derived from the new parent's key and the server cannot tell a re-seal
    from a new text, so a guest that moved a member's empty node becomes its name's last editor and may then take it
    back — accepted (owner 2026-10-16): it is a name with nothing behind it that the guest could already rename away, and
    the link rule keeps it from ending anybody's link. `ShareNodeAbandonCoreSliceTest` pins it, so changing it is a
@@ -108,7 +110,8 @@ Memory, an expense and a file side by side).
    subtree and is restored on its own ([ADR 0061](0061-node-deletion-reversible-node-trash.md), inbox #357).
 9. **A share covers exactly the subtree under its root, and nothing above it.** A guest of a chapter reads the chapter
    and below: its key opens nothing of the parent (the parent's key is not derivable from the child's), the root's
-   own name arrives as `sealedName` under `K_share` (it is sealed under the parent's key and a guest holds neither),
+   own name arrives as `sealedName` under a field key derived from `K_share` (its entry is sealed from the parent's key
+   and a guest holds neither),
    and resolve serves no node outside the subtree and no parent id of the root.
 10. **Guest moves.** A `READ_WRITE` guest may move a node inside its share's subtree — never the root, never out of
     the subtree, never into a cycle — by re-wrapping the key under the new parent's key it holds. A `WRITE_ONLY` guest
@@ -145,7 +148,7 @@ Memory, an expense and a file side by side).
    uploads into the chapter, a Memory link's contributor also into a chapter below it (decision 6), and an uploader
    seals to the chapter's own drop key). The web offers the chapter link through the same share dialogs as a Memory (`shareable: true`,
    `register.ts`). What each role may do is the role matrix in [`docs/apps/memories.md`](../apps/memories.md).
-14. **The share root's name.** It arrives as `sealedName` under `K_share`. A guest cannot rename the root (it holds
+14. **The share root's name.** It arrives as `sealedName` under a field key derived from `K_share`. A guest cannot rename the root (it holds
    no parent key). When a member renames a share root, that member's client re-seals the name of every share on it
    through the recovery copy (decision 12 makes it available) and stores it with its own operation
    (`PUT /api/shares/{shareId}/sealed-name`), which any member with WRITE access may call, not only the share's owner:

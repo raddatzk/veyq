@@ -47,7 +47,7 @@ describe('createMemory', () => {
     expect(req.nodeId).toMatch(UUID)
     expect(nodeId).toBe(req.nodeId)
     // name round-trips under K_SC, bound to this node; the server only ever saw ciphertext
-    expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Italien 2026')
+    expect(new TextDecoder().decode(v1.openField(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Italien 2026')
     // wrapped K_node opens to exactly the returned key
     expect(Array.from(openMemory(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
     // ...and is refused on any other node's row (a server moving the wrap gets no key)
@@ -135,8 +135,8 @@ describe('createChapter — recursive K_node (cr-0060)', () => {
     expect(nodeId).toBe(req.nodeId)
     // the chapter's entry is its parent's (ADR 0080 Decision 2): name and slug under the Memory's K_node, not K_SC —
     // so a guest of the Memory's share reads the chapter titles
-    expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), parentKey, fromB64(req.encryptedName)))).toBe('Tag 1')
-    expect(() => v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName))).toThrow(v1.OpenRefused)
+    expect(new TextDecoder().decode(v1.openField(nameCtx(nodeId), parentKey, fromB64(req.encryptedName)))).toBe('Tag 1')
+    expect(() => v1.openField(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName))).toThrow(v1.OpenRefused)
     expect(req.slugToken).toBe(b64std(v1.slugToken(parentKey, MEM, 'tag-1')))
     const row = { id: nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: req.wrappedContentKey }
     // the K_node opens under the PARENT key…
