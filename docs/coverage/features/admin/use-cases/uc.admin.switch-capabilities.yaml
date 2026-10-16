@@ -1,7 +1,8 @@
 useCase: uc.admin.switch-capabilities
 feature: admin
 title: Switch the instance's capabilities on and off
-# Refined 2026-10-15 from inbox #443 (ADR 0088 decisions 5, 12 and 13); built by cr-operator-capability-switches.
+# Refined 2026-10-15 from inbox #443 (ADR 0088 decisions 5, 12 and 13); built by cr-operator-capability-switches;
+# share-switch-acts-at-once by inbox #442.
 # The switch lives on the admin channel, so the criteria's refs are the backend's slice and unit tests; the web's
 # are the client meeting a withheld wrap. `admin-web`'s suites (the Capabilities panel, the CLI, the console's nav)
 # wait under `gaps` until its CI job has executed (ADR 0040), as uc.admin.configure-object-store's do.
@@ -59,6 +60,25 @@ acceptanceCriteria:
           prompt in a new tab. Not covered: a browser restart after a sign-in made while the switch was off, which
           leaves a remembered device only a session cookie (inbox #450, read from the code); and none of it runs in
           CI (inbox #448).
+  - id: share-switch-acts-at-once
+    text: While core.public-shares, .contribute or .drop-box is effectively off, every guest endpoint in core, Memories and Depot answers an existing link of the role it reaches exactly as an unknown link (the same 404 and body, before the password is asked), the links of the roles it does not reach stay served, and switching back on serves every link again because nothing was written onto it; changing a READ link into a READ_WRITE one while .contribute is off is refused with 422 capability_disabled.
+    coverage:
+      backend:
+        unit: [ShareAccessPolicyTest.eachRoleNeedsItsOwnLeaf, ShareAccessPolicyTest.anUnknownRoleNeedsTheParent]
+        integration: [ShareSwitchGuestGateCoreSliceTest.eachShareSwitchRefusesEveryCoreGuestPathOfItsRoleLikeAnUnknownLinkAndServesItAgainOnceBackOn, ShareSwitchGuestGateCoreSliceTest.aSwitchedOffPasswordLinkIsRefusedBeforeItsPasswordIsAsked, ShareSwitchGuestGateMemoriesSliceTest.eachShareSwitchRefusesEveryMemoriesGuestPathOfItsRoleLikeAnUnknownLinkAndServesItAgainOnceBackOn, ShareSwitchGuestGateDepotSliceTest.eachShareSwitchRefusesEveryDepotGuestPathOfItsRoleLikeAnUnknownLinkAndServesItAgainOnceBackOn, ReactivateShareCapabilitySliceTest.changingALinkIntoAContributeLinkWhileContributeIsOffIs422]
+      web:
+        unit: [src/core/sharing/resolvePublicShare.test.ts, src/core/sharing/pollPublicShare.wire.test.ts, src/views/ShareView.registry.test.ts]
+    gaps:
+      - surface: backend
+        reason: >-
+          The switch rows are written by `CapabilitySwitchFixtures` through the store and the cache invalidation the
+          Admin API's handler uses, minus the HTTP (as for every other gate, switch-without-restart). A URL the store
+          signed before the switch runs to its TTL and is not exercised: the in-memory store signs nothing.
+      - surface: web
+        reason: >-
+          Nothing changes in the web client: a refused link is the 404 an unknown or expired one already is, and the
+          refs pin that a 404 resolve, or a 404 on a poll, shows the unavailable page. A guest meeting a switched-off
+          link in a real browser has not been run (inbox #448 automates the browser passes).
   - id: off-state-in-a-browser
     text: In a real browser, a switched-off drop box, device linking and password-less remember are absent from the web client, and a device remembered before its switch went off asks for what its wrap replaced.
     coverage:

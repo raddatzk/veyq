@@ -113,10 +113,12 @@ switch refuses only what is new.
   Emergency Kit, and the sign-in screen says why. The password with the Secret Key always works, so nobody is locked
   out, and switching back on lets every device unlock as before. Tell your members before you switch one off.
   `core.device-linking` off also stops an addition that is under way; devices added before are not affected.
-- **Share switches refuse only new links, for now.** They are meant to stop existing links too, but that is not
-  built (inbox #442): today a switch refuses making, renewing and switching back on a link of its kind, and every
-  link that already exists keeps working. To stop those links now, take the tenant offline
-  ([Moderation](/veyq/run/moderation/#take-a-tenant-offline)).
+- **Share switches act at once, on existing links too.** With a share switch off, no link of its kind can be made,
+  renewed or switched back on, and every link of its kind that already exists stops working: a guest sees the same
+  "This link isn't available" page as for an expired link, and nothing tells them the instance switched it off.
+  `core.public-shares` stops every kind, its two children only their own. Nothing is deleted, so switching back on
+  brings every link back as it was. A download or upload address the server signed just before stays usable until it
+  expires, ten minutes by default, as after a member turns a link off.
 - **Feature switches refuse only what is new.** With `core.group-space` off no group can be created, and every
   existing group stays fully usable.
 

@@ -119,8 +119,9 @@ onMounted(() => {
 })
 
 // The normal flow's switcher offers READ + READ_WRITE only — the uploader is its own action/dialog (no switcher). READ_WRITE
-// only where `contribute` is on — or on the edit of a link that already is one: a feature switch refuses only what is new
-// (ADR 0088 decision 5), so an existing contributor link keeps its role on screen instead of showing no selection.
+// only where `contribute` is on — or on the edit of a link that already is one, so an existing contributor link keeps its
+// role on screen instead of showing no selection. While the switch is off such a link serves no guest (ADR 0088 decision
+// 5), but the member still edits its note and name or narrows it to READ; the server refuses only a change INTO it.
 const roleOptions = computed(() => [
   { label: t('share.roleViewer'), value: ShareRole.Read },
   ...(props.contribute || props.editShare?.role === ShareRole.ReadWrite

@@ -235,8 +235,9 @@ const NEW_LINK = 'new'
 
 // READ and READ_WRITE only: a WRITE_ONLY link on a folder is refused by the backend. READ_WRITE only where the host
 // handed `contribute` (the rights function's `shareContribute`, `core.public-shares.contribute`) — or on the edit of a
-// link that already is one: a feature switch refuses only what is new (ADR 0088 decision 5), so an existing contributor
-// link keeps its role on screen instead of showing no selection.
+// link that already is one, so an existing contributor link keeps its role on screen instead of showing no selection.
+// While the switch is off such a link serves no guest (ADR 0088 decision 5), but the member still edits it or narrows it to
+// READ; the server refuses only a change INTO it.
 const roleOptions = computed(() => [
   { label: t('share.roleViewer'), value: ShareRole.Read },
   ...(props.contribute || (view.value === 'edit' && editing.value?.role === ShareRole.ReadWrite)

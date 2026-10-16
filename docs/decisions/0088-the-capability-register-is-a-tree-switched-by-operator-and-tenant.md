@@ -1,6 +1,7 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
-- Status: Accepted 2026-10-15; the instance level is built, the tenant level is not (§ Consequences; inbox #439). It replaces
+- Status: Accepted 2026-10-15; the instance level is built, share switches reaching existing links included (inbox
+  #442), the tenant level is not (§ Consequences; inbox #439). It replaces
   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
   [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match.
 - Date: 2026-10-15
@@ -168,9 +169,17 @@ both off a place still works, named by hand. The user's own consent to the two
   device's local key, asks for the password and the Secret Key with a line saying why, and does not re-enrol the
   device to the other tier, so switching back on restores it. Without `DEVICE_KEY` that is the Secret Key too, not
   the password alone: a device holds one convenience wrap ([ADR 0005](0005-unlock-methods-and-device-trust.md) §9).
-- **Not built:** the tenant level and the post-auth tenant set (#439); share switches reaching existing links (#442),
-  so a share switch refuses new links only; requirements (decision 8); configuration as code (#444). The off states
-  have not yet been seen in a real browser.
+- **A share switch reaches existing links** (decision 5, measured: `ShareGuestGate.activeShare`): while
+  `core.public-shares`, `.contribute` or `.drop-box` is effectively off, every guest endpoint in core and in both
+  applications answers a link of that role exactly as an unknown link, a `404` with the same body, before the
+  password is asked, so a guest learns nothing of the instance's policy and web's unavailable page needs no new state.
+  The one predicate every guest path already passed is where it sits, so no application handles it. Nothing is
+  written onto the link, so switching back on serves it again. Presigned URLs already handed out run to their TTL, as
+  after a revoke. Changing a READ link into a READ_WRITE one (`updateShare`) is refused like creating one.
+- **Not built:** the tenant level and the post-auth tenant set (#439); requirements (decision 8); configuration as
+  code (#444); a member's share list saying that a link serves no guest while its switch is off (the list shows it as
+  on, and the share dialogs only hide what the switch refuses). The off states have not yet been seen in a real
+  browser.
 - **The two enforcement gaps of the flat ids are closed.** The server gated `core.group-space` only at group creation
   although the catalog names five use-cases - decided a doc fault, since a feature switch refuses only what is new
   (decision 5), so group creation is the one gate. Depot let a member create a drop box while uploader links were off,
