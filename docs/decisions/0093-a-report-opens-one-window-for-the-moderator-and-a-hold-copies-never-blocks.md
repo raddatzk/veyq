@@ -453,31 +453,3 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
    subscriber, the BKA's form asks for the port, and `X-Forwarded-For` carries none. The PROXY protocol from the
    trusted edge to the app may be the answer ([ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md)
    names it for the Helm load balancer); the decision is deferred to the CR that builds the guest-write record.
-
-## Decided in this draft — confirm
-
-Temporary: each line is a choice this draft made that the research did not clearly settle. The owner confirms or
-changes each, then deletes this section.
-
-1. **Six months after a measure count from the statement's sending** (a deferred statement from its sending, an
-   untold measure from the decision), and a lifted measure ends the hold. The research anchors the six months by
-   analogy only (DSA Art. 20(1), TCO Art. 6) and named "sent or deferred" as the start.
-2. **The extension reasons and the six-month step** (§ 4): the research's recommendation, not a norm.
-3. **An authority order that names no duration holds six months**, renewable with its reference.
-4. **A CSAM hold ends at the handover, at the latest 90 days after the report without authority contact.** One
-   report recommended this; the other recommended that such a hold never lapse by itself and instead force the
-   moderator to decide. This draft chose the bounded one, since keeping the material longer than needed is the
-   criminal-law risk.
-5. **An authority's order blocks the share and the content it reaches** (members included), not only the link.
-6. **A case closes when its last hold has ended and no objection is open**; the log's three years run from there.
-7. **The reporter's contact goes six months after the decision is told**: data minimization, no norm sets it.
-8. **The hosting-not-platform invariant** (no directory, no search, key in the fragment; a change needs an ADR).
-9. **The record's rows leave the instance backup's dump**, which changes ADR 0056's database leg; the fallback
-   deletion concept recommends B ≤ 30 days.
-10. **A deferral lasts at most six weeks per request** under the DSA too, mirroring TCO Art. 11(3); the DSA itself
-    sets no length.
-11. **The report categories** of § 1 and which three are urgent.
-12. **The operator section's revision follows its fixed text only** (a veyq release); the values it renders do not
-    reopen the gate, and a tenant without terms shows the section without a gate ([ADR 0035](0035-server-terms-of-service.md)
-    decision 6).
-13. **The provider identification is optional; admin-web warns while it is empty** (ADR 0035 decision 7).
