@@ -236,6 +236,10 @@ class ShareGuestGate(
      * would tell the guest the link exists. Nothing is written, so switching back on serves the same link again. No
      * re-check under the share-row lock ([SharingStore.admitsGuests]): a switch is no row the write could lock against,
      * and each later step of a guest write (a window, the complete) passes this gate again.
+     *
+     * **The link requirements** (ADR 0088 decision 8, [LinkRequirements]) act the same way: a link without a password
+     * while every link needs one, or outside the lifetime links may have, answers as an unknown link until its owner
+     * fixes it or the requirement is cleared; nothing is written onto it.
      */
     internal fun activeShare(shareId: String): ShareEntity? {
         val share = store.find(shareId) ?: return null
@@ -243,7 +247,8 @@ class ShareGuestGate(
         val expiry = share.expiresAt
         if (expiry != null && !expiry.isAfter(Instant.now())) return null
         if (!access.isLive(share.scopeId)) return null
-        if (!capabilities.isActive(ShareAccessPolicy.capabilityFor(share.role))) return null
+        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(share.role), share.scopeId)) return null
+        if (!LinkRequirements.admits(capabilities.requirementsInScope(share.scopeId), share)) return null
         return share
     }
 

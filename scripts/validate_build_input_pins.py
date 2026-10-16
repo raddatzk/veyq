@@ -225,7 +225,9 @@ def check_verification(files: list[str]) -> None:
     if not roots:
         fail("no tracked gradlew — re-anchor this guard")
     for root in roots:
-        rel = f"{root}/gradle/verification-metadata.xml"
+        # Joined, never formatted: the root launcher's `gradlew` sits at the repo root, whose parent is `.`, and
+        # `./gradle/…` is no path `git ls-files` prints — the check was red on a file that is tracked.
+        rel = pathlib.PurePosixPath(root, "gradle/verification-metadata.xml").as_posix()
         if rel not in files:
             fail(f"{rel} is not tracked — Gradle verifies no dependency of the build at {root}/")
             continue
@@ -237,8 +239,11 @@ def check_verification(files: list[str]) -> None:
         flag = tree.find(f"{NS}configuration/{NS}verify-metadata")
         if flag is None or (flag.text or "").strip() != "true":
             fail(f"{rel}: <verify-metadata> is not `true` — the file is there and checks nothing")
-        if not tree.findall(f"{NS}components/{NS}component"):
-            fail(f"{rel}: lists no component — regenerate it with --write-verification-metadata sha256")
+        # An EMPTY component list is allowed: with <verify-metadata> on, it makes Gradle refuse every artifact, so
+        # it is the strictest file there is, not one that checks nothing. The root launcher's is empty on purpose
+        # (it resolves nothing; changes/cr-root-gradle-launcher.md) — measured: a plugin added to it fails the build
+        # on verification. A build that does resolve dependencies cannot go green with one, which is the failure
+        # that then sends someone to --write-verification-metadata.
         for trust in tree.iter(f"{NS}trust"):
             if dict(trust.attrib) not in IDE_TRUST:
                 fail(f"{rel}: trust rule {dict(trust.attrib)} exempts more than the -sources/-javadoc jars and the "

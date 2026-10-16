@@ -6,7 +6,7 @@
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
 // + the tenant storage quota + release info + the config-secret state + the object-store setting and its check + the
-// capability switches. Per-tenant mail settings, terms authoring and the per-link storage
+// capability switches with their requirements + the external services. Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
 // they are not Server-Owner commands.
 // First-run **setup** is excluded on purpose (cr-admin-cli): it is a one-time interactive ceremony that mints
@@ -40,10 +40,19 @@ import {
   inLocale,
   listInstanceCapabilities,
   setInstanceCapability,
+  setInstanceCapabilityRequirement,
+  clearInstanceCapabilityRequirement,
+  requirementValue,
   type CapabilityLocale,
   type CapabilityNode,
   type InstanceCapability,
 } from '../features/instance/capabilities'
+import {
+  clearExternalService,
+  listExternalServices,
+  setExternalService,
+  type InstanceExternalService,
+} from '../features/instance/externalServices'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
 export type Flag = {
@@ -78,6 +87,13 @@ const domain: Flag = { describe: 'domain the tenant is reached at', required: tr
 const ownerEmail: Flag = { describe: "owner's email address", required: true }
 const lang: Flag = { describe: 'the language of the entry texts (default: from LC_ALL, then LANG)', required: false, oneOf: ['en', 'de'] }
 const capabilityId = { name: 'id', describe: 'the capability id, as `capabilities list` prints it' }
+const serviceId = { name: 'id', describe: 'the service’s register entry, as `services list` prints it' }
+
+/** One service as a line: its entry, then its address (and attribution), or `not configured`. */
+function renderService(s: InstanceExternalService): string {
+  if (!s.url) return `${s.id}  not configured`
+  return `${s.id}  ${s.url}${s.attribution ? `  (${s.attribution})` : ''}`
+}
 
 /**
  * The language the served entry texts are printed in: `--lang` if given, else the POSIX locale — `LC_ALL`, then
@@ -93,6 +109,7 @@ export function cliLocale(flags: Record<string, string>, env: Record<string, str
 /** The state token of one entry: `on`, `off`, or `off through <id>`. A fixed token, like `config-secret`'s `MISMATCH`:
  *  it reads the same in every locale, and the id it names is what `capabilities on` takes. */
 function stateToken(node: CapabilityNode): string {
+  if (node.state.kind === 'notConfigured') return 'not configured'
   return node.state.kind === 'offThrough' ? `off through ${node.state.through.id}` : node.state.kind
 }
 
@@ -106,7 +123,9 @@ function renderCapabilities(entries: InstanceCapability[], locale: CapabilityLoc
   const stateWidth = Math.max(...states.map((st) => st.length))
   const under = ' '.repeat(idWidth + stateWidth + 4)
   return tree
-    .map((n, i) => `${ids[i].padEnd(idWidth)}  ${states[i].padEnd(stateWidth)}  ${inLocale(n.entry.title, locale)}\n${under}${inLocale(n.entry.purpose, locale)}`)
+    .map((n, i) => `${ids[i].padEnd(idWidth)}  ${states[i].padEnd(stateWidth)}  ${inLocale(n.entry.title, locale)}\n${under}${inLocale(n.entry.purpose, locale)}${
+      n.entry.requirements.map((r) => `\n${under}requirement ${r.name}: ${requirementValue(r)}  ${inLocale(r.title, locale)}`).join('')
+    }`)
     .join('\n')
 }
 
@@ -276,6 +295,54 @@ export const COMMANDS: Record<string, Command> = {
       const locale = cliLocale(f, env)
       return `${inLocale(entry.whenOff, locale)}\n\n${renderSwitched(entry, locale)}`
     },
+  },
+  'capabilities require': {
+    usage: 'capabilities require <id> --requirement <name> --value <n|off> [--lang en|de]',
+    summary: 'Set a requirement on an entry for the instance (1 for a flag, else days 1-3650), or clear it with off, and print what it does to new and to existing data.',
+    flags: {
+      requirement: { describe: 'the requirement name, as `capabilities list` prints it', required: true },
+      value: { describe: '1 for a flag, a number of days (1-3650), or off to clear', required: true },
+      lang,
+    },
+    operand: capabilityId,
+    run: (f) => (f.value === 'off'
+      ? clearInstanceCapabilityRequirement(f.id, f.requirement)
+      : setInstanceCapabilityRequirement(f.id, f.requirement, Number(f.value))),
+    // Printed from the answer: the server's words for the requirement it stored, never a copy kept here.
+    render: (r, f, env) => {
+      const entry = r as InstanceCapability
+      const locale = cliLocale(f, env)
+      const req = entry.requirements.find((x) => x.name === f.requirement)
+      if (!req) return renderSwitched(entry, locale)
+      const effect = req.value === null || req.value === undefined ? '' : `${inLocale(req.whenSet, locale)}\n\n`
+      return `${effect}${entry.id}  requirement ${req.name}: ${requirementValue(req)}  ${inLocale(req.title, locale)}`
+    },
+  },
+  'services list': {
+    usage: 'services list',
+    summary: 'Print the external services a member’s browser calls, each with its address or "not configured".',
+    flags: {},
+    run: () => listExternalServices(),
+    render: (r) => (r as InstanceExternalService[]).map(renderService).join('\n'),
+  },
+  'services set': {
+    usage: 'services set <id> --url <url> [--attribution <text>]',
+    summary: 'Configure a service’s address (the map tiles: a {z}/{x}/{y} template and an attribution); acts at once.',
+    flags: {
+      url: { describe: 'an http(s) address; the map tiles take a template with {z}, {x} and {y}', required: true },
+      attribution: { describe: 'the attribution shown on every map (map tiles only)', required: false },
+    },
+    operand: serviceId,
+    run: (f) => setExternalService(f.id, f.url, f.attribution ?? null),
+    render: (r) => renderService(r as InstanceExternalService),
+  },
+  'services unset': {
+    usage: 'services unset <id>',
+    summary: 'Stop using a service: no browser calls it, and the served policy leaves its origin out. Deletes nothing.',
+    flags: {},
+    operand: serviceId,
+    run: (f) => clearExternalService(f.id),
+    render: (r) => renderService(r as InstanceExternalService),
   },
   'capabilities on': {
     usage: 'capabilities on <id> [--lang en|de]',

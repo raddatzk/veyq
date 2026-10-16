@@ -100,6 +100,13 @@ sequenceDiagram
 - **E3 — the member's grant won't unwrap** (corrupt / identity rotated without re-wrap): the member can't open the
   group → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not force a wipe),
   matching [en.spaces.group-scope](../enablers/en.spaces.group-scope.md) E2.
+- **E4 — a key-holder refuses the admission** (its tag does not verify under that key-holder's epoch key): its
+  worker declines the delivery (`admission_unverified`) and that account stays off the job, while any other
+  key-holder still delivers. A tag *ahead* of the worker's key never earns a refusal — the worker pauses until it
+  holds the new epoch. A rotation that re-tags the admission lifts the refusals, so every key-holder judges again;
+  a member refused by every key-holder in spite of a genuine admission comes back by being removed and added again
+  (a new membership, a new job) — [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6
+  § What a refusal lasts.
 
 ## Quality notes
 

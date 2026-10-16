@@ -73,7 +73,7 @@ member renames a shared node, their client re-seals the name of every share on i
 - [uc.sharing.share-accept](use-cases/uc.sharing.share-accept.md) — **built (contracts + backend + web,
   cr-anonymous-accept-gate)** (the
   accountless-visitor half of the two-tier terms gate, [ADR 0035](../../decisions/0035-server-terms-of-service.md)
-  §3: before viewing/contributing, an account-less share visitor **accepts the operator's tenant terms**, stored
+  §3: before viewing/contributing, an account-less share visitor **accepts the space's terms**, stored
   **client-side** (localStorage, per tenant + revision) — the server records nothing, anonymity preserved. The terms
   reach the accountless client from the **share** (not the member endpoint, not the Host — a share is
   Host-independent): a guest **`GET /api/shares/{shareId}/terms`** keyed on the non-enumerable `shareId`, so **no
@@ -97,7 +97,7 @@ member renames a shared node, their client re-seals the name of every share on i
   password **gate** itself is built ([uc.sharing.share-password](use-cases/uc.sharing.share-password.md)); only this
   cryptographic fold is not.
 - **Persisted shares / person-resolution** — cross-scope surfaces. **Tenant terms** are built
-  ([ADR 0035](../../decisions/0035-server-terms-of-service.md); the operator sets per-locale terms, each change a
+  ([ADR 0035](../../decisions/0035-server-terms-of-service.md); the space owner sets per-locale terms, each change a
   new revision, in [uc.admin.tenant-terms](../admin/use-cases/uc.admin.tenant-terms.md), members accept server-side in
   [uc.account.accept-terms](../account/use-cases/uc.account.accept-terms.md)), and the accountless-visitor
   acceptance is now its own built use-case

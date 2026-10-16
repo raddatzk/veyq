@@ -4,8 +4,12 @@ import me.raddatz.veyq.core.crypto.ConfigSecretKeyGuard
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
 import me.raddatz.veyq.core.generated.api.InstanceApi
 import me.raddatz.veyq.core.generated.model.InstanceCapability
+import me.raddatz.veyq.core.generated.model.InstanceCapabilityRequirement
+import me.raddatz.veyq.core.generated.model.InstanceCapabilityRequirementUpdate
 import me.raddatz.veyq.core.generated.model.InstanceCapabilityText
 import me.raddatz.veyq.core.generated.model.InstanceCapabilityUpdate
+import me.raddatz.veyq.core.generated.model.InstanceExternalService
+import me.raddatz.veyq.core.generated.model.InstanceExternalServiceUpdate
 import me.raddatz.veyq.core.generated.model.InstanceConfigSecret
 import me.raddatz.veyq.core.generated.model.InstanceRelease
 import me.raddatz.veyq.core.generated.model.InstanceStore
@@ -23,6 +27,7 @@ import me.raddatz.veyq.core.http.httpError
 import java.time.ZoneOffset
 import me.raddatz.veyq.core.generated.model.InstanceStoreProvisioning
 import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityText
 import me.raddatz.veyq.core.validation.validated
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
@@ -59,6 +64,7 @@ class InstanceResource(
     private val configSecret: ConfigSecretKeyGuard,
     private val store: StoreHandler,
     private val capabilities: CapabilitySwitchHandler,
+    private val services: ExternalServicesHandler,
 ) : InstanceApi {
 
     override fun getInstanceRelease(): Response =
@@ -94,7 +100,37 @@ class InstanceResource(
             is HttpFailure -> httpError(outcome)
         }
 
+    override fun listInstanceExternalServices(): Response =
+        Response.ok(services.list().map { it.toWire() }).build()
+
+    override fun setInstanceExternalService(capabilityId: String, instanceExternalServiceUpdate: InstanceExternalServiceUpdate): Response =
+        serviceAnswer(services.set(capabilityId, instanceExternalServiceUpdate.url, instanceExternalServiceUpdate.attribution))
+
+    override fun clearInstanceExternalService(capabilityId: String): Response = serviceAnswer(services.clear(capabilityId))
+
+    private fun serviceAnswer(outcome: ExternalServiceOutcome): Response = when (outcome) {
+        is ExternalServiceOutcome.Stored -> Response.ok(outcome.view.toWire()).build()
+        is HttpFailure -> httpError(outcome)
+    }
+
+    private fun ExternalServiceView.toWire() = InstanceExternalService(
+        id = id, title = texts.title.toWire(), url = address?.url, attribution = address?.attribution,
+        takesAttribution = takesAttribution,
+    )
+
     override fun listInstanceCapabilities(): Response = Response.ok(capabilities.list().map { it.toWire() }).build()
+
+    override fun setInstanceCapabilityRequirement(
+        capabilityId: String, requirement: String, instanceCapabilityRequirementUpdate: InstanceCapabilityRequirementUpdate,
+    ): Response = capabilityAnswer(capabilities.setRequirement(capabilityId, requirement, instanceCapabilityRequirementUpdate.value))
+
+    override fun clearInstanceCapabilityRequirement(capabilityId: String, requirement: String): Response =
+        capabilityAnswer(capabilities.setRequirement(capabilityId, requirement, null))
+
+    private fun capabilityAnswer(outcome: CapabilitySetOutcome): Response = when (outcome) {
+        is CapabilitySetOutcome.Stored -> Response.ok(outcome.view.toWire()).build()
+        is HttpFailure -> httpError(outcome)
+    }
 
     override fun setInstanceCapability(capabilityId: String, instanceCapabilityUpdate: InstanceCapabilityUpdate): Response =
         when (val outcome = capabilities.set(capabilityId, instanceCapabilityUpdate.off.validated())) {
@@ -130,6 +166,14 @@ class InstanceResource(
         id = state.id,
         title = texts.title.toWire(), purpose = texts.purpose.toWire(), whenOff = texts.whenOff.toWire(),
         off = state.off, effective = state.effective,
+        tenantSwitchable = state.id in CapabilityIds.TENANT_SWITCHABLE,
+        serviceConfigured = serviceConfigured,
+        requirements = requirements.map {
+            InstanceCapabilityRequirement(
+                name = it.def.name, kind = InstanceCapabilityRequirement.Kind.valueOf(it.def.kind.name.lowercase()),
+                title = it.def.title.toWire(), whenSet = it.def.whenSet.toWire(), value = it.value,
+            )
+        },
     )
 
     private fun CapabilityText.toWire() = InstanceCapabilityText(en = en, de = de)

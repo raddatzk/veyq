@@ -88,9 +88,9 @@ class AppShellSliceTest {
 
     @Test
     fun theShellsResponsesCarryThePolicyAndTheApiDoesNot() {
-        for (path in listOf("/", "/recover")) assertEquals(FIXTURE_POLICY, html(path).header(CSP), path)
+        for (path in listOf("/", "/recover")) assertEquals(SERVED_POLICY, html(path).header(CSP), path)
         // A worker takes its policy from its own script's response, which is the whole point of this one.
-        assertEquals(FIXTURE_POLICY, given().`when`().get("/sw.js").header(CSP), "/sw.js")
+        assertEquals(SERVED_POLICY, given().`when`().get("/sw.js").header(CSP), "/sw.js")
         assertNull(given().`when`().get("/api/setup").header(CSP), "the API is not the shell")
     }
 
@@ -141,6 +141,12 @@ class AppShellSliceTest {
 
         /** `src/test/resources/META-INF/resources/content-security-policy.txt`, without its trailing newline. */
         const val FIXTURE_POLICY =
-            "default-src 'self'; frame-ancestors 'none'; connect-src 'self' https://api.pwnedpasswords.com; form-action 'self'"
+            "default-src 'self'; frame-ancestors 'none'; img-src 'self'; connect-src 'self'; form-action 'self'"
+
+        /** The fixture's policy as served on a new instance: the seeded external services (ADR 0088 decision 7), the map
+         *  tiles in `img-src`, the geocoder and the breach check in `connect-src` (`ExternalServicesSliceTest` moves them). */
+        const val SERVED_POLICY =
+            "default-src 'self'; frame-ancestors 'none'; img-src 'self' https://tile.openstreetmap.org; " +
+                "connect-src 'self' https://nominatim.openstreetmap.org https://api.pwnedpasswords.com; form-action 'self'"
     }
 }

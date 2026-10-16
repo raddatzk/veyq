@@ -15,14 +15,14 @@ handling of reported shares.
 
 - ★ [First-run server setup](use-cases/uc.admin.setup-server.md) — **built (backend + admin-web)**
 - ★ [Administer only through the admin container](use-cases/uc.admin.admin-channel.md) — **built**
-- ★ [Connect and check the instance's object store](use-cases/uc.admin.configure-object-store.md) — **planned**
-  (ADR 0089): the store set and checked in the admin console instead of environment variables; a checked store
-  gates tenant creation.
   ([ADR 0065](../../decisions/0065-admin-ui-cli-separate-service.md); the backend answers every Server-Owner
   operation, first-run setup included, only on an internal listener the admin container reaches — classified by
   the socket, never by a header — and 404s it on the public origin)
+- ★ [Connect and check the instance's object store](use-cases/uc.admin.configure-object-store.md) — **built
+  (backend + admin-web)** (ADR 0089): the store set and checked in the admin console instead of environment
+  variables; a checked store gates tenant creation.
 - ★ [Switch the instance's capabilities on and off](use-cases/uc.admin.switch-capabilities.md) — **built (backend +
-  admin-web + web); the browser pass is pending** (ADR 0088 decisions 5, 12, 13;
+  admin-web + web; browser pass run 2026-10-15, inbox #447)** (ADR 0088 decisions 5, 12, 13;
   built 2026-10-15): the register in the admin console and the CLI, each entry with its
   purpose and effect-when-off, stored in the database and acting without a restart; a device switch withholds its
   wraps at once, and the web client keeps the device and asks for the password and the Secret Key.
@@ -50,6 +50,15 @@ handling of reported shares.
 - Manage server users & roles — planned
 - ★ [Set tenant terms (a new revision on each change)](use-cases/uc.admin.tenant-terms.md) — **built (web, cr-0114)** (ADR 0035; per-locale markdown + `terms_revision`; the member accept-gate consumes the revision)
 - ★ [Configure per-tenant mail (SMTP + invite template)](use-cases/uc.admin.tenant-mail-settings.md) — **built (backend + web)** (cr-email-smtp-transport; the tenant owner's Mail section in the web settings, `TenantMailSettingsPanel`; ADR 0048/0049/0050; per-tenant SMTP, password sealed at rest, invite templates over a closed variable set)
+- ★ [Switch capabilities off for a tenant](use-cases/uc.admin.tenant-switch-capabilities.md) — **built (backend +
+  web)** (ADR 0088 decisions 2, 3, 12): the tenant level of the register, in the tenant settings beside terms and mail;
+  a tenant only narrows what the Server Owner allows, and every gate refuses per tenant
+- ★ [Set requirements on capabilities](use-cases/uc.admin.capability-requirements.md) — **built (backend + web +
+  admin-web)** (ADR 0088 decision 8): a link needs a password, a link lives at most N days, being added
+  to a group needs a yes, a device asks for the password again after N days; the strictest of both levels
+- ★ [Configure the external services a browser calls](use-cases/uc.admin.configure-external-services.md) — **built
+  (backend + web + admin-web)** (ADR 0088 decision 7, ADR 0089): the map tiles, the geocoder and the
+  breached-password check as Server-Owner settings and register entries; the served policy follows them
 - ★ [A tenant's storage quota](use-cases/uc.admin.tenant-storage-quota.md) — **built** (backend, web, admin-web)
   ([ADR 0073](../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md); the ceiling belongs to
   whoever pays for the store — for the instance's store the Server Owner, on the admin channel; none by default;

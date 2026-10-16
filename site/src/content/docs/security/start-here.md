@@ -90,10 +90,11 @@ operator still ships the code that consumes it; unlock convenience and client in
 4. [Cryptography](/veyq/security/cryptography/) — the primitives, the hybrid post-quantum KEM and the conformance-pinned suite.
 5. [Key hierarchy](/veyq/security/key-hierarchy/) — from unlock methods through the Master Key and identity to scope, node and blob keys.
 6. [Protocols](/veyq/security/protocols/) — admission, grant delivery, rotation, sharing, device linking and recovery, step by step.
-7. [Verify it yourself](/veyq/security/verify-it-yourself/) — the vectors, tests and guards that hold these claims, and how to run them.
-8. [Known limitations](/veyq/security/known-limitations/) — every residual the design states, in one place.
-9. [Roadmap](/veyq/security/roadmap/) — what is designed and not built.
-10. [Reporting](/veyq/security/reporting/) — how to report a vulnerability.
+7. [How veyq is tested](/veyq/security/how-veyq-is-tested/) — the checks that stand in for a human code review, what each proves, and which have run.
+8. [Verify it yourself](/veyq/security/verify-it-yourself/) — the vectors, tests and guards that hold these claims, and how to run them.
+9. [Known limitations](/veyq/security/known-limitations/) — every residual the design states, in one place.
+10. [Roadmap](/veyq/security/roadmap/) — what is designed and not built.
+11. [Reporting](/veyq/security/reporting/) — how to report a vulnerability.
 
 To check that a release you run is the one that was published, see [Verify a release](/veyq/run/verify-a-release/).
 

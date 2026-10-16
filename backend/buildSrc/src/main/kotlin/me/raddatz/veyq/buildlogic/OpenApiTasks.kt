@@ -204,8 +204,11 @@ abstract class GenerateAdminChannelOperations : DefaultTask() {
  * (`core.public-shares.drop-box` → `PUBLIC_SHARES_DROP_BOX`); an entry under another root keeps the root in its name.
  * Every entry is advertised, because `scripts/validate_capabilities.py` holds every catalog entry to a built use-case
  * (ADR 0032 §6); the lifecycle that reserves an id ahead of its use-cases would add the skip here and there together.
- * The build refuses an id that is not lowercase-dotted, two ids that name one constant and an entry without its six
- * texts, rather than generate a register with a hole in it; the guard says the same about the catalog before any build.
+ * `TENANT_SWITCHABLE` is every entry whose `levels` name `tenant` (ADR 0088 decision 12), and `CapabilityRequirements`
+ * every entry's `requirements` with their kind and words (decision 8), each name unique in the catalog, and
+ * `EXTERNAL_SERVICES` every entry whose `source` is `external-service` (decision 7). The build refuses an id that
+ * is not lowercase-dotted, two ids that name one constant, an entry without its six texts and one without its levels,
+ * rather than generate a register with a hole in it; the guard says the same about the catalog before any build.
  */
 @CacheableTask
 abstract class GenerateCapabilityRegister : DefaultTask() {
@@ -230,10 +233,29 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
                         ?: "".also { problems += "$id: $field.$lang is missing or blank" }
                 }
             }
-            Entry(id, constantName(id), entry.path("description").asText(""), texts)
+            val levels = entry.path("levels").takeIf { it.isArray }?.map { it.asText() }.orEmpty()
+            if ("instance" !in levels || levels.any { it !in LEVELS }) problems += "$id: levels must hold instance, and tenant at most"
+            val requirements = entry.path("requirements").properties().map { (name, req) ->
+                val kind = req.path("kind").asText("")
+                if (kind !in REQUIREMENT_KINDS) problems += "$id: requirement $name has no flag or days kind"
+                val reqTexts = REQUIREMENT_TEXTS.associateWith { field ->
+                    LANGUAGES.associateWith { lang ->
+                        req.path(field).path(lang).takeIf { it.isTextual }?.asText()?.takeIf { it.isNotBlank() }
+                            ?: "".also { problems += "$id: requirement $name $field.$lang is missing or blank" }
+                    }
+                }
+                Requirement(name, kind, reqTexts)
+            }
+            Entry(
+                id, constantName(id), entry.path("description").asText(""), texts, "tenant" in levels, requirements,
+                entry.path("source").asText("") == "external-service",
+            )
         }
         register.groupBy { it.constant }.filterValues { it.size > 1 }.forEach { (name, clash) ->
             problems += "${clash.joinToString { it.id }}: all name the constant $name"
+        }
+        register.flatMap { e -> e.requirements.map { it.name } }.groupBy { it }.filterValues { it.size > 1 }.keys.forEach {
+            problems += "requirement $it is named by two entries: a name is one property of the wire's Capability"
         }
         if (problems.isNotEmpty()) throw GradleException("${file.name}:\n" + problems.joinToString("\n"))
 
@@ -255,6 +277,16 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
             |    /** Every entry, in catalog order, a parent before its children: the register this build serves. */
             |    val ADVERTISED: List<String> = listOf(
             |${register.joinToString("") { "        ${it.constant},\n" }}    )
+            |
+            |    /** The entries a tenant owner may switch off for their tenant too (the catalog's `levels`, ADR 0088 decision 12);
+            |     *  every other entry is the Server Owner's alone. */
+            |    val TENANT_SWITCHABLE: Set<String> = setOf(
+            |${register.filter { it.tenant }.joinToString("") { "        ${it.constant},\n" }}    )
+            |
+            |    /** The entries that are an outside service the browser calls (the catalog's `source: external-service`, ADR 0088
+            |     *  decision 7): active only while their address is configured. */
+            |    val EXTERNAL_SERVICES: Set<String> = setOf(
+            |${register.filter { it.external }.joinToString("") { "        ${it.constant},\n" }}    )
             |}
             |""".trimMargin(),
         )
@@ -276,9 +308,38 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
             |}
             |""".trimMargin(),
         )
+        dir.resolve("CapabilityRequirements.kt").writeText(
+            """
+            |package $PACKAGE
+            |
+            |/** A requirement's kind (ADR 0088 decision 8): set or not (stored as `1`), or a number of days. */
+            |enum class RequirementKind { FLAG, DAYS }
+            |
+            |/** One requirement of a register entry: the property it is on the wire's `Capability`, its kind and its words. */
+            |data class CapabilityRequirement(
+            |    val name: String, val capabilityId: String, val kind: RequirementKind, val title: CapabilityText, val whenSet: CapabilityText,
+            |)
+            |
+            |/** Generated from contracts/platform/capabilities.json (buildSrc's GenerateCapabilityRegister) — never edited. The
+            | *  requirements of every entry (the catalog's `requirements`), each name unique in the catalog. */
+            |object CapabilityRequirements {
+            |${register.flatMap { e -> e.requirements.map { "    const val ${requirementConstant(it.name)} = ${literal(it.name)}\n" } }.joinToString("")}
+            |    /** Every requirement, in catalog order. */
+            |    val ALL: List<CapabilityRequirement> = listOf(
+            |${register.flatMap { e -> e.requirements.map { r -> "        CapabilityRequirement(\n            ${literal(r.name)}, CapabilityIds.${e.constant}, RequirementKind.${r.kind.uppercase()},\n${REQUIREMENT_TEXTS.joinToString("") { f -> "            CapabilityText(${literal(r.texts.getValue(f).getValue("en"))}, ${literal(r.texts.getValue(f).getValue("de"))}),\n" }}        ),\n" } }.joinToString("")}    )
+            |
+            |    val BY_NAME: Map<String, CapabilityRequirement> = ALL.associateBy { it.name }
+            |}
+            |""".trimMargin(),
+        )
     }
 
-    private data class Entry(val id: String, val constant: String, val description: String, val texts: Map<String, Map<String, String>>)
+    private data class Entry(
+        val id: String, val constant: String, val description: String, val texts: Map<String, Map<String, String>>, val tenant: Boolean,
+        val requirements: List<Requirement>, val external: Boolean,
+    )
+
+    private data class Requirement(val name: String, val kind: String, val texts: Map<String, Map<String, String>>)
 
     private companion object {
         const val PACKAGE = "me.raddatz.veyq.core.platform.capabilities"
@@ -286,6 +347,12 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
         val ID = Regex("^[a-z0-9]+(\\.[a-z0-9-]+)+$")
         val TEXT_FIELDS = listOf("title", "purpose", "whenOff")
         val LANGUAGES = listOf("en", "de")
+        val LEVELS = setOf("instance", "tenant")
+        val REQUIREMENT_KINDS = setOf("flag", "days")
+        val REQUIREMENT_TEXTS = listOf("title", "whenSet")
+
+        /** `linkMaxDays` → `LINK_MAX_DAYS`. */
+        fun requirementConstant(name: String): String = name.replace(Regex("([a-z0-9])([A-Z])"), "$1_$2").uppercase()
 
         fun constantName(id: String): String = id.removePrefix(CORE_ROOT).uppercase().replace('.', '_').replace('-', '_')
 

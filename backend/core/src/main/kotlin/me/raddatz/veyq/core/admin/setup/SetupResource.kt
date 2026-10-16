@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.admin.setup
 
 import me.raddatz.veyq.core.generated.api.SetupApi
-import me.raddatz.veyq.core.generated.model.Capability
+import me.raddatz.veyq.core.platform.capabilities.capabilityWire
 import me.raddatz.veyq.core.generated.model.CreateServerOwnerRequest
 import me.raddatz.veyq.core.generated.model.SetupResult
 import me.raddatz.veyq.core.generated.model.SetupStatus
@@ -40,7 +40,7 @@ class SetupResource(private val handler: SetupHandler) : SetupApi {
                 suites = state.suites,
                 instanceSalt = state.instanceSalt,
                 version = Version(major = state.versionMajor, build = state.versionBuild),
-                capabilities = state.capabilities.map { Capability(id = it) },
+                capabilities = state.capabilities.map { capabilityWire(it, state.requirements, state.services) },
             ),
         ).build()
     }

@@ -1,4 +1,4 @@
-# ADR 0035 — Server terms of service: operator-set tenant terms + a member acceptance gate (server-side), anonymous acceptance client-side
+# ADR 0035 — Space terms of service: owner-set tenant terms + a member acceptance gate (server-side), anonymous acceptance client-side
 
 - Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the terms' change counter is a
   **revision** (`terms_revision`, `accepted_terms_revision`, `termsRevision`, was `…version`); the pre-E2EE
@@ -7,9 +7,11 @@
 
 ## Context
 
-veyq is **operator-blind** and **self-hostable**: each server is run by an **operator** (the central infra is
-one operator among many). There is today **no surface where an operator states their policy** — acceptable use,
-prohibited/illegal content, review-and-removal, contact, an Impressum — nor where users **consent** to it. The
+veyq is **operator-blind** and **self-hostable**: each server is run by an **operator** (the Server Owner; the
+central infra is one operator among many), and each server hosts **spaces** (tenants), each with its own **space
+owner** (tenant owner). The two are different people wherever a server hosts more than one space. There is today
+**no surface where a space states its policy** — acceptable use, prohibited/illegal content, review-and-removal,
+contact, an Impressum — nor where its members and guests **consent** to it. The
 fresh state already earmarks this: the admin feature "**Set tenant branding & legal terms — planned**"
 ([features/admin/_index](../features/admin/_index.md)), the sharing feature's deferred "**share notices / tenant
 terms**" ([features/sharing/_index](../features/sharing/_index.md)), and the **T&S "decryptable-on-report"
@@ -20,10 +22,15 @@ The **pre-E2EE product** shipped exactly this: `Tenant.termsMarkdownByLocale` (D
 CSAM, share-links, review-and-removal, external services, contact-and-deletion) and shown on shares with the
 version. We **adopt that model** (the refine's ruling, like the buckets adoption).
 
-**No tension with operator-blindness.** The terms are the operator's **public policy** (served to everyone,
+**The terms belong to the space, not the server.** The space owner is who answers for what is shared in their
+space and who its members and guests are, so the space owner writes the terms; the operator, who runs the server
+for every space on it, does not author them, and the Server-Owner surface (admin-web) has no terms editor.
+
+**No tension with operator-blindness.** The terms are the space's **public policy** (served to everyone,
 including pre-auth on the login page), and acceptance is **operational metadata** (who accepted which
-revision, and when — to the second) — never user content. It is in fact the one honest surface where the
-content-blind operator states policy + the honest-operator caveat + the public-share decryptable-on-report.
+revision, and when — to the second) — never user content. It is in fact the one honest surface where a space
+states its policy to the people it lets in, including what the server it runs on can and cannot see (the
+honest-operator caveat) and that a reported public share is decryptable-on-report.
 
 **The acceptance-storage split (the refine's key nuance).** An authenticated **member** has an account, so the
 server records their accepted revision. An anonymous **public-share visitor** has **no account**, so the server
@@ -34,12 +41,13 @@ storage splits by principal.
 
 Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 
-1. **Operator-set per-locale terms + a revision.** Each tenant carries **`terms_markdown_by_locale`** (DE+EN
-   markdown) + **`terms_revision`** (int, bumped on any edit). The **operator** (tenant owner) assembles/edits the
-   terms from a **clause template** — a curated set of ready-made clauses (privacy, rights-to-content,
-   prohibited/illegal content incl. **CSAM**, share-links, review-and-removal, external services,
-   contact-and-deletion, and an **Impressum** clause) — into their own ToS, and can edit freely. The terms are
-   **public operational content** (served, incl. pre-auth on the login page); never E2EE content.
+1. **Owner-set per-locale terms + a revision.** Each tenant carries **`terms_markdown_by_locale`** (DE+EN
+   markdown) + **`terms_revision`** (int, bumped on any edit). The **space owner** (tenant owner, owner-gated —
+   anyone else is refused) writes the terms, starting where they like from a **clause template** — a curated set
+   of ready-made clauses (privacy, rights-to-content, prohibited/illegal content incl. **CSAM**, share-links,
+   review-and-removal, external services, contact-and-deletion, and an **Impressum** clause) — and edits freely.
+   The operator does not write them. The terms are **public operational content** (served, incl. pre-auth on the
+   login page); never E2EE content.
 
 2. **A member acceptance gate — server-side (v1).** An authenticated member must **accept the current
    `terms_revision`** before entering; on a revision bump the gate re-appears (**re-accept**). Acceptance is
@@ -49,7 +57,7 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 3. **Anonymous share acceptance — client-side** (uc.sharing.share-accept). An accountless public-share visitor
    sees the tenant terms + revision and must accept (**hard gate + re-accept** on a revision change), but acceptance
    is stored **client-side** (localStorage, keyed **per tenant + revision** — accepting on one share of a tenant
-   clears the gate on every share of that tenant, since it is the *operator's* terms, not the link's) — the server
+   clears the gate on every share of that tenant, since they are the *space's* terms, not the link's) — the server
    records **nothing** about the accountless visitor, preserving anonymity. This reuses the same tenant terms (the
    T&S decryptable-on-report corollary).
 
@@ -78,16 +86,16 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    their times are **audit evidence** of *when* a member accepted *which* revision, should a violation or dispute
    arise — including one about a revision since superseded. Each time is the server's own clock at the acceptance,
    never client-supplied, written once per revision (re-accepting a recorded revision keeps its first time; accepting
-   a newer revision adds a row and leaves the older ones untouched). No API serves the history; operators and support
-   read it from the database. The rows go with their tenant (`ON DELETE CASCADE`); the user reference has no
-   cascade, like the tenant profile's, so an account erasure, when it exists, must name the table. (Inbox #318
+   a newer revision adds a row and leaves the older ones untouched). No API serves the history, so a space owner
+   cannot read it either: the operator and support read it from the database. The rows go with their tenant
+   (`ON DELETE CASCADE`); the user reference has no cascade, like the tenant profile's, so an account erasure, when it exists, must name the table. (Inbox #318
    dropped the time as unread on 2026-10-09; the owner restored it the same day as that evidence; #402 on
    2026-10-10 turned the single latest row into the history — a coordinator decision on the owner's behalf, to be
    reviewed.) The anonymous acceptance is client-only. **No
    user content, no new blindness cost** — recorded in the [security model](../crosscutting/security-model.md).
 
-5. **Two acceptance tiers, one login surface still deferred.** The operator sets/edits terms (admin UI, every saved
-   change a new revision). The **member** accept/re-accept gate is server-side (v1, cr-0114); the
+5. **Two acceptance tiers, one login surface still deferred.** The space owner sets/edits the terms (the
+   space's settings in the web client, every saved change a new revision). The **member** accept/re-accept gate is server-side (v1, cr-0114); the
    **accountless-share** accept/re-accept gate is client-side (§3, uc.sharing.share-accept). What stays deferred is
    only the **pre-auth login-page** terms surface (a Host-served public read — see §Consequences), a distinct
    mechanism from the share-keyed guest read above.
@@ -100,12 +108,17 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
   **before** login (alongside the branding/`/api/setup`-style pre-auth data) and on an **authed tenant endpoint**
   for editing + a member **accept** endpoint.
 - **The clause template gives a legally-meaningful starting ToS** (esp. the CSAM/illegal-content + review-removal
-  clauses) matching the pre-E2EE product; self-hosted operators own their terms, the central infra ships a
-  default. DE strings follow [cc.inclusive-language](../crosscutting/cc.inclusive-language.md).
+  clauses) matching the pre-E2EE product. No server ships default terms: a new tenant has none (revision 0) until
+  its owner writes them, the template inserted only on request. DE strings follow
+  [cc.inclusive-language](../crosscutting/cc.inclusive-language.md).
 - **Anonymous client-side acceptance is honest about its limits** (no server non-repudiation for an accountless
   visitor) — a stated property of the deferred share slice.
-- **Ties into the T&S "decryptable-on-report" corollary** — the terms are where the operator states that a
-  reported **public** share is decryptable-on-report, and the illegal-content/review-removal policy that governs it.
+- **Ties into the T&S "decryptable-on-report" corollary** — that a reported **public** share is
+  decryptable-on-report is a property of every public share on every server (the report carries the link's
+  secret, [security model](../crosscutting/security-model.md)), not something a space chooses. The terms are
+  where the space tells its members and guests so, and the template's review-and-removal clause is the
+  illegal-content policy that governs it. Neither the report intake nor an operator action on a single share is
+  built yet (security model § Sharing).
 
 ## Alternatives considered
 
@@ -114,7 +127,9 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
   is the honest choice for an accountless visitor.
 - **Shown-only (no acceptance gate).** Rejected — no consent record; a **hard gate + re-accept on change** is the
   legally-meaningful choice, matching the pre-E2EE product.
-- **Free-text markdown (no clause template).** Rejected — the template gives operators a sound starting ToS (the
-  CSAM/illegal + review-removal clauses matter) and matches the pre-E2EE UX; the operator can still edit freely.
-- **One global ToS (central infra only).** Rejected — veyq is **self-hostable**; each operator sets their own; the
-  central infra is one tenant among many.
+- **Free-text markdown (no clause template).** Rejected — the template gives space owners a sound starting ToS
+  (the CSAM/illegal + review-removal clauses matter) and matches the pre-E2EE UX; the owner can still edit freely.
+- **One global ToS (central infra only).** Rejected — veyq is **self-hostable**, and the central infra is one
+  operator among many.
+- **One ToS per server, written by its operator.** Rejected — a server hosts many spaces, each answering for its
+  own content and people; the space owner is who can state that space's policy, so every space writes its own.

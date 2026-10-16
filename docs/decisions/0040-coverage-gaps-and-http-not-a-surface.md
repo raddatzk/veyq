@@ -151,4 +151,5 @@ proven, whatever colour its column is. **The unit is the test, not the surface.*
   - *Forbid all overlap naively* (the finding's first proposal) — breaks legitimate partial coverage; it is the
     reason this needed a model decision rather than a one-line validator tweak.
 
-Explained for security researchers on the docs site: [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md).
+Explained for security researchers on the docs site: [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md),
+and the rule's place among every test stage: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).

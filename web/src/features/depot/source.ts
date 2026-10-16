@@ -16,7 +16,7 @@ import type { GuestAccess } from '../../core/access'
 import { createContentNode, deleteNode, restoreNode, type NodeParent, type TreeNode } from '../../core/node/tree'
 import { FOLDER_KIND } from '../../core/node/kind'
 import { loadTree, treeStore } from '../../core/node/treeStore'
-import { createShareNodeAsGuest, guestTreeContext, guestTreeErrorOf, GuestTreeError, type GuestTreeContext } from '../../core/sharing/guestTree'
+import { abandonShareNodeAsGuest, createShareNodeAsGuest, guestTreeContext, guestTreeErrorOf, GuestTreeError, type GuestTreeContext } from '../../core/sharing/guestTree'
 import { decodeHttpError, HttpStatus } from '../../shared/httpError'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
 import { withRefresh } from '../../app/sessionRefresh'
@@ -45,6 +45,9 @@ export interface FilesTreeUpload {
   folder(parent: string | null, name: string): Promise<string>
   /** The queue jobs that upload `files` into new `FILE` nodes under `parent`, each named by its `File`'s name. */
   jobs(parent: string | null, files: readonly File[]): UploadJob<FileUploadResult, FileJobExtra>[]
+  /** Take back the folder `id` this upload created, once it holds nothing (a guest's: core's `abandonShareNode`, erased at
+   *  once). Throws when the server keeps it. Absent for a member, who trashes what it no longer wants. */
+  abandon?(id: string): Promise<void>
 }
 
 /** The upload door of a session that has one. A picked file whose name a FILE sibling already holds goes into that file
@@ -314,6 +317,7 @@ function guestTree(ctx: GuestTreeContext, levelId: string): FilesTreeUpload {
       }
     },
     jobs: (parent, files) => files.map((file) => guestFileUploadJob({ ctx, parentId: parent ?? levelId }, file)),
+    abandon: (id) => abandonShareNodeAsGuest(ctx, id),
   }
 }
 

@@ -4,9 +4,8 @@
 // (operator-blind: choosing a weak password is the user's call). Privacy: the password never leaves the device —
 // only the first 5 hex chars of its SHA-1 are sent, directly to the HIBP range API (not via our server), which
 // returns ~hundreds of padded suffixes; the suffix match is computed locally (k-anonymity). The rule and its
-// fences: docs/crosscutting/security-model.md § the breached-password check.
-
-const HIBP_RANGE = 'https://api.pwnedpasswords.com/range/'
+// fences: docs/crosscutting/security-model.md § the breached-password check. The range API's address is the server's
+// (the `core.breached-password` capability's `serviceUrl`, uc.admin.configure-external-services): the caller passes it.
 
 /** Uppercase hex SHA-1 of the UTF-8 string (HIBP keys passwords on SHA-1). */
 export async function sha1HexUpper(s: string): Promise<string> {
@@ -29,11 +28,11 @@ export function breachCountFromRange(hashHexUpper: string, body: string): number
  * CSP, a non-2xx, a firewalled admin container. Failure is NOT folded into 0: the dialog says the password could
  * not be checked, and must never show "not checked" as "clean".
  */
-export async function pwnedCount(password: string): Promise<number | null> {
+export async function pwnedCount(password: string, rangeUrl: string): Promise<number | null> {
   if (!password) return 0
   try {
     const hash = await sha1HexUpper(password)
-    const res = await fetch(HIBP_RANGE + hash.slice(0, 5), { headers: { 'Add-Padding': 'true' } })
+    const res = await fetch(rangeUrl + hash.slice(0, 5), { headers: { 'Add-Padding': 'true' } })
     if (!res.ok) return null
     return breachCountFromRange(hash, await res.text())
   } catch {

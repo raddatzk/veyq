@@ -17,7 +17,7 @@ import { identityNameContext } from '../../core/sharing/guestIdentity'
 import { registry } from '../../core/applications/registry'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { fileNameSlug } from '../../shared/naming'
-import { dropGuestContext, ensureDropFolder, forgetDropGuest, loadDropGuest, nameDropGuest, saveDropGuest } from './dropBox'
+import { dropGuestContext, dropGuestJob, ensureDropFolder, forgetDropGuest, loadDropGuest, nameDropGuest, saveDropGuest } from './dropBox'
 import { guestFileUploadJob } from './shareUpload'
 import { FILE_KIND } from './kinds'
 
@@ -121,5 +121,14 @@ describe('a drop-box guest on the wire', () => {
     expect(requests.map((r) => JSON.stringify(r.json ?? {})).join('')).not.toContain('Bericht.pdf')
     // control: a seal under the drop box key is what the member's own nodes use, and it is not what the guest sent
     expect(sealName(boxKey, at(STORED), 'x')).not.toBe(String(sent.encryptedName))
+  })
+
+  // A refused upload into a full drop box leaves nothing behind either: the page's wrapper keeps the job's take-back, so
+  // the queue's `abandon` still reaches `abandonShareNode` (shareUpload.wire.test.ts holds what it sends).
+  it("the page's job wrapper keeps a given-up job's take-back", async () => {
+    const abandon = vi.fn(async () => {})
+    const job = { name: 'a.pdf', sizeBytes: 1, run: vi.fn(), abandon, extra: {} }
+    await dropGuestJob(job, { gone: false }).abandon?.()
+    expect(abandon).toHaveBeenCalledTimes(1)
   })
 })

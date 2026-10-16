@@ -17,6 +17,7 @@ vi.mock('../features/setup/EmergencyKitSave.vue', () => ({
 vi.mock('../shared/pwned', () => ({ pwnedCount: vi.fn() }))
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+import { serverState } from '../shared/state/serverState'
 
 import SetupView from './SetupView.vue'
 import { createServerOwner, prepareServerOwner } from '../features/setup/setupServer'
@@ -64,6 +65,7 @@ const i18n = createI18n({
 const PREPARED = { email: 'owner@example.com' } as unknown as CreateServerOwnerRequest
 
 beforeEach(() => {
+  serverState.breachRangeUrl = 'https://api.pwnedpasswords.com/range/' // a new instance's manifest
   vi.clearAllMocks()
   vi.mocked(prepareServerOwner).mockResolvedValue({ request: PREPARED, emergencyKit: { secretKey: 'A3-SECRET' } })
   vi.mocked(createServerOwner).mockResolvedValue({ userId: 'u-owner' })
@@ -92,7 +94,7 @@ describe('SetupView — the breached-password check', () => {
     await field.trigger('blur')
     await flushPromises()
     expect(pwnedCount).toHaveBeenCalledOnce()
-    expect(pwnedCount).toHaveBeenCalledWith('a long enough password')
+    expect(pwnedCount).toHaveBeenCalledWith('a long enough password', 'https://api.pwnedpasswords.com/range/')
   })
 
   it('a clean password goes ahead at once', async () => {

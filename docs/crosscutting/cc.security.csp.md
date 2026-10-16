@@ -47,9 +47,11 @@ The policy:
 ```
 default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none';
 script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline';
-img-src 'self' data: blob: <tile-origin>; media-src 'self' blob:; font-src 'self';
-connect-src 'self' https://api.pwnedpasswords.com <geocoder-origin> [<store-origin>]; form-action 'self'
+img-src 'self' data: blob: [<tile-origin>]; media-src 'self' blob:; font-src 'self';
+connect-src 'self' [<store-origin>] [<geocoder-origin>] [<breach-check-origin>]; form-action 'self'
 ```
+
+The bracketed origins are appended by the backend on every response; the built policy names none of them.
 
 Why each non-obvious source is there:
 
@@ -67,15 +69,19 @@ Why each non-obvious source is there:
   Widening either is a decision, not a tweak.
 - **`img-src data: blob:` / `media-src blob:`.** These cover the favicon SVG and QR `data:` URLs, and the object
   URLs of decrypted media.
-- **`connect-src https://api.pwnedpasswords.com`.** This is the client-direct HIBP k-anonymity password check:
-  automatic in the four password-choosing dialogs, over the finished password on blur and on submit. Only a 5-hex
-  SHA-1 prefix leaves the device ([security model](security-model.md) § the breached-password check).
-- **`<tile-origin>` (img-src) / `<geocoder-origin>` (connect-src).** These are the configured basemap and
-  reverse-geocoder ([`mapDefaults.ts`](../../web/src/shared/state/mapDefaults.ts)). The default is
-  OSM/Nominatim, and `VITE_VEYQ_MAP_*` overrides it. Both are derived from the **same** config the app fetches
-  from, so a self-hosted map deployment stays covered without anyone editing the policy by hand: one source, no
-  drift. A *per-device localStorage* override to an **arbitrary** host is limited to the origins the policy
-  allows, because a policy fixed at build time cannot anticipate a runtime host.
+- **`<tile-origin>` (img-src), `<geocoder-origin>` and `<breach-check-origin>` (connect-src).** The outside services
+  a member's browser calls directly: the basemap, the reverse geocoder and the client-direct HIBP k-anonymity
+  password check (automatic in the password-choosing dialogs, over the finished password; only a 5-hex SHA-1 prefix
+  leaves the device, [security model](security-model.md) § the breached-password check). Each is a Server-Owner
+  setting and a register entry (`memories.map`, `memories.places`, `core.breached-password`;
+  [ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 7,
+  [uc.admin.configure-external-services](../features/admin/use-cases/uc.admin.configure-external-services.md)). The
+  backend appends a service's origin only while its address is configured and its entry is on at the instance
+  level, so the client reads the address from the same manifest the policy follows: one source, no drift. The origins
+  are a snapshot recomputed after every write that can change them, because the header is written on the event loop.
+  A tenant owner's own switch acts through the tenant's set, not through the policy. A new instance is seeded with
+  OSM tiles, Nominatim and the HIBP range API; the dev server's header allows those three
+  ([`mapDefaults.ts`](../../web/src/shared/state/mapDefaults.ts)).
 - **`<store-origin>`** is appended by the backend at runtime. Every client `fetch`es store objects and decrypts
   them; no store response is ever rendered ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md)
   §2). So `connect-src` is the only directive that needs the store. The origin comes from the signer's own
@@ -144,8 +150,10 @@ every header of the admin origin.
 - **The policy stays a `<meta>`.** Its one source is
   [`admin-web/src/shared/security/csp.ts`](../../admin-web/src/shared/security/csp.ts), and
   `admin-web/vite.config.ts` delivers it as a `<meta>` in the build and as a header on the Vite dev server. It is
-  stricter than web's: there are no map providers, so the only origin besides its own is the HIBP range API in
-  `connect-src`. It carries **no `frame-ancestors`**, because a `<meta>` ignores it. Anti-framing is nginx's
+  stricter than web's: there are no map providers, so the only origin besides its own is the HIBP range API's
+  default origin in `connect-src`. A `<meta>` built into a static file cannot follow the Server Owner's setting, so
+  the console's own first-run check reaches only that default origin: a mirror elsewhere reads there as "could not
+  check", and no check runs at all while the instance's manifest carries no `core.breached-password`. It carries **no `frame-ancestors`**, because a `<meta>` ignores it. Anti-framing is nginx's
   `X-Frame-Options: DENY`, which is the whole guard, not a second layer.
 
   It is not moved into a header. The app's policy needs a header because it contains a value that is only known

@@ -76,7 +76,9 @@ This is a property with several triggers, so it lives here and not under any one
 - **E4 — the revoke did not reach the server** (offline, 5xx). The ending still runs, and the sign-in page says
   that the sign-out did not reach the server. The refresh cookie is then still live, so this browser can come
   back signed in, though locked. The sign-in card's own sign-out is the retry, the same fallback
-  [uc.account.sessions](uc.account.sessions.md) E3 names for the locked entry. The notice carries no account
+  [uc.account.sessions](uc.account.sessions.md) E3 names for the locked entry. Signing in on that card instead
+  unlocks inside the live session when it is the same account, and ends it first when it is another
+  ([login](uc.account.login.md) A2). The notice carries no account
   data across the new document: it is one word in this tab's `sessionStorage`, and the sign-in page removes it
   when it reads it.
 

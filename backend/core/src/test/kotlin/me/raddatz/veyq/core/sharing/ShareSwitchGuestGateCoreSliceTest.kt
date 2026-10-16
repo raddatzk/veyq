@@ -45,6 +45,8 @@ class ShareSwitchGuestGateCoreSliceTest {
         val (ownerId, scopeId) = seedMemberScope()
         val root = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val sub = seedNode(scopeId, NodeEntity.FOLDER, parentId = root, wrappedContentKey = CONTENT_KEY)
+        // `sub` holds a folder, so no abandon past the gate erases it (an empty one is core's placeholder)
+        seedNode(scopeId, NodeEntity.FOLDER, parentId = sub, wrappedContentKey = CONTENT_KEY)
         val cover = seedAttachment(scopeId, root, NodeCover.SLOT)
         return World(ownerId, scopeId, root, sub, cover.blobId)
     }
@@ -119,6 +121,10 @@ class ShareSwitchGuestGateCoreSliceTest {
                         """"wrappedContentKey":"cmUtd3JhcHBlZA==","placementRevision":${placementRevision(w.sub)}}""",
                 )
                 .`when`().patch("/api/shares/$id/nodes/${w.sub}")
+        },
+        // Past the gate a folder that holds one is no placeholder: a refusal only an admitted link reaches.
+        Path("abandonShareNode") { id ->
+            given().header("X-Contributor-Token", token).`when`().delete("/api/shares/$id/nodes/${w.sub}")
         },
     )
 

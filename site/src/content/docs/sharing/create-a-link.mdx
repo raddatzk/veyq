@@ -6,6 +6,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-password.md
   - docs/features/sharing/use-cases/uc.sharing.share-note.md
   - docs/features/depot/use-cases/uc.depot.share-file.md
+  - docs/features/admin/use-cases/uc.admin.capability-requirements.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -22,6 +23,9 @@ import Screenshot from '../../../components/Screenshot.astro';
      The password is checked by the server, not built into the encryption: it holds as far as you trust whoever runs
      the server, fully when that is you. What you shared stays encrypted either way.
    - **Expiry date**: the link stops working after that day.
+
+   Your space may require a password, or an end date within a number of days, on every link. The form then has the
+   section switched on and says so, and the date picker offers no later day.
 6. Choose **Create link**, then **Copy link**, and send it.
 
 <Screenshot id="sharing-create-link" shows="The New share form with the role choice, the Note, Password protection and Expiry date sections and the Create link button" />

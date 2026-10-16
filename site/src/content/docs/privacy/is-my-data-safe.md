@@ -153,6 +153,15 @@ otherwise.
   **no backdoor and no escrow**: the same thing that stops *us* from reading your data stops us from
   rescuing it. That's the deal, stated up front. More situations, and what to do: [Help](/veyq/help/).
 
+## The page itself comes from the server — an honest limit
+
+Everything above is done by the veyq page in your browser, and that page, including the one that opens a shared
+link, comes from the server each time you load it. So your things stay locked from someone who runs the server
+honestly, and from anyone who only gets hold of its stored data. But someone running the server who is set on reading
+along could change that page. On someone else's server, veyq in a browser protects you from an honest operator, not
+from a hostile one, and we would rather say so than claim more:
+[Known limitations](/veyq/security/known-limitations/#the-operator-served-web-client-is-passive-operator-only).
+
 > **Self-hosting note:** if *you* run your own veyq server, *you* are the operator — so the "can the
 > operator be trusted" question doesn't apply to your own instance.
 

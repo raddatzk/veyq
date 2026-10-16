@@ -23,7 +23,7 @@ acceptanceCriteria:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409, TenantTermsSliceTest.eachAcceptedRevisionKeepsItsOwnRowAndFirstTime, TenantTermsSliceTest.anOlderAcceptanceDoesNotClearTheGateForTheCurrentRevision, TenantTermsSliceTest.aClientSentAcceptanceTimeHasNoEffect, TenantTermsSliceTest.deletingATenantErasesEveryAcceptanceRow] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: re-accept-on-revision-bump
-    text: When the operator bumps terms_revision, the member's stored acceptance is now stale, so the gate re-appears; accepting the now-stale revision is refused (409 terms_revision_changed) until they re-read and re-accept the current one.
+    text: When the space owner bumps terms_revision, the member's stored acceptance is now stale, so the gate re-appears; accepting the now-stale revision is refused (409 terms_revision_changed) until they re-read and re-accept the current one.
     coverage:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
   - id: operator-blind

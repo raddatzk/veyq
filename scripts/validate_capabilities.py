@@ -10,15 +10,31 @@ guarantee validate_feature_wiring gives the feature graph:
     - built — its coverage YAML carries no `status: planned` (a capability is advertised active only once its
               use-case(s) are built, ADR 0032 §6).
 
-It also checks the catalog is well-formed: a lowercase-dotted id, a non-empty `serves`, and a known `source`.
+It also checks the catalog is well-formed: a lowercase-dotted id, a non-empty `serves`, and a known `source`
+(`operator-policy`, `infra-preflight`, or `external-service`: an outside service the browser calls, active only while
+its address is configured).
 
 And it checks the catalog is a TREE (ADR 0088 decisions 1 and 2):
-    - root  — every id's first segment is in `ROOTS`. Today that is `core` alone, a deliberate list of one: the CR
-              that adds the first `<application>.*` entry widens it and names the source the application set is
-              derived from, rather than typing application names here.
+    - root  — every id's first segment is in `ROOTS`: `core`, and every application the backend composes, derived
+              from its module directories (`backend/apps/<name>` with a `build.gradle.kts`), never typed here. The
+              first application entries (`memories.places`, `memories.map`) came with cr-external-services-as-settings.
     - parent — every id of three or more segments has its parent (the id minus its last segment) as a catalog
               entry. The server's effective state is an AND along the path, and an entry whose parent is missing
               has nothing to AND with. A root (`core`) is not an entry, so a two-segment id has no parent to need.
+
+And it checks every entry names who may switch it (`levels`, ADR 0088 decisions 2 and 12): a list holding
+`instance` (the Server Owner always may) and `tenant` where a tenant owner may narrow it for their tenant, nothing else
+and nothing twice. The backend generates `CapabilityIds.TENANT_SWITCHABLE` from it, and the tenant's write refuses any
+id outside it, so a missing or misspelt level would quietly take a switch away from tenant owners or hand one out.
+The defect that bought the check: no incident. Built with cr-tenant-capability-switches; run against the untouched
+catalog, which carried no `levels`, it was red seven times, once per entry.
+
+And it checks every requirement (ADR 0088 decision 8): a `flag` or `days` `kind`, its `title` and `whenSet` in both
+languages, a name no other entry uses, and that the name is a property of the wire's `Capability`
+(`contracts/api/_common.openapi.yaml`) of the matching type (a flag boolean, days integer), because both deliveries carry
+the values as `[{ id, …values }]`. A requirement missing there would be stored, enforced and invisible to every client.
+The defect that bought it: no incident. Built with cr-capability-requirements; run against a catalog with the four
+requirements and the untouched `Capability`, it was red four times, once per name.
 
 And it checks every entry carries its words (ADR 0088 decision 13): `title`, `purpose` and `whenOff`, each an
 object with a non-empty `en` and a non-empty `de` string (`TEXT_FIELDS`, `LANGUAGES`). They are what the Server
@@ -64,9 +80,17 @@ COVERAGE = ROOT / "docs" / "coverage" / "features"
 
 ID_RE = re.compile(r"^[a-z0-9]+(\.[a-z0-9-]+)+$")
 UC_RE = re.compile(r"^uc\.([a-z0-9-]+)\.[a-z0-9-]+$")
-KNOWN_SOURCES = {"operator-policy", "infra-preflight"}
-# The roots an id may hang from (ADR 0088 decision 1). `core` alone until the first application entry; see the docstring.
-ROOTS = {"core"}
+KNOWN_SOURCES = {"operator-policy", "infra-preflight", "external-service"}
+# Who may switch an entry off (ADR 0088 decisions 2 and 12): the Server Owner always, a tenant owner where listed.
+LEVELS = ("instance", "tenant")
+# A requirement's kind (ADR 0088 decision 8) and the type its property has on the wire's `Capability`.
+REQUIREMENT_KINDS = {"flag": "boolean", "days": "integer"}
+REQUIREMENT_TEXTS = ("title", "whenSet")
+COMMON = ROOT / "contracts" / "api" / "_common.openapi.yaml"
+# The roots an id may hang from (ADR 0088 decision 1): `core`, and every application the backend composes, derived from
+# its module directories (`backend/apps/<name>`, the `:apps:<name>` projects) rather than typed here.
+APPS = ROOT / "backend" / "apps"
+ROOTS = {"core"} | {d.name for d in APPS.iterdir() if d.is_dir() and (d / "build.gradle.kts").exists()}
 # The words every entry carries for the Server Owner (ADR 0088 decision 13), each in every language below.
 TEXT_FIELDS = ("title", "purpose", "whenOff")
 LANGUAGES = ("en", "de")
@@ -109,6 +133,12 @@ for cid, entry in caps.items():
             value = text.get(lang)
             if not isinstance(value, str) or not value.strip():
                 errors.append(f"{cid}: {field}.{lang} must be a non-empty string (ADR 0088 decision 13)")
+    levels = entry.get("levels")
+    if (not isinstance(levels, list) or "instance" not in levels or len(set(levels)) != len(levels)
+            or any(level not in LEVELS for level in levels)):
+        errors.append(
+            f"{cid}: levels must list 'instance', and 'tenant' where a tenant owner may switch it too, nothing else "
+            f"(ADR 0088 decisions 2 and 12), got {levels!r}")
     if entry.get("source") not in KNOWN_SOURCES:
         errors.append(f"{cid}: source '{entry.get('source')}' is not one of {sorted(KNOWN_SOURCES)}")
     serves = entry.get("serves")
@@ -132,6 +162,36 @@ for cid, entry in caps.items():
             errors.append(
                 f"{cid}: serves '{uc}' is not built yet (coverage status: planned) — a capability is advertised "
                 f"active only once its use-cases are built (ADR 0032 §6)")
+
+# Requirements (ADR 0088 decision 8): each a flag or a number of days with its words, and each name a property of the
+# wire's `Capability` of the matching type, because both deliveries carry the values as `[{ id, …values }]`.
+capability_schema = (yaml.safe_load(COMMON.read_text()) or {}).get("components", {}).get("schemas", {}).get("Capability", {})
+wire_properties = capability_schema.get("properties", {})
+seen_requirements: dict[str, str] = {}
+for cid, entry in caps.items():
+    requirements = entry.get("requirements", {})
+    if not isinstance(requirements, dict):
+        errors.append(f"{cid}: requirements must be an object of name -> requirement")
+        continue
+    for name, req in requirements.items():
+        where = f"{cid}: requirement {name}"
+        if name in seen_requirements:
+            errors.append(f"{where} is also {seen_requirements[name]}'s: a name is one property of the wire's Capability")
+        seen_requirements[name] = cid
+        kind = req.get("kind") if isinstance(req, dict) else None
+        if kind not in REQUIREMENT_KINDS:
+            errors.append(f"{where}: kind must be one of {sorted(REQUIREMENT_KINDS)}, got {kind!r}")
+        for field in REQUIREMENT_TEXTS:
+            text = req.get(field) if isinstance(req, dict) else None
+            if not isinstance(text, dict) or any(not isinstance(text.get(lang), str) or not text[lang].strip() for lang in LANGUAGES):
+                errors.append(f"{where}: {field} must carry a non-empty {' and '.join(LANGUAGES)} (ADR 0088 decision 13)")
+        prop = wire_properties.get(name)
+        if prop is None:
+            errors.append(f"{where} is no property of Capability in {COMMON.relative_to(ROOT)}: no client could read it")
+        elif kind in REQUIREMENT_KINDS and REQUIREMENT_KINDS[kind] not in (
+            [prop.get("type")] if isinstance(prop.get("type"), str) else (prop.get("type") or [])
+        ):
+            errors.append(f"{where}: Capability.{name} is {prop.get('type')!r}, a {kind} needs {REQUIREMENT_KINDS[kind]}")
 
 if errors:
     print("CAPABILITY CATALOG VALIDATION FAILED:")

@@ -59,8 +59,8 @@ class AppShellStoreOriginSliceTest {
         val csp = given().header("Accept", HTML).`when`().get("/recover").then().statusCode(200)
             .extract().header("Content-Security-Policy")
         assertEquals(
-            "default-src 'self'; frame-ancestors 'none'; connect-src 'self' https://api.pwnedpasswords.com $origin; " +
-                "form-action 'self'",
+            "default-src 'self'; frame-ancestors 'none'; img-src 'self' https://tile.openstreetmap.org; " +
+                "connect-src 'self' $origin https://nominatim.openstreetmap.org https://api.pwnedpasswords.com; form-action 'self'",
             csp,
         )
     }

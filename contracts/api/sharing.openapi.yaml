@@ -108,7 +108,10 @@ paths:
             any scope check, so it reads as instance policy, not a scope error (ADR 0032). `illegal_scope` — the
             node's kind may not be a share root with this role (`ShareRoots`, ADR 0080: a `FOLDER` with READ or READ_WRITE, a kind of an
             application as that application declares — Files: a `FILE` with READ or READ_WRITE, never WRITE_ONLY; a kind
-            nobody declares, or two do, is never shared); a non-member scope is a non-enumerable `404`, not `422`.
+            nobody declares, or two do, is never shared); a non-member scope is a non-enumerable `404`, not `422`. Two more, from the requirements on `core.public-shares` in effect for the node's tenant
+            (ADR 0088 decision 8, the strictest of the instance's and the tenant's): `link_password_required` — the
+            link carries no password while every link needs one; `link_expiry_required` — it has no end date, or one
+            more than `linkMaxDays` days after the link was made, while links must end within that.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
     get:
@@ -301,7 +304,8 @@ paths:
         "422":
           description: >
             The instance capability the share's role needs is disabled (`capability_disabled`, ADR 0032) — a
-            re-issue publishes a link, so it checks what `createShare` checks.
+            re-issue publishes a link, so it checks what `createShare` checks, the requirements included
+            (`link_password_required`, `link_expiry_required`, as `createShare`; the new link is made now).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
 
@@ -466,7 +470,9 @@ paths:
             place. `capability_disabled` — a change INTO a role whose instance capability is not active (READ →
             READ_WRITE while `core.public-shares.contribute` or its parent is off, ADR 0088): the change would publish
             a link of that role, so it checks what `createShare` checks. A request that names the share's current
-            role changes no role and is not refused for it.
+            role changes no role and is not refused for it. `link_password_required` — the update would leave the link
+            without a password while every link needs one; `link_expiry_required` — the end date it sets (a full
+            replace) is absent or more than `linkMaxDays` days after the link was made (ADR 0088 decision 8).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_role_change } }
     delete:
@@ -529,7 +535,7 @@ paths:
         - $ref: "#/components/parameters/ShareId"
       responses:
         "200":
-          description: The owning tenant's current public terms (or revision 0 / null when the operator has published none).
+          description: The owning tenant's current public terms (or revision 0 / null when the space owner has published none).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareTerms" }
@@ -869,7 +875,8 @@ paths:
         move needs the source parent's owner to let a READ_WRITE guest move that kind out and the destination's to
         let it move in, a rename the parent's to let it rename — `422 illegal_scope` otherwise); the slug is free
         there (`409 slug_taken`). The server compare-and-sets the placement revision and writes everything at once,
-        or nothing (`409 stale_placement`). No guest delete: nodes store no authorship.
+        or nothing (`409 stale_placement`). No guest delete of a node that holds anything: nodes store no authorship
+        (a guest takes back only an empty upload placeholder, `abandonShareNode`).
         **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
         token → `403 share_password_incorrect`.
       parameters:
@@ -917,6 +924,57 @@ paths:
             outside the share's subtree, the node itself or inside its subtree, or the kind's placement rule refuses
             it there), or an owner of the containers on either side does not let a READ_WRITE guest move or rename
             that kind (`illegal_scope`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
+        "429":
+          description: Too many wrong password attempts on this share (the password gate's own limiter).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+
+    delete:
+      tags: [sharing]
+      operationId: abandonShareNode
+      summary: Erase an empty upload placeholder inside a shared subtree (unauthenticated) — a guest's given-up upload.
+      description: >
+        **No auth.** A guest takes back the node it created for an upload that was then refused or given up — an
+        upload into a full link (`quota_exceeded`), a cancel: the node is **erased at once**, never trashed, so nothing
+        of the refused upload is kept (it is a guest's tree operation, [ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+        Decision 6). Behind core's guest gate like `updateShareNode`, without spending the upload budget; a
+        **READ_WRITE** link takes it for a node strictly inside its subtree, never a guest's identity folder or
+        anything inside one; a **WRITE_ONLY** link only for a node strictly inside its guest's own identity folder; a
+        READ link is `403 share_not_contributable`. **Only a placeholder:** nodes store no authorship, so the server
+        cannot tell whose node it is, and it erases only one that holds nothing anybody could lose — no child (live or
+        trashed), no upload another identity or a member is sending into it, and the owner of the node's kind
+        declares it empty (`GuestPlaceholders`: Depot's `FILE` whose slot never held a blob; core's own `FOLDER` that
+        carries no attachment and no sealed metadata — the folders a guest's folder-tree upload created before every
+        file of it was refused). So any guest in reach may take back any such node, a member's empty folder too: all it
+        can remove is a name with nothing behind it. Anything else is `409
+        not_a_placeholder`, and nothing is written. The erase is the trash purge's (the node's links ended, its
+        guest identities dropped where nothing names them any more) and moves the scope's tree revision.
+        **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
+        token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/SharePassword"
+        - $ref: "#/components/parameters/ContributorToken"
+      responses:
+        "204":
+          description: The placeholder was erased.
+        "403":
+          description: The share is a READ link, a WRITE_ONLY link whose identity has no live identity folder, the contributor token names no identity of it, or its root is in the trash or gone (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such share (disabled/expired/unknown/deleted, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (`share_not_found`); or no live node inside the guest's reach has that id (`node_not_found`) — non-enumerable.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: The node is not an empty upload placeholder — it has a child, an upload by another identity or a member is open into it, or the owner of its kind does not declare it empty (`not_a_placeholder`); nothing was written.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_a_placeholder } }
+        "422":
+          description: The node is the share's root, a WRITE_ONLY guest's identity folder itself, or — for a READ_WRITE link — a guest's identity folder or inside one (`illegal_structure`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
         "429":
@@ -2105,7 +2163,7 @@ components:
           description: The tenant's current terms revision. 0 = no terms published (the client never gates).
           example: 3
         terms:
-          description: The current per-locale terms (null/absent until the operator publishes any).
+          description: The current per-locale terms (null/absent until the space owner publishes any).
           oneOf:
             - $ref: "#/components/schemas/LocalizedMarkdown"
             - type: "null"

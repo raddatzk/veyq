@@ -81,6 +81,10 @@ range API whether the password appears in known breaches. The fences apply like 
   instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
   The docs site says so, in [Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) and
   [Change your password](../../site/src/content/docs/account/change-password.mdx). A one-sentence note under the password field says what leaves the device.
+- **Its address is the Server Owner's** ([ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+  decision 7): the register entry `core.breached-password` carries it, a new instance starts with the HIBP range API, a
+  mirror can replace it, and an instance with none configured (or the entry switched off) runs no check at all, sends
+  nothing and says nothing.
 - **It advises, never gates.** A hit shows a warning that needs an **explicit "Use it anyway"** before the dialog
   submits that password; the result is not stored. **A check that could not run** (offline, firewalled, the admin
   container with no route out) **does not stop anything**: the dialog submits and says, in one line, that the
@@ -145,7 +149,7 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
   node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
-  space); the tenant's **terms text + `terms_revision`** (the operator's *public* policy,
+  space); the tenant's **terms text + `terms_revision`** (the space owner's *public* policy,
   served to everyone incl. pre-auth) and a member's **accepted terms revisions** and **when they accepted each**
   (one row per revision, never overwritten; `accepted_at`, the server's own clock, written once per revision — audit
   evidence for a dispute, also about a superseded revision; restored by owner decision 2026-10-09 after #318 had
@@ -363,7 +367,7 @@ server-blind token makes this work without the server ever seeing a name:
   documented future upgrade.
 - **The accountless-visitor terms acceptance is client-only** ([ADR 0035](../decisions/0035-server-terms-of-service.md)
   §3, [uc.sharing.share-accept](../features/sharing/use-cases/uc.sharing.share-accept.md)): before viewing, an
-  account-less share visitor accepts the operator's tenant terms, but the acceptance lives in **localStorage** (per
+  account-less share visitor accepts the space's terms, but the acceptance lives in **localStorage** (per
   tenant + revision) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
   terms are **public operational content** (no blindness cost), served from the *share* via a guest
   `GET /api/shares/{shareId}/terms` keyed on the non-enumerable `shareId` (no `tenantId` existence oracle). It is an

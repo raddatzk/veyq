@@ -2,6 +2,7 @@
 title: "Den Ort festlegen"
 sources:
   - docs/features/memory/use-cases/uc.memory.place.md
+  - docs/features/admin/use-cases/uc.admin.configure-external-services.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -15,6 +16,10 @@ außen. Die Kartenbilder werden von einem Kartenanbieter geladen, und wenn du ei
 der gewählte Punkt an einen Dienst geschickt, der daraus einen Namen macht. Beides geht direkt von deinem Gerät zu
 diesem Anbieter und nie über den veyq-Server. Du kannst es jederzeit wieder ausschalten. Wähle **Karten aktivieren**,
 um fortzufahren, oder **Abbrechen**, um Karten ausgeschaltet zu lassen.
+
+Welcher Kartenanbieter und welcher Dienst für Ortsnamen genutzt werden, entscheidet die Person, die deinen Server
+betreibt. Nutzt sie keinen, steht im Bereich **Dieser Server zeigt keine Karten.**, und es lässt sich kein Ort setzen;
+ohne Dienst für Ortsnamen tippst du den Namen eines Orts selbst.
 
 <Screenshot id="memories-maps-consent" shows="Der Dialog Karten für Orte aktivieren? mit seinem Text und den Schaltflächen Abbrechen und Karten aktivieren" />
 

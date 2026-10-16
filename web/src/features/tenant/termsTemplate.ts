@@ -2,7 +2,7 @@
 // 11-clause set (purpose, privacy, rights, children, illegal/CSAM, share-links, guest-uploads, availability,
 // review & removal, external services, contact-with-`{contact}`). Seed content the OWNER inserts and then edits
 // freely; not UI chrome (so it lives here, not in i18n). DE is neutral-first inclusive language. The `{contact}`
-// placeholder is filled by the operator before publishing.
+// placeholder is filled by the owner before publishing.
 
 export const TERMS_TEMPLATE: { de: string; en: string } = {
   de: `# Nutzungsbedingungen

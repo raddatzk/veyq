@@ -40,15 +40,15 @@ sealed interface TermsAcceptOutcome {
     data class Ok(val revision: Int, val acceptedRevision: Int, val terms: TermsContent?) : TermsAcceptOutcome
     data object Suspended : TermsAcceptOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : TermsAcceptOutcome, HttpFailure by Failures.tenantNotFound
-    data object RevisionChanged : TermsAcceptOutcome, HttpFailure by httpFailure("terms_revision_changed", FailureStatus.CONFLICT) // the operator bumped the terms since they were shown
+    data object RevisionChanged : TermsAcceptOutcome, HttpFailure by httpFailure("terms_revision_changed", FailureStatus.CONFLICT) // the space owner bumped the terms since they were shown
 }
 
 /**
- * Server terms of service (uc.admin.tenant-terms + uc.account.accept-terms, ADR 0035). The tenant **owner**
+ * Space terms of service (uc.admin.tenant-terms + uc.account.accept-terms, ADR 0035). The tenant **owner**
  * sets per-locale (DE+EN) markdown terms; the server normalizes them and bumps `terms_revision` only on a real
  * change (an idempotent re-save doesn't). A **member** reads the current terms + their accepted revision and
  * accepts the current revision to clear the gate; a later bump re-stales them. Operator-blind: the terms are
- * the operator's public policy and acceptance is coarse operational metadata — no content key is involved, so
+ * the space owner's public policy and acceptance is coarse operational metadata — no content key is involved, so
  * this handler does no crypto. The owner/membership gates are code checks here (ADR 0008), like the member
  * invite handler; the Resource is a thin adapter.
  */
@@ -100,7 +100,7 @@ class TenantTermsHandler(
 
     /**
      * The **member** accepts the revision they were shown — recorded only if it still equals the current revision,
-     * else RevisionChanged (the operator bumped the terms meanwhile → the client re-reads + re-presents).
+     * else RevisionChanged (the space owner bumped the terms meanwhile → the client re-reads + re-presents).
      */
     @Transactional
     fun accept(callerId: String, tenantId: String, revision: Int): TermsAcceptOutcome {

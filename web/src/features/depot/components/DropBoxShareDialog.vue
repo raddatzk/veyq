@@ -5,12 +5,14 @@
 // public key (`mintDropBoxLink`), never its key. Switching a link off asks first and is undone by switching it on again
 // (core's `reactivateShare`, as the folder dialog does, inbox #394); a link a departed member may hold comes back only by
 // a renew (ADR 0075), which this dialog does not build — it says so and points at a new link. Not built here (the folder
-// dialog's extras): a label, a note, a password, an expiry, a renew.
+// dialog's extras): a label, a note, a renew; a password and an end date only where the space requires them (ADR 0088
+// decision 8, `core/sharing/linkRules.ts`), since a link without them would be refused.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
+import DatePicker from 'primevue/datepicker'
 import Message from 'primevue/message'
 import type { NodeShareDialogProps } from '../../../core/applications/registry'
 import {
@@ -20,6 +22,7 @@ import { buildShareLink, recoverShareLink } from '../../../core/sharing/shareLin
 import { ShareRole } from '../../../api/generated/sharing'
 import { mintDropBoxLink } from '../dropBox'
 import { useConfirm } from '../../../shared/state/useConfirm'
+import { lastExpiryDay, linkRules } from '../../../core/sharing/linkRules'
 
 const props = defineProps<NodeShareDialogProps>()
 const emit = defineEmits<{ close: [] }>()
@@ -31,6 +34,18 @@ const fresh = ref<string | null>(null)
 const busy = ref(false)
 const failed = ref(false)
 const copied = ref<string | null>(null)
+
+/** The core dialogs' minimum for a link password (a client-side convention; the server never sees it). */
+const MIN_PW = 10
+const rules = linkRules()
+const password = ref('')
+const expiresAt = ref<Date | null>(lastExpiryDay(rules.maxDays))
+const minExpiry = new Date()
+const maxExpiry = lastExpiryDay(rules.maxDays)
+/** What the space requires and the form does not carry yet: the create waits for it. */
+const missing = computed(() =>
+  (rules.passwordRequired && password.value.trim().length < MIN_PW) || (rules.maxDays !== null && !expiresAt.value),
+)
 
 const links = computed(() =>
   shares.value
@@ -58,7 +73,12 @@ async function run(action: () => Promise<void>) {
 
 const create = () =>
   run(async () => {
-    const minted = await mintDropBoxLink(props.scopeId, props.nodeId, props.nodeKey, props.epochs, props.nodeName)
+    const expiry = rules.maxDays !== null && expiresAt.value ? endOfDay(expiresAt.value) : null
+    const minted = await mintDropBoxLink(
+      props.scopeId, props.nodeId, props.nodeKey, props.epochs, props.nodeName, '',
+      rules.passwordRequired ? password.value : '', expiry,
+    )
+    password.value = ''
     fresh.value = buildShareLink(minted.shareId, minted.kShare)
   })
 
@@ -98,6 +118,13 @@ const switchOn = (shareId: string) =>
       reissueRefused.value = true
     }
   })
+
+/** End of the picked local day — the link works THROUGH that day, as the core dialogs save it. */
+function endOfDay(d: Date): Date {
+  const e = new Date(d)
+  e.setHours(23, 59, 59, 999)
+  return e
+}
 
 async function copy(text: string, id: string) {
   try {
@@ -177,11 +204,31 @@ async function copy(text: string, id: string) {
           </span>
         </li>
       </ul>
+      <template v-if="rules.passwordRequired">
+        <label for="dropbox-share-password">{{ t('share.passwordLabel') }}</label>
+        <InputText id="dropbox-share-password" v-model="password" type="password" autocomplete="new-password" :disabled="busy" />
+        <small class="veyq-form-copy">{{ t('share.passwordRequiredByRule') }} {{ t('share.passwordSectionHint', { min: MIN_PW }) }}</small>
+      </template>
+      <template v-if="rules.maxDays !== null">
+        <label for="dropbox-share-expiry">{{ t('share.expiryLabel') }}</label>
+        <DatePicker
+          id="dropbox-share-expiry"
+          v-model="expiresAt"
+          :min-date="minExpiry"
+          :max-date="maxExpiry ?? undefined"
+          date-format="yy-mm-dd"
+          show-icon
+          icon-display="input"
+          :disabled="busy"
+          fluid
+        />
+        <small class="veyq-form-copy">{{ t('share.expiryRequiredByRule', { days: rules.maxDays }) }}</small>
+      </template>
       <Message v-if="reissueRefused" severity="warn" :closable="false">{{ t('depot.dropBox.shareReissueHint') }}</Message>
       <Message v-else-if="failed" severity="error" :closable="false">{{ t('depot.dropBox.shareFailed') }}</Message>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('depot.dropBox.close')" severity="secondary" outlined @click="emit('close')" />
-        <Button type="button" :label="t('depot.dropBox.shareCreate')" icon="pi pi-plus" :loading="busy" @click="create" />
+        <Button type="button" :label="t('depot.dropBox.shareCreate')" icon="pi pi-plus" :loading="busy" :disabled="missing" @click="create" />
       </div>
     </div>
   </Dialog>

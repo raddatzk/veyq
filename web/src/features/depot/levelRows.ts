@@ -20,7 +20,8 @@
 //   (`webkitdirectory`), and which takes a dropped directory too (`dropDirectory`). Core looks first (`host.screenDirectory`):
 //   a download unpacked is, for a member, the import; anything else - a guest's always - is uploaded as its tree
 //   (`uploadFolder.ts`), after the quota preflight (a member's: the tenant's yes or no for the tree's bytes; a "no" writes
-//   nothing, an unanswered question never blocks).
+//   nothing, an unanswered question never blocks). A guest, who cannot trash, takes back the folders left empty once the
+//   batch settled (a full link refused every file).
 // - **The notices** only this application can explain: why a file of THIS folder was not uploaded, with the one remedy
 //   there is (replace anyway after a peer's replace).
 // - **Download and delete** (the delete into the scope's trash with the undo, inbox #385 (c)).
@@ -53,7 +54,7 @@ import { canUploadFolder, depotRights } from './rights'
 import { targetOf, type GuestAccess, type TreeSource } from '../../core/access'
 import { pickedDirectory, type DirectoryInput } from '../../core/export/importSource'
 import { tenantStorageFits } from '../tenant/tenantStorage'
-import { createFolders, planFolderUpload } from './uploadFolder'
+import { createFolders, planFolderUpload, takeBackEmptyFolders } from './uploadFolder'
 import { guestDepotSource, memberDepotSource, sourceRights, type FileUploadEntry, type DepotSource } from './source'
 
 /** The id of Depot's "Upload files" level action (`register.ts` declares the menu entry under it). */
@@ -301,12 +302,20 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       refresh()
     }
     for (const path of made.failed) refuse(t('depot.uploadFolderPartFailed', { name: path }))
-    if (made.jobs.length === 0) return
+    // Once nothing more can land, a guest takes back the folders that hold nothing (a full link refused every file).
+    const takeBack = (items: Parameters<typeof takeBackEmptyFolders>[2]) => void takeBackEmptyFolders(made, tree, items).then(refresh)
+    if (made.jobs.length === 0) {
+      takeBack([])
+      return
+    }
     enqueue<FileUploadResult, FileJobExtra>(made.jobs, {
       label: made.rootName,
       key: batchKey.value,
       onItemDone: refresh,
-      onComplete: refresh,
+      onComplete: (batch) => {
+        refresh()
+        takeBack(batch.files)
+      },
     })
   }
 

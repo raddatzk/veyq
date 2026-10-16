@@ -295,6 +295,27 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     w.unmount()
   })
 
+  // The Storage page's promise (site space-owners/storage): whoever uses a full link is told it takes no more uploads right
+  // now. The member's detail serves the guest (share view = member view), so its tile must know the upload is a link's -
+  // without that it read "Upload failed" with a Retry that no retry can help (ADR 0073 §6).
+  it('READ_WRITE: an upload the full link refuses reads as the link being full, with no retry', async () => {
+    saveGuestSession(SHARE, GUEST)
+    vi.mocked(addSharePhoto).mockRejectedValue(new Error('quota_exceeded'))
+    const w = await mountPage(ShareRole.ReadWrite)
+    const input = w.find('input[type="file"]')
+    const file = new File([new Uint8Array(4)], 'voll.jpg', { type: 'image/jpeg' })
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await vi.waitFor(() => expect(w.find('.gallery-tile-optimistic.is-failed').exists()).toBe(true))
+    const tile = w.find('.gallery-tile-optimistic')
+    expect(tile.text()).toContain(t('media.uploadTileLinkFull'))
+    expect(tile.text()).not.toContain(t('media.uploadTileFailed'))
+    expect(tile.find('.upload-tile-retry').exists(), 'a retry').toBe(false)
+    expect(addSharePhoto).toHaveBeenCalledTimes(1) // and the queue made none either
+    expectGuestOnly(w)
+    w.unmount()
+  })
+
   it("READ_WRITE: inside a chapter, an upload goes into THAT chapter under its key", async () => {
     saveGuestSession(SHARE, GUEST)
     await router.push(`/s/${SHARE}?node=${CHAPTER}${HASH}`)

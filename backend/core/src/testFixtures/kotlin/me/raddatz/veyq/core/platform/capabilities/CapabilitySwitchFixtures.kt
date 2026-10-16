@@ -38,3 +38,76 @@ object CapabilitySwitchFixtures {
     private fun store(): CapabilitySwitchStore = Arc.container().instance(CapabilitySwitchStore::class.java).get()
     private fun switches(): StoredCapabilitySwitches = Arc.container().instance(StoredCapabilitySwitches::class.java).get()
 }
+
+/**
+ * The tenant level's [CapabilitySwitchFixtures]: rows in `veyq_tenant_capability_switch` written through
+ * [TenantCapabilitySwitchStore] and followed by [StoredTenantCapabilitySwitches.invalidate] once committed — what
+ * `TenantCapabilitySwitchHandler.set` does behind `PUT /api/tenants/{tenantId}/capability-switches/{capabilityId}`, minus
+ * the HTTP and the owner gate (those are `TenantCapabilitySwitchesSliceTest`'s). Restored in a `finally`, as there.
+ */
+object TenantCapabilitySwitchFixtures {
+
+    /** Runs [block] with exactly [ids] switched off for [tenantId], then switches every tenant's entries back on. */
+    fun <T> with(tenantId: String, vararg ids: String, block: () -> T): T {
+        val left = QuarkusTransaction.requiringNew().call { TenantCapabilitySwitchEntity.count() }
+        check(left == 0L) { "a previous test left $left tenant switch row(s)" }
+        ids.forEach { id -> QuarkusTransaction.requiringNew().run { store().set(tenantId, id, off = true) } }
+        switches().invalidate()
+        try {
+            return block()
+        } finally {
+            clear()
+        }
+    }
+
+    /** Switches every tenant's entries back on — for a class that switches through the API and must not leave a row. */
+    fun clear() {
+        QuarkusTransaction.requiringNew().run { TenantCapabilitySwitchEntity.deleteAll() }
+        switches().invalidate()
+    }
+
+    private fun store(): TenantCapabilitySwitchStore = Arc.container().instance(TenantCapabilitySwitchStore::class.java).get()
+    private fun switches(): StoredTenantCapabilitySwitches =
+        Arc.container().instance(StoredTenantCapabilitySwitches::class.java).get()
+}
+
+/**
+ * Requirement values set the way production sets them (ADR 0088 decision 8): rows written through
+ * [CapabilityRequirementStore] and followed by [StoredCapabilityRequirementValues.invalidate] once committed — what the
+ * two `setRequirement` handlers do behind their `PUT`, minus the HTTP and the owner gates. Restored in a `finally`.
+ */
+object CapabilityRequirementFixtures {
+
+    /** Runs [block] with [instance] set at the instance level and [tenant] for [tenantId], then clears every value. */
+    fun <T> with(
+        instance: Map<String, Int> = emptyMap(), tenantId: String? = null, tenant: Map<String, Int> = emptyMap(), block: () -> T,
+    ): T {
+        val left = QuarkusTransaction.requiringNew().call {
+            CapabilityRequirementEntity.count() + TenantCapabilityRequirementEntity.count()
+        }
+        check(left == 0L) { "a previous test left $left requirement row(s)" }
+        instance.forEach { (name, value) -> QuarkusTransaction.requiringNew().run { store().setInstance(name, value) } }
+        if (tenantId != null) {
+            tenant.forEach { (name, value) -> QuarkusTransaction.requiringNew().run { store().setTenant(tenantId, name, value) } }
+        }
+        values().invalidate()
+        try {
+            return block()
+        } finally {
+            clear()
+        }
+    }
+
+    /** Clears every value at both levels — for a class that sets them through the API and must not leave a row. */
+    fun clear() {
+        QuarkusTransaction.requiringNew().run {
+            CapabilityRequirementEntity.deleteAll()
+            TenantCapabilityRequirementEntity.deleteAll()
+        }
+        values().invalidate()
+    }
+
+    private fun store(): CapabilityRequirementStore = Arc.container().instance(CapabilityRequirementStore::class.java).get()
+    private fun values(): StoredCapabilityRequirementValues =
+        Arc.container().instance(StoredCapabilityRequirementValues::class.java).get()
+}

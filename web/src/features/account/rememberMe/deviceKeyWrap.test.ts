@@ -13,7 +13,15 @@ vi.mock('../../../api/client', () => ({
   sessionApi: vi.fn(),
 }))
 
-import { enrolDeviceKey, restoreDeviceKey, clearDeviceKey, isRemembered, rememberedWrapId, readdressRemembered } from './deviceKeyWrap'
+import {
+  enrolDeviceKey,
+  restoreDeviceKey,
+  clearDeviceKey,
+  isRemembered,
+  rememberedWrapId,
+  rememberedEmail,
+  readdressRemembered,
+} from './deviceKeyWrap'
 import { accountWrapsApi } from '../../../api/client'
 import type { AccountKeyMaterial, AccountWrapsApi, MasterKeyWrap } from '../../../api/generated/account'
 import { fakeApi } from '../../../test/apiMock'
@@ -78,6 +86,16 @@ describe('deviceKeyWrap (web remember-me, cr-0054)', () => {
 
   it('a device that was never enrolled holds no wrap id', async () => {
     expect(await rememberedWrapId('a@b.com')).toBeNull()
+  })
+
+  // inbox #450: the sign-in screen prefills its email from the record, so it reads the record's one plaintext.
+  it('names the email of its record, normalised, and none once the record is cleared', async () => {
+    expect(await rememberedEmail()).toBeNull()
+    mockWrapsApi(vi.fn<AddWrap>().mockResolvedValue({ id: 'wrap-1' }), vi.fn<DeleteWrap>().mockResolvedValue(undefined))
+    await enrolDeviceKey('User@Example.com', masterKey())
+    expect(await rememberedEmail()).toBe('user@example.com')
+    await clearDeviceKey()
+    expect(await rememberedEmail()).toBeNull()
   })
 
   it('re-enrol replaces: uploads the new wrap, then deletes the prior one', async () => {

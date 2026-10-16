@@ -131,12 +131,54 @@ describe('runGrantDeliveryWorker', () => {
     expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe(ADMISSION_UNVERIFIED)
   })
 
+  it('pauses (neither wraps nor declines) when the admission is AHEAD of its key — n+1 reaching a worker still at n', async () => {
+    // A rotation landed and re-tagged the admission at n+1 while this tab still holds n. That is a fact about the
+    // worker, not the target: a decline would exclude this key-holder from the job for good, even once it holds n+1.
+    const E3 = v1.randomBytes(32)
+    const E4 = v1.randomBytes(32)
+    const claimTask = vi.fn<TasksApi['claimTask']>()
+      .mockResolvedValueOnce(job(admitted(E4, 4))).mockResolvedValueOnce(job(admitted(E4, 4))).mockResolvedValueOnce(null)
+    const completeTask = vi.fn<TasksApi['completeTask']>()
+    const declineTask = vi.fn<TasksApi['declineTask']>()
+    mockTasks(claimTask, completeTask, vi.fn<TasksApi['failTask']>(), declineTask)
+
+    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: E3, epoch: 3 })).toBe(0)
+    expect(declineTask).not.toHaveBeenCalled()
+    expect(completeTask).not.toHaveBeenCalled()
+    expect(claimTask).toHaveBeenCalledTimes(1) // stops draining: every further job meets the same behind key
+    expect(checkAndPin).not.toHaveBeenCalled()
+  })
+
   it('control: a tag made at n+1 reaching the worker at n+1 is delivered', async () => {
     const E4 = v1.randomBytes(32)
     const { completeTask, declineTask } = oneJob(job(admitted(E4, 4)))
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: E4, epoch: 4 })).toBe(1)
     expect(declineTask).not.toHaveBeenCalled()
     expect(completeTask.mock.calls[0][0].completeRequest?.epoch).toBe(4)
+  })
+
+  // The poll hands the worker the ACTIVE SPACE's write key, and leaving or re-entering the space zeroes that array in
+  // place while a run is still in flight (found live 2026-10-16: an accepted member's job declined admission_unverified,
+  // which excludes this key-holder from it for good). The run must not see that: it neither declines a genuine
+  // admission nor seals an all-zero key to the member.
+  it.each([
+    ['while the claim is in flight', 'claim'],
+    ['between the admission check and the seal', 'pin'],
+  ] as const)('keeps its own key when the caller zeroes the one it handed over %s', async (_when, at) => {
+    const K_SC = v1.randomBytes(32)
+    const held = K_SC.slice() // the active space's array — the one the caller zeroes
+    const { claimTask, completeTask, declineTask } = oneJob(job(admitted(K_SC, 0)))
+    if (at === 'claim') {
+      claimTask.mockReset()
+      claimTask.mockImplementationOnce(async () => (held.fill(0), job(admitted(K_SC, 0)))).mockResolvedValueOnce(null)
+    } else {
+      vi.mocked(checkAndPin).mockImplementationOnce(async () => (held.fill(0), 'firstUse'))
+    }
+
+    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: held, epoch: 0 })).toBe(1)
+    expect(declineTask).not.toHaveBeenCalled()
+    const sealedResult = completeTask.mock.calls[0][0].completeRequest?.sealedResult as string
+    expect(Array.from(openAsTarget(sealedResult, 0))).toEqual(Array.from(K_SC))
   })
 
   it('declines a target that carries no admission at all', async () => {

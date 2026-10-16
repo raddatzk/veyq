@@ -1,7 +1,7 @@
 # ADR 0093 — A report opens one window for the moderator, and a hold copies, never blocks
 
 - Status: Accepted 2026-10-16; nothing of it is built. When it is built is the inbox's call: the V1 line puts share
-  moderation out of V1 ([inbox](../inbox.md) § V1, row #460 asks again).
+  moderation out of V1 ([inbox](../inbox.md) § V1, row #462 asks again).
 - Date: 2026-10-16
 
 Provenance: **(M)** is measured in this worktree (file and line named); **(S)** comes from a read-only sweep of the
@@ -213,7 +213,7 @@ range and its no-extension rule (§ 2 there).
   keys in the crypto suite with new vectors, the guest-write record, the moderation log. `EveryStoredTimeHasAReaderTest`
   needs a reader for each new time: the purge for records and holds, admin-web for the log.
 - **A single operator reviews their own measure** on objection, and the whole Server Owner vault is open while
-  reviewing. A moderator role with its own key pair (inbox #461) answers both and adds a deputy for when the owner
+  reviewing. A moderator role with its own key pair (inbox #463) answers both and adds a deputy for when the owner
   is away.
 - An operator away from admin-web acts over SSH with `veyq-admin`, and the Run docs show how to reach admin-web
   remotely (an SSH tunnel or a VPN).

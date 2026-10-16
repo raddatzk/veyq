@@ -23,7 +23,9 @@ decisions. One toggle now covers both options — the password-bound DEVICE wrap
 
 ## Main flow — one adaptive screen
 
-The screen shows only the fields this device still needs:
+The screen shows only the fields this device still needs. Where the device holds a convenience record of exactly
+one account, the email is filled in from it, so the screen knows which fields it needs before anything is typed
+(the record already keeps that email in plaintext on the device; with records of two accounts the field stays empty):
 
 1. **First time on this device** (no convenience wrap yet): **email + password + Secret Key**, plus the
    **"remember me"** toggle. On submit the client **logs in** (password → auth keypair → session, ADR 0003) and
@@ -88,7 +90,12 @@ sequenceDiagram
   ([ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
   decision 5). The device keeps its key, asks for the password and the Secret Key with the field's hint saying why
   (`unlock.deviceHeldBack`), and is not replaced: unlike E2, that sign-in neither clears it nor enrols a DEVICE
-  wrap, so it opens by itself again once the switch is back on.
+  wrap. It also keeps the persistent session cookie, although the toggle is hidden while the switch is off: a session
+  cookie would end with the browser, and the device would meet its restored wrap with no session. So it opens by
+  itself again once the switch is back on, after a browser restart too. The cookie widens nothing the switch forbids:
+  its lifetime is a session matter ([ADR 0004](../../../decisions/0004-session-tokens.md)) that no switch gates, and
+  while the wrap is withheld a revived session still meets the password-and-Secret-Key screen. A device without such
+  a record still signs in with the session cookie.
 
 ## Quality notes
 

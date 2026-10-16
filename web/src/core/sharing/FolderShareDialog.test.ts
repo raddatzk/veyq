@@ -28,6 +28,8 @@ import { ShareRole } from '../../api/generated/sharing'
 import { confirmRequest, settleConfirm } from '../../shared/state/useConfirm'
 import { realI18n, t } from '../../test/i18n'
 import { i18n } from '../../i18n'
+import { setTenantCapabilities } from '../../shared/state/useCapabilities'
+import { httpError } from '../../test/httpError'
 
 const mintShare = vi.mocked(manage.mintShare)
 const listSharesFor = vi.mocked(manage.listSharesFor)
@@ -135,6 +137,34 @@ describe('FolderShareDialog — a new link', () => {
     expect(w.text()).toContain(t('share.linkReady'))
     expect(w.find('input.input').attributes('value')).toBe('https://x/s/new-share#k=abc')
     expect(listSharesFor, 'the list is re-read behind the link').toHaveBeenCalledTimes(2)
+  })
+
+  it('a space\'s maximum lifetime fills the end date with the last day it allows and sends it (ADR 0088 decision 8)', async () => {
+    setTenantCapabilities([{ id: 'core.public-shares', linkMaxDays: 7 }])
+    try {
+      const w = mountDialog()
+      await flushPromises()
+      await byText(w, t('share.createNew')).trigger('click')
+      expect(w.text()).toContain(t('share.expiryRequiredByRule', { days: 7 }))
+      await byText(w, t('share.create')).trigger('click')
+      await flushPromises()
+      const expiry = mintShare.mock.calls[0]![6] as Date
+      expect(expiry).toBeInstanceOf(Date)
+      expect(expiry.getTime()).toBeLessThanOrEqual(Date.now() + 7 * 24 * 3600 * 1000) // within the limit
+      expect(expiry.getTime()).toBeGreaterThan(Date.now() + 5 * 24 * 3600 * 1000) // and the last day it allows
+    } finally {
+      setTenantCapabilities(null)
+    }
+  })
+
+  it('names the requirement when the server refuses a link for one', async () => {
+    mintShare.mockRejectedValueOnce(httpError(422, 'link_password_required'))
+    const w = mountDialog()
+    await flushPromises()
+    await byText(w, t('share.createNew')).trigger('click')
+    await byText(w, t('share.create')).trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain(t('share.requirementRefused'))
   })
 
   it('says so when the mint fails, and stays on the form', async () => {

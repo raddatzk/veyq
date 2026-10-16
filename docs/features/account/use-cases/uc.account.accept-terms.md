@@ -2,8 +2,8 @@
 
 - **ID:** uc.account.accept-terms
 - **Primary actor:** A **member** with a session, entering a tenant whose **current `terms_revision`** they have
-  not yet accepted (first entry, or after the operator bumped the revision).
-- **Goal:** Read and **accept** the tenant's current terms to enter; if the operator later changes them (a higher
+  not yet accepted (first entry, or after the space owner bumped the revision).
+- **Goal:** Read and **accept** the tenant's current terms to enter; if the space owner later changes them (a higher
   `terms_revision`), a **re-accept** gate re-appears.
 - **Preconditions:** An authenticated **session** — acceptance is **operational metadata**, so it needs a session,
   **not** an unlocked vault (parallels the operational Server-Owner settings). The tenant has terms set
@@ -49,8 +49,8 @@ always know what you have agreed to.
 ## Related
 
 - **Feature:** [account](../_index.md)
-- **Use-cases:** [uc.admin.tenant-terms](../../admin/use-cases/uc.admin.tenant-terms.md) (the operator sets the
-  revision this gate checks), [uc.account.unlock](uc.account.unlock.md) (the layer below — the gate sits on top of a
+- **Use-cases:** [uc.admin.tenant-terms](../../admin/use-cases/uc.admin.tenant-terms.md) (the space owner sets
+  the revision this gate checks), [uc.account.unlock](uc.account.unlock.md) (the layer below — the gate sits on top of a
   session, above unlock), [uc.account.login](uc.account.login.md).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md) (`accepted_terms_revision` = coarse
   operational metadata; the terms text is public).

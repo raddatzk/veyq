@@ -39,7 +39,7 @@ class TreeRevisionBumpsTest {
     private val bumping = mapOf(
         "core/src/main/kotlin/me/raddatz/veyq/core/content/NodesStore.kt" to
             setOf("create", "createIdentityFolder", "applyUpdate", "deleteSubtree", "restoreSubtree"),
-        "core/src/main/kotlin/me/raddatz/veyq/core/content/NodeSubtreePurge.kt" to setOf("eraseExpiredIn"),
+        "core/src/main/kotlin/me/raddatz/veyq/core/content/NodeSubtreePurge.kt" to setOf("erase"),
         "core/src/main/kotlin/me/raddatz/veyq/core/blob/AttachmentStore.kt" to setOf("attach", "detach"),
         "core/src/main/kotlin/me/raddatz/veyq/core/sharing/SharingStore.kt" to setOf("create"),
     )
@@ -48,7 +48,7 @@ class TreeRevisionBumpsTest {
     private val exempt = mapOf(
         "core/src/main/kotlin/me/raddatz/veyq/core/node/NodeScopeEraser.kt" to "erases the scope's rows with the scope (and its revision row)",
         "core/src/main/kotlin/me/raddatz/veyq/core/blob/AttachmentScopeEraser.kt" to "erases the scope's attachments with the scope",
-        "core/src/main/kotlin/me/raddatz/veyq/core/blob/AttachmentNodeSubtreeEraser.kt" to "runs inside NodeSubtreePurge.eraseExpiredIn, which bumps",
+        "core/src/main/kotlin/me/raddatz/veyq/core/blob/AttachmentNodeSubtreeEraser.kt" to "runs inside NodeSubtreePurge.erase, which bumps",
     )
 
     @Test

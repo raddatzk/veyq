@@ -1,6 +1,6 @@
 # ADR 0087 — Published documentation is a Starlight site; `docs/` is for development only
 
-- Status: Accepted; nothing of it is built (`changes/cr-published-docs-site.md`)
+- Status: Accepted; built, except the first GitHub Pages deploy, which runs on the first push to the public remote
 - Date: 2026-10-15
 
 ## Context
