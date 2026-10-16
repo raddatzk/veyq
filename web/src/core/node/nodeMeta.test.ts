@@ -185,4 +185,13 @@ describe('editParticipantsOf — the participants editor merges instead of surfa
     expect(editParticipantsOf(merge)(meta, ctx)).toEqual({ v: 1, participants: expected })
     expect(merge).toHaveBeenCalledWith([])
   })
+
+  it('participants as an array (a foreign client\'s JSON) reads as no ids, and a write starts a clean sub-object', () => {
+    // An array is a non-null object: its elements must not be spread into the sub-object as `0`/`1` keys (inbox #473).
+    const merge = vi.fn(() => ['u'])
+    const out = editParticipantsOf(merge)({ v: 1, participants: ['x', 'y'] }, ctx)
+    expect(merge).toHaveBeenCalledWith([])
+    expect(out).toEqual({ v: 1, participants: { userIds: ['u'] } })
+    expect(out && Object.keys(out.participants as object)).toEqual(['userIds'])
+  })
 })
