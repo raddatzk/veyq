@@ -35,8 +35,8 @@ and nothing enforced it. Prose that three documents agree on is still prose.
 shape *"no non-base64 cleartext property in `account.openapi.yaml`"* is **red on arrival**: a parse of the
 untouched tree returns **14** such properties, among them `MasterKeyWrap.id`, `AddWrapResult.id` and
 `IdentityPins.version` (a `revision` since inbox #452), all of which are legitimate. Only the schema-scoped
-allowlists below are green on the tree as it stands, which is what makes a later red mean *"someone added a field"* rather than *"this guard was
-always red"*.
+allowlists below are green on the tree as it stands, which is what makes a later red mean *"someone added a
+field"* rather than *"this guard was always red"*.
 
 **Its limits.**
   - This is a *contract* sensor over *three schemas*. It says nothing about any other schema, and it cannot see

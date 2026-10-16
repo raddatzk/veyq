@@ -30,7 +30,7 @@
    blob: a fresh `K_blob` wrapped under the **node's content key**, bound to blob, node and role `COVER`
    ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), the blob meta `{type: image/jpeg}` under `K_blob`. The upload
    runs as a job of the core upload queue (progress and failure show in the tray; a quota refusal says so).
-4. One request hands the open upload **and** the node's re-sealed `wrappedMeta` (the `cover` field `{ source, crop }`, version-
+4. One request hands the open upload **and** the node's re-sealed `wrappedMeta` (the `cover` field `{ source, crop }`, revision-
    checked, [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)): `setNodeCover` attaches the upload,
    freeing in the same transaction the blob it replaces (`expectedBlobId`) and compare-and-setting the meta. Either both land or
    neither does. A **re-crop** of the current cover is a plain meta write (the stored image, a moved crop); a **photo** the
@@ -52,7 +52,7 @@
   second *source* in the same sealed field that core carries untouched and the Memory's `cover.load` reads. Core's dialog, crop and
   write are the only ones — the Memory has no dialog of its own.
 - **E1 — a peer changed the cover meanwhile:** `409 cover_stale` — nothing was attached, the old cover is intact, the upload was
-  spent and freed; the member is told and may try again. A meta that moved is `409 stale_version`: nothing written, the upload
+  spent and freed; the member is told and may try again. A meta that moved is `409 stale_revision`: nothing written, the upload
   still open, the client re-applies its change on the current meta and sends the same upload again.
 - **E2 — the upload or the write fails, or is cancelled:** the **old cover stays, exactly as it was** (the blob step and the
   meta are one transaction); an upload no write ever attached is an unfinished upload like any other, which the server's

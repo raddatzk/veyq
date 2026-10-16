@@ -82,7 +82,7 @@ Memories' original file name and the media type its gallery badges a video by), 
 own. For a **new** application, its keys are derived from the scope
 key by HKDF with the application id as context (`veyq/v1/<application id>:…`, the form the existing derivations
 use in `packages/crypto/src/v1.ts`), so two applications never share a key by accident; the seals' associated
-data binds the application id or kind, the object id and the version, by the ADR 0072 mechanism. **Measured with
+data binds the application id or kind, the object id and the revision, by the ADR 0072 mechanism. **Measured with
 Depot (cr-files-application P3-S1/P5), a new kind meets both rules with no new seal purpose and no HKDF context:**
 its node key is random and wrapped under its parent's key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
 so it shares no key with another application's node by construction, which is what the HKDF context was for; and
@@ -278,7 +278,7 @@ on their own.
   core's `FOLDER`, Depot's drop box, Memories' two kinds; not a `FILE`) carries one image its owner uploads as the node's own
   blob in the `COVER` slot, written by core's `setNodeCover` / `removeNodeCover` - the blob step (`AttachmentStore` attach
   with a compare on the blob replaced, or detach) and the node's re-sealed `wrappedMeta` (the `cover` field, ADR 0077
-  version-checked) in ONE transaction, so the slot and the meta that names it never part. `COVER` is a role core declares
+  revision-checked) in ONE transaction, so the slot and the meta that names it never part. `COVER` is a role core declares
   (`CoreMemberBlobRoles`) and the opt-in is a seam on each kind's own placement rules, so core names no application kind. The web
   mechanism (`core/node/cover/`: the model, the upload, the one writer, the store, the action, the one dialog and the display) serves every kind;
   an application adds only what is its own - Memories' second source (one of its photos: `cover.load` reads it, `cover.extraSource`

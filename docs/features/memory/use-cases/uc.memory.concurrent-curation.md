@@ -25,7 +25,7 @@
    started from ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)).
 3. If nobody wrote in between, the server stores it at `metaRevision + 1`, and the client updates its copy to the
    blob it sent and that revision.
-4. If somebody wrote in between, the server stores nothing and answers `409 stale_version` with the current blob
+4. If somebody wrote in between, the server stores nothing and answers `409 stale_revision` with the current blob
    and its revision. The client re-runs step 2 on that blob — at most five times — and the change of the member
    who wrote first survives.
 5. The client's copy (the tree, the gallery item) is replaced by what the server last told it, whether or not the

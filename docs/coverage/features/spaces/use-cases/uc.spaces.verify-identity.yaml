@@ -12,7 +12,7 @@ acceptanceCriteria:
     text: The first time a client wraps to a contact's identity key it pins the full identity public bundle (kem+sign) keyed by userId (state pinned) and proceeds — trust-on-first-use. The pin store is one blob sealed under the Master Key, synced across the account, account-global (one pin per contact across tenants). The server sees one opaque ciphertext, never a userId, key, or count.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts] }
-      backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobVersionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToVersionOne, IdentityPinsSliceTest.storeIsPerAccountNotShared] }
+      backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobRevisionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToRevisionOne, IdentityPinsSliceTest.storeIsPerAccountNotShared] }
   - id: change-surfaced-not-trusted
     text: A directory key that differs from the pin is never silently trusted. In the UI it is a notice (accept -> re-pin); on the human-less grant-delivery worker it is a block (no K_SC wrap) + a job decline back to the server (do not re-offer this worker), leaving the directory's changed badge as the review surface. A change is attack-or-legitimate-rotation, resolved by a human.
     # "a human-review flag" (the pre-split wording) named a field that was never built — the decline + the
@@ -37,23 +37,23 @@ acceptanceCriteria:
     text: Verification is client-only (compare against the sealed pin, no server call) and the pin store is one Master-Key-sealed ciphertext, so the operator never learns who pinned or verified whom, nor the count — the trust graph stays off the server.
     # Real but indirect: no test asserts the negative (that a growing pin/verified set never changes the wire
     # shape) as its own property. Coverage here is inferred — the backend refs prove the wire shape is always
-    # exactly {blob, version}, the web refs prove the compare functions make no network call — not a dedicated
+    # exactly {blob, revision}, the web refs prove the compare functions make no network call — not a dedicated
     # "operator learns nothing" test. Named honestly rather than stretched; a stronger direct test is a genuine
     # gap, not a citation problem.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts] }
-      backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobVersionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToVersionOne] }
+      backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobRevisionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToRevisionOne] }
   - id: pin-store-never-goes-backwards
     text: A device refuses a pin store older than one it has held, a missing store after it held one, and a store that does not open — none is read as empty. The refusal holds before every read and before every write (the master-key rotation's re-seal included), is named (trust_state_rolled_back / trust_state_unreadable), and pauses the grant-delivery worker rather than declining the job.
     # ADR 0028 Decision 7, cr-trust-state-never-goes-backwards. Web only by construction: the marks never leave
-    # the device, and the server's half ({blob, version}) is unchanged. The three live defects (wipe, unopenable,
+    # the device, and the server's half ({blob, revision}) is unchanged. The three live defects (wipe, unopenable,
     # rollback reinstating a retired key) were red on the untouched tree; each negative anchors on its code and
     # has a control on the same served payload. `trustMarks.test.ts` pins the marks as a store (a maximum, one
     # slot per account); the worker's pause and the notices that name a refusal are pinned where they live.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts, src/features/account/trustMarks.test.ts, src/features/tasks/grantDeliveryWorker.test.ts, src/features/spaces/useMemberDirectory.test.ts, src/app/activeSpace.test.ts] }
   - id: a-refused-pin-store-is-started-over-only-by-the-user
-    text: A refused pin store can be started over only by the user, on a device, after a confirmation that names the cost (every contact first-seen again, every verification gone, a key that changed meanwhile accepted as new); no server response reaches it. It writes the empty store one version above the served one, never over a copy that opens, and sets this device's mark to the version it wrote — the one place a mark goes down. The residual is stated, not closed — a server can withhold the store until the user resets it, now visibly and with consent.
+    text: A refused pin store can be started over only by the user, on a device, after a confirmation that names the cost (every contact first-seen again, every verification gone, a key that changed meanwhile accepted as new); no server response reaches it. It writes the empty store one revision above the served one, never over a copy that opens, and sets this device's mark to the revision it wrote — the one place a mark goes down. The residual is stated, not closed — a server can withhold the store until the user resets it, now visibly and with consent.
     # ADR 0028 Decision 7's way back (inbox #192). Bitten: swapping the mark's set for a raise reddened the
     # rolled-back case (the reset's own write was refused); an injected write on the refusal path reddened the
     # no-server-reaches-it negative, whose control serves a readable store to the same paths and sees the writes.

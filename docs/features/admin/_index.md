@@ -48,7 +48,7 @@ handling of reported shares.
   [uc.spaces.manage-member-invites](../spaces/use-cases/uc.spaces.manage-member-invites.md); assigning a role in a
   tenant is **planned** (roles exist only inside a group, [uc.spaces.manage-group-members](../spaces/use-cases/uc.spaces.manage-group-members.md))
 - Manage server users & roles — planned
-- ★ [Set tenant terms (versioned)](use-cases/uc.admin.tenant-terms.md) — **built (web, cr-0114)** (ADR 0035; per-locale markdown + `terms_version`; the member accept-gate consumes the version)
+- ★ [Set tenant terms (a new revision on each change)](use-cases/uc.admin.tenant-terms.md) — **built (web, cr-0114)** (ADR 0035; per-locale markdown + `terms_revision`; the member accept-gate consumes the revision)
 - ★ [Configure per-tenant mail (SMTP + invite template)](use-cases/uc.admin.tenant-mail-settings.md) — **built (backend + web)** (cr-email-smtp-transport; the tenant owner's Mail section in the web settings, `TenantMailSettingsPanel`; ADR 0048/0049/0050; per-tenant SMTP, password sealed at rest, invite templates over a closed variable set)
 - ★ [A tenant's storage quota](use-cases/uc.admin.tenant-storage-quota.md) — **built** (backend, web, admin-web)
   ([ADR 0073](../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md); the ceiling belongs to

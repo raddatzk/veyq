@@ -40,7 +40,7 @@
    identity-pin store and the device register are re-sealed under `MK'` and travel in the **same request**,
    written in the same transaction — so a rotation that cannot re-seal them does not happen, rather than
    leaving them under a key that no longer exists. Each is opened under the old key through this device's
-   trust-state marks first (E8), and a `stale_version` on either fails that attempt whole: the client re-reads,
+   trust-state marks first (E8), and a `stale_revision` on either fails that attempt whole: the client re-reads,
    re-seals and resubmits. The Memory pins are re-sealed under `MK'` and the caller's own item marks re-tagged —
    their self-tag's key derives from the Master Key, and only a mark whose tag verifies under the old key is
    carried ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9); these two run

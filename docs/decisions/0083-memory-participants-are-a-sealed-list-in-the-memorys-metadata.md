@@ -1,6 +1,7 @@
 # ADR 0083 — Memory participants are a sealed list in the Memory's metadata
 
-- Status: Accepted
+- Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the conflict is `stale_revision`
+  (was `stale_version`).
 - Date: 2026-10-13
 
 ## Context
@@ -38,7 +39,7 @@ validated on read (non-strings, duplicates dropped). It is **capped at 100 ids**
 characters of base64 (about 6 KB sealed), and an id is about 40 bytes of JSON next to the date, place and cover. Unknown
 sibling fields are preserved. A write is a read-modify-write through `writeNodeMeta`; because the list is a *set* that two
 members may extend at once, it uses **its own edit function, not `editField`** (which throws `MetaConflictError` when the
-same field moved and would drop a peer's addition). On `409 stale_version` the client re-reads and **merges**: the union
+same field moved and would drop a peer's addition). On `409 stale_revision` the client re-reads and **merges**: the union
 of the stored and the editor's list, except that an id the person editing **removed** stays removed. This is the
 reversible choice about storage too: the list stays in `wrappedMeta` rather than a separate column, because the profile
 page lists Memories as level-view rows with cover, date and place and so needs the full meta anyway; moving it later is a

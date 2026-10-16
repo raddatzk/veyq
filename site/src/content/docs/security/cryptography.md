@@ -124,7 +124,7 @@ because it would show the operator which blobs are equal (ADR 0013 §5).
 ## What a seal binds
 
 Every seal binds its **purpose** and **the identity of the object it is stored as**: the scope, and the node,
-media, blob, bucket, share or member it belongs to, plus the epoch or version the wire stores it at
+media, blob, bucket, share or member it belongs to, plus the epoch or revision the wire stores it at
 ([ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md)). The
 opener supplies those values from the address it fetched the object by, never from the ciphertext, so a
 ciphertext the server moves to another object or another purpose fails to open. Where a key is unique to one
@@ -136,8 +136,8 @@ exported, so an unbound seal cannot be written from the web client at all. Every
 and a test compares the purposes in code with the vector set in both directions.
 
 Two limits are part of the decision. **Parents are not bound**: the tree's shape is server-visible, and a move
-re-seals only the moved node, never its subtree. **Binding makes a version authentic, not fresh**: which
-authentic version the server serves is still its choice, except where a device keeps a mark of its own
+re-seals only the moved node, never its subtree. **Binding makes an epoch or a revision authentic, not fresh**:
+which authentic one the server serves is still its choice, except where a device keeps a mark of its own
 ([Known limitations](/veyq/security/known-limitations/)).
 
 ## Suite agility
