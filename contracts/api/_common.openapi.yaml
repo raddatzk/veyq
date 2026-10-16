@@ -140,8 +140,11 @@ components:
       description: >
         One entry of an effective capability set (ADR 0032, ADR 0088): the pre-auth instance manifest of
         `GET /api/setup`, and the tenant's set a member reads after sign-in (`GET /api/tenants/{tenantId}/capabilities`).
-        Both are one type so they grow together, `[{ id }]` to `[{ id, …values }]` (ADR 0088 decision 8), without a
-        `major` bump (additive => `build`).
+        Both are one type and carry the entry's requirements in effect as values, `[{ id, …values }]` (ADR 0088
+        decision 8): each value property belongs to one entry (the catalog's `requirements`, whose names
+        `scripts/validate_capabilities.py` holds to these properties) and is present only on it and only while set. The
+        pre-auth manifest carries the instance level's, the tenant's set the strictest of both. Additive, no `major`
+        bump.
       required: [id]
       properties:
         id:
@@ -154,6 +157,40 @@ components:
             only when the capability is present AND local policy permits.
           maxLength: 64
           example: core.public-shares.drop-box
+        linkPassword:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            On `core.public-shares` only, and only while in effect: every link of any kind needs a password (a
+            requirement, ADR 0088 decision 8). A share dialog then asks for one; the server refuses a link without it
+            (`422 link_password_required`) and answers guests of an existing one as an unknown link.
+          example: true
+        linkMaxDays:
+          x-veyq-visibility: measure
+          type: integer
+          description: >
+            On `core.public-shares` only, and only while in effect: a link ends at most this many days after it was
+            made (a requirement). A share dialog then asks for an end date within it; the server refuses one beyond
+            (`422 link_expiry_required`) and answers guests of an existing link outside it as an unknown link.
+          minimum: 1
+          maximum: 3650
+          example: 30
+        addConsent:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            On `core.group-space` only, and only while in effect: being added to a group needs the person's yes,
+            whatever their own setting (a requirement). Members already added stay.
+          example: true
+        passwordMaxDays:
+          x-veyq-visibility: measure
+          type: integer
+          description: >
+            On `core.remember-device` only, and only while in effect: a session is not renewed more than this many
+            days after it began, so a device asks for the password again (a requirement, instance level only).
+          minimum: 1
+          maximum: 3650
+          example: 14
 
     ErrorResponse:
       type: object

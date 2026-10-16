@@ -507,6 +507,7 @@ paths:
                   "off": true
                   effective: false
                   tenantSwitchable: true
+                  requirements: []
                 - id: core.public-shares.contribute
                   title: { en: "Links to look and add", de: "Links zum Ansehen und Hinzufügen" }
                   purpose: { en: "A public link whose guests can add to what they see …", de: "Ein öffentlicher Link, über den Gäste …" }
@@ -514,6 +515,7 @@ paths:
                   "off": false
                   effective: false
                   tenantSwitchable: true
+                  requirements: []
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -591,6 +593,7 @@ paths:
                 "off": true
                 effective: false
                 tenantSwitchable: false
+                requirements: []
         "400":
           description: The request was malformed, or `off` is missing. Nothing is stored.
           content:
@@ -615,6 +618,119 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: capability_not_found }
+
+  /api/instance/capabilities/{capabilityId}/requirements/{requirement}:
+    put:
+      tags: [instance]
+      operationId: setInstanceCapabilityRequirement
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the write carries one requirement's value, never the register, and the later
+          write on the same requirement is the one the owner made last.
+      x-veyq-channel: admin
+      summary: Set one requirement on a capability entry for the instance.
+      description: >
+        Sets the instance's value of one requirement (ADR 0088 decision 8): a flag (`1`) or a number of days (1 to
+        3650), as the catalog's `kind` says. It acts at once, without a restart: every client reads the value with the
+        capability, and every gate refuses what does not meet it, existing links and sessions included as the
+        requirement's `whenSet` says. The effective value, per tenant, is the strictest of the instance's and the
+        tenant's. Server-Owner only. Returns the entry as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          description: The entry's id, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: core.public-shares }
+        - name: requirement
+          in: path
+          required: true
+          description: The requirement's name, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: linkMaxDays }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceCapabilityRequirementUpdate" }
+            example: { value: 30 }
+      responses:
+        "200":
+          description: The value was stored and applied; the entry as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceCapability" }
+        "400":
+          description: The request was malformed, or the value does not fit the requirement's kind (a flag is `1`, days 1–3650). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: The entry has no requirement of this name (`requirement_not_found`). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: requirement_not_found }
+    delete:
+      tags: [instance]
+      operationId: clearInstanceCapabilityRequirement
+      x-veyq-channel: admin
+      summary: Clear one requirement on a capability entry for the instance.
+      description: >
+        Removes the instance's value: the requirement is then in effect only where a tenant set it. Everything it
+        refused serves again, because nothing was written onto a link or a session. Clearing one that is not set
+        changes nothing and answers the same. Server-Owner only. Returns the entry as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          description: The entry's id, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: core.public-shares }
+        - name: requirement
+          in: path
+          required: true
+          description: The requirement's name, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: linkMaxDays }
+      responses:
+        "200":
+          description: The value is cleared; the entry as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceCapability" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: The entry has no requirement of this name (`requirement_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: requirement_not_found }
 
 components:
   schemas:
@@ -981,7 +1097,7 @@ components:
       # `off` is quoted wherever it is a key or a list item, in this schema, InstanceCapabilityUpdate and the
       # examples: a YAML 1.1 parser reads a bare `off` as the boolean false. PyYAML, which every contracts guard
       # reads the specs with, did exactly that, and saw a property named "false".
-      required: [id, title, purpose, whenOff, "off", effective, tenantSwitchable]
+      required: [id, title, purpose, whenOff, "off", effective, tenantSwitchable, requirements]
       properties:
         id:
           x-veyq-visibility: public
@@ -1017,6 +1133,13 @@ components:
             ADR 0088 decision 12). Such a tenant only narrows: an entry on here may still be off in a tenant, never
             the other way round. Entries offered before sign-in are the Server Owner's alone.
           example: true
+        requirements:
+          type: array
+          description: >
+            The entry's requirements (the catalog's, in its order; empty for most), each with its words and the
+            instance's value (ADR 0088 decision 8).
+          maxItems: 16
+          items: { $ref: "#/components/schemas/InstanceCapabilityRequirement" }
 
     InstanceCapabilityText:
       type: object
@@ -1037,6 +1160,48 @@ components:
           description: The German text.
           maxLength: 1024
           example: Gemerkte Geräte
+
+    InstanceCapabilityRequirement:
+      type: object
+      description: >
+        One requirement of a register entry (ADR 0088 decision 8) with its words and the instance's value.
+      required: [name, kind, title, whenSet]
+      properties:
+        name:
+          x-veyq-visibility: public
+          type: string
+          description: The requirement's name, unique in the catalog; also the property that carries it on `Capability`.
+          maxLength: 64
+          example: linkMaxDays
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          enum: [flag, days]
+          description: A flag (set or not, value `1`) or a number of days.
+          example: days
+        title:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        whenSet:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        value:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          description: The instance's value (`1` for a set flag, days for days); null while the instance sets none.
+          example: 30
+
+    InstanceCapabilityRequirementUpdate:
+      type: object
+      description: One requirement's value to store at the instance level.
+      required: [value]
+      properties:
+        value:
+          x-veyq-visibility: measure
+          type: integer
+          description: '`1` sets a flag; for days, the number of days, 1 to 3650.'
+          minimum: 1
+          maximum: 3650
+          example: 30
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(3650)'
 
     InstanceCapabilityUpdate:
       type: object

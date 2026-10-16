@@ -1,6 +1,6 @@
 {
   "registry": "platform-capabilities",
-  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core` today; an application's own entries hang from the application, ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the Server Owner switches it off through the Admin API, PUT /api/instance/capabilities/{capabilityId}, stored in the database and applied without a restart, and the endpoint refuses with 422 capability_disabled) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, ADR 0032 §5). `levels` names who may switch an entry off: `instance` (the Server Owner, `*` in ADR 0088's register) always, and `tenant` (a tenant owner, for their tenant, through PUT /api/tenants/{tenantId}/capability-switches/{capabilityId}, `+`) where listed. The effective state is the AND along the path at both levels, so a tenant only narrows. An entry a client offers before sign-in is instance-only, because the client cannot know a tenant's choice there (ADR 0088 decision 12). `title`, `purpose` and `whenOff` are the entry's words for whoever switches it, each in English and German: what it is, what it is for, and what switching it off does to what is new and to what exists, as built (ADR 0088 decision 13). The catalog is the one place they are written; the backend generates its ids and these texts from it (buildSrc's GenerateCapabilityRegister), the API serves them and every client renders them from there. `description` is the dev-facing note and is not served. scripts/validate_capabilities.py checks the tree, that every `serves` resolves to a built use-case, and that every entry carries its three texts in both languages.",
+  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core` today; an application's own entries hang from the application, ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the Server Owner switches it off through the Admin API, PUT /api/instance/capabilities/{capabilityId}, stored in the database and applied without a restart, and the endpoint refuses with 422 capability_disabled) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, ADR 0032 §5). `levels` names who may switch an entry off: `instance` (the Server Owner, `*` in ADR 0088's register) always, and `tenant` (a tenant owner, for their tenant, through PUT /api/tenants/{tenantId}/capability-switches/{capabilityId}, `+`) where listed. The effective state is the AND along the path at both levels, so a tenant only narrows. An entry a client offers before sign-in is instance-only, because the client cannot know a tenant's choice there (ADR 0088 decision 12). `requirements` are the entry's values that tighten it instead of switching it off (ADR 0088 decision 8): each a `flag` or a number of `days`, settable at the entry's levels, the strictest of both in effect (a flag set at either level, the smaller number of days). Each name is unique in the catalog, because it is a property of the wire's `Capability` (contracts/api/_common.openapi.yaml), and each carries its `title` and `whenSet`, what it refuses and what it does to what exists. `title`, `purpose` and `whenOff` are the entry's words for whoever switches it, each in English and German: what it is, what it is for, and what switching it off does to what is new and to what exists, as built (ADR 0088 decision 13). The catalog is the one place they are written; the backend generates its ids and these texts from it (buildSrc's GenerateCapabilityRegister), the API serves them and every client renders them from there. `description` is the dev-facing note and is not served. scripts/validate_capabilities.py checks the tree, that every `serves` resolves to a built use-case, and that every entry carries its three texts in both languages.",
   "capabilities": {
     "core.public-shares": {
       "title": {
@@ -18,6 +18,30 @@
       "serves": ["uc.sharing.share-public-viewer"],
       "source": "operator-policy",
       "levels": ["instance", "tenant"],
+      "requirements": {
+        "linkPassword": {
+          "kind": "flag",
+          "title": {
+            "en": "Every link needs a password",
+            "de": "Jeder Link braucht ein Passwort"
+          },
+          "whenSet": {
+            "en": "A new link, of any kind, can only be made or renewed with a password, and no link’s password can be removed. Links that already exist without a password stop working at once: a guest sees the same “This link isn’t available” page as for an expired link, until the link’s owner gives it a password. Nothing is deleted, so they work again once they have one or once this is cleared.",
+            "de": "Ein neuer Link, gleich welcher Art, lässt sich nur mit Passwort anlegen oder erneuern, und bei keinem Link lässt sich das Passwort entfernen. Bestehende Links ohne Passwort funktionieren sofort nicht mehr: Gäste sehen dieselbe Seite „Dieser Link ist nicht verfügbar“ wie bei einem abgelaufenen Link, bis die Person, der der Link gehört, ihm ein Passwort gibt. Gelöscht wird nichts, also funktionieren sie wieder, sobald sie eines haben oder diese Vorgabe aufgehoben ist."
+          }
+        },
+        "linkMaxDays": {
+          "kind": "days",
+          "title": {
+            "en": "Links end within this many days",
+            "de": "Links enden nach höchstens so vielen Tagen"
+          },
+          "whenSet": {
+            "en": "A new link, of any kind, needs an end date at most this many days after the day it is made. Links that already exist without an end date, or with one later than that counted from when they were made, stop working at once: a guest sees the same “This link isn’t available” page as for an expired link. Their owner can give a younger link an end date that fits; an older link is renewed. Nothing is deleted, so they work again once this is cleared.",
+            "de": "Ein neuer Link, gleich welcher Art, braucht ein Enddatum, das höchstens so viele Tage nach dem Tag liegt, an dem er angelegt wird. Bestehende Links ohne Enddatum oder mit einem späteren, gezählt ab ihrer Erstellung, funktionieren sofort nicht mehr: Gäste sehen dieselbe Seite „Dieser Link ist nicht verfügbar“ wie bei einem abgelaufenen Link. Einem jüngeren Link kann die Person, der er gehört, ein passendes Enddatum geben; ein älterer wird erneuert. Gelöscht wird nichts, also funktionieren sie wieder, sobald diese Vorgabe aufgehoben ist."
+          }
+        }
+      },
       "description": "Public share links of a node in the READ access mode, and the parent of every other share entry. Off => createShare, reactivateShare and reissueShare of a READ link are refused with 422 capability_disabled, and by the AND along the path so are those of a contribute and a drop-box link; the client hides the Share affordance. A share switch acts at once (ADR 0088 decision 5): every guest endpoint answers an existing link of a switched-off role exactly as an unknown link (404 share_not_found, ShareGuestGate.activeShare), and serves it again when the entry is back on, because nothing is written onto the link."
     },
     "core.public-shares.contribute": {
@@ -72,6 +96,19 @@
       "serves": ["uc.spaces.add-group-member", "uc.spaces.manage-group-members", "uc.spaces.rename-group", "uc.spaces.delete-group", "uc.spaces.consent-group-add"],
       "source": "operator-policy",
       "levels": ["instance", "tenant"],
+      "requirements": {
+        "addConsent": {
+          "kind": "flag",
+          "title": {
+            "en": "Being added to a group needs a yes",
+            "de": "Aufnahme in eine Gruppe braucht ein Ja"
+          },
+          "whenSet": {
+            "en": "Whoever is added to a group is asked first and joins only once they say yes, whatever their own setting says. Members already in a group stay, including someone added just before whose access is still on its way.",
+            "de": "Wer in eine Gruppe aufgenommen wird, wird zuerst gefragt und kommt erst nach einem Ja dazu, egal was die eigene Einstellung sagt. Wer schon in einer Gruppe ist, bleibt, auch wer gerade erst aufgenommen wurde und dessen Zugang noch unterwegs ist."
+          }
+        }
+      },
       "description": "Shared group spaces. Off => creating a group scope (createGroup) is refused with 422 capability_disabled and the client hides the affordance: a personal-only instance. A feature switch refuses only what is new (ADR 0088 decision 5), so an existing group stays usable: renaming it, managing its members, deleting and restoring it, and accepting or declining an add keep working."
     },
     "core.remember-device": {
@@ -90,6 +127,19 @@
       "serves": ["uc.account.trust-device", "uc.account.remember-this-device"],
       "source": "operator-policy",
       "levels": ["instance"],
+      "requirements": {
+        "passwordMaxDays": {
+          "kind": "days",
+          "title": {
+            "en": "Ask for the password again after this many days",
+            "de": "Nach so vielen Tagen erneut nach dem Passwort fragen"
+          },
+          "whenSet": {
+            "en": "A signed-in device asks for the password again once this many days have passed since it signed in, on remembered devices too; after that, a remembered device opens as before. It applies at once: devices signed in for longer are asked at their next renewal, at most a quarter of an hour later. A device added from another one counts from when it was added. Nothing is deleted.",
+            "de": "Ein angemeldetes Gerät fragt erneut nach dem Passwort, sobald seit der Anmeldung so viele Tage vergangen sind, auch ein gemerktes Gerät; danach öffnet ein gemerktes Gerät wie zuvor. Das gilt sofort: Geräte, die schon länger angemeldet sind, werden bei ihrer nächsten Verlängerung gefragt, spätestens eine Viertelstunde später. Ein Gerät, das über ein anderes hinzugefügt wurde, zählt ab dem Hinzufügen. Gelöscht wird nichts."
+          }
+        }
+      },
       "description": "Remembering a device: a DEVICE wrap, the Master Key under the password and a device-bound key that stands in for the Secret Key. Off => enrolling a DEVICE wrap (addAccountWrap) is refused with 422 capability_disabled, and by the AND along the path so is a passwordless one; the client hides \"remember this device\". Unlocking with a wrap that already exists, and deleting one, stay allowed."
     },
     "core.remember-device.passwordless": {

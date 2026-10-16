@@ -1216,6 +1216,7 @@ paths:
                   "off": true
                   serverOff: false
                   effective: false
+                  requirements: []
         "401":
           description: Generic authentication failure.
           content:
@@ -1293,6 +1294,7 @@ paths:
                 "off": true
                 serverOff: false
                 effective: false
+                requirements: []
         "400":
           description: The request was malformed, or `off` is missing. Nothing is stored.
           content:
@@ -1320,6 +1322,122 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: capability_not_found }
+
+  /api/tenants/{tenantId}/capability-switches/{capabilityId}/requirements/{requirement}:
+    put:
+      tags: [tenants]
+      operationId: setTenantCapabilityRequirement
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the tenant owner; the write carries one requirement's value, and the later write on the same
+          requirement wins.
+      summary: Set one requirement on a capability entry for this tenant (owner-gated).
+      description: >
+        Sets the tenant's value of one requirement of a tenant-switchable entry (ADR 0088 decision 8): a flag (`1`) or a
+        number of days (1 to 3650). The value in effect for the tenant is the strictest of the instance's and the
+        tenant's, so a tenant tightens and never loosens: a looser value is stored and listed as not in effect. It acts at
+        once, on the tenant's existing links too, as the requirement's `whenSet` says. Owner-gated (`403
+        not_tenant_owner`; a non-member `404`). Returns the entry as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - name: capabilityId
+          in: path
+          required: true
+          description: The entry's id, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: core.public-shares }
+        - name: requirement
+          in: path
+          required: true
+          description: The requirement's name, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: linkPassword }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantCapabilityRequirementUpdate" }
+            example: { value: 1 }
+      responses:
+        "200":
+          description: The value was stored and applied; the entry as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantCapabilitySwitch" }
+        "400":
+          description: The request was malformed, or the value does not fit the requirement's kind (a flag is `1`, days 1–3650). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner. Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id, or the caller is not a member of it (`tenant_not_found`); or no tenant-switchable
+            entry has a requirement of this name (`requirement_not_found`). Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: requirement_not_found }
+    delete:
+      tags: [tenants]
+      operationId: clearTenantCapabilityRequirement
+      summary: Clear one requirement on a capability entry for this tenant (owner-gated).
+      description: >
+        Removes the tenant's value; the instance's, if any, stays in effect. Clearing one that is not set changes nothing
+        and answers the same. Owner-gated. Returns the entry as it now stands.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - name: capabilityId
+          in: path
+          required: true
+          description: The entry's id, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: core.public-shares }
+        - name: requirement
+          in: path
+          required: true
+          description: The requirement's name, as the catalog spells it.
+          schema: { type: string, maxLength: 64, example: linkPassword }
+      responses:
+        "200":
+          description: The value is cleared; the entry as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantCapabilitySwitch" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner. Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id, or the caller is not a member of it (`tenant_not_found`); or no tenant-switchable
+            entry has a requirement of this name (`requirement_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: requirement_not_found }
 
   /api/tenants/{tenantId}/storage:
     get:
@@ -2489,7 +2607,7 @@ components:
         One register entry a tenant owner may switch (ADR 0088 decision 12), with its words and both levels' state.
         Tenant configuration and server self-description; nothing here is member data.
       # `off` is quoted as in instance.openapi.yaml's InstanceCapability: a YAML 1.1 parser reads a bare `off` as false.
-      required: [id, title, purpose, whenOff, "off", serverOff, effective]
+      required: [id, title, purpose, whenOff, "off", serverOff, effective, requirements]
       properties:
         id:
           x-veyq-visibility: public
@@ -2522,6 +2640,13 @@ components:
             Whether the entry is active for this tenant: on at both levels, for it and every ancestor (the AND along
             the path). The gates and the tenant's set follow this.
           example: true
+        requirements:
+          type: array
+          description: >
+            The entry's requirements (the catalog's, in its order; empty for most), each with its words, the tenant's
+            value, the instance's and the one in effect (ADR 0088 decision 8).
+          maxItems: 16
+          items: { $ref: "#/components/schemas/TenantCapabilityRequirement" }
 
     CapabilityText:
       type: object
@@ -2540,6 +2665,59 @@ components:
           description: The German text.
           maxLength: 1024
           example: Öffentliche Links
+
+    TenantCapabilityRequirement:
+      type: object
+      description: >
+        One requirement of a tenant-switchable entry (ADR 0088 decision 8), with its words and its value at both
+        levels. A flag's value is `1`, days are a number of days; null where a level sets none.
+      required: [name, kind, title, whenSet]
+      properties:
+        name:
+          x-veyq-visibility: public
+          type: string
+          description: The requirement's name, unique in the catalog; also the property that carries it on `Capability`.
+          maxLength: 64
+          example: linkPassword
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          enum: [flag, days]
+          description: A flag (set or not, value `1`) or a number of days.
+          example: flag
+        title:
+          $ref: "#/components/schemas/CapabilityText"
+        whenSet:
+          $ref: "#/components/schemas/CapabilityText"
+        value:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          description: The tenant's own value; null while the tenant sets none.
+          example: 1
+        serverValue:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          description: The instance's value, set by the Server Owner; null while it sets none.
+          example: null
+        effective:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          description: The value in effect for the tenant, the strictest of both (a flag set at either, the smaller number of days); null when neither sets one.
+          example: 1
+
+    TenantCapabilityRequirementUpdate:
+      type: object
+      description: One requirement's value to store for the tenant.
+      required: [value]
+      properties:
+        value:
+          x-veyq-visibility: measure
+          type: integer
+          description: '`1` sets a flag; for days, the number of days, 1 to 3650.'
+          minimum: 1
+          maximum: 3650
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(3650)'
 
     TenantCapabilitySwitchUpdate:
       type: object

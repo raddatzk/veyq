@@ -27,6 +27,13 @@ id outside it, so a missing or misspelt level would quietly take a switch away f
 The defect that bought the check: no incident. Built with cr-tenant-capability-switches; run against the untouched
 catalog, which carried no `levels`, it was red seven times, once per entry.
 
+And it checks every requirement (ADR 0088 decision 8): a `flag` or `days` `kind`, its `title` and `whenSet` in both
+languages, a name no other entry uses, and that the name is a property of the wire's `Capability`
+(`contracts/api/_common.openapi.yaml`) of the matching type (a flag boolean, days integer), because both deliveries carry
+the values as `[{ id, …values }]`. A requirement missing there would be stored, enforced and invisible to every client.
+The defect that bought it: no incident. Built with cr-capability-requirements; run against a catalog with the four
+requirements and the untouched `Capability`, it was red four times, once per name.
+
 And it checks every entry carries its words (ADR 0088 decision 13): `title`, `purpose` and `whenOff`, each an
 object with a non-empty `en` and a non-empty `de` string (`TEXT_FIELDS`, `LANGUAGES`). They are what the Server
 Owner reads before switching an entry off, and the catalog is the one place they are written: the API serves them
@@ -74,6 +81,10 @@ UC_RE = re.compile(r"^uc\.([a-z0-9-]+)\.[a-z0-9-]+$")
 KNOWN_SOURCES = {"operator-policy", "infra-preflight"}
 # Who may switch an entry off (ADR 0088 decisions 2 and 12): the Server Owner always, a tenant owner where listed.
 LEVELS = ("instance", "tenant")
+# A requirement's kind (ADR 0088 decision 8) and the type its property has on the wire's `Capability`.
+REQUIREMENT_KINDS = {"flag": "boolean", "days": "integer"}
+REQUIREMENT_TEXTS = ("title", "whenSet")
+COMMON = ROOT / "contracts" / "api" / "_common.openapi.yaml"
 # The roots an id may hang from (ADR 0088 decision 1). `core` alone until the first application entry; see the docstring.
 ROOTS = {"core"}
 # The words every entry carries for the Server Owner (ADR 0088 decision 13), each in every language below.
@@ -147,6 +158,36 @@ for cid, entry in caps.items():
             errors.append(
                 f"{cid}: serves '{uc}' is not built yet (coverage status: planned) — a capability is advertised "
                 f"active only once its use-cases are built (ADR 0032 §6)")
+
+# Requirements (ADR 0088 decision 8): each a flag or a number of days with its words, and each name a property of the
+# wire's `Capability` of the matching type, because both deliveries carry the values as `[{ id, …values }]`.
+capability_schema = (yaml.safe_load(COMMON.read_text()) or {}).get("components", {}).get("schemas", {}).get("Capability", {})
+wire_properties = capability_schema.get("properties", {})
+seen_requirements: dict[str, str] = {}
+for cid, entry in caps.items():
+    requirements = entry.get("requirements", {})
+    if not isinstance(requirements, dict):
+        errors.append(f"{cid}: requirements must be an object of name -> requirement")
+        continue
+    for name, req in requirements.items():
+        where = f"{cid}: requirement {name}"
+        if name in seen_requirements:
+            errors.append(f"{where} is also {seen_requirements[name]}'s: a name is one property of the wire's Capability")
+        seen_requirements[name] = cid
+        kind = req.get("kind") if isinstance(req, dict) else None
+        if kind not in REQUIREMENT_KINDS:
+            errors.append(f"{where}: kind must be one of {sorted(REQUIREMENT_KINDS)}, got {kind!r}")
+        for field in REQUIREMENT_TEXTS:
+            text = req.get(field) if isinstance(req, dict) else None
+            if not isinstance(text, dict) or any(not isinstance(text.get(lang), str) or not text[lang].strip() for lang in LANGUAGES):
+                errors.append(f"{where}: {field} must carry a non-empty {' and '.join(LANGUAGES)} (ADR 0088 decision 13)")
+        prop = wire_properties.get(name)
+        if prop is None:
+            errors.append(f"{where} is no property of Capability in {COMMON.relative_to(ROOT)}: no client could read it")
+        elif kind in REQUIREMENT_KINDS and REQUIREMENT_KINDS[kind] not in (
+            [prop.get("type")] if isinstance(prop.get("type"), str) else (prop.get("type") or [])
+        ):
+            errors.append(f"{where}: Capability.{name} is {prop.get('type')!r}, a {kind} needs {REQUIREMENT_KINDS[kind]}")
 
 if errors:
     print("CAPABILITY CATALOG VALIDATION FAILED:")
