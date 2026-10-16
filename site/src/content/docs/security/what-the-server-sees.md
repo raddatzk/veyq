@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0047-inline-video-playback-range-streaming.md
   - docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md
   - docs/decisions/0014-group-scopes-and-governance.md
+  - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
 ---
 
 The server never sees content, only structure. Operator-blind does not mean metadata-blind: a defined set of
@@ -120,6 +121,11 @@ time the server observes live is not kept for them. What it does hold, each with
   the database in the clear
   ([ADR 0050](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0050-operator-config-secret-encryption.md)).
 - A mail itself carries only a link, the domain, an expiry and neutral copy, never sealed metadata.
+- The instance's **own mail settings**, for its release notices to the Server Owner: the same fields, the password
+  sealed the same way, the hash of an outstanding confirmation code and which address was confirmed when. A notice
+  mail carries release numbers, a date and a link. The **release check** behind it stores its switch, its source and
+  what it found about published releases; its daily request names no release
+  ([ADR 0097](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)).
 
 ### Account email
 

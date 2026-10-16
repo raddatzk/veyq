@@ -42,6 +42,8 @@ vi.mock('../features/tenants/TenantDetailPanel.vue', () => ({
 vi.mock('../features/instance/ReleaseVersionPanel.vue', () => ({ default: { template: '<div class="stub-release" />' } }))
 vi.mock('../features/instance/CapabilitiesPanel.vue', () => ({ default: { template: '<div class="stub-capabilities" />' } }))
 vi.mock('../features/instance/ExternalServicesPanel.vue', () => ({ default: { template: '<div class="stub-services" />' } }))
+vi.mock('../features/instance/ReleaseNoticesPanel.vue', () => ({ default: { template: '<div class="stub-notices" />' } }))
+vi.mock('../features/instance/InstanceMailPanel.vue', () => ({ default: { template: '<div class="stub-mail" />' } }))
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
@@ -67,6 +69,7 @@ const i18n = createI18n({
       release: { navTitle: 'Release' },
       capabilities: { navTitle: 'Capabilities' },
       services: { navTitle: 'External services' },
+      instanceMail: { navTitle: 'Mail' },
     },
   },
 })
@@ -183,6 +186,19 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     await flushPromises()
     expect(w.find('.stub-services').exists()).toBe(true)
     expect(w.find('.stub-capabilities').exists()).toBe(false)
+  })
+
+  it('shows the release check under Server → Release, and opens Server → Mail (uc.admin.learn-of-new-releases)', async () => {
+    vi.mocked(listTenants).mockResolvedValue([])
+    const { w } = await mountConsole()
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Release'))!.trigger('click')
+    await flushPromises()
+    expect(w.find('.stub-release').exists()).toBe(true)
+    expect(w.find('.stub-notices').exists()).toBe(true)
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Mail'))!.trigger('click')
+    await flushPromises()
+    expect(w.find('.stub-mail').exists()).toBe(true)
+    expect(w.find('.stub-notices').exists()).toBe(false)
   })
 })
 

@@ -65,8 +65,9 @@ The owner's go covers every phase, landing on `main` included (2026-10-16).
   - *A local candidate* passes `--unsigned-local`, refused unless both image references carry no registry host and no
     digest (a `docker build -t veyq:<x>` tag); the run says on every line that nothing was verified.
   - *The manifest marks an unscheduled major* (`"unscheduled": true`), from a publish input that defaults to false
-    and is refused on a release that does not change the major. [`cr-release-notices`](cr-release-notices.md) reads
-    it; this CR only writes it.
+    and is refused on a release that does not change the major. The backend's release check reads it
+    (`core/admin/instance/ReleaseFeed`, ADR 0097 — built: through the GitHub source it reads each new major's
+    `manifest.json` release asset, so the publish of phase 2 must upload it); this CR only writes it.
 
 ### Inventory — the locators
 

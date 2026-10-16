@@ -168,6 +168,11 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   hash of a full-entropy key, not the key, so the "no usable secret in a DB dump" property holds); a mail itself
   carries only link + domain + expiry + neutral copy, never sealed metadata
   ([ADR 0049](../decisions/0049-email-delivery-boundary.md)).
+  The **instance's own mail settings** are of the same class (host/port/from/username/TLS, the password sealed the
+  same way, the hash of the outstanding confirmation code, and which address the Server Owner confirmed and when), and
+  so is the **release check** — its switch, its source, its last success and the notices it found, which describe
+  published software only ([ADR 0097](../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)).
+  Its daily request names no release, and the notice mail carries release numbers, a date and a link, no user data.
 
 **Applications widen what is visible by one fact: the node `kind`.** The kind of every node is a server-visible
 column already (`FOLDER`, `MEMORY`, `CHAPTER`, `FILE`, `DEPOT_DROPBOX` today). Once an application adds kinds, it also shows the operator

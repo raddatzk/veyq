@@ -1,6 +1,8 @@
 # ADR 0097 — An instance looks for new releases by default and mails its Server Owner
 
-- Status: Accepted 2026-10-16; nothing of it is built
+- Status: Accepted 2026-10-16; built: decisions 1–6 (`core/admin/instance/`, `core/mail/`, admin-web's Server →
+  Release and Server → Mail). The GitHub source reads each candidate major's `manifest.json` release asset, which
+  exists once `veyqctl`'s publish uploads it; until then a new major on GitHub is a failed check, a mirror is not
 - Date: 2026-10-16
 
 ## Context
@@ -88,3 +90,7 @@ not an instance notice and stays ADR 0048 §5's copy-link (inbox #465).
   major was unscheduled, and `veyqctl` reads the releases anyway.
 - **Rejected — reuse a tenant's SMTP for the Server Owner.** There may be no tenant, and it would send instance notices
   under a tenant's identity.
+
+On the docs site: [Operations](../../site/src/content/docs/run/operations.md) (the check, switching it off, a mirror),
+[Storage and email](../../site/src/content/docs/run/storage-and-email.md) (the instance mail) and
+[What the server sees](../../site/src/content/docs/security/what-the-server-sees.md).

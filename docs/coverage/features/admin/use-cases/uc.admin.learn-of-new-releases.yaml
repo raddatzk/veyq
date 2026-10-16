@@ -1,40 +1,74 @@
 useCase: uc.admin.learn-of-new-releases
 feature: admin
 title: Learn of a new release without looking for one
-status: planned
-# Refined 2026-10-16 with ADR 0097 (cr-release-notices). Nothing is built.
+# Built by cr-release-notices (ADR 0097): the daily check (core/admin/instance/ReleaseCheck, ReleaseFeed,
+# ReleaseNoticePolicy) against an in-test HTTP source, the instance mail (InstanceMailSettingsHandler,
+# InstanceNoticeMailer over core/mail/SmtpDelivery) against an in-JVM SMTP server, admin-web's Server → Release and
+# Server → Mail. Every "no request" / "nothing mailed" has a control on the same source or relay that does.
 acceptanceCriteria:
   - id: the-instance-checks-by-default-and-names-no-version
     text: >-
       A stamped instance reads the published releases once a day by default, and its request carries nothing that
       names the running release; the comparison is local.
+    coverage:
+      backend:
+        unit: [ReleaseFeedTest.theGitHubListSkipsDraftsAndKeepsThePublishedDay, ReleaseFeedTest.theGitHubManifestIsFollowedThroughItsRedirect, ReleaseFeedTest.aMirrorIsReadInTheProducersLayout, ReleaseFeedTest.aTagThatIsNoReleaseNeverReachesAPath]
+        integration: [ReleaseCheckSliceTest.aNewInstanceChecksTheGitHubReleasesByDefault, ReleaseCheckSliceTest.theRequestNamesNoRelease, ReleaseCheckStampedSliceTest.theScheduledRunAsksTheSourceWithTheInstancesOwnRelease, ReleaseCheckSliceTest.unstampedRunMakesNoRequest, ReleaseCheckSliceTest.aSnapshotMakesNoRequest]
   - id: the-check-can-be-switched-off-and-pointed-elsewhere
     text: >-
       The Server Owner switches the check off, after which the instance makes no request, or points it at a mirror.
+    coverage:
+      backend:
+        integration: [ReleaseCheckSliceTest.switchedOffMakesNoRequestAndOnAgainDoes, ReleaseCheckSliceTest.aSourceMustBeAnHttpUrl, ReleaseCheckSliceTest.aMemberIsNotTheServerOwnerAndIsRefused]
   - id: a-failed-check-blocks-nothing
     text: >-
       An unreachable or malformed source is logged and retried; no request, startup or other job waits on it, and
       the console shows when the last check succeeded.
+    coverage:
+      backend:
+        unit: [ReleaseFeedTest.aStatusOtherThan200IsAFailedRead, ReleaseFeedTest.aSlowAnswerIsAFailedRead, ReleaseFeedTest.anAnswerOverItsCapIsAFailedReadAndOneAtItIsNot, ReleaseFeedTest.aListOfTheWrongShapeIsAFailedRead, ReleaseFeedTest.aManifestThatNamesAnotherReleaseIsAFailedRead]
+        integration: [ReleaseCheckSliceTest.aServerErrorLeavesTheNoticesAndTheLastSuccess, ReleaseCheckSliceTest.aSlowSourceLeavesTheNoticesAndTheLastSuccess, ReleaseCheckSliceTest.anOversizedAnswerLeavesTheNoticesAndTheLastSuccess, ReleaseCheckSliceTest.aMalformedAnswerLeavesTheNoticesAndTheLastSuccess]
   - id: a-newer-release-is-noticed-in-the-console
     text: >-
       The admin console shows every release newer than the running one that the check found.
+    coverage:
+      backend:
+        unit: [ReleaseNoticePolicyTest.everyNewerReleaseOfTheRunningMajorIsANoticeAndNoOlderOneIs, ReleaseNoticePolicyTest.noNewerReleaseIsNoNotice, ReleaseNoticePolicyTest.aNoticesKeyIsItsIdentityAcrossChecks]
+        integration: [ReleaseCheckSliceTest.aNewerReleaseOfTheRunningMajorIsNoticed, ReleaseCheckSliceTest.aNoticeIsFoundOnceAcrossTwoChecks, ReleaseCheckStampedSliceTest.theConsoleShowsANoticeOnlyWhileItsReleaseIsNewerThanTheRunningOne]
   - id: majors-are-told-apart-and-an-unscheduled-one-is-urgent
     text: >-
       A planned new major is shown with the date the running major leaves the client window; an unscheduled one, as
       the release manifest marks it, is shown as urgent.
+    coverage:
+      backend:
+        unit: [ReleaseNoticePolicyTest.aPlannedMajorCarriesTheDayTheRunningMajorLeavesTheWindow, ReleaseNoticePolicyTest.aTrainThatLeftLateStillEndsTheWindowOnTheFirstOfMay, ReleaseNoticePolicyTest.anUnscheduledMajorIsUrgentAndDoesNotMoveTheWindow, ReleaseNoticePolicyTest.aMajorIsOneNoticeOnItsFirstRelease, ReleaseNoticePolicyTest.theWindowRemindersFallDueNinetyAndThirtyDaysAheadOneAtATime]
+        integration: [ReleaseCheckSliceTest.aPlannedMajorIsNoticedWithTheDayTheRunningMajorLeavesTheWindow, ReleaseCheckSliceTest.anUnscheduledMajorIsNoticedAsSuch, ReleaseCheckSliceTest.theWindowReminderFallsDueBeforeTheWindowEnds]
   - id: instance-mail-reaches-only-the-server-owner
     text: >-
       Instance mail settings are the Server Owner's, their password sealed under the config-secret key; they send
       only instance notices and only to the Server Owner's address, and never a tenant's mail.
+    coverage:
+      backend:
+        integration: [InstanceMailSettingsSliceTest.theOwnerConfiguresSmtpAndThePasswordIsWriteOnlyAndSealed, InstanceMailSettingsSliceTest.omittingThePasswordKeepsTheStoredOne, InstanceMailSettingsSliceTest.theInstanceMailPasswordJoinsTheInstanceWideKeyState, InstanceMailSettingsSliceTest.aMemberIsNotTheServerOwnerAndIsRefused, InstanceNoticeMailSliceTest.aSaveMailsTheCodeToTheServerOwnerAndTheCodeConfirms, InstanceNoticeMailSliceTest.aTenantsSettingsNeverSendAnInstanceNotice, InstanceNoticeMailSliceTest.theInstanceSettingsNeverSendATenantsMail, InstanceNoticeMailSliceTest.aKeyThatCannotOpenThePasswordSendsNothingAndSaysWhy]
   - id: the-address-is-confirmed-before-any-notice
     text: >-
       Saving the instance mail settings sends a test mail with a one-time code; no notice is mailed until the code
       was entered in the admin console, and a changed address or changed settings ask again.
+    coverage:
+      backend:
+        integration: [InstanceNoticeMailSliceTest.aSaveMailsTheCodeToTheServerOwnerAndTheCodeConfirms, InstanceNoticeMailSliceTest.aSaveWhoseTestMailCannotBeDeliveredSaysSoAndConfirmsNothing, InstanceNoticeMailSliceTest.nothingIsMailedWhileUnconfirmedAndTheNoticesFollowOnceConfirmed, InstanceNoticeMailSliceTest.aChangedAccountAddressUnconfirmsAndStopsTheMail, InstanceMailSettingsSliceTest.aCodeIsRefusedWhenNoneIsOutstanding]
   - id: each-notice-is-mailed-once-with-a-calendar-date
     text: >-
       Each notice is mailed once; a planned major and the window reminders carry their date written out and as an
       attached `.ics` event.
+    coverage:
+      backend:
+        integration: [InstanceNoticeMailSliceTest.aNoticeIsMailedOnceAcrossTwoChecks, InstanceNoticeMailSliceTest.aDatedNoticeCarriesItsDateAsAnIcsThatParses, InstanceNoticeMailSliceTest.anUndatedNoticeCarriesNoCalendar, InstanceNoticeMailSliceTest.aFailedSendLeavesTheNoticeForTheNextCheck]
 gaps:
-  backend: "Not built: no release check, no instance mail settings, no notices (cr-release-notices)."
-  admin-web: "Not built: the Release panel shows no notices, and there is no Server → Mail panel (cr-release-notices)."
+  admin-web: >-
+    Server → Release's notices and check (`ReleaseNoticesPanel.test.ts`: the urgent row apart, an unstamped build said
+    as such, switching off, a refused source), Server → Mail (`InstanceMailPanel.test.ts`: the write-only password, the
+    code entry and its refusal, the key state), the nav (`AdminConsoleView.test.ts`) and `veyq-admin release` /
+    `release check on|off` (`cli.test.ts`) live in `admin-web` (ADR 0065); their suites exist and pass under
+    `npm run check`, and wait until admin-web's CI job has executed (ADR 0040), as uc.admin.switch-capabilities' do.
   web: "No web surface: the Server Owner's client is admin-web (ADR 0065), where this use-case lives."

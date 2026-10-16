@@ -49,3 +49,5 @@ None for members. The instance makes one outbound request a day unless switched 
   [ADR 0048](../../../decisions/0048-provider-neutral-smtp-mail-transport.md) (tenant mail, which this does not touch)
 - [uc.admin.install-and-upgrade-instance](uc.admin.install-and-upgrade-instance.md),
   [uc.admin.tenant-mail-settings](uc.admin.tenant-mail-settings.md)
+- Run area of the docs site: [Operations](../../../../site/src/content/docs/run/operations.md),
+  [Storage and email](../../../../site/src/content/docs/run/storage-and-email.md)

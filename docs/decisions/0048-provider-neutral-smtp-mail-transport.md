@@ -44,8 +44,11 @@ keeps the copy-link (§5).**
 3. **The password is a server-held secret, encrypted at rest** ([ADR 0050](0050-operator-config-secret-encryption.md)):
    the DB holds only ciphertext + nonce, the field is **write-only** over the API (never returned or logged —
    reads expose only a `passwordSet` boolean), and it is decrypted only at send time to build the client.
-4. **Per-tenant, no server-level default.** Mail settings exist only at tenant scope (the owner's choice), so
-   there is no instance-wide secret. The `LoggingTenantInviteMailer` copy-link fallback
+4. **Per-tenant, no server-level default.** A tenant's mail settings exist only at tenant scope (the owner's
+   choice), so there is no instance-wide secret for tenant mail. The instance's own mail settings
+   ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3) are the one other
+   SMTP configuration: they send only instance notices, only to the Server Owner, and are never a tenant's default or
+   fallback — the two share the wire (`core/mail/SmtpDelivery`) and nothing else. The `LoggingTenantInviteMailer` copy-link fallback
    that a tenant without settings once fell back to now serves **only the owner-bootstrap invite** of §5 —
    [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) made a working mailer a precondition for every
    other mail-bound action, so a tenant with no sendable settings is refused rather than degraded.
@@ -85,7 +88,7 @@ keeps the copy-link (§5).**
 - **Rejected — a hosted provider SDK.** Breaks self-hostability (the security guarantee) + vendor lock;
   deliverability ops are #38, not a transport decision.
 - **Rejected — a server-level default + per-tenant override.** The owner chose per-tenant only; a default
-  reintroduces an instance-wide server-held secret and more config surface, for the one case the copy-link still
+  reintroduces an instance-wide server-held secret for tenant mail and more config surface, for the one case the copy-link still
   covers (the bootstrap invite); an unconfigured tenant is refused instead ([ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)).
 - **Rejected — plaintext password in the DB.** Breaks the "a DB dump yields no usable secret" property; encrypted
   at rest instead ([ADR 0050](0050-operator-config-secret-encryption.md)).

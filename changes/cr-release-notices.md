@@ -127,7 +127,7 @@ Implementation waits for the owner's go on this CR.
     "key absent" criterion is proven on `MISMATCH`, the same `state != OK` branch. Bitten: the confirmation gate,
     the claim's `mailed_at is null`, the claim's release, the line fold and the key check each turned a test red.
 
-- [ ] **4 admin-web, docs, coverage.** Server → Release lists the notices (urgent styled as such) and the check's
+- [x] **4 admin-web, docs, coverage.** Server → Release lists the notices (urgent styled as such) and the check's
   switch, source and last success; Server → Mail holds the settings, the send-and-confirm step and the code entry; the
   CLI's `release` prints the notices and `release check on|off` toggles (mail stays console-only, as tenant mail is,
   `admin-web/src/cli/commands.ts:8-9`). `admin-web/src/i18n/index.ts` EN and DE. ADR 0048 §4 edited in place ("no
@@ -138,6 +138,12 @@ Implementation waits for the owner's go on this CR.
     from Mailpit, see the notice mailed once with its `.ics`; switch off and see the panel say so.
   - **Done when:** `npm run check` in `admin-web/` and `site/` green; `python3 scripts/validate_coverage.py` green; the
     browser pass's evidence kept; committed.
+  - **Built:** `ReleaseNoticesPanel` under the running release, `InstanceMailPanel` (web's tenant panel's transport
+    half, copied) on Server → Mail, `veyq-admin release` (the notices merged after `release`) and `release check on|off`
+    (keeps the source). Coverage: backend refs per criterion; admin-web stays a named gap until its CI job has run
+    (ADR 0040), as its neighbours do. Docs: ADR 0048 §4, ADR 0097's status, `security-model.md`, Run → Operations,
+    Storage and email, Hardening, Security → What the server sees. **Browser pass not run** (no dev stack in this
+    session): owed, recorded on inbox #464.
 
 ## Definition of done
 
@@ -148,3 +154,21 @@ and how to stop it. **Baseline** — before the first edit, on a detached worktr
 and `./gradlew check` from `backend/`.
 
 ## Retrospective
+
+- **The refine's inventory of sweeps was written from the contract side only.** It listed every guard a new
+  *operation* meets and missed the one a new *table* meets: `EveryStoredTimeHasAReaderTest` went red on five time
+  columns at the first full `check`. Harvested into `backend/CLAUDE.md` § Migrations. Likewise "tested against Mailpit,
+  as tenant mail is" was remembered — tenant mail is tested with GreenMail in the JVM — and "one un-mocked `.ics`
+  parse" named no parser where none exists (harvested into `changes/README.md`). *Next time:* the refine runs the
+  inventory locator for the test trees too (`grep -rn "Instant" … EveryStoredTime…`) and reads the neighbour's test
+  before citing how it is tested.
+- **A stopped predecessor's wip spanned phases 2 and 3 in one tree** (the instance-mail table and endpoints arrived
+  with phase 2), and phase 3's first files were written before phase 2 was committed, so the phase-2 `check` needed
+  them set aside by hand. *Next time:* commit a phase before the first file of the next is written; a wip save names
+  which phase each file belongs to.
+- **Two of the new tests were green for the wrong reason until bitten.** The key-mismatch test passed with the key
+  check removed (the relay refused the login anyway), and "mailed once" passed with the claim's `mailed_at is null`
+  removed (the read filter held it). Both got a control (a relay that accepts that login; a second claim refused) —
+  `changes/README.md`'s "tell the guard held apart from nothing ran", applied late rather than at design time.
+- **The browser pass the CR's phase 4 asks for could not run**: the brief forbade a dev stack. The CR named the pass
+  but not that this session would not be allowed one; it is recorded as owed on inbox #464.
