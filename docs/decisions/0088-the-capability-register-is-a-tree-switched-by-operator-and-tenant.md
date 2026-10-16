@@ -1,7 +1,8 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
 - Status: Accepted 2026-10-15; the instance level and the tenant level are built, share switches reaching existing
-  links included (inbox #442, #439 step 2); requirements and external services are not (§ Consequences; inbox #439). It replaces
+  links included (inbox #442, #439 step 2), and so are four requirements (#439 step 3); external services are not
+  (§ Consequences; inbox #439). It replaces
   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
   [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match.
 - Date: 2026-10-15
@@ -139,7 +140,7 @@ both off a place still works, named by hand. The user's own consent to the two
 | `core.public-shares` | a link needs a password; a link expires within N days |
 | `core.group-space` | joining a group needs the member's consent (today a per-user setting, `require_group_add_consent`) |
 | `core.remember-device` | ask for the password again after N days |
-| `core.public-shares` | share only with verified identities (planned; not buildable as specified) |
+| `core.public-shares` | share only with verified identities (planned; not buildable as specified: the server knows no verified identity to check) |
 | `core.offline-cache` [native] | no decrypted data kept on the device. Only the client can keep this, the server cannot enforce it |
 
 ### Not in the register
@@ -193,10 +194,23 @@ both off a place still works, named by hand. The user's own consent to the two
   share gates and the guest gate ask the share's scope's tenant, group creation the request's, node creation the
   scope's; the key material and pairing ask none (the instance-only entries above). The Server Owner's console marks
   the entries a tenant may narrow further (`tenantSwitchable`).
-- **Not built:** requirements (decision 8); external services as entries (decision 7); configuration as
-  code (#444); a member's share list saying that a link serves no guest while its switch is off (the list shows it as
-  on, and the share dialogs only hide what the switch refuses). The off states have not yet been seen in a real
-  browser.
+- **Four requirements are built** (decision 8, measured: `CapabilityRequirements`, generated from the catalog's
+  `requirements`; `LinkRequirements`; `SessionService.pastPasswordMaxDays`): `core.public-shares` `linkPassword` and
+  `linkMaxDays`, `core.group-space` `addConsent`, `core.remember-device` `passwordMaxDays` (instance only, as its entry).
+  Each is set at its entry's levels (`PUT|DELETE …/requirements/{requirement}`, the console, `veyq-admin capabilities
+  require`, the tenant settings), stored per level in `veyq_capability_requirement` and
+  `veyq_tenant_capability_requirement`, and in effect at the strictest of both. Both deliveries carry the values on their
+  entry, `[{ id, …values }]`. They act at once (decision 5), and that took two decisions the table above did not hold:
+  a link's lifetime counts from when it was made, never from now, because a moving window would refuse a link today and
+  serve it later, so an edit fixes a younger link and an older one is renewed; and `addConsent` leaves members already
+  added alone, a direct add whose key is still on its way included, because the server holds no sealed name key to turn
+  it into a request and removing it would delete a membership. What the gates read is what the server already held: that
+  a link has a password verifier, its dates, a session family's start. Not built: the verified-identities requirement
+  and `offline-cache` (above), and a member's share list saying that a link serves no guest while a requirement or a
+  switch stops it.
+- **Not built:** external services as entries (decision 7); configuration as code (#444); a member's share list saying
+  that a link serves no guest while its switch is off (the list shows it as on, and the share dialogs only hide what
+  the switch refuses, or ask for what a requirement needs). The off states have not yet been seen in a real browser.
 - **The two enforcement gaps of the flat ids are closed.** The server gated `core.group-space` only at group creation
   although the catalog names five use-cases - decided a doc fault, since a feature switch refuses only what is new
   (decision 5), so group creation is the one gate. Depot let a member create a drop box while uploader links were off,

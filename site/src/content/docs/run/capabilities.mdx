@@ -6,10 +6,15 @@ sources:
   - docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md
   - docs/decisions/0032-capability-discovery-version-gating.md
   - docs/features/admin/use-cases/uc.admin.tenant-switch-capabilities.md
+  - docs/features/admin/use-cases/uc.admin.capability-requirements.md
   - contracts/platform/capabilities.json
 ---
 
 import catalog from '../../../../../contracts/platform/capabilities.json';
+
+export const requirements = Object.entries(catalog.capabilities).flatMap(([id, entry]) =>
+  Object.entries(entry.requirements ?? {}).map(([name, r]) => ({ entry: id, name, ...r })),
+);
 
 export const entries = Object.entries(catalog.capabilities).map(([id, entry]) => ({
   id,
@@ -75,6 +80,50 @@ An id the instance does not know is refused (`capability_not_found`, exit `1`), 
 A switch is stored in the database, so a database backup carries it. It acts on the next request, without a restart:
 the application reads the switches through an in-process cache that each write clears, which holds for the single
 replica both recipes run.
+
+## Requirements
+
+A requirement tightens an entry instead of switching it off
+([ADR 0088](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+decision 8). In the console each entry lists its requirements with **Require** and **Clear**; a requirement of days takes
+a number from 1 to 3650 first. Setting one shows what it does to what exists and asks you to confirm. The CLI:
+
+```sh
+veyq-admin capabilities require core.public-shares --requirement linkMaxDays --value 30
+veyq-admin capabilities require core.public-shares --requirement linkPassword --value 1
+veyq-admin capabilities require core.public-shares --requirement linkMaxDays --value off
+```
+
+`capabilities list` prints each entry's requirements with their value. A tenant owner can set the requirements of the
+entries they may switch for their own tenant; the value in effect is the stricter one (a flag set at either level, the
+smaller number of days), so a tenant tightens yours and never loosens it. Every member's client reads the values with
+the capability, before sign-in yours, after it the tenant's.
+
+<table>
+  <thead>
+    <tr>
+      <th>Requirement</th>
+      <th>What it does</th>
+    </tr>
+  </thead>
+  <tbody>
+    {requirements.map((r) => (
+      <tr>
+        <td>
+          <strong>{r.title.en}</strong>
+          <br />
+          <code>{r.entry}</code> <code>{r.name}</code> ({r.kind})
+        </td>
+        <td>{r.whenSet.en}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+A requirement acts at once, on what exists too: a link that misses one answers its guests like an unknown link until
+its owner fixes it or you clear the requirement; nothing is written onto it. `passwordMaxDays` is yours alone, like the
+remembered-device switches, and counts from a session's sign-in, or from the moment a device was added from another
+one: switch `core.device-linking` off if a device must never get a session without the password.
 
 ## The built entries
 
@@ -171,8 +220,9 @@ browser blocks it. Its address would become your configuration instead of a buil
 
 **Beyond the entries.**
 
-- **Requirements**, values on an entry where the strictest wins: a link needs a password, a link expires within N
-  days, joining a group needs the member's consent, a remembered device asks for the password again after N days.
+- **Two more requirements**: sharing only with verified identities (not buildable as specified: there is no verified
+  identity the server could check), and keeping no decrypted data on a native device (only the app could keep it, the
+  server cannot enforce it).
 - **Configuration as code** (inbox #444): declaring switches in the compose file or the Helm values instead of
   switching them in the console.
 

@@ -64,8 +64,8 @@ response and a client-side gate that reads them.
 - **Two deliveries.** The pre-auth `/api/setup` advertises the **instance** level, for what matters before login.
   After login the server delivers the **effective** set for the tenant. The client only reads it and never
   computes it (ADR 0088 decision 3).
-- **Wire shape** `[{ id }]` today. It grows to `[{ id, …values }]` for requirements (ADR 0088 decision 8), which is
-  additive and costs no major. The deprecation lifecycle (`state`, `sunsetAt`, `supersededBy`) stays deferred: a
+- **Wire shape** `[{ id, …values }]`: each entry carries the requirement values in effect on it (ADR 0088 decision
+  8), one optional property per requirement of the catalog, which was additive and cost no major. The deprecation lifecycle (`state`, `sunsetAt`, `supersededBy`) stays deferred: a
   removal under [ADR 0085](0085-one-major-moved-on-a-yearly-train.md) is marked `deprecated: true` in its contract
   and needs no manifest state.
 

@@ -53,6 +53,9 @@ handling of reported shares.
 - ★ [Switch capabilities off for a tenant](use-cases/uc.admin.tenant-switch-capabilities.md) — **built (backend +
   web)** (ADR 0088 decisions 2, 3, 12): the tenant level of the register, in the tenant settings beside terms and mail;
   a tenant only narrows what the Server Owner allows, and every gate refuses per tenant
+- ★ [Set requirements on capabilities](use-cases/uc.admin.capability-requirements.md) — **built (backend + web +
+  admin-web)** (ADR 0088 decision 8): a link needs a password, a link lives at most N days, being added
+  to a group needs a yes, a device asks for the password again after N days; the strictest of both levels
 - ★ [A tenant's storage quota](use-cases/uc.admin.tenant-storage-quota.md) — **built** (backend, web, admin-web)
   ([ADR 0073](../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md); the ceiling belongs to
   whoever pays for the store — for the instance's store the Server Owner, on the admin channel; none by default;

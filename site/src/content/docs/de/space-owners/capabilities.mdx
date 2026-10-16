@@ -2,6 +2,7 @@
 title: "Was dein Bereich anbietet"
 sources:
   - docs/features/admin/use-cases/uc.admin.tenant-switch-capabilities.md
+  - docs/features/admin/use-cases/uc.admin.capability-requirements.md
 ---
 
 Du legst fest, was dein Bereich seinen Mitgliedern anbietet: öffentliche Links, Links, über die Gäste Fotos oder
@@ -26,3 +27,21 @@ Was Ausschalten bewirkt, kurz:
 Gemerkte Geräte, Entsperren ohne Passwort und das Hinzufügen eines Geräts über ein anderes werden auf der
 Anmeldeseite angeboten, bevor dein Bereich dort bekannt ist; deshalb schaltet sie nur die Person, die den Server
 betreibt.
+
+## Vorgaben
+
+Statt etwas abzuschalten, kannst du es strenger machen. Unter **Öffentliche Links** und **Gruppen** hat jede Vorgabe
+**Verlangen** und **Aufheben**; eine Zahl von Tagen trägst du vorher ein. Bevor sie gilt, liest du, was sie mit
+Bestehendem macht, und bestätigst.
+
+- **Jeder Link braucht ein Passwort.** Bestehende Links ohne Passwort funktionieren sofort nicht mehr, bis die Person,
+  der sie gehören, ihnen eines gibt.
+- **Links enden nach höchstens so vielen Tagen.** Links ohne Enddatum oder mit einem späteren, gezählt ab ihrer
+  Erstellung, funktionieren sofort nicht mehr; ein jüngerer Link bekommt ein passendes Enddatum, ein älterer wird
+  erneuert.
+- **Aufnahme in eine Gruppe braucht ein Ja.** Alle werden zuerst gefragt, egal was ihre eigene Einstellung sagt. Wer
+  schon in einer Gruppe ist, bleibt.
+
+Die Person, die den Server betreibt, kann dieselben Vorgaben setzen. Es gilt der strengere Wert: Du kannst ihren
+verschärfen, nie lockern, und das Panel sagt, wenn ihrer gilt. Hebst du eine Vorgabe auf, funktioniert jeder Link
+wieder, den sie gestoppt hat.

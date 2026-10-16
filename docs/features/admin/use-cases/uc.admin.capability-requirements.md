@@ -71,3 +71,6 @@ stored being deleted: a link that does not meet a new rule pauses until its owne
 - **Decisions:** [ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md),
   [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md),
   [ADR 0004](../../../decisions/0004-session-tokens.md) (the session family a renewal belongs to)
+- **On the docs site:** [Capabilities](../../../../site/src/content/docs/run/capabilities.mdx) (both levels, the CLI),
+  [What your space offers](../../../../site/src/content/docs/space-owners/capabilities.mdx) (a tenant owner's) and
+  [Create a link](../../../../site/src/content/docs/sharing/create-a-link.mdx) (what a member sees in the form).
