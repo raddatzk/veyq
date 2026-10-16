@@ -33,6 +33,13 @@ what this instance can do, what version it speaks, and which optional features t
   member copies a node and its subtree within a space; the client re-creates it through the export/import hooks and uploads
   every file again, so the server never learns it is a copy.)
 
+## Enablers
+
+- [en.platform.field-editor](enablers/en.platform.field-editor.md) — **planned** (ADR 0093 § 8: the server stores the
+  last editor of every sealed field group — name, meta, note, icon — as an opaque `user:{id}` / `share:{identityId}`,
+  from the authenticated caller, served to no client; a guest's take-back then erases only a placeholder its own identity
+  named, ADR 0080 decision 6.)
+
 ## Precedent already in the fresh state
 
 The pre-auth `GET /api/setup` already advertises `suites: ["v1"]` (crypto-suite negotiation); the background-tasks

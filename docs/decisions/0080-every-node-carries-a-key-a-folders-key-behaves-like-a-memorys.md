@@ -88,7 +88,7 @@ Memory, an expense and a file side by side).
    Until a node stores who last wrote its name, that rule stands. That attribution is decided in
    [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 8 (the last editor
    of every sealed field group, for reported names and metadata) but not built; once it exists, a guest takes back
-   only a placeholder its own identity named, and a member's empty node — or one a member renamed — is no longer one. A guest's create states the epoch it sealed with, and
+   only a placeholder its own identity named, and a member's empty node — or one a member renamed — is no longer one. A move counts as naming: a placement re-seals the name under the new parent's key, so a guest that moved a member's empty node becomes its name's last editor and may then take it back — accepted, it is the same name with nothing behind it that the guest could already rename away (owner 2026-10-16). **A node that carries a link is never a placeholder**: the erase tombstones every link on the node (`NodeSubtreePurge.erase`), so a take-back could end a member's other link (owner 2026-10-16). Neither is built; both land with the attribution (`cr-sealed-fields-record-their-last-editor`). A guest's create states the epoch it sealed with, and
    the server checks it as a member's placement off the scope root (a guest never targets the scope root): above the
    scope's current epoch it is `409 stale_epoch`, at or below it the epoch is stored as sent — the `node-name` and
    `content-key` seals bind it, so the reader opens at the stored number (owner, 2026-10-07; it replaced a server-chosen
