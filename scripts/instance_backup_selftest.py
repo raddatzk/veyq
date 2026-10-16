@@ -273,7 +273,7 @@ def not_data_cases() -> None:
     check("every table a migration seeds is excluded — a fresh install holds those rows, so a restore onto it "
           "would be refused (veyq_external_service did exactly that, 2026-10-16)",
           seeded <= set(ib.NOT_DATA), str(sorted(seeded - set(ib.NOT_DATA))))
-    check("the exclusion list is the five named tables, no pattern", len(ib.NOT_DATA) == 5, str(ib.NOT_DATA))
+    check("the exclusion list is the seven named tables, no pattern", len(ib.NOT_DATA) == 7, str(ib.NOT_DATA))
 
 
 # The vector `backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.

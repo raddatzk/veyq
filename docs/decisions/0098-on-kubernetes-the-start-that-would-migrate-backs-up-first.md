@@ -1,8 +1,9 @@
 # ADR 0098 — On Kubernetes, the start that would migrate backs up first
 
-- Status: Proposed 2026-10-16 (draft for the owner); nothing of it is built. It is the Kubernetes-native backup
-  decision [ADR 0064](0064-kubernetes-helm-deployment-target.md) defers; the owner's idea it starts from is a Helm
-  `pre-upgrade` hook, and its first open question is whether to keep that shape (§ Open for the owner, 1).
+- Status: Accepted 2026-10-16 (owner: every recommendation of the former § Open for the owner taken, and the store
+  leg is its index only); nothing of it is built. It is the Kubernetes-native backup decision
+  [ADR 0064](0064-kubernetes-helm-deployment-target.md) defers; the owner's starting idea was a Helm `pre-upgrade` hook,
+  and this ADR keeps it as the rejected shape with its costs (§ Decided with the owner, 1).
 - Date: 2026-10-16
 
 Provenance: a claim marked **(Mn)** was measured — a command or a primary document fetched on 2026-10-16, listed in
@@ -170,7 +171,11 @@ CRD or a cluster-scoped object.
   self-heal an out-of-band scale-down is reverted within seconds (M5, R5) — a capture that starts cold and ends
   hot. Decision 7's request is the scheduled form.
 
-## Open for the owner
+## Decided with the owner
+
+Owner 2026-10-16 ("Bei den drei offenen Punkten gehe ich überall mit"): 1 (a) the gate; 2 (b) an explicit
+choice the schema enforces; 3 (a) a third released image, `veyq-tools`; 4 the index only; 5 (a) + (b), offline. The
+options stay below as the record of what was weighed.
 
 1. **Gate or hook?** (a) The init-container gate (decisions 1–9). (b) A `pre-upgrade` hook Job, as proposed: it
    needs its own ServiceAccount and Role (`get` on the Deployment to read the running image, `patch` on

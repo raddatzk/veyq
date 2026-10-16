@@ -199,6 +199,8 @@ NOT_DATA = (
     "veyq_store_setting",
     "veyq_capability_switch",
     "veyq_external_service",
+    "veyq_release_check",
+    "veyq_release_notice",
 )
 NOT_DATA_SQL = ", ".join(f"'{t}'" for t in NOT_DATA)
 
@@ -332,6 +334,10 @@ class Database:
             0089): instance configuration and no member's data, and unlike the two above it is never empty — its
             migration seeds the three defaults (map tiles, place search, the breached-password range API), so every
             fresh install holds rows here. The dump replaces it wholesale, so the restored instance's services win.
+          - `veyq_release_check` and `veyq_release_notice` are the release check's switch and what it found (ADR 0097):
+            the switch is a seeded singleton, and a stamped install checks on its own from its first start, so a
+            fresh target can hold notices before anyone restores onto it. Neither is anyone's data; the dump replaces
+            both, so the restored instance's switch and notices win.
 
         The table set is read out of `information_schema` rather than listed here, so a table a future migration
         adds is covered without anyone remembering to add it (changes/README.md § a guard derives its anchor set
