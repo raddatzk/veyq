@@ -135,6 +135,26 @@ components:
       enum: [PENDING, ACTIVE, SUSPENDED]
       example: ACTIVE
 
+    Capability:
+      type: object
+      description: >
+        One entry of an effective capability set (ADR 0032, ADR 0088): the pre-auth instance manifest of
+        `GET /api/setup`, and the tenant's set a member reads after sign-in (`GET /api/tenants/{tenantId}/capabilities`).
+        Both are one type so they grow together, `[{ id }]` to `[{ id, …values }]` (ADR 0088 decision 8), without a
+        `major` bump (additive => `build`).
+      required: [id]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            Stable lowercase-dotted capability id, a path in the register tree (e.g. "core.public-shares.drop-box"),
+            from the catalog contracts/platform/capabilities.json. A capability says what this server, and this tenant,
+            serves at all ("X exists here") — NOT a per-scope/role permission ("you may do X here"). A feature is offered
+            only when the capability is present AND local policy permits.
+          maxLength: 64
+          example: core.public-shares.drop-box
+
     ErrorResponse:
       type: object
       required: [code]

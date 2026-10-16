@@ -20,6 +20,13 @@ And it checks the catalog is a TREE (ADR 0088 decisions 1 and 2):
               entry. The server's effective state is an AND along the path, and an entry whose parent is missing
               has nothing to AND with. A root (`core`) is not an entry, so a two-segment id has no parent to need.
 
+And it checks every entry names who may switch it (`levels`, ADR 0088 decisions 2 and 12): a list holding
+`instance` (the Server Owner always may) and `tenant` where a tenant owner may narrow it for their tenant, nothing else
+and nothing twice. The backend generates `CapabilityIds.TENANT_SWITCHABLE` from it, and the tenant's write refuses any
+id outside it, so a missing or misspelt level would quietly take a switch away from tenant owners or hand one out.
+The defect that bought the check: no incident. Built with cr-tenant-capability-switches; run against the untouched
+catalog, which carried no `levels`, it was red seven times, once per entry.
+
 And it checks every entry carries its words (ADR 0088 decision 13): `title`, `purpose` and `whenOff`, each an
 object with a non-empty `en` and a non-empty `de` string (`TEXT_FIELDS`, `LANGUAGES`). They are what the Server
 Owner reads before switching an entry off, and the catalog is the one place they are written: the API serves them
@@ -65,6 +72,8 @@ COVERAGE = ROOT / "docs" / "coverage" / "features"
 ID_RE = re.compile(r"^[a-z0-9]+(\.[a-z0-9-]+)+$")
 UC_RE = re.compile(r"^uc\.([a-z0-9-]+)\.[a-z0-9-]+$")
 KNOWN_SOURCES = {"operator-policy", "infra-preflight"}
+# Who may switch an entry off (ADR 0088 decisions 2 and 12): the Server Owner always, a tenant owner where listed.
+LEVELS = ("instance", "tenant")
 # The roots an id may hang from (ADR 0088 decision 1). `core` alone until the first application entry; see the docstring.
 ROOTS = {"core"}
 # The words every entry carries for the Server Owner (ADR 0088 decision 13), each in every language below.
@@ -109,6 +118,12 @@ for cid, entry in caps.items():
             value = text.get(lang)
             if not isinstance(value, str) or not value.strip():
                 errors.append(f"{cid}: {field}.{lang} must be a non-empty string (ADR 0088 decision 13)")
+    levels = entry.get("levels")
+    if (not isinstance(levels, list) or "instance" not in levels or len(set(levels)) != len(levels)
+            or any(level not in LEVELS for level in levels)):
+        errors.append(
+            f"{cid}: levels must list 'instance', and 'tenant' where a tenant owner may switch it too, nothing else "
+            f"(ADR 0088 decisions 2 and 12), got {levels!r}")
     if entry.get("source") not in KNOWN_SOURCES:
         errors.append(f"{cid}: source '{entry.get('source')}' is not one of {sorted(KNOWN_SOURCES)}")
     serves = entry.get("serves")

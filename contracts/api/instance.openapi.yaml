@@ -506,12 +506,14 @@ paths:
                   whenOff: { en: "No new public link of any kind can be made …", de: "Es lässt sich kein neuer öffentlicher Link mehr anlegen …" }
                   "off": true
                   effective: false
+                  tenantSwitchable: true
                 - id: core.public-shares.contribute
                   title: { en: "Links to look and add", de: "Links zum Ansehen und Hinzufügen" }
                   purpose: { en: "A public link whose guests can add to what they see …", de: "Ein öffentlicher Link, über den Gäste …" }
                   whenOff: { en: "No new link of this kind can be made …", de: "Es lässt sich kein neuer Link dieser Art anlegen …" }
                   "off": false
                   effective: false
+                  tenantSwitchable: true
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -588,6 +590,7 @@ paths:
                 whenOff: { en: "No device can be newly remembered …", de: "Kein Gerät lässt sich neu merken …" }
                 "off": true
                 effective: false
+                tenantSwitchable: false
         "400":
           description: The request was malformed, or `off` is missing. Nothing is stored.
           content:
@@ -978,7 +981,7 @@ components:
       # `off` is quoted wherever it is a key or a list item, in this schema, InstanceCapabilityUpdate and the
       # examples: a YAML 1.1 parser reads a bare `off` as the boolean false. PyYAML, which every contracts guard
       # reads the specs with, did exactly that, and saw a property named "false".
-      required: [id, title, purpose, whenOff, "off", effective]
+      required: [id, title, purpose, whenOff, "off", effective, tenantSwitchable]
       properties:
         id:
           x-veyq-visibility: public
@@ -1005,6 +1008,14 @@ components:
           description: >
             Whether the entry is active: it and every ancestor entry are on (the AND along the path). This is what
             the gates and the manifest follow.
+          example: true
+        tenantSwitchable:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether a tenant owner may switch the entry off for their own tenant as well (the catalog's `levels`,
+            ADR 0088 decision 12). Such a tenant only narrows: an entry on here may still be off in a tenant, never
+            the other way round. Entries offered before sign-in are the Server Owner's alone.
           example: true
 
     InstanceCapabilityText:

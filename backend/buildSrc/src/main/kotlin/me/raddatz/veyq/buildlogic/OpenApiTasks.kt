@@ -204,8 +204,9 @@ abstract class GenerateAdminChannelOperations : DefaultTask() {
  * (`core.public-shares.drop-box` → `PUBLIC_SHARES_DROP_BOX`); an entry under another root keeps the root in its name.
  * Every entry is advertised, because `scripts/validate_capabilities.py` holds every catalog entry to a built use-case
  * (ADR 0032 §6); the lifecycle that reserves an id ahead of its use-cases would add the skip here and there together.
- * The build refuses an id that is not lowercase-dotted, two ids that name one constant and an entry without its six
- * texts, rather than generate a register with a hole in it; the guard says the same about the catalog before any build.
+ * `TENANT_SWITCHABLE` is every entry whose `levels` name `tenant` (ADR 0088 decision 12). The build refuses an id that
+ * is not lowercase-dotted, two ids that name one constant, an entry without its six texts and one without its levels,
+ * rather than generate a register with a hole in it; the guard says the same about the catalog before any build.
  */
 @CacheableTask
 abstract class GenerateCapabilityRegister : DefaultTask() {
@@ -230,7 +231,9 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
                         ?: "".also { problems += "$id: $field.$lang is missing or blank" }
                 }
             }
-            Entry(id, constantName(id), entry.path("description").asText(""), texts)
+            val levels = entry.path("levels").takeIf { it.isArray }?.map { it.asText() }.orEmpty()
+            if ("instance" !in levels || levels.any { it !in LEVELS }) problems += "$id: levels must hold instance, and tenant at most"
+            Entry(id, constantName(id), entry.path("description").asText(""), texts, "tenant" in levels)
         }
         register.groupBy { it.constant }.filterValues { it.size > 1 }.forEach { (name, clash) ->
             problems += "${clash.joinToString { it.id }}: all name the constant $name"
@@ -255,6 +258,11 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
             |    /** Every entry, in catalog order, a parent before its children: the register this build serves. */
             |    val ADVERTISED: List<String> = listOf(
             |${register.joinToString("") { "        ${it.constant},\n" }}    )
+            |
+            |    /** The entries a tenant owner may switch off for their tenant too (the catalog's `levels`, ADR 0088 decision 12);
+            |     *  every other entry is the Server Owner's alone. */
+            |    val TENANT_SWITCHABLE: Set<String> = setOf(
+            |${register.filter { it.tenant }.joinToString("") { "        ${it.constant},\n" }}    )
             |}
             |""".trimMargin(),
         )
@@ -278,7 +286,9 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
         )
     }
 
-    private data class Entry(val id: String, val constant: String, val description: String, val texts: Map<String, Map<String, String>>)
+    private data class Entry(
+        val id: String, val constant: String, val description: String, val texts: Map<String, Map<String, String>>, val tenant: Boolean,
+    )
 
     private companion object {
         const val PACKAGE = "me.raddatz.veyq.core.platform.capabilities"
@@ -286,6 +296,7 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
         val ID = Regex("^[a-z0-9]+(\\.[a-z0-9-]+)+$")
         val TEXT_FIELDS = listOf("title", "purpose", "whenOff")
         val LANGUAGES = listOf("en", "de")
+        val LEVELS = setOf("instance", "tenant")
 
         fun constantName(id: String): String = id.removePrefix(CORE_ROOT).uppercase().replace('.', '_').replace('-', '_')
 

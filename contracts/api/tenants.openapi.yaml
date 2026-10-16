@@ -1142,6 +1142,185 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
 
+  /api/tenants/{tenantId}/capabilities:
+    get:
+      tags: [tenants]
+      operationId: getTenantCapabilities
+      summary: The tenant's effective capability set, for every member.
+      description: >
+        What this tenant offers (ADR 0088 decision 3): every register entry that is active at the instance level AND
+        at this tenant's level, along the whole path, in catalog order. A client reads it after sign-in for the tenant
+        of the space it opened and soft-gates on it as on the pre-auth manifest of `GET /api/setup`, which carries the
+        instance level alone. A tenant only narrows, so this set is a subset of that manifest. The same for every
+        member of the tenant; every member may read it. The gates follow the same set (`422 capability_disabled`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: The tenant's effective set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantCapabilities" }
+              example:
+                capabilities:
+                  - { id: core.public-shares }
+                  - { id: core.remember-device }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+
+  /api/tenants/{tenantId}/capability-switches:
+    get:
+      tags: [tenants]
+      operationId: listTenantCapabilitySwitches
+      summary: The register entries a tenant owner may switch, with their words and both levels' state (owner-gated).
+      description: >
+        Every register entry a tenant owner may switch off for their tenant (the catalog's `levels` naming `tenant`,
+        ADR 0088 decision 12), in catalog order, a parent before its children. Entries offered before sign-in
+        (remembered devices, unlocking without a password, adding a device from another one) are the Server Owner's
+        alone and are not listed. Each entry carries the catalog's words in English and German (decision 13), the
+        tenant's own switch (`off`), whether the instance level has it off (`serverOff`: the Server Owner switched it
+        or an ancestor off), and `effective`, the AND of both levels along the path, which the gates and the tenant's
+        set follow. Owner-gated: a member who is not the owner gets `403 not_tenant_owner`, a non-member `404`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: The tenant-switchable entries in catalog order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TenantCapabilitySwitch" }
+              example:
+                - id: core.public-shares
+                  title: { en: "Public links", de: "Öffentliche Links" }
+                  purpose: { en: "Members can share what is in a space through a link …", de: "Mitglieder können Inhalte eines Bereichs über einen Link teilen …" }
+                  whenOff: { en: "No new public link of any kind can be made …", de: "Es lässt sich kein neuer öffentlicher Link mehr anlegen …" }
+                  "off": true
+                  serverOff: false
+                  effective: false
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner. Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+
+  /api/tenants/{tenantId}/capability-switches/{capabilityId}:
+    put:
+      tags: [tenants]
+      operationId: setTenantCapabilitySwitch
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the tenant owner; the write carries one entry's own switch, never the whole set, so two tabs
+          switching different entries cannot overwrite each other, and on the same entry the later write wins.
+      summary: Switch one entry off or back on for this tenant (owner-gated).
+      description: >
+        Sets the tenant's own switch for one entry and applies it at once, without a restart (ADR 0088 decisions 2
+        and 12): the tenant's set (`getTenantCapabilities`) follows it, and so does every gate acting on the tenant's
+        content, on the entry and by the AND along the path on its children. What off does is the entry's `whenOff`
+        (decision 5): a share switch reaches the tenant's existing links at once (a guest gets the `404` an unknown
+        link gets), a feature switch refuses only what is new. Switching back on restores the entry as far as the
+        Server Owner allows. Writing the state the entry already has changes nothing and answers the same.
+        Owner-gated (`403 not_tenant_owner`; a non-member `404`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - name: capabilityId
+          in: path
+          required: true
+          description: The entry's id, as the catalog spells it.
+          schema:
+            type: string
+            maxLength: 64
+            example: core.public-shares
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantCapabilitySwitchUpdate" }
+            examples:
+              switchOff:
+                summary: Switch the entry off for this tenant
+                value: { "off": true }
+              switchOn:
+                summary: Switch it back on
+                value: { "off": false }
+      responses:
+        "200":
+          description: The switch was stored and applied; the entry as it now stands is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantCapabilitySwitch" }
+              example:
+                id: core.group-space
+                title: { en: "Groups", de: "Gruppen" }
+                purpose: { en: "Members can create groups …", de: "Mitglieder können Gruppen anlegen …" }
+                whenOff: { en: "No new group can be created …", de: "Es lässt sich keine neue Gruppe mehr anlegen …" }
+                "off": true
+                serverOff: false
+                effective: false
+        "400":
+          description: The request was malformed, or `off` is missing. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner. Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id, or the caller is not a member of it (`tenant_not_found`); or no register entry a
+            tenant may switch has this id (`capability_not_found`: unknown, or the Server Owner's alone). Nothing is
+            stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: capability_not_found }
+
   /api/tenants/{tenantId}/storage:
     get:
       tags: [tenants]
@@ -2285,6 +2464,95 @@ components:
           description: The most the tenant may hold in the store, in bytes. `0` refuses every upload start.
           example: 107374182400
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+
+    TenantCapabilities:
+      type: object
+      description: >
+        A tenant's effective capability set (ADR 0088 decision 3). The same for every member of the tenant;
+        nothing here is member data.
+      required: [capabilities]
+      properties:
+        capabilities:
+          type: array
+          description: >
+            Every entry active at the instance level and at this tenant's level along its whole path, in catalog
+            order. A client soft-gates each optional feature on the presence of its id and never ANDs ids itself.
+          maxItems: 256
+          items: { $ref: "#/components/schemas/Capability" }
+
+    Capability:
+      $ref: '_common.openapi.yaml#/components/schemas/Capability'
+
+    TenantCapabilitySwitch:
+      type: object
+      description: >
+        One register entry a tenant owner may switch (ADR 0088 decision 12), with its words and both levels' state.
+        Tenant configuration and server self-description; nothing here is member data.
+      # `off` is quoted as in instance.openapi.yaml's InstanceCapability: a YAML 1.1 parser reads a bare `off` as false.
+      required: [id, title, purpose, whenOff, "off", serverOff, effective]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: The entry's lowercase-dotted id, a path in the register tree.
+          maxLength: 64
+          example: core.public-shares
+        title:
+          $ref: "#/components/schemas/CapabilityText"
+        purpose:
+          $ref: "#/components/schemas/CapabilityText"
+        whenOff:
+          $ref: "#/components/schemas/CapabilityText"
+        "off":
+          x-veyq-visibility: flag
+          type: boolean
+          description: The tenant's own switch, as the tenant owner set it. Neither a parent nor the Server Owner changes it.
+          example: false
+        serverOff:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True when the instance level has the entry off: the Server Owner switched it, or an ancestor, off. The
+            entry is then off for the tenant whatever its own switch says.
+          example: false
+        effective:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether the entry is active for this tenant: on at both levels, for it and every ancestor (the AND along
+            the path). The gates and the tenant's set follow this.
+          example: true
+
+    CapabilityText:
+      type: object
+      description: One text of a register entry, in each language the catalog carries (ADR 0088 decision 13).
+      required: [en, de]
+      properties:
+        en:
+          x-veyq-visibility: public
+          type: string
+          description: The English text.
+          maxLength: 1024
+          example: Public links
+        de:
+          x-veyq-visibility: public
+          type: string
+          description: The German text.
+          maxLength: 1024
+          example: Öffentliche Links
+
+    TenantCapabilitySwitchUpdate:
+      type: object
+      description: The tenant's own switch to store for one entry.
+      required: ["off"]
+      properties:
+        "off":
+          x-veyq-visibility: flag
+          # nullable type + @NotNull: a required primitive binds a missing field to false (backend/CLAUDE.md)
+          type: [boolean, "null"]
+          description: True switches the entry off for this tenant, false switches it back on.
+          example: true
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
