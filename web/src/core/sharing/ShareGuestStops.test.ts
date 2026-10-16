@@ -47,7 +47,7 @@ const CASES: { stop: ShareGuestStop; en: string; de: string }[] = [
   {
     stop: { reason: 'tenantSwitch', capabilityId: 'core.public-shares.contribute' },
     en: 'Links that let guests add are switched off in this space. Only the space’s owner can switch them back on.',
-    de: 'Links, über die Gäste etwas hinzufügen sind in diesem Bereich ausgeschaltet. Nur wer den Bereich besitzt, kann sie wieder einschalten.',
+    de: 'Links zum Ansehen und Hinzufügen sind in diesem Bereich ausgeschaltet. Nur wer den Bereich besitzt, kann sie wieder einschalten.',
   },
   {
     stop: { reason: 'tenantSwitch', capabilityId: 'core.public-shares.drop-box' },

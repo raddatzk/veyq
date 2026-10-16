@@ -3480,7 +3480,7 @@ const de: typeof en = {
       unknown: 'Der Server stellt ihn gerade nicht bereit.',
       entry: {
         publicShares: 'Öffentliche Links',
-        contribute: 'Links, über die Gäste etwas hinzufügen',
+        contribute: 'Links zum Ansehen und Hinzufügen',
         dropBox: 'Upload-Links',
         other: 'Links wie dieser',
       },
