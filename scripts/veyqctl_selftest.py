@@ -7,7 +7,10 @@ what prove it. Everything here runs against a mirror directory this file writes 
 
   1. **the resolver** — `VEYQ_RELEASE` per line of ADR 0096 decision 4 (a pin, a major, `latest`) against a mirror
      whose minors sort differently as strings (`1.12` after `1.7`), prereleases never taken and a pin to one refused,
-     a selector that selects nothing refused, and the newer major `check` reports;
+     a selector that selects nothing refused, and the newer major `check` reports; and ADR 0096 decision 5 step 1 on
+     top of it (`upgrade_target`): a later major entered only from the running major's last release, never more than
+     one major per run, a pin in the next major reached directly from its predecessor's last, a prerelease never the
+     "last" of a major, a next major without a release refused;
   2. **the manifest parse** — the fields veyqctl reads, and a refusal for each way one is wrong: another release's
      manifest, an image missing, `unscheduled` not a boolean, an asset name that is a path (`../`, a directory), an
      asset without a sha256, a required asset missing;
@@ -27,8 +30,9 @@ what prove it. Everything here runs against a mirror directory this file writes 
      the manifest kept verbatim beside the release, a shell's `COMPOSE_*` dropped, and every printed line of an
      `--unsigned-local` run saying that nothing was verified;
   8. **`upgrade`** — `VEYQ_RELEASE` per line of ADR 0096 decision 4 against a running 1.3 (a pin to the running
-     release does nothing and runs nothing, a major takes its newest, `latest` crosses majors and skips a prerelease, a
-     pin below the running release is refused); decision 5's order (both images, the staged `.env` checked by Compose,
+     release does nothing and runs nothing, a major takes its newest, `latest` and `2` stop on 1.12, the last of major
+     1, and say that the next `upgrade` enters major 2, which it then does, skipping a prerelease; `check` says the
+     same; a pin below the running release is refused); decision 5's order (both images, the staged `.env` checked by Compose,
      then the app stopped, leg (c) copied out, the capture by the RUNNING release's tool and its check, the switch,
      `up` on the new recipe) with nothing stopped before step 4; the new `.env` (the new image lines, the operator's
      values and kept keys carried over); and the refusals — `--key-into` omitted, existing or inside `backups/`
@@ -233,7 +237,7 @@ def test_resolver(tmp: pathlib.Path) -> None:
     check("resolver: `1.3` pins exactly 1.3", take("1.3") == "1.3")
     check("resolver: `1` takes the newest of major 1, numerically (1.12 after 1.7)", take("1") == "1.12")
     check("resolver: `0` takes the newest of major 0", take("0") == "0.9")
-    check("resolver: `latest` crosses majors and never takes a prerelease (2.0)", take("latest") == "1.12")
+    check("resolver: `latest` takes the newest of all and never a prerelease (2.0)", take("latest") == "1.12")
     check("resolver: a pin to a prerelease is refused, naming it",
           "prerelease" in refused(vc.select, listed, "2.0", "the mirror"))
     check("resolver: a major whose only release is a prerelease selects nothing",
@@ -253,6 +257,39 @@ def test_resolver(tmp: pathlib.Path) -> None:
           "flat file name" in refused(vc.DirSource(mirror).fetch, "v1.3", "sub/garage.toml"))
     check("source: a tag that is not `v<major>.<minor>` is refused",
           "not a release tag" in refused(vc.DirSource(mirror).fetch, "../v1.3", vc.MANIFEST_ASSET))
+
+
+def test_major_entry() -> None:
+    """ADR 0096 decision 5 step 1, the resolution alone: where one `upgrade` from `running` goes."""
+    def listed(*releases: str, pre: tuple = ()) -> list:
+        return [vc.Listed(f"v{r}", *(int(x) for x in r.split(".")), r in pre) for r in releases]
+
+    def goes(rel: list, running: str, selector: str) -> str:
+        chosen = vc.select(rel, selector, "the mirror")
+        return vc.upgrade_target(rel, tuple(int(x) for x in running.split(".")), chosen, "the mirror").release
+
+    two = listed("1.3", "1.9", "2.2", "2.5")
+    three = listed("1.3", "1.9", "2.2", "2.5", "3.1")
+    # the control: within a major nothing stops on the way
+    check("major entry: within a major, 1.3 → 1.9 directly (control)", goes(two, "1.3", "1") == "1.9")
+    check("major entry: `latest` from 1.3 (1.9 the newest of major 1, 2.5 of all) stops on 1.9",
+          goes(two, "1.3", "latest") == "1.9")
+    check("major entry: a pin in the next major (2.5) from 1.3 stops on 1.9", goes(two, "1.3", "2.5") == "1.9")
+    check("major entry: `2` from 1.3 stops on 1.9", goes(two, "1.3", "2") == "1.9")
+    check("major entry: from 1.9, the last of major 1, a pin in major 2 (2.2) is reached directly",
+          goes(two, "1.9", "2.2") == "2.2")
+    check("major entry: from 1.9, `latest` within the next major (2.5) is reached directly",
+          goes(two, "1.9", "latest") == "2.5")
+    check("major entry: from 1.9 with 3.1 listed, `latest` enters major 2 only, at its newest (2.5)",
+          goes(three, "1.9", "latest") == "2.5")
+    check("major entry: from 1.9, a pin in major 3 (3.1) goes to the newest of major 2", goes(three, "1.9", "3.1") == "2.5")
+    check("major entry: from 1.3 with 3.1 listed, `latest` stops on 1.9 first", goes(three, "1.3", "latest") == "1.9")
+    check("major entry: a prerelease (1.10) is never the last of a major — from 1.9 `latest` goes to 2.5",
+          goes(listed("1.3", "1.9", "1.10", "2.5", pre=("1.10",)), "1.9", "latest") == "2.5")
+    gap = listed("1.9", "2.0", "3.1", pre=("2.0",))
+    message = refused(lambda: goes(gap, "1.9", "latest"))
+    check("major entry: a next major with only a prerelease is refused, naming it, never crossed",
+          "no release of major 2" in message, message)
 
 
 def test_manifest() -> None:
@@ -519,13 +556,30 @@ def test_upgrade_selector(tmp: pathlib.Path) -> None:
     mirror = upgrade_mirror(tmp / "mirror-up")
     keys = tmp / "keys-up"
     keys.mkdir()
-    for selector, want in (("1.3", "1.3"), ("1", "1.12"), ("latest", "2.1"), ("2", "2.1"), ("1.7", "1.7")):
+    out_of = {}
+    for selector, want in (("1.3", "1.3"), ("1", "1.12"), ("latest", "1.12"), ("2", "1.12"), ("1.7", "1.7")):
         home = installed(tmp, f"home-up-{selector}", mirror, "1.3", selector)
         host = FakeHost(local_images=all_images(), project="veyq-proof")
         rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(keys / f"{selector}.key"))
+        out_of[selector] = out
         check(f"upgrade: VEYQ_RELEASE={selector}, running 1.3, takes {want}"
               + (" — nothing to do, nothing run" if want == "1.3" else ""),
               rc == 0 and vc.read_state(home).release == want and (want != "1.3" or not host.commands), out[-400:])
+    home = tmp / "home-up-latest"
+    check("upgrade: a run that stops on 1.12, the last of major 1, says the next `upgrade` enters major 2",
+          "selects 2.1" in out_of["latest"] and "the next `upgrade` enters major 2" in out_of["latest"].splitlines()[-1],
+          out_of["latest"][-400:])
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(keys / "latest-2.key"))
+    check("upgrade: that next `upgrade` from 1.12 enters major 2 at its newest (2.1, the prerelease 2.2 skipped)",
+          rc == 0 and vc.read_state(home).release == "2.1" and "enters major" not in out, out[-400:])
+    home = installed(tmp, "home-check", mirror, "1.3", "latest")
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = vc.main(["--home", str(home), "check"], FakeHost(local_images=all_images(), project="veyq-proof"))
+    check("check: from 1.3 with `latest`, `upgrade` would take 1.12 and the one after it enters major 2",
+          rc == 0 and "would take release 1.12" in out.getvalue()
+          and "the `upgrade` after that one enters major 2" in out.getvalue(), out.getvalue()[-400:])
     home = installed(tmp, "home-up-down", mirror, "1.12", "1.3")
     host = FakeHost(local_images=all_images(), project="veyq-proof")
     rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(keys / "down.key"))
@@ -710,6 +764,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyqctl-selftest-") as raw:
         tmp = pathlib.Path(raw)
         test_resolver(tmp)
+        test_major_entry()
         test_manifest()
         test_assets_on_disk(tmp)
         test_template(tmp)
