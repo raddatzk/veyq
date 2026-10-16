@@ -354,7 +354,9 @@ this section only points at it (rule 2) — assembling this picture by hand each
   what it must carry is defined once in [`../../changes/README.md`](../../changes/README.md) § trust-chain
   guards. Run the chain locally as CI does:
   `for f in scripts/validate_*.py; do python3 "$f"; done` — with one difference, `validate_guard_gaps.py`, which
-  skips locally while no guard changed (`--force` runs it).
+  skips locally while no guard changed (`--force` runs it). The whole pipeline runs locally by one command,
+  `python3 scripts/run_pipeline.py`, read from `ci.yml` itself; until the repository has a remote, that run is the
+  only run (its docstring says what it cannot reproduce).
 - **What runs where.** [`trust-chain.yml`](../../.github/workflows/trust-chain.yml) — deliberately unfiltered
   and buildless, the guard glob minus `validate_guard_gaps.py`; a docs-only change is validated **there and
   nowhere else**, because [`ci.yml`](../../.github/workflows/ci.yml) — the one pipeline per commit, whose

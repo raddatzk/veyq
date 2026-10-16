@@ -610,7 +610,8 @@ during cr-e2e-orchestrator:
   and `admin-web` are not among them, is ADR 0040's note on what a row is.) No branch filter and no dispatch
   trick changes that; only publishing the repository does, which is the owner's
   call and tracked as inbox **#26** item (1). Until then, a local run over the **committed** tree is the
-  strongest available proof, and a done-when must say exactly that rather than "green in CI". The two gates
+  strongest available proof — `python3 scripts/run_pipeline.py` runs `ci.yml`'s jobs on a commit and names every
+  job and step it did not run — and a done-when must say exactly that rather than "green in CI". The two gates
   above stay because they are what bites *after* the remote exists.
 
 Then **read the job's log, not its tick**: a job that ran nothing and a job whose suites all passed render

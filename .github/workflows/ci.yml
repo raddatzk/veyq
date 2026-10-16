@@ -202,8 +202,10 @@ jobs:
           fetch-depth: 0
 
       # The pinned Helm (workflow-level env above): verified against the pin BEFORE it is extracted, so a
-      # tarball that does not match never runs. The same step installs it here and in `publish`.
+      # tarball that does not match never runs. The same step installs it here and in `publish`. On a host that is
+      # not GitHub's runner (scripts/run_pipeline.py, whose `runner.environment` is `local`) the next step stands in.
       - name: Install Helm (pinned tarball)
+        if: runner.environment == 'github-hosted'
         run: |
           set -euo pipefail
           tarball="helm-${HELM_VERSION}-linux-amd64.tar.gz"
@@ -211,6 +213,17 @@ jobs:
           echo "${HELM_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict -
           tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}" linux-amd64/helm
           echo "${RUNNER_TEMP}/linux-amd64" >> "$GITHUB_PATH"
+
+      # Never runs on GitHub. Elsewhere the host's own Helm is used, and it must at least be the pinned version (its
+      # bytes are the host's package manager's, not the hash above).
+      - name: Check the host's Helm is the pinned version
+        if: runner.environment != 'github-hosted'
+        run: |
+          found="$(helm version --template '{{.Version}}')"
+          if [ "$found" != "$HELM_VERSION" ]; then
+            echo "the host's Helm is ${found}, the workflow pins ${HELM_VERSION}" >&2
+            exit 1
+          fi
 
       # The chart's rendered-manifest invariants (ADR 0064). It needs `helm`, which is why it sits outside the
       # buildless `validate_*` glob of `guards` and trust-chain.yml and runs here, as its own surface check.
@@ -465,6 +478,23 @@ jobs:
           sbom: true
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+      # Never runs on GitHub. scripts/run_pipeline.py cannot run the action above, so on its host (`runner.environment`
+      # `local`) this builds the same Dockerfile, target, platform and build arguments with the host's own Docker: no
+      # registry, no GitHub cache, no provenance or SBOM. The tag names this leg and is overwritten by the next run.
+      - name: Build image (the host's Docker)
+        if: runner.environment != 'github-hosted'
+        env:
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          TARGET: ${{ matrix.target }}
+          PLATFORM: ${{ matrix.platform }}
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+          VEYQ_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          docker build --file "$DOCKERFILE" --target "$TARGET" --platform "$PLATFORM" \
+            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
+            --tag "veyq-pipeline/${IMAGE}:${ARCH}" .
 
   # The upgrade proof (ADR 0057 Decision 7, site/src/content/docs/run/upgrade.mdx): the predecessor's own jar and e2e
   # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
