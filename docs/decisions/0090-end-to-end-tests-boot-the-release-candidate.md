@@ -128,8 +128,10 @@ What a green run proves today stops short of what a Server Owner runs:
   min. Estimated at refine, not measured: ~6–10 min for the first scenarios. What it rests on: the image is
   built once by `build` and only pulled (dispatch) or rebuilt from its cache (dry run); one instance per run, not per
   file; a cold birth is a few Argon2id derivations at `t=3, m=32 MiB` (`packages/crypto/src/v1.ts`); the fast-jar
-  started in 2–6 s in a local `run_web_e2e.py` run on 2026-10-15. The first CI run's per-stage times replace this
-  paragraph. Speed is never bought by weakening what ships.
+  started in 2–6 s in a local `run_web_e2e.py` run on 2026-10-15. Measured locally on 2026-10-16 (arm64 Mac, images
+  from cache, load 4–6): the job's steps 91 s; the lane itself 48.5 s with ten tests and 73.6–91.3 s with fifteen,
+  every stage timed in its summary — a runner's cold build and image pulls are not in those. The first CI run's
+  per-stage times replace this paragraph. Speed is never bought by weakening what ships.
 - **Published** for security researchers on the docs site, with every other stage: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 - **The Run pages become checkable.** first-run.setup.ts uses admin-web's own labels in the order first-run.mdx gives
   them; a renamed button or a reordered step is a red run.

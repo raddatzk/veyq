@@ -19,8 +19,11 @@ nobody who finds its domain can claim it first.
 
 :::note[How far this is proven]
 This page describes the console and the CLI as their code and tests define them (`admin-web/src/views`,
-`admin-web/src/cli`). The labels below are the console's own. It was not exercised on a running instance while this
-page was written.
+`admin-web/src/cli`). The labels below are the console's own. The console's part of first run — the not-set-up page,
+the Server Owner and the Emergency Kit, signing in, the bundled store and its check, the first tenant and its invite
+link — is driven in this order in a real browser against the images that ship, by the end-to-end suite
+(`e2e/tests/setup/first-run.setup.ts`), locally so far; no CI run yet. The CLI is not exercised on a running
+instance.
 :::
 
 ## Reach the console
