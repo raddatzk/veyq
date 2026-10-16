@@ -14,7 +14,7 @@ The probe is `GET /api/setup`. It needs no sign-in, answers as soon as the datab
 when the object store is not usable yet. There is no other health endpoint.
 
 - **Docker Compose** runs it as the application's healthcheck (every 15 s, after a 60 s start period). MariaDB has a
-  healthcheck of its own; Garage, Traefik and the admin surface have none, so `docker compose ps` shows them as
+  healthcheck of its own; Garage, Traefik and the admin surface have none, so `veyqctl status` shows them as
   running, not healthy. `volume-ownership` shows as exited (0), which is its done state.
 - **Kubernetes** uses it for the startup probe (every 5 s, up to 36 times) and the readiness probe (every 15 s).
   There is **no liveness probe by default, on purpose**: it would turn a long garbage-collection pause into a
@@ -26,7 +26,7 @@ when the object store is not usable yet. There is no other health endpoint.
 The application writes to standard output, at the default level:
 
 ```sh
-docker compose -f infra/docker-compose.prod.yml logs -f app
+./veyqctl logs -f app                 # in /opt/veyq
 kubectl -n veyq logs -f deploy/veyq-app
 ```
 

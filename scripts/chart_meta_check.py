@@ -130,8 +130,9 @@ defect that was live elsewhere.** (i) is the sink's own deletion semantics, held
 `KubernetesGatewayTlsPerDomainTest.aListenerSetThisSinkDoesNotOwnSurvivesARegenerate`; this is the chart half. (ii) is
 inbox #26 finding (g), found at refine by measuring that a PVC does not seed ownership — the same
 `AccessDeniedException` restart-loop the compose recipe already paid for once
-(`validate_app_volume_ownership.py`'s docstring). (iii) is inbox #121's undecided update mechanism, stated as
-a constraint so the day it is decided the constraint is findable. (iv) and (v) were measured at refine and are
+(`validate_app_volume_ownership.py`'s docstring). (iii) is the migration at boot with no gate, which ADR 0096
+keeps (it decides who starts an upgrade, not how the schema moves), stated as a constraint so a change to it finds
+this. (iv) and (v) were measured at refine and are
 pinned so they cannot be re-argued into the chart. (vii)–(xi) came with the ACME opt-in, each written red
 against the chart before the opt-in existed; (x) apart from (ix) because removing the helper from the
 ConfigMap alone was the injection that turned only one of them red. (xii) and (xiii) came with the admin

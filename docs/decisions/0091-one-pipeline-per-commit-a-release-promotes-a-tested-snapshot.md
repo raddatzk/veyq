@@ -195,8 +195,13 @@ Three structural costs sit on top of those numbers:
   backend 8.1, frontend 5.0, chart 0.4 — the version 0.1, the races 9.5, every one green; the image build 4.6 (app,
   uncached, on an earlier run). Under a heavier load (13 → 35) the races outran their 10-minute budget beside the
   backend's Gradle run and took 7.0 alone: locally they share the machine with `./gradlew check`, in CI they have a
-  runner of their own. The API end-to-end run was not run (it shares the developer's one compose stack), nor the amd64
-  legs. Local wall times say little about a CI runner's; the estimate above stays until a CI run replaces it.
+  runner of their own. The API end-to-end run was left out of that run (it shares the developer's one compose stack),
+  and ran alone at the close (2026-10-16, `--job web-e2e`, the infra directory pinned to the main checkout's): green,
+  **13.8 min of its 15**, its 27 suites and three tool self-tests, under a load average of ~15–19 from other sessions
+  — a loaded figure (the direct run of § Context took 9.2), and a budget that is tight under such load. Its first run
+  under the pipeline, a commit earlier, was red in its backup self-test: a migration's seeded table made every restore
+  onto a fresh install refuse, which no backend check sees. The amd64 legs have not run. Local wall times say little
+  about a CI runner's; the estimate above, and whether 15 minutes is enough, stay until the first CI run replaces them.
 - **Registry growth** is bounded by the retention rule; a snapshot per `main` commit is otherwise one image pair per
   commit.
 

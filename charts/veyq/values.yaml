@@ -60,8 +60,9 @@ app:
   # stops the app at startup. Behind an appending load balancer that is not listed, every client shares its bucket.
   trustedProxies: ""
   # `Recreate`, and NOT Kubernetes' default RollingUpdate — the second half of "one app pod" is the one that
-  # matters. quarkus.flyway.migrate-at-start=true runs the schema migration at boot with no gate, which is
-  # today's undecided update mechanism (inbox #121); RollingUpdate with its default maxSurge starts the new pod
+  # matters. quarkus.flyway.migrate-at-start=true runs the schema migration at boot with no gate (ADR 0096 decides
+  # who starts an upgrade — by hand, here `helm upgrade` — not how the schema moves); RollingUpdate with its
+  # default maxSurge starts the new pod
   # BEFORE the old one stops, so a `helm upgrade` would briefly run two migrators against one database.
   # `replicas: 1` alone does not prevent that; Recreate is what makes "one migrator at a time" true. Deliberately
   # not a value: raising replicas is a decision about the migration mechanism, not a tuning knob.

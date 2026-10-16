@@ -32,7 +32,7 @@ revoked link, including the one you were sent.
 **Take offline** in the admin console, or the CLI:
 
 ```sh
-docker compose -f infra/docker-compose.prod.yml exec \
+docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env exec \
   -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
   admin veyq-admin tenant suspend --tenant-id <id>
 ```
