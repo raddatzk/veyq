@@ -132,8 +132,8 @@ CREATE TABLE veyq_access_token (
 );
 CREATE UNIQUE INDEX ux_access_token_hash ON veyq_access_token (token_hash);
 
--- A tenant, resolved by Host. The terms (ADR 0035) are the operator's free text as a per-locale JSON map, so
--- utf8mb4 can take them past the TEXT ceiling: MEDIUMTEXT. share_link_limit_bytes (ADR 0073 §4) and
+-- A tenant, resolved by Host. The terms (ADR 0035) are the space owner's free text as a per-locale JSON map,
+-- so utf8mb4 can take them past the TEXT ceiling: MEDIUMTEXT. share_link_limit_bytes (ADR 0073 §4) and
 -- storage_quota_bytes (§1, null = no quota) live here because every upload start locks this row (§5).
 -- TenantEntity repeats the link-limit default for a tenant born through the entity.
 CREATE TABLE veyq_tenant (
