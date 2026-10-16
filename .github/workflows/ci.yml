@@ -72,8 +72,10 @@ jobs:
     # The pipeline's own run of the guards, so `publish` can wait on them (ADR 0091 decision 2). trust-chain.yml runs
     # the same glob unfiltered, because a docs-only commit is validated there and nowhere else; the overlap is these
     # cheap guards, about a minute and a half. `validate_guard_gaps.py` is not run here: it tests the guards, not the
-    # commit, and is its own stage (ADR 0091 decisions 1 and 4) — trust-chain.yml runs it.
+    # commit, and is its own stage (ADR 0091 decisions 1 and 4) — trust-chain.yml's `guard-gaps` job runs it when a
+    # guard changes, and nightly.
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -103,6 +105,7 @@ jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -128,6 +131,7 @@ jobs:
     # race classes from the code and starts its own throwaway MariaDB from the image infra/docker-compose.yml pins
     # (tag + digest), so the pin keeps one home — which is why this job declares no `services:`, as web-e2e does not.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -148,6 +152,7 @@ jobs:
   frontend:
     name: Frontend checks (crypto, web, admin-web)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -187,6 +192,7 @@ jobs:
   chart:
     name: Chart checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # The whole history: the chart upgrade check below reads its predecessor's chart out of git (HEAD^1, or the
       # last release tag once there is one).
@@ -196,8 +202,10 @@ jobs:
           fetch-depth: 0
 
       # The pinned Helm (workflow-level env above): verified against the pin BEFORE it is extracted, so a
-      # tarball that does not match never runs. The same step installs it here and in `publish`.
+      # tarball that does not match never runs. The same step installs it here and in `publish`. On a host that is
+      # not GitHub's runner (scripts/run_pipeline.py, whose `runner.environment` is `local`) the next step stands in.
       - name: Install Helm (pinned tarball)
+        if: runner.environment == 'github-hosted'
         run: |
           set -euo pipefail
           tarball="helm-${HELM_VERSION}-linux-amd64.tar.gz"
@@ -205,6 +213,17 @@ jobs:
           echo "${HELM_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict -
           tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}" linux-amd64/helm
           echo "${RUNNER_TEMP}/linux-amd64" >> "$GITHUB_PATH"
+
+      # Never runs on GitHub. Elsewhere the host's own Helm is used, and it must at least be the pinned version (its
+      # bytes are the host's package manager's, not the hash above).
+      - name: Check the host's Helm is the pinned version
+        if: runner.environment != 'github-hosted'
+        run: |
+          found="$(helm version --template '{{.Version}}')"
+          if [ "$found" != "$HELM_VERSION" ]; then
+            echo "the host's Helm is ${found}, the workflow pins ${HELM_VERSION}" >&2
+            exit 1
+          fi
 
       # The chart's rendered-manifest invariants (ADR 0064). It needs `helm`, which is why it sits outside the
       # buildless `validate_*` glob of `guards` and trust-chain.yml and runs here, as its own surface check.
@@ -232,6 +251,7 @@ jobs:
     # stack (MariaDB + Garage), then per e2e file gives it its own database and a fresh %e2e backend boot. That
     # is why this job declares no `services:` and no `env:` — adding either would split the truth in two.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -300,6 +320,7 @@ jobs:
   version:
     name: Read the veyq version from the tree
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read # the version is a function of the checkout; this job reaches no network at all
     outputs:
@@ -384,6 +405,7 @@ jobs:
   build:
     name: Build ${{ matrix.image }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     # Only the version, not the tests (ADR 0091 decision 2): the build starts beside the surface checks instead of
     # after them. The Docker build compiles but runs no tests (-x test), and that is safe only because nothing it
     # builds becomes a published name until `publish`, which needs every stage green. On a dispatch it does push the
@@ -457,6 +479,23 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
 
+      # Never runs on GitHub. scripts/run_pipeline.py cannot run the action above, so on its host (`runner.environment`
+      # `local`) this builds the same Dockerfile, target, platform and build arguments with the host's own Docker: no
+      # registry, no GitHub cache, no provenance or SBOM. The tag names this leg and is overwritten by the next run.
+      - name: Build image (the host's Docker)
+        if: runner.environment != 'github-hosted'
+        env:
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          TARGET: ${{ matrix.target }}
+          PLATFORM: ${{ matrix.platform }}
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+          VEYQ_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          docker build --file "$DOCKERFILE" --target "$TARGET" --platform "$PLATFORM" \
+            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
+            --tag "veyq-pipeline/${IMAGE}:${ARCH}" .
+
   # The upgrade proof (ADR 0057 Decision 7, site/src/content/docs/run/upgrade.mdx): the predecessor's own jar and e2e
   # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
   # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
@@ -470,6 +509,7 @@ jobs:
   upgrade-proof:
     name: Upgrade proof (the predecessor's backup, restored onto and read by this build)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: false
     permissions:
       contents: read
@@ -515,6 +555,7 @@ jobs:
   publish:
     name: Publish the release (both images and the chart)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Every other job of this file is a stage, and a publish waits for each to be green (ADR 0091 decision 2) — it is
     # the only thing that makes it safe for `build` to start beside the tests. validate_release_identity.py holds the
     # list to the file: a job added and not needed here is red.

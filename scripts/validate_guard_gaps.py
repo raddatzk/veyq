@@ -319,7 +319,8 @@ domain-keyed limiter **fires**) is therefore held where it can be: in the sweep'
 CR-number reuse against history, old inbox #107 — is *gone*, not deferred: CRs are named by slug, not an
 allocated number, so there is no number to reuse and nothing to guard. See `changes/README.md` § naming.)
 
-A `validate_*.py`, so the trust-chain glob runs it on every push with no build. Runnable locally:
+A `validate_*.py`, so the local glob runs it with no build. CI does not run it in that glob but as its own job,
+`trust-chain.yml › guard-gaps` (ADR 0091 decision 4, § Skipped locally below). Runnable locally:
 
     python3 scripts/validate_guard_gaps.py            # skipped when no guard changed since the last green run
     python3 scripts/validate_guard_gaps.py --force    # the full run, whatever the stamp says
@@ -345,12 +346,16 @@ run writes the SHA-256 of every file under `scripts/` and `.claude/skills/trust-
 and the gap map, as git lists them) to `.trust-chain-cache/guard_gaps.json` (gitignored, one per checkout), and a
 later run whose inputs hash the same prints `SKIPPED` and exits 0 without copying anything. A red run writes no
 stamp, so it runs again until it is green. **In CI it never skips** (`CI` is set on every GitHub Actions runner): a
-fresh checkout has no stamp, and one restored from a cache would vouch for a tree it never saw.
+fresh checkout has no stamp, and one restored from a cache would vouch for a tree it never saw. Its CI job decides
+by the same inputs instead: `trust-chain.yml › guard-gaps` runs it, with `--force`, when a push or pull request
+changes `SKIP_INPUTS` (a `dorny/paths-filter` that `validate_pipeline_shape.py` holds to that constant), and
+nightly on `main` whatever changed.
 
 **What a skip does not see — its limit.** A verdict also rests on its forgery's ANCHORS, and many live outside
 `scripts/`: a test a coverage file cites, a coverage file's path, an ADR's wording. Renaming one turns this guard
 red ("could not apply forgery"), and a skip hides that until the next full run. So a change that renames or moves
-what a guard anchors on runs `--force` (`changes/README.md` § Coverage is part of the work, the renaming rule).
+what a guard anchors on runs `--force` (`changes/README.md` § Coverage is part of the work, the renaming rule). The
+CI filter has the same blind spot: there, the next nightly run is the next full one.
 """
 from __future__ import annotations
 
