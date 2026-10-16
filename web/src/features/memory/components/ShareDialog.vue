@@ -17,6 +17,7 @@ import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 import ShareCreateDialog from './ShareCreateDialog.vue'
+import ShareGuestStops from '../../../core/sharing/ShareGuestStops.vue'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import {
   listSharesFor,
@@ -142,6 +143,8 @@ function openReissue(share: ManagedShare) {
 }
 // Renew: the owner's own share, enabled or not; anyone's share once it is off (the new one is then theirs).
 const canReissue = (share: ManagedShare) => share.mine || !share.enabled
+// Edit: the caller's own link, whose recovery copy re-opens `K_share`.
+const canEdit = (share: ManagedShare) => share.mine && !!share.sealedShareKey
 async function onSaved() {
   await loadShares()
 }
@@ -254,6 +257,15 @@ function fmtDate(d: Date): string {
                      the server's answer, since the verifier is never on the wire (#270). -->
                 <span v-if="share.newGuestsRefused" class="veyq-badge muted share-new-guests-refused" :title="t('share.newGuestsRefusedHint')">{{ t('share.newGuestsRefusedBadge') }}</span>
               </div>
+              <!-- inbox #457: the guest gate's own answer why a guest gets no link, with the edit or renew that fixes it. -->
+              <ShareGuestStops
+                :stops="share.guestStops"
+                :created-at="share.createdAt"
+                :can-edit="canEdit(share)"
+                :can-renew="canReissue(share)"
+                @edit="openEdit(share)"
+                @renew="openReissue(share)"
+              />
             </div>
             <div class="share-list-actions">
               <Button
@@ -267,7 +279,7 @@ function fmtDate(d: Date): string {
                 @click="copyShareLink(share)"
               />
               <Button
-                v-if="share.mine && share.sealedShareKey"
+                v-if="canEdit(share)"
                 type="button"
                 icon="pi pi-pencil"
                 :aria-label="t('share.edit')"

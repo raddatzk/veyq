@@ -27,6 +27,17 @@ class LinkRequirementsTest {
     }
 
     @Test
+    fun missedNamesEveryRequirementALinkMissesThePasswordFirstAndTheRefusalIsItsFirst() {
+        val both = mapOf(LINK_PASSWORD to 1, LINK_MAX_DAYS to 7)
+        assertEquals(
+            listOf(LinkRequirements.Missed.Password, LinkRequirements.Missed.Lifetime(7)),
+            LinkRequirements.missed(both, hasPassword = false, made, expiresAt = null),
+        )
+        assertEquals(listOf(LinkRequirements.Missed.Lifetime(7)), LinkRequirements.missed(both, hasPassword = true, made, expiresAt = null))
+        assertEquals(emptyList<LinkRequirements.Missed>(), LinkRequirements.missed(both, true, made, made.plus(Duration.ofDays(7))))
+    }
+
+    @Test
     fun aMaximumLifetimeCountsFromWhenTheLinkWasMadeAndIncludesItsLastInstant() {
         val rules = mapOf(LINK_MAX_DAYS to 7)
         assertEquals(Failures.linkExpiryRequired, LinkRequirements.refusal(rules, hasPassword = false, made, expiresAt = null))

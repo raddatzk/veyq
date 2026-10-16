@@ -22,6 +22,7 @@ import me.raddatz.veyq.core.generated.model.ShareBlobUploadWindowsResponse
 import me.raddatz.veyq.core.generated.model.ShareBlobUploadsRequest
 import me.raddatz.veyq.core.generated.model.ShareBlobUploadsResponse
 import me.raddatz.veyq.core.generated.model.ShareCreated
+import me.raddatz.veyq.core.generated.model.ShareGuestStop
 import me.raddatz.veyq.core.generated.model.ShareIdentityCreated
 import me.raddatz.veyq.core.generated.model.ShareNode
 import me.raddatz.veyq.core.generated.model.ShareRole
@@ -106,7 +107,7 @@ class SharingResource(
                 is HttpFailure -> return httpError(o)
             }
         }
-        return Response.ok(shares.map { (s, reissueRequired, deletable, newGuestsRefused) ->
+        return Response.ok(shares.map { (s, reissueRequired, deletable, newGuestsRefused, guestStops) ->
             ShareSummary(
                 shareId = s.id,
                 scopeId = UUID.fromString(s.scopeId), // the recovery wrap is bound to (scope, node, share), ADR 0072
@@ -120,6 +121,7 @@ class SharingResource(
                 newGuestsRefused = newGuestsRefused, // ADR 0076 point 5: re-issue to let new guests in (#270)
                 // …and the same missing verifier for any role: the role edit warns before it makes a guest link (#303)
                 writeVerifierMissing = s.writeVerifier == null,
+                guestStops = guestStops.map { it.toDto() }, // inbox #457: the guest gate's own answer, for members only
                 createdAt = s.createdAt.atOffset(ZoneOffset.UTC),
                 expiresAt = s.expiresAt?.atOffset(ZoneOffset.UTC),
                 sealedNote = s.sealedNote, // cr-0115: the manage UI shows + edits it
@@ -131,6 +133,20 @@ class SharingResource(
             )
         }).build()
     }
+
+    private fun GuestStop.toDto() = ShareGuestStop(
+        reason = when (reason) {
+            GuestStop.Reason.REVOKED -> ShareGuestStop.Reason.revoked
+            GuestStop.Reason.EXPIRED -> ShareGuestStop.Reason.expired
+            GuestStop.Reason.SPACE_UNAVAILABLE -> ShareGuestStop.Reason.spaceUnavailable
+            GuestStop.Reason.INSTANCE_SWITCH -> ShareGuestStop.Reason.instanceSwitch
+            GuestStop.Reason.TENANT_SWITCH -> ShareGuestStop.Reason.tenantSwitch
+            GuestStop.Reason.LINK_PASSWORD -> ShareGuestStop.Reason.linkPassword
+            GuestStop.Reason.LINK_MAX_DAYS -> ShareGuestStop.Reason.linkMaxDays
+        },
+        capabilityId = capabilityId,
+        maxDays = maxDays,
+    )
 
     override fun revokeShare(shareId: String): Response =
         when (val o = handler.revoke(identity.principal.name, shareId)) {

@@ -78,7 +78,7 @@ describe('the drop box share dialog', () => {
     shareId: 'link-1', scopeId: SCOPE, nodeId: 'b1', role: ShareRole.WriteOnly, enabled: true, mine: true,
     createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null, sealedNote: null, sealedShareName: null,
     sealedShareKey: 'k', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
-    reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false,
+    reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
   } as ManagedShare
 
   it('deletes a link only after the member confirmed, saying what its guests sent stays', async () => {

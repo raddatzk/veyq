@@ -58,6 +58,26 @@ class CapabilityRegistryTest {
     }
 
     @Test
+    fun offSwitchesNameEverySwitchOnThePathRootFirstInstanceBeforeTenantAndAreEmptyExactlyWhenActive() {
+        val registry = tenantRegistry(setOf(PUBLIC_SHARES, PUBLIC_SHARES_CONTRIBUTE), PUBLIC_SHARES, REMEMBER_DEVICE)
+        assertEquals(
+            listOf(
+                OffSwitch(SwitchLevel.INSTANCE, PUBLIC_SHARES),
+                OffSwitch(SwitchLevel.TENANT, PUBLIC_SHARES),
+                OffSwitch(SwitchLevel.INSTANCE, PUBLIC_SHARES_CONTRIBUTE),
+            ),
+            registry.offSwitches(PUBLIC_SHARES_CONTRIBUTE, "t1"),
+        )
+        assertEquals(listOf(OffSwitch(SwitchLevel.INSTANCE, PUBLIC_SHARES)), registry.offSwitches(PUBLIC_SHARES, "t2"), "another tenant")
+        // A tenant row on an entry no tenant may switch counts for neither answer.
+        assertEquals(emptyList<OffSwitch>(), registry.offSwitches(REMEMBER_DEVICE, "t1"))
+        // The equivalence the share list rests on (inbox #457), for every entry and both tenants.
+        for (tenant in listOf(null, "t1", "t2")) CapabilityIds.ADVERTISED.forEach {
+            assertEquals(registry.isActive(it, tenant), registry.offSwitches(it, tenant).isEmpty(), "$it in $tenant")
+        }
+    }
+
+    @Test
     fun activeIsEveryAdvertisedIdWhenNothingIsSwitchedOff() {
         val registry = registry()
         assertEquals(CapabilityIds.ADVERTISED, registry.active)

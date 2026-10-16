@@ -83,6 +83,14 @@ acceptanceCriteria:
           Nothing changes in the web client: a refused link is the 404 an unknown or expired one already is, and the
           refs pin that a 404 resolve, or a 404 on a poll, shows the unavailable page. A guest meeting a switched-off
           link in a real browser has not been run (inbox #448 automates the browser passes).
+  - id: share-switch-named-in-the-share-list
+    text: While a share switch is off at the instance level, a member's share list marks every link it stops with that switch's entry (the link's role's entry or an ancestor), the links of the roles it does not reach unmarked, from the predicate the guest gate runs (inbox #457).
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.offSwitchesNameEverySwitchOnThePathRootFirstInstanceBeforeTenantAndAreEmptyExactlyWhenActive]
+        integration: [ShareGuestStopsCoreSliceTest.anInstanceSwitchNamesItsEntryOnTheLinksOfItsRoleOnly, ShareGuestStopsCoreSliceTest.theListAndTheGuestGateAgreeOverTheMatrix]
+      web:
+        unit: [src/core/sharing/ShareGuestStops.test.ts, src/core/sharing/FolderShareDialog.test.ts]
   - id: off-state-in-a-browser
     text: In a real browser, a switched-off drop box, device linking and password-less remember are absent from the web client, and a device remembered before its switch went off asks for what its wrap replaced.
     coverage:
