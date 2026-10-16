@@ -32,7 +32,7 @@ annotation. Keys, and who enforces them:
 
 | key | enforced by | keyed on |
 |---|---|---|
-| `IP` | `IpRateLimitFilter` (boundary, pre-auth) | client remote address — only valid on `@PermitAll` |
+| `IP` | `IpRateLimitFilter` (boundary, pre-auth) | the client address `ClientAddress` resolves ([ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)), its IP alone — only valid on `@PermitAll` |
 | `USER` | `UserRateLimitFilter` (boundary, post-authorization) | resolved principal — only valid on `@Authenticated` |
 | `SHARE` / `RECIPIENT` / `OWNER` / `TENANT` | **the handler** | a domain value that only exists behind the fine-grained authz guard |
 
@@ -147,11 +147,15 @@ is gone with the algorithm ([ADR 0052](../decisions/0052-token-bucket-rate-limit
 - **Per-instance / in-memory.** A bucket is not shared across replicas; behind a load balancer each
   instance counts independently.
 - **Resets on restart.** A process restart clears every bucket — which, for a limiter, errs toward the caller.
-- **Trusts the client IP.** Behind a proxy the key is the forwarded address, and Quarkus honours that header
-  from any peer that reaches the app. [ADR 0071](../decisions/0071-runtime-hardening-on-both-targets.md)
-  narrows the peers to the proxies veyq ships or the operator names, by network: separate compose networks,
-  and a NetworkPolicy set on Helm. A peer inside that set, or a cluster whose CNI does not enforce policy,
-  can still forge the header. A NAT'd source still shares one bucket.
+- **The key is only as good as the network in front of the app.** veyq keys on the rightmost `X-Forwarded-For`
+  entry that `veyq.http.trusted-proxies` does not list, which a proxy the request really passed wrote
+  ([ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md) decision 3), and on the
+  socket peer where that entry is no IP address. The peer itself is vouched for only by the network
+  ([ADR 0071](../decisions/0071-runtime-hardening-on-both-targets.md)): separate compose networks, and a
+  NetworkPolicy on Helm. A pod past an unenforced policy (`networkPolicy.enabled=false`, or a CNI that enforces
+  none) writes the whole header and can forge the key (0094 decision 6). Behind an appending chain whose load
+  balancer is not listed, every client shares the load balancer's bucket. A NAT'd source, carrier-grade NAT
+  included, still shares one bucket: the key is the IP alone, never its port.
 - **A full bucket may be evicted under key-flood pressure** (past `MAX_TRACKED_KEYS`). Behaviourally free — a
   full bucket is indistinguishable from an absent one.
 - **The key map is bounded in steady state, not absolutely** — the weakness that pairs with the eviction above,
@@ -161,15 +165,17 @@ is gone with the algorithm ([ADR 0052](../decisions/0052-token-bucket-rate-limit
   flood outpaces the refill. At the per-IP bound's one-token-per-second that needs on the order of 100 000
   distinct keys per second — a documented shape, not a hole, and the same shape the fixed window had.
 
-These are **deferred** hardening items (a distributed store, an address-based `trusted-proxies` default), recorded so the limit
-isn't mistaken for a strong guarantee. It raises the cost of automated abuse; it does not make it impossible.
+These are **deferred** hardening items (a distributed store), recorded so the limit isn't mistaken for a strong
+guarantee. A trust-list default is not one of them any more: the list names the hops in front of the gateway, which
+no default can know, and it is empty unless the operator sets it (ADR 0094 decisions 3 and 5). It raises the cost of automated abuse; it does not make it impossible.
 
 ## Verified by
 
 Runtime tests (RestAssured) hit the **real** governed endpoints, so a `429` can only fire where `@RateLimited`
-is actually wired — proving mechanism **and** configuration in one. Each test presents its own client IP via
-`X-Forwarded-For` (the test profile enables `proxy-address-forwarding`), so the cases are order-independent and
-the per-IP property is asserted directly.
+is actually wired — proving mechanism **and** configuration in one. Each test presents its own client IP as a
+single-entry `X-Forwarded-For` from loopback with an empty trust list, so that entry is the rightmost and the client
+(ADR 0094); no Quarkus forwarding setting is involved. The cases are order-independent and the per-IP property is
+asserted directly.
 
 - `AuthRateLimitTest.challengeIsThrottledOverTheLimit` — past the limit `/login/challenge` → `429` +
   `rate_limited`.
@@ -179,6 +185,17 @@ the per-IP property is asserted directly.
   limit does not throttle a second IP.
 - `AuthRateLimitRefillTest.theBucketRefillsSoADrainedCallerIsAllowedAgain` — **refill**: under a 1-second
   window (3 per second) a drained per-IP bucket accrues a token and lets the caller through again.
+- `AuthRateLimitTest.aForgedLeftmostEntryOpensNoBucket` — **the key is not the client's own entry**: three
+  requests with `198.51.100.66, 203.0.113.77` and a fourth with a new forged leftmost entry get `429`; a different
+  rightmost entry gets `200` (the control: not one global bucket).
+- `AuthRateLimitTest.aPortAtTheStopDoesNotChangeTheKey` — **the IP alone**: a new port per request at the stop
+  entry opens no bucket; another IP does.
+- `TrustedProxiesRateLimitTest.theListedLoadBalancerIsSkippedAndTheForgedLeftmostEntryIgnored` — with
+  `veyq.http.trusted-proxies=10.0.0.5`, the entry left of the listed load balancer is the key, not the load
+  balancer and not the forged leftmost entry.
+- `ClientAddressTest` — the resolver itself, in the backend mutation gate: every row of ADR 0094's topology table,
+  the entry grammar with its ports, the trust list and its CIDR match, and the setting's refusal of a hostname, a
+  bad prefix and an empty element.
 
 **Out of scope for any test:** whether the configured *limit value* is the right number — that is a policy
 judgement (review + config), not something a test asserts.

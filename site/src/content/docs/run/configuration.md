@@ -11,22 +11,28 @@ veyq splits its configuration in two
 
 - **The environment** carries only what the process needs before it can reach the database or serve its first
   request: the database connection, the public domain and the proxy posture, the path of the config-secret key file,
-  the images and the admin listener. On Compose that is `infra/.env`; on Kubernetes, the chart's values.
+  the images and the admin listener. On Compose that is the instance's `.env` (`/opt/veyq/.env`); on Kubernetes, the
+  chart's values.
 - **Everything else is set in the admin console** and stored in the database. Today that is the object store.
 
 `scripts/validate_run_config_reference.py` fails when a variable of the production compose file or of
 `infra/.env.example`, or a key of the chart's `values.yaml`, is missing from this page.
 
-## Docker Compose: `infra/.env`
+## Docker Compose: `.env`
 
-Copy `infra/.env.example` to `infra/.env` and fill it in. Every required variable has no default: a missing one
-fails `docker compose up` with its name. Generate the secrets with `openssl rand -hex 32` (the Garage RPC secret) and
+`veyqctl install` writes `/opt/veyq/.env` (mode `0600`) from the release's template, `env.example` — the tree's
+`infra/.env.example` ([Set up a new instance](/veyq/run/new-instance/#install)). It generates the four secrets, writes
+the two image lines from the release's manifest, and takes every other value from `--set KEY=VALUE` or asks for it; an
+optional variable is given the same way. `upgrade` keeps every value, and every key the new template does not name.
+By hand, copy the template to `.env` and fill it in: every required variable has no default, and a missing one fails
+`docker compose up` with its name. Generate the secrets with `openssl rand -hex 32` (the Garage RPC secret) and
 `openssl rand -base64 24` (the others).
 
 | Variable | Required | Default | Meaning |
 |---|---|---|---|
+| `VEYQ_RELEASE` | No | `latest` | Read by `veyqctl` only: the release line `install` and `upgrade` take. `<major>.<minor>` pins one release, `<major>` takes the newest of that major, `latest` the newest of all; a new major is entered only from the last release of the one before ([Upgrade](/veyq/run/upgrade/#which-release-upgrade-takes)) |
 | `VEYQ_DOMAIN` | Yes | — | The instance's domain. It is written into every invitation and recovery link, so changing it later is not supported, and a restore must target the same domain |
-| `VEYQ_IMAGE` | Yes | — | The application image, as `ghcr.io/raddatzk/veyq:<major>.<minor>@sha256:<digest>` — the line [Verify a release](/veyq/run/verify-a-release/) prints |
+| `VEYQ_IMAGE` | Yes | — | The application image, as `ghcr.io/raddatzk/veyq:<major>.<minor>@sha256:<digest>`. `veyqctl` writes it from the release's manifest ([Verify a release](/veyq/run/verify-a-release/)) and refuses it as a `--set` |
 | `VEYQ_ADMIN_IMAGE` | Yes | — | The admin image of the same release, pinned the same way |
 | `MARIADB_PASSWORD` | Yes | — | The application's database password |
 | `MARIADB_ROOT_PASSWORD` | Yes | — | MariaDB's root password; a backup capture uses it |
@@ -71,7 +77,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 
 | Value | Default | Meaning |
 |---|---|---|
-| `app.trustedProxies` | — | Addresses whose forwarded header is trusted; set it only for a proxy with a stable address ([Hardening](/veyq/run/hardening/#trust-only-a-stable-proxy-address)) |
+| `app.trustedProxies` | — | The hops in front of the gateway, such as a load balancer: IP addresses and CIDR ranges, comma-separated; renders `VEYQ_HTTP_TRUSTED_PROXIES` ([Hardening](/veyq/run/hardening/#list-only-the-hops-in-front-of-the-gateway)) |
 | `app.resources.limits.memory` | `1Gi` | The memory limit; the JVM heap is 60 % of it |
 | `app.resources.requests.cpu` | `250m` | |
 | `app.resources.requests.memory` | `512Mi` | |

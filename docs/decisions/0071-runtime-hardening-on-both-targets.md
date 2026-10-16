@@ -10,8 +10,9 @@ Standard. The compose recipe never followed: no service sets `user:`, `cap_drop`
 `read_only`, and Garage runs as uid 0 under compose but as 1000 in the chart. **Reachability** is open on both
 targets. Every compose service shares one network, so the internet-facing proxy can open a connection to the
 database. The chart has no NetworkPolicy, so any pod in the cluster can reach the app directly. The per-IP
-rate limiter keys on the forwarded client address, so such a pod can also forge it
-([cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md)). The proxy's own Docker socket, the
+rate limiter keys on a client address taken from `X-Forwarded-For`, so such a pod, which writes the whole header,
+can also forge it ([cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md),
+[ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md) decision 6). The proxy's own Docker socket, the
 worst of it, is answered by [ADR 0063](0063-database-driven-tenant-ingress.md): Traefik runs the file provider
 only.
 
@@ -77,14 +78,14 @@ Forces:
      NetworkPolicy direction, not the Kubernetes kind). An install without
      it fails and says why; the chart never guesses a namespace. An operator whose CNI does not enforce
      policy, or who writes their own, sets `enabled: false` explicitly.
-4. **`quarkus.http.proxy.trusted-proxies` is an optional chart value with no default, and compose does not
-   set it.** A default would have to name the gateway data plane's address. On a typical cluster that is an ephemeral
-   pod IP inside the same CIDR as every other pod, so any range wide enough to survive a restart trusts every
-   pod, which is the finding again. The selector-based policy is what confines who can send a forwarded header.
-   The value is for topologies with a stable proxy address: a host-network data plane or an external load
-   balancer. On compose, decision 3 leaves the app's public port reachable only from its network peers. Of
-   those, the proxy is the one that forwards a client's address. The admin container talks to the admin
-   listener, not to the public port.
+4. **`veyq.http.trusted-proxies` is an optional chart value (`app.trustedProxies`) with no default, and compose
+   does not set it.** It is veyq's own property ([ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md)
+   decisions 3 and 5), and it names the hops **in front of** the gateway, such as an external load balancer, never
+   the gateway itself. The gateway is the socket peer, and the selector-based policy is what confines the peer. A
+   list that named the gateway data plane would have to name an ephemeral pod IP inside the same CIDR as every other
+   pod, so any range wide enough to survive a restart would trust every pod, which is the finding again. On compose,
+   decision 3 leaves the app's public port reachable only from its network peers. Of those, the proxy is the one
+   that forwards a client's address. The admin container talks to the admin listener, not to the public port.
 
 ## Consequences
 
@@ -124,5 +125,6 @@ Forces:
 - [Kubernetes](../../site/src/content/docs/run/kubernetes.md) (the docs site's Run area: naming the gateway's
   data plane, and what a CNI without NetworkPolicy enforcement leaves open).
 - [ADR 0065](0065-admin-ui-cli-separate-service.md) (the admin container, a second proxy in front of the app).
-- [cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md) (the forwarded-address trust this narrows).
+- [cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md) (the peers this confines, whose header the
+  limiter reads; [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md) resolves the address).
 - Run area of the docs site: [Hardening](../../site/src/content/docs/run/hardening.md)

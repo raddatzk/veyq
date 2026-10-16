@@ -45,8 +45,8 @@ is **rate-limited** has no such statement. The forces:
   replaced every bound's algorithm with `grep -rn "@RateLimit(key" backend/src/main` byte-identical before and
   after.
 - **Enforcement and declaration are not the same thing, and the split is by key.**
-  - `IP` and `USER` are **runtime-enforced** by a generalized boundary filter. `IP` keys on the remote address
-    pre-auth; `USER` keys on the resolved `SecurityIdentity` principal.
+  - `IP` and `USER` are **runtime-enforced** by a generalized boundary filter. `IP` keys on the client's IP pre-auth, as
+    [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md) resolves it; `USER` keys on the resolved `SecurityIdentity` principal.
   - `SHARE`, `RECIPIENT`, `OWNER`, `TENANT` are **declaration markers**. Enforcement stays in the handler,
     behind the fine-grained guard, because that is the first point the key exists.
 - **`USER` runs after authorization, not with `IP`.** Under

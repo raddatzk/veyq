@@ -45,9 +45,12 @@ networkPolicy:
  **A CNI that does not enforce
 NetworkPolicy renders the set and enforces none of it.** On such a cluster, or if you write your own policies, set
 `networkPolicy.enabled: false`, which removes every policy the chart renders, including the one on the admin
-listener. `app.trustedProxies` stays unset unless your proxy has a stable address, such as a host-network
-data plane or an external load balancer. A pod-IP range wide enough to survive a data-plane pod's restart trusts
-every pod beside it.
+listener. Without an enforced policy any pod can reach the app and write the whole `X-Forwarded-For` header, so
+the rate limits can key on a forged address; the install notes say so
+([Networking](/veyq/run/networking/#the-client-address-and-the-rate-limits)). `app.trustedProxies` stays unset
+unless a load balancer sits in front of your gateway: it lists the hops in front of the gateway, never the
+gateway's own data plane. A pod-IP range wide enough to survive a data-plane pod's restart trusts every pod beside
+it.
 
 Generate the bundled store's secrets the same way as for compose: `openssl rand -hex 32` for `garageRpcSecret` (exactly
 64 hex characters) and a long random value for `garageAdminToken`. The app's S3 key pair is derived from the admin token, so

@@ -222,19 +222,24 @@ Taken over from [ADR 0092](0092-logs-are-operational-and-name-no-person.md), whi
 range and its no-extension rule (§ 2 there).
 
 - **One core table, `veyq_guest_write_record`**, one row per guest write that enters a guest as last editor (§ 8):
-  upload commit, identity creation, folder creation, rename, meta. A row holds the client's address, the server
-  time it was observed, the share identity, the object (kind, id, field group) and `expires_at`. No User-Agent.
+  upload commit, identity creation, folder creation, rename, meta. A row holds the client's address, its source
+  port (`client_port`, nullable: unknown where no hop wrote one), the server time it was observed in milliseconds
+  UTC, the share identity, the object (kind, id, field group) and `expires_at`. No User-Agent. Behind carrier-grade
+  NAT only the address, the port and an exact time together name a subscriber (0094 M8), so an export states the
+  time zone, and the Run docs ask the operator to keep the server's clock on NTP: a clock minutes off makes the
+  port worthless, because the port soon belongs to someone else.
   Nothing a member writes or anyone reads is recorded.
 - **The record never takes an address a client can choose.** A forged address in evidence names an innocent third
-  party. Quarkus takes the leftmost `X-Forwarded-For` entry and, without trusted proxies, believes any peer, so
-  where the address comes from is decided apart from this ADR (owner 2026-10-16), in
+  party. Quarkus's forwarding takes the leftmost `X-Forwarded-For` entry, the one a client writes, so where the
+  address comes from is decided apart from this ADR (owner 2026-10-16), in
   [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md): the record takes the address of
   veyq's one core resolver, the rightmost `X-Forwarded-For` entry that is not a trusted proxy. When the resolver
-  yields no address, nothing is recorded. On Compose the address is strong by construction; on Helm it is only as
+  yields no address, nothing is recorded; when it yields no port, the address is recorded alone. On Compose the address is strong by construction; on Helm it is only as
   strong as an enforced NetworkPolicy (0094 decision 6), and the disclosure and the Run docs say so. The
   slice test is 0094's: a guest write carrying `198.51.100.66, 203.0.113.77` records `203.0.113.77` (the
-  control), and `198.51.100.66` is in no record and no log. The record holds no source port, and behind
-  carrier-grade NAT an IPv4 address without one often names no single subscriber (§ Legal basis, still open 4).
+  control), and `198.51.100.66` is in no record and no log. A stop entry `203.0.113.77:51234` records port `51234`,
+  and `198.51.100.66:4711, 203.0.113.77` records none, with `4711` in no record and no log. Where the port
+  comes from on the edges that write none is still open (§ Legal basis, still open 4).
 - **Its basis is Art. 6(1)(f) GDPR** (L): a host has no duty to keep addresses and is permitted to keep them
   briefly, for a stated purpose, disclosed — the legitimate interest in tracing the misuse of a guest link once it
   is reported. The Server Owner is the controller; the information duty is theirs, not the tenant owner's.
@@ -258,9 +263,9 @@ range and its no-extension rule (§ 2 there).
   table; access to a backup only to restore it; the startup purge after every restore; and **N + B** in the
   disclosure.
 - **Disclosure (GDPR Art. 13, at collection), from the Server Owner, never from a tenant's terms.** Every guest
-  write page carries one first-layer sentence with the value current at the write — "your address and the time are
-  kept for N days, longer only if a report or an authority's order concerns this content" — and a link to the full
-  text in the operator section of the terms ([ADR 0035](0035-server-terms-of-service.md) decision 6), which names
+  write page carries one first-layer sentence with the value current at the write — "your IP address and source
+  port and the time are kept for N days, longer only if a report or an authority's order concerns this content" —
+  and a link to the full text in the operator section of the terms ([ADR 0035](0035-server-terms-of-service.md) decision 6), which names
   the controller and contact, purpose, basis and legitimate interest, the data, N (and N + B where it applies), the
   hold durations of § 4, the recipients (law enforcement on request or suspicion), the rights and the supervisory
   authority, and that a guest who does not want this can view but not add. **The right to object (Art. 21) is
@@ -457,7 +462,10 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
 3. **Whether the German IP-retention bill has passed.** The hearing was on 7 October 2026; no vote was found. It
    reaches access providers only; if it passes, a value of N above seven gains weight, since a guest's address
    would then resolve for three months. Re-check before the CR is written.
-4. **The source-port gap.** Behind carrier-grade NAT an IPv4 address without its source port often names no single
-   subscriber, the BKA's form asks for the port, and `X-Forwarded-For` carries none. The PROXY protocol from the
-   trusted edge to the app may be the answer ([ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md)
-   names it for the Helm load balancer); the decision is deferred to the CR that builds the guest-write record.
+4. **Where the source port comes from.** Behind carrier-grade NAT an IPv4 address without its source port often
+   names no single subscriber, and the BKA's form asks for the port. The record keeps one (§ 10), and
+   [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md) decision 3 takes it from the stop entry
+   of `X-Forwarded-For` where a load balancer writes it there. Traefik and the common gateways write none, so on
+   Compose and behind them the port is unknown until a second source exists: the PROXY protocol from the gateway to
+   the app, or a header the edge overwrites on every request (ADR 0094 § Consequences, inbox #472). That follow-up
+   lands before the CR that builds the guest-write record.

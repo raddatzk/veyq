@@ -2,7 +2,9 @@ package me.raddatz.veyq.core.ratelimit
 
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.clientAddress
 import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.http.socketPeer
 import io.smallrye.config.SmallRyeConfig
 import io.vertx.core.http.HttpServerRequest
 import jakarta.annotation.Priority
@@ -37,8 +39,11 @@ private fun ContainerRequestContext.abortRateLimited(retryAfterSeconds: Long) = 
 // dependency (constructor OR field injection fails config-mapping registration). So both filters read the mapping
 // via a programmatic lookup, lazily on first request — the mapping is registered by then — keeping VeyqConfig the
 // single typed source for these knobs rather than falling back to scattered @ConfigProperty.
+private val veyqConfig: VeyqConfig
+    get() = (ConfigProvider.getConfig() as SmallRyeConfig).getConfigMapping(VeyqConfig::class.java)
+
 private val rateLimitConfig: VeyqConfig.RateLimit
-    get() = (ConfigProvider.getConfig() as SmallRyeConfig).getConfigMapping(VeyqConfig::class.java).ratelimit()
+    get() = veyqConfig.ratelimit()
 
 /**
  * Enforces `@RateLimit(key = IP)`: a best-effort, per-client-IP token bucket over the **public** surface —
@@ -49,11 +54,14 @@ private val rateLimitConfig: VeyqConfig.RateLimit
  * `@PermitAll` endpoint (a rule the posture sweep asserts statically): on an authenticated endpoint the principal
  * is both available and the better axis, and an IP bound there throttles a legitimate active user instead.
  *
- * **It trusts the client IP**: only correct behind a proxy when `quarkus.http.proxy.proxy-address-forwarding=true`
- * AND the proxy is trusted (else `X-Forwarded-For` is spoofable). We intentionally do NOT trust forwarded headers
- * by default. Tuning: `veyq.ratelimit.auth.max-requests` (default 60) per `veyq.ratelimit.auth.window-seconds`
- * (default 60) per client IP; set the max very high to effectively disable (the `%test` profile does this so the
- * slice tests, all from 127.0.0.1, don't trip it).
+ * **Its key is the client's IP as ADR 0094 resolves it** (`core/http/ClientAddress.kt`): the rightmost
+ * `X-Forwarded-For` entry that `veyq.http.trusted-proxies` does not list, which a proxy wrote and no client chose. The
+ * IP alone, never its port: a port changes with every connection, and a key that held it would open a bucket per
+ * connection. Where that entry is not an IP address, the key is the socket peer's IP. Behind an appending chain
+ * whose load balancer is not listed, every client shares the load balancer's bucket (ADR 0094 § Consequences).
+ * Tuning: `veyq.ratelimit.auth.max-requests` (default 60) per `veyq.ratelimit.auth.window-seconds` (default 60) per
+ * client IP; set the max very high to effectively disable (the `%test` profile does this so the slice tests, all
+ * from 127.0.0.1, don't trip it).
  *
  * **All `key = IP` endpoints share one bucket per IP.** That is a deliberate property, not an oversight: it bounds
  * an attacker's total public-surface spend rather than handing them a fresh budget per route. It is also why the
@@ -77,7 +85,8 @@ class IpRateLimitFilter : ContainerRequestFilter {
         RateLimitPosture.enforcedKey(resourceInfo.resourceClass, resourceInfo.resourceMethod, RateLimitKey.IP)
             ?: return
 
-        val ip = request.remoteAddress()?.hostAddress() ?: "unknown"
+        val ip = (request.clientAddress(veyqConfig.http().trustedProxies().orElse(null)) ?: request.socketPeer())
+            ?.ip?.hostAddress ?: "unknown"
         val auth = rateLimitConfig.auth()
         val retryAfter = counter.consume(
             key = ip,

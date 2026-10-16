@@ -165,11 +165,12 @@ app.
 
 The admin container also carries `veyq-admin`, a client of the same operations. It needs no route and no exposed
 port. It signs in fresh on every call with the Server Owner's own credentials and writes nothing to disk; each call
-therefore pays one password derivation (about 1–3 s) first.
+therefore pays one password derivation (about 1–3 s) first. On Docker Compose, run it from the instance's home,
+`/opt/veyq`, with `<release>` the running release (`./veyqctl status` names it):
 
 ```sh
 read -rs VEYQ_ADMIN_PASSWORD && export VEYQ_ADMIN_PASSWORD
-docker compose -f infra/docker-compose.prod.yml exec \
+docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env exec \
   -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
   admin veyq-admin tenant list
 ```

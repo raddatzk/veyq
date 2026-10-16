@@ -44,9 +44,9 @@ Forces:
   half-kept — every Server-Owner operation stayed reachable from the internet behind the owner's login, and
   `POST /api/setup/owner` behind nothing: it is `@PermitAll`, guarded only by "setup not yet complete", so
   whoever calls it first after `up -d` becomes Server Owner, on a domain that is in public CT logs minutes after
-  ACME issuance. Two facts constrain the fix. **Nothing a request carries identifies its door:** proxy-address
-  forwarding is on on both targets, so `Host`, the client address and the scheme are values the client writes
-  (`X-Forwarded-*`, `Forwarded`). **Quarkus has one HTTP listener for application resources:** one port, one
+  ACME issuance. Two facts constrain the fix. **Nothing a request carries identifies its door:** `Host`, a
+  forwarded client address and the scheme are values the client can write (`X-Forwarded-*`, `Forwarded`), and
+  Quarkus's forwarding, when on, rewrites the request's own view from them. **Quarkus has one HTTP listener for application resources:** one port, one
   TLS port, one domain socket, all feeding the same router; its management interface serves Vert.x routes,
   never JAX-RS.
 

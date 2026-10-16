@@ -126,8 +126,6 @@ services:
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:mariadb://mariadb:3306/veyq
       QUARKUS_DATASOURCE_USERNAME: veyq
       QUARKUS_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/.env}
-      # Behind a reverse proxy the per-IP rate limiter must key on the real client, not on Traefik.
-      QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
       # HSTS on the app's responses (ADR 0069). The switch is the DEPLOYMENT's, named for it rather than for
       # this service, so every origin this stack serves answers to the one value — https://raddatzk.github.io/veyq/run/new-instance/ says when to
       # turn it off. Traefik adds nothing: the app sends its own headers.

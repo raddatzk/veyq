@@ -34,7 +34,7 @@ save it, and run **Check store**; the step that failed is named
   most 50 certificates a week. Test against the staging directory (`VEYQ_ACME_CASERVER` /
   `gateway.tls.acme.server`).
 - **Docker Compose:** `permission denied` in Traefik's log means the certificate volume is not owned by Traefik's
-  user; `docker compose -f infra/docker-compose.prod.yml up -d` runs the `volume-ownership` step that fixes it.
+  user; `veyqctl start` (`up -d --wait` on the recipe) runs the `volume-ownership` step that fixes it.
 - **Kubernetes:** cert-manager 1.21 or later must be installed, with its CRDs and with its Gateway API and
   `ListenerSet` support on; `kubectl -n veyq get certificate` shows each order. A tenant with no certificate while the
   instance's own host has one usually means the gateway implementation does not serve `ListenerSet`s:
@@ -60,7 +60,7 @@ affected ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key
   `ssh -L 8081:127.0.0.1:8081 you@the-host`. On Kubernetes, with
   `kubectl -n veyq port-forward svc/veyq-admin 8081:8080`.
 - **"This instance can't be reached right now."** The console loads but the application does not answer it: check
-  that the application runs (`docker compose … ps`, `kubectl … get pods`).
+  that the application runs (`veyqctl status`, `kubectl … get pods`).
 - **The application does not start** and its log says the admin listener could not bind: something else holds port
   8090 in its container.
 - **The admin container exits** at start: `VEYQ_HSTS_ENABLED` is something other than `true` or `false`.

@@ -150,8 +150,8 @@ CRD or a cluster-scoped object.
   image) and the schema refuses `enabled` without a claim. `chart_meta_check.py` and `chart_upgrade_check.py` see a
   new init container and a new volume on the Deployment — neither an immutable field.
 - **The Run area changes**: the Kubernetes tab of Upgrade replaces its hand procedure with the gate and the
-  `--wait`/`timeout` advice; Backup and restore gains the restore Job and the one-time key export. Both pages are
-  in flight under cr-veyqctl phase 6, so a CR for this waits for it.
+  `--wait`/`timeout` advice; Backup and restore gains the restore Job and the one-time key export. cr-veyqctl
+  rewrote both around `veyqctl` (done 2026-10-16) and left their Kubernetes halves as they were, so nothing waits.
 - **ADR 0056's guard gap narrows, not closes**: the cluster backup is the gate's, but that a key export happened is
   still the operator's to know; the fingerprint tripwire remains the only detection of a lost key.
 - **A stack lane for it** is a later step: ADR 0091's lanes boot Compose through `veyqctl`; a cluster lane is inbox

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Guard that three security-relevant lookups each have exactly one home in the backend.
+"""Guard that four security-relevant lookups each have exactly one home in the backend.
 
-**What it asserts.** Over every main Kotlin file of the backend (`backend_tree`), three kinds of lookup occur only in their home:
+**What it asserts.** Over every main Kotlin file of the backend (`backend_tree`), four kinds of lookup occur only in their home:
 
   A. **A request's Host header is read** only in `core/tenant/TenantHostResolver.kt`. Spellings: a string
      literal naming the forwarded-host header (any case), a `getHeader`/`getHeaderString`/`header` call whose
@@ -11,6 +11,8 @@
      whose query string starts with the `domain` column.
   C. **A user is looked up by email** only in `core/identity/AccountStore.kt`: `VeyqUser.find`/`count`/`list`/
      `stream` whose query string starts with the `email` column.
+  D. **A client's forwarded address is read** only in `core/http/ClientAddress.kt` (ADR 0094 decision 1): a string
+     literal naming the forwarded-for header (any case), wherever it stands — a call argument, a constant, a map key.
 
 Each home must itself still carry its rule's lookup, so a home that moved or was renamed reads red ("nothing
 there to be the only one"), never as a vacuous green. A header read through the resolver
@@ -25,12 +27,20 @@ one normalization is what makes "the account under this address" mean the same t
 first run on the untouched tree was red on exactly the CR's inventory: two hand parses, three domain lookups, four
 email lookups outside their homes.
 
+Rule D came with cr-client-address-resolver (ADR 0094). Quarkus's forwarding took the leftmost forwarded-for entry,
+the one a client writes, and keyed the per-IP rate limiter on it; the guest-write record of ADR 0093 § 10 will keep
+the address as evidence. A second hand parse there takes the leftmost entry again and records a forged address
+that names a third party, and every test that sends a single-entry header stays green, so no human notices. Its
+first run, before `ClientAddress.kt` existed, was red on the missing home.
+
 **Its limit.**
 
   (a) **An alias defeats it.** `const val H = "Host"` read as `getHeaderString(H)` is a header read no spelling
       above matches: the literal is not an argument and the call has no literal. Catching it needs data flow,
       which a buildless grep does not have. `validate_guard_gaps.py` pins this gap, so closing it turns that
-      guard red instead of landing silently.
+      guard red instead of landing silently. Rule D matches its literal anywhere, so a constant holding the name
+      is caught; what defeats it is a name that is never one literal — assembled from two (`"X-Forwarded-" +
+      "For"`), or matched by a prefix over every header — which is the same data-flow gap, pinned the same way.
   (b) **It reads text, not code.** A comment or KDoc that spells a forbidden call is red too: describe the call
       instead of writing it. (Masking comments was considered and dropped: `validate_coverage.py`'s Kotlin
       masker blanks string literals as well — the very thing rules A–C read — and that module runs its whole
@@ -56,6 +66,7 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 RESOLVER = backend_tree.source_file("me.raddatz.veyq.core.tenant.TenantHostResolver")
 ACCOUNTS = backend_tree.source_file("me.raddatz.veyq.core.identity.AccountStore")
+CLIENT_ADDRESS = backend_tree.source_file("me.raddatz.veyq.core.http.ClientAddress")
 
 # A double-quoted literal's content, at the position a pattern leaves off. Kotlin allows `"…"` only here; a raw
 # `"""…"""` query is out of reach, see limit (b).
@@ -73,6 +84,9 @@ RULES: list[tuple[str, str, pathlib.Path, list[re.Pattern[str]]]] = [
     ]),
     ("C", "a user looked up by email", ACCOUNTS, [
         re.compile(r'\bVeyqUser\s*\.\s*(?:find|count|list|stream)\(\s*' + LITERAL),
+    ]),
+    ("D", "a client's forwarded address read", CLIENT_ADDRESS, [
+        re.compile(r'"x-forwarded-for"', re.I),
     ]),
 ]
 
@@ -120,7 +134,8 @@ def main() -> int:
             print(f"  {msg}")
         return 1
     print(f"lookup-single-home OK: {len(files)} Kotlin file(s); Host read + tenant-by-domain only in "
-          f"{RESOLVER.name}, user-by-email only in {ACCOUNTS.name}")
+          f"{RESOLVER.name}, user-by-email only in {ACCOUNTS.name}, forwarded client address only in "
+          f"{CLIENT_ADDRESS.name}")
     return 0
 
 

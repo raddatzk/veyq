@@ -1,5 +1,5 @@
 {
-  "_comment": "Canonical mutate scope for the backend policy-layer mutation gate (ADR 0045 §2). The single source of truth for WHAT PIT mutates, read by BOTH build.gradle.kts (the pitest{} block, the mutator) AND a scripts/ meta-check (the guard that asserts something was in fact mutated) — Gradle-Kotlin-DSL and Python cannot parse each other's config, so a restated scope would drift the mutator and its guard apart (mirrors web/stryker.mutate.json). PIT class-glob syntax. An EXPLICIT list, never a package sweep: ADR 0045 §2 mutates the curated pure-decision tier only — never the dumb stores (a wrong WHERE is a real-DB test, not a mutant) nor the @QuarkusTest slices (integration-level mutation conflates wiring with assertion strength). TokenBucket carries NO trailing `*` on purpose (ADR 0052): a wildcard there would also match the imperative shell TokenBucketCounter (map + clock) and its data holders' generated equals/copy/toString — neither is the pure decision tier. Do not 'fix' it into a glob.",
+  "_comment": "Canonical mutate scope for the backend policy-layer mutation gate (ADR 0045 §2). The single source of truth for WHAT PIT mutates, read by BOTH build.gradle.kts (the pitest{} block, the mutator) AND a scripts/ meta-check (the guard that asserts something was in fact mutated) — Gradle-Kotlin-DSL and Python cannot parse each other's config, so a restated scope would drift the mutator and its guard apart (mirrors web/stryker.mutate.json). PIT class-glob syntax. An EXPLICIT list, never a package sweep: ADR 0045 §2 mutates the curated pure-decision tier only — never the dumb stores (a wrong WHERE is a real-DB test, not a mutant) nor the @QuarkusTest slices (integration-level mutation conflates wiring with assertion strength). TokenBucket carries NO trailing `*` on purpose (ADR 0052): a wildcard there would also match the imperative shell TokenBucketCounter (map + clock) and its data holders' generated equals/copy/toString — neither is the pure decision tier. Do not 'fix' it into a glob. ClientAddress carries none for the same reason (ADR 0094): a wildcard would match its result and trust-list holders (ClientAddress$Resolved, $Range, $TrustList) and the request accessor's file class ClientAddressKt, which holds no decision.",
   "targetClasses": [
     "me.raddatz.veyq.core.spaces.scope.RotationPolicy*",
     "me.raddatz.veyq.core.admin.tenant.RemovalPolicy*",
@@ -7,7 +7,8 @@
     "me.raddatz.veyq.core.sharing.ShareAccessPolicy*",
     "me.raddatz.veyq.core.spaces.scope.MembershipPolicy*",
     "me.raddatz.veyq.core.sharing.ReissuePolicy*",
-    "me.raddatz.veyq.core.tasks.CompromiseRotationPolicy*"
+    "me.raddatz.veyq.core.tasks.CompromiseRotationPolicy*",
+    "me.raddatz.veyq.core.http.ClientAddress"
   ],
   "targetTests": [
     "me.raddatz.veyq.core.spaces.scope.RotationPolicyTest",
@@ -16,6 +17,7 @@
     "me.raddatz.veyq.core.sharing.ShareAccessPolicyTest",
     "me.raddatz.veyq.core.spaces.scope.MembershipPolicyTest",
     "me.raddatz.veyq.core.sharing.ReissuePolicyTest",
-    "me.raddatz.veyq.core.tasks.CompromiseRotationPolicyTest"
+    "me.raddatz.veyq.core.tasks.CompromiseRotationPolicyTest",
+    "me.raddatz.veyq.core.http.ClientAddressTest"
   ]
 }

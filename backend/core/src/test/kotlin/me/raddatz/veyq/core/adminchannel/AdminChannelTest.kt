@@ -1,9 +1,7 @@
 package me.raddatz.veyq.core.adminchannel
 
 import io.vertx.core.net.SocketAddress
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Test
@@ -63,15 +61,5 @@ class AdminChannelTest {
     fun aMissingAddressIsThePublicChannel() {
         assertFalse(AdminChannel.isAdminChannel(null, peer("127.0.0.1"), adminPort))
         assertFalse(AdminChannel.isAdminChannel(on(adminPort), null, adminPort))
-    }
-
-    @Test
-    fun onlyLiteralsAreParsedAndNothingIsResolved() {
-        assertEquals("10.0.0.1", AdminChannel.literal("10.0.0.1")?.hostAddress)
-        assertTrue(AdminChannel.literal("fd00::1") != null)
-        // A name is never looked up: it is not a literal, so it is not recognised, so it is the public channel.
-        assertNull(AdminChannel.literal("localhost"))
-        assertNull(AdminChannel.literal("admin"))
-        assertNull(AdminChannel.literal("999.1.1.1"))
     }
 }

@@ -3,8 +3,9 @@
 - Status: Accepted 2026-10-16; built: `veyqctl` (decisions 1, 2, 4–7), the producer of a release's assets, and no
   image carries a recipe (`scripts/veyqctl.py`, `scripts/release_assets.py`); the stack lane installs every candidate
   through it; the publish creating the GitHub Release (decision 3, `ci.yml`'s `publish` job, held by
-  `scripts/validate_release_identity.py` assertion 11 and never run: there is no remote). Not built: the Run pages
-  around `veyqctl`
+  `scripts/validate_release_identity.py` assertion 11 and never run: there is no remote); the Run pages around
+  `veyqctl`, each keeping the commands the tool runs, and *Verify a release*'s `cosign verify-blob` for `veyqctl`
+  itself (held by assertion 7). What waits on the owner: the remote, immutable releases switched on, the first publish.
 - Date: 2026-10-16
 
 ## Context

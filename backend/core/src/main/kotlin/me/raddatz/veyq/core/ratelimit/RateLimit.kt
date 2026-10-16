@@ -6,7 +6,7 @@ import jakarta.ws.rs.NameBinding
  * The axis a rate limit counts on — the vocabulary of the declarative posture (ADR 0051).
  *
  * The split is not cosmetic: [IP] and [USER] are the only keys a **boundary filter** can know, because they come
- * from the request itself (remote address) or from the resolved `SecurityIdentity`. Every other key is a domain
+ * from the request itself (the client address) or from the resolved `SecurityIdentity`. Every other key is a domain
  * value that only exists **behind** the handler's fine-grained authorization guard (the second layer in
  * `cc.security.authorization`), so those are *declaration markers* — the handler enforces them.
  *
@@ -14,7 +14,8 @@ import jakarta.ws.rs.NameBinding
  * content** ([invariant] operator-blind) — that is a hard boundary on anything added to this enum.
  */
 enum class RateLimitKey {
-    /** Client remote address, counted before authentication. Only valid on a `@PermitAll` endpoint. */
+    /** The client's IP as `ClientAddress` resolves it (ADR 0094), counted before authentication. Only valid on a
+     *  `@PermitAll` endpoint. */
     IP,
 
     /** The resolved principal (`userId`), counted after authorization. Only valid on an `@Authenticated` endpoint. */

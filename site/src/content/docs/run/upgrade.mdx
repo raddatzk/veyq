@@ -6,6 +6,7 @@ sources:
   - docs/decisions/0057-release-identity-and-deployment-recipe.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/decisions/0085-one-major-moved-on-a-yearly-train.md
+  - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -13,15 +14,16 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 The schema migrates at boot with no operator gate and the migration set carries no downgrade path, so the backup
 is not a precaution taken *around* this procedure — it **is** the way back ([ADR 0056](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) §6).
 Everything else below exists to keep that backup usable: to name the release you are leaving, and to notice a
-recipe change before it becomes a failed `up`.
+recipe change before it stops anything.
 
-**Which of these steps has ever been executed.** Step 2 is rehearsed on every `scripts/run_web_e2e.py` run: it
-captures a live instance, destroys it, restores it and runs a suite against the result, and it holds the production
-capture to resolving the production project instead of whatever happens to run out of `infra/`. The DATA half of the
-whole upgrade is rehearsed by the upgrade proof below, from jars rather than images. **No image has ever been
-published**, so no other step here has ever run — not the stop, not the pull, not the recipe diff, not the rollback.
-This is a procedure derived from the decisions that govern it, not from a rehearsal, and you are the one finding out
-where it is wrong. Read it that way.
+**Which of these steps has ever been executed.** `veyqctl upgrade` has run once, live, between two releases produced
+from two commits of the tree with images built on the host (`--unsigned-local`, so no signature was checked): a
+Memory sealed under the first was still open after it, the upgrade's backup restored onto a fresh install, and its
+refusals were each provoked against a running instance with every container's start time unchanged. The two
+releases' images were identical, so that run proves the switch, not a schema migration. **No release has been
+published**, so no upgrade has pulled a published image or checked its signatures, and none has run a rollback. Step 4's
+capture is also rehearsed on every `scripts/run_web_e2e.py` run, and the data half of a whole upgrade by the upgrade
+proof below. Read it that way.
 
 **The upgrade proof — what it covers, and what it does not** ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md) Decision 7).
 `python3 scripts/run_web_e2e.py --upgrade` builds the **predecessor** in a worktree of its ref (its own fast-jar, its
@@ -36,90 +38,79 @@ builds' highest migration, the migrations changed or removed between them, and t
 refusal (a changed baseline's checksum above all) is named as such. Before the first release a red proof informs and
 gates nothing; `ci.yml`'s `upgrade-proof` job, which `publish` needs, is disabled until then
 ([backend/CLAUDE.md](https://github.com/raddatzk/veyq/blob/main/backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
-images, so the pull, the recipe diff and the `up` of steps 4–6 and the rollback stay unrehearsed; and it says nothing
+images, so a pull, an `up` that migrates, and the rollback stay unrehearsed; and it says nothing
 about the chart — `helm upgrade` from the predecessor's chart to the candidate's runs in no cluster; its immutable
 fields and claims are compared on rendered manifests by `scripts/chart_upgrade_check.py` ([Upgrade](/veyq/run/upgrade/), Kubernetes), and a cluster leg is inbox #430.
 
 <Tabs syncKey="target">
   <TabItem label="Docker Compose">
 
-1. **Stop the application — and only the application.** *Cold* means the **writer** is stopped; MariaDB and
-   Garage stay up, because the capture reads through their own interfaces (ADR 0056 §2).
+```sh
+cd /opt/veyq
+./veyqctl check                                              # which release upgrade would take, and what is newer
+./veyqctl upgrade --key-into /media/usb-stick/veyq-<stamp>.key
+./veyqctl self-update                                        # then: veyqctl itself, as the new release ships it
+```
+
+`upgrade` runs only when you run it, and in this order — **nothing is stopped before step 4**. Each step names what it
+runs, so you can do it by hand.
+
+1. **Resolve the release** `.env`'s `VEYQ_RELEASE` selects ([below](#which-release-upgrade-takes)). The running one:
+   nothing to do. An older one: refused — there is no downgrade.
+2. **Verify it and fetch its files** into `releases/<new>/`, exactly as [Verify a release](/veyq/run/verify-a-release/)
+   shows. A signature that does not verify stops it here, with nothing pulled.
+3. **Check the new template against `.env`.** Every key the new `env.example` assigns that `.env` lacks, and every
+   `${VAR:?…}` the new recipe or your `compose.override.yml` leaves unset, is refused by name: add it to `.env` and run
+   `upgrade` again. A release that adds a required variable has no other way to reach you, and a setting that moved
+   into the admin console leaves the template as a removed variable; a change you have to act on is named in that
+   release's notes ([Versions and compatibility](#versions-and-compatibility)). `upgrade` then writes the next `.env`
+   as `.env.next` (the new image lines, your values, every key the template does not name kept) and lets Compose check
+   it: `docker compose -f releases/<new>/docker-compose.prod.yml --env-file .env.next config --quiet`. By hand,
+   read the two diffs:
 
    ```sh
-   docker compose -f infra/docker-compose.prod.yml stop app
+   diff -u releases/<old>/env.example             releases/<new>/env.example
+   diff -u releases/<old>/docker-compose.prod.yml releases/<new>/docker-compose.prod.yml
    ```
 
-   **`scripts/instance_backup.py` does not check this, and does not pretend to** — it cannot know what "the
-   app" is on your host. It is the one precondition you own, and the entire consistency argument rests on it:
-   with the app down the database gains no rows, so a row whose object was never captured is impossible and
-   there is no ordering to get right.
+4. **Back up, switch, start.** It stops the application — and only it: *cold* means the **writer** is stopped, and
+   MariaDB and Garage stay up because the capture reads through their own interfaces (ADR 0056 §2). It captures the
+   three legs with the running release's own `instance_backup.py` into `backups/<stamp>-before-<new>/`, leg (c) to
+   the file `--key-into` names, and checks the capture — [Backup and restore § Capture](/veyq/run/backup-and-restore/#capture)
+   shows each command. A capture that fails switches nothing and starts the running release again. Then `.env.next`
+   becomes `.env`, `state.json` names the new release, and the stack comes up on the new recipe:
+   `docker compose -f releases/<new>/docker-compose.prod.yml --env-file .env up -d --wait` (plus your
+   override). **The schema migrates during this boot. There is no gate and no prompt.** If the stack is not healthy,
+   `upgrade` says so and names the way back ([Rollback](#rollback)).
 
-2. **Capture, then check the capture,** exactly as [Backup and restore § Capture](/veyq/run/backup-and-restore/#capture)
-   shows for the production recipe: as root, on the `veyq_edge` network, with leg (c) read from the
-   `veyq-config-secret` volume and copied to a medium of its own. The application is already stopped (step 1), so
-   skip that page's first step and do not start it again at its last.
+`--key-into` is required, refused before anything else runs when it is missing, already exists or lies inside
+`backups/`: the dump plus the key opens every tenant's SMTP password, so they never sit side by side. Encrypt the
+capture before it leaves the host ([Capture](/veyq/run/backup-and-restore/#capture)).
 
-   Do not skip `verify`. A capture that silently missed objects and one that is complete look identical until
-   the day you need it, which is the day you find out. Encrypt it before it leaves this host ([Capture](/veyq/run/backup-and-restore/#capture)).
+**What names the release you are leaving.** `releases/<old>/` stays, with the manifest that names its two images by
+digest, and the capture's `manifest.json` records `app.version`. A release is `<major>.<minor>` and a publish onto an
+existing one **fails** rather than replacing it ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md)),
+so that name is one fixed set of bits for good — a rollback target rather than a label.
 
-3. **Confirm the backup can name the release you are leaving.** Read `app.version` in the capture's
-   `manifest.json`. A release is `<major>.<minor>`, and a release onto an existing tag **fails** rather than
-   replacing it ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md)), so that tag
-   names one fixed set of bits for good — which is what makes it a rollback target rather than a label. A
-   `<major>.<minor>-SNAPSHOT` is not: its tag moves, so roll back to the digest you pinned instead. If the
-   manifest records no release, the backup is still valid and still restorable; what it cannot tell you is which
-   image to start it under, so write that down yourself now, from the admin console's **Server → Release**, while the
-   instance you are leaving still exists to be asked. And keep a copy of `infra/.env`'s `VEYQ_IMAGE` and
-   `VEYQ_ADMIN_IMAGE` lines: they name, by the digest you verified when you installed them, the pair you roll
-   back to.
-
-4. **Verify the new release and pull both of its images**, so the download is not part of the outage: run
-   [Verify a release](/veyq/run/verify-a-release/) with `version=<new-version>`. It pulls the app and the admin image by digest, extracts
-   the new recipe into `./recipe-<new-version>/` and prints the two image lines step 6 pins. If either
-   `cosign verify` fails, stop here — nothing has changed yet.
-
-5. **Diff the new image's recipe against the one you are running.** The image's copy is authoritative for the
-   version it belongs to (ADR 0057), and a version that adds a service or a required variable has **no other
-   delivery path to you** — the first sign of one you missed is a `up` that dies on a missing variable. A setting
-   that moved into the admin console leaves the recipe the same way, as a removed variable; a change you have to
-   act on is named in that release's notes ([Versions and compatibility](#versions-and-compatibility)).
-
-   ```sh
-   diff -u infra/docker-compose.prod.yml ./recipe-<new-version>/docker-compose.prod.yml
-   diff -u infra/.env.example            ./recipe-<new-version>/.env.example
-   ```
-
-6. **Apply what the diff showed, then bring the new version up.** Take the new recipe as yours
-   (`cp ./recipe-<new-version>/docker-compose.prod.yml ./recipe-<new-version>/.env.example infra/`), carry any
-   new variable into `infra/.env`, replace its `VEYQ_IMAGE` and `VEYQ_ADMIN_IMAGE` lines with the two step 4
-   printed — both, never one — and:
-
-   ```sh
-   docker compose -f infra/docker-compose.prod.yml up -d
-   ```
-
-   The schema migrates during this boot. There is no gate and no prompt.
-
-7. **Verify, and not by "it started".** Open **Server → Object store** and run **Check store** (or
-   `veyq-admin store check`): the store setting survives the upgrade in the database, and the check proves it still
-   reaches its store. Read the instance's config-secret state as the Server Owner
-   on the admin channel — the admin console's **Server → Config-secret key**, or `veyq-admin config-secret` — and
-   expect `OK`; then have a person sign in and **open a Memory that contains media**. That is the one assertion
-   touching all three legs at once — the row, the object and the key are three different failures wearing the
-   same "it looked fine".
+**Then verify, and not by "it started".** Open **Server → Object store** and run **Check store** (or
+`veyq-admin store check`): the store setting survives the upgrade in the database, and the check proves it still
+reaches its store. Read the instance's config-secret state as the Server Owner on the admin channel — the admin
+console's **Server → Config-secret key**, or `veyq-admin config-secret` — and expect `OK`; then have a person sign in
+and **open a Memory that contains media**. That is the one assertion touching all three legs at once — the row, the
+object and the key are three different failures wearing the same "it looked fine".
 
   </TabItem>
   <TabItem label="Kubernetes">
 
-The same procedure as under Docker Compose, with the same reason it is a procedure: the schema
-migrates at boot with no gate and no downgrade path, so the backup is the way back. Two things are specific
-to this target.
+The same order as `veyqctl`'s, by hand — `veyqctl` drives Compose only (ADR 0096 decision 8) — with the same reason
+it is a procedure: the schema migrates at boot with no gate and no downgrade path, so the backup is the way back. Three
+things are specific to this target.
 
 - **One app pod, `strategy: Recreate`, and that is not a tuning knob.** Kubernetes' default `RollingUpdate`
   starts the new pod before the old one stops, which would run two migrators against one schema during every
   upgrade; `Recreate` is what makes "one migrator at a time" true, at the cost of a short outage per upgrade.
-  The day the update mechanism is decided (inbox #121) this is the constraint to revisit.
+  An upgrade here is `helm upgrade`, started by hand (ADR 0096 decision 8); the migration at boot is ungated either
+  way, so this stays.
 - **What the chart change between two releases is checked for — and what not** ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)
   § Decision, the chart-upgrade check). `python3 scripts/chart_upgrade_check.py` reads the upgrade proof's predecessor's `charts/veyq` out of git
   (the commit before until the first release, the last `v<major>.<minor>` from then on; `--upgrade-from <ref>` names
@@ -154,7 +145,7 @@ kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the applicatio
 #    then delete ./veyq-config-secret.key — the key now lives on its own medium, never in the capture
 helm upgrade veyq "oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}" -n veyq -f my-values.yaml \
   --set image.digest="${app_digest}" --set admin.image.digest="${admin_digest}"   # Verify a release, <new>
-# 3. the schema migrates during this boot; then verify as the compose runbook says — not by "it started"
+# 3. the schema migrates during this boot; then verify as the Compose tab says — not by "it started"
 ```
 
 The new chart names the new release as both images' tag; pin each image to the digest the verification resolved
@@ -164,6 +155,27 @@ and images' digests, exactly as under compose.
 
   </TabItem>
 </Tabs>
+
+## Which release upgrade takes
+
+`VEYQ_RELEASE` in `.env` is the release line ([ADR 0096](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md) decisions 4–5):
+
+| `VEYQ_RELEASE` | `upgrade` takes |
+|---|---|
+| `1.4` | Nothing: the release is pinned. `check` still says what is newer |
+| `1` | The newest release of major 1 |
+| `latest` | The newest release, one major at a time (below) |
+
+**A new major is entered only from the last release of the one before.** A major is where something is removed, and
+the path the release pipeline tests into a new major is the one from the previous major's last release; a jump from
+an older release across those removals is a path nobody tested. So when the selected release lies in a later major
+and you do not run the newest release of your own, `upgrade` goes to that newest release first, and ends by saying
+that the next `upgrade` enters the next major. One run never crosses more than one major. With 1.3 running, 1.9 the
+newest of major 1 and 2.5 the newest of all, `latest` takes 1.9, and the next run 2.5. From 1.9 with 3.1 listed it
+takes the newest of major 2, never 3.1. A pin in the next major, `2.3`, is reached directly from 1.9. A next major
+with no release (a mirror that lacks it, or only a prerelease) is refused rather than crossed. `veyqctl check` says
+which release the next `upgrade` takes, and which major the one after it would enter. Under Helm the same rule is
+yours to follow by hand. This rule is held by `veyqctl`'s self-test; no two published majors exist yet.
 
 ## Versions and compatibility
 
@@ -185,10 +197,26 @@ run and the version clients check already share one major; no train has left yet
 
 ## Rollback
 
-**Rollback is the backup plus the tag, and both are nameable only because a release is immutable.** Install the
-release you left first: a freshly installed instance on the two lines step 3 kept (`VEYQ_IMAGE` and
-`VEYQ_ADMIN_IMAGE` pinned back, the app started once and stopped, as [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires), then restore the capture
-from step 2 onto it. The order is the rollback: restored onto the new release, the same capture is accepted as an
-older backup and migrated up again at the next start, which repeats the failed upgrade instead of undoing it —
-the restore says so when it sees one. There is no other way back: the migrations carry no down path, so an instance
-that has booted on the new schema cannot be handed to the old image.
+**Rollback is the backup plus the release you left, and both are nameable only because a release is immutable.**
+Install the release you left on a fresh instance, then restore the capture `upgrade` took onto it. The order is the
+rollback: restored onto the new release, the same capture is accepted as an older backup and migrated up again at the
+next start, which repeats the failed upgrade instead of undoing it — the restore says so when it sees one. There is
+no other way back: the migrations carry no down path, so an instance that has booted on the new schema cannot be
+handed to the old image.
+
+```sh
+cd /opt/veyq && ./veyqctl stop                 # the failed release; its volumes stay until you remove them
+sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /opt/veyq-rollback
+./veyqctl --home /opt/veyq-rollback install --set VEYQ_RELEASE=<old> --set COMPOSE_PROJECT_NAME=veyq-rollback \
+  --set VEYQ_DOMAIN=<your domain> --set VEYQ_ACME_EMAIL=<your email>
+./veyqctl --home /opt/veyq-rollback restore /opt/veyq/backups/<stamp>-before-<new> \
+  --domain <the tenant's domain> --key-from /media/usb-stick/veyq-<stamp>.key
+```
+
+The rollback runs as a project of its own, so its volumes are new and empty, which a restore requires
+([Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance)), and the failed instance's stay
+until you remove them (`docker compose -f releases/<new>/docker-compose.prod.yml --env-file .env down -v` in `/opt/veyq`, once the
+rollback is verified). Its proxy orders its
+certificates anew. Under Helm: a fresh release of the previous chart and images by their digests, then the restore.
+**Derived:** the live run restored an upgrade's backup onto a fresh install of the *new* release, never of the old
+one.
