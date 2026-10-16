@@ -1,19 +1,21 @@
-# UC: Tenant terms — the operator sets their server's legal terms (a new revision on each change)
+# UC: Tenant terms — the space owner sets the space's legal terms (a new revision on each change)
 
 - **ID:** uc.admin.tenant-terms
-- **Primary actor:** The **tenant owner** (the operator of this server), signed in — a session, no unlocked vault
-  needed (terms are operational, not content).
+- **Primary actor:** The **tenant owner** (the space owner — not the Server Owner who runs the server), signed in — a
+  session, no unlocked vault needed (terms are operational, not content).
 - **Goal:** Set and edit the tenant's **legal terms** (acceptable use, prohibited/illegal content, review &
   removal, contact, an Impressum) as **per-locale markdown**, written per language — **the languages the terms
   carry are the languages the owner added**, and a starter template can fill any one of them on request; a
   change **bumps the revision**, which re-gates members ([uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md)).
 - **Preconditions:** A session as the **tenant owner** (`isOwner`); the tenant is ACTIVE.
 - **Postconditions (success):** the tenant's **`terms_markdown_by_locale`** + **`terms_revision`** are updated;
-  a *normalized* change bumps `terms_revision` (idempotent edits don't); the higher revision re-gates every member.
+  a *normalized* change bumps `terms_revision` (idempotent edits don't); the higher revision re-gates every member,
+  and every guest who opens one of the space's shares (a guest's acceptance is client-only and per space,
+  `recordTermsAccepted` in `web/src/core/sharing/resolvePublicShare.ts`).
 
 ## What the terms are here
 
-The operator's **public policy** — served to everyone (including **pre-auth on the login page**), **not** E2EE
+The space's **public policy** — served to everyone (including **pre-auth on the login page**), **not** E2EE
 content. Each tenant carries **`terms_markdown_by_locale`** (a locale→markdown map, DE+EN) + an int
 **`terms_revision`**. The owner **writes the markdown**, per language. A **starter template** is available for
 each language — the pre-E2EE 11-clause set (purpose, privacy, rights-to-content, **children**, **illegal
@@ -23,7 +25,7 @@ it was asked for: it is a draft to edit, not a structure the terms are assembled
 individually toggled; the clause numbers are literal in the template text, so any subset would print a gap in
 the numbering. Absent a template insert, a language is free markdown from the first character.
 
-This is where the content-blind operator states policy + the honest-operator caveat
+This is where the space owner states policy + the honest-operator caveat
 + the public-share **decryptable-on-report** ([security-model](../../../crosscutting/security-model.md),
 [ADR 0035](../../../decisions/0035-server-terms-of-service.md)). Self-hosted operators own their terms; the central
 infra ships a default.
