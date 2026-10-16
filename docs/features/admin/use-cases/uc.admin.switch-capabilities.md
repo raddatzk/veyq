@@ -33,12 +33,15 @@
   `DEVICE` wrap a member needs the password **and the Secret Key**. Without the `DEVICE_KEY` wrap a member needs the
   password **and the Secret Key** too: a device holds one convenience wrap
   ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §9), so a password-less device has no
-  `DEVICE` wrap to fall back on, only the `PASSWORD` floor. The unlock screen asks for the Secret Key at once, and
-  the field's hint line says why (`unlock.deviceHeldBack`) instead of the first-sign-in hint, and the device's own
-  line in Devices and sessions says it is held back (`sessions.deviceHeldBack`) instead of how it unlocks. The device keeps its
-  local key and is never re-enrolled to the other tier while its wrap is withheld, so switching back on restores
-  it. The `PASSWORD` wrap is always served, so nobody is locked out, and the confirmation text says so in those
-  words.
+  `DEVICE` wrap to fall back on, only the `PASSWORD` floor. The sign-in screen fills in the email from the device's
+  one local record, asks for the Secret Key at once, and the field's hint line says why (`unlock.deviceHeldBack`)
+  instead of the first-sign-in hint, before anything is typed; the device's own line in Devices and sessions says
+  it is held back (`sessions.deviceHeldBack`) instead of how it unlocks. The device keeps its local key and is
+  never re-enrolled to the other tier while its wrap is withheld. A remembered device that signs in meanwhile also
+  keeps its persistent session cookie, although the "stay signed in" toggle is hidden: the cookie's lifetime is a
+  session matter ([ADR 0004](../../../decisions/0004-session-tokens.md)) that no switch gates, and it opens no vault
+  while the wrap is withheld. So switching back on restores every remembered device, across a browser restart too.
+  The `PASSWORD` wrap is always served, so nobody is locked out, and the confirmation text says so in those words.
 - **A3, a share switch:** when `core.public-shares`, `core.public-shares.contribute` or `core.public-shares.drop-box`
   is switched off (the parent switches all three), every link of the role it reaches stops at once. Every guest
   endpoint, in core and in each application, answers such a link exactly as a link that never existed: the same
