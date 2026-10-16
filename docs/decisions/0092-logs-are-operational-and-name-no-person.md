@@ -1,8 +1,10 @@
 # ADR 0092 — Logs are operational and name no person; evidence never rides a log
 
 - Status: Proposed 2026-10-16 (draft for refinement); nothing of it is built. The guest-write record, the hold, the
-  report path and the moderation log belong to the moderation ADR, which is being drafted (number not yet set,
-  the next free one after 0092). This ADR owns logs: what they may hold, how long, and how that is enforced.
+  report path and the moderation log belong to the moderation ADR,
+  [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md); which client
+  address a request has belongs to [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md). This
+  ADR owns logs: what they may hold, how long, and how that is enforced.
 - Date: 2026-10-16
 
 Provenance: every factual claim in Context carries **(Mn)**, a command in § Measurement ledger re-run on this
@@ -35,7 +37,7 @@ hold, how long it is kept, on what legal basis, or how it relates to evidence of
 No table stores an IP or a User-Agent (M13). Tokens travel in headers, a cookie or bodies, never in a query or
 path; `shareId` is a path segment and half the capability, the share key stays in the fragment (M14).
 
-### What the moderation ADR decides, and this one assumes
+### What the moderation ADR (0093) decides, and this one assumes
 
 - The app keeps a **guest-write record** (address and time) for every write that enters a guest as the last
   editor, and for nothing a member writes or anyone reads. The record lives in the database for its retention
@@ -48,7 +50,8 @@ path; `shareId` is a path segment and half the capability, the share key stays i
 - An access log, Traefik's or an ingress controller's, is **not** the evidence: it records every reader, links to
   no object, sits outside a hold's reach and keeps its own retention.
 
-None of this is in the repo yet (`legal hold` has no hit, M15). This ADR rests on it only where a log meets it:
+When this ADR was drafted none of this was in the repo (`legal hold` had no hit, M15); ADR 0093 now decides it.
+This ADR rests on it only where a log meets it:
 § 1, § 3's last row, § 4's slice test and § 8.
 
 ## Decision
@@ -71,8 +74,9 @@ it depends on:
 - **Which address is recorded is decided elsewhere.** Quarkus takes the leftmost `X-Forwarded-For` entry and, with
   no `trusted-proxies`, trusts every peer (M18), so the address a client sends can be the one recorded. A forged
   address in an evidence record can name an innocent third party. How veyq resolves a client address it can
-  stand behind, on both targets and for the rate limiter too, is refined on its own; this ADR only requires that
-  the record never takes an address a client can choose.
+  stand behind, on both targets and for the rate limiter too, is
+  [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md)'s; this ADR only requires that the
+  record never takes an address a client can choose.
 - **The retention period is an instance setting.** The Server Owner sets it in admin-web and its CLI, and it is
   stored in the database ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
   decision 1; [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) lists
@@ -109,7 +113,8 @@ only through the database, which the operator holds under its own retention.
   path, the copy-link fallback, the unknown-wrap warning (a crafted value with a newline and an email address).
   Each asserts the line **is** emitted (the positive control) and does not carry the value.
 - **The guest-write slice test** makes a guest write from a known address (`203.0.113.77`) and asserts the address
-  is in the record (the control) and in no captured log record.
+  is in the record (the control) and in no captured log record. ADR 0094's inventory sharpens it to a two-entry
+  `X-Forwarded-For` whose forged leftmost entry must be in no record and no log.
 - **A catch-all exception mapper** logs the exception and the route **template**, never the URI and never its
   query, and answers `internal_error`.
 - **`validate_compose_posture.py` gains** a `logging:` block with `max-size` and `max-file` on every service, and

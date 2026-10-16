@@ -177,9 +177,11 @@ range and its no-extension rule (§ 2 there).
   Nothing a member writes or anyone reads is recorded.
 - **The record never takes an address a client can choose.** A forged address in evidence names an innocent third
   party. Quarkus takes the leftmost `X-Forwarded-For` entry and, without trusted proxies, believes any peer, so
-  where the address comes from is decided apart from this ADR (owner 2026-10-16). Until it is, whether some
-  deployments can record at all is open, and with it what the disclosure promises and what an operator can hand
-  over.
+  where the address comes from is decided apart from this ADR (owner 2026-10-16), in
+  [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md): the record takes the address of
+  veyq's one core resolver, the rightmost `X-Forwarded-For` entry that is not a trusted proxy. When the resolver
+  yields no address, nothing is recorded. On Compose the address is strong by construction; on Helm it is only as
+  strong as an enforced NetworkPolicy (0094 decision 6), and the disclosure and the Run docs say so.
 - **Switch `core.public-shares.guest-write-record`**, operator only (`*`), on by default
   ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)). Off: nothing is
   recorded, and the next purge deletes every live row; hold copies stay.
