@@ -1556,6 +1556,12 @@ metadata; a generated one is reproducible, auditable byte for byte, and carries 
 Write its generator with **no third-party import** — one that needs Pillow installed is a fixture nobody can
 regenerate on the machine where it next matters.
 
+**A CR that asks for the un-mocked test names the real reader it means, or says there is none.**
+`cr-release-notices` asked that its `.ics` "parses (one un-mocked parse)" and no iCalendar library was on any
+classpath; the honest form was the real mail library's MIME parse plus a strict RFC 5545 line reader in the test,
+decided at implement time. Adding a library for one assertion is a dependency decision (checksums, a licence), not a
+test detail, so the refine makes it or rules it out.
+
 **The same instinct, pointed at the CR itself: a phase can specify work a convention forbids.** The same CR's
 doc phase listed two applied Flyway migrations as "edited". `backend/CLAUDE.md` forbids that outright, and the
 reason is not style — `migrate-at-start` validates each applied migration's checksum, so a one-word comment fix
