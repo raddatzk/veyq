@@ -3,10 +3,17 @@ package me.raddatz.veyq.core.sharing
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.platform.capabilities.SwitchLevel
 import jakarta.enterprise.context.ApplicationScoped
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.Base64
+
+/** One reason a guest is not served a link ([ShareGuestGate.guestStops]): [capabilityId] for a switch, [maxDays] for a
+ *  lifetime, null otherwise. The wire's `ShareGuestStop`. */
+data class GuestStop(val reason: Reason, val capabilityId: String? = null, val maxDays: Int? = null) {
+    enum class Reason { REVOKED, EXPIRED, SPACE_UNAVAILABLE, INSTANCE_SWITCH, TENANT_SWITCH, LINK_PASSWORD, LINK_MAX_DAYS }
+}
 
 /** What [ShareGuestGate.writeGate] answers. Each refusal is the outcome the guest write calls answered before the
  *  gate was a service; the caller maps it onto its own response, so no status moves. */
@@ -241,15 +248,32 @@ class ShareGuestGate(
      * while every link needs one, or outside the lifetime links may have, answers as an unknown link until its owner
      * fixes it or the requirement is cleared; nothing is written onto it.
      */
-    internal fun activeShare(shareId: String): ShareEntity? {
-        val share = store.find(shareId) ?: return null
-        if (!share.enabled) return null
+    internal fun activeShare(shareId: String): ShareEntity? = store.find(shareId)?.takeIf { guestStops(it).isEmpty() }
+
+    /**
+     * Why a guest is not served [share] now — **empty exactly when it is**; else every reason, in the order the steps
+     * read: the link's own state, its space, the switches (root entry first, the instance level before the tenant's),
+     * the requirements (the password first). [activeShare] is this list being empty, and a member's share list carries
+     * it (`ShareSummary.guestStops`, inbox #457), so the two cannot disagree. Only a member who may list the share reads
+     * it; a guest is told none of it (the unknown link's 404, ADR 0088 decision 5).
+     */
+    fun guestStops(share: ShareEntity): List<GuestStop> {
+        val stops = mutableListOf<GuestStop>()
+        if (!share.enabled) stops += GuestStop(GuestStop.Reason.REVOKED)
         val expiry = share.expiresAt
-        if (expiry != null && !expiry.isAfter(Instant.now())) return null
-        if (!access.isLive(share.scopeId)) return null
-        if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(share.role), share.scopeId)) return null
-        if (!LinkRequirements.admits(capabilities.requirementsInScope(share.scopeId), share)) return null
-        return share
+        if (expiry != null && !expiry.isAfter(Instant.now())) stops += GuestStop(GuestStop.Reason.EXPIRED)
+        if (!access.isLive(share.scopeId)) stops += GuestStop(GuestStop.Reason.SPACE_UNAVAILABLE)
+        capabilities.offSwitchesInScope(ShareAccessPolicy.capabilityFor(share.role), share.scopeId).forEach {
+            val reason = if (it.level == SwitchLevel.INSTANCE) GuestStop.Reason.INSTANCE_SWITCH else GuestStop.Reason.TENANT_SWITCH
+            stops += GuestStop(reason, capabilityId = it.capabilityId)
+        }
+        LinkRequirements.missed(capabilities.requirementsInScope(share.scopeId), share).forEach {
+            stops += when (it) {
+                LinkRequirements.Missed.Password -> GuestStop(GuestStop.Reason.LINK_PASSWORD)
+                is LinkRequirements.Missed.Lifetime -> GuestStop(GuestStop.Reason.LINK_MAX_DAYS, maxDays = it.maxDays)
+            }
+        }
+        return stops
     }
 
     /** cr-0118 (ADR 0037): the access-control password gate. A non-password share is always OK; a password share
