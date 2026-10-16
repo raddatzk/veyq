@@ -1,0 +1,14 @@
+---
+// The project website in every language but the default, one page per entry of `languages`. Its content:
+// components/website/.
+import Home from '../../components/website/Home.astro';
+import { defaultLang, languages, type Lang } from '../../components/website/strings';
+
+export function getStaticPaths() {
+  return languages.filter((l) => l.code !== defaultLang).map((l) => ({ params: { lang: l.code } }));
+}
+
+const lang = Astro.params.lang as Lang;
+---
+
+<Home lang={lang} />

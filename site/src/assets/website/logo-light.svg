@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+
+<svg width="366" height="395" viewBox="0 0 366 395" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" baseProfile="full">
+    <defs>
+        <linearGradient id="4334801803243325462784" x1="-20.147867%" x2="193.810577%" y1="111.680878%" y2="47.638836%">
+            <stop offset="0%" style="stop-color:#474747;stop-opacity:1.000000"></stop>
+            <stop offset="100%" style="stop-color:#9c9c9c;stop-opacity:1.000000"></stop>
+        </linearGradient>
+        <linearGradient id="4334801835243325463104" x1="100.338089%" x2="9.994464%" y1="99.639603%" y2="-1.396222%">
+            <stop offset="0%" style="stop-color:#584fff;stop-opacity:1.000000"></stop>
+            <stop offset="100%" style="stop-color:#332e94;stop-opacity:1.000000"></stop>
+        </linearGradient>
+    </defs>
+    <g transform="scale(1.000000,-1.000000) translate(0,-395)">
+        <path d="M 1.000000 203.702814 L 92.970544 1.000000 L 120.206004 67.711257 C 122.506004 73.239775 122.853096 76.309714 117.806004 85.996811 L 71.763602 188.724390 C 68.935084 194.983865 66.486882 203.189790 55.078049 203.302814 C 33.169216 203.615838 18.864521 203.302814 1.000000 203.702814 Z" transform="scale(1.000000,1.000000) translate(57.424155,120.981961)" fill="url(#4334801803243325462784)" opacity="1.000000"></path>
+        <path d="M 1.000000 49.532466 L 88.978855 276.469130 L 152.309408 276.469130 L 41.864597 1.000000 L 24.235887 1.000000 Z" transform="scale(1.000000,1.000000) translate(162.258814,49.686711)" fill="url(#4334801835243325463104)" opacity="1.000000"></path>
+    </g>
+</svg>
