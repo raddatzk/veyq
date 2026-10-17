@@ -172,6 +172,29 @@ acceptanceCriteria:
       keys are comparable against the blob rows that reference them. A capture missing an object is detected
       against the database it was taken with, before anyone restores it — the check a volume copy cannot offer,
       and the reason this form was chosen.
+  - id: an-index-capture-restores-only-against-the-objects-it-indexed
+    # A4 and A11 (ADR 0098). No coverage on a surface: the observable is the operator tool's exit and message — a
+    # Python operator tool, not a coverage surface (ADR 0040). Proven by `scripts/instance_backup_selftest.py` (G5:
+    # a format-3 restore against a fake live listing — all present loads and never writes to the store, a missing
+    # and a resized object each refuse naming it before the load, an extra object is tolerated,
+    # `--accept-missing-objects` loads and names the broken object, `--record` writes the backup's release; G6: a
+    # Compose capture keeps backupFormat 2 byte for byte), run by ci.yml's `web-e2e` job and inside the tools image
+    # in the `build` job. Run live once in a throwaway compose project and once in a kind cluster's restore Job
+    # (cr-kubernetes-backup-gate), each followed by a sign-in that read the media's bytes back.
+    text: >-
+      A capture whose store leg is an index (the cluster's backup gate) holds every object's key, size and MD5 and no
+      object. Its restore writes nothing to the store: before anything is loaded, every object the dump's rows
+      require is checked against the live store, and a missing or changed one refuses the restore naming it, unless
+      the operator knowingly restores without it. An older tool refuses such a capture by its format number.
+  - id: the-cluster-capture-never-holds-the-key
+    # A11, ADR 0098 decision 4c. No coverage on a surface: proven by `scripts/instance_backup_selftest.py` G8 (the
+    # gate, with a readable key at the default path, records leg (c) separate and no file on the volume holds the
+    # key's bytes) and by `scripts/chart_meta_check.py` (xxiii) (the init container never mounts the config-secret
+    # claim; bitten by mounting it).
+    text: >-
+      A capture the cluster's backup gate writes records the config-secret key as kept separately and never holds it:
+      the gate does not mount the key's claim, so no capture on the backup volume can open the tenants' SMTP
+      passwords; its restore asks for the key from the operator's own medium.
   - id: the-server-owner-reads-the-config-secret-state
     # GET /api/instance/config-secret on the admin listener (admin console Server → Config-secret key,
     # `veyq-admin config-secret`). The Server Owner seeded here owns no tenant. "Changes nothing" is pinned by the

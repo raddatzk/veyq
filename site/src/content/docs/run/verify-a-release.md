@@ -7,10 +7,11 @@ sources:
   - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
 ---
 
-A release is two images, `ghcr.io/raddatzk/veyq` and `ghcr.io/raddatzk/veyq-admin`, a Helm chart,
+A release is three images, `ghcr.io/raddatzk/veyq`, `ghcr.io/raddatzk/veyq-admin` and — run only on Kubernetes, by the
+backup gate — `ghcr.io/raddatzk/veyq-tools`, a Helm chart,
 `ghcr.io/raddatzk/charts/veyq`, and a GitHub Release on the tag `v<major>.<minor>` whose assets are the Compose recipe
 (`docker-compose.prod.yml`, the `.env` template as `env.example`, `garage.toml`), `instance_backup.py`, `veyqctl` with
-its signature `veyqctl.bundle`, and a `manifest.json` naming both images by `tag@digest` and every other asset by its
+its signature `veyqctl.bundle`, and a `manifest.json` naming the three images by `tag@digest` and every other asset by its
 sha256, with its signature `manifest.json.bundle` ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md) §3,
 [ADR 0096](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)).
 The publish signs the images, the chart, `veyqctl` and the manifest keylessly with cosign, under one identity.
@@ -58,7 +59,7 @@ It verifies the release's `manifest.json` against its signature, checks both ima
 names, and pulls nothing. `install` and `upgrade` run the same checks first, and stop if one fails. By hand:
 
 ```sh
-# 1. the manifest, verified against the one identity that publishes veyq, names both images by tag@digest
+# 1. the manifest, verified against the one identity that publishes veyq, names the images by tag@digest
 curl -fsSLO "${base}/manifest.json"
 curl -fsSLO "${base}/manifest.json.bundle"
 cosign verify-blob --bundle manifest.json.bundle \

@@ -1,7 +1,10 @@
 # ADR 0098 — On Kubernetes, the start that would migrate backs up first
 
 - Status: Accepted 2026-10-16 (owner: every recommendation of the former § Open for the owner taken, and the store
-  leg is its index only); nothing of it is built. It is the Kubernetes-native backup decision
+  leg is its index only); built (cr-kubernetes-backup-gate): `scripts/instance_backup.py gate` and its index capture in
+  the third released image `veyq-tools` (`tools/Dockerfile`), the chart's `backup.*` values and init container
+  `backup-gate`, held by `scripts/instance_backup_selftest.py` and `scripts/chart_meta_check.py` (xxiii)–(xxv), and run
+  once on a kind cluster (M13). It is the Kubernetes-native backup decision
   [ADR 0064](0064-kubernetes-helm-deployment-target.md) defers; the owner's starting idea was a Helm `pre-upgrade` hook,
   and this ADR keeps it as the rejected shape with its costs (§ Decided with the owner, 1).
 - Date: 2026-10-16
@@ -76,15 +79,16 @@ The target release is the app image's tag, rendered into the gate's environment 
 capture names as `app.version` is the record's, since there is no Docker to ask (Context 5).
 
 **3. Before capturing, the gate refuses what no tested path covers — and writes nothing.**
-- **A target older than the record** — a downgrade. The previous release would start against a schema it does not
-  know (R4). The refusal names the capture to restore instead (ADR 0056 §7: a rollback is the backup's release
+- **A target older than the record** — a downgrade. The previous release refuses to start on a schema history
+  holding a migration it does not know (M9), and the gate cannot tell whether this one holds such a migration. The refusal names the capture to restore instead (ADR 0056 §7: a rollback is the backup's release
   plus a restore).
 - **A target more than one major ahead** — ADR 0096 decision 5's *no run crosses more than one major*.
 - **A major entered from anything but the release it was tested from** — how the gate knows that release is
   § Open for the owner, 5.
 
 **4. The legs.** (a) The database is dumped into the capture, as today. (b) **The store leg is its index only** (owner 2026-10-16:
-"nur Datenbank + Index"): the object keys with their sizes and ETags, read through the S3 API, never the objects.
+"nur Datenbank + Index"): the object keys with their sizes and MD5s, read through the S3 API in one listing, never the objects (rclone reads
+the MD5 from a single-part object's ETag, and every object veyq writes is one presigned PUT, M10).
 An upgrade migrates the schema; it does not rewrite an object — every object is an immutable ciphertext blob — so
 the database plus the index is the whole rollback point. Before a restore writes, the index is checked against the
 live store (ADR 0056's A4): every object the dump references must still be there. Keeping the objects themselves is
@@ -106,12 +110,12 @@ prunes to make room.
 **6. A failed or refused gate keeps the app from starting, and that is the failure mode.** Nothing has migrated, the
 record has not moved, and the old pod is already gone: the instance is down until the operator acts, with its data
 untouched. Pinning the previous release back starts it again — the record still names it. Kubernetes retries a
-failed init container with backoff (R7); the gate is idempotent, every attempt a fresh capture. Who sees it:
+failed init container with backoff (M13); the gate is idempotent, every attempt a fresh capture. Who sees it:
 - `helm upgrade` without `--wait` reports success, since its default waits for hooks only (M2) — the Run page says
   to upgrade with `--wait --timeout` above the capture time;
 - Argo CD shows the application progressing, and the Deployment reports `ProgressDeadlineExceeded` after
   `progressDeadlineSeconds` (600 by default) while the controller keeps retrying (M7, R6);
-- Flux waits for readiness within its timeout (R3, M6); past it, remediation rolls back, which ends the gate
+- Flux waits for readiness within its timeout (M14); past it, remediation rolls back, which ends the gate
   mid-capture — the `.partial` is swept on the next start. The operator sets `spec.timeout` above the capture time.
 
 **7. A capture can also be asked for, the GitOps way.** `backup.request` is an opaque value rendered into the pod
@@ -128,7 +132,11 @@ retention; its format stays the one Compose writes, so a capture taken in a clus
 which image it is, is § Open for the owner, 3.
 
 **9. Restore is never automatic and never a hook.** It is a documented one-off Job on the Run page, run with the
-tools image of the release the backup came from: the app scaled to zero (`kubectl scale`, by hand — an operator
+tools image of the release that **wrote** the capture (its manifest's `capture.tool`) — the gate captures when the new
+release starts, so that is the one image certain to read it, and the first release that ships the tools image has a
+predecessor with none. The Job's pod carries the app pod's labels, so the NetworkPolicy set admits it to the database
+and the store as it admits the app, which is scaled to zero meanwhile (M13); it runs as the app's uid and places the
+key as that uid (`--key-as-runtime-user`: a claim's directory is root-owned under `fsGroup`). The app scaled to zero (`kubectl scale`, by hand — an operator
 under Argo pauses its automated sync first), the database emptied by the operator because A5 refuses a populated
 target, the key from the operator's medium (`--key-from`), the domain named. The Job ends by writing the record
 with the backup's `app.version`, so the next start of that release passes the gate; ADR 0056 §5's config-secret
@@ -146,11 +154,14 @@ CRD or a cluster-scoped object.
   replication or snapshot loses its objects with the store, whatever the gate captured. The Run page says so.
 - **The backup volume holds ciphertext and opaque metadata**, never the KEK — operator-blindness is unchanged: the
   gate reads what the app already reads (the database password, the store's admin token) and less (no KEK).
-- **The values gain `backup.*`** (`enabled`, `existingClaim`, `keep`, `request`, the store-leg choice, the tools
-  image) and the schema refuses `enabled` without a claim. `chart_meta_check.py` and `chart_upgrade_check.py` see a
+- **The values gain `backup.*`** (`enabled`, `existingClaim`, `keep`, `request`, the tools image, and
+  `store.existingSecret` for a store of the operator's own, whose key the gate cannot open without the KEK) and the schema refuses `enabled` without a claim. `chart_meta_check.py` and `chart_upgrade_check.py` see a
   new init container and a new volume on the Deployment — neither an immutable field.
-- **The Run area changes**: the Kubernetes tab of Upgrade replaces its hand procedure with the gate and the
-  `--wait`/`timeout` advice; Backup and restore gains the restore Job and the one-time key export. cr-veyqctl
+- **The Run area changes**: the Kubernetes tab of [Upgrade](../../site/src/content/docs/run/upgrade.mdx) replaces its
+  hand procedure with the gate and the `--wait`/`timeout` advice (the hand procedure stays for `backup.enabled:
+  false`); [Backup and restore](../../site/src/content/docs/run/backup-and-restore.md) gains § Under Kubernetes and the
+  restore Job; [Kubernetes](../../site/src/content/docs/run/kubernetes.md) and [Plan](../../site/src/content/docs/run/plan.md)
+  say what the gate is and what ran. cr-veyqctl
   rewrote both around `veyqctl` (done 2026-10-16) and left their Kubernetes halves as they were, so nothing waits.
 - **ADR 0056's guard gap narrows, not closes**: the cluster backup is the gate's, but that a key export happened is
   still the operator's to know; the fingerprint tripwire remains the only detection of a lost key.
@@ -168,7 +179,7 @@ CRD or a cluster-scoped object.
 - **A volume snapshot (`VolumeSnapshot`, Velero) as the procedure.** Storage-class-bound and unverifiable, the
   reasons ADR 0056 §3 rejects a volume copy; an operator may still take one beside the gate.
 - **A scheduled `CronJob` that scales the app down and captures.** It needs a Role to scale, and under Argo CD's
-  self-heal an out-of-band scale-down is reverted within seconds (M5, R5) — a capture that starts cold and ends
+  self-heal an out-of-band scale-down is reverted within seconds (M5, M15) — a capture that starts cold and ends
   hot. Decision 7's request is the scheduled form.
 
 ## Decided with the owner
@@ -233,6 +244,32 @@ options stay below as the record of what was weighed.
   docstring and `Database._wrap` / `app_release` (the Docker paths); `TOOLS` in `scripts/release_assets.py`;
   `site/src/content/docs/run/upgrade.mdx`, Kubernetes tab.
 
+- **M9** Flyway refuses an older release on a newer schema: Quarkus 3.36.0's `FlywayCreator` hands Flyway an EMPTY
+  `ignoreMigrationPatterns` unless `quarkus.flyway.ignore-future-migrations` (default `false`) or the patterns are
+  set, so Flyway 12.0.0's own default `*:future` never applies, and nothing in the backend sets either (2026-10-17).
+  Run once: an image four migrations older, started on the newer schema, stopped with `FlywayValidateException:
+  Detected applied migration not resolved locally`.
+- **M10** `rclone lsjson -R --hash` (the pinned 1.75.0) against the pinned Garage: the `md5` it reports for an object
+  the app uploaded by presigned PUT equals the MD5 of the object's bytes, the raw `<ETag>` of the ListObjectsV2 body
+  is that MD5, and rclone reports no raw ETag.
+- **M11** A bundled `veyq_store_setting` row names nothing but `bundled` (`StoreHandler.build`:
+  `StoreSettingRow(true, null, …)`); its bucket is the hint's `veyq.bundled-store.bucket` (default `blobs`). A store of
+  the operator's own names its endpoint, bucket and region in plaintext, its secret key sealed.
+- **M12** The app's database user as the chart and the recipe create it (`MARIADB_USER`, `ALL PRIVILEGES ON veyq.*`)
+  runs `mariadb-dump --single-transaction`, drops every table and loads the dump, on `mariadb:11.4`.
+- **M13** One run on a kind cluster (2026-10-17; a `restricted` namespace, stub Gateway API CRDs): the gate's first
+  attempt ran before the database was up, failed, and the kubelet restarted it with backoff (R7); install on an empty
+  database recorded the release; an upgrade captured, the old pod terminating before the new one was scheduled; a
+  restart captured nothing; a downgrade was refused, retried, and `helm upgrade --wait` failed; pinning the release
+  back started it; the documented rollback ran the restore Job with the capture's tool image; a changed
+  `backup.request` captured, and the fourth capture pruned the oldest. A restore Job without the app pod's labels
+  could not reach the database through the NetworkPolicy set.
+- **M14** fluxcd.io/flux/components/helm/helmreleases (fetched 2026-10-17): `disableWait` *"Defaults to `false`"*; the
+  timeout covers *"any individual Kubernetes operation (like Jobs for hooks)"*, default `5m0s`; upgrade remediation
+  *"Defaults to `rollback`"*; drift correction is *"creating and patching the resources"*.
+- **M15** argo-cd.readthedocs.io/en/stable/user-guide/auto_sync (fetched 2026-10-17): self-heal is off by default and,
+  on, syncs when the live state deviates from git; `spec.syncPolicy.automated.enabled: false` skips automated sync.
+
 ## Remembered (measure before it drives code)
 
 - **R1** Helm's three-way merge puts back a `replicas` changed out of band on the next upgrade — relevant only to
@@ -240,11 +277,11 @@ options stay below as the record of what was weighed.
 - **R2** Helm's `lookup` returns nothing under `helm template`, so an Argo-rendered chart cannot read the live
   Deployment at render time (community issues, not an Argo document; `values.yaml` already says `lookup` is blind
   there) — why detection lives in the gate, not the template.
-- **R3** Flux's helm-controller is built on the Helm SDK, waits for readiness by default, and its drift correction
-  patches resources without running hooks.
-- **R4** Flyway's default ignores applied migrations newer than the code on validate, so an older release may start
-  on a newer schema rather than refuse it.
-- **R5** Argo CD runs one operation per application at a time, so self-heal does not interrupt a running sync, and
-  reverts an out-of-band `kubectl scale` otherwise.
-- **R6** Argo CD's health for a Deployment past its progress deadline is `Degraded`.
-- **R7** A failing init container is restarted with backoff under the pod's `restartPolicy: Always`.
+- **R3** Flux's drift correction patches resources without running hooks — its page says it creates and patches, and
+  says nothing of hooks; that Flux waits for readiness by default is measured (M14).
+- **R5** Argo CD runs one operation per application at a time, so self-heal does not interrupt a running sync —
+  unmeasured; that self-heal, when on (it is off by default), reverts a `kubectl` change is M15.
+- **R6** Argo CD's health for a Deployment past its progress deadline is `Degraded` — its health page does not say
+  (fetched 2026-10-17), so the Run page says "progressing" only.
+
+R4 (Flyway would let an older release start on a newer schema) was measured false (M9), and R7 true (M13).

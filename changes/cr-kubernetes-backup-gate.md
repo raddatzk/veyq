@@ -340,7 +340,7 @@ below as the record of what was weighed.
   - **Done when:** `python3 scripts/chart_meta_check.py` green (at refine: `chart meta check OK`, re-run as baseline);
     `chart_upgrade_check.py` run and its finding read; C1–C4 recorded; O5's run recorded or its absence named.
 
-- [ ] **4 docs — state, the Run pages, coverage.**
+- [x] **4 docs — state, the Run pages, coverage.**
   - **State:** ADR 0098's status line (built: decisions and where), its "store-leg choice" phrase deleted, decision 9's
     image sentence per O6; ADR 0064 (`grep -n -i "backup" docs/decisions/0064-*.md`: the "(proposed)" and "deferred"
     lines point at ADR 0098 as built); ADR 0056 §3 gains the index form for the gate in place (its reasons stand for

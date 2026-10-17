@@ -170,7 +170,7 @@ For the maintainer; an operator starts at the [Run area](https://raddatzk.github
 `release/**`, and every pull request, runs `.github/workflows/ci.yml` — the one pipeline per commit
 ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)) — as a **dry
 run**: every stage (the guards, the surface checks with the chart's `scripts/chart_meta_check.py` and
-`scripts/chart_upgrade_check.py`, the races, the API end-to-end run) and, beside them, both image builds, with no
+`scripts/chart_upgrade_check.py`, the races, the API end-to-end run) and, beside them, the image builds (app, admin, tools), with no
 registry login and no push. A publish is started by hand, from `main` or `release/<major>.x`, runs the same stages,
 publishes only when every one is green, and is one of two kinds:
 
@@ -179,7 +179,7 @@ gh workflow run ci.yml --ref main                    # a snapshot: <major>.<mino
 gh workflow run ci.yml --ref main -f release=true    # a release:  <major>.<minor>
 ```
 
-- **A snapshot** publishes both images and the chart as `<major>.<minor>-SNAPSHOT` (and the images as
+- **A snapshot** publishes the three images and the chart as `<major>.<minor>-SNAPSHOT` (and the images as
   `sha-<commit>`), signed, with no git ref. Dispatching again on the same commit replaces it — it is the one name
   that moves, and it is never a rollback target.
 - **A release** publishes `<major>.<minor>`, `<major>`, `sha-<commit>`, `latest` from `main`, and the chart, all
@@ -188,8 +188,8 @@ gh workflow run ci.yml --ref main -f release=true    # a release:  <major>.<mino
 - **The version is the tree's.** `VERSION` holds the major alone; the minor counts the commits since `VERSION` last
   changed, so `VERSION` is touched only to change the major — any commit touching it restarts the minor at `0`.
   Major `0` is pre-release: it exercises the whole path and promises no upgrade path.
-- **The packages must be pullable.** The first publish creates `veyq`, `veyq-admin` and `charts/veyq` under the
-  owner's GHCR packages. Make all three public, or every operator needs registry credentials — and the chart has no
+- **The packages must be pullable.** The first publish creates `veyq`, `veyq-admin`, `veyq-tools` and `charts/veyq` under the
+  owner's GHCR packages. Make all four public, or every operator needs registry credentials — and the chart has no
   `imagePullSecrets` value, so public is the state it supports.
 - **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
   at the top of `ci.yml`, checked against the published `.sha256sum` and the GitHub release notes.
@@ -199,7 +199,7 @@ gh workflow run ci.yml --ref main -f release=true    # a release:  <major>.<mino
 
 **No dispatch has ever run** — this repository has no remote — so all of the above is a statement about a file,
 held by `scripts/validate_release_identity.py`, not about a run. The first runs are its proof, in this order: a
-push (the dry run is green and nothing lands in GHCR); a snapshot dispatch at `VERSION=0` (both images and the
+push (the dry run is green and nothing lands in GHCR); a snapshot dispatch at `VERSION=0` (the images and the
 chart published and signed, no git tag); a release dispatch (`v0.<n>` exists), then a **second** release dispatch
 on the same commit, which must be red at the refusal; then the `1.x` commit above and its release dispatch. Until
 that refused repeat has run, ADR 0064 says the chart's release is built, its publish unobserved.

@@ -10,7 +10,7 @@ bucket, no access key and no grant. Today `infra/garage-init.sh` closes that gap
 and it needs a container of its own for a reason that has nothing to do with the work — the official Garage
 image is `scratch`-based and has no shell, so `infra/garage-init.Dockerfile` exists purely to put the `garage`
 CLI on an Alpine that has one. That image carries `build:` in `infra/docker-compose.prod.yml` and is not one of
-the two images the publish workflow (then `container.yml`, `ci.yml` since ADR 0091) publishes.
+the images the publish workflow (then `container.yml`, `ci.yml` since ADR 0091) publishes.
 
 Forces:
 
@@ -145,8 +145,10 @@ customer's infrastructure, never their data.
 
 ## Consequences
 
-- **The publish workflow (`.github/workflows/ci.yml` since ADR 0091) keeps its two images.** The alternative was a third, published, signed
-  and versioned forever to serve a one-shot.
+- **The publish workflow (`.github/workflows/ci.yml` since ADR 0091) gains no image for provisioning.** The alternative was a
+  third, published, signed and versioned forever to serve a one-shot. A third image did come later, for a different
+  job — `veyq-tools`, the cluster's backup gate ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)),
+  which runs on every release change rather than once — and that reason stands for provisioning.
 - **The backend gains Garage-specific code, deliberately and behind the type.** That is the honest cost of
   Decision 1, and it is bounded **structurally rather than by care**: under `type: s3` no provisioner is
   constructed at all, so there is no branch for a `type: s3` instance to fall down and nothing to keep
@@ -184,8 +186,8 @@ customer's infrastructure, never their data.
 
   **This is not a cost this ADR introduces; it is one it stops hiding.** On Kubernetes there has never been a
   sidecar — [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s chart deploys `garage` and the app and
-  nothing beside them — so a cluster restore has always faced exactly this wall, which ADR 0064 deferred
-  wholesale (*"a Kubernetes-native backup story … is deferred to its own future decision"*). Compose merely had
+  nothing beside them — so a cluster restore has always faced exactly this wall, which ADR 0064 left to a decision
+  of its own ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)). Compose merely had
   a sidecar in front of it. Redefining the gate fixes both targets with one change, where a compose-shaped
   remedy would have fixed neither.
 - **The bucket's default name is fixed once an instance is installed.** Neither recipe sets

@@ -6,7 +6,7 @@ name: CI
 # surface checks a second time and whose `build` waited for that second copy. `container.yml` was folded in here.
 #
 # Nothing is published by a push (ADR 0057 §1). A push and a pull request (Dependabot's included) run every stage and
-# build both images as a dry run that writes to no registry; a publish is started by hand with `workflow_dispatch`,
+# build the images as a dry run that writes to no registry; a publish is started by hand with `workflow_dispatch`,
 # from `main` or `release/<major>.x`, as a snapshot (the default) or — `release: true` — a release. The version step
 # refuses a dispatch on any other branch, so a dispatch is not a way to give a feature branch a run: a pull request is.
 #
@@ -188,7 +188,7 @@ jobs:
         run: npm run check
 
       # Gated for the same reason the app is: the image build compiles but runs no tests, so without this a broken
-      # admin surface could still be published beside a green app image (ADR 0065 — one release, two images).
+      # admin surface could still be published beside a green app image (ADR 0065 — one release, its images).
       - name: Run admin surface checks
         working-directory: admin-web
         run: npm run check
@@ -402,7 +402,7 @@ jobs:
               kind=snapshot
             fi
           fi
-          # Otherwise a push or a pull request: a dry run that builds both images and publishes nothing. Its stamp
+          # Otherwise a push or a pull request: a dry run that builds the images and publishes nothing. Its stamp
           # carries -SNAPSHOT, so an image that was never released can never carry a release's name.
 
           echo "major=${major}" >> "$GITHUB_OUTPUT"

@@ -3,6 +3,7 @@ title: Plan your instance
 description: Choose Compose or Kubernetes, size the host, plan for storage growth and quotas, and set up the domains an instance needs.
 sources:
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
+  - docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md
   - docs/decisions/0063-database-driven-tenant-ingress.md
   - docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md
   - docs/features/admin/use-cases/uc.admin.tenant-storage-quota.md
@@ -26,8 +27,8 @@ Both targets run the same images and the same procedures; every page in this are
 | Object store | Same origin as the instance, under a path | A host of its own (`storeDomain`) |
 | Network isolation | Separate container networks | A NetworkPolicy set, enforced only if your CNI enforces NetworkPolicy |
 | Database | The bundled MariaDB | The bundled MariaDB, or your own (`mariadb.enabled: false`, `externalDatabase.jdbcUrl`) |
-| Backup and restore | Rehearsed with the backup tool | Through port-forwards, derived, not rehearsed; no Kubernetes-native backup |
-| Proven | Every stack-lane run installs the hardened recipe through `veyqctl` from a release built on the host; nothing published has been installed | The rendered chart is checked; nothing has been installed in a cluster |
+| Backup and restore | Rehearsed with the backup tool | The chart's backup gate captures the database and an index of the store before every release change; a restore is a one-off Job; both run once on a kind cluster |
+| Proven | Every stack-lane run installs the hardened recipe through `veyqctl` from a release built on the host; nothing published has been installed | The rendered chart is checked on every run; one kind cluster ran it once, for the backup gate, without a Gateway implementation |
 
 If you have no cluster, Compose is the smaller and better-proven choice
 ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)).

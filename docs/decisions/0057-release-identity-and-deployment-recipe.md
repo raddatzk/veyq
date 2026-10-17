@@ -64,7 +64,7 @@ form can never be, and which is the difference between a provable change and an 
 with no remote. The count needs the full history: a shallow clone counts 1.
 
 **A green push publishes a snapshot; a release promotes one** ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
-decision 5). A pull request (Dependabot's included) builds and tests both images and publishes nothing — a pull
+decision 5). A pull request (Dependabot's included) builds and tests the release's images and publishes nothing — a pull
 request never writes to a registry. A push to `main` or `release/<major>.x` builds them once per commit and
 architecture, runs every stage on those digests, and only when all are green publishes them:
 

@@ -58,7 +58,7 @@ its Node CLI (`admin-web/src/cli/`). Management is the instance's lifecycle *on 
 **3. A release is an immutable GitHub Release, and the recipe is its assets.** The publish creates, per release, a
 GitHub Release on the tag `v<major>.<minor>` carrying `docker-compose.prod.yml`, `.env.example` (as `env.example`:
 GitHub renames an asset whose name starts with a period), `garage.toml`, `veyqctl` (signed keylessly with `cosign
-sign-blob`, the same identity as the images, its bundle an asset beside it), and a manifest naming both images by
+sign-blob`, the same identity as the images, its bundle an asset beside it), and a manifest naming the release's images by
 `tag@digest` and every other asset by its sha256 — signed the same way into `manifest.json.bundle`, which `veyqctl`
 verifies before it trusts any of it — all uploaded in the one call that creates the release. The repository has immutable releases switched on before the first release, so nothing a
 release carries can change after it is published. Snapshots get no GitHub Release; `veyqctl` never installs one.

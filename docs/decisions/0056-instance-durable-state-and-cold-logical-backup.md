@@ -106,6 +106,12 @@ copy of the store's data directories. Three reasons, in order of weight:
   [A5](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md) means **holding no data** rather
   than **holding no tables**.
 
+**On Kubernetes the store leg is its index** ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)
+decision 4): the cluster's backup gate records every object's key, size and MD5 in the manifest (`backupFormat` 3)
+and leaves the objects in the store, whose own versioning, replication or snapshots keep them. The first reason
+above still holds for it — the index is compared against the rows at capture, and against the live store before a
+restore writes anything — the second and third are the mirror's, which Compose keeps taking.
+
 **The tool is invoked, not vendored:** the procedure shells out to `rclone`. `scripts/` carries no third-party
 Python dependency today and this decision does not add one, in the same shape as the e2e orchestrator shelling
 out to `docker compose`. Rejected: a boto3-based script, which would make one procedure the reason for the
@@ -143,8 +149,9 @@ compares the manifest's `database.schemaVersion` with the Flyway version the fre
 (Flyway's own version order, never a string comparison), before anything is written:
 
 - **Newer than the target:** refused. The message names the release the backup came from
-  (`app.version`). The older image would refuse to start on a history holding migrations it does not know, so
-  loading first and failing at boot would leave the operator with neither instance.
+  (`app.version`). The older image would refuse to start on a history holding migrations it does not know
+  (measured: ADR 0098 M9 — Quarkus hands Flyway no ignore pattern), so loading first and failing at boot would leave
+  the operator with neither instance.
 - **The same or older:** the restore first drops **every** table of the target and then loads the dump. Dropping
   is safe only because the target is proven to hold no data (A5 of the use-case). It is needed because the dump
   drops and recreates only the tables *it* names: a table a later migration added would otherwise survive under

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Produce one veyq release as files, in the mirror layout `veyqctl` reads (ADR 0096).
 
-    python3 scripts/release_assets.py <out> --app <ref> --admin <ref> [--unscheduled]
+    python3 scripts/release_assets.py <out> --app <ref> --admin <ref> [--tools <ref>] [--unscheduled]
+    python3 scripts/release_assets.py --major-entry <release>   # what the tools image bakes as its major entry
 
 writes, for the release the tree names (`v<major>.<minor>`, counted the way `ci.yml`'s version step counts it):
 
     <out>/releases.json           every release in <out>: tag, date, prerelease flag, manifest — merged, never replaced
-    <out>/<tag>/manifest.json     release, date, both images, unscheduled, and every asset with its sha256
+    <out>/<tag>/manifest.json     release, date, the images, unscheduled, and every asset with its sha256
     <out>/<tag>/<asset>           the recipe set, and the tools that operate it
 
 The same three questions — which releases exist, what does one's manifest say, give me one asset — are answered
