@@ -172,7 +172,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
         <span>{{ t('share.uploaderEphemeralWarning') }}</span>
       </p>
       <!-- core's one naming form; who reads the name: the Memory's members, never another link holder (ADR 0030 point 8) -->
-      <GuestNaming :action="submitName" :hint="t('share.nameVisibility')" />
+      <GuestNaming :action="submitName" :hint="t('share.nameVisibility')" :record-days="head.share.guestWriteRecordDays" />
     </div>
   </div>
 
@@ -185,7 +185,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
           <span class="pi pi-cloud-upload" />
           {{ t('share.uploaderBadge') }}
         </span>
-        <GuestNaming v-if="session" :current="session" :forget="forgetUploader" />
+        <GuestNaming v-if="session" :current="session" :forget="forgetUploader" :record-days="head.share.guestWriteRecordDays" />
       </div>
       <div class="share-view-actions">
         <button type="button" class="share-add-button" @click="fileInput?.click()">

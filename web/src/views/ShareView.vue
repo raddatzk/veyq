@@ -373,7 +373,13 @@ onMounted(() => {
     </div>
 
     <template v-else-if="head && bodyHead && body && access">
-      <GuestNaming v-if="showsIdentity" class="share-view-identity" :current="session" :forget="() => forgetGuestSession(shareId)" />
+      <GuestNaming
+        v-if="showsIdentity"
+        class="share-view-identity"
+        :current="session"
+        :forget="() => forgetGuestSession(shareId)"
+        :record-days="head.share.guestWriteRecordDays"
+      />
       <!-- Core's page of the link's tree (the member's views), or a WRITE_ONLY link's drop page (its naming too). -->
       <component
         :is="body"
@@ -390,6 +396,7 @@ onMounted(() => {
         dialog
         :title="t('share.guest.nameTitle')"
         :hint="t('share.guest.nameHint')"
+        :record-days="head.share.guestWriteRecordDays"
         :action="nameGuest"
         @close="onNamingClose"
       />
