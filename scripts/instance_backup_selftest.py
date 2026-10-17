@@ -35,7 +35,7 @@ This asserts, with no daemon and no root:
   9. the object pool (P1–P9, ADR 0056 §3 and §7): the REAL Store and Pool driving an rclone interpreted in memory
      (`Rclone`, through `--rclone-binary`, so every argv and environment the tool builds is the one it would run) —
      the top-up of exactly the index's keys, a short pool failing the capture, the prune keeping exactly what the
-     kept captures' indexes name and never running on a ledger without the new entry, the builder's copy-only shape,
+     kept captures' indexes name and never running on a ledger without the new entry, the builder's shape (copy --immutable, a read, or the prune's delete),
      no pool credential in the manifest, and the restore's empty-store gate, source check and copy-before-load.
 
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key

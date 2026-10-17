@@ -11,7 +11,7 @@ sources:
 The use-case owns the goal and the failure modes
 ([uc.admin.back-up-and-restore-instance](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md));
 [ADR 0056](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) owns the decisions. This
-page owns the **commands**. On Docker Compose they are `veyqctl backup` and `veyqctl restore`, which run the running
+page owns the **commands**. On Docker Compose they are `veyqctl backup`, `veyqctl restore` and `veyqctl rollback`, which run the running
 release's own `instance_backup.py` — an asset of the release, checked against its manifest before it runs, whose
 module docstring carries the tool's reference. Each block below also shows what `veyqctl` runs, so it can be done by
 hand.
@@ -34,9 +34,42 @@ cd /opt/veyq
 ./veyqctl backup --key-into /media/usb-stick/veyq-<stamp>.key
 ```
 
-It stops the application, captures legs (a) and (b) into `backups/<UTC stamp>/` and leg (c) to the file
-`--key-into` names, checks the capture, and starts the application again — also when the capture failed. The
-downtime is the capture, and nothing else. `upgrade` takes the same capture first. By hand, what it runs:
+It stops the application, captures the database and the store's **index** into `backups/<UTC stamp>/` and leg (c)
+to the file `--key-into` names, checks the capture, starts the application again — also when the capture failed — and
+prints the downtime. `upgrade` takes the same capture first.
+
+**A capture holds the database and the store's index, not the objects** (ADR 0056 §3). The index — every object's key,
+size and MD5 — is what lets a restore check the objects before it writes anything; the objects themselves stay in the
+store, and keeping them is the store's job: its versioning, replication or snapshots. **The bundled Garage keeps no
+object versions** (measured on the pinned v2.0.0: `rclone backend versioning` answers `Unversioned`, and turning it on
+answers `501 NotImplemented`), so on the bundled store a lost store volume loses every photo and file, whatever
+`backups/` holds — and `veyqctl status` says so until you name an **object pool**:
+
+```sh
+# .env — a directory on ANOTHER disk (a pool on the store's own disk dies with it)
+VEYQ_BACKUP_OBJECTS_TO=/mnt/backup-disk/veyq-objects
+# …or a bucket of any S3-compatible store; its key pair stays here and in the tool's environment, never in a capture
+# VEYQ_BACKUP_OBJECTS_TO=s3:veyq-objects/my-instance
+# VEYQ_BACKUP_POOL_ENDPOINT=https://s3.example.org
+# VEYQ_BACKUP_POOL_ACCESS_KEY=…
+# VEYQ_BACKUP_POOL_SECRET_KEY=…
+```
+
+With a pool, `backup` and `upgrade` first copy the store's objects into it while the application still runs, then the
+capture tops it up with whatever arrived since — objects are immutable, so the early copy cannot go stale, and the
+downtime grows by the new uploads only. Every copy is `rclone copy --immutable`: a key the pool holds is not copied
+again, and one whose bytes differ fails the capture instead of replacing the pool's copy. The capture records the pool
+in its manifest (`store.pool.target`), and a restore onto a fresh instance names it (below). **The pool keeps what its
+newest captures need, and nothing more:** each capture writes its index's keys into the pool's ledger
+(`veyq-pool/captures/`), the newest `VEYQ_BACKUP_POOL_KEEP` (default 3) are kept, and every object none of them names
+is deleted from the pool — so an object erased on the instance leaves the pool within that many captures, and one a
+kept capture needs is never deleted. A pool serves one instance; `--objects-to` names another one for a single run. A
+directory pool is created `0700`, its files are yours. Without a pool, and with a store of your own, the objects stay
+where they are, and the store's own durability is what keeps them. The other way to keep the bundled store's objects
+is a copy of its volumes ([the fast path](#the-volume-copy-fast-path--and-what-it-is-not)) — opaque, and bound to one
+Garage version.
+
+By hand, what `veyqctl backup` runs:
 
 ```sh
 cd /opt/veyq
@@ -60,7 +93,9 @@ export COMPOSE_ENV_FILES=/opt/veyq/.env
 docker cp "$(docker compose -f "$recipe" --env-file .env ps -aq app)":/var/lib/veyq/config-secret.key \
   .key/config-secret.key
 
-# 4. Capture legs (a) and (b) into backups/<stamp>/, and leg (c) to a medium of its own; then drop the copy.
+# 4. Capture the database and the store's index into backups/<stamp>/ — with a pool, add --objects-to <pool>
+#    (and, before step 1, `instance_backup.py copy-objects --objects-to <pool> --docker-network veyq_edge` while the
+#    app still runs) — and leg (c) to a medium of its own; then drop the copy.
 python3 "releases/${release}/instance_backup.py" capture --compose-file "$recipe" \
     --docker-network veyq_edge --config-secret-file .key/config-secret.key \
     --key-into /media/usb-stick/veyq-<stamp>.key --into backups/<stamp>
@@ -87,11 +122,13 @@ keeps it in a VM) and which only root can read where it can; `docker cp` takes i
 instead, so **no step needs root** — a user who may use Docker runs all of it. The key is copied to a destination of
 its own, never into the capture.
 
-**How far this is proven.** `veyqctl upgrade` ran this capture once, live, on an instance it had installed from a
-release produced from the tree — three legs, the key apart — and the capture was restored onto a fresh install.
-`veyqctl backup` is the same capture with the application started again after it; it has not run on its own. Every
-`scripts/run_web_e2e.py` run captures a live instance, destroys it, restores it and runs a suite against the result,
-and holds the production capture to resolving the production project rather than whatever else runs.
+**How far this is proven.** `veyqctl backup` and `upgrade` ran live (2026-10-17) on an instance the stack lane had
+installed and filled through the browser: the capture into a directory pool with the early copy before the stop, an
+object the store lost kept in the pool while a retained capture named it, the prune deleting what no kept capture
+named, and the capture restored from the pool onto a second fresh install. `scripts/instance_backup_selftest.py` holds
+the pool's builder (copied into with `--immutable`, deleted from only by the prune), the prune and every refusal without Docker. Every `scripts/run_web_e2e.py` run captures a
+live instance into a pool, destroys it, restores it from the pool and runs a suite against the result, and holds the
+production capture to resolving the production project rather than whatever else runs.
 
 **Leg (c) never goes beside the dump.** The dump plus the key opens every tenant's SMTP password, so a capture
 directory holding both is exactly the leaked backup the key exists to defend against (ADR 0056 §1). `capture`
@@ -131,8 +168,25 @@ and `verify` says so when it did not.
 ### Restore — onto a freshly installed instance
 
 A restore targets the **same domain** (ADR 0056 §4); `--domain` is required and the tool refuses anything the
-backup did not hold. It also refuses a target that already holds **data**, or a bucket that already holds
-objects — the restore is defined onto an empty instance and nothing reconciles two populated ones (A5).
+backup did not hold. It also refuses a target whose database already holds **data** — the restore is defined onto an
+empty instance and nothing reconciles two populated ones (A5).
+
+**It checks the objects before it writes anything, and it writes objects only into an empty store**
+([ADR 0056](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) §7).
+Two forms:
+
+- **Without a source** — the objects are already in the store the capture indexed (a rollback, [Upgrade](/veyq/run/upgrade/#rollback)):
+  every object the dump's rows require must be there with the indexed size and MD5, or the restore refuses naming
+  each, and nothing is written to the store. Onto a fresh install, whose store holds nothing, this form refuses and
+  names the pool the capture recorded.
+- **With `--objects-from <pool>`** — onto a fresh instance: its store must hold **no object** (the store check's probe
+  aside), every required object must be in the pool as indexed, then exactly the index's keys are copied in and the
+  store is checked once more — all before the dump is loaded. A capture of the older layout, which holds its objects
+  in `objects/`, restores the same way from that directory, without the flag.
+
+*Required* is what the dump's blob rows name; the index's other keys — orphans waiting to be reclaimed, the chunks of
+an unfinished upload — are reported and tolerated. `--accept-missing-objects` restores knowingly without the named
+ones, each a Memory whose picture yields a `404`.
 
 **It compares the backup's schema with the target's before it writes anything** ([ADR 0056](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) §7),
 in Flyway's version order. A backup **newer** than the target is refused, and the message names the release it
@@ -156,10 +210,12 @@ the store usable, and the same start migrates the schema, so the two go together
 
 ```sh
 cd /opt/veyq
-./veyqctl restore /media/restore/<stamp> --domain <the tenant's domain> --key-from /media/usb-stick/veyq-<stamp>.key
+./veyqctl restore /media/restore/<stamp> --domain <the tenant's domain> --key-from /media/usb-stick/veyq-<stamp>.key \
+    --objects-from /mnt/backup-disk/veyq-objects
 ```
 
-It stops the application, loads all three legs with the running release's tool, puts leg (c) into the app's volume as
+`--objects-from` is never implied by `.env`: a restore writes objects only when you say where from. It stops the
+application, loads all three legs with the running release's tool, puts leg (c) into the app's volume as
 the application's own user, and starts the application again. `--domain` is required and never defaulted: the
 capture holds its **tenants'** domains, and `.env`'s `VEYQ_DOMAIN` is the instance's bootstrap domain, not one of
 them. A restore the tool refuses at its gates wrote nothing, and the application stays stopped until `veyqctl start`.
@@ -173,7 +229,8 @@ docker compose -f "$recipe" --env-file .env stop app
 (umask 077; mkdir .key)
 python3 "releases/${release}/instance_backup.py" restore /media/restore/<stamp> \
     --domain <the tenant's domain> --compose-file "$recipe" --docker-network veyq_edge \
-    --config-secret-file .key/config-secret.key --key-from /media/usb-stick/veyq-<stamp>.key
+    --config-secret-file .key/config-secret.key --key-from /media/usb-stick/veyq-<stamp>.key \
+    --objects-from /mnt/backup-disk/veyq-objects
 
 # 3. Leg (c) into the app's volume, written by the image's own user, the key on stdin; then drop the copy.
 docker compose -f "$recipe" --env-file .env run --rm --no-deps -T --entrypoint /bin/sh app \
@@ -197,7 +254,9 @@ tool, given a `--config-secret-file` inside the volume itself, gives the key the
 and refuses a run that cannot — the route for an operator who mounts the volume as root.) **How far this is proven:**
 `veyqctl restore` ran once, live, putting an upgrade's capture onto a fresh install: 46 tables dropped, the dump and
 4 objects loaded, the key in the app's volume as `10001:10001 600`, and a Memory opened there. The tool's owner rule
-is held by `scripts/instance_backup_selftest.py`, without Docker or root.
+is held by `scripts/instance_backup_selftest.py`, without Docker or root. A restore from a pool ran live
+(2026-10-17): refused onto the fresh install without `--objects-from`, naming the pool; refused while its bucket held
+one object; then 6 objects copied, the config-secret state `OK`, and the bucket equal to the capture's index.
 
 The store's **setting** now travels with the database: it is a row (`veyq_store_setting`, a table the
 emptiness gate ignores), its secrets sealed under the config-secret key, so with leg (c) restored they open again.
@@ -206,9 +265,9 @@ whatever that install's Garage secrets are. The bundled store's own bucket, acce
 still not restored, because they were never state: the app recreates them idempotently on every start. This has no
 "fresh node only" limit — the layout step is satisfied by a node already carrying a role at any version, and
 applies `current + 1` where it has work to do. A store of your own is the same store after the restore (its
-endpoint and bucket are in the restored setting, and they cannot be changed once blobs exist), so the objects go back
-into that bucket. The restore refuses a bucket that still holds objects, so empty it first if it outlived the
-instance. If the store's credentials were rotated since the capture, re-enter them in **Server → Object store**.
+endpoint and bucket are in the restored setting, and they cannot be changed once blobs exist): restored without a
+source it checks the objects still there; from a pool it refuses a bucket that still holds objects, so empty it first
+if it outlived the instance. If the store's credentials were rotated since the capture, re-enter them in **Server → Object store**.
 
 The final step is not "it started". Open **Server → Object store** and run **Check store** (or `veyq-admin store check`): it
 proves the restored setting reaches its store before anyone relies on it. Then read the instance's **config-secret state** as the Server Owner, on the admin
@@ -254,6 +313,9 @@ Your part:
   or when the Secret's endpoint or bucket is not the store in use.
 - **The downtime.** Every release change is longer by the capture: one dump and one listing of the bucket,
   whatever the store holds.
+- **No object pool.** The gate names none (ADR 0098 decision 4): a copy in the init container would lengthen every
+  release change, and a pool outside the cluster would be a new egress peer for the NetworkPolicy set. A restore Job
+  may still name `--objects-from`, like any restore — then only into an empty store.
 
 With `backup.enabled: false` none of this runs, and the capture before an upgrade is yours, by hand
 ([Upgrade](/veyq/run/upgrade/), Kubernetes).
@@ -368,8 +430,9 @@ own.
 
 #### A capture taken by hand
 
-A capture taken by hand with `backup.enabled: false` holds the objects themselves, and restores through
-port-forwards. The tool reaches MariaDB and Garage through port-forwards and cannot reach the app's claim, so it
+A capture taken by hand with `backup.enabled: false` is the database and the store's index, like every capture —
+name a pool with `--objects-to` to keep the objects too — and restores through port-forwards: onto a freshly installed
+release, whose store is empty, from that pool (`--objects-from`). The tool reaches MariaDB and Garage through port-forwards and cannot reach the app's claim, so it
 writes leg (c) to a local file of your own, and `kubectl cp` puts it in the pod. `kubectl cp` unpacks as the
 container's user, uid 10001, so the key is born the app's — the property the Compose restore gets from its one-off
 container of the `app` service. Onto a **freshly installed** release, exactly as [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires:

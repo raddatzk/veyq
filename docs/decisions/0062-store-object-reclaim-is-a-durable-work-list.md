@@ -121,8 +121,8 @@ messaging pattern this codebase does not have.
   - **Built in the backend, it needs a new port operation, and the listing is unpartitionable.** Decision 1
     above states why the reclaim list needs no listing; the same two facts are what make a backend reconcile
     expensive rather than free. Built as an **operator tool** instead, it needs no port at all:
-    `scripts/instance_backup.py` already lists and mirrors the bucket through rclone, so a reconcile there is
-    `rclone lsf` plus one database snapshot.
+    `scripts/instance_backup.py` already lists the bucket through rclone (every capture's index), so a reconcile
+    there is that listing plus one database snapshot.
   - **The keys now live in three tables, not two** — `veyq_blob`, `veyq_upload_session` and
     `veyq_store_reclaim`. An object is an anomaly only when **none** of the three explains it, and the third is
     what turns the question from unanswerable into answerable: before it, an object whose row was legitimately
@@ -150,7 +150,7 @@ messaging pattern this codebase does not have.
     two do not. What remains true is the stock: against zero, a delete arm buys nothing, which is the rejected
     arm's surviving reason. The closest thing to a prototype already exists and is the same question asked of a
     *capture* rather than a live instance — `scripts/instance_backup.py`'s `verify` counts orphaned objects and
-    tolerates them — but it is weaker than it sounds: it compares the capture's local mirror against
+    tolerates them — but it is weaker than it sounds: it compares the capture's index of the bucket against
     `manifest["store"]["blobs"]`, **one** table and never a bucket, so its orphan count includes every pending
     reclaim and every in-flight upload by construction.
 - **Rejected — leave it best-effort and add a failure log.** Nine lines, and it makes future failures visible.

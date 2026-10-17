@@ -7,10 +7,11 @@
   `veyqctl`, each keeping the commands the tool runs, and *Verify a release*'s `cosign verify-blob` for `veyqctl`
   itself and for the manifest (held by assertion 7); the manifest signed by the publish and verified by `veyqctl`
   before it is trusted, from every source (decisions 3 and 7). What waits on the owner: the remote, immutable releases switched on, the first publish.
-  Decided 2026-10-17 and not yet built (cr-backup-store-leg-is-an-index): `backup` and `upgrade` capture the database and
-  the store's index with an optional object pool, `restore` checks the objects and copies them only into an empty
-  store, and `status` warns while the bundled store has no pool (decisions 1 and 5, [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)
-  §3 and §7); today they still copy the whole bucket.
+  Built 2026-10-17 (cr-backup-store-leg-is-an-index): `backup` and `upgrade` capture the database and the store's index
+  with an optional, pruned object pool, `restore` checks the objects and copies them only into an empty store, `status`
+  warns while the bundled store has no pool, and `rollback` goes back in place (decisions 1, 5 and 6,
+  [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3 and §7) — held by `scripts/veyqctl_selftest.py`
+  (`test_pool`, `test_rollback`) and run live on a throwaway Compose project.
 - Date: 2026-10-16
 
 ## Context
@@ -51,9 +52,10 @@ its Node CLI (`admin-web/src/cli/`). Management is the instance's lifecycle *on 
 | `install` | fetch the release `VEYQ_RELEASE` selects, verify it, write `.env` from its template with fresh secrets, `up` |
 | `start` / `stop` / `status` / `logs` | the stack, addressed by the recipe's project name; `status` also warns while the instance uses the bundled store and no object pool is configured — Garage keeps no object versions ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3) |
 | `upgrade` | decision 5 |
-| `backup` / `restore` | the release's `instance_backup.py` capture, verify and restore ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)): the database and the store's **index**, and — when `--objects-to` or `.env`'s `VEYQ_BACKUP_OBJECTS_TO` names one — the new objects copied into an object pool that only grows; `restore` checks every object the dump needs against the live store, or with `--objects-from` copies them out of a pool, which it does only into an empty store. Leg (c), the config-secret key, still goes to a separate medium, so `--key-into` stays required |
+| `backup` / `restore` | the release's `instance_backup.py` capture, verify and restore ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)): the database and the store's **index**, and — when `--objects-to` or `.env`'s `VEYQ_BACKUP_OBJECTS_TO` names one — the new objects copied into an object pool, which keeps what its newest `VEYQ_BACKUP_POOL_KEEP` captures index and deletes the rest; `restore` checks every object the dump needs against the live store, or with `--objects-from` copies them out of a pool, which it does only into an empty store. Leg (c), the config-secret key, still goes to a separate medium, so `--key-into` stays required |
 | `verify` | check the signatures of the release `VEYQ_RELEASE` selects, nothing else |
 | `check` | which release `upgrade` would take, and whether a newer major exists beyond the selector |
+| `rollback` | back to the release a capture was taken under, **in place**: refused unless that release is still in `releases/` and the capture verifies against the live store; then the database is emptied (confirmed, or `--yes`), the release started once on the empty schema, and the capture restored with the check only — the objects never leave the store, which an upgrade does not rewrite ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 9's rollback in Compose's form) |
 | `self-update` | replace `veyqctl` with the one of the installed release |
 
 **2. Python, standard library only, one file.** The repository's rule for scripts, and the host already needs

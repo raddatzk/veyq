@@ -70,9 +70,10 @@ and spaces in their deletion grace keep their bytes for 30 days, until the sched
 - Within it, a tenant's owner sets how much a share link may receive (10 GiB by default, `0` switches link uploads
   off).
 
-**Backups.** A capture is a full logical copy of the database and of every stored object, so plan space for at least
-one capture of everything beside the instance ([Backup and restore](/veyq/run/backup-and-restore/)). There are no
-incremental captures.
+**Backups.** A capture is the database and an index of the stored objects, never the objects, so a capture is about the
+size of the database ([Backup and restore](/veyq/run/backup-and-restore/)). The objects are kept by the store — or, on
+the bundled store, which keeps no versions, by an **object pool** on another disk or store: plan space there for every
+stored object once, growing by the new uploads at each backup and pruned to what the newest captures need.
 
 ## Domains
 

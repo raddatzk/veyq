@@ -60,7 +60,10 @@ The instance lives in `/opt/veyq` (`--home` names another):
 | `compose.override.yml` | Optional, yours: a Compose overlay laid over the recipe on every command (a port, a network, a CA), kept across upgrades |
 | `state.json` | The running release, the Compose project, the source |
 | `releases/<release>/` | That release's files, as published; an upgrade adds the next one beside it |
-| `backups/` | The captures `backup` and `upgrade` take |
+| `backups/` | The captures `backup` and `upgrade` take: the database and the store's index each |
+
+No directory here holds an object pool: it lives where `.env`'s `VEYQ_BACKUP_OBJECTS_TO` names — by intent another disk
+or another store, since a pool on the store's own disk dies with it ([Backup and restore](/veyq/run/backup-and-restore/#capture)).
 
 `start`, `stop`, `status` and `logs [-f] [service]` address the stack by its project; `status` exits non-zero unless
 every service is healthy.

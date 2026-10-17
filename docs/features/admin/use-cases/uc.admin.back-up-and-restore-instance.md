@@ -11,10 +11,9 @@
   store from the host. The restore target serves the **same domain** as the source (ADR 0056 §4). The people
   whose Memories these are still hold their passwords and Emergency Kits — the operator holds no key and cannot
   supply that half ([uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md)).
-- **What is built** (2026-10-17): the store leg as an index, and the restore's check against it, on Kubernetes (A11);
-  for Compose and `veyqctl` it is decided (ADR 0056 §3, §7) and not yet built — their captures still copy the whole
-  bucket into `objects/` and restore it into an empty store (cr-backup-store-leg-is-an-index builds steps 3 and 8 as
-  written below, and the object pool).
+- **What is built** (2026-10-17): every step below, on Compose and `veyqctl` and on Kubernetes (A11) — the store leg as
+  an index, the optional pruned object pool, the restore's check against the index and its copy only into an empty
+  store (ADR 0056 §3, §7), and the in-place rollback (A7).
 - **Postconditions (success):** A restored instance holds the same three legs as the source: the same database,
   the same objects, and the same config-secret key. Its users sign in with the credentials they already had,
   every Memory decrypts, and the instance can admit members and send recovery links again. Nothing about the
@@ -32,8 +31,9 @@
 3. The operator **lists the bucket into the capture as its index** — every object's key, size and MD5, as the store
    serves them over S3, never the store's on-disk directories and never the objects (ADR 0056 §3). The objects stay
    in the store, whose versioning, replication or snapshots keep them; when the operator names an **object pool**
-   (`--objects-to`), the objects the pool lacks are copied into it — copy-only, so the pool only grows — and the
-   capture records the pool beside the index. The capture is cold, so no app is running to sign for the tool: the
+   (`--objects-to`), the objects the pool lacks are copied into it — never replacing a copy it holds — and the
+   capture records the pool beside the index; the pool then deletes every object no retained capture's index names,
+   its captures rotating by `keep` (ADR 0056 §3), so an erased object leaves it within that window. The capture is cold, so no app is running to sign for the tool: the
    operator **supplies the store's credentials for this run** ([ADR 0089](../../../decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
    decision 7). For the bundled store the recipe's environment already holds them (the tool derives the S3 key pair
    from the bundled admin token); for a store of their own they are the ones entered in the admin console, which
@@ -137,8 +137,10 @@
   manifest's `app.version`). Restored onto the new release, the backup would be migrated up again at the next
   start (A9), which repeats the failed upgrade instead of undoing it. The upgrade rewrote no object, so the
   objects the backup indexes are still in the instance's own store: the rollback restores onto **that** store, its
-  database emptied, with the check only — or onto a fresh instance's empty store from a pool (`--objects-from`). On
-  Kubernetes it is the first (A11); which of the two `veyqctl` offers on Compose is open (cr-backup-store-leg-is-an-index).
+  database emptied, with the check only — or onto a fresh instance's empty store from a pool (`--objects-from`). Both
+  targets take the first: on Kubernetes the restore Job (A11), on Compose `veyqctl rollback`, which refuses unless the
+  capture verifies against the live store, then empties the database, starts the capture's release once and
+  restores with the check only.
 - **A9 — The backup is older than the target.** Accepted (ADR 0056 §7). The restore drops every table of the
   data-less target before loading, so the instance holds exactly the captured schema. The application then
   migrates it up at its next start, the same forward migration an ordinary upgrade runs. The restore says so as

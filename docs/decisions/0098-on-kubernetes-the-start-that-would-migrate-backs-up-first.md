@@ -132,9 +132,8 @@ change has no termination guarantee (M7), so a due capture could be a hot one.
 
 **8. The gate runs `instance_backup.py`, the one capture implementation.** The tool gains a mode for running inside
 the pod (database and store by address, client binaries on `PATH`, no Docker), the record, the refusals and the
-retention; its format is the one every capture writes (`backupFormat` 3, ADR 0056 §3 — for Compose decided, built by
-cr-backup-store-leg-is-an-index), so a capture taken in a
-cluster restores onto Compose and back (same domain, ADR 0056 §4) — onto the other target's store only with its
+retention; its format is the one every capture writes (`backupFormat` 3, ADR 0056 §3, Compose's too), so a capture
+taken in a cluster restores onto Compose and back (same domain, ADR 0056 §4) — onto the other target's store only with its
 objects, from a pool (ADR 0056 §7). The image the gate runs is pinned by digest and released and signed with the other two
 ([ADR 0057](0057-release-identity-and-deployment-recipe.md), [ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md));
 which image it is, is § Open for the owner, 3.

@@ -41,12 +41,12 @@ of the one before, so an upgrade from an older release first goes to that one �
    `.env`, takes a backup ([uc.admin.back-up-and-restore-instance](uc.admin.back-up-and-restore-instance.md): the
    database and the store's index, the key to the medium `--key-into` names, and the new objects into the object pool
    `.env`'s `VEYQ_BACKUP_OBJECTS_TO` names, if it names one), stops the app, switches to the new recipe and image
-   lines, brings the stack up and waits until it is healthy. (The index and the pool are decided 2026-10-17 and not
-   yet built for `veyqctl`, whose backup still copies the whole bucket — cr-backup-store-leg-is-an-index.)
+   lines, brings the stack up and waits until it is healthy. With a pool, the objects are copied into it while the app
+   still runs, and the capture after the stop tops it up with what arrived since.
 3. **Status.** `veyqctl status` names the running release and every service's health; while the instance keeps its
    objects in the bundled store and no object pool is configured, it also warns that nothing but the store's own
    volume holds them — Garage keeps no object versions ([ADR 0056](../../../decisions/0056-instance-durable-state-and-cold-logical-backup.md)
-   §3). The warning does not change the exit code, which stays the health verdict. (Decided, not yet built.)
+   §3). The warning does not change the exit code, which stays the health verdict; `install` ends with the same line.
 
 ## Alternate / exception flows
 
