@@ -30,7 +30,13 @@ This asserts, with no daemon and no root:
      a table a migration creates, and every table a migration seeds with literal rows is among them;
   7. the store's credentials for a run (ADR 0089): the bundled store's key pair derived from its admin token — one
      pinned vector, the one `BundledStoreCredentialsTest` pins on the backend's side — an operator's own pair winning
-     over a token, half a pair refused, and a run that names no store refused naming both ways.
+     over a token, half a pair refused, and a run that names no store refused naming both ways;
+  8. the cluster's gate (G1–G8, behind fake Database and Store seams), and that every capture is the index (G6);
+  9. the object pool (P1–P9, ADR 0056 §3 and §7): the REAL Store and Pool driving an rclone interpreted in memory
+     (`Rclone`, through `--rclone-binary`, so every argv and environment the tool builds is the one it would run) —
+     the top-up of exactly the index's keys, a short pool failing the capture, the prune keeping exactly what the
+     kept captures' indexes name and never running on a ledger without the new entry, the builder's copy-only shape,
+     no pool credential in the manifest, and the restore's empty-store gate, source check and copy-before-load.
 
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key
 in a running container — that is the live proof on the production recipe, recorded where the coverage of
@@ -43,14 +49,17 @@ from __future__ import annotations  # the repo's scripts run on Python 3.9
 
 import argparse
 import contextlib
+import hashlib
 import io
 import json
 import os
 import pathlib
 import re
 import stat
+import subprocess
 import sys
 import tempfile
+import types
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import instance_backup as ib  # noqa: E402
@@ -137,7 +146,8 @@ def restore_reaches_seam(tmp: pathlib.Path, euid: int) -> tuple[str, bool]:
     backup = tmp / f"backup-{euid}"
     backup.mkdir()
     (backup / ib.MANIFEST_NAME).write_text(json.dumps({
-        "backupFormat": ib.BACKUP_FORMAT, "domains": ["veyq.test"], "configSecret": {"placement": ib.SEPARATE}}))
+        "backupFormat": ib.INDEX_FORMAT, "domains": ["veyq.test"], "configSecret": {"placement": ib.SEPARATE},
+        "store": {"leg": ib.INDEX, "index": [], "blobs": []}}))
     kept = tmp / f"kept-{euid}.key"
     kept.write_bytes(b"k")
     target_dir = tmp / f"volume-{euid}"
@@ -410,13 +420,8 @@ class FakeStore:
         self.w.calls.append("index")
         return sorted([list(e) for e in self.w.listing])
 
-    def mirror_out(self, dest):
-        for key, size, _ in self.w.listing:
-            (dest / key).parent.mkdir(parents=True, exist_ok=True)
-            (dest / key).write_bytes(b"x" * size)
-
-    def mirror_in(self, source):
-        self.w.calls.append("mirror_in")
+    def data_keys(self):
+        return [e[0] for e in self.w.listing if e[0] != PROBE]
 
     def size(self):
         return len(self.w.listing), sum(e[1] for e in self.w.listing)
@@ -634,7 +639,7 @@ def g5_index_restore(tmp: pathlib.Path) -> None:
     whole = [["sk1/0", 10, "a" * 32], ["sk1/1", 20, "b" * 32]]
     outcome, calls, _ = restore_index(tmp, "g5-whole", whole)
     check("G5 restore: an index capture whose objects are all in the live store loads, and never writes to the store",
-          outcome == "ok 0" and "load" in calls and "mirror_in" not in calls, f"{outcome} {calls}")
+          outcome == "ok 0" and calls == ["index", "drop", "load"], f"{outcome} {calls}")
     outcome, calls, _ = restore_index(tmp, "g5-missing", whole[:1])
     check("G5 restore: a missing object refuses naming it, before the load",
           outcome.startswith("refused:") and "missing object  sk1/1" in outcome and "load" not in calls, outcome)
@@ -657,7 +662,9 @@ def g5_index_restore(tmp: pathlib.Path) -> None:
 
 
 @guarded
-def g6_compose_untouched(tmp: pathlib.Path) -> None:
+def g6_compose_is_the_index(tmp: pathlib.Path) -> None:
+    """B1 — every capture is the index (ADR 0056 §3): the default capture, which Compose and `veyqctl` take, writes
+    backupFormat 3 with the store's listing and no `objects/` (on the tree before this rule it wrote the mirror)."""
     into, kept = tmp / "g6-capture", tmp / "g6-kept.key"
     key = tmp / "g6-config-secret.key"
     key.write_bytes(KEY_BYTES)
@@ -667,18 +674,18 @@ def g6_compose_untouched(tmp: pathlib.Path) -> None:
                       "--compose-file", str(tmp / "no-compose.yml"), "--store-endpoint", "http://garage:3900",
                       "--store-access-key", "GKx", "--store-secret-key", "s"])
     manifest = json.loads((into / ib.MANIFEST_NAME).read_text()) if (into / ib.MANIFEST_NAME).is_file() else {}
-    check("G6 compose: a default capture is the mirror, backupFormat 2, with exactly the keys it always had",
-          rc == 0 and manifest.get("backupFormat") == 2 and sorted(manifest) == sorted(
-              ["backupFormat", "domains", "app", "database", "store", "configSecret", "capture"])
-          and sorted(manifest["store"]) == sorted(["bucket", "objects", "bytes", "blobs", "openUploadSessions"])
-          and sorted(manifest["capture"]) == ["finishedAt", "startedAt"]
-          and manifest["configSecret"] == {"placement": ib.SEPARATE} and (into / ib.OBJECTS_DIR).is_dir(),
+    store = manifest.get("store") or {}
+    check("G6 compose: a default capture is the index — backupFormat 3, store.leg index, the listing, no objects/, "
+          "no pool",
+          rc == 0 and manifest.get("backupFormat") == 3 and store.get("leg") == "index"
+          and store.get("index") == [["sk1/0", 10, "a" * 32], ["sk1/1", 20, "b" * 32]] and "pool" not in store
+          and not (into / "objects").exists() and manifest.get("configSecret") == {"placement": ib.SEPARATE},
           json.dumps(manifest)[:300])
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         rc = ib.main(["verify", str(into), "--key-from", str(kept)])
-    check("G6 compose: its verify is the format-2 verify — objects present, no live-store line",
-          rc == 0 and "2 present, 2 required" in out.getvalue() and "live store" not in out.getvalue(),
+    check("G6 compose: its verify answers A4 from the index and says no pool was named",
+          rc == 0 and "2 indexed, 2 required" in out.getvalue() and "none named" in out.getvalue(),
           out.getvalue()[-400:])
 
 
@@ -727,9 +734,463 @@ def gate_cases(tmp: pathlib.Path) -> None:
     g3_order(tmp)
     g4_retention(tmp)
     g5_index_restore(tmp)
-    g6_compose_untouched(tmp)
+    g6_compose_is_the_index(tmp)
     g7_url_parser()
     g8_no_key(tmp)
+
+
+# --------------------------------------------------------------------------------------------------------
+# The object pool (ADR 0056 §3, §7) — P1–P9, the real Store and Pool driving an rclone that runs in memory
+# --------------------------------------------------------------------------------------------------------
+
+def md5(data: bytes) -> str:
+    return hashlib.md5(data).hexdigest()  # noqa: S324 — rclone's own hash type, not a security use
+
+
+class Rclone:
+    """The rclone the tool runs (`--rclone-binary`, so every path is a host path), interpreted against in-memory
+    remotes: the store's bucket (`STORE:blobs`) and every pool root registered here, each `{key: (size, md5, bytes)}`.
+    Any other path is the real filesystem (a `--files-from` list, a ledger entry's folder, a format-2 `objects/`).
+    Every call is recorded with its environment and the contents of its `--files-from` list."""
+
+    def __init__(self, store: dict | None = None):
+        self.store = store if store is not None else {}
+        self.pools: dict[str, dict] = {}
+        self.calls: list[dict] = []
+        self.order: list[str] | None = None   # a World's call log, to interleave with the database's
+        self.drop_on_copy: set[str] = set()   # keys a copy into a pool silently loses (B8)
+        self.ledger_blind = False             # `cat` of a ledger answers nothing (the prune's refusal)
+
+    def pool(self, root: str) -> dict:
+        return self.pools.setdefault(root, {})
+
+    def _where(self, path: str):
+        if path.startswith(f"{ib.REMOTE}:"):
+            bucket, _, prefix = path[len(ib.REMOTE) + 1:].partition("/")
+            return self.store, prefix
+        for root, content in self.pools.items():
+            if path == root or path.startswith(root + "/"):
+                return content, path[len(root) + 1:]
+        return None, path
+
+    def _entries(self, path: str) -> dict:
+        content, prefix = self._where(path)
+        if content is None:
+            base = pathlib.Path(prefix)
+            return {p.relative_to(base).as_posix(): (p.stat().st_size, md5(p.read_bytes()), p.read_bytes())
+                    for p in base.rglob("*") if p.is_file()} if base.is_dir() else {}
+        lead = prefix + "/" if prefix else ""
+        return {key[len(lead):]: value for key, value in content.items() if key.startswith(lead)}
+
+    def run(self, cmd, capture_output=True, text=True, env=None, **_kw):
+        argv = list(cmd[1:])
+        verb, flags, paths, files_from, i = argv[0], set(), [], None, 1
+        while i < len(argv):
+            arg = argv[i]
+            if arg in ("--files-from", "--hash-type", "--stats"):
+                if arg == "--files-from":
+                    files_from = pathlib.Path(argv[i + 1]).read_text().split()
+                i += 2
+                continue
+            (flags.add(arg) if arg.startswith("-") else paths.append(arg))
+            i += 1
+        self.calls.append({"argv": argv, "env": dict(env or {}), "files_from": files_from})
+        out, err, rc = "", "", 0
+        if verb == "lsjson":
+            entries = self._entries(paths[0])
+            out = json.dumps([{"Path": k, "Size": v[0], **({"Hashes": {"md5": v[1]}} if "--hash" in flags else {})}
+                              for k, v in sorted(entries.items()) if files_from is None or k in files_from])
+        elif verb == "size":
+            entries = self._entries(paths[0])
+            out = json.dumps({"count": len(entries), "bytes": sum(v[0] for v in entries.values())})
+        elif verb == "cat":
+            entries = self._entries(paths[0])
+            out = "" if self.ledger_blind else "".join(
+                v[2].decode() for _, v in sorted(entries.items(), reverse=True))  # any order: the reader sorts
+        elif verb in ("copy", "sync"):
+            src, (dst, prefix) = self._entries(paths[0]), self._where(paths[1])
+            lead = prefix + "/" if prefix else ""
+            for key, value in sorted(src.items()):
+                if files_from is not None and key not in files_from:
+                    continue
+                if dst is not self.store and key in self.drop_on_copy:
+                    continue
+                held = dst.get(lead + key)
+                if held is not None and held[:2] != value[:2]:
+                    if "--immutable" in flags:
+                        err, rc = f"ERROR : {key}: Source and destination exist but do not match: immutable file modified", 6
+                        continue
+                dst[lead + key] = value
+                if self.order is not None and dst is self.store:
+                    self.order.append(f"copy {key}")
+            if verb == "sync":
+                for key in [k for k in dst if k.startswith(lead) and k[len(lead):] not in src]:
+                    del dst[key]
+        elif verb == "delete":
+            content, prefix = self._where(paths[0])
+            lead = prefix + "/" if prefix else ""
+            for key in files_from or []:
+                content.pop(lead + key, None)
+        else:
+            err, rc = f"unknown verb {verb}", 1
+        return subprocess.CompletedProcess(cmd, rc, out, err)
+
+
+class Emulated:
+    """The real Store and Pool over the in-memory rclone, the database faked; restored on exit."""
+
+    def __init__(self, world: World, rclone: Rclone):
+        self.world, self.rclone = world, rclone
+
+    def __enter__(self):
+        self.saved = (ib.Database, ib.require_db_password, ib.subprocess)
+        ib.Database = lambda *_a, **_k: FakeDatabase(self.world)
+        ib.require_db_password = lambda: "x"
+        ib.subprocess = types.SimpleNamespace(run=self.rclone.run, CompletedProcess=subprocess.CompletedProcess,
+                                              PIPE=subprocess.PIPE)
+        self.rclone.order = self.world.calls
+        return self.rclone
+
+    def __exit__(self, *_exc):
+        ib.Database, ib.require_db_password, ib.subprocess = self.saved
+
+
+LAST_RCLONE: dict = {}  # the runs P5 reads every pool argv of
+PROBE = "veyq-check/probe"  # StoreCheck.kt's PROBE_KEY, which the tool's own constant must equal
+
+STORE_ARGS = ["--rclone-binary", "rclone", "--store-endpoint", "http://garage:3900", "--store-access-key", "GKx",
+              "--store-secret-key", "s"]
+
+
+def obj(data: bytes) -> tuple:
+    return len(data), md5(data), data
+
+
+def run_tool(world: World, rclone: Rclone, argv: list[str], env: dict | None = None) -> tuple[str, str]:
+    """`ib.main(argv)` under the emulation: (`ok <rc>` or `refused: …`, everything it printed)."""
+    out, err = io.StringIO(), io.StringIO()
+    saved_env = {k: os.environ.get(k) for k in (env or {})}
+    os.environ.update(env or {})
+    try:
+        with Emulated(world, rclone), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                rc = ib.main(argv)
+            except SystemExit as e:  # argparse: a flag this tool does not know
+                rc = e.code or 2
+    finally:
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    text = out.getvalue() + err.getvalue()
+    return (f"ok {rc}" if rc == 0 else f"refused: {err.getvalue().strip()}"), text
+
+
+def pool_capture(tmp: pathlib.Path, world: World, rclone: Rclone, name: str, pool: str, *extra: str,
+                 env: dict | None = None) -> tuple[str, str, pathlib.Path]:
+    into = tmp / name
+    outcome, text = run_tool(world, rclone, ["capture", "--into", str(into), "--key-kept-apart", "--app-version", "0.5",
+                                             "--objects-to", pool, *extra, *STORE_ARGS], env)
+    return outcome, text, into
+
+
+def ledger_of(rclone: Rclone, root: str) -> list[str]:
+    return sorted(k for k in rclone.pool(root) if k.startswith(ib.LEDGER + "/"))
+
+
+def objects_of(rclone: Rclone, root: str) -> list[str]:
+    return sorted(k for k in rclone.pool(root) if not k.startswith(ib.LEDGER + "/"))
+
+
+def pool_argvs(rclone: Rclone, root: str) -> list[list[str]]:
+    return [c["argv"] for c in rclone.calls if any(a == root or a.startswith(root + "/") for a in c["argv"])]
+
+
+def a_store() -> dict:
+    return {"sk1/0": obj(b"zero"), "sk1/1": obj(b"one!"), PROBE: obj(b"probe")}
+
+
+@guarded
+def p1_capture_into_a_pool(tmp: pathlib.Path) -> None:
+    root = str(tmp / "p1-pool")
+    rclone = LAST_RCLONE["p1-pool"] = Rclone(a_store())
+    rclone.pool(root)
+    outcome, text, into = pool_capture(tmp, World(), rclone, "p1-capture", root)
+    manifest = json.loads((into / ib.MANIFEST_NAME).read_text()) if (into / ib.MANIFEST_NAME).is_file() else {}
+    fill = [c for c in rclone.calls if c["argv"][0] == "copy" and c["argv"][-4] == root]
+    check("P1 capture --objects-to: format 3, store.pool.target the directory, the pool holds every indexed key, one "
+          "ledger entry, no objects/",
+          outcome == "ok 0" and manifest.get("backupFormat") == 3 and manifest["store"]["pool"]["target"] == root
+          and objects_of(rclone, root) == sorted(a_store()) and len(ledger_of(rclone, root)) == 1
+          and manifest["store"]["pool"]["objects"] == 3 and not (into / "objects").exists(), f"{outcome} {text[-400:]}")
+    check("P1 the top-up copies exactly the index's keys (--files-from), with --immutable",
+          len(fill) == 1 and sorted(fill[0]["files_from"] or []) == sorted(a_store())
+          and "--immutable" in fill[0]["argv"], str([c["argv"] for c in rclone.calls]))
+    check("P1 the pool directory is created 0700 by the tool", oct(os.stat(root).st_mode & 0o777) == "0o700",
+          oct(os.stat(root).st_mode & 0o777) if os.path.isdir(root) else "absent")
+    # Incremental by construction: a second capture hands rclone the same keys and the pool's copies stand.
+    rclone.store["sk2/0"] = obj(b"two")
+    before = dict(rclone.pool(root))
+    outcome, _, _ = pool_capture(tmp, World(blobs=(("sk1", 2), ("sk2", 1))), rclone, "p1-capture-2", root)
+    check("P1 a second capture adds the new object and leaves every earlier copy as it was",
+          outcome == "ok 0" and "sk2/0" in rclone.pool(root)
+          and all(rclone.pool(root)[k] == v for k, v in before.items() if not k.startswith(ib.LEDGER)), outcome)
+
+
+@guarded
+def p2_pool_short_fails(tmp: pathlib.Path) -> None:
+    """B8 — a pool that lacks an indexed key after the copy fails the capture and writes no manifest; and the prune
+    never runs before the new capture's index is complete: no ledger entry, no delete."""
+    root = str(tmp / "p2-pool")
+    rclone = Rclone(a_store())
+    rclone.pool(root)["stray/0"] = obj(b"stray")
+    rclone.drop_on_copy = {"sk1/1"}
+    outcome, _, into = pool_capture(tmp, World(), rclone, "p2-capture", root)
+    check("P2 capture: a pool lacking one indexed key after the copy fails, naming it, and writes no manifest",
+          outcome.startswith("refused:") and "missing in pool  sk1/1" in outcome
+          and not (into / ib.MANIFEST_NAME).exists(), outcome)
+    check("P2 prune: a failed pool step writes no ledger entry and deletes nothing (the stray object stays)",
+          ledger_of(rclone, root) == [] and "stray/0" in rclone.pool(root)
+          and not any(c["argv"][0] == "delete" for c in rclone.calls), str([c["argv"][0] for c in rclone.calls]))
+    rclone2 = Rclone(a_store())
+    rclone2.pool(root + "-b")
+    rclone2.pool(root + "-b")["sk1/1"] = obj(b"ONE!")  # the pool's copy differs: objects are immutable
+    outcome, _, into = pool_capture(tmp, World(), rclone2, "p2-capture-b", root + "-b")
+    check("P2 capture: a pool copy whose bytes differ from the store's fails (rclone's immutable refusal), the copy kept",
+          outcome.startswith("refused:") and "immutable file modified" in outcome
+          and rclone2.pool(root + "-b")["sk1/1"][2] == b"ONE!" and not (into / ib.MANIFEST_NAME).exists(), outcome)
+
+
+@guarded
+def p3_prune(tmp: pathlib.Path) -> None:
+    """The pool keeps exactly what its kept captures' indexes name (owner 2026-10-17)."""
+    root = str(tmp / "p3-pool")
+    rclone = LAST_RCLONE["p3-pool"] = Rclone(a_store())
+    rclone.pool(root)
+    pool_capture(tmp, World(), rclone, "p3-c1", root, "--pool-keep", "2")
+    # The store loses sk1/1 (a purge); an early copy left a stray the next index never names.
+    del rclone.store["sk1/1"]
+    rclone.pool(root)["stray/0"] = obj(b"stray")
+    outcome, text, _ = pool_capture(tmp, World(blobs=(("sk1", 1),)), rclone, "p3-c2", root, "--pool-keep", "2")
+    check("P3 prune: an object a kept capture's index names is never pruned — sk1/1, which only the first capture "
+          "indexes, stays",
+          outcome == "ok 0" and "sk1/1" in rclone.pool(root), f"{outcome} {objects_of(rclone, root)}")
+    check("P3 prune (control, same run): an object no kept index names is gone",
+          "stray/0" not in rclone.pool(root), str(objects_of(rclone, root)))
+    outcome, text, _ = pool_capture(tmp, World(blobs=(("sk1", 1),)), rclone, "p3-c3", root, "--pool-keep", "2")
+    check("P3 prune: once the first capture rotates out (keep 2), the object only it indexed is gone, its ledger entry "
+          "with it, and what the kept ones name stays",
+          outcome == "ok 0" and "sk1/1" not in rclone.pool(root) and "sk1/0" in rclone.pool(root)
+          and len(ledger_of(rclone, root)) == 2 and not any("p3-c1" in k for k in ledger_of(rclone, root)),
+          f"{outcome} {sorted(rclone.pool(root))}")
+    deletes = [c for c in rclone.calls if c["argv"][0] == "delete"]
+    check("P3 prune: the pool's one delete is `delete --files-from` the computed list",
+          deletes and all(c["argv"][:2] == ["delete", "--files-from"] for c in deletes), str(deletes))
+
+
+@guarded
+def p4_prune_waits_for_the_ledger(tmp: pathlib.Path) -> None:
+    """A prune never runs on a ledger that does not hold the capture just written: an empty read would name nothing."""
+    root = str(tmp / "p4-pool")
+    rclone = Rclone(a_store())
+    rclone.pool(root)["stray/0"] = obj(b"stray")
+    rclone.ledger_blind = True
+    outcome, text, into = pool_capture(tmp, World(), rclone, "p4-capture", root)
+    check("P4 prune: a ledger read lacking the new entry refuses the prune — nothing is deleted, the capture stands "
+          "and says the pool was not pruned",
+          outcome == "ok 0" and (into / ib.MANIFEST_NAME).is_file() and "pool was NOT pruned" in text
+          and sorted(objects_of(rclone, root)) == sorted([*a_store(), "stray/0"])
+          and not any(c["argv"][0] == "delete" for c in rclone.calls), f"{outcome} {objects_of(rclone, root)}")
+
+
+@guarded
+def p5_builder_is_copy_only(tmp: pathlib.Path) -> None:
+    """B4 — every rclone argv the pool builder makes is `copy --immutable`, a read, or the prune's `delete
+    --files-from`: a pool is never synced, moved or purged."""
+    store = ib.Store(argparse.Namespace(store_endpoint="e", store_access_key="a", store_secret_key="s",
+                                        store_bucket="blobs", store_region="r", rclone_image="i", rclone_binary=None,
+                                        docker_network="n"))
+    for target in ("/srv/pool", "s3:bucket/prefix"):
+        pool = ib.Pool(target, store, {"VEYQ_BACKUP_POOL_ENDPOINT": "http://p", "VEYQ_BACKUP_POOL_ACCESS_KEY": "a",
+                                       "VEYQ_BACKUP_POOL_SECRET_KEY": "s"})
+        built = {"fill (whole bucket)": pool.argv_fill(None), "fill (the index's keys)": pool.argv_fill("/s/k"),
+                 "hashed listing": pool.argv_listing("/l", True), "listing": pool.argv_listing("/l", False),
+                 "list all": pool.argv_list_all(), "copy into the store": pool.argv_empty_into_store("/l"),
+                 "ledger write": pool.argv_record("/scratch/entry"), "ledger read": pool.argv_ledger(),
+                 "prune": pool.argv_delete("/l")}
+        for name, argv in built.items():
+            verb, flag = argv[0], ib.POOL_VERBS.get(argv[0], "absent")
+            check(f"P5 builder, {'S3' if target.startswith('s3:') else 'directory'} pool, {name}: copy --immutable, "
+                  f"a read, or delete --files-from", verb in ib.POOL_VERBS and (flag is None or flag in argv),
+                  " ".join(argv))
+    used = []
+    for name in ("p1-pool", "p3-pool"):
+        used += pool_argvs(LAST_RCLONE.get(name, Rclone()), str(tmp / name))
+    check("P5 every argv the runs above handed rclone against a pool is one of those shapes",
+          bool(used) and all(a[0] in ib.POOL_VERBS and (ib.POOL_VERBS[a[0]] is None or ib.POOL_VERBS[a[0]] in a)
+                             for a in used), str(sorted({a[0] for a in used})))
+
+
+
+@guarded
+def p6_s3_pool_keeps_no_credential(tmp: pathlib.Path) -> None:
+    """B5 — the manifest of an S3-pool capture carries neither half of the pool's key pair."""
+    env = {"VEYQ_BACKUP_POOL_ENDPOINT": "http://pool.example:9000", "VEYQ_BACKUP_POOL_ACCESS_KEY": "AKpoolACCESSid",
+           "VEYQ_BACKUP_POOL_SECRET_KEY": "pool-SECRET-value", "VEYQ_BACKUP_POOL_REGION": "eu-pool-1"}
+    rclone = Rclone(a_store())
+    rclone.pool("POOL:pbucket/pre")
+    outcome, _, into = pool_capture(tmp, World(), rclone, "p6-capture", "s3:pbucket/pre", env=env)
+    text = (into / ib.MANIFEST_NAME).read_text() if (into / ib.MANIFEST_NAME).is_file() else ""
+    pool_env = [c["env"] for c in rclone.calls if any(a.startswith("POOL:") for a in c["argv"])]
+    check("P6 S3 pool (positive control): rclone's environment for the pool calls held its key pair",
+          bool(pool_env) and all(e.get("RCLONE_CONFIG_POOL_SECRET_ACCESS_KEY") == "pool-SECRET-value"
+                                 and e.get("RCLONE_CONFIG_POOL_ACCESS_KEY_ID") == "AKpoolACCESSid" for e in pool_env),
+          outcome)
+    check("P6 S3 pool: the manifest names the pool as s3:<endpoint>/<path> and carries neither key",
+          outcome == "ok 0" and '"target": "s3:http://pool.example:9000/pbucket/pre"' in text
+          and "AKpoolACCESSid" not in text and "pool-SECRET-value" not in text, outcome)
+    check("P6 S3 pool: no argv carries a key", not any(v in " ".join(c["argv"]) for c in rclone.calls
+                                                       for v in ("AKpoolACCESSid", "pool-SECRET-value")))
+    outcome, _ = run_tool(World(), Rclone(a_store()), ["copy-objects", "--objects-to", "s3:pbucket", *STORE_ARGS])
+    check("P6 S3 pool without its credentials is refused, naming the variables",
+          outcome.startswith("refused:") and "VEYQ_BACKUP_POOL_SECRET_KEY" in outcome, outcome)
+
+
+INDEX = [["sk1/0", 4, md5(b"zero")], ["sk1/1", 4, md5(b"one!")], [PROBE, 5, md5(b"probe")],
+         ["orphan/0", 3, md5(b"orf")]]
+
+
+def pooled_capture(tmp: pathlib.Path, name: str, pool: str | None) -> pathlib.Path:
+    backup = index_capture(tmp, name, INDEX)
+    manifest = json.loads((backup / ib.MANIFEST_NAME).read_text())
+    manifest["store"].update({"objects": len(INDEX), "bytes": 16})
+    if pool:
+        manifest["store"]["pool"] = {"target": pool, "objects": 4, "bytes": 16}
+    (backup / ib.MANIFEST_NAME).write_text(json.dumps(manifest))
+    return backup
+
+
+def pool_restore(tmp: pathlib.Path, name: str, store: dict, pool: dict | None, *extra: str, backup=None):
+    root = str(tmp / f"{name}-pool")
+    rclone = Rclone(store)
+    if pool is not None:
+        rclone.pool(root).update(pool)
+        pathlib.Path(root).mkdir(exist_ok=True)
+    backup = backup or pooled_capture(tmp, name, root)
+    world = World(data=False)
+    source = ["--objects-from", root] if pool is not None else []
+    outcome, text = run_tool(world, rclone, ["restore", str(backup), "--domain", "veyq.test", "--without-key",
+                                             "--config-secret-file", str(tmp / f"{name}.key"), *source, *extra,
+                                             *STORE_ARGS])
+    into_store = [c for c in rclone.calls if c["argv"][0] == "copy" and c["argv"][-4] == f"{ib.REMOTE}:blobs"]
+    return outcome, text, world.calls, rclone, into_store
+
+
+def full_pool() -> dict:
+    return {"sk1/0": obj(b"zero"), "sk1/1": obj(b"one!"), PROBE: obj(b"probe"), "orphan/0": obj(b"orf"),
+            "other/0": obj(b"another capture's")}
+
+
+@guarded
+def p7_restore_from_a_pool(tmp: pathlib.Path) -> None:
+    """B2 — objects are copied only into an empty store; the store check's probe is not data."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    check_kt = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/blobstore/StoreCheck.kt"
+    # The tools image ships no backend (as for not_data_cases): there only the tool's constant is checked.
+    check("P7 the probe the empty-store gate spares is the store check's own key",
+          ib.PROBE_KEY == PROBE and (not (root / "backend").is_dir() or f'"{PROBE}"' in check_kt.read_text()),
+          ib.PROBE_KEY)
+    outcome, _, calls, _, _ = pool_restore(tmp, "p7-held", {"someone/0": obj(b"x")}, full_pool())
+    check("P7 restore --objects-from onto a store holding one object is refused before load, naming the count",
+          outcome.startswith("refused:") and "already holds 1 object" in outcome and "load" not in calls
+          and not any(c.startswith("copy") for c in calls), outcome)
+    outcome, text, calls, rclone, into_store = pool_restore(tmp, "p7-probe", {PROBE: obj(b"probe")},
+                                                            full_pool())
+    check("P7 control: a store holding only the probe loads, copying exactly the index's keys the source holds (the "
+          "probe aside), the copy before the load",
+          outcome == "ok 0" and len(into_store) == 1 and sorted(into_store[0]["files_from"]) == ["orphan/0", "sk1/0",
+                                                                                              "sk1/1"]
+          and "--immutable" in into_store[0]["argv"] and "other/0" not in rclone.store
+          and calls.index("load") > max(i for i, c in enumerate(calls) if c.startswith("copy")), f"{outcome} {calls}")
+
+
+@guarded
+def p8_restore_checks_the_source(tmp: pathlib.Path) -> None:
+    """B3 — a source object whose MD5 differs from the index's refuses by name; a missing one too, until
+    --accept-missing-objects restores without it and the closing log names it. Orphans are tolerated (O2)."""
+    changed = {**full_pool(), "sk1/1": obj(b"ONE!")}
+    outcome, _, calls, _, _ = pool_restore(tmp, "p8-md5", {}, changed)
+    check("P8 restore: a source object of another MD5 refuses naming it, before anything is written",
+          outcome.startswith("refused:") and "changed object  sk1/1 (md5" in outcome and "load" not in calls
+          and not any(c.startswith("copy") for c in calls), outcome)
+    outcome, _, calls, _, _ = pool_restore(tmp, "p8-equal", {}, full_pool())
+    check("P8 control: equal MD5s load", outcome == "ok 0" and "load" in calls, outcome)
+    missing = {k: v for k, v in full_pool().items() if k != "sk1/1"}
+    outcome, _, calls, _, _ = pool_restore(tmp, "p8-missing", {}, missing)
+    check("P8 restore: a required object the source lacks refuses naming it",
+          outcome.startswith("refused:") and "missing object  sk1/1" in outcome and "load" not in calls, outcome)
+    outcome, text, calls, _, into_store = pool_restore(tmp, "p8-accept", {}, missing, "--accept-missing-objects")
+    check("P8 --accept-missing-objects copies what the source has, loads, and the closing log names the broken object",
+          outcome == "ok 0" and "load" in calls and "broken object  sk1/1" in text
+          and sorted(into_store[0]["files_from"]) == ["orphan/0", "sk1/0"], f"{outcome} {text[-300:]}")
+    no_orphan = {k: v for k, v in full_pool().items() if k != "orphan/0"}
+    outcome, text, calls, _, _ = pool_restore(tmp, "p8-orphan", {}, no_orphan)
+    check("P8 an indexed object no row requires (an orphan) absent from the source is reported and tolerated (O2)",
+          outcome == "ok 0" and "absent, not required  orphan/0" in text, f"{outcome} {text[-300:]}")
+    check("P8 --objects-from with a format-2 capture is refused (it holds its objects)",
+          pool_restore(tmp, "p8-fmt2", {}, full_pool(), backup=format2_capture(tmp, "p8-fmt2-capture"))[0]
+          .startswith("refused:"))
+
+
+def format2_capture(tmp: pathlib.Path, name: str) -> pathlib.Path:
+    """What Compose wrote before every capture became the index: the objects themselves in `objects/`."""
+    backup = tmp / name
+    (backup / "objects" / "sk1").mkdir(parents=True)
+    (backup / "objects" / "sk1" / "0").write_bytes(b"zero")
+    (backup / "objects" / "sk1" / "1").write_bytes(b"one!")
+    (backup / ib.DUMP_NAME).write_text("CREATE TABLE a (b int);\n-- flyway_schema_history\n")
+    (backup / ib.MANIFEST_NAME).write_text(json.dumps({
+        "backupFormat": 2, "domains": ["veyq.test"], "app": {"version": "0.4", "versionSource": "container-env"},
+        "database": {"name": "veyq", "schemaVersion": SCHEMA, "bytes": 1},
+        "store": {"bucket": "blobs", "objects": 2, "bytes": 8, "blobs": [["sk1", 2]], "openUploadSessions": 0},
+        "configSecret": {"placement": ib.SEPARATE}, "capture": {"startedAt": "x", "finishedAt": "y"}}))
+    return backup
+
+
+@guarded
+def p9_format2_and_the_empty_store(tmp: pathlib.Path) -> None:
+    """B6 — a format-2 capture restores only into an empty store; B7 — a format-3 restore without a source onto an
+    EMPTY store refuses naming --objects-from and the capture's pool."""
+    backup = format2_capture(tmp, "p9-fmt2")
+    outcome, _, calls, _, _ = pool_restore(tmp, "p9-held", {"someone/0": obj(b"x")}, None, backup=backup)
+    check("P9 a format-2 restore into a store holding an object is refused before load",
+          outcome.startswith("refused:") and "already holds 1 object" in outcome and "load" not in calls, outcome)
+    outcome, _, calls, rclone, into_store = pool_restore(tmp, "p9-empty", {}, None, backup=backup)
+    check("P9 control: a format-2 restore into an empty store copies its objects/ (the copy before the load) and loads",
+          outcome == "ok 0" and sorted(rclone.store) == ["sk1/0", "sk1/1"] and len(into_store) == 1
+          and calls.index("load") > max(i for i, c in enumerate(calls) if c.startswith("copy")), f"{outcome} {calls}")
+    pooled = pooled_capture(tmp, "p9-pooled", "/srv/veyq-pool")
+    outcome, _, calls, _, _ = pool_restore(tmp, "p9-b7", {PROBE: obj(b"probe")}, None, backup=pooled)
+    check("P9 a format-3 restore without a source onto an empty store refuses naming --objects-from and the pool",
+          outcome.startswith("refused:") and "the store is empty" in outcome
+          and "--objects-from /srv/veyq-pool" in outcome and "load" not in calls, outcome)
+    s3 = pooled_capture(tmp, "p9-s3", "s3:http://pool.example:9000/pbucket/pre")
+    outcome, _, _, _, _ = pool_restore(tmp, "p9-b7-s3", {}, None, backup=s3)
+    check("P9 the same for an S3 pool names s3:<path> and its endpoint",
+          "--objects-from s3:pbucket/pre with VEYQ_BACKUP_POOL_ENDPOINT=http://pool.example:9000" in outcome, outcome)
+
+
+def pool_cases(tmp: pathlib.Path) -> None:
+    p1_capture_into_a_pool(tmp)
+    p2_pool_short_fails(tmp)
+    p3_prune(tmp)
+    p4_prune_waits_for_the_ledger(tmp)
+    p6_s3_pool_keeps_no_credential(tmp)
+    p7_restore_from_a_pool(tmp)
+    p8_restore_checks_the_source(tmp)
+    p9_format2_and_the_empty_store(tmp)
+    p5_builder_is_copy_only(tmp)
 
 
 def main() -> int:
@@ -742,6 +1203,7 @@ def main() -> int:
         # As `main` runs the tool: under its owner-only umask, which `verify` holds every written file to.
         os.umask(ib.OWNER_ONLY_UMASK)
         gate_cases(tmp_path)
+        pool_cases(tmp_path)
     version_cases()
     not_data_cases()
     store_cases()
