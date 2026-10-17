@@ -93,6 +93,12 @@ export const SEAL_PURPOSES = {
   // Purpose only: under a KEK with a fresh salt, or under the account's own Master Key.
   'master-key': [],
   'identity-priv': [],
+  // A report share (ADR 0093 § 1, ./report.ts): the keys that open one reported item, sealed under the report's fresh
+  // K_report. Addressed by the item the server stores it for — a node or an application's item inside one (`NODE` or
+  // `ITEM`, as the report's wire names the kind) — so a share served for another item does not open.
+  'report-share': [['itemKind', 'role'], ['itemId', 'id']],
+  // The same for an upload link a WRITE_ONLY guest reports: addressed by the link's share id.
+  'report-link': [['shareId', 'shareId']],
 } as const satisfies Schema
 
 /**
@@ -135,6 +141,9 @@ export const SEAL_TO_PURPOSES = {
   // The instance moderation key M_n of one epoch, sealed to a moderator's identity (ADR 0099 § 2). There is one key per
   // epoch for the whole instance, so the epoch is the whole address; the recipient is the identity it is sealed to.
   'moderation-grant': [['epoch', 'uint']],
+  // A report's sealed part — K_report, the reason, the contact, the context (ADR 0093 § 2, ./report.ts) — to the epoch's
+  // public half. A report stays sealed to the epoch it was made under (ADR 0099 § 4), which the server stores beside it.
+  'moderation-report': [['epoch', 'uint']],
 } as const satisfies Schema
 
 type KindValue<K extends FieldKind> = K extends 'uint'
