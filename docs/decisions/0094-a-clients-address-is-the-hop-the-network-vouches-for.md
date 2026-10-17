@@ -1,6 +1,6 @@
 # ADR 0094 — A client's address is the hop the network vouches for
 
-- Status: Accepted 2026-10-16; built except the guest-write record (the moderation CR's)
+- Status: Accepted 2026-10-16; built — the guest-write record too (cr-guest-write-record, 2026-10-17; its stack scenario is lane L1's `guest-write record` stage)
 - Date: 2026-10-16
 
 ## Context

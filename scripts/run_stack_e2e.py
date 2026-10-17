@@ -64,6 +64,13 @@ the recipe:
      browser is baked into the image; a library one patch apart fails at launch) or is not installed at all. **A
      green needs at least one EXECUTED test** (the JUnit report): a selection that matched nothing, or a run whose
      every test was skipped, is red, never "nothing failed". Arguments after `--` go to `playwright test` as they are.
+  7b. **guest-write record** — the stack scenario ADR 0094 § For the moderation CR asks for, the half the `client port`
+     stage leaves open (that one reads an echo): `e2e/tests/features/guest-write-record.spec.ts` has a guest create a
+     folder through the release's Traefik and writes, from the browser container's own TCP table, the sockets it holds to
+     Traefik's :443 and the folder's id (`guest-write-record.json`). This stage reads the app's record of that write off
+     the instance's database: exactly one row, the browser's own address, and a port that is one of the browser's own
+     sockets' — the one Traefik accepted and its plugin stated (ADR 0094 decision 7). Skipped, saying so, when the
+     selection ran no test of that spec; red when it ran one and left no file.
   8. **sweep** — the ADR 0053 wire assertion, with the sensors `run_web_e2e.py` uses (`scripts/e2e_sweeps.py`,
      parameterised by compose project): every value the suite typed (`canaries-<spec>.json`, `e2e/src/canaries.ts`)
      must be absent from the instance's database, its bucket (keys and bytes), every container log of the project
@@ -910,6 +917,47 @@ def close_window(opened: Window) -> None:
         opened.statements.close()
 
 
+GUEST_WRITE_SPEC = "guest-write-record.spec.ts"
+UUID_SHAPE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def guest_write_record(stack: sweeps.Stack, workdir: Path) -> None:
+    """The app's record of a guest's write equals what the browser's own socket was (stage 7b, ADR 0094)."""
+    ran = {Path(name).name: n for name, n in junit_files(workdir / "junit.xml").items()}
+    if not ran.get(GUEST_WRITE_SPEC):
+        print(f"guest-write record: skipped — the selection ran no test of {GUEST_WRITE_SPEC}", flush=True)
+        return
+    expected_file = workdir / "guest-write-record.json"
+    if not expected_file.is_file():
+        raise Red(f"{GUEST_WRITE_SPEC} ran and left no {expected_file.name}: the write it records was never made")
+    expected = json.loads(expected_file.read_text(encoding="utf-8"))
+    object_id = str(expected.get("objectId", ""))
+    if not UUID_SHAPE.match(object_id):
+        raise Red(f"{expected_file.name} names no node id ({object_id!r})")
+    sockets = expected.get("sockets") or []
+    if not sockets:
+        raise Red(f"{expected_file.name} holds no socket of the browser to Traefik")
+    rows = subprocess.run(
+        stack.mariadb("mariadb", "-N", "-B", "-e",
+                      "SELECT object_kind, IFNULL(field_group, '-'), client_ip, IFNULL(client_port, '-') "
+                      f"FROM veyq_guest_write_record WHERE object_id = '{object_id}';", DATABASE),
+        check=True, capture_output=True, text=True,
+    ).stdout.split("\n")
+    rows = [r.split("\t") for r in rows if r.strip()]
+    if len(rows) != 1:
+        raise Red(f"the guest's create of {object_id} left {len(rows)} record row(s), not one: {rows}")
+    kind, group, ip, port = rows[0]
+    own = {(s["localIp"], int(s["localPort"])) for s in sockets}
+    if (kind, group) != ("NODE", "name"):
+        raise Red(f"the record names {kind}/{group}, not NODE/name")
+    if ip not in {s_ip for s_ip, _ in own}:
+        raise Red(f"the record holds address {ip}, not the browser's own ({sorted(own)})")
+    if port == "-" or (ip, int(port)) not in own:
+        raise Red(f"the record holds port {port}, not one of the browser's own sockets to Traefik ({sorted(own)})")
+    print(f"guest-write record: the app recorded {ip}:{port} for the guest's create — the browser's own socket, of "
+          f"{len(own)} it held to Traefik {expected.get('traefik')}:443", flush=True)
+
+
 def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
     """Every typed canary of the run, swept everywhere an operator of this instance could read it (ADR 0053).
 
@@ -1018,6 +1066,7 @@ def main() -> int:
             stack = sweep_stack(compose, project, installed.env) if installed else None
             opened = stage("window", window, stack, stamp, workdir, since)
             stage("browser", browser, compose, workdir, mirror, selection)
+            stage("guest-write record", guest_write_record, stack, workdir)
             stage("sweep", sweep, stack, workdir, opened)
     finally:
         if opened is not None:
