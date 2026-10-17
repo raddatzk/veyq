@@ -8,6 +8,8 @@ sources:
   - docs/crosscutting/security-model.md
   - docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md
   - docs/decisions/0032-capability-discovery-version-gating.md
+  - docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md
+  - docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md
 ---
 
 There is no central moderation service, because there is no central service. And an instance's operator cannot
@@ -70,8 +72,17 @@ existing data, and how to switch it, is on [Capabilities](/veyq/run/capabilities
 - **Report intake.** There is no form or address that collects abuse reports; a report reaches you however your
   members reach you.
 - **An operator action on a single share.**
+- **Moderators.** Decided, not built
+  ([ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)):
+  you will appoint existing accounts as moderators, who share one moderation key. They review and decide in the web
+  app on any tenant's address, with only that key open, never the rest of their account. A moderator can block a
+  share, its content, or a guest uploader with the link they came through; blocking a member and taking a tenant
+  offline stay yours, and a moderator can only propose them. You are a moderator too, and can step down while
+  another moderator holds the key. Where there are two or more, a different moderator reviews an objection.
 
-These are on the security model's target; see the [Security roadmap](/veyq/security/roadmap/).
+These are on the security model's target, decided in
+[ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md);
+see the [Security roadmap](/veyq/security/roadmap/).
 
 **How far this is proven.** Suspension, reactivation and the feature switches are covered by the backend's tests of
 their use-cases. No moderation path has run on a deployed instance.

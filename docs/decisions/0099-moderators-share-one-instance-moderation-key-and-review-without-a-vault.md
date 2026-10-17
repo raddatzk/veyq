@@ -1,10 +1,10 @@
 # ADR 0099 — Moderators share one instance moderation key, and review without a vault
 
-- Status: Proposed 2026-10-17 (draft for the owner); nothing of it is built. It changes
+- Status: Accepted 2026-10-17; nothing of it is built. It changes
   [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md), which is not built
-  in the parts touched here (§ 2, § 3, § 7, § 11–13), and [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
-  decision 3; both are edited in place once this is accepted (§ Consequences lists the edits). From
-  [inbox](../inbox.md) #463 (owner 2026-10-17: build it).
+  in the parts touched here (§§ 1–3, 6–7, 11–13), and [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
+  decisions 3, 5 and 6; both are edited in place (§ Consequences lists the edits). From [inbox](../inbox.md) #463
+  (owner 2026-10-17: build it; the three questions under § Decided with the owner answered as recommended).
 - Date: 2026-10-17
 
 ## Context
@@ -121,8 +121,9 @@ What exists to build on (measured in this worktree):
 - **With one moderator**, the objection does not wait: the decider reviews it, the log marks the review as by the
   decider, and the answer to the objector says so. Waiting for a second moderator who may never come would leave a
   measure unreviewed indefinitely; the courts stay open either way (0093 § 7).
-- **The Server Owner is a moderator from the moment moderation is turned on**, and holds the key. Whether they may
-  step down is open (§ Open 1).
+- **The Server Owner is a moderator from the moment moderation is turned on**, and holds the key. They may step
+  down while at least one other accepted moderator holds it: their grants go, the key rotates (decision 4), and they
+  can reappoint themselves (§ Decided with the owner, 1).
 - **Against the operator this is accountability, not a control.** The Server Owner owns the server and the roster;
   the rule binds a team, not the host.
 
@@ -143,12 +144,15 @@ What exists to build on (measured in this worktree):
   objection.
 - **Kept on the admin channel, for the Server Owner only:** the roster, minting and rotation, the instance contact,
   and the steps that reach beyond what was reported — blocking a member's sign-in, taking a tenant offline
-  ([ADR 0066](0066-tenant-suspension.md)) — see § Open 2. A moderator can propose them; the case shows the proposal.
+  ([ADR 0066](0066-tenant-suspension.md)). A moderator blocks the share, the content, and a guest uploader with the
+  link it came through (0093 § 6); the other two steps they propose: the case shows the proposal, and the Server
+  Owner takes it (§ Decided with the owner, 2).
 - **An authority's order** (0093 § 12) is entered in either surface: by a moderator with the key proof, or by the
   Server Owner in admin-web or `veyq-admin` without a key, as 0093 decided. Two operations on one service, because
   the admin-channel marker names a door per operation (ADR 0065).
-- **Where the queue is served:** the moderation surface is a route of web/ on every tenant host, and its queue spans
-  the instance (§ Open 3).
+- **Where the queue is served:** the moderation surface is a route of web/ on every tenant host, reachable only with
+  the `MODERATOR` role and the key proof; its queue spans the instance, and a review opens on the reported tenant's
+  host (§ Decided with the owner, 3).
 - **Limits, stated:** the surface is operator-served web, passive-operator-safe only (ADR 0026), which is moot
   against the operator, the moderation authority itself; and a script flaw on a tenant origin reaches what that
   origin stores for the moderator's account (a trusted-device wrap), so the surface never offers one and the docs
@@ -182,7 +186,7 @@ What exists to build on (measured in this worktree):
   exist; moderator accounts with no tenant; any signal of a moderator's identity to the affected (statements name the
   host, not the person).
 
-**ADR 0093 edits once this is accepted** (in place, per [the ADR rules](README.md)):
+**Edited in ADR 0093** (in place, per [the ADR rules](README.md)):
 
 - **§ 1**, the report share's last bullet: served against the key proof **and** the `MODERATOR` role (0099 § 2).
 - **§ 2**, first bullet: the moderation key is the instance moderation key's current epoch (0099), not the Server
@@ -190,7 +194,7 @@ What exists to build on (measured in this worktree):
 - **§ 3**, title and body: review and decisions in web/'s moderation surface for the moderator role, the viewer
   holding only the moderation key; admin-web keeps roster, key, contact, the Server-Owner-only steps and the order
   path; the "only flow where a Server Owner signs in on a tenant host" becomes the moderator's.
-- **§ 6**: which steps a moderator takes, which stay the Server Owner's (0099 § 6, § Open 2).
+- **§ 6**: which steps a moderator takes, which stay the Server Owner's (0099 § 6).
 - **§ 7**: the objection is reviewed by another moderator, with the single-moderator rule (0099 § 5).
 - **§ 11**: the instance events (0099 § 4); "shown per case in admin-web" becomes the moderation surface.
 - **§ 12**: the order path in both surfaces (0099 § 6). **§ 13**: the CSAM warning and the BKA export in the
@@ -203,7 +207,8 @@ Also edited: [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-se
 (moderation notices to moderators; their address confirmed in the moderation surface);
 [ADR 0065](0065-admin-ui-cli-separate-service.md)'s split rule gains the moderator as a fifth audience, whose gate is
 not the Server-Owner gate and so stays in web/; the [security model](../crosscutting/security-model.md)'s T&S section;
-the Run docs' moderation page.
+the Run docs' [moderation page](../../site/src/content/docs/run/moderation.md), which states the design as decided and
+not built.
 
 ## Rejected alternatives
 
@@ -228,18 +233,22 @@ the Run docs' moderation page.
 - **An objection that waits for a second moderator.** Leaves a measure unreviewed on every one-person instance.
 - **The role as a value of `server_role`.** One column, one role; the Server Owner is both.
 
-## Open for the owner
+## Decided with the owner
+
+The owner answered each question as recommended (2026-10-17); the options stay as the record of what was weighed.
 
 1. **May the Server Owner step down as a moderator?** (a) Never: the host moderates. (b) While at least one other
    accepted moderator holds the key: their grants go, the key rotates, and they can reappoint themselves. (c) Always.
-   **Recommendation: (b).** A company's IT admin who runs the instance should not have to see what Legal reviews,
-   child sexual abuse material above all; it is a boundary of duty, not of security — the Server Owner owns the
-   roster and the server — and the docs say so.
+   **Decided: (b)** (decision 5). A company's IT admin who runs the instance should not have to see what Legal
+   reviews, child sexual abuse material above all; it is a boundary of duty, not of security — the Server Owner owns
+   the roster and the server — and the docs say so.
 2. **Do moderators block a member's sign-in and take a tenant offline?** (a) No, the Server Owner only; a moderator
    blocks the share, the content and a guest uploader with their link, and proposes the rest. (b) Yes, every step of
-   0093 § 6. **Recommendation: (a).** Those two steps reach content and people nobody reported; blocking the share
-   and the content already stops what was reported from being served, so a deputy can keep the TCO hour without them.
-3. **Where is the instance-wide queue served?** (a) A route of web/ on every tenant host, the review opening on the
-   reported tenant's host. (b) A moderation host the Server Owner sets, its own route on both targets. **Recommendation:
-   (a)** — no new host, route or certificate on Compose or Helm; a moderator signs in where they already do, and a
-   tenant host serving the instance queue to a moderator shows them nothing they could not open anyway.
+   0093 § 6. **Decided: (a)** (decision 6). Those two steps reach content and people nobody reported; blocking the
+   share and the content already stops what was reported from being served, so a deputy can keep the TCO hour
+   without them.
+3. **Where is the instance-wide queue served?** (a) A route of web/ on every tenant host, reachable only with the
+   `MODERATOR` role and a moderation-key signature, the review opening on the reported tenant's host. (b) A moderation
+   host the Server Owner sets, its own route on both targets. **Decided: (a)** (decision 6) — no new host, route or
+   certificate on Compose or Helm; a moderator signs in where they already do, and a tenant host serving the
+   instance queue to a moderator shows them nothing they could not open anyway.

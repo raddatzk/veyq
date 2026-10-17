@@ -326,9 +326,20 @@ server-blind token makes this work without the server ever seeing a name:
 
 - A **public share** wraps the subtree's content keys to a per-share key. The **share secret lives in
   the URL fragment (`#…`)** and never reaches the server. Anyone with the link decrypts client-side.
-- **Trust & Safety operates at the share boundary.** An abuse report includes the full share URL (and
-  thus the secret), so the operator **can decrypt a reported public share** to verify, quarantine,
-  preserve evidence and act. The same intake serves takedown requests. **Built today: neither half.** There is
+- **Trust & Safety operates at the share boundary**
+  ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)). A
+  report carries a report share for exactly what was reported, sealed to the **instance moderation key**, so the
+  operator side **can decrypt what was reported, and nothing else**, to verify, hold evidence and act; an
+  authority's order acts on ids without a report. That key is one key in epochs, granted to each **moderator** the
+  Server Owner appoints (the Server Owner among them) and rotated forward when one leaves
+  ([ADR 0099](../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)).
+  Review and decisions run in `web/`'s moderation surface, gated by a `MODERATOR` role **and** a signature with
+  the moderation key, and the page that renders a report holds that key and nothing of the moderator's vault. A
+  moderator blocks a share, its content or a guest uploader; blocking a member and taking a tenant offline stay
+  the Server Owner's. A second moderator reviews an objection where there is one. Against the operator this is
+  accountability, not a control: the Server Owner owns the server and the roster, and the surface is
+  operator-served, passive-operator-safe only ([ADR 0026](../decisions/0026-client-trust-tiers.md)).
+  **Built today: neither half.** There is
   no report intake, and the operator has no action on a single share — revoking one is its creator's alone
   (`SharingHandler.revoke`); the operator's only lever is suspending the whole tenant, every link in it
   ([uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)). Built is the key a report
