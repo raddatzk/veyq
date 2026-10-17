@@ -1087,8 +1087,14 @@ jobs:
 
           docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
 
+      # The cosign every signature below is made with: the same line an operator verifies with. `cosign-release` is
+      # pinned because the installer's own default lags (v4.1.2 installs v3.0.6, inside GHSA-fx35-mq7g-6g98's range),
+      # and no Dependabot ecosystem reads it: a newer cosign is a bump by hand. scripts/validate_release_identity.py
+      # holds it to an exact version no older than scripts/veyqctl.py's COSIGN_MIN_VERSION.
       - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
 
       - name: Sign the published images (keyless)
         id: sign-images
@@ -1168,8 +1174,8 @@ jobs:
       # bundle `veyqctl` verifies before it trusts any sha256 or digest the manifest names — from GitHub, a mirror or a
       # directory alike (inbox #469: unsigned, the recipe was exactly as trustworthy as its source) — so nothing may
       # rewrite the manifest after it is signed; and `veyqctl`, for the copy an operator fetches by hand, before any
-      # manifest is checked. Both in the Sigstore bundle format (`--new-bundle-format`), the one cosign 3 reads by
-      # default and the only one a later cosign keeps: a published bundle can never be re-signed. And ONE
+      # manifest is checked. Both in the Sigstore bundle format: cosign 3's default and the only one it will keep, which
+      # is why no line passes the deprecated flag that once chose it — a published bundle can never be re-signed. And ONE
       # `gh release create` uploads the whole directory — because an immutable
       # release (a repository setting the owner switches on before the first release) takes no asset after it is
       # published — on the ref the step above pushed (`--verify-tag`), never a draft or a prerelease, which `veyqctl`
@@ -1202,8 +1208,8 @@ jobs:
             exit 1
           fi
 
-          cosign sign-blob --yes --new-bundle-format --bundle "${out}/v${VERSION}/veyqctl.bundle" "${out}/v${VERSION}/veyqctl"
-          cosign sign-blob --yes --new-bundle-format --bundle "${out}/v${VERSION}/manifest.json.bundle" "${out}/v${VERSION}/manifest.json"
+          cosign sign-blob --yes --bundle "${out}/v${VERSION}/veyqctl.bundle" "${out}/v${VERSION}/veyqctl"
+          cosign sign-blob --yes --bundle "${out}/v${VERSION}/manifest.json.bundle" "${out}/v${VERSION}/manifest.json"
 
           gh release create "v${VERSION}" --verify-tag --repo "$GITHUB_REPOSITORY" \
             --title "veyq ${VERSION}" --latest="$PUBLISH_LATEST" \
