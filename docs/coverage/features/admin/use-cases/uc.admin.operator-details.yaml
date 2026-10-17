@@ -62,7 +62,8 @@ acceptanceCriteria:
         reason: >-
           Over a real SMTP server in the JVM and the confirm endpoint over HTTP. The code entry on the panel is
           admin-web's (`OperatorPanel.test.ts`), waiting under the use-case gap; that notices reach the address only
-          once confirmed is for the CR that mails them (cr-report-and-hold).
+          once confirmed is held where the new-case mail is (uc.moderation.report,
+          ReportMailSliceTest.theInstanceContactsConfirmedNotificationAddressIsMailedTooAndAnUnconfirmedOneIsNot).
   - id: the-public-values-are-served-pre-auth-and-never-the-notification-address
     text: >-
       The contact with its languages, the statement address, the identification and the supervisory authority are

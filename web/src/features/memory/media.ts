@@ -873,7 +873,8 @@ export async function loadMediaExif(scopeId: string, media: MediaRef, memoryKey:
 }
 
 /**
- * What a report of this medium hands over (uc.moderation.report, cr-report-and-hold decision 3): the `K_blob` of every
+ * What a report of this medium hands over (uc.moderation.report, en.moderation.hold § What a report hands over): the
+ * `K_blob` of every
  * blob it has — the original and each derivative, tagged with its blob id — and the `K_field`s of its two metadata tiers,
  * `media-meta` and (only where this session reads it, a member) `media-exif`, each under the key the medium seals under
  * ([mediaKey]: `K_node`, or a WRITE_ONLY guest's `K_up`). The drop key never leaves; a key that does not open what it is

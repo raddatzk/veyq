@@ -1,6 +1,6 @@
-// What a report hands over for a node or a link (cr-report-and-hold decision 3, en.moderation.hold § What a report hands
-// over): the keys that open exactly that, role-tagged, for `v1.sealReportShare`. An application's item brings its own
-// keys (Memories' medium: `features/memory/media.ts`, `mediumReportKeys`).
+// What a report hands over for a node or a link (en.moderation.hold § What a report hands over): the keys that open
+// exactly that, role-tagged, for `v1.sealReportShare`. An application's item brings its own keys (Memories' medium:
+// `features/memory/media.ts`, `mediumReportKeys`).
 //
 // A node's NAME is sealed under the key its directory entry lives under — its parent's `K_node`, `K_SC` at the node's
 // epoch for a scope-root node, a guest's `K_up` for an identity folder — so `K_node` does not open it, and the report

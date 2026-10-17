@@ -1,4 +1,5 @@
-// What a report hands over for a node and a link (cr-report-and-hold decision 3), against real seals: each key opens the
+// What a report hands over for a node and a link (en.moderation.hold § What a report hands over), against real
+// seals: each key opens the
 // field it is tagged for and nothing else is handed over. A node's name is under its PARENT's key (`K_SC` at its epoch for
 // a scope-root node), so the report carries the name's own K_field beside K_node; a guest's link root is named by the link.
 import { describe, it, expect } from 'vitest'
@@ -41,6 +42,7 @@ describe('nodeReportKeys', () => {
   it('a member\'s node: K_node, its name\'s K_field (under the parent\'s key) and its meta\'s', () => {
     const keys = nodeReportKeys(access, tree, SCOPE, nodes[1])!
     expect(keys.map((k) => k.role)).toEqual(['NODE', 'NODE_NAME', 'NODE_META'])
+    expect(() => v1.encodeReportKeys(keys)).not.toThrow()
     expect(keys[0].key).toEqual(K_CHILD)
     expect(nameOf(nodes[1], keys[1].key)).toBe('Sommer')
     expect(() => nameOf(nodes[1], K_CHILD), 'K_node does not open its own name').toThrow()
@@ -68,6 +70,7 @@ describe('nodeReportKeys', () => {
     const guestTree: TreeSource = { ...tree, rootId: ROOT }
     const keys = nodeReportKeys(guest, guestTree, SCOPE, nodes[0])!
     expect(keys.map((k) => k.role)).toEqual(['NODE', 'LINK_NAME'])
+    expect(() => v1.encodeReportKeys(keys), 'every role is a token the sealer takes (16 characters at most)').not.toThrow()
     expect(new TextDecoder().decode(v1.openFieldWith({ purpose: 'share-memory-name' }, keys[1].key, fromB64std(sealedName)))).toBe('Familie')
   })
 })
@@ -80,6 +83,7 @@ describe('linkReportKeys', () => {
     const guest = { mode: 'guest', head: { kShare, share: { sealedName, sealedNote } } } as unknown as GuestAccess
     const keys = linkReportKeys(guest)
     expect(keys.map((k) => k.role)).toEqual(['SHARE', 'LINK_NAME', 'LINK_NOTE'])
+    expect(() => v1.encodeReportKeys(keys)).not.toThrow()
     expect(keys[0].key).toEqual(kShare)
     expect(new TextDecoder().decode(v1.openFieldWith({ purpose: 'share-note' }, keys[2].key, fromB64std(sealedNote)))).toBe('{"en":"hi"}')
   })

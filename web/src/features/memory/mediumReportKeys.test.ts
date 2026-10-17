@@ -1,4 +1,5 @@
-// What a report of a Memories medium hands over (cr-report-and-hold decision 3): the K_blob of every blob it has, each
+// What a report of a Memories medium hands over (en.moderation.hold § What a report hands over): the K_blob of
+// every blob it has, each
 // tagged with its blob id, and the K_field of its listed-metadata tier — keys that open exactly those seals. A wrap the
 // server moved onto another medium does not open, so it is not handed over.
 import { describe, it, expect, vi } from 'vitest'

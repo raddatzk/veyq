@@ -43,8 +43,15 @@ async function fillReport(page: Page, category: string, reason: string, address?
   if (address) await dialog.locator('#veyq-report-contact').fill(address)
   await dialog.getByRole('button', { name: 'Send report' }).click()
   await expect(dialog.getByText('Your report was received.')).toBeVisible({ timeout: 60_000 })
-  await dialog.getByRole('button', { name: 'Close' }).click()
+  await dialog.locator('.veyq-report-receipt').getByRole('button', { name: 'Close' }).click()
   await expect(dialog).toBeHidden()
+}
+
+/** Select a row in the level's Select mode the way a person does: the drawn box, which is the checkbox's label. */
+async function tick(page: Page, title: string): Promise<void> {
+  const box = page.getByRole('checkbox', { name: title, exact: true })
+  await page.locator('label.veyq-level-item-check').filter({ has: box }).click()
+  await expect(box).toBeChecked()
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -80,7 +87,7 @@ test(
     await page.getByRole('button', { name: 'New', exact: true }).click()
     await page.getByRole('menuitem', { name: 'Upload files' }).click()
     await (await chooser).setFiles({ name: recordTyped(fileName), mimeType: 'application/octet-stream', buffer: randomBytes(4096) })
-    await expect(page.getByRole('button', { name: fileName, exact: true })).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByRole('button', { name: `Open ${fileName}`, exact: true })).toBeVisible({ timeout: 60_000 })
 
     // A view-only link on the folder, for the guest.
     await page.getByRole('button', { name: 'Share', exact: true }).click()
@@ -96,7 +103,7 @@ test(
     await page.goto(tenantOrigin())
     await expect(page.getByRole('button', { name: folder, exact: true })).toBeVisible({ timeout: 60_000 })
     await page.locator('.veyq-select-button').click()
-    await page.getByRole('checkbox', { name: folder }).check()
+    await tick(page, folder)
     await page.locator('.veyq-select-report').click()
     await fillReport(page, 'A threat to someone’s life or safety', memberReason, reporterAddress)
   },
@@ -108,9 +115,9 @@ test(
   async () => {
     const { page } = guest
     await page.goto(shareLink)
-    await expect(page.getByRole('button', { name: fileName, exact: true })).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByRole('button', { name: `Open ${fileName}`, exact: true })).toBeVisible({ timeout: 60_000 })
     await page.locator('.veyq-select-button').click()
-    await page.getByRole('checkbox', { name: fileName }).check()
+    await tick(page, fileName)
     await page.locator('.veyq-select-report').click()
     await fillReport(page, 'A breach of the terms', guestReason)
   },

@@ -2,8 +2,8 @@
 // The moderation surface (ADR 0099 § 6, uc.moderation.serve-as-moderator): one route on every tenant host, outside the
 // member shell. It signs the moderator in, takes up the appointment, confirms the address the instance mail reaches,
 // and unlocks — with the password AND the Secret Key every time (owner decision Q2) — only to open the moderation
-// grants; the vault is dropped before the queue renders (`unlockModeration.ts`). The queue is empty until reports
-// exist (cr-report-and-hold); reaching it already needs the key proof.
+// grants; the vault is dropped before the queue renders (`unlockModeration.ts`). Reports arrive (uc.moderation.report),
+// but the queue does not list them yet: that is the review's; reaching it already needs the key proof.
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from 'primevue/card'
