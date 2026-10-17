@@ -679,6 +679,7 @@ const en = {
   },
   moderation: {
     title: 'Moderation',
+    loading: 'Reading your appointment…',
     signInCopy: 'Sign in with the account you were appointed with. This page opens no other part of your account.',
     password: 'Password',
     signIn: 'Sign in',
@@ -2542,6 +2543,7 @@ const de: typeof en = {
   },
   moderation: {
     title: 'Moderation',
+    loading: 'Deine Ernennung wird gelesen …',
     signInCopy: 'Melde dich mit dem Konto an, mit dem du ernannt wurdest. Diese Seite öffnet nichts anderes von deinem Konto.',
     password: 'Passwort',
     signIn: 'Anmelden',

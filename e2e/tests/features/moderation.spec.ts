@@ -32,10 +32,16 @@ const deputyDomain = () => `deputy.${stack().domain}`
 async function openModerationPanel(page: Page): Promise<void> {
   const { owner } = instance()
   await page.goto(stack().adminOrigin)
-  await page.getByLabel('Email', { exact: true }).fill(owner.email)
-  await passwordField(page).fill(recordTyped(owner.password))
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'Server administration', level: 1 })).toBeVisible({ timeout: 60_000 })
+  const console = page.getByRole('heading', { name: 'Server administration', level: 1 })
+  const email = page.getByLabel('Email', { exact: true })
+  // A console this context already signed in to opens signed in; a new one asks first.
+  await expect(console.or(email)).toBeVisible({ timeout: 60_000 })
+  if (await email.isVisible()) {
+    await email.fill(owner.email)
+    await passwordField(page).fill(recordTyped(owner.password))
+    await page.getByRole('button', { name: 'Sign in' }).click()
+  }
+  await expect(console).toBeVisible({ timeout: 60_000 })
   await page.getByRole('button', { name: 'Moderation', exact: true }).click()
   await expect(page.getByRole('heading', { level: 2, name: 'Moderation' })).toBeVisible()
 }
@@ -45,8 +51,10 @@ async function openModeration(page: Page, origin: string, account: { email: stri
   await expect(async () => {
     await page.goto(`${origin}/moderation`)
   }).toPass({ timeout: 60_000, intervals: [1_000] })
-  await expect(page.getByText('Moderation', { exact: true }).first()).toBeVisible({ timeout: 60_000 })
+  // The page reads the appointment of a session it holds before it shows anything; without one it asks to sign in.
   const signIn = page.getByRole('button', { name: 'Sign in', exact: true })
+  const state = page.locator('.moderation-accept, .moderation-address, .moderation-unlock, .moderation-none')
+  await expect(signIn.or(state).first()).toBeVisible({ timeout: 60_000 })
   if (await signIn.isVisible()) {
     await page.getByLabel('Email', { exact: true }).fill(account.email)
     await passwordField(page).fill(recordTyped(account.password))

@@ -32,6 +32,9 @@ const { t } = useI18n()
 const appointment = ref<ModeratorAppointment | null>(null)
 const unlocked = ref<ModerationUnlock | null>(null)
 const busy = ref(false)
+// A page that holds a session reads the appointment first: until it is read the page shows neither the sign-in form
+// nor a state, so a revived session never flashes the sign-in form (the browser pass clicked into that flash).
+const loading = ref(session.accessToken !== null)
 const error = ref('')
 const notice = ref('')
 
@@ -72,6 +75,7 @@ async function load() {
     },
     () => t('moderation.loadFailed'),
   )
+  loading.value = false
 }
 
 const signIn = () =>
@@ -147,8 +151,10 @@ onUnmounted(clearModerationKeys)
       <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
       <Message v-if="notice" severity="success" :closable="false" class="form-message">{{ notice }}</Message>
 
+      <p v-if="loading" class="veyq-form-copy moderation-loading">{{ t('moderation.loading') }}</p>
+
       <!-- Signed out: sign in here, never through the member login (it would open a device wrap). -->
-      <form v-if="!signedIn" class="veyq-form" @submit.prevent="signIn">
+      <form v-else-if="!signedIn" class="veyq-form moderation-sign-in-form" @submit.prevent="signIn">
         <p class="veyq-form-copy">{{ t('moderation.signInCopy') }}</p>
         <label>{{ t('common.email') }}<InputText v-model="email" type="email" autocomplete="username" required /></label>
         <label for="moderation-sign-in-password">{{ t('moderation.password') }}</label>

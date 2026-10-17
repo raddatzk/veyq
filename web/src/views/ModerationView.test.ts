@@ -64,6 +64,13 @@ describe('ModerationView', () => {
     expect(w.find('.moderation-sign-in').exists()).toBe(true)
   })
 
+  it('with a session, it shows no sign-in form while the appointment is read', async () => {
+    vi.mocked(myAppointment).mockReturnValue(new Promise(() => {}))
+    const w = await mountView()
+    expect(w.find('.moderation-sign-in-form').exists()).toBe(false)
+    expect(w.text()).toContain(t('moderation.loading'))
+  })
+
   it('an account that is not appointed is told so and offered nothing', async () => {
     vi.mocked(myAppointment).mockResolvedValue(appointment({ state: 'NONE', appointedAt: null, acceptedAt: null }))
     const w = await mountView()
