@@ -44,7 +44,9 @@ vi.mock('../features/instance/CapabilitiesPanel.vue', () => ({ default: { templa
 vi.mock('../features/instance/ExternalServicesPanel.vue', () => ({ default: { template: '<div class="stub-services" />' } }))
 vi.mock('../features/instance/ReleaseNoticesPanel.vue', () => ({ default: { template: '<div class="stub-notices" />' } }))
 vi.mock('../features/instance/InstanceMailPanel.vue', () => ({ default: { template: '<div class="stub-mail" />' } }))
-vi.mock('../features/instance/ModerationPanel.vue', () => ({ default: { template: '<div class="stub-moderation" />' } }))
+vi.mock('../features/instance/ModerationPanel.vue', () => ({
+  default: { emits: ['openTenant'], template: '<button class="stub-moderation" @click="$emit(\'openTenant\', \'tn-9\')" />' },
+}))
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
@@ -211,6 +213,19 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     await flushPromises()
     expect(w.find('.stub-moderation').exists()).toBe(true)
     expect(w.find('.stub-mail').exists()).toBe(false)
+  })
+
+  // uc.admin.suspend-tenant A4: a proposal to take a tenant offline is taken on that tenant's own page, where the
+  // suspension already lives — the moderation panel asks, the console opens it in its place.
+  it('opens the tenant a take-offline proposal names when the moderation panel asks for it', async () => {
+    vi.mocked(listTenants).mockResolvedValue([])
+    const { w } = await mountConsole()
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Moderation'))!.trigger('click')
+    await flushPromises()
+    await w.find('.stub-moderation').trigger('click') // the panel's "open the tenant"
+    await flushPromises()
+    expect(w.find('.stub-moderation').exists()).toBe(false)
+    expect(w.find('.stub-detail').attributes('tenant-id')).toBe('tn-9')
   })
 })
 

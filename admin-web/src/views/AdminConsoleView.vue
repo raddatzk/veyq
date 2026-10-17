@@ -228,7 +228,7 @@ async function signOut() {
         <CapabilitiesPanel v-else-if="serverPanel === 'capabilities'" />
         <ExternalServicesPanel v-else-if="serverPanel === 'services'" />
         <InstanceMailPanel v-else-if="serverPanel === 'mail'" />
-        <ModerationPanel v-else-if="serverPanel === 'moderation'" />
+        <ModerationPanel v-else-if="serverPanel === 'moderation'" @open-tenant="selected = $event; serverPanel = null" />
         <OperatingModePanel v-else-if="serverPanel === 'mode'" />
         <OperatorPanel v-else-if="serverPanel === 'operator'" />
         <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" @revoked="onRevoked" />

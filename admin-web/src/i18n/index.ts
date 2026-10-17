@@ -243,6 +243,44 @@ const en = {
       "grantsIncomplete": "The roster changed while the key was being minted; nothing was stored. Try again.",
       "epochStale": "Another new key was made in the meantime; nothing was stored. Look at the roster and try again.",
       "failed": "The change couldn’t be made."
+    },
+    "steps": {
+      "proposalsTitle": "Proposals",
+      "proposalsHint": "Steps the moderators proposed that only you can take: blocking a member’s sign-in, or taking a tenant offline. Take one, or decline it; the case shows which.",
+      "noProposals": "No open proposals.",
+      "stepMemberSignIn": "Block a member’s sign-in",
+      "stepTenantOffline": "Take the tenant offline",
+      "categories": {
+        "CHILD_SEXUAL_ABUSE": "Child sexual abuse material",
+        "TERRORIST_CONTENT": "Terrorist content",
+        "THREAT_TO_LIFE": "A threat to someone’s life or safety",
+        "ILLEGAL_CONTENT": "Other illegal content",
+        "TERMS_BREACH": "A breach of the terms"
+      },
+      "accountGone": "An account that no longer exists",
+      "proposedAt": "Proposed {at} · case {caseId}",
+      "block": "Block sign-in",
+      "blockTitle": "Block the sign-in of {address}?",
+      "blockBody": "Every session of this account ends at once, and every sign-in is refused until you lift the block. Nothing of the account is deleted.",
+      "openTenant": "Open the tenant to suspend it",
+      "decline": "Decline",
+      "declineTitle": "Decline this proposal?",
+      "declineBody": "Nothing is done to {target}. The case shows the proposal as declined, and the moderation log records it.",
+      "blocksTitle": "Sign-in blocks",
+      "noBlocks": "No sign-in is blocked.",
+      "blockedForCase": "Blocked since {at} · case {caseId}",
+      "blockedNoCase": "Blocked since {at} · no case",
+      "lift": "Lift",
+      "errors": {
+        "accountNotFound": "No account has this address any more.",
+        "caseNotFound": "The case this proposal belongs to no longer exists.",
+        "blockExists": "This account’s sign-in is blocked already.",
+        "cannotBlockOwner": "This is your own account, the server owner’s: its sign-in can’t be blocked.",
+        "proposalNotFound": "This proposal no longer exists.",
+        "blockNotFound": "This block no longer exists.",
+        "invalidRequest": "The step couldn’t be sent as it is. Read the list again and retry.",
+        "notOwner": "Only the server owner can take these steps."
+      }
     }
   },
   "store": {
@@ -713,6 +751,44 @@ const de: typeof en = {
       "grantsIncomplete": "Die Moderation hat sich geändert, während der Schlüssel erzeugt wurde; nichts wurde gespeichert. Versuche es erneut.",
       "epochStale": "Inzwischen wurde ein anderer neuer Schlüssel erzeugt; nichts wurde gespeichert. Sieh dir die Liste an und versuche es erneut.",
       "failed": "Die Änderung konnte nicht vorgenommen werden."
+    },
+    "steps": {
+      "proposalsTitle": "Vorschläge",
+      "proposalsHint": "Schritte, die die Moderation vorgeschlagen hat und die nur du vornehmen kannst: die Anmeldung eines Mitglieds sperren oder einen Tenant offline nehmen. Nimm einen davon vor oder lehne ihn ab; der Fall zeigt, was geschah.",
+      "noProposals": "Keine offenen Vorschläge.",
+      "stepMemberSignIn": "Anmeldung eines Mitglieds sperren",
+      "stepTenantOffline": "Den Tenant offline nehmen",
+      "categories": {
+        "CHILD_SEXUAL_ABUSE": "Darstellung sexuellen Missbrauchs von Kindern",
+        "TERRORIST_CONTENT": "Terroristische Inhalte",
+        "THREAT_TO_LIFE": "Eine Gefahr für Leben oder Sicherheit",
+        "ILLEGAL_CONTENT": "Andere rechtswidrige Inhalte",
+        "TERMS_BREACH": "Ein Verstoß gegen die Nutzungsbedingungen"
+      },
+      "accountGone": "Ein Konto, das es nicht mehr gibt",
+      "proposedAt": "Vorgeschlagen {at} · Fall {caseId}",
+      "block": "Anmeldung sperren",
+      "blockTitle": "Anmeldung von {address} sperren?",
+      "blockBody": "Jede Sitzung dieses Kontos endet sofort, und jede Anmeldung wird abgelehnt, bis du die Sperre aufhebst. Vom Konto wird nichts gelöscht.",
+      "openTenant": "Tenant öffnen, um ihn offline zu nehmen",
+      "decline": "Ablehnen",
+      "declineTitle": "Diesen Vorschlag ablehnen?",
+      "declineBody": "Mit {target} geschieht nichts. Der Fall zeigt den Vorschlag als abgelehnt, und das Moderationsprotokoll hält es fest.",
+      "blocksTitle": "Gesperrte Anmeldungen",
+      "noBlocks": "Keine Anmeldung ist gesperrt.",
+      "blockedForCase": "Gesperrt seit {at} · Fall {caseId}",
+      "blockedNoCase": "Gesperrt seit {at} · kein Fall",
+      "lift": "Aufheben",
+      "errors": {
+        "accountNotFound": "Kein Konto hat diese Adresse mehr.",
+        "caseNotFound": "Den Fall zu diesem Vorschlag gibt es nicht mehr.",
+        "blockExists": "Die Anmeldung dieses Kontos ist bereits gesperrt.",
+        "cannotBlockOwner": "Das ist dein eigenes Konto, das der Besitzperson des Servers: Seine Anmeldung kann nicht gesperrt werden.",
+        "proposalNotFound": "Diesen Vorschlag gibt es nicht mehr.",
+        "blockNotFound": "Diese Sperre gibt es nicht mehr.",
+        "invalidRequest": "Der Schritt konnte so nicht gesendet werden. Lies die Liste neu und versuche es erneut.",
+        "notOwner": "Nur die Besitzperson des Servers kann diese Schritte vornehmen."
+      }
     }
   },
   "store": {

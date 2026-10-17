@@ -9,6 +9,10 @@
 //     and the roster is read again after it, so what is shown is what is stored (a removal whose rotation was refused
 //     stands, and then shows as a due rotation);
 //   - each step that changes who holds the key asks first.
+// uc.moderation.take-a-measure step 5 adds the Server Owner's steps below the roster: the moderators' open proposals
+// — a member's sign-in block, taken here after a confirm, or the tenant's suspension, taken on the tenant's own page
+// (the console opens it; suspending settles the proposal) — each of which may be declined instead, and every sign-in
+// block in force, which is lifted here.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -17,8 +21,10 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import {
-  appointModerator, getModeration, ModeratorState, removeModerator, rotateModerationKey, RotationReason,
-  type InstanceModeration, type InstanceModerator,
+  appointModerator, blockSignIn, declineProposal, getModeration, getModerationSteps, liftSignInBlock, ModeratorState,
+  ProposalStep, removeModerator, rotateModerationKey, RotationReason,
+  type AccountSignInBlock, type InstanceModeration, type InstanceModerator, type ModerationSteps,
+  type OpenModerationProposal,
 } from './moderation'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useConfirm } from '../../shared/state/useConfirm'
@@ -28,8 +34,12 @@ import { decodeHttpError, isUnauthorized, HttpStatus } from '../../shared/httpEr
 const { t, locale } = useI18n()
 const { ask } = useConfirm()
 const on401 = handle401(useRouter())
+// A tenant-offline proposal is taken on the tenant's own page, where the suspension already lives: the console
+// opens it, as it opens the store page for the create dialog.
+const emit = defineEmits<{ openTenant: [tenantId: string] }>()
 
 const moderation = ref<InstanceModeration | null>(null)
+const steps = ref<ModerationSteps | null>(null)
 const address = ref('')
 const reason = ref<RotationReason>(RotationReason.ByHand)
 const error = ref('')
@@ -39,8 +49,10 @@ const busy = ref(false)
 // Server Owner changes it when it was an identity rotation (the server says that one is due, not why).
 const { pending: loading, error: loadErr } = useAsyncData(
   async () => {
-    moderation.value = await getModeration()
-    if (moderation.value.rotationDueSince) reason.value = RotationReason.Removal
+    const [roster, open] = await Promise.all([getModeration(), getModerationSteps()])
+    moderation.value = roster
+    steps.value = open
+    if (roster.rotationDueSince) reason.value = RotationReason.Removal
   },
   { onError: on401 },
 )
@@ -121,6 +133,73 @@ function stateOf(m: InstanceModerator): { text: string; tone: 'success' | 'warni
 }
 
 const dueSince = computed(() => moderation.value?.rotationDueSince?.toLocaleString(locale.value) ?? '')
+
+/** The panel's words for each refusal the Server Owner's step operations name (tag instance-moderation). */
+const STEP_REFUSALS: Record<string, string> = {
+  account_not_found: 'moderation.steps.errors.accountNotFound',
+  case_not_found: 'moderation.steps.errors.caseNotFound',
+  sign_in_block_exists: 'moderation.steps.errors.blockExists',
+  cannot_block_server_owner: 'moderation.steps.errors.cannotBlockOwner',
+  proposal_not_found: 'moderation.steps.errors.proposalNotFound',
+  sign_in_block_not_found: 'moderation.steps.errors.blockNotFound',
+  invalid_request: 'moderation.steps.errors.invalidRequest',
+}
+
+/** Run one step; show the steps as they now stand, or the refusal in words and the steps read again. */
+async function actOnSteps(change: () => Promise<ModerationSteps>): Promise<void> {
+  error.value = ''
+  busy.value = true
+  try {
+    steps.value = await change()
+  } catch (e) {
+    on401(e)
+    if (isUnauthorized(e)) return
+    const { status, code } = await decodeHttpError(e)
+    error.value = t(
+      code && STEP_REFUSALS[code]
+        ? STEP_REFUSALS[code]
+        : status === HttpStatus.forbidden ? 'moderation.steps.errors.notOwner' : 'moderation.errors.failed',
+    )
+    // A refusal is most often a step someone else took meanwhile: read them again so what is shown is what stands.
+    await getModerationSteps().then((s) => (steps.value = s)).catch(() => {})
+  } finally {
+    busy.value = false
+  }
+}
+
+async function block(p: OpenModerationProposal) {
+  if (!p.address) return
+  const accepted = await ask({
+    header: t('moderation.steps.blockTitle', { address: p.address }),
+    message: t('moderation.steps.blockBody'),
+    acceptLabel: t('moderation.steps.block'),
+    acceptIcon: 'pi pi-ban',
+  })
+  const address = p.address
+  if (accepted) await actOnSteps(() => blockSignIn(address, p.caseId))
+}
+
+async function decline(p: OpenModerationProposal) {
+  const accepted = await ask({
+    header: t('moderation.steps.declineTitle'),
+    message: t('moderation.steps.declineBody', { target: targetOf(p) }),
+    acceptLabel: t('moderation.steps.decline'),
+    acceptIcon: 'pi pi-times',
+  })
+  if (accepted) await actOnSteps(() => declineProposal(p.id))
+}
+
+async function lift(b: AccountSignInBlock) {
+  await actOnSteps(() => liftSignInBlock(b.id))
+}
+
+/** What the proposal would act on: the member's address, or the tenant's domain. */
+function targetOf(p: OpenModerationProposal): string {
+  if (p.step === ProposalStep.TenantOffline) return p.tenantDomain ?? p.tenantId ?? ''
+  return p.address ?? t('moderation.steps.accountGone')
+}
+
+const at = (d: Date) => d.toLocaleString(locale.value)
 </script>
 
 <template>
@@ -209,6 +288,87 @@ const dueSince = computed(() => moderation.value?.rotationDueSince?.toLocaleStri
             </div>
           </div>
         </template>
+
+        <!-- The Server Owner's steps (uc.moderation.take-a-measure step 5). Shown whether moderation is on or not: a
+             sign-in block outlives the key, and a block in force must stay liftable. -->
+        <template v-if="steps">
+          <div class="mod-steps">
+            <h3>{{ t('moderation.steps.proposalsTitle') }}</h3>
+            <p class="settings-muted">{{ t('moderation.steps.proposalsHint') }}</p>
+            <p v-if="!steps.proposals.length" class="settings-muted mod-proposals-empty">{{ t('moderation.steps.noProposals') }}</p>
+            <ul v-else class="mod-roster mod-proposals">
+              <li v-for="p in steps.proposals" :key="p.id" class="mod-row mod-proposal" :data-proposal="p.id">
+                <div class="mod-row__head">
+                  <strong>{{ p.step === ProposalStep.TenantOffline ? t('moderation.steps.stepTenantOffline') : t('moderation.steps.stepMemberSignIn') }}</strong>
+                  <span class="veyq-badge warning mod-proposal__category">{{ t(`moderation.steps.categories.${p.category}`) }}</span>
+                </div>
+                <span class="mod-proposal__target">{{ targetOf(p) }}</span>
+                <small class="settings-muted mod-proposal__when">{{ t('moderation.steps.proposedAt', { at: at(p.proposedAt), caseId: p.caseId }) }}</small>
+                <div class="veyq-dialog-action-row">
+                  <Button
+                    v-if="p.step === ProposalStep.MemberSignIn && p.address"
+                    type="button"
+                    class="mod-proposal__block"
+                    severity="danger"
+                    outlined
+                    icon="pi pi-ban"
+                    :label="t('moderation.steps.block')"
+                    :disabled="busy"
+                    @click="block(p)"
+                  />
+                  <Button
+                    v-else-if="p.step === ProposalStep.TenantOffline && p.tenantId"
+                    type="button"
+                    class="mod-proposal__tenant"
+                    outlined
+                    icon="pi pi-server"
+                    :label="t('moderation.steps.openTenant')"
+                    :disabled="busy"
+                    @click="emit('openTenant', p.tenantId)"
+                  />
+                  <Button
+                    type="button"
+                    class="mod-proposal__decline"
+                    severity="secondary"
+                    text
+                    icon="pi pi-times"
+                    :label="t('moderation.steps.decline')"
+                    :disabled="busy"
+                    @click="decline(p)"
+                  />
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <div class="mod-steps">
+            <h3>{{ t('moderation.steps.blocksTitle') }}</h3>
+            <p v-if="!steps.signInBlocks.length" class="settings-muted mod-blocks-empty">{{ t('moderation.steps.noBlocks') }}</p>
+            <ul v-else class="mod-roster mod-blocks">
+              <li v-for="b in steps.signInBlocks" :key="b.id" class="mod-row mod-block" :data-block="b.address">
+                <div class="mod-row__head">
+                  <strong>{{ b.address }}</strong>
+                </div>
+                <small class="settings-muted mod-block__since">
+                  {{ b.caseId
+                    ? t('moderation.steps.blockedForCase', { at: at(b.blockedAt), caseId: b.caseId })
+                    : t('moderation.steps.blockedNoCase', { at: at(b.blockedAt) }) }}
+                </small>
+                <div>
+                  <Button
+                    type="button"
+                    class="mod-block__lift"
+                    text
+                    icon="pi pi-unlock"
+                    :label="t('moderation.steps.lift')"
+                    :disabled="busy"
+                    @click="lift(b)"
+                  />
+                </div>
+              </li>
+            </ul>
+          </div>
+        </template>
       </template>
     </section>
   </section>
@@ -236,7 +396,8 @@ const dueSince = computed(() => moderation.value?.rotationDueSince?.toLocaleStri
   align-items: center;
 }
 .mod-appoint,
-.mod-rotate {
+.mod-rotate,
+.mod-steps {
   display: grid;
   gap: 0.5rem;
 }

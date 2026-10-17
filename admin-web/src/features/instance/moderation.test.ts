@@ -10,10 +10,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({ instanceModerationApi: vi.fn() }))
 
-import { epochOneFor, removeModerator, rotateModerationKey, type InstanceModeration } from './moderation'
+import {
+  blockSignIn, declineProposal, epochOneFor, getModerationSteps, liftSignInBlock, removeModerator, rotateModerationKey,
+  type InstanceModeration, type ModerationSteps,
+} from './moderation'
 import { instanceModerationApi } from '../../api/client'
 import type { InstanceModerator, MintModerationEpochRequest } from '../../api/generated/instance'
-import { fakeApi } from '../../test/apiMock'
+import { fakeApi, stubApi } from '../../test/apiMock'
 import { httpError } from '../../test/httpError'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -153,5 +156,45 @@ describe('removeModerator', () => {
       },
     })
     await expect(removeModerator('second')).rejects.toHaveProperty('response.status', 409)
+  })
+})
+
+// uc.moderation.take-a-measure step 5 — the Server Owner's steps on the wire: each facade call reaches its operation
+// with the body the contract names, and a refusal propagates (the panel and the CLI say it, not this file).
+describe('the Server Owner’s steps', () => {
+  const steps: ModerationSteps = { proposals: [], signInBlocks: [] }
+
+  it('reads the steps, declines by proposal id, and lifts by block id', async () => {
+    const mocks = stubApi(instanceModerationApi, {
+      getModerationSteps: steps,
+      declineModerationProposal: steps,
+      unblockAccountSignIn: steps,
+    })
+    expect(await getModerationSteps()).toBe(steps)
+    await declineProposal('p-1')
+    expect(mocks.declineModerationProposal).toHaveBeenCalledWith({ proposalId: 'p-1' })
+    await liftSignInBlock('b-1')
+    expect(mocks.unblockAccountSignIn).toHaveBeenCalledWith({ blockId: 'b-1' })
+  })
+
+  it('blocks by the trimmed address with the case, and with an explicit null case when none is named', async () => {
+    const mocks = stubApi(instanceModerationApi, { blockAccountSignIn: steps })
+    await blockSignIn('  member@example.com ', 'case-1')
+    expect(mocks.blockAccountSignIn).toHaveBeenLastCalledWith({
+      blockAccountSignInRequest: { address: 'member@example.com', caseId: 'case-1' },
+    })
+    await blockSignIn('member@example.com')
+    expect(mocks.blockAccountSignIn).toHaveBeenLastCalledWith({
+      blockAccountSignInRequest: { address: 'member@example.com', caseId: null },
+    })
+  })
+
+  it('rejects with the server’s refusal rather than swallowing it', async () => {
+    fakeApi(instanceModerationApi, {
+      blockAccountSignIn: async () => {
+        throw httpError(409, 'cannot_block_server_owner')
+      },
+    })
+    await expect(blockSignIn('owner@example.com')).rejects.toHaveProperty('response.status', 409)
   })
 })

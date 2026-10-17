@@ -1,6 +1,7 @@
-// uc.moderation.appoint-moderators (admin-web, ADR 0099) — the Server Owner's half of moderation, and the ONE place in
-// this package that mints the instance moderation key. The console's Server → Moderation panel and `veyq-admin
-// moderator …` / `moderation rotate` both call it, so the rules below hold for the UI and the CLI alike.
+// uc.moderation.appoint-moderators + uc.moderation.take-a-measure step 5 (admin-web, ADR 0099) — the Server Owner's
+// half of moderation, and the ONE place in this package that mints the instance moderation key. The console's
+// Server → Moderation panel and `veyq-admin moderator …` / `moderation …` / `account block|unblock` all call it, so
+// the rules below hold for the UI and the CLI alike.
 //
 // What it keeps honest:
 //   - admin-web holds no vault (ADR 0099 § 3): it draws `M_n`, derives the epoch's public bundle, seals `M_n` to each
@@ -19,16 +20,20 @@ import {
   type InstanceModeration,
   type MintModerationEpochRequestReasonEnum,
   type ModerationGrantForMint,
+  type ModerationSteps,
 } from '../../api/generated/instance'
 import { deserializeIdentityPublic, generateModerationKey, moderationBundle, sealTo } from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
-export type { InstanceModeration, InstanceModerator } from '../../api/generated/instance'
+export type {
+  AccountSignInBlock, InstanceModeration, InstanceModerator, ModerationSteps, OpenModerationProposal,
+} from '../../api/generated/instance'
 // Each re-export carries the generated const AND its union type, so `RotationReason.Removal` and `: RotationReason`
 // both read from here.
 export {
   InstanceModeratorStateEnum as ModeratorState,
   MintModerationEpochRequestReasonEnum as RotationReason,
+  OpenModerationProposalStepEnum as ProposalStep,
 } from '../../api/generated/instance'
 
 /** `M_n` sealed to one identity public key (standard base64, as the roster serves it) for epoch `epoch`. */
@@ -117,4 +122,36 @@ export async function rotateModerationKey(reason: MintModerationEpochRequestReas
 export async function removeModerator(accountId: string): Promise<InstanceModeration> {
   const after = await instanceModerationApi().removeModerator({ accountId })
   return after.rotationDueSince ? rotateModerationKey('REMOVAL', after) : after
+}
+
+// uc.moderation.take-a-measure step 5 — the Server Owner's steps. A moderator proposes; only the Server Owner takes
+// one: a member's sign-in block here, or the tenant's suspension (`features/tenants/tenants.ts`'s `suspendTenant`,
+// which settles every open TENANT_OFFLINE proposal of that tenant as taken). None of these touches a key; each
+// answers with the steps as they now stand.
+
+/** The open proposals and every sign-in block in force. Refusal: 403 `not_server_owner`. */
+export function getModerationSteps(): Promise<ModerationSteps> {
+  return instanceModerationApi().getModerationSteps()
+}
+
+/** Decline a proposal; the case shows it, the log records it. Refusal: 404 `proposal_not_found`. */
+export function declineProposal(proposalId: string): Promise<ModerationSteps> {
+  return instanceModerationApi().declineModerationProposal({ proposalId })
+}
+
+/**
+ * Block an account's sign-in, by its address, answering `caseId` when a proposal asked for it: every session of the
+ * account ends at once and every sign-in is refused until the block is lifted. Settles the account's open
+ * MEMBER_SIGN_IN proposals as taken. Refusals: 404 `account_not_found` / `case_not_found`, 409
+ * `sign_in_block_exists` / `cannot_block_server_owner`.
+ */
+export function blockSignIn(address: string, caseId?: string | null): Promise<ModerationSteps> {
+  return instanceModerationApi().blockAccountSignIn({
+    blockAccountSignInRequest: { address: address.trim(), caseId: caseId ?? null },
+  })
+}
+
+/** Lift a sign-in block; the account signs in again with its own keys. Refusal: 404 `sign_in_block_not_found`. */
+export function liftSignInBlock(blockId: string): Promise<ModerationSteps> {
+  return instanceModerationApi().unblockAccountSignIn({ blockId })
 }
