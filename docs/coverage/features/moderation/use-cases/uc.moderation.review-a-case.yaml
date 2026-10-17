@@ -1,0 +1,37 @@
+useCase: uc.moderation.review-a-case
+feature: moderation
+title: Review a case
+status: planned
+# Written by cr-moderation-review-and-measures phase 0; its later phases turn each gap into refs.
+acceptanceCriteria:
+  - id: the-queue-lists-cases-in-clear-fields
+    text: >-
+      Behind the role and a key proof the queue lists the instance's open and decided cases in clear fields only
+      (category, kind, times, report count, tenant, state, hold end), urgent categories first, then the oldest.
+  - id: a-case-shows-its-reports-and-log
+    text: >-
+      A case's details carry each report's sealed part, opened in the browser with its epoch's key, its measures,
+      proposals, hold and log; the server answers them only to a moderator with a proof over that case.
+  - id: review-reads-the-held-snapshot
+    text: >-
+      The review fetches the report shares and the held snapshot through moderation reads, which log one opened event per
+      fetch; it answers the held rows after the share, the node and the space were deleted, and nothing once the hold
+      ended.
+  - id: moderation-mode-renders-the-guest-viewer-without-guest-calls
+    text: >-
+      The share viewer in moderation mode unlocks only the moderation grants, opens the reports and report shares, and
+      renders the snapshot with the guest viewer read-only, calling no guest endpoint and no scope client.
+  - id: dismissal-ends-the-hold-at-once
+    text: >-
+      A dismissal closes the case, ends its hold at once (snapshot dropped, pins released, the sweep reclaims what was
+      deleted meanwhile) and dates the case's events to 31 December of the third year after the close.
+  - id: an-extension-needs-a-reason-and-a-bound
+    text: >-
+      A hold is extended only while alive, with a sealed reason and an end after the current one and at most six months
+      from now; the log records both.
+  - id: a-barred-reporter-is-refused
+    text: >-
+      A barred member's further reports, or a guest's through the barred link, are refused until the bar is lifted.
+gaps:
+  backend: Planned; built by cr-moderation-review-and-measures phases 2-3.
+  web: Planned; built by cr-moderation-review-and-measures phases 4-5.

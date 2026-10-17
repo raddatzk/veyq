@@ -83,6 +83,11 @@ sequenceDiagram
 - **A3 — public links switched off on the instance:** while `core.public-shares` is off, every link of every role
   answers the resolve, the blob endpoint and every other guest endpoint exactly as an unknown id — a `404`, before any
   password is asked — and serves again, unchanged, once it is back on ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md) A3, ADR 0088 decision 5).
+- **A4 — blocked by the operator:** a moderator blocked the link, or a guest uploader who came through it
+  ([uc.moderation.take-a-measure](../../moderation/use-cases/uc.moderation.take-a-measure.md)): every guest path answers
+  exactly as an unknown link, the curator's share list names the stop *blocked by the operator*, and neither a
+  reactivation nor — for a blocked link — a re-issue passes until a moderator lifts it. Content a moderator blocked
+  inside a live link shows as the placeholder *Blocked by the operator*, as it does for a member.
 - **E1 — link without the fragment key:** the `shareId` alone is **inert** — the server returns the wrapped key,
   but without `K_share` the client cannot unwrap `K_node`, so nothing decrypts. Both halves are required.
 - **E2 — wrong / guessed id:** unknown `shareId` → `404`. The 256-bit id is unguessable; there is no enumeration.

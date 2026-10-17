@@ -1,0 +1,80 @@
+# UC: Take a measure
+
+- **ID:** uc.moderation.take-a-measure
+- **Primary actor:** A **moderator** in web/'s moderation surface; for the steps beyond what was reported, the **Server
+  Owner** in admin-web or `veyq-admin`
+- **Secondary actor:** the share's creator, the uploader, every member and guest who reaches the item (they see the
+  effect)
+- **Goal:** Stop what was reported from being served, in the smallest step that does it, reversibly and on the record
+  ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+  §§ 4, 6; [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
+  § 6, decided with the owner 2).
+- **Preconditions:** An open or decided case the moderator reviewed ([uc.moderation.review-a-case](uc.moderation.review-a-case.md)).
+- **Postconditions (success):** A measure is a row naming its kind, its target id, the case, who took it and when; it
+  deletes nothing and holds until it is lifted. The case is decided and its hold ends six months after the decision.
+  Every step and every lift is an event in the moderation log.
+
+## Main flow
+
+1. The case's decision panel offers each step with its reach stated, for the targets the case knows: the reported item,
+   the links that reach it or that its reports came through, and its uploaders as the held rows name them.
+2. **Block the share.** The moderator blocks a link. Every guest path of it answers exactly as an unknown link (`404
+   share_not_found`); its creator's share list shows it stopped with the reason *blocked by the operator*, and they can
+   neither reactivate it nor re-issue it while the block stands.
+3. **Block the content.** The moderator blocks the reported node or medium. Every byte of it — a node's blob and every
+   blob below it, a medium's original and derivatives — is refused to everyone, members included, as `451
+   blocked_by_operator`; every listing that names it keeps it and marks it blocked, so members and guests see the
+   placeholder *Blocked by the operator* with no reason. The uploader can still delete it; replacing a blocked file's
+   content and restoring a blocked item from the trash are refused.
+4. **Block a guest uploader.** The moderator blocks a guest identity the held rows name as an uploader: its token is
+   refused on every write, and the link it came through is blocked with it (a guest could mint a new identity on the same
+   link). The link's creator may re-issue the link: the new link is a member's new decision.
+5. **Propose the Server Owner's steps.** For a member uploader the moderator proposes blocking their sign-in; for the
+   tenant, taking it offline. The case shows the proposal; the Server Owner sees it in admin-web (`veyq-admin moderation
+   proposals`) and takes it — a member's sign-in block, which ends every session of the account at once and refuses
+   every sign-in until lifted (`veyq-admin account block|unblock`); or the tenant's suspension
+   ([uc.admin.suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md)) — or declines it.
+6. Each step takes an optional note sealed to the moderation key; the case is *decided*, and its hold now ends six
+   months after the decision (until the statement of reasons moves the start to its sending).
+7. **Lift.** Any moderator lifts a measure of a case; the Server Owner lifts a sign-in block. A lift records when it was
+   lifted and writes its log event, and the target serves again unchanged. Lifting a case's last measure ends its hold.
+
+## Alternate / exception flows
+
+- **A1 — A target the case does not know.** A share, an item or an identity outside the case is refused
+  (`moderation_target_unknown`); a step that does not fit the item (a content block on an upload link) the same.
+- **A2 — The same step twice.** A measure already in force on that target is not taken again
+  (`moderation_measure_exists`).
+- **A3 — A moderator reaches for a Server Owner's step.** Blocking a member's sign-in and listing proposals are
+  operations of the admin channel: on the public listener they answer as an unknown route, and a moderator's session
+  is no Server Owner's.
+- **A4 — The Server Owner's own account.** Its sign-in cannot be blocked (`cannot_block_server_owner`).
+- **A5 — A copy escapes.** A copy a member made is a new blob under a new key; a block reaches only the reported one.
+- **A6 — A guest of a blocked link** sees an unknown link, exactly as after a revoke; a member keeps every other
+  function of the share list.
+
+## Quality notes
+
+- **Blocking deletes nothing**: every measure is a row that a lift closes, and the content, the link and the account stand
+  unchanged behind it.
+- **Measures are clear metadata**: the server knows which id is blocked, since it must refuse it; the notes are sealed.
+- **Every step hangs on ids, never on a report or a key**, so an authority's order takes the same steps.
+- **A member's view and a guest's are one view** (inbox #401): the placeholder is a row state both see, not a guest-only
+  screen.
+
+## User impact
+
+What was reported stops being shown — the link, the item or the person who uploaded it — without deleting anything, and
+everyone sees that it was the operator who blocked it.
+
+## Related
+
+- [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md),
+  [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md),
+  [ADR 0066](../../../decisions/0066-tenant-suspension.md)
+- [uc.moderation.review-a-case](uc.moderation.review-a-case.md),
+  [uc.sharing.share-public-viewer](../../sharing/use-cases/uc.sharing.share-public-viewer.md),
+  [uc.memory.gallery](../../memory/use-cases/uc.memory.gallery.md), [uc.depot.view-file](../../depot/use-cases/uc.depot.view-file.md),
+  [uc.account.login](../../account/use-cases/uc.account.login.md),
+  [uc.admin.suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md), [en.moderation.log](../enablers/en.moderation.log.md)
+- Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md)

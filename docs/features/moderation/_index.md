@@ -27,7 +27,12 @@ the log that keeps them accountable. A **core** feature
   step down.
 - ★ [Report what you see](use-cases/uc.moderation.report.md) — **built (backend + web)** (ADR 0093 §§ 1–2, 4–5): a
   member or a guest reports up to 100 items; one case per item, a hold on each, moderators mailed.
-- Review a report and decide — planned (ADR 0093 §§ 3, 6–7, 11–13).
+- ★ [Review a case](use-cases/uc.moderation.review-a-case.md) — **planned** (ADR 0093 §§ 3–5, 11): the queue, a case's
+  reports and log, the held snapshot in the share viewer's moderation mode, dismissing, extending a hold, barring a
+  reporter.
+- ★ [Take a measure](use-cases/uc.moderation.take-a-measure.md) — **planned** (ADR 0093 § 6, ADR 0099 § 6): block the
+  share, the content or a guest uploader; propose the Server Owner's steps; lift.
+- The statement of reasons and the objection — planned (ADR 0093 § 7).
 
 ## Enablers
 

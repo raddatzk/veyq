@@ -58,6 +58,9 @@ stateDiagram-v2
 - **A3 — a member's request arrives while suspension is in flight:** there is no window where the tenant
   reads `SUSPENDED` but an operation still passes, because the gate reads the same row the flip wrote, on
   every call.
+- **A4 — on a moderator's proposal** ([uc.moderation.take-a-measure](../../moderation/use-cases/uc.moderation.take-a-measure.md)):
+  admin-web's moderation panel and `veyq-admin moderation proposals` list a proposal to take the tenant offline with its
+  case; suspending the tenant settles every open such proposal as taken, and the Server Owner may decline one instead.
 - **E1 — the Server Owner themselves holds a membership in the suspended tenant** (the on-premise
   collapsed case, see *create-tenant*'s note): they are refused exactly like any other member. Server-Owner
   status is global and lets them *reactivate* the tenant through the (unaffected) server-admin surface, but

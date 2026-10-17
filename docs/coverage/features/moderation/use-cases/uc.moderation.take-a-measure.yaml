@@ -1,0 +1,43 @@
+useCase: uc.moderation.take-a-measure
+feature: moderation
+title: Take a measure
+status: planned
+# Written by cr-moderation-review-and-measures phase 0; its later phases turn each gap into refs.
+acceptanceCriteria:
+  - id: a-blocked-share-answers-as-an-unknown-link
+    text: >-
+      A blocked link answers every guest path exactly as an unknown link; its creator's list names the stop, and neither
+      a reactivation nor a re-issue passes while it stands.
+  - id: blocked-content-is-refused-and-marked
+    text: >-
+      Blocked content answers every byte read, a member's and a guest's, with 451 blocked_by_operator while a sibling is
+      still served; every listing keeps it marked blockedByOperator; its delete stays allowed, a content replace and a
+      restore are refused.
+  - id: every-byte-path-honours-a-content-block
+    text: >-
+      Every caller of presignGets checks the content block or is exempt with a reason; a new caller that does neither
+      turns the build red.
+  - id: a-blocked-guest-identity-and-its-link
+    text: >-
+      A blocked guest identity's token is refused and its link answers as unknown, while an identity on the link its
+      creator re-issued writes.
+  - id: server-owner-steps-are-proposals-on-the-admin-channel
+    text: >-
+      A moderator proposes a member's sign-in block or the tenant's suspension; only the Server Owner, on the admin
+      channel, lists the proposals and takes or declines them, and a moderator's session reaches none of it.
+  - id: a-sign-in-block-ends-every-session
+    text: >-
+      A member's sign-in block ends every session family of the account and refuses every sign-in until it is lifted;
+      the Server Owner's own account cannot be blocked.
+  - id: placeholder-for-members-and-guests
+    text: >-
+      Members and guests see "Blocked by the operator" in the level rows and tiles, the lightbox and the file view, with
+      no reason; the uploader is offered delete, never replace or restore.
+  - id: every-measure-is-lifted-and-logged
+    text: >-
+      Every measure is lifted by any moderator (a sign-in block by the Server Owner), the target serves again unchanged,
+      and every step and lift is a log event; a measure moves the hold's end to six months after the decision, and
+      lifting the case's last one ends it.
+gaps:
+  backend: Planned; built by cr-moderation-review-and-measures phases 2-3.
+  web: Planned; built by cr-moderation-review-and-measures phases 4-5.

@@ -1,8 +1,8 @@
 ---
 id: cr-moderation-review-and-measures
 title: A moderator reviews a case from the held snapshot and takes reversible measures by id
-status: planned
-satisfies: []            # phase 0 writes the use-cases; see § Use-cases
+status: in-progress
+satisfies: [uc.moderation.review-a-case, uc.moderation.take-a-measure]
 adrs: ["0093", "0099", "0066", "0065", "0026", "0088"]
 invariants:
   - operator-blind E2EE (only what was reported opens; the review page holds the moderation key and no vault)
@@ -99,7 +99,7 @@ coverage. Existing use-cases whose behaviour changes and gain an alternate flow 
 
 ## Phases
 
-- [ ] **0 docs** — the two use-cases, the alternate flows above, planned coverage. · Done when: `validate_feature_format.py`,
+- [x] **0 docs** — the two use-cases, the alternate flows above, planned coverage. · Done when: `validate_feature_format.py`,
   `validate_coverage.py`, `validate_doc_links.py`, `validate_changes.py` green.
 - [ ] **1 contracts** — the queue, open a case (fetch the report share), the snapshot reads in the guest viewer's
   schemas, decide (dismiss, block, propose, lift, extend, bar a reporter) on the moderation spec; the Server-Owner

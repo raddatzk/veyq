@@ -68,6 +68,10 @@
   member pressed Stop. Leaving the page stops the read.
 - **A6 — the file is replaced** (by this page or a peer): the viewer reads the new content; the old object URL is
   revoked.
+- **A7 — the file is blocked by the operator**
+  ([uc.moderation.take-a-measure](../../moderation/use-cases/uc.moderation.take-a-measure.md)): its row and this page
+  show *Blocked by the operator* with no reason; nothing is read (`451 blocked_by_operator`), no download and no replace
+  is offered, and the uploader may still delete it.
 
 ## Quality notes
 
