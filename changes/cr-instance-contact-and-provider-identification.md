@@ -196,7 +196,7 @@ planned). After phase 0 the front matter's `satisfies:` names both.
   mapper → the raw-JSON test is red; make the apply step write the tenant table too → the tenant-untouched test is
   red; skip the apply step on a mode change → the organisation-deletes-the-row test is red. *The guest-write switch
   defaults off in private* is `cr-guest-write-record`'s bite (§ Context).
-- [ ] **3 admin-web + CLI** — the setup step (the two modes, the notice, the tick for *private*); Server → Operating
+- [x] **3 admin-web + CLI** — the setup step (the two modes, the notice, the tick for *private*); Server → Operating
   mode (the notice, the preset's changes listed before setting); Server → Operator panel (the three addresses,
   languages, identification, supervisory authority, the code entry as `InstanceMailPanel` has it) and the two
   warnings, both only in the *organisation* mode; `veyq-admin operator show|set|clear` (no code entry, per
