@@ -76,8 +76,9 @@ operator pays for the held bytes. When the last pin of a key has expired, its re
 | Case dismissed, measure taken, lifted | at once / six months after the statement / with the lift | cr-moderation-review-and-measures, cr-statement-of-reasons-and-objection |
 | Child sexual abuse material, an authority's order | ADR 0093 § 4's table | cr-authority-orders-and-art18-reports |
 
-A scheduled purge (`HoldPurge`, which also runs at its first trigger after startup) deletes an expired hold with its
-snapshot and pins; the sweep catches up on its own.
+The moderation cleanup (`ModerationPurge`, hourly, which also runs at its first trigger after startup) deletes a hold
+past its end with its snapshot and pins (`Holds.purgeExpired`); the sweep catches up on its own — already from the pin's
+end, since the skip asks for a pin whose end is still ahead.
 
 ## Related
 

@@ -139,10 +139,23 @@ class StoreReclaimStore {
     @Transactional(Transactional.TxType.MANDATORY)
     fun record(storageKey: String, chunkCount: Int) = record(listOf(StoreObjectRef(storageKey, chunkCount)))
 
-    /** Rows the sweep may attempt now: not given up on, and past their backoff. Oldest first, at most [limit]. */
+    /**
+     * Rows the sweep may attempt now: not given up on, past their backoff, and **not held** — no hold pins their storage
+     * key with an end still ahead (ADR 0093 § 4, en.moderation.hold). Oldest first, at most [limit].
+     *
+     * **The hold's skip lives in this selection, not after it**, and that is the whole guarantee: a held row is never
+     * handed to the store, so it is never [defer]red — "a skip is not a failed attempt", or a hold longer than the
+     * backoff's five tries would abandon the very objects it keeps. Every store deletion passes this one query
+     * (`StoreReclaimSweep` is the only deleter, `validate_store_reclaim_arity.py` holds that every deleted row's key
+     * reaches this list), so no other path needs to know a hold exists. Once the last pin of a key has ended, its row
+     * is due exactly as it was; the hold's purge deletes the ended pin rows later, which changes nothing here.
+     */
     fun due(now: Instant, limit: Int): List<StoreReclaimEntity> =
-        StoreReclaimEntity.find("abandonedAt is null and nextAttemptAt <= ?1 order by createdAt, id", now)
-            .page(0, limit).list()
+        StoreReclaimEntity.find(
+            "from StoreReclaimEntity r where r.abandonedAt is null and r.nextAttemptAt <= ?1 and not exists " +
+                "(select 1 from HoldPinEntity p where p.storageKey = r.storageKey and p.expiresAt > ?1) order by r.createdAt, r.id",
+            now,
+        ).page(0, limit).list()
 
     /**
      * The row's objects are gone from the store: drop it.

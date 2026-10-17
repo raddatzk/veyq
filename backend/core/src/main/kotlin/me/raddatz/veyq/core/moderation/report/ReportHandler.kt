@@ -12,6 +12,9 @@ import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.moderation.ModerationEpochEntity
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationLog
+import me.raddatz.veyq.core.moderation.hold.HoldTarget
+import me.raddatz.veyq.core.moderation.hold.HoldTrigger
+import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.sharing.ShareAccessPolicy
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestGate
@@ -61,7 +64,8 @@ object ReportFailures {
 
 /**
  * Receives a report (ADR 0093 §§ 1–2, 5; uc.moderation.report): checks who may report what, then — in one transaction —
- * stores it, finds or opens one case per item and hands each its report share. Nothing is blocked; the server reads only
+ * stores it, finds or opens one case per item, hands each its report share and takes each case's hold
+ * ([Holds], en.moderation.hold). Nothing is blocked; the server reads only
  * the clear fields (category, epoch, time, kinds and ids) and stores the sealed ones as it got them.
  *
  * **Check order** (each refusal stores nothing): the reporter's own gate first — a member's scope access (the gate every
@@ -82,6 +86,7 @@ class ReportHandler(
     private val gate: ShareGuestGate,
     private val limiter: ReportRateLimiter,
     private val log: ModerationLog,
+    private val holds: Holds,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All reportable: MutableList<ReportableItems>,
     config: VeyqConfig,
@@ -201,6 +206,11 @@ class ReportHandler(
         val cases = placed.map { (item, scopeId) ->
             val itemId = item.id ?: reporterShare!!
             val (case, opened) = caseFor(item.kind, itemId, scopeId, r.category)
+            // The hold (ADR 0093 § 4): taken with the case, and again by a report that finds the case's hold ended —
+            // never twice while one is alive. A case-open hold ends 90 days after the report that took it.
+            if (!holds.aliveFor(case.id, now)) {
+                holds.take(case.id, holdTarget(item.kind, itemId, scopeId), HoldTrigger.CASE_OPEN, report.receivedAt.plus(Holds.CASE_OPEN))
+            }
             ReportShareEntity().apply {
                 id = UUID.randomUUID().toString()
                 reportId = report.id
@@ -211,6 +221,13 @@ class ReportHandler(
             ReportedCase(case.id, opened, ReportCategory.valueOf(case.category))
         }
         return ReportOutcome.Received(report.id, now, cases)
+    }
+
+    /** What a held item's snapshot is taken on: a node's live subtree (its `K_node` opens every key below it). */
+    private fun holdTarget(kind: ReportItemKind, itemId: String, scopeId: String): HoldTarget = when (kind) {
+        ReportItemKind.NODE -> HoldTarget.Subtree(scopeId, sharing.liveSubtreeIds(scopeId, itemId))
+        ReportItemKind.ITEM -> HoldTarget.Item(scopeId, itemId)
+        ReportItemKind.LINK -> HoldTarget.Link(scopeId, itemId)
     }
 
     /** The item's open case, its category raised to the more urgent one — or a new one. Under the space lock. */
