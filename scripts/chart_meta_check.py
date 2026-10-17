@@ -93,9 +93,10 @@ render, asserts — deriving every anchor from the source rather than listing it
        prints the schema violation on STDOUT (`[ERROR] values.yaml: - at '/gateway/…'`) and only a summary on
        stderr, so both streams are read.
   xiv. **A digest the values pin is the digest the pod runs.** Where a values file sets `image.digest` /
-       `admin.image.digest`, every container running that image renders as `…@<that digest>`; where it sets none,
-       the image carries no digest at all. Some file in `ci/` must set both, or the digest render is checked by
-       nobody, and `helm lint` with a digest that is not `sha256:<64 hex>` must be refused naming `digest`.
+       `admin.image.digest` / `backup.image.digest`, every container (init containers included) running that image
+       renders as `…@<that digest>`; where it sets none, the image carries no digest at all. Some file in `ci/` must
+       set all three, or the digest render is checked by nobody, and `helm lint` with a digest that is not
+       `sha256:<64 hex>` must be refused naming `digest`.
   xix. **The app container's store variables are the bundled-store hint, and no credential of a store**
        (cr-store-connection-in-admin-web phase 4, ADR 0089): `VEYQ_BUNDLED_STORE_ENDPOINT`, `_ADMIN_ENDPOINT` and
        `_ADMIN_TOKEN` are present, and no `VEYQ_BLOB_STORE_*` variable is — the store setting lives in the database.
@@ -118,6 +119,16 @@ render, asserts — deriving every anchor from the source rather than listing it
        rule naming `gateway.networking.k8s.io` grants only `httproutes` and `listenersets` (no `gateways`, no `*`),
        and some rule grants both — the positive control, or the sink could not reconcile at all (ADR 0064: the
        backend can neither add nor change a listener on the chart's `Gateway`).
+  xxiii.**With `backup.enabled`, the app's Deployment runs exactly one init container, `backup-gate`, on the tools
+       image (`veyq-tools`), mounting the claim `backup.existingClaim` names and NOT the config-secret claim — the
+       volume of the app container's mount covering the KEK path, found as (ii) finds it — with
+       `VEYQ_BACKUP_TARGET_RELEASE` equal to the app image's tag** (ADR 0098 decisions 1, 2 and 4c: a capture on the
+       backup claim can never hold the KEK, and the gate judges the release about to migrate).
+  xxiv.**With `backup.enabled: false`, the Deployment runs no init container and declares no volume its containers
+       do not mount** — and, the positive control on the same file, rendering it with the other choice
+       (`--set backup.enabled=…`) flips the gate: every file is rendered both ways.
+  xxv. **The schema refuses an install that makes neither backup choice, naming `/backup`** (the gate on with no
+       claim), and accepts each of the two (a claim named; `enabled: false`) — ADR 0098's explicit choice (owner 2b).
 
 The app container is recognised the way the compose guards recognise the app service: an image whose
 repository is `veyq` — never `veyq-admin` or any other veyq-namespaced sibling — with the datasource
@@ -145,7 +156,12 @@ written — no container had a read-only root, and the one policy admitted the a
 cluster, which could therefore forge the forwarded address the per-IP rate limiter keys on. Run against that chart,
 each of them was red; each was then bitten by a template or schema injection. (xx)–(xxii) came with the move from
 `Ingress` to the Gateway API (cr-helm-gateway-api): the chart rendered three `Ingress` objects and a Role on
-`ingresses` when they were written, and each was bitten by a template injection.
+`ingresses` when they were written, and each was bitten by a template injection. (xxiii)–(xxv) came with the backup
+gate (cr-kubernetes-backup-gate, ADR 0098) — no incident: they pin, on the render, the decision that the gate never
+mounts the KEK's claim and judges the app's own release, and that an install chooses; each was bitten by injection
+(the config-secret mount, a hard-coded target, the schema's `anyOf` removed). The trap they record: give the gate
+`QUARKUS_DATASOURCE_JDBC_URL` and the app-container recognition below takes it for the app and demands the KEK's
+claim of it — the gate carries `VEYQ_BACKUP_DB_*` instead.
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
 the manifests say and nothing about a cluster: not that a StorageClass exists for the claim, not that the
@@ -166,7 +182,12 @@ recognises the database by its image repository, so a database image of another 
 the app container's mount and the pod's
 `fsGroup`; it does not check the claim's access mode or that the same claim is not also mounted elsewhere. (xi)
 checks three contradictions, not the schema's completeness. (xiv) proves the rendered reference, not that the
-digest exists or is the one `site/src/content/docs/run/verify-a-release.md` verified — the chart cannot see the verification. And it says nothing about the compose recipe, which
+digest exists or is the one `site/src/content/docs/run/verify-a-release.md` verified — the chart cannot see the verification.
+(xxiii) proves what the init container is handed, not what it does: the gate's decisions are
+`scripts/instance_backup_selftest.py`'s, and that the claim is writable under `fsGroup`, that `restricted` admits the
+pod and that the gate captures cold were measured once, on a kind cluster (cr-kubernetes-backup-gate), not here. And
+it recognises the config-secret claim only through the app container's KEK path; a key the app reads from elsewhere
+is out of its reach. And it says nothing about the compose recipe, which
 its sibling guards own (`validate_compose_posture.py` holds that target's half of ADR 0071).
 
 **Why it sits OUTSIDE the `validate_*` glob.** It shells out to `helm`, which is not a repository artifact,
@@ -217,6 +238,10 @@ KT_CONST = re.compile(r'const\s+val\s+(OWNER_LABEL|OWNER_VALUE|HTTP_LISTENER|SHA
 APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
 DB_IMAGE = re.compile(r"(?:^|/)mariadb(?::|$)")
 ADMIN_IMAGE = re.compile(r"(?:^|/)veyq-admin(?::|$)")
+TOOLS_IMAGE = re.compile(r"(?:^|/)veyq-tools(?::|$)")
+# (xxiii)–(xxv) the backup gate (ADR 0098): its container name and the variable its target release travels in.
+GATE_NAME = "backup-gate"
+GATE_TARGET_ENV = "VEYQ_BACKUP_TARGET_RELEASE"
 WORKLOADS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
 # Kinds that exist only cluster-wide. The chart installs into one namespace and holds nothing beyond it.
 CLUSTER_SCOPED = {
@@ -365,11 +390,20 @@ def port_hits(entry, port_name: str | None, port_number: int) -> bool:
     return entry == port_number or (port_name is not None and entry == port_name)
 
 
+def backup_enabled(values: dict) -> bool:
+    return ((values.get("backup") or {}).get("enabled", True)) is not False  # the chart's default is true
+
+
+def every_container(spec: dict | None) -> list[dict]:
+    return list((spec or {}).get("containers") or []) + list((spec or {}).get("initContainers") or [])
+
+
 def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
     """(xiv) a digest the values set is the digest the pod runs, and one they leave unset adds none."""
     wanted = {
         "app": (((values.get("image") or {}).get("digest")) or "", APP_IMAGE),
         "admin": ((((values.get("admin") or {}).get("image") or {}).get("digest")) or "", ADMIN_IMAGE),
+        "tools": ((((values.get("backup") or {}).get("image") or {}).get("digest")) or "", TOOLS_IMAGE),
     }
     for which, (digest, pattern) in wanted.items():
         if digest:
@@ -377,9 +411,11 @@ def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
         images = [
             str(c.get("image") or "")
             for obj in rendered
-            for c in ((pod_spec(obj) or {}).get("containers") or [])
+            for c in every_container(pod_spec(obj))
             if pattern.search(str(c.get("image") or "").split("@", 1)[0])
         ]
+        if not images and which == "tools" and not backup_enabled(values):
+            continue  # the gate is off: no container runs the tools image, by (xxiv)
         if not images:
             errors.append(f"(xiv) {tag}: no container runs the {which} image, so its digest reached nothing this could check")
         for image in images:
@@ -390,6 +426,63 @@ def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
                 )
             if not digest and "@" in image:
                 errors.append(f"(xiv) {tag}: the {which} image renders as `{image}` with a digest the values never set")
+
+
+def image_tag(image: str) -> str | None:
+    """The tag of `registry/repo:tag[@digest]` — None for an image without one."""
+    last = image.split("@", 1)[0].rsplit("/", 1)[-1]
+    return last.split(":", 1)[1] if ":" in last else None
+
+
+def check_backup_gate(tag: str, enabled: bool, claim: str | None, rendered: list[dict]) -> bool:
+    """(xxiii) with the gate on, exactly one init container `backup-gate` on the tools image, mounting the named claim
+    and NOT the config-secret claim, its target release the app image's tag; (xxiv) with it off, no init container
+    and no volume no main container mounts. Returns whether the render carries the gate."""
+    app = next(((o, s, c) for o in rendered if o.get("kind") == "Deployment" for s in [pod_spec(o)]
+                for c in (s or {}).get("containers") or [] if is_app_container(c)), None)
+    if app is None:
+        return False  # reported elsewhere: no app container
+    obj, spec, container = app
+    inits = spec.get("initContainers") or []
+    volumes = {v.get("name"): v for v in spec.get("volumes") or []}
+
+    def claim_of(volume: str | None) -> str | None:
+        return ((volumes.get(volume) or {}).get("persistentVolumeClaim") or {}).get("claimName")
+
+    if not enabled:
+        mounted = {m.get("name") for c in spec.get("containers") or [] for m in c.get("volumeMounts") or []}
+        if inits:
+            errors.append(f"(xxiv) {tag}: backup.enabled is false and {name_of(obj)} still runs init container(s) {[c.get('name') for c in inits]}")
+        for leftover in sorted(set(volumes) - mounted):
+            errors.append(f"(xxiv) {tag}: backup.enabled is false and {name_of(obj)} still declares volume `{leftover}`, which no container mounts")
+        return bool(inits)
+    gates = [c for c in inits if c.get("name") == GATE_NAME]
+    if len(inits) != 1 or len(gates) != 1:
+        errors.append(f"(xxiii) {tag}: {name_of(obj)} runs init containers {[c.get('name') for c in inits]} — with backup.enabled, exactly one, `{GATE_NAME}`")
+        return bool(gates)
+    gate = gates[0]
+    image = str(gate.get("image") or "")
+    if not TOOLS_IMAGE.search(image.split("@", 1)[0]):
+        errors.append(f"(xxiii) {tag}: `{GATE_NAME}` runs `{image}`, not the veyq-tools image — the one capture implementation is released there (ADR 0098)")
+    gate_claims = {claim_of(m.get("name")): m.get("name") for m in gate.get("volumeMounts") or []}
+    if claim not in gate_claims:
+        errors.append(f"(xxiii) {tag}: `{GATE_NAME}` mounts claims {sorted(c for c in gate_claims if c)}, not backup.existingClaim `{claim}` — the captures would go nowhere the operator named")
+    # The KEK's claim, found the way (ii) finds it: the app container's mount covering the resolved config-secret path.
+    path = resolve_secret_path(container, workdir, default_path)
+    kek = next((m.get("name") for m in container.get("volumeMounts") or [] if path and covers(path, str(m.get("mountPath", "")))), None)
+    if kek is not None and (kek in gate_claims.values() or (claim_of(kek) and claim_of(kek) in gate_claims)):
+        errors.append(
+            f"(xxiii) {tag}: `{GATE_NAME}` mounts `{kek}`, the config-secret claim — a capture on the backup claim could then "
+            f"hold the KEK, the leaked backup ADR 0056 §1 exists to prevent; the gate never reads the key (ADR 0098 decision 4c)"
+        )
+    target = next((e.get("value") for e in gate.get("env") or [] if e.get("name") == GATE_TARGET_ENV), None)
+    app_release = image_tag(str(container.get("image") or ""))
+    if target is None or target != app_release:
+        errors.append(
+            f"(xxiii) {tag}: `{GATE_NAME}`'s {GATE_TARGET_ENV} is {target!r}, but the app container starts release "
+            f"{app_release!r} — the gate would judge a release change that is not the one about to migrate"
+        )
+    return True
 
 
 def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list) -> None:
@@ -814,6 +907,18 @@ def check(values_file: pathlib.Path) -> list[dict]:
         check_network_policies(tag, rendered)
     check_image_digests(tag, values, rendered)
     check_rbac(tag, rendered)
+    enabled = backup_enabled(values)
+    if first:
+        check_backup_gate(tag, enabled, (values.get("backup") or {}).get("existingClaim"), rendered)
+        # (xxiv) and its positive control on the same file: the other choice renders the other shape.
+        flip = ["--set", "backup.enabled=false"] if enabled else ["--set", "backup.enabled=true", "--set", "backup.existingClaim=flipped-backup"]
+        flipped = render(values_file, flip)
+        has_gate = check_backup_gate(f"{tag} {' '.join(flip)}", not enabled, None if enabled else "flipped-backup",
+                                     objects(flipped) if flipped else [])
+        if not flipped:
+            errors.append(f"(xxiv) {tag}: the render with {' '.join(flip)} failed, so the other backup choice is unchecked")
+        elif has_gate == enabled:
+            errors.append(f"(xxiv) {tag}: flipping backup.enabled did not flip the gate — the switch renders nothing different")
 
     if not first:
         return rendered
@@ -901,7 +1006,7 @@ digests_set: set[str] = set()
 renders = {f.name: check(f) for f in values_files}
 
 # (xiv) the digest path is rendered by some file, and the schema refuses a digest that is not one.
-for which in ("app", "admin"):
+for which in ("app", "admin", "tools"):
     if values_files and which not in digests_set:
         errors.append(f"(xiv) no file in {CI_DIR.relative_to(ROOT)} sets the {which} image's digest, so the `repository:tag@digest` render is checked by nobody")
 if values_files:
@@ -929,7 +1034,19 @@ if values_files:
                 errors.append(f"(xviii) `helm lint {' '.join(extra)}` passed — an enabled policy set with no gateway data plane named must be refused")
             elif "ingressFrom" not in output:
                 errors.append(f"(xviii) `helm lint {' '.join(extra)}` failed, but its output never names `ingressFrom`:\n{output.strip()}")
-    for key in ("image.digest", "admin.image.digest"):
+    # (xxv) the backup choice is explicit: neither (the gate on, no claim) is refused naming `backup`, and each of the
+    # two choices passes — the file's own and the gate switched off.
+    neither = ["--set", "backup.enabled=true", "--set", "backup.existingClaim="]
+    for extra, refused in ((neither, True), (["--set", "backup.enabled=false"], False),
+                           (["--set", "backup.enabled=true", "--set", "backup.existingClaim=a-claim"], False)):
+        code, output = lint(base, extra)
+        if refused and code == 0:
+            errors.append(f"(xxv) `helm lint {' '.join(extra)}` passed — an install that neither names backup.existingClaim nor says backup.enabled: false must be refused (ADR 0098, owner 2b)")
+        elif refused and "/backup" not in output:
+            errors.append(f"(xxv) `helm lint {' '.join(extra)}` failed, but its output never names `/backup`:\n{output.strip()}")
+        elif not refused and code != 0:
+            errors.append(f"(xxv) `helm lint {' '.join(extra)}` failed — that is a choice the schema must accept:\n{output.strip()}")
+    for key in ("image.digest", "admin.image.digest", "backup.image.digest"):
         code, output = lint(values_files[0], ["--set", f"{key}=sha256:not-a-digest"])
         if code == 0:
             errors.append(f"(xiv) `helm lint --set {key}=sha256:not-a-digest` passed — the schema must refuse a digest that is not `sha256:<64 hex>`")
@@ -954,5 +1071,7 @@ print(
     f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on the Gateway and in the properties file, "
     f"its contradictions refused by the schema; a pinned image digest is the digest the pod runs; no Ingress, every "
     f"route on the one Gateway on the listener its TLS mode names, the sink's listeners present, and a Role on "
-    f"httproutes/listenersets with nothing on gateways"
+    f"httproutes/listenersets with nothing on gateways; the backup gate on the tools image where on — the named claim, "
+    f"never the config-secret claim, the app's release as its target — nothing of it where off, and no install that "
+    f"makes neither choice"
 )

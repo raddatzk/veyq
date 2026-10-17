@@ -102,6 +102,24 @@ def place_cases(tmp: pathlib.Path) -> None:
     ib.place_key(source, target)
     check("place: an existing key with a looser mode is overwritten and tightened to 0600",
           stat.S_IMODE(target.stat().st_mode) == 0o600 and target.read_bytes() == source.read_bytes())
+    # A restore Job runs as the application's uid on a claim whose directory is root-owned (fsGroup gives a group,
+    # never an owner): --key-as-runtime-user places the key as this process, and refuses root and a stranger's key.
+    runtime_dir = tmp / "claim"
+    runtime_dir.mkdir()
+    runtime_key = runtime_dir / ib.KEY_NAME
+    check("place --key-as-runtime-user: the key is born to this process's uid, 0600",
+          ib.place_key(source, runtime_key, True).action == ib.AS_IS and runtime_key.stat().st_uid == os.geteuid()
+          and stat.S_IMODE(runtime_key.stat().st_mode) == 0o600)
+    saved = ib.effective_uid
+    for label, euid in (("as root, which would make the key root's", 0), ("over a key another uid owns", 4242)):
+        ib.effective_uid = lambda euid=euid: euid
+        try:
+            ib.key_gate(runtime_key, True)
+            check(f"gate --key-as-runtime-user: refused {label}", False, "no BackupError")
+        except ib.BackupError as e:
+            check(f"gate --key-as-runtime-user: refused {label}", True, str(e))
+        finally:
+            ib.effective_uid = saved
     try:
         ib.key_gate(tmp / "missing-dir" / ib.KEY_NAME)
         check("gate: a missing directory is refused, not created", False, "no BackupError")
@@ -537,6 +555,15 @@ def g2_refusals(tmp: pathlib.Path) -> None:
         outcome, root, _ = gate(tmp, f"g2-{n}-control", World(), **control)
         check(f"G2 control: one field away from {label}, the gate captures",
               outcome == "ok 0" and len(captures(root)) == 1, outcome)
+
+
+    def two_captures(root: pathlib.Path) -> None:
+        for name, release in (("2020-01-01T00-00-00Z", "0.5"), ("2020-01-02T00-00-00Z", "0.6")):
+            (root / ib.CAPTURES_DIR / name).mkdir(parents=True)
+            (root / ib.CAPTURES_DIR / name / ib.MANIFEST_NAME).write_text(json.dumps({"app": {"version": release}}))
+    outcome, _, _ = gate(tmp, "g2-way-back", World(), target="0.5", record={"release": "0.6"}, prepare=two_captures)
+    check("G2 gate: a refused downgrade names the capture taken FROM the target release as the way back, not the newest",
+          "restore the capture 2020-01-01T00-00-00Z, taken from release 0.5" in outcome, outcome)
 
 
 @guarded

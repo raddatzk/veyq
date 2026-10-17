@@ -65,7 +65,7 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      version and pushes to `oci://ghcr.io/<owner>/charts`; a `cosign sign` step names `charts/<name>`; and the
      chart's default image repositories are exactly the upstream images the Run area's verification page
      (`site/src/content/docs/run/verify-a-release.md`) verifies by digest — `image.repository` the chart's own
-     name, `admin.image.repository` its `-admin` sibling. And that page verifies the chart itself by digest (assertion 7 collects `ghcr.io/<owner>/charts/<name>`
+     name, `admin.image.repository` its `-admin` sibling, `backup.image.repository` its `-tools` one (ADR 0098). And that page verifies the chart itself by digest (assertion 7 collects `ghcr.io/<owner>/charts/<name>`
      tokens as it collects the images', and holds them to a digest the same way).
   4. **The release carries every file its recipe reads** (ADR 0096). `scripts/release_assets.py` derives the
      recipe set — the production compose file, `.env.example`, and every file the compose file reads relative to
@@ -1586,7 +1586,8 @@ else:
     values_file = CHART_DIR / "values.yaml"
     values = (yaml.safe_load(values_file.read_text()) or {}) if values_file.is_file() else {}
     chart_name = str((yaml.safe_load(CHART.read_text()) or {}).get("name") or "")
-    for key, image in (("image", chart_name), ("admin.image", f"{chart_name}-admin")):
+    for key, image in (("image", chart_name), ("admin.image", f"{chart_name}-admin"),
+                       ("backup.image", f"{chart_name}-tools")):
         node = values
         for part in key.split("."):
             node = (node or {}).get(part) if isinstance(node, dict) else None

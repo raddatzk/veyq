@@ -30,3 +30,9 @@ secrets:
   garageAdminToken: ci-only-not-a-token
 gateway:
   className: traefik
+backup:
+  # The gate on (ADR 0098): a claim named, and a digest, so the tools image's `repository:tag@digest` render is checked.
+  existingClaim: veyq-backup
+  image:
+    repository: ghcr.io/example/veyq-tools
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000003"

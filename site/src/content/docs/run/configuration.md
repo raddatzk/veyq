@@ -54,7 +54,8 @@ Run `helm show values` for the chart and its comments. The chart generates no se
 refuses an install that leaves a required value unset, naming it. Required: `domain`, `storeDomain`,
 `gateway.className`, every key under `secrets` (or `secrets.existingSecret`), `networkPolicy.ingressFrom` while
 network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `false`, `gateway.tls.secretName` in
-`shared` mode, and `gateway.tls.acme.email` when the ACME issuer is on.
+`shared` mode, `gateway.tls.acme.email` when the ACME issuer is on, and a backup choice: `backup.existingClaim`, or
+`backup.enabled: false`.
 
 ### Domains, images, HSTS
 
@@ -141,6 +142,26 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `garage.resources.limits.memory` | `512Mi` | |
 | `garage.resources.requests.cpu` | `100m` | |
 | `garage.resources.requests.memory` | `128Mi` | |
+
+### Backups
+
+The backup gate captures the database and an index of the store before a release change migrates them
+([Upgrade](/veyq/run/upgrade/), [Backup and restore](/veyq/run/backup-and-restore/)).
+
+| Value | Default | Meaning |
+|---|---|---|
+| `backup.enabled` | `true` | The gate. `false` is a choice the schema accepts: then the backup before an upgrade is yours, by hand |
+| `backup.existingClaim` | — | A PersistentVolumeClaim of your own for the captures; required while the gate is on. The chart creates none |
+| `backup.keep` | `3` | Complete captures kept; the newest is never pruned |
+| `backup.request` | — | Change it to ask for a capture without a release change |
+| `backup.image.repository` | `ghcr.io/raddatzk/veyq-tools` | The tools image |
+| `backup.image.tag` | `image.tag` | The application's release; the gate refuses any other |
+| `backup.image.digest` | — | Its verified digest |
+| `backup.image.pullPolicy` | `IfNotPresent` | |
+| `backup.store.existingSecret` | — | For a store of your own: a Secret with `endpoint`, `bucket`, `accessKey`, `secretKey` (optionally `region`), allowed to list the bucket |
+| `backup.resources.limits.memory` | `256Mi` | |
+| `backup.resources.requests.cpu` | `100m` | |
+| `backup.resources.requests.memory` | `64Mi` | |
 
 ## Settings in the admin console
 

@@ -840,8 +840,12 @@ def key_owner_plan(euid: int, parent_uid: int, parent_gid: int, existing_uid: in
     return KeyOwnerPlan(AS_IS)
 
 
-def key_gate(target: Path) -> KeyOwnerPlan:
-    """The key's placement, decided and checked before the restore writes anything (A5 would refuse a retry)."""
+def key_gate(target: Path, as_runtime_user: bool = False) -> KeyOwnerPlan:
+    """The key's placement, decided and checked before the restore writes anything (A5 would refuse a retry).
+
+    `as_runtime_user` is the cluster's case: a restore Job runs as the application's own uid (its `runAsUser`), and
+    a claim's directory is root-owned — `fsGroup` gives it a group, never an owner — so the directory names nobody
+    to hand the key to, and the key born to this process IS born to the application's uid."""
     parent = target.parent
     if not parent.is_dir():
         raise BackupError(f"--config-secret-file {target}: its directory {parent} does not exist. On the production "
@@ -850,6 +854,16 @@ def key_gate(target: Path) -> KeyOwnerPlan:
     st = parent.stat()
     existing_uid = target.stat().st_uid if target.exists() else None
     euid = effective_uid()
+    if as_runtime_user:
+        if euid == 0:
+            raise BackupError(f"--key-as-runtime-user: this tool runs as root, so the key would be born root's — run it "
+                              f"as the application's uid (a Kubernetes Job's runAsUser, 10001 for the veyq image)")
+        if existing_uid not in (None, euid):
+            raise BackupError(f"--config-secret-file {target}: a key already there belongs to uid {existing_uid}, not to "
+                              f"this tool's uid {euid}, the application's — overwriting it would keep that owner")
+        if not os.access(parent, os.W_OK | os.X_OK):
+            raise BackupError(f"--config-secret-file {target}: its directory is not writable by uid {euid}")
+        return KeyOwnerPlan(AS_IS)
     plan = key_owner_plan(euid, st.st_uid, st.st_gid, existing_uid)
     if plan.action == REFUSE:
         raise BackupError(f"--config-secret-file {target}: {plan.reason}")
@@ -858,10 +872,10 @@ def key_gate(target: Path) -> KeyOwnerPlan:
     return plan
 
 
-def place_key(source: Path, target: Path) -> KeyOwnerPlan:
+def place_key(source: Path, target: Path, as_runtime_user: bool = False) -> KeyOwnerPlan:
     """Write leg (c) at `target`, `0600`, owned per `key_gate` — owner and mode set BEFORE the bytes land, so the
     restored key is never readable by a user it was not meant for, not even for a moment."""
-    plan = key_gate(target)
+    plan = key_gate(target, as_runtime_user)
     fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
         if plan.action == CHOWN:
@@ -1354,7 +1368,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
     # objects are in, so a refusal there would leave a half-restored instance the A5 gate then refuses to retry.
     target_key = Path(args.config_secret_file)
     if key_source is not None:
-        key_gate(target_key)
+        key_gate(target_key, getattr(args, "key_as_runtime_user", False))
 
     indexed = manifest["backupFormat"] == INDEX_FORMAT
     accept_missing = getattr(args, "accept_missing_objects", False)
@@ -1444,7 +1458,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
         # Over the key a fresh install generated, which is expected (or onto none: the seal generates its key
         # lazily, so a fresh install's one start usually leaves the file absent).
         try:
-            plan = place_key(key_source, target_key)
+            plan = place_key(key_source, target_key, getattr(args, "key_as_runtime_user", False))
         except (BackupError, OSError) as e:
             # The gate above passed, so the target changed under the run. Legs (a) and (b) are in; say so.
             raise BackupError(f"{e}\n[backup] Legs (a) and (b) ARE already loaded; only the key failed. Place it "
@@ -1575,13 +1589,19 @@ def gate_refusal(record: dict | None, target: str, major_entry: str | None, root
     ours, theirs = release_order(target), release_order(held)
     if theirs is None:
         return None
-    newest = complete_captures(root)
-    restore = (f"restore the newest capture, {newest[-1].name}, under release {held}" if newest else
-               f"restore the capture you took before release {held} was started")
     if ours < theirs:
+        # The way back to `target` is a capture of ITS data — one a gate took when `target` was left — restored under
+        # `target` (ADR 0098 decision 9). Named by its manifest, newest first; not guessed when there is none here.
+        taken = [p.name for p in reversed(complete_captures(root))
+                 if ((json.loads((p / MANIFEST_NAME).read_text()) if (p / MANIFEST_NAME).is_file() else {})
+                     .get("app") or {}).get("version") == target]
+        restore = (f"empty the database, start release {target} once, then restore the capture {taken[0]}, taken "
+                   f"from release {target}" if taken else
+                   f"no capture on this volume was taken from release {target}; restore one you keep elsewhere")
         return (f"release {target} is OLDER than release {held}, whose data this database holds — a downgrade. "
-                f"Release {target} would refuse to start on a schema history holding migrations it does not know "
-                f"(ADR 0056 §7); a way back is the backup's release plus a restore: {restore} "
+                f"Release {target} refuses to start on a schema history holding a migration it does not know (ADR 0056 "
+                f"§7), and nothing here can tell which this one holds; a way back is the backup's release plus a "
+                f"restore: {restore} "
                 f"(https://raddatzk.github.io/veyq/run/backup-and-restore/), or set the image back to {held}. "
                 f"Nothing was written.")
     if ours[0] > theirs[0] + 1:
@@ -1682,12 +1702,15 @@ def cmd_gate(args: argparse.Namespace, env: dict[str, str] | None = None) -> int
     if record is None:
         release, source = None, "no-record"
         log("no record on the backup volume and the database holds data: the running release is unknown")
+    elif held is None:
+        release, source = None, "record-names-none"
+        log("the record names no release (a restore of a capture that named none): the running release is unknown")
     elif release_order(held) is None:
         release, source = None, f"record-unparsable: {held!r}"
         log(f"the record names {held!r}, which is not a release: the running release is unknown")
     else:
         release, source = held, "record"
-    why = ("no record" if record is None else
+    why = ("no record" if record is None else "the record names no release" if held is None else
            f"release {held} → {target}" if held != target else f"a new request, {request!r}")
     log(f"capturing before the start that would migrate ({why})")
     store = gate_store(args, db, env)                                                   # (5)
@@ -1849,6 +1872,10 @@ def main(argv: list[str]) -> int:
                          help="an index capture: restore although objects the rows require are missing from (or "
                               "changed in) the live store — each is a broken picture (A4), named at the end. Only "
                               "knowingly, when the store's versioning cannot bring them back")
+    restore.add_argument("--key-as-runtime-user", action="store_true",
+                         help="this restore runs as the application's own uid (a Kubernetes Job's runAsUser): the "
+                              "key is born to it, whoever owns the claim's directory (fsGroup gives it a group, "
+                              "never an owner)")
     restore.add_argument("--record", default=None, metavar="DIR",
                          help="the cluster's backup volume: as the last step, write its state.json naming the "
                               "backup's release, so that release's next start passes the gate (ADR 0098 decision 9)")

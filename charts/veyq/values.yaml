@@ -14,7 +14,7 @@
 # What is required and has no default:  domain · storeDomain · gateway.className ·
 # every key under secrets (or secrets.existingSecret) · externalDatabase.jdbcUrl when mariadb.enabled=false ·
 # gateway.tls.secretName when gateway.tls.mode=shared · gateway.tls.acme.email when gateway.tls.acme.enabled ·
-# networkPolicy.ingressFrom while networkPolicy.enabled (the default).
+# networkPolicy.ingressFrom while networkPolicy.enabled (the default) · backup.existingClaim, or backup.enabled: false.
 
 # The instance's bootstrap domain — what VEYQ_DOMAIN is under compose. Written into every invitation and
 # recovery link the instance mails, routed statically by the chart's own HTTPRoute (the backend never projects
@@ -129,6 +129,51 @@ admin:
     requests:
       cpu: 50m
       memory: 32Mi
+
+backup:
+  # The backup gate (ADR 0098): an init container, `backup-gate`, in the app pod, before the container that migrates.
+  # When the pod is about to start a different release than the database holds — or a new `request` — it captures the
+  # database and an INDEX of the object store (keys, sizes, MD5s; the objects stay in the store) onto the claim below,
+  # refuses a downgrade, a jump of more than one major and a major entered from an untested release (writing
+  # nothing), and keeps the newest `keep` captures. Because it is part of the Deployment, `helm upgrade`, Argo CD, Flux
+  # and a plain `kubectl apply` all run it, and `--no-hooks` or a selective sync cannot skip it. A failed or refused
+  # gate keeps the app from starting; nothing has migrated, and pinning the previous release back starts it again.
+  # It never mounts the config-secret claim, so no capture holds the KEK: export the key once, by hand
+  # (https://raddatzk.github.io/veyq/run/backup-and-restore/).
+  #
+  # A REQUIRED choice, with no default that decides it for you (the schema refuses an install that makes none): name a
+  # claim, or switch the gate off — and then take the backup before every upgrade by hand.
+  enabled: true
+  # A PersistentVolumeClaim you created in this namespace (ReadWriteOnce is enough: one pod mounts it). The chart
+  # creates none, so `helm uninstall` cannot take the backups with it; its size, class and encryption are yours.
+  existingClaim: ""
+  # Complete captures kept; the newest is never pruned, and a full claim fails the gate rather than pruning to make room.
+  keep: 3
+  # An opaque value: change it (a commit, by a person or a bot) to ask for a capture without a release change — a
+  # new pod-template revision, so Kubernetes stops the old pod first and the capture is cold.
+  request: ""
+  image:
+    # The upstream's tools image, released and signed with the app and admin images (ADR 0057; verified on
+    # https://raddatzk.github.io/veyq/run/verify-a-release/). The tag defaults to the APP image's tag: the gate runs
+    # only in its own release's tools image, and refuses an app release that is not that image's.
+    repository: ghcr.io/raddatzk/veyq-tools
+    tag: ""
+    # Verified with the other two, by the same page, and set together with them.
+    digest: ""
+    pullPolicy: IfNotPresent
+  store:
+    # Only for a store of your own (Server → Object store): its secret key is sealed under the KEK the gate never
+    # reads, so name a Secret with `endpoint`, `bucket`, `accessKey`, `secretKey` (and optionally `region`) — a key
+    # pair that can LIST the bucket is enough. The gate checks endpoint and bucket against the store in use and fails
+    # naming the value when they differ, or when the instance uses its own store and no Secret is named. The bundled
+    # store needs nothing here.
+    existingSecret: ""
+  resources:
+    limits:
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
 
 networkPolicy:
   # Default-deny for every pod of the release, then exactly the paths the stack uses (templates/networkpolicy.yaml,

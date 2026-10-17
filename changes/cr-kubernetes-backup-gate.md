@@ -303,7 +303,7 @@ below as the record of what was weighed.
     committed tree with every not-run step named (registry write, keyless signing — no remote exists); every
     `scripts/validate_*.py` green, `validate_guard_gaps.py --force` too if a guard's anchor changed.
 
-- [ ] **3 the chart — the gate in the app pod, the explicit choice.**
+- [x] **3 the chart — the gate in the app pod, the explicit choice.**
   - **Values** (`values.yaml`, header's list of required choices updated): `backup.enabled` (default `true`),
     `backup.existingClaim` (`""`), `backup.keep` (3), `backup.request` (`""`), `backup.image` (`imageRef`:
     `ghcr.io/raddatzk/veyq-tools`, tag defaulting to `appVersion`, `digest`), `backup.resources`, and O2's
