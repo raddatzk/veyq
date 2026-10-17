@@ -55,6 +55,9 @@ import { b64std } from '@veyq/crypto/base64'
 import { realI18n, t } from '../test/i18n'
 import { chooseNew } from '../test/newMenu'
 import PrimeVue from 'primevue/config'
+import { sealName, wrapContentKey, type NodeAddress } from '../core/node/tree'
+import { dropKeysForShare, mintIdentityKey, openDropPublicKey } from '../core/sharing/dropKey'
+import { hashForNode } from '../core/node/location'
 
 const sealed = (nodeId: string, name: string) => ({
   encryptedName: b64std(v1.sealField({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, SCOPE_KEY, v1.utf8(name))),
@@ -96,9 +99,9 @@ const settle = async (ms: number) => {
 // One poll interval and the jitter's widest draw, so the tests follow the cadence instead of a copied number.
 const OVER_ONE_INTERVAL = Math.ceil(LIVE_POLL.intervalMs * (1 + LIVE_POLL.jitter)) + 500
 
-async function mountLevel() {
+async function mountLevel(hash = '#~me') {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
-  await router.replace({ name: 'home', hash: '#~me' })
+  await router.replace({ name: 'home', hash })
   await router.isReady()
   const w = mount(MemoryHomeView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } } })
   await settle(0)
@@ -260,6 +263,100 @@ describe('the member level view, live', () => {
     expect(listNodes.mock.calls.length).toBe(1)
     expect(treeStore.error).toBe(false)
     expect(w.find('.home-state').exists()).toBe(false)
+    w.unmount()
+  })
+})
+
+// The drop box's own page (owner decision 2026-10-17): its guests' folders and their file counts ARE the scope's tree, so
+// the host keeps the tree live while it is open (`KindDescriptor.liveDetail`), with the level's own poll and its
+// condition — a new guest's folder or a new file appears without a reload, an idle drop box is a 304. Real crypto: each
+// guest's folder is sealed under its own identity key, which the member opens through the drop box's drop key
+// (`tree.identityFolder.test.ts`).
+describe("the drop box's page, live", () => {
+  const BOX = '22222222-2222-4222-8222-222222222222'
+  const ANNA = '33333333-3333-4333-8333-0000000000a1'
+  const BERT = '33333333-3333-4333-8333-0000000000b1'
+  const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 })
+  const sealedRow = (
+    id: string, parentId: string | null, kind: string, entryKey: Uint8Array, key: Uint8Array, name: string, extra: Partial<NodeSummary> = {},
+  ): NodeSummary => ({
+    id, parentId: parentId ?? undefined, kind, orderIndex: 0, epoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0),
+    encryptedName: sealName(entryKey, at(id), name), slugToken: 'c2x1Zw==', wrappedContentKey: wrapContentKey(entryKey, at(id), key), ...extra,
+  })
+  /** A drop box at the root with its drop key, and the rows a guest's first call and its files add, as the server serves them. */
+  function dropBoxWorld() {
+    const boxKey = v1.randomBytes(32)
+    const kShare = v1.randomBytes(32)
+    const drop = dropKeysForShare(SCOPE_ID, BOX, boxKey, kShare, null)
+    const box = sealedRow(BOX, null, 'DEPOT_DROPBOX', SCOPE_KEY, boxKey, 'Einsendungen', { sealedDropPrivateKey: drop.sealedDropPrivateKey })
+    const folderKeys = new Map<string, Uint8Array>()
+    const guestFolder = (folderId: string, identityId: string, name: string, createdAt: number): NodeSummary => {
+      const { identityKey, wrappedIdentityKey } = mintIdentityKey(SCOPE_ID, BOX, identityId, openDropPublicKey(kShare, drop.sealedDropPublicKey))
+      const folderKey = v1.randomBytes(32)
+      folderKeys.set(folderId, folderKey)
+      return { ...sealedRow(folderId, BOX, 'FOLDER', identityKey, folderKey, name), createdAt: new Date(createdAt), shareIdentityId: identityId, wrappedIdentityKey }
+    }
+    const file = (fileId: string, folderId: string, name: string) => sealedRow(fileId, folderId, 'FILE', folderKeys.get(folderId)!, v1.randomBytes(32), name)
+    return { box, guestFolder, file }
+  }
+  /** The drop box's folder rows as the page shows them: the guest's name and its file count. */
+  const folderRows = (w: Awaited<ReturnType<typeof mountLevel>>) =>
+    w.findAll('.dropbox-row-open').map((b) => `${b.find('.veyq-row-title').text()} · ${b.find('.veyq-row-subtitle').text()}`)
+  async function openDropBox(rows: NodeSummary[]) {
+    change(rows)
+    await loadTree()
+    listNodes.mockClear()
+    return mountLevel(hashForNode(treeStore.nodes, BOX, '~me'))
+  }
+
+  it("shows a new guest's folder and a new file after one poll interval, with no reload; an idle drop box is a 304", async () => {
+    const world = dropBoxWorld()
+    const w = await openDropBox([
+      world.box,
+      world.guestFolder(ANNA, '55555555-5555-4555-8555-0000000000a1', 'Anna', 1),
+      world.file('44444444-4444-4444-8444-0000000000a1', ANNA, 'Bericht.pdf'),
+    ])
+    expect(w.find('.dropbox-detail').exists(), "the drop box's page is on screen").toBe(true)
+    expect(folderRows(w)).toEqual(['Anna · 1 file'])
+
+    await settle(OVER_ONE_INTERVAL)
+    expect(listNodes.mock.calls.map(([r]) => r.ifNoneMatch), 'an idle drop box echoes the tag of what it shows').toEqual([`"${revision}"`])
+    expect(folderRows(w)).toEqual(['Anna · 1 file'])
+
+    change([
+      ...served,
+      world.guestFolder(BERT, '55555555-5555-4555-8555-0000000000b1', 'Bert', 2),
+      world.file('44444444-4444-4444-8444-0000000000b1', BERT, 'Foto.jpg'),
+    ])
+    await settle(OVER_ONE_INTERVAL)
+    expect(folderRows(w), "a new guest's folder appears").toEqual(['Anna · 1 file', 'Bert · 1 file'])
+
+    change([...served, world.file('44444444-4444-4444-8444-0000000000a2', ANNA, 'Nachtrag.pdf')])
+    await settle(OVER_ONE_INTERVAL)
+    expect(folderRows(w), "a new file counts on its guest's folder").toEqual(['Anna · 2 files', 'Bert · 1 file'])
+    w.unmount()
+  })
+
+  it('asks the server nothing while a dialog of the page is open, and nothing after the page is gone', async () => {
+    const world = dropBoxWorld()
+    const w = await openDropBox([world.box])
+    await w.find(`button[aria-label="${t('depot.dropBox.delete')}"]`).trigger('click') // core's delete dialog
+    await settle(OVER_ONE_INTERVAL * 2)
+    expect(listNodes).not.toHaveBeenCalled()
+    w.unmount()
+    await settle(OVER_ONE_INTERVAL * 3)
+    expect(listNodes).not.toHaveBeenCalled()
+  })
+
+  it("control: an open file's page polls nothing (only a kind whose page is drawn from the tree is live)", async () => {
+    change([...served, rowOf(FILE_ID, 'FILE', 'foto.png')])
+    await loadTree()
+    listNodes.mockClear()
+    const w = await mountLevel(hashForNode(treeStore.nodes, FILE_ID, '~me'))
+    expect(w.find('.dropbox-detail').exists()).toBe(false)
+    expect(titlesOf(w), 'no level is on screen').toEqual([])
+    await settle(OVER_ONE_INTERVAL * 2)
+    expect(listNodes).not.toHaveBeenCalled()
     w.unmount()
   })
 })

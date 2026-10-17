@@ -19,7 +19,8 @@ import { createLivePoller, type LivePollerOptions } from '../../shared/state/liv
 export const LIVE_POLL: LivePollerOptions = { intervalMs: 5_000, maxBackoffMs: 120_000, jitter: 0.2, minGapMs: 2_000 }
 
 export interface LevelLiveOptions {
-  /** Whether a folder level is on screen now (the host shows a detail or a state instead otherwise): polls only then. */
+  /** Whether a folder level is on screen now, or an opened node's page drawn from the tree (`KindDescriptor.liveDetail`,
+   *  Depot's drop box): polls only then — not on any other detail, nor on a state. */
   active: () => boolean
   /** The host's "do not refresh over this": a dialog is open, a write is in flight. */
   paused: () => boolean

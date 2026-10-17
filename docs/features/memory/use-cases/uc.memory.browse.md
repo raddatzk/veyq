@@ -96,7 +96,8 @@
   the next level that has it shows it again. The view switch offers the presentations of what the tab shows. A share
   guest gets the same bar: the guest's page is this very view.
 - <a id="live-refresh"></a>**An open level stays current** (inbox #408). While a folder level is on screen and the tab is
-  visible, core re-reads the level about every 5 s (jittered; doubling to 2 min after errors; at once when the tab
+  visible — or an opened node's page that is drawn from the tree, which only Depot's drop box is (its guests' folders and
+  their files; `KindDescriptor.liveDetail`, owner decision 2026-10-17) — core re-reads the level about every 5 s (jittered; doubling to 2 min after errors; at once when the tab
   becomes visible or focused; nothing while hidden or unmounted), so a share guest's upload or a peer's new Memory or
   folder appears without a reload — for a member (`MemoryHomeView`, one `listNodes` per tick) and a share guest
   (`ShareView`, one `resolveShare` per tick) alike. Both reads are conditional ([ADR 0081](../../../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)):
