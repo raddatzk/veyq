@@ -232,6 +232,11 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   while the fixture serving it stayed green; typed, the feature mocks named fields that did not exist (admin-web's
   `{ state: 'ACTIVE' }` on `TenantInviteState`), and of 114 `as never` most hid nothing — the ones that did hid
   fixtures that were not the model.
+- **A race test forces its overlap.** One writer's commit is held back (`whileUncommitted`, which takes a
+  `MANDATORY`-transaction entry point) while the other writer runs; two threads released at a barrier mostly run one
+  after the other, and stay green with the lock removed. So a race test is bitten by removing the lock it guards, and
+  asserts what the loser must not have done, not only what the winner did. What bought it: cr-moderation-review-and-measures'
+  first decision/report races started both writers at a barrier and were green with every lock taken out.
 - The **coverage validators** (Python; added with the first feature slice, per start-light) check the
   trust chain: every behavior maps to its use-case coverage.
 
