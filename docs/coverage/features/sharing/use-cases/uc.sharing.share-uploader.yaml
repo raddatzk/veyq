@@ -91,3 +91,15 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/views/ShareView.picker.test.ts]
+  - id: an-uploaders-photos-are-recorded-and-it-is-told-first
+    text: >-
+      While the guest-write record is on, an upload link's guest naming itself and every photo it adds record its
+      client address, port and time — a photo once, as the medium, in the attach's transaction, and nothing for a
+      completion that attached nothing; its delete of its own photo takes the record with it, and a hold on the photo
+      copies it. The drop page says so before the first photo, with the N served and the right to object on its own,
+      and says nothing while no N is served.
+    coverage:
+      backend:
+        integration: [GuestWriteRecordMemoriesSliceTest.aGuestsUploadRecordsOnceAsAnItemAndItsDeleteTakesTheRecordWith, GuestWriteRecordMemoriesSliceTest.aCompletionThatAttachesNothingRecordsNothing, GuestWriteRecordMemoriesSliceTest.aHoldOnTheMediumCopiesItsRecord]
+      web:
+        unit: [src/views/ShareView.memory.test.ts]

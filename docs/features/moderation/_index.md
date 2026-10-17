@@ -37,5 +37,5 @@ the log that keeps them accountable. A **core** feature
   the reported rows and a pin on their store objects, which the reclaim sweep skips; the ends).
 - [en.moderation.log](enablers/en.moderation.log.md) — **built** for the instance events (ADR 0093 § 11: an append-only table, structured
   fields in the clear and free text sealed to the moderation key; the instance events and their retention).
-- [en.moderation.guest-write-record](enablers/en.moderation.guest-write-record.md) — **planned** (ADR 0093 § 10: a
+- [en.moderation.guest-write-record](enablers/en.moderation.guest-write-record.md) — **built** (ADR 0093 § 10: a
   guest's write keeps its client address, port and time for N days, as evidence a hold copies).

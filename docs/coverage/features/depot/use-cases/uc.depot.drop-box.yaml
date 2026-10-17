@@ -61,6 +61,18 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [DropBoxSliceTest.onlyAWriteOnlyLinkOnADropBoxGetsAFolder] }
       web: { unit: [src/features/depot/register.test.ts] }
+  - id: a-drop-box-guests-writes-are-recorded-and-it-is-told-first
+    text: >-
+      While the guest-write record is on, the call that creates a drop-box guest's folder records it once (a call that
+      finds it records nothing), and each file the guest creates and the content it uploads into it record, the content
+      as the file with no field group; a replace that loses its compare-and-set records nothing. The drop page says so
+      before the first file and beside the guest's session line, with the N served and the right to object on its own,
+      and says nothing while no N is served.
+    coverage:
+      backend:
+        integration: [GuestWriteRecordDepotSliceTest.theFolderTheFileAndItsContentEachRecordOnce]
+      web:
+        unit: [src/features/depot/components/DropBoxShareBody.test.ts]
 gaps:
   stack: >-
     Lane L1's browser suite (`e2e/tests/features/depot-live.spec.ts`) drives `one-folder-per-guest-identity`,

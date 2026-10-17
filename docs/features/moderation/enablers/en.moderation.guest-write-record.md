@@ -4,9 +4,13 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
   A **model** enabler: one table, the writes that fill it, a retention setting, a purge and a switch.
-- **Status:** **planned** — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+- **Status:** **built** — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 10 (with § 14's default per operating mode), the address from [ADR 0094](../../../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md);
-  built by cr-guest-write-record.
+  built by cr-guest-write-record (2026-10-17): `core/moderation/guestwrite` (`GuestWriteRecords`, the purge, the
+  eraser, the hold's contributor, the retention's resource), `core/http/RequestClient`, the writes that call it, the
+  instance backup's schema-only dump, admin-web's Server → Moderation and `veyq-admin guest-write-record`, and web's
+  `GuestWriteRecordNotice`. Open: the notice's wording (counsel) and its link to the operator section, which
+  cr-operator-section-of-the-terms builds.
 - **Provides:** for every write a link's guest makes that enters it as the last editor of something
   ([en.platform.field-editor](../../platform/enablers/en.platform.field-editor.md)), the client address and source port
   the server saw and the time, kept for N days, so a hold can copy them as evidence when the written item is reported.
@@ -70,22 +74,28 @@ go at boot) and then on `veyq.moderation.guest-write-record.purge.every`.
 ## Where a row goes
 
 - **Its identity is erased:** the row goes with it (`fk_guest_write_record_identity`, cascading).
-- **Its object is erased:** core deletes the rows of erased nodes (`NodeSubtreeEraser`, `ScopeEraser`) and of an
-  erased identity's own record; an application deletes the rows of its own items through core
-  (`GuestWriteRecords.forget`) where it erases them (Memories: a medium's purge and its two erasers).
-- **A hold is taken on its object:** the hold copies it (phase 900, after every contributor: every row whose object a
-  copied row or a named identity is), and the copy follows the hold's end, not N.
+- **Its object is erased:** core deletes the rows of an erased node subtree (`GuestWriteRecordNodeSubtreeEraser`,
+  phase 400 — a guest's take-back of its placeholder too); an application deletes the rows of its own items through
+  core (`GuestWriteRecords.forget`) where it erases them (Memories: `MediaStore.purgeMediaRows`, which the retention
+  purge, a guest's delete of its own and the subtree eraser share). A space's erasure needs no step of its own: every
+  record of a space names an identity of one of its links, and `ShareScopeEraser` deletes those, cascading.
+- **A hold is taken on its object:** the hold copies it (`GuestWriteRecordHoldSnapshot`, phase 900, after every
+  contributor: every row whose object is a copied row or a named identity — UUIDs only, a share row's id is none — and
+  for a reported link every row its guests wrote), and the copy follows the hold's end, not N.
 - **The instance backup** dumps the table's schema and leaves out its rows (ADR 0093 § 10): what is lost is at most
   30 days old and expiring anyway, and what was reported lives in the hold tables, which are backed up.
 
 ## The disclosure
 
 While the switch is on, a link's resolve that lets its guest write (`READ_WRITE`, `WRITE_ONLY`, unlocked) carries
-`guestWriteRecordDays` = N as it stands; otherwise it carries none. The guest page shows one first-layer sentence with
-that N wherever the guest can write — the naming step before its first write on a `READ_WRITE` link, the drop pages —
-and the right to object (GDPR Art. 21) as a sentence of its own, both linking the operator section of the terms. A
-`READ` guest sees nothing, because nothing is recorded. The sentence follows the switch, never the mode. Its wording
-waits on counsel (ADR 0093 § Legal basis, Still open 4); the full text is the operator section's.
+`guestWriteRecordDays` = N as it stands; otherwise it carries none (it is in the response's tag, so an open page learns
+a change). The guest page shows one first-layer sentence with that N wherever the guest can write, before its first
+write — core's `GuestNaming` in every shape: the naming dialog of a `READ_WRITE` link, the line that says whose session
+the device holds, the drop pages of Memories and Depot — and the right to object (GDPR Art. 21) as a sentence of its
+own. A `READ` guest sees nothing, because nothing is recorded. The sentence follows the switch, never the mode. Its
+wording waits on counsel (ADR 0093 § Legal basis, Still open 4); the full text, and the link to it (anchor
+`#guest-write-record`), come with the operator section of the terms (cr-operator-section-of-the-terms), which does not
+exist yet — so no link is shown until then.
 
 ## Related
 
@@ -94,3 +104,8 @@ waits on counsel (ADR 0093 § Legal basis, Still open 4); the full text is the o
   [ADR 0092](../../../decisions/0092-logs-are-operational-and-name-no-person.md) § 2;
   [ADR 0056](../../../decisions/0056-instance-durable-state-and-cold-logical-backup.md) (the dump leaves the rows out)
 - [en.moderation.hold](en.moderation.hold.md), [en.platform.field-editor](../../platform/enablers/en.platform.field-editor.md)
+- Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
+  [Configuration](../../../../site/src/content/docs/run/configuration.md),
+  [Backup and restore](../../../../site/src/content/docs/run/backup-and-restore.md),
+  [What the server sees](../../../../site/src/content/docs/security/what-the-server-sees.md),
+  [What a guest sees](../../../../site/src/content/docs/sharing/what-guests-see.mdx)

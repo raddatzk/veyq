@@ -205,12 +205,54 @@ acceptanceCriteria:
       web:
         unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memory/rights.test.ts]
         e2e: [src/features/memory/folderShareGuest.e2e.test.ts]
+  - id: a-guests-write-records-the-address-the-network-vouches-for
+    text: >-
+      While core.public-shares.guest-write-record is on, every write that enters a guest as last editor — naming
+      itself, a node it creates, renames or moves, a photo or file it adds — records in its own transaction the client
+      address of core's one resolver (the rightmost X-Forwarded-For entry no trusted proxy wrote; never the client's own
+      leftmost entry, which is in no record and no log line), the port that entry carries or the configured source
+      states (none under `none`, whatever a header says; never a port left of the stop entry), the time in
+      milliseconds, the identity and the object; with no address nothing is recorded and the write stands; a refused
+      write and a member's write record nothing; every resource operation that takes a guest's write credential
+      resolves the client for it or is exempt with its reason; an erased node takes its records with it.
+    coverage:
+      backend:
+        integration: [GuestWriteRecordCoreSliceTest.theRightmostEntryIsRecordedAndTheClientsOwnLeftmostIsInNoRecordAndNoLog, GuestWriteRecordCoreSliceTest.aStopEntrysOwnPortIsRecorded, GuestWriteRecordCoreSliceTest.aPortOnAnEntryLeftOfTheStopIsNeverRead, GuestWriteRecordCoreSliceTest.theHeaderSourceStatesThePortAndNoneReadsNoHeader, GuestWriteRecordCoreSliceTest.noAddressNoRecordButTheWriteStands, GuestWriteRecordCoreSliceTest.namingItselfCreatingAndPlacingEachRecordOnceWithItsObjectAndFieldGroup, GuestWriteRecordCoreSliceTest.aRefusedWriteAndAMembersWriteRecordNothing, GuestWriteRecordCoreSliceTest.anErasedNodeTakesItsRecordsWith]
+        unit: [GuestWriteRecordedTest.everyResourceOperationTakingAGuestCredentialRecordsOrIsExempt, GuestWriteRecordedTest.anExemptOperationRecordsNothingAndStillTakesACredential, GuestWriteRecordedTest.theScanSeesTheKnownWrites]
+  - id: the-record-is-kept-n-days-switched-by-the-operator-and-copied-by-a-hold
+    text: >-
+      A row is kept N days (an instance setting the Server Owner sets, 1 to 30, 7 by default, refused outside), written
+      with its own end; the purge — at startup and hourly — deletes a row past its end or older than N as it stands now,
+      so a shortening reaches every row and a lengthening only new ones. The switch's default follows the operating
+      mode: private writes its off row (setup, a later mode change, and the migration on an instance already private),
+      organisation none; switched off by hand or with public links off, nothing is recorded and the next purge deletes
+      every live row, while a hold's copy stays; a private instance that switches it on by hand records. A hold copies
+      the records of what it holds — a node, a medium, every record of a reported link's guests.
+    coverage:
+      backend:
+        integration: [GuestWriteRecordCoreSliceTest.aShorteningReachesAnOldRowAtTheNextPurgeAndALengtheningDoesNotExtendIt, GuestWriteRecordCoreSliceTest.theServerOwnerSetsNWithinOneToThirty, GuestWriteRecordCoreSliceTest.switchedOffNothingIsRecordedAndThePurgeEmptiesTheTableWhileAHoldCopyStays, GuestWriteRecordCoreSliceTest.theParentOffSwitchesTheRecordOff, GuestWriteRecordCoreSliceTest.privateSwitchesTheRecordOffAndOrganisationOn, GuestWriteRecordCoreSliceTest.aPrivateInstanceThatSwitchesTheRecordOnByHandRecords, GuestWriteRecordCoreSliceTest.theMigrationWritesTheOffRowOnAPrivateInstanceOnly, GuestWriteRecordCoreSliceTest.aHoldOnALinkCopiesEveryRecordItsGuestsWrote, SetupServerSliceTest.createsOwner]
+  - id: a-writing-guest-is-told-before-its-first-write
+    text: >-
+      While the switch is on, the resolve of a link whose guest writes (READ_WRITE, WRITE_ONLY, unlocked) serves N as it
+      stands, and the page shows one sentence with that N and the right to object as a sentence of its own before the
+      first write — in the naming dialog, and beside the line that says whose session this device holds. A READ link is
+      served none and shows nothing (nothing is recorded); while the switch is off none is served and nothing is said.
+      The wording awaits counsel (ADR 0093 Still open 4); the link to the operator section joins with that section.
+    coverage:
+      backend:
+        integration: [GuestWriteRecordCoreSliceTest.theResolveServesNToAGuestThatWritesWhileTheSwitchIsOn]
+      web:
+        unit: [src/views/ShareView.guestWriteRecord.test.ts, src/core/sharing/GuestWriteRecordNotice.test.ts]
 gaps:
   stack: >-
     Lane L1's browser suite (`e2e/tests/features/field-seal.spec.ts`) drives `sealed-name-anonymous-identity` in
     Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with
     its criterion. A guest of a "View + add photos" link names itself at its first upload; the name holds on its page
-    after a reload and reaches the members. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job
+    after a reload and reaches the members. `e2e/tests/features/guest-write-record.spec.ts` drives
+    `create-contributor-share`, `a-writing-guest-is-told-before-its-first-write` and
+    `a-guests-write-records-the-address-the-network-vouches-for`: a guest reads the notice with N = 7 in the naming
+    dialog and creates a folder through the release's Traefik, and the orchestrator's `guest-write record` stage holds
+    the app's record of it to the browser container's own socket (address and port). Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job
     (`ci.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log
     shows the suite executed. On that run each file becomes a ref on the criteria its tests are tagged with, and this
     gap goes.
