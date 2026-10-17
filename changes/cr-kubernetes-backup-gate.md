@@ -1,7 +1,7 @@
 ---
 id: cr-kubernetes-backup-gate
 title: On Kubernetes the start that would migrate backs up first — the backup-gate init container and the veyq-tools image
-status: planned
+status: in-progress
 satisfies: ["uc.admin.back-up-and-restore-instance", "uc.admin.install-and-upgrade-instance"]
 adrs: ["0098", "0056", "0057", "0064", "0091", "0096", "0067", "0089", "0050"]
 invariants:
@@ -47,11 +47,16 @@ in a third released and signed image, `veyq-tools`. A restore stays a documented
     `run/backup-and-restore.md` its § Restore under Helm (`grep -n "^### " site/src/content/docs/run/backup-and-restore.md`).
     This CR owns those two sections, `run/kubernetes.md`, and in `run/verify-a-release.md` only the `cosign verify`
     block for `veyq-tools` (beside the app and admin ones: `grep -n "cosign verify \"ghcr" site/src/content/docs/run/verify-a-release.md`).
-  - **cr-signed-release-manifest** (planned, inbox #469 B) signs `manifest.json` and edits `scripts/release_assets.py`,
-    `veyqctl`, the publish job and `run/verify-a-release.md` (its phase 3) — the same four files phase 2 here touches
-    for `images.tools` (`grep -n "release_assets\|verify-a-release" changes/cr-signed-release-manifest.md`). Whichever
-    lands second starts from the other's commit and re-reads the manifest's shape; a signed manifest then binds
-    `images.tools` with no further work. Phase 2 tells that CR's refine, if it lands first, that the manifest gains a key.
+  - **cr-signed-release-manifest has landed** (inbox #469 B; its CR is deleted). The publish step's `github-release`
+    now signs `manifest.json` (`cosign sign-blob --yes --new-bundle-format`, bundle `manifest.json.bundle`;
+    `release_assets.MANIFEST_BUNDLE` is in the producer's fixed set: `grep -n "MANIFEST_BUNDLE" scripts/release_assets.py`),
+    and `validate_release_identity.py` assertion 11 collects every `sign-blob` line of that step and requires the
+    producer first, then both `sign-blob`s, and nothing between the manifest's `sign-blob` and `gh release create`
+    that calls `release_assets.py` or names `manifest.json` (`grep -n "sign-blob" scripts/validate_release_identity.py`).
+    `veyqctl` verifies the manifest (cosign ≥ `COSIGN_MIN_VERSION` 3.1.3) before parsing it
+    (`grep -n "COSIGN_MIN_VERSION\|def verify_manifest" scripts/veyqctl.py`). Phase 2 touches the same four files
+    (`release_assets.py`, `veyqctl`, the publish job, `run/verify-a-release.md`) for `images.tools`: the manifest
+    gains a key, it stays signed as one file, and assertion 11 must stay green with the third image.
   - **cr-one-pipeline-per-commit** is `in-progress` with phases 1–6 checked (`grep -n '^- \[.\]' changes/cr-one-pipeline-per-commit.md`);
     phase 2 here edits `ci.yml`, so re-read it on the merged tree before the first edit.
   - **cr-text-fields-seal-under-their-own-key** touches `packages/crypto`, `web`, backend limits — no file in common.
@@ -210,7 +215,7 @@ below as the record of what was weighed.
 
 ## Phases
 
-- [ ] **1 the tool — `scripts/instance_backup.py` in the pod, and its self-test.**
+- [x] **1 the tool — `scripts/instance_backup.py` in the pod, and its self-test.**
   - **Measure first** (into the retrospective): R4, R8–R11. R8/R9/R10/R11 need a store and a database: a throwaway
     compose project (`mariadb:11.4` and Garage at the pins `validate_image_pins.py` holds), never the owner's dev
     stack. A claim that fails changes the decision it feeds before code is written, and is reported.
@@ -369,7 +374,7 @@ below as the record of what was weighed.
 - **No CI run exists in this repository** (no remote): "green" is the local run over the committed tree,
   `python3 scripts/run_pipeline.py`, or the per-phase commands above.
 
-Implementation has the owner's go (2026-10-16) and every answer (2026-10-17). Its entry: after `cr-signed-release-manifest` lands — both edit the publish step, `release_assets.py` and `validate_release_identity.py`.
+Implementation has the owner's go (2026-10-16) and every answer (2026-10-17). Its entry condition — `cr-signed-release-manifest` landed first, since both edit the publish step, `release_assets.py` and `validate_release_identity.py` — holds (merged at `a0a4aeb1`).
 
 ## Retrospective
 
