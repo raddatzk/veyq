@@ -166,6 +166,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -1301,6 +1302,7 @@ def pool_warning(host: Host, home: Path, state: State) -> None:
         say(f"the store setting in use could not be read ({str(e).splitlines()[0][:200]})")
         in_use = "unreadable"
     if in_use != "own":
+        say(f"the store in use: {in_use or 'none named'}")
         say(BUNDLED_WARNING)
 
 
@@ -1412,6 +1414,7 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
         raise
 
     # 4. back up; stop the app; switch to the new release's recipe and image lines; up; wait until healthy
+    stopped = time.monotonic()
     stop_app(host, home, state)
     try:
         backup = capture(host, home, state, tool, key_into, f"{utc_stamp()}-before-{manifest.release}", pool)
@@ -1428,7 +1431,9 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
     except Refused as e:
         raise Refused(f"{e}\nRelease {manifest.release} is switched in but not healthy. The way back is on disk: "
                       f"release {state.release}'s recipe in {release_dir(home, state.release)}, and the backup "
-                      f"{backup} with its key at {key_into} — restore it onto release {state.release}.") from None
+                      f"{backup} with its key at {key_into} — `veyqctl rollback {backup} --key-from {key_into}` "
+                      f"restores it in place under release {state.release}.") from None
+    say(f"downtime: {time.monotonic() - stopped:.0f} s, from stopping the app to release {manifest.release} healthy")
     say(f"release {manifest.release} runs; release {state.release} stays in {release_dir(home, state.release)}")
     if chosen != selection:
         say(entry_note(selector, selection, chosen, "the next `upgrade`"))
@@ -1445,11 +1450,13 @@ def cmd_backup(args: argparse.Namespace, host: Host) -> int:
     pool = pool_choice(home, args.objects_to, "--objects-to")
     if pool.target:
         copy_objects_early(host, home, state, tool, pool)
+    stopped = time.monotonic()
     stop_app(host, home, state)
     try:
         capture(host, home, state, tool, key_into, utc_stamp(), pool)
     finally:
         up(host, compose(home, state.release, state.project), state.project)
+        say(f"downtime: {time.monotonic() - stopped:.0f} s, from stopping the app to every service healthy again")
     return 0
 
 

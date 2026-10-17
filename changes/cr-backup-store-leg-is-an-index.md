@@ -143,7 +143,7 @@ Baseline before the first edit, on a detached worktree of `HEAD` (changes/README
 `for f in scripts/validate_*.py; do [ "$f" = scripts/validate_guard_gaps.py ] && continue; python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done; python3 scripts/instance_backup_selftest.py | tail -1; python3 scripts/veyqctl_selftest.py | tail -1`
 — a red after this CR is this CR's only against that list.
 
-- [ ] **1 tool — `scripts/instance_backup.py`** (decisions 1–7). Locators: the mirror capture and its readers
+- [x] **1 tool — `scripts/instance_backup.py`** (decisions 1–7). Locators: the mirror capture and its readers
   `grep -n 'MIRROR\|INDEX\b\|mirror_in\|OBJECTS_DIR\|BACKUP_FORMAT\|INDEX_FORMAT\|store_leg' scripts/instance_backup.py`;
   every caller of the tool `grep -rln 'instance_backup' scripts/ tools/ .github/ charts/`; every test that builds a capture
   `grep -n 'take_capture\|cmd_capture\|cmd_restore\|backupFormat' scripts/instance_backup_selftest.py`. The module
@@ -176,7 +176,7 @@ Baseline before the first edit, on a detached worktree of `HEAD` (changes/README
   body; `python3 scripts/chart_meta_check.py` green; the tools image's self-test path unchanged (`tools/Dockerfile`
   copies the self-test — it must still need no Docker).
 
-- [ ] **2 veyqctl — `scripts/veyqctl.py`** (decisions 8–10, ADR 0096 decisions 1, 5, 6). Locators:
+- [x] **2 veyqctl — `scripts/veyqctl.py`** (decisions 8–10, ADR 0096 decisions 1, 5, 6). Locators:
   `grep -n 'def cmd_backup\|def cmd_restore\|def cmd_upgrade\|def cmd_status\|def capture\|def backup_env\|def report\|KEPT_HEADER' scripts/veyqctl.py`;
   the template `grep -n 'BACKUP\|^# ' infra/.env.example | head`; guards reading the template
   `grep -ln 'env.example' scripts/validate_*.py` (run each after the template edit). `test_backup_restore` and
@@ -192,7 +192,7 @@ Baseline before the first edit, on a detached worktree of `HEAD` (changes/README
     credentials reach it through `env`, never argv.*
   Done when: `python3 scripts/veyqctl_selftest.py` green, bites recorded; every guard that reads the template green.
 
-- [ ] **3 harness — the e2e restore groups move onto a pool** (no run here: an agent never runs
+- [x] **3 harness — the e2e restore groups move onto a pool** (no run here: an agent never runs
   `scripts/run_web_e2e.py`; the coordinating session runs `python3 scripts/run_pipeline.py --job web-e2e` after this CR
   lands, because the restore groups are the Compose restores' content proof — capture, destroy, restore, sign in, bytes
   compared). Locator: `grep -n 'backup_tool(\|backup_tool_result(\|fresh_bucket(\|def destroy\|def restore_hook\|def capture_destroy_install\|forged' scripts/run_web_e2e.py`.
@@ -207,7 +207,7 @@ Baseline before the first edit, on a detached worktree of `HEAD` (changes/README
   names `run_pipeline.py --job web-e2e` as the coordinating session's step, with what its log must show (each restore
   group's `--objects-from` restore, the new refusal by message).
 
-- [ ] **4 live — a throwaway Compose project** (phases 1–2 on real Docker). Not the dev stack (`veyq-*` containers; the
+- [x] **4 live — a throwaway Compose project** (phases 1–2 on real Docker). Not the dev stack (`veyq-*` containers; the
   dev Traefik publishes 18080, so 80/443 are free — measured `docker ps --format '{{.Names}} {{.Ports}}'` at refine,
   re-check), not `run_web_e2e.py`. Either `scripts/run_stack_e2e.py --app … --admin … --keep` (it installs through
   `veyqctl install --unsigned-local` and leaves an instance with a Memory the browser suite sealed — its `home/` is the
@@ -233,7 +233,7 @@ Baseline before the first edit, on a detached worktree of `HEAD` (changes/README
   Who runs it: the implementer (Docker is available to agents on this host; the dev stack is not touched). Done when
   every step's output is in the CR's record.
 
-- [ ] **5 rollback on Compose** — **waits for O1.** On the recommended (a): `veyqctl rollback <capture> --key-from F`
+- [x] **5 rollback on Compose** — **waits for O1.** On the recommended (a): `veyqctl rollback <capture> --key-from F`
   builds the in-place form (O1 spells it out); its self-test order case and its live run (an upgrade between two local
   releases, then the rollback, the Memory's media still opening) join phases 2 and 4's records. On (b) or (c) this phase
   is only the Run page's Rollback section.
@@ -262,6 +262,57 @@ Baseline before the first edit, on a detached worktree of `HEAD` (changes/README
 
 - [ ] **7 close** — the inbox row the coordinating session opens for this CR (none exists at refine: `grep -n
   'store-leg-is-an-index\|objects-to' docs/inbox.md` → nothing) marked done; lessons harvested; the CR deleted.
+
+## Implementation record
+
+Phases 1, 2, 5: bites red-then-green, each in its commit's body. Phase 3: **not run here** — `scripts/run_web_e2e.py`
+is the coordinating session's, through `python3 scripts/run_pipeline.py --job web-e2e`; its log must show each restore
+group capturing with `--objects-to <group_dir>/pool`, every restore with `--objects-from` it, and `A5 store control:
+refused, naming the object the store held` before the real restore.
+
+**Phase 4, live, 2026-10-17** — measured: `scripts/run_stack_e2e.py --app veyq:l1-464 --admin veyq-admin:l1-464 --keep`
+(GREEN, 146 s) left instance A, project `veyq-e2e-20261017-125442`, release 0.673 installed by `veyqctl install
+--unsigned-local`, holding the browser suite's tenant `family.veyq.test` with 6 blob rows; this tree's `veyqctl.py`
+drove it (the home's `instance_backup.py` asset is this tree's, produced by the run). Dev stack not touched (its four
+containers' `StartedAt` identical before and after). Each step's output, abridged:
+1. `veyqctl status` → `the store in use: bundled` and the WARNING, exit 0; with `VEYQ_BACKUP_OBJECTS_TO=<scratch>/pool`
+   in `.env` → no warning, exit 0.
+2. `veyqctl backup --key-into k1` → `copy-objects` before `stop app`; manifest `backupFormat` 3, `store.leg` index,
+   `store.pool` `{target: <pool>, objects: 7, bytes: 6535}`, no `objects/`; index 7 keys (6 required + the store
+   check's probe), pool ⊇ index, one ledger entry; `downtime: 9 s`. Pool files `501:0` (Docker Desktop maps the owner;
+   the `--user` half is for a Linux host and is not measured here).
+3. A blob's object `2825…/0` deleted from A's bucket with the tool's rclone; `veyqctl backup` again → the second index
+   lacks it, the pool still holds it (the first capture is retained, keep 3); that capture's `verify` refuses (A4,
+   `missing object 2825…/0`) — the check doing its job; `veyqctl` exits 1 after starting the app again.
+4. Instance B, a second home, `install --unsigned-local` as project `veyq-cr-pool-b` (an override drops Traefik's
+   ports): ends with `the store in use: none` and the warning. **Its bucket right after the first boot: `{"count":0,
+   "bytes":0}`** — a fresh install holds no object, not even the probe; the gate's exclusion of `PROBE_KEY` stands for a
+   store the app has checked since.
+5. `veyqctl --home B restore <capture 1> --domain family.veyq.test --key-from k1` (no source) → refused: *"the store is
+   empty — … holds no object, and the backup's rows require 6. … --objects-from <pool> (this capture recorded the pool
+   <pool>). Nothing was written."*
+6. One object `rclone touch`ed into B's bucket, `restore … --objects-from <pool>` → refused *"already holds 1
+   object(s) … Empty the bucket …"*; the object deleted, the same command → `copying 6 object(s) …`, `dropped the 49
+   table(s) …`, `restored`, the key placed by `veyqctl`. `veyq-admin config-secret` → `OK`; B's bucket equals capture
+   1's index (size and MD5) for all 6 required keys. `veyq-admin store check` on B: CREDENTIALS, PROVISION, BUCKET
+   passed, PROBE_PUT failed — *"could not reach https://veyq.test: ConnectException"*: B has no ingress (no published
+   Traefik, no DNS for its domain), an artefact of the second instance; the check passed on A after the rollback.
+7. `rclone backend versioning STORE:blobs` on A's and B's own Garage (the shipped recipe) → `"Unversioned"` both.
+   **The prune, live:** A's object put back from the pool (`Pool.empty_into_store`), the probe deleted from A's bucket
+   (A holds no other orphan), `VEYQ_BACKUP_POOL_KEEP=1`, `veyqctl backup` → *"the pool keeps the objects of its newest 1
+   capture(s): 6 object(s) / 6518 B; pruned 1 object(s) no kept capture's index names and the ledger entries …"*; the
+   probe gone from the pool, `2825…/0` still in it, one ledger entry left.
+8. **Phase 5, live:** `VEYQ_RELEASE=0.674`, `veyqctl --source <run>/mirror upgrade --unsigned-local --key-into k4`
+   (the stack run's mirror, the same images) → `downtime: 10 s`, release 0.674; `veyqctl rollback
+   <…-before-0.674> --key-from k4 --yes` → *"the capture verifies against the live store"*, `dropped 49 table(s)`, 0.673
+   started once, *"the objects stay where they are … restored"*; state 0.673, `.env`'s image lines 0.673's,
+   `VEYQ_RELEASE` left at 0.674 (said so). Then `veyq-admin config-secret` → `OK`, `veyq-admin store check` → `passed:
+   true` (PROBE_PUT, PROBE_GET passed), 6 of 6 required objects with the indexed size and MD5, schema V202610161746,
+   `veyq_blob` 6 rows, tenant `family.veyq.test`. **Not done:** a browser opening the Memory's photo after the rollback
+   — the stack lane's suite cannot be pointed at an existing instance; the objects' bytes are what the index check and
+   the store check prove.
+9. Teardown: `docker compose -p <each> down -v --remove-orphans`; `docker ps -a`, `volume ls`, `network ls` filtered by
+   either project → nothing; the run directory and the scratch pool deleted.
 
 ## Definition of done
 
