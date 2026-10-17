@@ -587,7 +587,8 @@ class Database:
         alive without a `veyq_blob` row adds its keys here, as `[storage_key, chunk_count]` rows. `veyq_hold_pin` is
         that table (ADR 0093 § 4, en.moderation.hold): once a held medium's uploader deleted it, its `veyq_blob` row is
         gone and only the pin names its objects, while the database leg carries the hold that needs them — so a store
-        leg read from `veyq_blob` alone would leave them out. A key both name is listed once (`UNION`).
+        leg read from `veyq_blob` alone would leave them out. A key both name is listed once (`UNION`). A table added
+        here must also go into `run_web_e2e.seed_project_decoy`, whose decoy is the smallest instance a capture accepts.
         """
         return [[row[0], int(row[1])] for row in
                 self.query("SELECT storage_key, chunk_count FROM veyq_blob UNION "
