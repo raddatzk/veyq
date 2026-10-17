@@ -1,6 +1,9 @@
 # ADR 0056 — An instance's durable state has three legs, and it is captured with the writer stopped
 
-- Status: Accepted
+- Status: Accepted. §3's store leg as an **index** with an optional object pool, and §7's object checks (owner
+  2026-10-17): built for the cluster's backup gate ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md));
+  decided and not yet built for Compose and `veyqctl`, whose captures still copy the bucket (cr-backup-store-leg-is-an-index
+  builds it).
 - Date: 2026-08-06
 
 ## Context
@@ -53,8 +56,9 @@ idempotently by the **backend itself**, on every start, from the declared store 
 
 **1. An instance's durable state is exactly three legs.** (a) the **database**; (b) the object store's
 **contents**, meaning the objects and not the store's on-disk representation; (c) the **config-secret key
-file**. A procedure that captures fewer than three does not produce a restorable instance, and the third is
-named first in the runbook precisely because it is the one that gets forgotten.
+file**. A procedure that keeps fewer than three does not produce a restorable instance, and the third is
+named first in the runbook precisely because it is the one that gets forgotten. *Keeps*, not *captures*: the
+capture holds leg (b) as its index, and the objects themselves are kept by the store or by an object pool (§3).
 
 **Leg (c) is captured, but never beside legs (a) and (b).** ADR 0050's key file defends a leaked database
 backup only while the key is somewhere else. A capture directory that holds the dump *and* the key is
@@ -88,13 +92,24 @@ blocks — and its two plausible orderings differ in which direction of corrupti
 whose correctness rests on an argument that subtle is a procedure that gets executed wrong. The price is
 downtime equal to the capture, which for a household instance is the cheaper side of that trade.
 
-**3. The store leg is captured logically.** The backup is the object namespace read through the S3 API, not a
-copy of the store's data directories. Three reasons, in order of weight:
+**3. The store leg is captured logically, as its index; the objects go into an object pool only when one is
+named.** The backup reads the object namespace through the S3 API, never the store's data directories, and on
+every target it records that namespace as an **index**: every object's key, size and MD5, in one listing, in the
+manifest (`backupFormat` 3). The objects stay in the store. Owner, 2026-10-17: *"Richtiges Vollbackup liegt doch
+im Betrieb des S3"* — keeping the objects is the store operator's job (its versioning, replication or snapshots),
+and a backup that copied the whole bucket every time would make each capture, and each upgrade's downtime, as
+large as the store. Two properties of the built system make the index enough for what veyq's own backup is for:
+an upgrade migrates the schema and **never rewrites an object** — every object is an immutable ciphertext blob,
+written once by one presigned PUT — so the database plus the index is a complete way back from an upgrade; and
+the index is exactly what lets a restore *check* the objects without holding them.
+
+Logical, for three reasons, in order of weight:
 
 - **It can be verified.** Object keys are comparable against the blob rows that reference them, so the one
-  failure mode Context 2 leaves unhandled can be *detected in the backup* rather than discovered at restore. A
-  volume copy is opaque: a complete one and a truncated one look identical until you restore them.
-- **It is neutral.** It restores onto any S3-compatible store, and onto a different version of the same one.
+  failure mode Context 2 leaves unhandled can be *detected in the backup* rather than discovered at restore — and
+  the index's sizes and MD5s are what a restore holds the live store, or a pool, against before it writes anything
+  (§7). A volume copy is opaque: a complete one and a truncated one look identical until you restore them.
+- **It is neutral.** A pool restores onto any S3-compatible store, and onto a different version of the same one.
   The backend signs through a vendor-neutral SDK precisely so the store is replaceable; a volume backup would
   reintroduce at the backup layer the binding the code goes out of its way to avoid, and would additionally tie
   the restorability of old backups to the store's on-disk format.
@@ -106,11 +121,30 @@ copy of the store's data directories. Three reasons, in order of weight:
   [A5](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md) means **holding no data** rather
   than **holding no tables**.
 
-**On Kubernetes the store leg is its index** ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)
-decision 4): the cluster's backup gate records every object's key, size and MD5 in the manifest (`backupFormat` 3)
-and leaves the objects in the store, whose own versioning, replication or snapshots keep them. The first reason
-above still holds for it — the index is compared against the rows at capture, and against the live store before a
-restore writes anything — the second and third are the mirror's, which Compose keeps taking.
+**The object pool is optional and named per run** (`--objects-to <target>`: a directory, or a bucket of another
+S3-compatible store whose credentials come from the environment, never an argument). It is **copy-only**: rclone
+`copy --immutable`, never `sync`, `move` or a delete — a pool only grows, so an object a later capture no longer
+lists is still there for an earlier capture's restore, and a key whose bytes differ from the pool's copy fails the
+capture instead of replacing it (objects are immutable, so a differing copy is a fault, never an update; measured
+with the pinned rclone 1.75.0: `copy --immutable` exits 6, *"immutable file modified"*, and leaves the pool's copy).
+It is **incremental by construction**: a key the pool holds is not copied again. The capture records the pool's
+target (never a credential) beside the index, and **the index is what ties the two**: a restore copies exactly the
+index's keys out of the pool, whatever else the pool holds. The pool holds ciphertext only, as the store does, so it
+changes nothing about what the operator can read.
+
+**The bundled store keeps no history of its own.** Garage, the pinned v2.0.0, has no object versioning (measured
+2026-10-17 against a throwaway node through the pinned rclone: `GetBucketVersioning` answers `Unversioned`,
+`PutBucketVersioning` and `ListObjectVersions` answer `501 NotImplemented`), and it can snapshot its metadata but
+not its data blocks (the fast path below). So on the bundled store, under Compose, nothing but a pool or a volume
+copy of the store keeps an object the store loses, and `veyqctl status` says so while no pool is configured
+([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)). On Kubernetes the gate takes no pool
+([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 4).
+
+**Every capture is `backupFormat` 3.** A capture that holds its objects itself (`objects/`, `backupFormat` 2, what
+Compose wrote before this decision, and writes until it is built — see Status) is then written by nothing and stays
+readable: it verifies against its own
+`objects/` and restores by copying them, which, like any restore that writes objects, goes only into an empty store
+(§7).
 
 **The tool is invoked, not vendored:** the procedure shells out to `rclone`. `scripts/` carries no third-party
 Python dependency today and this decision does not add one, in the same shape as the e2e orchestrator shelling
@@ -144,7 +178,8 @@ operator gate, and the migration set carries no downgrade path — so returning 
 restoring a backup. The upgrade procedure therefore *begins* with this one, and that ordering belongs to this
 decision rather than to the runbook's discretion.
 
-**7. A restore accepts a backup of the target's schema or an older one, and refuses a newer one.** The restore
+**7. A restore accepts a backup of the target's schema or an older one, and refuses a newer one; it checks the
+objects, and writes them only into an empty store.** The restore
 compares the manifest's `database.schemaVersion` with the Flyway version the freshly installed target is at
 (Flyway's own version order, never a string comparison), before anything is written:
 
@@ -167,6 +202,27 @@ run the failed upgrade again. The restore says this when the backup is older tha
 **Rejected — refusing every backup that is not exactly the target's version.** It is safe, but it makes the
 operator carry the downgrade-restore-upgrade sequence by hand. Each step in it is one more place to install the
 wrong image, and it buys nothing that the forward migration does not already have to guarantee.
+
+**A restore also checks the objects before it writes, and it writes objects only into an empty store** (owner
+2026-10-17). Both forms run before the dump is loaded, and a refusal writes nothing:
+
+- **Without a source — the check only.** Every object the dump's rows require must be in the **live store** with
+  the size and MD5 the index recorded (A4). A missing or different one refuses the restore, naming each; an object
+  the store holds and the index does not is tolerated (an upload after the capture). `--accept-missing-objects`
+  restores knowingly without the named ones, each a Memory whose picture yields a valid URL and a `404`. Nothing is
+  written to the store. This is the way back from an upgrade, whose objects never left the store.
+- **With a source — `--objects-from <pool>` — data, onto a fresh instance only.** The target's database holds no
+  data (A5) **and its store holds no object**; anything else is refused, because copying objects into a store that
+  is in use is reconciling two populated instances, which nothing describes. Every object the rows require must be
+  in the source with the indexed size and MD5, refused by name otherwise as above. Then exactly the index's keys are
+  copied (`copy`, never `sync`), and the store is checked once more against the index before the dump is loaded.
+  A capture that holds its own objects (`backupFormat` 2) is this form with its `objects/` as the source.
+- **Never onto a running instance.** The application is stopped for every restore (§2's writer), and `veyqctl`
+  stops it itself.
+
+*Required* means what the dump's blob rows name, not every key the index lists: the index also holds orphans
+pending reclaim and the chunks of open upload sessions (Context 2), which the instance that resumes would reclaim
+anyway, so their absence is reported and never refused.
 
 ## Consequences
 
@@ -194,6 +250,17 @@ wrong image, and it buys nothing that the forward migration does not already hav
   reliably, and it buys a household instance minutes it does not need (Decision 2).
 - **Rejected — volume copy as the primary form.** Faster and credential-free, but unverifiable and bound to one
   store's format and version (Decision 3).
+- **A lost store is lost unless something outside veyq's backup kept its objects.** The index proves what is
+  missing; it brings nothing back. That is the store's versioning, replication or snapshots, or the object pool
+  (Decision 3) — and on the bundled Garage, which keeps no versions, the pool or a volume copy of the store. The
+  Run pages say it where the commands are, and `veyqctl status` says it on the host.
+- **Rejected — a full copy of the bucket in every capture** (what Compose did until 2026-10-17). Self-contained,
+  but every capture and every upgrade's downtime grows with the store, the copies duplicate what the store's own
+  durability already keeps, and an upgrade, which never rewrites an object, gains nothing from them. The pool keeps
+  the self-contained option for whoever wants it, at the cost of the new objects only.
+- **Rejected — a pool that mirrors the bucket (`sync`).** It would delete from the pool what the store deleted, so
+  an earlier capture's objects would vanish from under its index, and a store that lost objects would take the
+  pool's copies with it on the next run.
 - **Rejected — a domain-rewrite step in the restore.** It is a product surface wearing a runbook's clothes
   (Decision 4).
 

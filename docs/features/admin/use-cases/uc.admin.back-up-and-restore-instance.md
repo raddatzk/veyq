@@ -11,6 +11,10 @@
   store from the host. The restore target serves the **same domain** as the source (ADR 0056 §4). The people
   whose Memories these are still hold their passwords and Emergency Kits — the operator holds no key and cannot
   supply that half ([uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md)).
+- **What is built** (2026-10-17): the store leg as an index, and the restore's check against it, on Kubernetes (A11);
+  for Compose and `veyqctl` it is decided (ADR 0056 §3, §7) and not yet built — their captures still copy the whole
+  bucket into `objects/` and restore it into an empty store (cr-backup-store-leg-is-an-index builds steps 3 and 8 as
+  written below, and the object pool).
 - **Postconditions (success):** A restored instance holds the same three legs as the source: the same database,
   the same objects, and the same config-secret key. Its users sign in with the credentials they already had,
   every Memory decrypts, and the instance can admit members and send recovery links again. Nothing about the
@@ -25,8 +29,11 @@
 2. The operator **dumps the database**. From this moment the dump cannot go stale in the direction that
    matters — with the app down the database gains no rows, so no row can appear whose object the later store
    capture missed (ADR 0056 §2).
-3. The operator **mirrors the bucket** — the object namespace as the store serves it over S3, not the store's
-   on-disk directories (ADR 0056 §3). The capture is cold, so no app is running to sign for the tool: the
+3. The operator **lists the bucket into the capture as its index** — every object's key, size and MD5, as the store
+   serves them over S3, never the store's on-disk directories and never the objects (ADR 0056 §3). The objects stay
+   in the store, whose versioning, replication or snapshots keep them; when the operator names an **object pool**
+   (`--objects-to`), the objects the pool lacks are copied into it — copy-only, so the pool only grows — and the
+   capture records the pool beside the index. The capture is cold, so no app is running to sign for the tool: the
    operator **supplies the store's credentials for this run** ([ADR 0089](../../../decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
    decision 7). For the bundled store the recipe's environment already holds them (the tool derives the S3 key pair
    from the bundled admin token); for a store of their own they are the ones entered in the admin console, which
@@ -47,8 +54,11 @@
 7. The operator **loads the database dump**. It replaces the fresh schema wholesale, migration history included,
    so the instance is at the version it was captured at. The target may run the backup's release or a newer one
    (A9); a backup newer than the target is refused before anything is written (A10).
-8. The operator **pushes the mirrored objects back** into that bucket, with the credentials supplied as for the
-   capture.
+8. The operator **lets the restore check the objects**: before anything is written, every object the dump's rows
+   require must be in the store with the size and MD5 the index recorded (A4). On a fresh store — another host, a
+   lost disk — the operator names the pool (`--objects-from`) instead: then the store must hold **no object**, every
+   required object must be in the pool as indexed, and exactly the index's keys are copied in (ADR 0056 §7). The
+   credentials are supplied as for the capture.
 9. The operator **puts the config-secret key file**, from wherever it was kept, where the application expects
    it, on storage that survives a container being recreated, **readable by the application's runtime user** — a
    key the application cannot read reports `ABSENT` and refuses invites and resets exactly as a missing one does.
@@ -68,8 +78,8 @@
 ## Alternate / exception flows
 
 - **A1 — The application was still running during the capture.** The one precondition of the whole procedure is
-  gone: a client can complete an upload and the app can commit its row between the database dump and the store
-  mirror, producing a row whose object was never captured. That restores as a Memory with a picture that yields
+  gone: a client can complete an upload and the app can commit its row between the database dump and the store's
+  index, producing a row whose object was never indexed (nor pooled). That restores as a Memory with a picture that yields
   a valid URL and a `404` — no server-side error, nothing in a log, a broken thumbnail as the only sign
   (ADR 0056 § Context 2). Redo the capture; a partially captured backup cannot be repaired after the fact.
 - **A2 — The config-secret key was not captured.** The instance starts, serves content, and reports
@@ -86,15 +96,20 @@
   Restore onto the same domain, or treat it as a new instance.
 - **A4 — Objects are missing relative to the rows that reference them.** Detectable before the restore, because
   the capture is logical: the object keys can be compared against the blob rows that name them. This is the one
-  check a volume copy cannot offer, and it is the reason the store leg is captured this way. For an index capture
-  (A11) it is asked twice: at capture, of the index; and before a restore writes anything, of the **live store** —
-  every object the dump's rows require must be there with its indexed size (and MD5 where both sides have one).
-  A missing or changed object refuses the restore, naming it; an object the index does not hold is tolerated (an
-  upload after the capture). The operator brings missing objects back from the store's own versioning, or restores
-  knowingly without them (`--accept-missing-objects`), each a Memory whose picture yields a `404`.
+  check a volume copy cannot offer, and it is the reason the store leg is captured this way. It is asked twice: at
+  capture, of the index; and before a restore writes anything, of **where the objects come from** — the live store,
+  or the pool named with `--objects-from` — every object the dump's rows require must be there with its indexed size
+  and MD5 (size alone where one side has no MD5, said so). A missing or changed object refuses the restore, naming
+  it; an object the index does not hold is tolerated (an upload after the capture), and so is an indexed key no row
+  requires (an orphan pending reclaim, an open upload's chunk). The operator brings missing objects back from the
+  store's own versioning or from a pool, or restores knowingly without them (`--accept-missing-objects`), each a
+  Memory whose picture yields a `404`. **On the bundled Garage there is no versioning to bring them back from**
+  (ADR 0056 §3, measured): only a pool or a volume copy of the store can.
 - **A5 — The target already holds data.** The restore is defined onto an empty instance and nothing reconciles
-  two populated ones. A load over live rows, or a mirror into a bucket that already holds objects, produces a
-  state no test covers and no decision describes. Start from a fresh instance instead.
+  two populated ones. A load over live rows, or objects copied into a bucket that already holds objects, produces a
+  state no test covers and no decision describes. So a restore that copies objects (`--objects-from`, or a capture
+  that holds its own) also refuses a store holding **any** object, before it writes; a restore that only checks
+  the store needs the store as it is, and refuses only a populated database. Start from a fresh instance instead.
 
   **Empty means *holding no data*, not *holding nothing*.** A **freshly installed** instance — started once, so
   its schema is migrated and its store provisioned — is exactly what a restore targets, and is accepted. That
@@ -104,8 +119,10 @@
   has no way to produce a target that is initialised in one respect and untouched in the other. What is refused
   is an instance that has been **used**: any row of real data, including the rows a half-finished restore just
   wrote.
-- **A6 — The target store is not the one the source used.** The capture is the S3 namespace, so any
-  S3-compatible store accepts the objects, and the backend signs vendor-neutrally. What differs is where the
+- **A6 — The target store is not the one the source used.** The objects then come from a pool (`--objects-from`);
+  the pool and the index are the S3 namespace, so any S3-compatible store accepts the objects, and the backend signs
+  vendor-neutrally. Without a pool a different store cannot be restored onto: the index names objects it cannot
+  supply. What differs is where the
   *setting* comes from. A **bundled** setting is a reference to the hint of the install it runs on, so a new bundled
   store, even under another bucket name the new recipe's hint carries, works as it stands. A store of the
   operator's own comes back as the setting the source held — its endpoint and bucket are in the restored database,
@@ -118,7 +135,10 @@
   downgrade path, so the previous image cannot simply be started again. Restore the backup taken before the
   upgrade; there is no shorter way back. The target must run the **release the backup came from** (the
   manifest's `app.version`). Restored onto the new release, the backup would be migrated up again at the next
-  start (A9), which repeats the failed upgrade instead of undoing it.
+  start (A9), which repeats the failed upgrade instead of undoing it. The upgrade rewrote no object, so the
+  objects the backup indexes are still in the instance's own store: the rollback restores onto **that** store, its
+  database emptied, with the check only — or onto a fresh instance's empty store from a pool (`--objects-from`). On
+  Kubernetes it is the first (A11); which of the two `veyqctl` offers on Compose is open (cr-backup-store-leg-is-an-index).
 - **A9 — The backup is older than the target.** Accepted (ADR 0056 §7). The restore drops every table of the
   data-less target before loading, so the instance holds exactly the captured schema. The application then
   migrates it up at its next start, the same forward migration an ordinary upgrade runs. The restore says so as
@@ -129,16 +149,16 @@
 - **A10 — The backup is newer than the target.** Refused before anything is written, naming the release the
   backup came from. The older image would refuse to start on a migration history it does not know, so loading
   and failing at boot would leave the operator with neither instance.
-- **A11 — On Kubernetes, the capture is the chart's backup gate, and its store leg is an index**
+- **A11 — On Kubernetes, the capture is the chart's backup gate**
   ([ADR 0098](../../../decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)). The gate runs in
   the app pod before the container that migrates, with the old pod already terminated, so steps 1 and 5 are
-  Kubernetes' (`Recreate`). Step 3 lists the bucket instead of mirroring it — every object's key, size and MD5 —
-  and leaves the objects in the store, whose versioning, replication or snapshots are the operator's to keep. Step 4
+  Kubernetes' (`Recreate`). Step 3 is the index, as everywhere. Step 4
   is not the gate's: it never mounts the key, and records leg (c) as kept separately; the operator exports the key
   once, by hand. The restore is a one-off Job, run with the tools image of the release that wrote the capture, onto
-  an emptied database the backup's release has started once: no step 8 (the objects are where they were, checked
-  against the index, A4), the key from the operator's medium, and as its last step the gate's record set to the
-  backup's release, so that release's next start passes. A Compose capture is unchanged by any of this.
+  an emptied database the backup's release has started once: step 8 is the check only (the objects are where they
+  were, A4), the key from the operator's medium, and as its last step the gate's record set to the
+  backup's release, so that release's next start passes. The gate names no pool (ADR 0098 decision 4); the Job may
+  pass `--objects-from` like any restore, then only into an empty store.
 - **A8 — Only the users' half is lost.** Nothing here helps. A perfectly restored server whose people lost their
   passwords and Emergency Kits is unreadable ciphertext, and that is the design, not a defect
   ([uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md) A7).

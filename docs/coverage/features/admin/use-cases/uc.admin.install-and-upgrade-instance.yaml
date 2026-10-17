@@ -26,8 +26,16 @@ acceptanceCriteria:
       started, no sha256 or digest in that manifest is used, and nothing on the host changes.
   - id: an-upgrade-backs-up-before-it-migrates
     text: >-
-      An upgrade takes a three-leg backup, the key to a separate medium, before the new release's app starts and
-      migrates the schema.
+      An upgrade takes a backup of the three legs — the database, the store's index (and, when a pool is configured,
+      the new objects into it), and the key to a separate medium — before the new release's app starts and migrates
+      the schema.
+  - id: status-warns-while-the-bundled-store-has-no-pool
+    # ADR 0056 §3, ADR 0096 decision 1. Decided 2026-10-17, not built: cr-backup-store-leg-is-an-index builds it and
+    # proves it in scripts/veyqctl_selftest.py (a host tool, not a coverage surface — this file's header).
+    text: >-
+      `veyqctl status` warns while the instance keeps its objects in the bundled store and no object pool is
+      configured, says that the bundled store keeps no object versions, and names how to configure one; with a pool
+      configured, or a store of the operator's own, it does not. The warning never changes the exit code.
   - id: a-cluster-start-that-would-migrate-backs-up-first
     # A6, ADR 0098. The gate is `scripts/instance_backup.py gate` in the `veyq-tools` image, and neither a Python
     # operator tool nor a chart render is a coverage surface (ADR 0040), so this file stays `planned` for it too. What
