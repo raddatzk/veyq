@@ -27,20 +27,22 @@ the log that keeps them accountable. A **core** feature
   step down.
 - ★ [Report what you see](use-cases/uc.moderation.report.md) — **built (backend + web)** (ADR 0093 §§ 1–2, 4–5): a
   member or a guest reports up to 100 items; one case per item, a hold on each, moderators mailed.
-- ★ [Review a case](use-cases/uc.moderation.review-a-case.md) — **planned** (ADR 0093 §§ 3–5, 11): the queue, a case's
-  reports and log, the held snapshot in the share viewer's moderation mode, dismissing, extending a hold, barring a
-  reporter.
-- ★ [Take a measure](use-cases/uc.moderation.take-a-measure.md) — **planned** (ADR 0093 § 6, ADR 0099 § 6): block the
-  share, the content or a guest uploader; propose the Server Owner's steps; lift.
+- ★ [Review a case](use-cases/uc.moderation.review-a-case.md) — **built (backend + web)** (ADR 0093 §§ 3–5, 11): the
+  queue, a case's reports and log, the held snapshot in the share viewer's moderation mode, dismissing, extending a
+  hold, barring a reporter.
+- ★ [Take a measure](use-cases/uc.moderation.take-a-measure.md) — **built (backend + web + admin-web)** (ADR 0093 § 6,
+  ADR 0099 § 6): block the share, the content or a guest uploader; propose the Server Owner's steps, which they take or
+  decline in admin-web or `veyq-admin`; lift.
 - The statement of reasons and the objection — planned (ADR 0093 § 7).
 
 ## Enablers
 
 - [en.moderation.moderation-key](enablers/en.moderation.moderation-key.md) — **built** (ADR 0099 § 2: per epoch a
   32-byte `M_n`, its public bundle, a grant per moderator, and the key proof every moderation call carries).
-- [en.moderation.hold](enablers/en.moderation.hold.md) — **built** for the case-open hold (ADR 0093 § 4: a snapshot of
-  the reported rows and a pin on their store objects, which the reclaim sweep skips; the ends).
-- [en.moderation.log](enablers/en.moderation.log.md) — **built** for the instance events (ADR 0093 § 11: an append-only table, structured
-  fields in the clear and free text sealed to the moderation key; the instance events and their retention).
+- [en.moderation.hold](enablers/en.moderation.hold.md) — **built** for a case's holds (ADR 0093 § 4: a snapshot of
+  the reported rows and a pin on their store objects, which the reclaim sweep skips; the ends of an open, dismissed,
+  decided or extended case); an authority's order's are not.
+- [en.moderation.log](enablers/en.moderation.log.md) — **built** (ADR 0093 § 11: an append-only table, structured
+  fields in the clear and free text sealed to the moderation key; the instance and case events and their retention).
 - [en.moderation.guest-write-record](enablers/en.moderation.guest-write-record.md) — **built** (ADR 0093 § 10: a
   guest's write keeps its client address, port and time for N days, as evidence a hold copies).

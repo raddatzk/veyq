@@ -4,14 +4,18 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
   A **model** enabler: tables, a seam, one skip in the reclaim sweep, and the ends.
-- **Status:** **built** for the case-open hold — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+- **Status:** **built** for a case's holds — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 4, built by cr-report-and-hold (2026-10-17): `core/moderation/hold` (`Holds`, `HoldSnapshot`, `CoreHoldSnapshot`),
   Memories' `MediaHoldSnapshot`, `StoreReclaimStore.due`'s skip; the reconcile's claim query and the backup's blob index
-  read the pins too.
+  read the pins too. The ends of a dismissed, decided, lifted or extended case and the review's reads of the snapshot
+  (`CaseSnapshots`, `CaseReviewResource`, Memories' `CaseMediaResource`, Depot's `CaseFilesResource`) by
+  cr-moderation-review-and-measures; an authority's order's ends are not built.
 - **Provides:** a copy of what was reported, taken when it was reported, that no delete, overwrite or revoke reaches —
   the evidence a moderator opens with the keys a report hands over.
-- **Serves (use-cases):** [uc.moderation.report](../use-cases/uc.moderation.report.md); later the review and an
-  authority's order (ADR 0093 §§ 3, 12).
+- **Serves (use-cases):** [uc.moderation.report](../use-cases/uc.moderation.report.md),
+  [uc.moderation.review-a-case](../use-cases/uc.moderation.review-a-case.md),
+  [uc.moderation.take-a-measure](../use-cases/uc.moderation.take-a-measure.md); later an authority's order (ADR 0093
+  § 12).
 - **Depends on:** [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md) (every store object
   passes `StoreReclaimSweep`), [en.moderation.moderation-key](en.moderation.moderation-key.md).
 
@@ -75,7 +79,10 @@ operator pays for the held bytes. When the last pin of a key has expired, its re
 | Hold | Ends | Set by |
 |---|---|---|
 | Case open | 90 days after the report that took it | this enabler (cr-report-and-hold) |
-| Case dismissed, measure taken, lifted | at once / six months after the statement / with the lift | cr-moderation-review-and-measures, cr-statement-of-reasons-and-objection |
+| Case dismissed | at once | cr-moderation-review-and-measures (`CaseDecisions`) |
+| Measure taken | six months after the decision (`Holds.SIX_MONTHS`, 183 days); from the statement's sending once it exists | cr-moderation-review-and-measures; cr-statement-of-reasons-and-objection moves the start |
+| The case's last measure lifted | at once, and the case closes | cr-moderation-review-and-measures |
+| Extended by a moderator | the end the extension names: after the current end, at most six months from now, with a sealed reason | cr-moderation-review-and-measures |
 | Child sexual abuse material, an authority's order | ADR 0093 § 4's table | cr-authority-orders-and-art18-reports |
 
 The moderation cleanup (`ModerationPurge`, hourly, which also runs at its first trigger after startup) deletes a hold

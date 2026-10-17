@@ -115,10 +115,12 @@ entscheidet. Was gemeldet wurde, bleibt für die Moderation bis zu 90 Tage erhal
 wird. [Etwas melden](/veyq/de/help/report-something/)
 
 Reagieren können dann die Leute, die deinen Server betreiben, und die Moderation, die sie bestimmen. Eine zentrale
-Moderationsstelle gibt es nicht, weil es keinen zentralen Dienst gibt. **Eine einzelne Freigabe oder ein einzelnes
-Element abschalten kann der Betrieb noch nicht**; das kann nur, wer sie erstellt hat. Was der Betrieb kann: einen
-**ganzen Bereich** auf seinem Server offline nehmen — für dessen Mitglieder und mit jeder Freigabe darin.
-Private Inhalte bleiben trotzdem unlesbar — genau das ist der Entwurf.
+Moderationsstelle gibt es nicht, weil es keinen zentralen Dienst gibt. Die Moderation kann sperren, was gemeldet
+wurde — einen Link, ein Element oder einen Gast, der über einen Link hochgeladen hat —, und alle sehen an seiner Stelle
+dann **Von der Moderation gesperrt**, ohne Begründung; eine Sperre löscht nichts und lässt sich aufheben
+([Etwas melden](/veyq/de/help/report-something/#von-der-moderation-gesperrt)). Die Anmeldung eines Mitglieds zu
+sperren oder alles unter einer Adresse offline zu nehmen, ist Sache der Person, die den Server betreibt. Private
+Inhalte bleiben trotzdem unlesbar — genau das ist der Entwurf.
 
 ## Gebaut, um zu bleiben
 

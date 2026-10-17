@@ -5,6 +5,8 @@ sources:
   - docs/features/moderation/enablers/en.moderation.moderation-key.md
   - docs/features/moderation/enablers/en.moderation.log.md
   - docs/features/moderation/use-cases/uc.moderation.report.md
+  - docs/features/moderation/use-cases/uc.moderation.review-a-case.md
+  - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
   - docs/features/moderation/enablers/en.moderation.hold.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
   - docs/crosscutting/security-model.md
@@ -154,8 +156,12 @@ time the server observes live is not kept for them. What it does hold, each with
   verifies under), why it was made, and whether a rotation is due; per moderator and epoch a grant sealed to that
   moderator's identity. Never the key itself: it opens on a moderator's device only.
 - **The moderation log's structured fields**: the event (appointed, accepted, key handed on, removed, stepped down,
-  identity replaced, new key), its time, the moderator it concerns, who acted, the epoch and a reason category. Free
-  text would be sealed to the moderation key. Kept to 31 December of the third year after the moderator's removal.
+  identity replaced, new key; for a case: report received or attached, opened for review, dismissed, measure taken or
+  lifted, proposed, proposal taken or declined, hold extended or ended, reporter barred), its time, the moderator it
+  concerns, who acted, the epoch, a reason category, a measure's kind and target id, and an extension's new end. Free
+  text — a decision's note, an extension's reason — only sealed to the moderation key in the moderator's browser, bound
+  to its epoch and case (`moderation-note` [epoch, caseId]). Kept to 31 December of the third year after the
+  moderator's removal, a case's events after the case closed.
 - A key proof's challenge, for five minutes.
 - **A report's clear fields** ([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md)):
   its category, the epoch it is sealed to, when it arrived, each reported item's kind and id, and who sent it — the
@@ -165,7 +171,19 @@ time the server observes live is not kept for them. What it does hold, each with
   whether the "new case" mail went out.
 - **A hold** ([en.moderation.hold](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.hold.md)):
   copies of the reported rows as stored (ciphertext and metadata) and the storage keys it pins, until its end — so the
-  server keeps what a member deleted after a report, for up to 90 days, readable to no one but the moderators.
+  server keeps what a member deleted after a report, readable to no one but the moderators: for up to 90 days while
+  the case is open (a dismissal ends it at once), six months after a measure (its lift ends it), and beyond that only
+  by a moderator's extension, at most six months at a time.
+- **A case's measures** ([uc.moderation.take-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.take-a-measure.md)),
+  in the clear, because the server must refuse what they name: per measure its kind (a link, content, a guest identity,
+  a member's sign-in, a barred reporter), the id it names — the link, the node or item, the guest identity, the account
+  —, the case it answers, who took it and when, and when it was lifted. The same for a proposal to the Server Owner
+  (its step, its target, who proposed it, when, and whether it was taken or declined), and for a case its state, when
+  it was decided and closed, and its hold's end. The reports stay sealed as above.
+- **The review** ([uc.moderation.review-a-case](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.review-a-case.md)):
+  which moderator fetched which case's report shares and when. What it serves is the hold's ciphertext and presigned
+  reads of its pinned objects; the report, the report share and the content open in the moderator's browser with the
+  moderation key, never on the server.
 - **The guest-write record** ([en.moderation.guest-write-record](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.guest-write-record.md)),
   while the Server Owner keeps it switched on: for each write a link's guest makes (naming itself, a folder or file it
   creates, renames or moves, a photo or file it adds), the client's IP address and source port as the server's one

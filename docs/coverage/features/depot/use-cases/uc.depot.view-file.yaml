@@ -99,3 +99,21 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ShareFilesSliceTest.aGuestsUploadIsAttributedToItsIdentityForMembersAndTheGuestListingNamesNoUploader] }
       web: { unit: [src/features/depot/components/FileDetail.guest.test.ts] }
+  - id: a-file-blocked-by-the-operator
+    # Alternate flow A7, added by cr-moderation-review-and-measures (uc.moderation.take-a-measure).
+    text: >-
+      A file a moderator blocked shows "Blocked by the operator" with no reason in its row and on this page; nothing is
+      read (451 blocked_by_operator) and no download or replace is offered, for a member and a guest alike, and the
+      uploader may still delete it.
+    coverage:
+      backend:
+        integration: [ModerationDepotSliceTest.aBlockedFileIsNeitherReadNorReplacedByAnyoneWhileTheReviewStillReadsIt]
+      web:
+        unit: [src/core/node/LevelView.blocked.test.ts, src/features/memory/components/FolderShareGuest.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The row is held (the placeholder, no opening, delete alone kept, for a member and a guest), and so is a
+          guest's file page opened by its address: core's share page draws the placeholder in place of the file's
+          detail and reads nothing of it (FolderShareGuest.test.ts). The member's page does the same
+          (MemoryHomeView.vue's `node-blocked`), with no test of its own.

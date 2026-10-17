@@ -1,37 +1,86 @@
 useCase: uc.moderation.review-a-case
 feature: moderation
 title: Review a case
-status: planned
-# Written by cr-moderation-review-and-measures phase 0; its later phases turn each gap into refs.
+# Built by cr-moderation-review-and-measures: core/moderation/cases (CaseViews, CaseDecisions) and core/moderation/review
+# (CaseReviewResource), Memories' CaseMediaResource and Depot's CaseFilesResource on the backend, all behind
+# ModerationProofGate; features/moderation (the queue, CaseDetail, cases.ts) and features/moderation/review (ShareReview,
+# openReview, the review data source) on web. Lane L1's browser pass is e2e/tests/features/review-and-measures.spec.ts,
+# tagged per criterion; `stack` waits under gaps until a run admits it.
 acceptanceCriteria:
   - id: the-queue-lists-cases-in-clear-fields
     text: >-
       Behind the role and a key proof the queue lists the instance's open and decided cases in clear fields only
       (category, kind, times, report count, tenant, state, hold end), urgent categories first, then the oldest.
+    coverage:
+      backend:
+        integration: [ModerationCasesSliceTest.theQueueListsTheInstancesCasesInClearFieldsUrgentFirst, ModerationProofPostureSweepTest.everyKeyProvedOperationRefusesAModeratorWithoutTheProof]
+      web:
+        unit: [src/features/moderation/ModerationQueue.test.ts, src/features/moderation/cases.test.ts]
   - id: a-case-shows-its-reports-and-log
     text: >-
       A case's details carry each report's sealed part, opened in the browser with its epoch's key, its measures,
       proposals, hold and log; the server answers them only to a moderator with a proof over that case.
+    coverage:
+      backend:
+        integration: [ModerationCasesSliceTest.aCaseCarriesItsSealedReportsHoldTargetsAndLog, ModerationProofPostureSweepTest.everyKeyProvedOperationRefusesAModeratorWithoutTheProof]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
   - id: review-reads-the-held-snapshot
     text: >-
       The review fetches the report shares and the held snapshot through moderation reads, which log one opened event per
       fetch; it answers the held rows after the share, the node and the space were deleted, and nothing once the hold
       ended.
+    coverage:
+      backend:
+        integration: [ModerationMemoriesSliceTest.theReviewReadsTheHeldSnapshotAfterTheLinkTheMemoryAndTheSpaceAreGone, ModerationDepotSliceTest.aBlockedFileIsNeitherReadNorReplacedByAnyoneWhileTheReviewStillReadsIt, ModerationProofPostureSweepTest.theSweepSeesTheModerationSpecAndEveryReviewRead]
+      web:
+        unit: [src/features/moderation/review/openReview.test.ts]
   - id: moderation-mode-renders-the-guest-viewer-without-guest-calls
     text: >-
       The share viewer in moderation mode unlocks only the moderation grants, opens the reports and report shares, and
       renders the snapshot with the guest viewer read-only, calling no guest endpoint and no scope client.
+    coverage:
+      web:
+        unit: [src/features/moderation/review/ShareReview.guard.test.ts, src/views/ShareView.moderation.test.ts, src/features/moderation/review/openReview.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          "Unlocks only the moderation grants" is the shared ModerationGate's, which ShareReview.vue mounts with `review`;
+          its unlock is held where /moderation uses it (uc.moderation.serve-as-moderator's coverage), while
+          ShareReview.guard.test.ts mounts ReviewBody, past the gate, and no test mounts the review page through the gate.
   - id: dismissal-ends-the-hold-at-once
     text: >-
       A dismissal closes the case, ends its hold at once (snapshot dropped, pins released, the sweep reclaims what was
       deleted meanwhile) and dates the case's events to 31 December of the third year after the close.
+    coverage:
+      backend:
+        integration: [ModerationCasesSliceTest.aDismissalClosesTheCaseEndsItsHoldAtOnceAndDatesItsEvents, ModerationMemoriesSliceTest.aDismissalReleasesThePinsAndTheSweepReclaimsWhatWasDeletedMeanwhile, ModerationRacesSliceTest.aReportInsideADismissalOpensANewCaseAndNoHoldStaysOnTheClosedOne, ModerationLogSliceTest.theRetentionEndIsTheLastDayOfTheThirdYearAfter]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
   - id: an-extension-needs-a-reason-and-a-bound
     text: >-
       A hold is extended only while alive, with a sealed reason and an end after the current one and at most six months
       from now; the log records both.
+    coverage:
+      backend:
+        integration: [ModerationCasesSliceTest.anExtensionNeedsAnAliveHoldAReasonAndABound]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
   - id: a-barred-reporter-is-refused
     text: >-
       A barred member's further reports, or a guest's through the barred link, are refused until the bar is lifted.
+    coverage:
+      backend:
+        integration: [ModerationCasesSliceTest.aBarredMemberReportsNothingUntilTheBarIsLifted, ModerationCasesSliceTest.aBarredLinkTakesNoGuestReportsUntilLifted]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
 gaps:
-  backend: Planned; built by cr-moderation-review-and-measures phases 2-3.
-  web: Planned; built by cr-moderation-review-and-measures phases 4-5.
+  crypto: >-
+    The `moderation-note` seal a dismissal's note and an extension's reason use (bound to its epoch and case) is pinned
+    by packages/crypto's src/report.test.ts, "moderation notes", against its vector, but crypto's CI job has never
+    executed (ADR 0040).
+  stack: >-
+    e2e/tests/features/review-and-measures.spec.ts (lane L1, being written with cr-moderation-review-and-measures) tags
+    the-queue-lists-cases-in-clear-fields, a-case-shows-its-reports-and-log and
+    moderation-mode-renders-the-guest-viewer-without-guest-calls; stack refs are admitted only once a CI run executed
+    lane L1 (ADR 0040).

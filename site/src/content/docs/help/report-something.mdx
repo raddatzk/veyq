@@ -3,6 +3,7 @@ title: "Report something"
 sources:
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
+  - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
 ---
 
 If you see something in a space or through a link that is illegal or against the terms, you can tell the people who
@@ -37,5 +38,21 @@ If **Report** is not there, the server has no moderation key yet, and there is n
   reach them at once.
 - **Your address** goes to the server once, for the receipt it mails you; it keeps only the copy the moderators alone
   can read.
+
+## Blocked by the operator
+
+When the moderators decide that something must not be shown any more, they block it. In its place you then see
+**Blocked by the operator**, with its name and without a reason: in the list of a folder, as a tile in a Memory, and in
+the lightbox. A member of the space and a guest of a link see the same.
+
+- **It does not open.** Nothing of it is shown or downloaded, and nothing inside a blocked folder or Memory either.
+- **It can still be deleted.** Whoever could delete it before — the person who uploaded it, for example — still can.
+  Nothing else reaches it: it cannot be opened, renamed or moved, a file's content cannot be replaced, and once deleted
+  it cannot be restored from the trash while the block stands.
+- **Nothing is deleted by a block.** When the moderators lift it, it is back as it was.
+- **A blocked link** no longer opens for anyone it was sent to: they see it as a link that does not exist. The person
+  who made it can neither re-activate nor renew it while the block stands. If the moderators blocked a guest who
+  uploaded through a link, that link stops working too, and the person who made it may renew it: the renewed link has a
+  new address.
 
 How safe the rest of your data stays: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

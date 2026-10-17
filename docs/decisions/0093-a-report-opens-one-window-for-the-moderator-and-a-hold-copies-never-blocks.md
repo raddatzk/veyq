@@ -5,8 +5,12 @@
   hold (cr-report-and-hold, 2026-10-17; [uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
   [en.moderation.hold](../features/moderation/enablers/en.moderation.hold.md)): the report share and its sealed part,
   one case per item, the new-case mail and the reporter's receipt, the snapshot and the pin, and a case-open hold's
-  90-day end; a field reported on its own and "everything by this uploader" are not, and neither are review and
-  every decision (§§ 3, 6, 7) or the other hold ends. The rest is not. Who moderates — moderators the
+  90-day end; a field reported on its own and "everything by this uploader" are not. §§ 3 and 6 are built — the queue,
+  the review in moderation mode, and every step and its lift, the Server Owner's taken on the admin channel — with § 4's
+  other ends of a case and § 5's bar of a reporter (cr-moderation-review-and-measures, 2026-10-18;
+  [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md),
+  [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)); the statement of
+  reasons and the objection (§ 7) are not. The rest is not. Who moderates — moderators the
   Server Owner appoints, sharing one instance moderation key — is
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
   and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here
@@ -140,8 +144,9 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
 
 - **web/'s moderation surface**, a route on every tenant host reachable only with the `MODERATOR` role and the key
   proof ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6), shows the
-  instance-wide queue (clear fields only) and opens `https://<tenant domain>/s/…#<sealed report>` on the reported
-  tenant's host.
+  instance-wide queue (clear fields only) and opens `https://<tenant domain>/s/<case id>#moderation` on the reported
+  tenant's host (as built: the fragment names the mode and carries no key; the case's reports and report shares come
+  sealed through the key-proved review reads, uc.moderation.review-a-case).
 - **web/'s share viewer in moderation mode** signs the moderator in and unlocks their vault **only to open their
   moderation grants** — no member shell, no scope grant fetched — keeps the moderation key and drops the Master Key
   and the identity private key before any reported content opens. It then opens the report, proves the moderation

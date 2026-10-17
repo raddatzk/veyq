@@ -180,7 +180,8 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
   decryptable-on-report is a property of every public share on every server (the report carries the link's
   secret, [security model](../crosscutting/security-model.md)), not something a space chooses. The terms are
   where the space tells its members and guests so; how a report is handled is the operator section's (6), which
-  every space carries. Neither the report intake nor an operator action on a single share is built yet (security
+  every space carries. The report intake and an operator's measures on a single share, item or guest are built
+  (ADR 0093 §§ 1-6, uc.moderation.take-a-measure); the statement of reasons and the operator section are not (security
   model § Sharing).
 - **The operator section and the provider identification are new public surface** (6, 7): instance settings in
   admin-web and the CLI ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)),

@@ -29,7 +29,7 @@ this page says so.
 |---|---|---|---|
 | [Key Transparency](#key-transparency) | an identity installed by the operator; TOFU's first-use gap | named as the end-state; no design recorded | ADR 0060 (g), ADR 0028 |
 | [Strict verification mode](#strict-verification-mode) | verification is advisory; nothing enforces it before a first share | decided in principle; shape open | ADR 0028 Decision 4 |
-| [Abuse-report intake and per-share operator action](#abuse-report-intake-and-per-share-operator-action) | no notice-and-takedown path for a single public share | described in the target model | security-model § Sharing |
+| [Statement of reasons, objection and authority orders](#statement-of-reasons-objection-and-authority-orders) | the affected are not told of a moderation decision and cannot object; an authority's order has no entry | decided | ADR 0093 §§ 7, 12–13 |
 | [Passkey unlock](#passkey-unlock) | no passwordless login and unlock | method named in the contract; no client | en.account.key-model |
 | [Hybrid ML-DSA signatures](#hybrid-ml-dsa-signatures) | signatures are classical (Ed25519) | strategy only | ADR 0017 |
 | [A client served by a trusted third party](#a-client-served-by-a-trusted-third-party) | operator-served web is passive-operator only | trust tier defined; needs a central origin | ADR 0026 |
@@ -78,28 +78,25 @@ hold against an active operator only on a client that operator does not serve.
 Decision 4 and [§ What is still open](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md#what-is-still-open),
 [uc.spaces.require-verified-identities](https://github.com/raddatzk/veyq/blob/main/docs/features/spaces/use-cases/uc.spaces.require-verified-identities.md).
 
-## Abuse-report intake and per-share operator action
+## Statement of reasons, objection and authority orders
 
-**Today.** Neither half is built. There is no report intake, and the operator has no action on a single share:
-revoking one is its creator's alone. The operator's only lever is suspending the whole tenant, which takes every link
-in it down
-([uc.admin.suspend-tenant](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.suspend-tenant.md)).
-What is built is who will act on a report: moderators the Server Owner appoints, who share one instance moderation
-key in epochs that the server stores only as a public half and sealed grants, and every moderator call proved with
-that key ([uc.moderation.appoint-moderators](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md),
-[uc.moderation.serve-as-moderator](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.serve-as-moderator.md)).
+**Today.** Notice-and-takedown at the share boundary is built. A member or a guest reports what they see; the report
+share is sealed to the instance moderation key, and a hold keeps the reported rows and objects. Moderators the Server
+Owner appoints review the held snapshot in the share viewer's moderation mode, holding only that key, and decide in
+web's moderation surface: dismiss, extend a hold, bar a reporter, or block a link, content or a guest uploader. Blocking
+a member's sign-in and taking a tenant offline stay the Server Owner's, on the admin channel. Every step is a row by id
+that deletes nothing and is lifted by closing it
+([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md),
+[uc.moderation.review-a-case](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.review-a-case.md),
+[uc.moderation.take-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.take-a-measure.md)).
 
-**Gap it would close.** Notice-and-takedown at the share boundary. In the target model, trust and safety operates
-where content is distributed: an abuse report includes the full share URL and thus the key in its fragment, so the
-operator **can decrypt a reported public share** to verify it, quarantine it, preserve evidence and act; the same
-intake serves takedown requests. Private, unshared content stays unscannable by design; public shares become
-decryptable on report, so notice-and-takedown works exactly where content is distributed.
+**Gap it would close.** The person affected by a decision is not told of it, and cannot object; no second moderator
+reviews an objection. An authority's order — which acts on ids, without a report — has no entry, and the flow for
+child sexual abuse material and Art. 18 reports, with its own hold ends, is not built.
 
-**Design state.** Decided: a report is a report share sealed to the moderation key plus a hold that copies and never
-blocks, reviewed in web's moderation surface holding only that key
-([ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md),
-[ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)).
-The intake, the hold, the measures and the log's case events are not built.
+**Design state.** Decided: the statement of reasons and the objection in
+[ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+§ 7, an authority's order and Art. 18 reports in §§ 12–13; both reuse the block-by-id steps that are built.
 
 **Decided in:** [security-model § Sharing & share-boundary Trust & Safety](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#sharing--share-boundary-trust--safety),
 [ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md),

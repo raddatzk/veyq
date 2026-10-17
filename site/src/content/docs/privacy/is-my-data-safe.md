@@ -107,9 +107,11 @@ the moderators learns of the report, and nothing is blocked by it: a person deci
 them for up to 90 days even if it is deleted in the meantime. [Report something](/veyq/help/report-something/)
 
 Who acts on it is the people who run your server and the moderators they appoint. There is no central moderation
-team, because there is no central service. Today they **cannot yet switch off a single share** or item: only the
-person who created it can. What the operator can do is take a **whole space** on their server offline — for
-its members and for every share in it. They still cannot read anything private, which is the whole design.
+team, because there is no central service. The moderators can block what was reported — a link, an item or a guest
+who uploaded through a link — and everyone then sees **Blocked by the operator** in its place, without a reason; a
+block deletes nothing and can be lifted ([Report something](/veyq/help/report-something/#blocked-by-the-operator)).
+Blocking a member's sign-in or taking everything on an address offline is up to the person who runs the server. They
+still cannot read anything private, which is the whole design.
 
 ## Built to last
 

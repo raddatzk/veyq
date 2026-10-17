@@ -76,5 +76,9 @@ everyone sees that it was the operator who blocked it.
   [uc.sharing.share-public-viewer](../../sharing/use-cases/uc.sharing.share-public-viewer.md),
   [uc.memory.gallery](../../memory/use-cases/uc.memory.gallery.md), [uc.depot.view-file](../../depot/use-cases/uc.depot.view-file.md),
   [uc.account.login](../../account/use-cases/uc.account.login.md),
-  [uc.admin.suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md), [en.moderation.log](../enablers/en.moderation.log.md)
-- Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md)
+  [uc.admin.suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md), [en.moderation.log](../enablers/en.moderation.log.md),
+  [en.moderation.hold](../enablers/en.moderation.hold.md)
+- Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
+  [Moderate an instance](../../../../site/src/content/docs/account/moderate.md),
+  [Report something](../../../../site/src/content/docs/help/report-something.mdx) (§ Blocked by the operator),
+  [What the server sees](../../../../site/src/content/docs/security/what-the-server-sees.md)

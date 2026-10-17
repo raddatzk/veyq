@@ -83,4 +83,5 @@ deleted, and can close an unfounded report at once.
   [uc.moderation.serve-as-moderator](uc.moderation.serve-as-moderator.md),
   [en.moderation.hold](../enablers/en.moderation.hold.md), [en.moderation.log](../enablers/en.moderation.log.md)
 - Docs site: [Moderate an instance](../../../../site/src/content/docs/account/moderate.md),
-  [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md)
+  [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
+  [What the server sees](../../../../site/src/content/docs/security/what-the-server-sees.md)
