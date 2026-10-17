@@ -7,9 +7,11 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
-import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
-import software.amazon.awssdk.services.s3.model.PutObjectRequest
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -28,6 +30,8 @@ import java.util.UUID
 @EnabledIfEnvironmentVariable(named = "VEYQ_S3_E2E", matches = "1")
 class S3BlobStoreListE2ETest {
 
+    private val http: HttpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
+
     @Test
     fun aRealStoreListsPageByPageOnItsOwnClock() {
         val connection = connection()
@@ -37,8 +41,14 @@ class S3BlobStoreListE2ETest {
         val prefix = "0000-reconcile-e2e-${UUID.randomUUID()}"
         val keys = (0 until 5).map { "$prefix/$it" }
         try {
+            // Written the way veyq's clients write — a presigned PUT — not through the SDK's putObject, whose default
+            // checksummed upload Garage v2.0.0 refuses ("Invalid payload signature", measured).
             keys.forEachIndexed { i, key ->
-                s3.putObject(PutObjectRequest.builder().bucket(connection.bucket).key(key).build(), RequestBody.fromBytes(ByteArray(i + 1)))
+                val body = ByteArray(i + 1)
+                val put = HttpRequest.newBuilder(URI.create(store.presignPut(key, body.size.toLong(), null)))
+                    .header("Content-Type", "application/octet-stream")
+                    .PUT(HttpRequest.BodyPublishers.ofByteArray(body)).build()
+                assertEquals(200, http.send(put, HttpResponse.BodyHandlers.discarding()).statusCode(), "PUT $key")
             }
             val first = store.list(null, 2)
             assertEquals(keys.take(2), first.objects.map { it.key })

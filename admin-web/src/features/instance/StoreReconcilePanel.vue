@@ -18,7 +18,7 @@ import Message from 'primevue/message'
 import {
   confirmExclusiveBucket,
   getStoreReconcile,
-  graceDays,
+  graceUnits,
   pauseReconcile,
   resumeReconcile,
   StoreReconcileClocksRestartReasonEnum,
@@ -69,7 +69,11 @@ const RESTART = {
 const at = (d: Date | null | undefined) => d?.toLocaleString(locale.value) ?? ''
 const size = (b: number) => formatBytes(b, locale.value)
 const verdict = computed(() => (state.value ? VERDICT[state.value.verdict] : null))
-const days = computed(() => (state.value ? graceDays(state.value) : 0))
+const grace = computed(() => {
+  if (!state.value) return ''
+  const { unit, n } = graceUnits(state.value)
+  return t(unit === 'days' ? 'reconcile.graceDays' : 'reconcile.graceMinutes', { n })
+})
 const candidates = computed(() => state.value?.candidates ?? null)
 const confirmed = computed(() => state.value?.exclusiveBucketConfirmedAt != null)
 const armed = computed(() => state.value?.verdict === StoreReconcileVerdictEnum.Armed)
@@ -96,7 +100,7 @@ async function confirm() {
   const c = candidates.value
   const accepted = await ask({
     header: t('reconcile.confirmTitle'),
-    message: t('reconcile.confirmBody', { days: days.value, keys: c?.storageKeys ?? 0, due: c?.dueKeys ?? 0 }),
+    message: t('reconcile.confirmBody', { grace: grace.value, keys: c?.storageKeys ?? 0, due: c?.dueKeys ?? 0 }),
     acceptLabel: t('reconcile.confirm'),
     acceptIcon: 'pi pi-lock',
   })
@@ -131,7 +135,7 @@ async function resume() {
 
     <template v-else-if="state && verdict">
       <Message :severity="verdict.severity" :closable="false" class="reconcile-verdict" :data-verdict="state.verdict">
-        {{ t(verdict.key, { days }) }}
+        {{ t(verdict.key, { grace }) }}
       </Message>
       <Message v-if="state.failure" severity="error" :closable="false" class="reconcile-failure" :data-reason="state.failure.reason">
         {{ t(FAILURE[state.failure.reason], { at: at(state.failure.at) }) }}

@@ -106,9 +106,9 @@ describe('StoreReconcilePanel (uc.admin.configure-object-store A7, admin-web)', 
     confirmAsk.mockResolvedValueOnce(true)
     await w.find('.reconcile-confirm').trigger('click')
     await flushPromises()
-    expect(confirmAsk).toHaveBeenCalledWith(expect.objectContaining({ message: t('reconcile.confirmBody', { days: 30, keys: 9, due: 2 }) }))
+    expect(confirmAsk).toHaveBeenCalledWith(expect.objectContaining({ message: t('reconcile.confirmBody', { grace: t('reconcile.graceDays', { n: 30 }), keys: 9, due: 2 }) }))
     expect(confirmExclusiveBucket).toHaveBeenCalledOnce()
-    expect(w.find('.reconcile-verdict').text()).toBe(t('reconcile.verdict.ARMED', { days: 30 }))
+    expect(w.find('.reconcile-verdict').text()).toBe(t('reconcile.verdict.ARMED', { grace: t('reconcile.graceDays', { n: 30 }) }))
     expect(w.find('.reconcile-due').text()).toBe(t('reconcile.firstDue', { at: at(FIRST_DUE) }))
     expect(w.find('.reconcile-confirm').exists()).toBe(false)
   })
@@ -163,8 +163,15 @@ describe('StoreReconcilePanel (uc.admin.configure-object-store A7, admin-web)', 
 
   it.each(Object.values(StoreReconcileVerdictEnum))('has words for the verdict %s', async (verdict) => {
     const w = await mountPanel(reconcile({ verdict }))
-    expect(w.find('.reconcile-verdict').text()).toBe(t(`reconcile.verdict.${verdict}`, { days: 30 }))
+    expect(w.find('.reconcile-verdict').text()).toBe(t(`reconcile.verdict.${verdict}`, { grace: t('reconcile.graceDays', { n: 30 }) }))
     expect(w.find('.reconcile-verdict').text()).not.toBe(`reconcile.verdict.${verdict}`)
+  })
+
+  // Found in the live proof (a three-minute test grace read "0 days"): below a day the grace is said in minutes.
+  it('says a grace of less than a day in minutes, never as 0 days', async () => {
+    const w = await mountPanel(armed({ graceSeconds: 180 }))
+    expect(w.find('.reconcile-verdict').text()).toBe(t('reconcile.verdict.ARMED', { grace: t('reconcile.graceMinutes', { n: 3 }) }))
+    expect(w.find('.reconcile-verdict').text()).not.toContain('0 days')
   })
 
   it('offers no switch while no store is in use', async () => {

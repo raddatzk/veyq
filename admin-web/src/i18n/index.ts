@@ -269,7 +269,7 @@ const en = {
     "loadFailed": "Couldn’t read what the store holds.",
     "notOwner": "Only the server owner can see what the store holds.",
     "verdict": {
-      "ARMED": "Deleting is on: an object no record has claimed for {days} days is handed to the deletion list, which deletes it.",
+      "ARMED": "Deleting is on: an object no record has claimed for {grace} is handed to the deletion list, which deletes it.",
       "NOT_CONFIRMED": "Only counting: nothing is deleted until you confirm that this bucket holds this server's objects alone.",
       "PAUSED": "Deleting is paused: the counting goes on, and nothing is handed to the deletion list until you resume.",
       "NO_STORE": "No store is in use, so there is nothing to list."
@@ -294,9 +294,11 @@ const en = {
       "STORE_CHANGED": "Every grace period restarted {at}: another store is in use."
     },
     "confirmedAt": "You confirmed this bucket holds this server's objects alone {at}.",
+    "graceDays": "{n} days",
+    "graceMinutes": "{n} minutes",
     "confirm": "Confirm exclusive bucket",
     "confirmTitle": "Delete unclaimed objects from this bucket?",
-    "confirmBody": "Confirm only if no other server or tool writes to this bucket: their objects would look unclaimed here. From now on, an object no record has claimed for {days} days is deleted — right now {keys} uploads are counted, {due} of them past their grace period. A restore or another store setting withdraws this confirmation.",
+    "confirmBody": "Confirm only if no other server or tool writes to this bucket: their objects would look unclaimed here. From now on, an object no record has claimed for {grace} is deleted — right now {keys} uploads are counted, {due} of them past their grace period. A restore or another store setting withdraws this confirmation.",
     "withdraw": "Withdraw confirmation",
     "pause": "Pause deleting",
     "resume": "Resume deleting",
@@ -677,7 +679,7 @@ const de: typeof en = {
     "loadFailed": "Konnte nicht lesen, was der Speicher enthält.",
     "notOwner": "Nur die Besitzperson des Servers kann sehen, was der Speicher enthält.",
     "verdict": {
-      "ARMED": "Löschen ist an: Ein Objekt, das {days} Tage lang kein Eintrag beansprucht hat, geht an die Löschliste, die es löscht.",
+      "ARMED": "Löschen ist an: Ein Objekt, das {grace} lang kein Eintrag beansprucht hat, geht an die Löschliste, die es löscht.",
       "NOT_CONFIRMED": "Nur Zählen: Nichts wird gelöscht, bis du bestätigst, dass dieser Bucket nur die Objekte dieses Servers enthält.",
       "PAUSED": "Löschen ist pausiert: Gezählt wird weiter, an die Löschliste geht nichts, bis du fortsetzt.",
       "NO_STORE": "Es ist kein Speicher in Gebrauch, also gibt es nichts zu listen."
@@ -702,9 +704,11 @@ const de: typeof en = {
       "STORE_CHANGED": "Jede Frist hat {at} neu begonnen: Ein anderer Speicher ist in Gebrauch."
     },
     "confirmedAt": "Du hast {at} bestätigt, dass dieser Bucket nur die Objekte dieses Servers enthält.",
+    "graceDays": "{n} Tage",
+    "graceMinutes": "{n} Minuten",
     "confirm": "Bucket als exklusiv bestätigen",
     "confirmTitle": "Objekte ohne Eintrag aus diesem Bucket löschen?",
-    "confirmBody": "Bestätige nur, wenn kein anderer Server und kein anderes Werkzeug in diesen Bucket schreibt: Deren Objekte sähen hier unbeansprucht aus. Ab jetzt wird ein Objekt gelöscht, das {days} Tage lang kein Eintrag beansprucht hat — gerade werden {keys} Uploads gezählt, {due} davon über ihrer Frist. Eine Wiederherstellung oder eine andere Speichereinstellung nimmt diese Bestätigung zurück.",
+    "confirmBody": "Bestätige nur, wenn kein anderer Server und kein anderes Werkzeug in diesen Bucket schreibt: Deren Objekte sähen hier unbeansprucht aus. Ab jetzt wird ein Objekt gelöscht, das {grace} lang kein Eintrag beansprucht hat — gerade werden {keys} Uploads gezählt, {due} davon über ihrer Frist. Eine Wiederherstellung oder eine andere Speichereinstellung nimmt diese Bestätigung zurück.",
     "withdraw": "Bestätigung zurücknehmen",
     "pause": "Löschen pausieren",
     "resume": "Löschen fortsetzen",

@@ -44,7 +44,12 @@ export function resumeReconcile(): Promise<StoreReconcile> {
   return instanceStoreReconcileApi().resumeStoreReconcile()
 }
 
-/** The grace in whole days, rounded down — what the console and the confirm dialog say. */
-export function graceDays(r: Pick<StoreReconcile, 'graceSeconds'>): number {
-  return Math.floor(r.graceSeconds / 86_400)
+/**
+ * The grace as the console and the confirm dialog say it: whole days from one day up, whole minutes below — a grace
+ * of minutes (a test instance's) must not read "0 days", which says the opposite of what is armed.
+ */
+export function graceUnits(r: Pick<StoreReconcile, 'graceSeconds'>): { unit: 'days' | 'minutes'; n: number } {
+  return r.graceSeconds >= 86_400
+    ? { unit: 'days', n: Math.floor(r.graceSeconds / 86_400) }
+    : { unit: 'minutes', n: Math.max(1, Math.round(r.graceSeconds / 60)) }
 }
