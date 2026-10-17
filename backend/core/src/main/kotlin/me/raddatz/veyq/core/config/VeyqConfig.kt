@@ -318,6 +318,26 @@ interface VeyqConfig {
     /** Moderation (ADR 0099, ADR 0093 § 11): how often expired key-proof challenges and moderation-log events go. */
     interface Moderation {
         fun purge(): Interval
+
+        /** Reports (ADR 0093 § 5, uc.moderation.report): the bounds a reporter meets. */
+        fun report(): Report
+
+        interface Report {
+            /** How many of a member's reports may be open at once (owner decision Q8: a generous cost bound). */
+            @WithDefault("100")
+            fun openCap(): Int
+
+            /** A link's report budget per window — a guest's bound beside the per-address one (Q8). */
+            @WithDefault("20")
+            fun perShareMaxRequests(): Int
+
+            /** How many receipts one address gets per window (owner decision Q6: the receipt is no mail relay). */
+            @WithDefault("3")
+            fun receiptsPerAddress(): Int
+
+            @WithDefault("3600")
+            fun windowSeconds(): Long
+        }
     }
 
     /** Device linking (ADR 0059) — how long a pairing channel lives, and how long a spent one is kept. */

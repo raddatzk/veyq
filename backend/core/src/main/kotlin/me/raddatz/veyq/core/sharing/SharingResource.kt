@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.generated.model.LocalizedMarkdown
 import me.raddatz.veyq.core.generated.model.PresignedUrl
 import me.raddatz.veyq.core.generated.model.PublicShare
 import me.raddatz.veyq.core.generated.model.ReissueShareRequest
+import me.raddatz.veyq.core.generated.model.ReportSubmission
 import me.raddatz.veyq.core.generated.model.SetShareSealedNameRequest
 import me.raddatz.veyq.core.generated.model.ShareBlobDownload
 import me.raddatz.veyq.core.generated.model.ShareBlobUploadResultItem
@@ -31,6 +32,10 @@ import me.raddatz.veyq.core.generated.model.ShareTerms
 import me.raddatz.veyq.core.generated.model.UpdateShareRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.moderation.report.ReportHandler
+import me.raddatz.veyq.core.moderation.report.Reporter
+import me.raddatz.veyq.core.moderation.report.ReportsResource
+import me.raddatz.veyq.core.moderation.report.ReportsResource.Companion.toReport
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import me.raddatz.veyq.core.ratelimit.RateLimitKey
@@ -62,6 +67,7 @@ class SharingResource(
     private val nodes: ShareNodesHandler,
     private val identity: SecurityIdentity,
     private val tenant: RequestTenant,
+    private val reports: ReportHandler,
 ) : SharingApi {
 
     /** As in `MediaResource`: the resolved tenant's own domain (ADR 0063), never the raw `Host` header. A share
@@ -291,6 +297,15 @@ class SharingResource(
             ).build()
             is HttpFailure -> httpError(o)
         }
+
+    // A guest's report (uc.moderation.report, ADR 0093 §§ 1-2): behind the link, its password and its write proof —
+    // the same handler as a member's report (ReportsResource).
+    @PermitAll
+    // Per address at the boundary; per link in the handler (ReportRateLimiter.allowShare) — a guest has no account to
+    // count open reports against (owner decision Q8).
+    @RateLimit(key = RateLimitKey.IP)
+    override fun reportInShare(shareId: String, reportSubmission: ReportSubmission, xSharePassword: String?, xShareWrite: String?): Response =
+        ReportsResource.answer(reports.report(Reporter.Guest(shareId, xSharePassword, xShareWrite), reportSubmission.toReport()))
 
     private fun toShareNode(n: ShareNodeRow) = ShareNode(
         id = UUID.fromString(n.id),

@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.blob.MemberBlobRoles
 import me.raddatz.veyq.core.blob.UploadCompletion
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
+import me.raddatz.veyq.core.moderation.report.ReportableItems
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.quota.StorageQuota
@@ -88,6 +89,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var guestCreatableKinds: MutableList<GuestCreatableKinds>
     @Inject @All lateinit var guestPlaceholders: MutableList<GuestPlaceholders>
     @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
+    @Inject @All lateinit var reportableItems: MutableList<ReportableItems>
 
     @Inject lateinit var quota: StorageQuota
 
@@ -108,6 +110,7 @@ class ModuleCompositionTest {
         GuestCreatableKinds::class.java to guestCreatableKinds,
         GuestPlaceholders::class.java to guestPlaceholders,
         MemberBlobRoles::class.java to memberRoles,
+        ReportableItems::class.java to reportableItems,
     )
 
     private val compiled: List<Class<*>> by lazy {

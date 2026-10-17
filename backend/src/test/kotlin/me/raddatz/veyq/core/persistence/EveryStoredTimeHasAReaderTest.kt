@@ -100,6 +100,8 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_moderation_epoch.rotation_due_at" to "served: InstanceModeration.rotationDueSince; RotationDueNotice mails it",
             "veyq_moderation_epoch.rotation_due_mailed_at" to "RotationDueNotice's claim: mailed once, released on a failed send",
             "veyq_moderation_challenge.expires_at" to "ModerationProofGate refuses an expired challenge; ModerationPurge deletes it",
+        // --- reports (ADR 0093 §§ 1-2; uc.moderation.report)
+        "veyq_moderation_report.received_at" to "ReportsResource answers it to the reporter as the receipt's time",
             "veyq_moderation_event.occurred_at" to "ModerationLog.closeFor dates an event from the later of it and the removal",
             "veyq_moderation_event.expires_at" to "ModerationPurge deletes the event past it (ModerationLog.purgeExpired)",
             // --- tasks

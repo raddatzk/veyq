@@ -7,8 +7,14 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
 
-/** The instance events of the moderation log (ADR 0099 § 4); a case's events come with the report (ADR 0093 § 11). */
-enum class ModerationEvent { APPOINTED, ACCEPTED, DELIVERED, REMOVED, STEPPED_DOWN, IDENTITY_ROTATED, EPOCH_MINTED }
+/**
+ * The events of the moderation log: the instance events (ADR 0099 § 4), and a case's (ADR 0093 § 11) — [RECEIVED] when a
+ * report opens it, [REPORT_ATTACHED] when a further report attaches to it.
+ */
+enum class ModerationEvent {
+    APPOINTED, ACCEPTED, DELIVERED, REMOVED, STEPPED_DOWN, IDENTITY_ROTATED, EPOCH_MINTED,
+    RECEIVED, REPORT_ATTACHED,
+}
 
 /**
  * The moderation log (ADR 0093 § 11, en.moderation.log): append-only, written by its caller's transaction so an event
@@ -47,9 +53,25 @@ class ModerationLog {
         }.persist()
     }
 
+    /**
+     * A case's event (ADR 0093 § 11): [actorId] is the reporting member, null for a guest. Its date stays open (NULL)
+     * while the case is: a case's events are kept to 31 December of the third year after it closes, which the review
+     * (cr-moderation-review-and-measures) sets when it closes one.
+     */
+    fun appendCase(event: ModerationEvent, at: Instant, caseId: String, actorId: String?) {
+        ModerationEventEntity().apply {
+            id = UUID.randomUUID().toString()
+            this.event = event.name
+            occurredAt = at
+            this.caseId = caseId
+            this.actorId = actorId
+            expiresAt = null
+        }.persist()
+    }
+
     /** The moderator [moderatorId] left the roster at [removedAt]: every event about them still open gets its date. */
     fun closeFor(moderatorId: String, removedAt: Instant) {
-        ModerationEventEntity.list("moderatorId = ?1 and expiresAt is null", moderatorId).forEach { e ->
+        ModerationEventEntity.list("moderatorId = ?1 and expiresAt is null and caseId is null", moderatorId).forEach { e ->
             e.expiresAt = retentionEnd(maxOf(e.occurredAt, removedAt))
         }
     }

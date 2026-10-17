@@ -236,34 +236,34 @@ components:
       enum: [CHILD_SEXUAL_ABUSE, TERRORIST_CONTENT, THREAT_TO_LIFE, ILLEGAL_CONTENT, TERMS_BREACH]
       example: ILLEGAL_CONTENT
 
-    ReportItemKind:
-      x-veyq-visibility: enum
-      type: string
-      description: >
-        What a reported item is: a NODE (any kind — a folder, a Memory, a chapter, a file), an application's ITEM on a
-        node (a Memories medium), or the LINK itself (a guest of an upload link reports nothing else, ADR 0093 § 1).
-      enum: [NODE, ITEM, LINK]
-      example: NODE
-
     ReportItemSubmission:
       type: object
       description: One reported item, and the keys that open it sealed under the report's `K_report`.
       required: [kind, sealedShare]
       properties:
-        kind: { $ref: "#/components/schemas/ReportItemKind" }
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            What the item is: a NODE (any kind — a folder, a Memory, a chapter, a file), an application's ITEM on
+            a node (a Memories medium), or the LINK itself (a guest of an upload link reports nothing else, ADR
+            0093 § 1).
+          enum: [NODE, ITEM, LINK]
+          example: NODE
         id:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
           description: >
-            The node's or the item's id; absent for a LINK, which is the link the request is made through. The hold
-            and the reach check need it in the clear.
+            The node's or the item's id; absent for a LINK, which is the link the request is made through. The
+            hold and the reach check need it in the clear.
           example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
         sealedShare:
           type: string
           description: >
-            The report share: the item's keys, role-tagged, sealed under `K_report` (`seal` purpose `report-share`
-            [itemKind, itemId], or `report-link` [shareId]; `@veyq/crypto`'s report.ts). At most 32 keys.
+            The report share: the item's keys, role-tagged, sealed under `K_report` (`seal` purpose
+            `report-share` [itemKind, itemId], or `report-link` [shareId]; `@veyq/crypto`'s report.ts). At most
+            32 keys.
           contentEncoding: base64
           maxLength: 4140
           example: AnJlcG9ydC1zaGFyZQ==

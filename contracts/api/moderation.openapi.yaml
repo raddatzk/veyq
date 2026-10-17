@@ -770,8 +770,6 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/ReportSubmission'
     ReportItemSubmission:
       $ref: '_common.openapi.yaml#/components/schemas/ReportItemSubmission'
-    ReportItemKind:
-      $ref: '_common.openapi.yaml#/components/schemas/ReportItemKind'
     ReportCategory:
       $ref: '_common.openapi.yaml#/components/schemas/ReportCategory'
     ReportReceipt:

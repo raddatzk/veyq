@@ -128,6 +128,13 @@ class ShareMediaRouteSliceTest {
             given().header("X-Contributor-Token", w.token).`when`().delete("/api/shares/${w.shareId}/nodes/${w.memory}")
                 .then().statusCode(422).body("code", equalTo("illegal_structure"))
         },
+        "reportInShare" to Probe("POST", "/api/shares/{shareId}/reports") { w ->
+            // A real link holding its write proof, a report sealed to an epoch that is not the current one: only the
+            // report handler answers `moderation_epoch_changed`.
+            given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(w.shareId))
+                .body("""{"category":"TERMS_BREACH","epoch":999999,"sealedReport":"cmVwb3J0","items":[{"kind":"NODE","id":"${w.memory}","sealedShare":"c2hhcmU="}]}""")
+                .`when`().post("/api/shares/${w.shareId}/reports").then().statusCode(409).body("code", equalTo("moderation_epoch_changed"))
+        },
         // --- Memories `share-media` (root /api/shares/{shareId}/media) ---
         "listShareMedia" to Probe("GET", "/api/shares/{shareId}/media") { w ->
             given().`when`().get("/api/shares/${w.shareId}/media").then().statusCode(200)
@@ -147,7 +154,7 @@ class ShareMediaRouteSliceTest {
     @Test
     fun theTableIsEveryShareRouteOfBothGeneratedApis() {
         val generated = shareOperations()
-        assertEquals(20, generated.size, "the /api/shares operations of both specs: $generated")
+        assertEquals(21, generated.size, "the /api/shares operations of both specs: $generated")
         assertEquals(generated, probes.mapValues { (_, p) -> "${p.method} ${p.path}" }, "a route without a row, or a row without a route")
     }
 
