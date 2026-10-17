@@ -196,7 +196,10 @@ a `PROXY TCP4 …` line arrives as a malformed request line and is answered 400 
 | Prose that says the port is unknown on Compose / that the socket is the address | `git grep -n -i -e 'port is unknown' -e 'port unknown' -e 'unknown (M6)' -e 'write none' -e 'writes none' -e 'adds no port' -e 'until a second source' -e 'inbox #472' -e '(inbox #472)' -- docs site/src/content/docs charts infra backend/core/src/main ':!docs/inbox.md'` | ADR 0094 `:4`, `:58`, `:79`, `:88`, `:136`; ADR 0093 `:237-242`, `:465-471` (open legal question 4; re-measured after merging `8cadad88`); `run/networking.md:104`, `:113`. Each **edited** in phase 4 |
 | Site pages that speak for the docs this CR edits | `git grep -ln -e 0094-a-clients -e 0093-a-report -e uc.admin.admin-channel -e cc.security.rate-limit -- site/src/content/docs` | `run/networking.md`, `run/configuration.md` **edited**; `run/operations.md` (the probe, `:13-21`) and `run/kubernetes.md` **edited**; `run/hardening.md`, `run/first-run.mdx`, `security/known-limitations.md`, `security/threat-model.md` **checked, unchanged unless the sweep finds a port claim** |
 
-## Open for the owner
+## Decided with the owner
+
+Owner 2026-10-17 ("Passt", to "alles wie empfohlen"): O1 (a) an echo stage in the stack run; O2 (a) Traefik's `experimental.localPlugins` in the default
+compose recipe, the risk named. The options stay below as the record.
 
 - **O1 — What observes the plugin's overwrite in the stack lane?** Before the moderation CR nothing in the app keeps
   or returns the port, so an end-to-end "the app saw the real port" has no observable yet.
