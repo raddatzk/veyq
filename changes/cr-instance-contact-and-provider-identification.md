@@ -1,8 +1,8 @@
 ---
 id: cr-instance-contact-and-provider-identification
 title: The operating mode, the instance contact and the provider identification, set in admin-web
-status: planned
-satisfies: []            # phase 0 writes the use-case; see § Use-cases
+status: in-progress
+satisfies: [uc.admin.operator-details, uc.admin.setup-server]
 adrs: ["0093", "0035", "0088", "0097", "0089", "0065", "0050"]
 invariants:
   - operator-blind E2EE (these are public operational values, never content)
@@ -169,7 +169,7 @@ planned). After phase 0 the front matter's `satisfies:` names both.
 
 ## Phases
 
-- [ ] **0 docs** — `uc.admin.operator-details` + its planned coverage YAML; the mode step in `uc.admin.setup-server`;
+- [x] **0 docs** — `uc.admin.operator-details` + its planned coverage YAML; the mode step in `uc.admin.setup-server`;
   ADR 0097 decision 5 gains the contact's confirmation (per Q1); `docs/features/admin/_index.md` lists it. · Done when: `python3 scripts/validate_feature_format.py`,
   `validate_coverage.py`, `validate_doc_links.py`, `validate_changes.py` green; `satisfies:` here names the use-case.
 - [ ] **1 contracts** — tag `instance-operator` on `instance.openapi.yaml` (get, put, clear, confirm the notification

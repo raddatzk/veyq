@@ -1,0 +1,48 @@
+useCase: uc.admin.operator-details
+feature: admin
+title: Choose the operating mode and publish who runs the instance
+status: planned
+# Refined with cr-instance-contact-and-provider-identification; every surface below is built by that CR's phases.
+acceptanceCriteria:
+  - id: an-unchosen-mode-runs-as-organisation
+    text: >-
+      An instance where no mode was ever chosen reads as club, organisation or company.
+  - id: a-mode-sets-its-presets-switches-and-nothing-else
+    text: >-
+      Setting a mode stores it and, in the same transaction, sets the instance-level switch of each register entry the
+      catalog's `modes` names to that mode's value; a tenant's switches and every entry without a preset are untouched,
+      and setting it again sets the preset again.
+  - id: the-notice-comes-before-the-mode
+    text: >-
+      admin-web and the CLI show the notice and the switches the other mode's preset would change before the mode is
+      set; choosing private needs the tick in admin-web and `--accept-notice` in the CLI.
+  - id: the-values-are-set-and-cleared
+    text: >-
+      The Server Owner sets and clears the contact with its languages, the statement address, the notification
+      address, the identification and the supervisory authority; every value may stay empty, and an out-of-bounds one
+      is refused with nothing stored.
+  - id: the-notification-address-is-confirmed-by-a-code
+    text: >-
+      A saved, unconfirmed notification address gets a one-time code through confirmed instance mail; typing it into
+      admin-web confirms it; a wrong code spends an attempt; a changed address unconfirms without a further write; no
+      code goes out while instance mail is not confirmed.
+  - id: the-public-values-are-served-pre-auth-and-never-the-notification-address
+    text: >-
+      The contact with its languages, the statement address, the identification and the supervisory authority are
+      served without sign-in on any host; the notification address never leaves the admin channel.
+  - id: admin-web-warns-in-the-organisation-mode-only
+    text: >-
+      In the club, organisation or company mode admin-web warns while public links are on and no contact is set, and
+      while the identification is empty; in private neither warning shows.
+  - id: the-identification-appears-on-the-login-and-share-pages
+    text: >-
+      Where set, in either mode, the identification is shown on the login and the share pages through the public read;
+      a failed read shows nothing and blocks nothing.
+  - id: operator-operations-are-server-owner-only-on-the-admin-channel
+    text: >-
+      Every operation that reads the notification address or writes a value or the mode is a Server-Owner operation
+      answered on the admin channel only.
+gaps:
+  backend: Planned — phase 2 of cr-instance-contact-and-provider-identification.
+  web: Planned — phase 4 of cr-instance-contact-and-provider-identification (the login and share pages).
+  admin-web: Planned — phase 3 of cr-instance-contact-and-provider-identification (the panels, the setup step, the CLI).
