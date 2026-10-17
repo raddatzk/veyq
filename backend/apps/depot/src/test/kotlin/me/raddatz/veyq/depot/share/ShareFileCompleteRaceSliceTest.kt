@@ -119,7 +119,7 @@ class ShareFileCompleteRaceSliceTest {
 
     /** The guest's completion into the file, as the completion's answer. */
     private fun complete(t: Tree, uploadId: String): CompleteFileOutcome {
-        val o = files.complete(t.link.shareId, null, t.link.token, t.file, uploadId, null)
+        val o = files.complete(t.link.shareId, null, t.link.token, t.file, uploadId, null, seen = null)
         return (o as ShareFileCompleteOutcome.Completed).outcome
     }
 

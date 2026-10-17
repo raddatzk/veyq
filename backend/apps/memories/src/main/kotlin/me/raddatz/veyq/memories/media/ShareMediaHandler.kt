@@ -7,6 +7,9 @@ import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
 import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
 import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.ClientSeen
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteObject
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.sharing.ShareGuestGate
@@ -80,6 +83,7 @@ class ShareMediaHandler(
     private val completions: UploadCompletions,
     private val guestWrites: MediaShareGuestWrites,
     private val store: MediaStore,
+    private val guestWriteRecords: GuestWriteRecords,
 ) {
 
     /**
@@ -106,10 +110,12 @@ class ShareMediaHandler(
      * Complete a guest upload — attach each item to the target node, stamped with the guest identity: the share's root
      * (a Memory or a chapter) when [nodeId] is null, else the Memory or chapter below the root the guest names (ADR 0080
      * decision 6, [ShareGuestGate.target]; a `WRITE_ONLY` link only its root). The kind decides as the start's did: no
-     * Memory or chapter, not contributable.
+     * Memory or chapter, not contributable. Each medium attached records [seen] in its attach's transaction (the
+     * guest-write record, ADR 0093 § 10: the upload and the meta it carries are the guest's).
      */
     fun complete(
-        shareId: String, pwToken: String?, contributorToken: String, items: List<ShareMediaItem>, nodeId: String? = null,
+        shareId: String, pwToken: String?, contributorToken: String, items: List<ShareMediaItem>, nodeId: String?,
+        seen: ClientSeen?,
     ): ShareMediaCompleteOutcome {
         // Attaching is what creates the media rows, so it spends the per-share upload budget the start spends
         // (ADR 0051, `@RateLimit(key = SHARE)`): the two are one contributor write flow.
@@ -149,6 +155,7 @@ class ShareMediaHandler(
         return ShareMediaCompleteOutcome.Results(
             completions.complete(
                 gated.scopeId, completeItems, UploadOpener.Contributor(gated.identityId), gate.admittedInto(gated, target),
+                attached = { mediaId -> guestWriteRecords.record(seen, gated.identityId, gated.scopeId, GuestWriteObject.ITEM, mediaId, null) },
             ),
         )
     }

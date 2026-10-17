@@ -93,7 +93,7 @@ class CapabilityRegistryTest {
         assertFalse(registry.isActive(PUBLIC_SHARES_DROP_BOX, null), "a child needs its parent")
         assertTrue(registry.isActive(GROUP_SPACE, null), "a sibling entry stays active")
         assertEquals(
-            CapabilityIds.ADVERTISED - setOf(PUBLIC_SHARES, PUBLIC_SHARES_CONTRIBUTE, PUBLIC_SHARES_DROP_BOX),
+            CapabilityIds.ADVERTISED - publicSharesSubtree(),
             registry.active,
             "active keeps the advertised order, minus the switched-off entry and everything below it",
         )
@@ -132,7 +132,7 @@ class CapabilityRegistryTest {
         // Controls: the same switch reaches neither another tenant nor the instance level.
         assertTrue(registry.isActive(PUBLIC_SHARES_DROP_BOX, "t2"), "another tenant is untouched")
         assertTrue(registry.isActive(PUBLIC_SHARES_DROP_BOX, null), "the instance level is untouched")
-        assertEquals(CapabilityIds.ADVERTISED - setOf(PUBLIC_SHARES, PUBLIC_SHARES_CONTRIBUTE, PUBLIC_SHARES_DROP_BOX), registry.active("t1"))
+        assertEquals(CapabilityIds.ADVERTISED - publicSharesSubtree(), registry.active("t1"))
         assertEquals(CapabilityIds.ADVERTISED, registry.active)
     }
 
@@ -222,4 +222,9 @@ class CapabilityRegistryTest {
         assertEquals(null, ExternalServiceOrigins.origin("ftp://geo.example.com"))
         assertEquals(null, ExternalServiceOrigins.origin("/relative/{z}"))
     }
+
+    /** `core.public-shares` and every entry below it, as the catalog has them today — derived, so a new child (the
+     *  guest-write record was the third) is in the subtree without a list to keep. */
+    private fun publicSharesSubtree(): Set<String> =
+        CapabilityIds.ADVERTISED.filter { it == PUBLIC_SHARES || it.startsWith("$PUBLIC_SHARES.") }.toSet()
 }

@@ -1,6 +1,7 @@
 package me.raddatz.veyq.depot.share
 
 import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.RequestClient
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
@@ -28,6 +29,8 @@ import java.util.UUID
 class ShareFilesResource(
     private val handler: ShareFilesHandler,
     private val dropFolders: DropFolderHandler,
+    /** The client a guest's write records (the guest-write record, ADR 0093 § 10): resolved once, handed down. */
+    private val client: RequestClient,
 ) : ShareFilesApi {
 
     @PermitAll
@@ -39,7 +42,7 @@ class ShareFilesResource(
         return when (
             val o = dropFolders.ensure(
                 shareId, xSharePassword, r.contributorToken, r.nodeId.toString(), r.encryptedName, r.slugToken,
-                r.epoch.validated(), r.wrappedContentKey,
+                r.epoch.validated(), r.wrappedContentKey, client.seen(),
             )
         ) {
             is DropFolderOutcome.Folder -> Response.ok(
@@ -78,7 +81,7 @@ class ShareFilesResource(
         return when (
             val o = handler.complete(
                 shareId, xSharePassword, r.contributorToken, nodeId.toString(), r.uploadId.toString(),
-                r.expectedBlobId?.toString(),
+                r.expectedBlobId?.toString(), client.seen(),
             )
         ) {
             is ShareFileCompleteOutcome.Completed -> FilesResource.respond(o.outcome)
