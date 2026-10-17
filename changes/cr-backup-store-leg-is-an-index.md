@@ -265,7 +265,17 @@ Baseline before the first edit, on a detached worktree of `HEAD` (changes/README
   the restore groups restoring `--objects-from` a pool and the non-empty-store refusal by message. Not "green in CI": there
   is no remote.
 
-## Open for the owner
+## Decided with the owner
+
+Owner 2026-10-17 ("Alles so wie empfohlen"): **O1 (a)** an in-place `veyqctl rollback` (empty the database, start the old
+release once, restore with the check only; the objects are still in the same store) — phase 5 is unblocked; **O2** a restore
+requires the objects the database rows reference, and reports but tolerates orphans and open upload chunks; **O3 — the
+orchestrator's proposal, not "document now, prune later":** the pool **deletes an object as soon as no retained capture's
+index names it**, and captures rotate by `keep` — so the pool keeps exactly what the retained backups need and a deletion
+reaches the pool within the backup rotation window `security-model.md` promises. This is built in this CR (a pool prune step
+after each capture's rotation, with its own bites: an object a retained index names is never pruned; one no retained index
+names is gone after the rotation); "an object pool only grows" is replaced by that rule in ADR 0056 § 3, the use-case and
+the coverage criterion. **O4** no pool for the Kubernetes gate, as ADR 0098 already says. The options stay below as the record.
 
 **O1 — How does a Compose instance roll back, now that its capture holds no objects?** Today's documented rollback
 (`site/src/content/docs/run/upgrade.mdx` § Rollback) installs the old release as **a new project with new, empty
