@@ -83,11 +83,17 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
     inside `web/`; the exact destination is the CR's inventory, not this ADR's.
 
     **The rule the split follows, and the one to apply to anything moved later: ask which gate the BACKEND
-    applies — the Server-Owner gate, or `not_tenant_owner` — never which directory the file happens to sit
-    in.** The Context finding's cross-import method is right as far as it reaches: grepping for imports *into*
-    `features/admin/**` finds the anonymous and ordinary-member callers. It is structurally blind to a file
-    that is **owner-scoped by the state it reads** and that nothing imports from outside, which is exactly
-    what those two panels are — a **fourth** audience, the tenant owner, that an import graph cannot show.
+    applies — the Server-Owner gate, or another (`not_tenant_owner`, the moderator's) — never which directory
+    the file happens to sit in.** The Context finding's cross-import method is right as far as it reaches:
+    grepping for imports *into* `features/admin/**` finds the anonymous and ordinary-member callers. It is
+    structurally blind to a file that is **owner-scoped by the state it reads** and that nothing imports from
+    outside, which is exactly what those two panels are — a **fourth** audience, the tenant owner, that an
+    import graph cannot show. A **fifth** is the **moderator**
+    ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6, not built):
+    an account the Server Owner appoints, whose review and decisions the backend gates by a `MODERATOR` role and a
+    moderation-key signature on the public listener, not by the Server-Owner gate — so the moderation surface
+    stays in `web/`, while the roster and minting and rotating the moderation key are Server-Owner operations
+    and live here.
   - **`web/` carries no "is this caller a Server Owner" probe.** It used to (`serverRole.ts`, calling
     `listTenants` to show Server Owners a settings note that administration lives elsewhere); under the admin
     channel that call can only ever 404, so the probe and the note are deleted rather than re-pointed — the
