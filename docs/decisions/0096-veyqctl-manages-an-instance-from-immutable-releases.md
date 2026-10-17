@@ -5,7 +5,8 @@
   through it; the publish creating the GitHub Release (decision 3, `ci.yml`'s `publish` job, held by
   `scripts/validate_release_identity.py` assertion 11 and never run: there is no remote); the Run pages around
   `veyqctl`, each keeping the commands the tool runs, and *Verify a release*'s `cosign verify-blob` for `veyqctl`
-  itself (held by assertion 7). What waits on the owner: the remote, immutable releases switched on, the first publish.
+  itself and for the manifest (held by assertion 7); the manifest signed by the publish and verified by `veyqctl`
+  before it is trusted, from every source (decisions 3 and 7). What waits on the owner: the remote, immutable releases switched on, the first publish.
 - Date: 2026-10-16
 
 ## Context
@@ -58,7 +59,8 @@ its Node CLI (`admin-web/src/cli/`). Management is the instance's lifecycle *on 
 GitHub Release on the tag `v<major>.<minor>` carrying `docker-compose.prod.yml`, `.env.example` (as `env.example`:
 GitHub renames an asset whose name starts with a period), `garage.toml`, `veyqctl` (signed keylessly with `cosign
 sign-blob`, the same identity as the images, its bundle an asset beside it), and a manifest naming both images by
-`tag@digest`, all uploaded in the one call that creates the release. The repository has immutable releases switched on before the first release, so nothing a
+`tag@digest` and every other asset by its sha256 — signed the same way into `manifest.json.bundle`, which `veyqctl`
+verifies before it trusts any of it — all uploaded in the one call that creates the release. The repository has immutable releases switched on before the first release, so nothing a
 release carries can change after it is published. Snapshots get no GitHub Release; `veyqctl` never installs one.
 
 **4. The operator picks a release line in `.env`: `VEYQ_RELEASE`.**
@@ -78,7 +80,8 @@ keys, so it stays a deliberate act. In order, and nothing is stopped before step
    the newest of its own, this run upgrades to that newest release instead and says that the next `upgrade` enters
    the next major — and no run crosses more than one major. That entry is a path the lanes test (ADR 0091 decision
    6), so a jump from an older release across a major's removals is never taken;
-2. download its assets into `releases/<version>/` and verify both images' cosign signatures by the manifest's digests;
+2. verify the manifest's signature, then both images' cosign signatures by the manifest's digests, then download its
+   assets into `releases/<version>/`, each against the manifest's sha256;
 3. refuse if the new `.env.example` requires a value `.env` lacks, naming it — with `latest` this is what stops a
    major whose removals need the operator;
 4. back up; stop the app; switch to the new release's recipe and image lines; `up`; wait until healthy.
@@ -89,7 +92,9 @@ The previous release's directory stays, so the diff and the way back are both on
 nothing to migrate from today's `infra/` layout: no release has ever been published.
 
 **7. GitHub is the default source, never a requirement.** `veyqctl` takes a source override, a mirror the operator
-runs; trusting that mirror is the operator's own decision, and the Run pages say so.
+runs, verified exactly as GitHub is: the manifest's signature holds its contents to veyq's publish, so trusting a
+mirror is a matter of availability and freshness — it decides which releases are offered, and could withhold a newer
+one — never of integrity; the Run pages say so.
 
 **8. Kubernetes is out of scope.** `veyqctl` drives Compose only. A cluster upgrades with `helm upgrade` by digest
 and keeps current with its own GitOps tooling; veyq ships no in-cluster operator.

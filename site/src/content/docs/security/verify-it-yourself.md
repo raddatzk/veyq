@@ -295,8 +295,10 @@ means "operator-blind, verified". The traffic is the wire sweep's job.
 ## Verifying a signed release
 
 A release is identified by its tree. Its deployment recipe is the release's assets, beside a manifest that names
-both images by digest, and the publish signs the images, the Helm chart and `veyqctl` keylessly with cosign and
-creates the immutable GitHub Release that carries the assets
+both images by digest and every other asset by its sha256, and the publish signs the images, the Helm chart,
+`veyqctl` and that manifest keylessly with cosign and creates the immutable GitHub Release that carries the assets.
+`veyqctl` verifies the manifest's signature before it trusts any of it, so a mirror can withhold a release but not
+change one
 ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md),
 [ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)).
 The step-by-step check — resolve each tag to a digest once, verify each signature against the one workflow

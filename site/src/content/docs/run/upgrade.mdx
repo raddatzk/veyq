@@ -58,7 +58,8 @@ runs, so you can do it by hand.
 1. **Resolve the release** `.env`'s `VEYQ_RELEASE` selects ([below](#which-release-upgrade-takes)). The running one:
    nothing to do. An older one: refused — there is no downgrade.
 2. **Verify it and fetch its files** into `releases/<new>/`, exactly as [Verify a release](/veyq/run/verify-a-release/)
-   shows. A signature that does not verify stops it here, with nothing pulled.
+   shows: the manifest's signature first, then both images'. A signature that does not verify stops it here, with
+   nothing pulled.
 3. **Check the new template against `.env`.** Every key the new `env.example` assigns that `.env` lacks, and every
    `${VAR:?…}` the new recipe or your `compose.override.yml` leaves unset, is refused by name: add it to `.env` and run
    `upgrade` again. A release that adds a required variable has no other way to reach you, and a setting that moved

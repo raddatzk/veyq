@@ -29,8 +29,11 @@ the compose file read it, and the two `COPY` lines that carried the recipe did n
 step into a scratch directory and requires every derived file there, byte-identical to the tree.
 
 **The publish uploads `<out>/<tag>/` whole** (`ci.yml`'s `publish` job, one `gh release create` with every file),
-after it has added `veyqctl.bundle`, `veyqctl`'s `cosign sign-blob` bundle, which no manifest lists (it is made after
-the manifest, and it vouches for `veyqctl` where no manifest has been checked yet: the operator's first fetch).
+after it has added two `cosign sign-blob` bundles, which no manifest lists because each is made after it:
+`manifest.json.bundle`, the manifest's own signature, which `veyqctl` verifies before it trusts any sha256 or digest
+the manifest names (from GitHub, a mirror or a directory alike), and `veyqctl.bundle`, which vouches for `veyqctl`
+where no manifest has been checked yet: the operator's first fetch by hand. A release produced here and never
+published carries neither, and `veyqctl` installs it only `--unsigned-local`.
 
 **The images are named by digest.** A reference with a registry path (`/`) must carry `@sha256:<64 hex>`; only a
 local build's bare `name:tag` may go without one, which is what `veyqctl --unsigned-local` accepts and nothing
@@ -76,6 +79,11 @@ RELEASES = "releases.json"
 # (ADR 0096 decision 3). It is not in the manifest — it is made after it, and it is what vouches for `veyqctl` where
 # no manifest has been checked yet. Named here so no recipe file can take its name.
 VEYQCTL_BUNDLE = "veyqctl.bundle"
+# The manifest's keyless signature, written by the publish (`cosign sign-blob --bundle`) after this file wrote the
+# manifest and uploaded beside it: `veyqctl` verifies it against the images' identity before it trusts any sha256 or
+# digest the manifest names (inbox #469, ADR 0057 §3). Named here so no recipe file can take its name, and
+# validate_release_identity.py holds the publish's `--bundle` and `veyqctl`'s `MANIFEST_BUNDLE_ASSET` to it.
+MANIFEST_BUNDLE = "manifest.json.bundle"
 # A name GitHub publishes as given: no leading or trailing period, nothing but letters, digits, `.`, `_` and `-`.
 ASSET_NAME = re.compile(r"^[A-Za-z0-9_-](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?$")
 
@@ -196,7 +204,7 @@ def recipe_reads(compose: pathlib.Path = COMPOSE) -> tuple[dict[str, list[str]],
             if isinstance(body, dict) and "file" in body:
                 path(body["file"], f"{section}.{key}.file")
 
-    fixed = {COMPOSE.name, TEMPLATE_ASSET, MANIFEST, VEYQCTL_BUNDLE, *TOOLS}
+    fixed = {COMPOSE.name, TEMPLATE_ASSET, MANIFEST, VEYQCTL_BUNDLE, MANIFEST_BUNDLE, *TOOLS}
     for asset in sorted(set(reads) & fixed):
         if asset != COMPOSE.name:
             errors.append(f"{name} reads a file named `{asset}`, which is also the name of a release asset of its own")

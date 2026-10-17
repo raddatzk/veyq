@@ -37,8 +37,9 @@ it at another stack.
 **A release is the source's three answers** — which releases exist, what one's manifest says, give me one asset — and
 three sources answer them the same way: the GitHub Releases of `raddatzk/veyq` (the default), an HTTP mirror and a
 local directory, both in the mirror layout `scripts/release_assets.py` produces (`releases.json`, `<tag>/<asset>`).
-Trusting a mirror is the operator's decision (decision 7). Prereleases are never installed, and an asset name with a
-directory in it (`../`) is refused: a release's assets are flat names, by construction of the producer.
+Every source is verified the same way (below), so choosing a mirror is a decision about availability and freshness,
+never about what a release contains (decision 7). Prereleases are never installed, and an asset name with a directory
+in it (`../`) is refused: a release's assets are flat names, by construction of the producer.
 
 **`VEYQ_RELEASE` in `.env` selects the release** (decision 4): `<major>.<minor>` pins one, `<major>` takes the newest
 of that major, `latest` the newest of all. `install` takes it from `--set VEYQ_RELEASE=…`, else `latest`, and writes
@@ -49,14 +50,20 @@ newest release first when the running one is not it, and never more than the nex
 major is reached directly from its predecessor's last release; a next major with no release (only prereleases, or a
 mirror that lacks it) is refused, since going past it would cross two.
 
-**Nothing unverified is pulled or started** (ADR 0057). The manifest names both images by `tag@digest`; each is
-checked with the host's `cosign verify` against the one identity that publishes veyq — GitHub's OIDC issuer and
-`ci.yml` of `raddatzk/veyq` on `main` or a `release/<major>.x` branch, the identity the Run area's *Verify a release*
-page documents, and `scripts/validate_release_identity.py` assertion 7 holds both to what signs — before a single
-image is pulled. `--unsigned-local` is the one way past it, for a release produced from a local `docker build`: it is
-refused unless BOTH image references are a bare `name:tag` with no registry host and no digest, refused for an image
-that is not on this host (a bare name would otherwise be pulled from Docker Hub's `library/`), and every line the run
-prints says that nothing was verified.
+**Nothing unverified is pulled or started** (ADR 0057). First the manifest: the publish signs it with `cosign
+sign-blob` into `manifest.json.bundle`, an asset beside it, and `fetch_manifest` — the one entry that reads a manifest
+from a source — runs the host's `cosign verify-blob` on the manifest's exact bytes against that bundle and the one
+identity that publishes veyq (GitHub's OIDC issuer and `ci.yml` of `raddatzk/veyq` on `main` or a `release/<major>.x`
+branch, the identity the Run area's *Verify a release* page documents, and `scripts/validate_release_identity.py`
+assertion 7 holds both to what signs) BEFORE a single field of it is read — so no sha256 and no digest in it is
+trusted unless veyq's publish signed it, whether it came from GitHub, a mirror or a directory. A missing bundle is
+refused, and so is a cosign older than `COSIGN_MIN_VERSION` (3.1.3: every cosign up to 3.1.2 accepts a forged
+legacy-format bundle without checking its identity, GHSA-fx35-mq7g-6g98). Then the images: the manifest names both by
+`tag@digest`, and each is checked with `cosign verify` against the same identity, before a single image is pulled.
+`--unsigned-local` is the one way past both, for a release produced from a local `docker build`: no bundle is fetched
+and it is refused unless BOTH image references are a bare `name:tag` with no registry host and no digest, refused for
+an image that is not on this host (a bare name would otherwise be pulled from Docker Hub's `library/`), and every line
+the run prints says that nothing was verified.
 
 **`.env` from the template.** `install` copies the release's `.env` template (`env.example`: the tree's
 `infra/.env.example`, published without the leading period a GitHub Release asset cannot keep) line by line: the four
@@ -70,7 +77,7 @@ Written `0600`, in a home created `0700`.
      an older one (there is no downgrade: going back is restoring a backup, ADR 0056 §6); one beyond the running
      major is entered from its predecessor's last release, one major per run (above), and a run that stops on the way
      ends by saying that the next `upgrade` enters the next major;
-  2. verify both images (as `install` does), then fetch its assets into `releases/<release>/`;
+  2. verify its manifest, then both images (as `install` does), then fetch its assets into `releases/<release>/`;
   3. fill the new template from `.env` (`upgrade_values`): the image lines are the new release's, a key `.env` has
      keeps its value, a secret veyqctl knows how to make is made — and every other key the new template assigns, and
      every `${VAR:?…}` the new recipe or the override leaves unset, is refused, named; the result is staged as
@@ -94,25 +101,32 @@ image's own user — born the application's, `0600`, without root (the alternati
 names). `--key-into` is required for `backup` and `upgrade`, and refused when it exists or lies inside `backups/`.
 
 **`self-update`** replaces this file with the installed release's `veyqctl` after checking it against that release's
-manifest — a release whose images were verified at `install`/`upgrade`, or one installed `--unsigned-local`, which it
-says. It checks no signature of `veyqctl`'s own: the publish signs it with `cosign sign-blob` (ADR 0096 decision 3),
-but its bundle, `veyqctl.bundle`, sits beside the release's assets and not in its manifest — it is for the copy an
-operator fetches by hand, before any manifest is checked — so `install` and `upgrade` do not fetch it, and like every
-other asset the `veyqctl` it installs is bound to the release by the manifest's sha256 and the source.
+manifest — and, because it replaces the verifier itself, it first verifies that manifest on disk against the
+`manifest.json.bundle` kept beside it, with the same `cosign verify-blob`; a manifest edited in the home, or one whose
+bundle is gone, is refused and nothing is replaced. A release installed `--unsigned-local` has no bundle, and
+`self-update` says it is NOT VERIFIED. `veyqctl.bundle`, the publish's signature of `veyqctl` alone, is for the copy an
+operator fetches by hand, before any manifest is checked; `install` and `upgrade` do not fetch it, since the signed
+manifest binds `veyqctl` by its sha256 like every other asset.
 
 **What proves it** — it is a host tool, not a coverage surface (ADR 0040; the use-case
 `uc.admin.install-and-upgrade-instance` stays `planned` for that reason): `scripts/veyqctl_selftest.py`, without
-Docker, holds the resolver, the manifest parse, the template merge, `upgrade`'s order and every refusal; the live
+Docker, holds the resolver, the manifest's signature and parse, the template merge, `upgrade`'s order and every
+refusal, with a stand-in for cosign; `cosign verify-blob` in the exact form it runs was run against cosign's own
+signed release files (cr-signed-release-manifest), never against a veyq release, none being published; the live
 runs of cr-veyqctl installed, stopped and started an instance from a mirror directory with images built from the tree,
 upgraded it from one commit's release to the next with a Memory in it, and restored the upgrade's backup onto a fresh
 install; and the stack lane (`scripts/run_stack_e2e.py`, ADR 0090) installs every candidate it boots with this file's
 `install --unsigned-local`, its overlay as the override file — `install`, the override and `.env` from the template,
 on every run (`start`, `stop`, `upgrade`, `backup` and `restore` are not on that path).
 
-Its limits: it drives Compose only (Kubernetes upgrades with `helm upgrade`, decision 8); it cannot verify a mirror's
-`releases.json` or a manifest beyond its shape and the assets' sha256 — the images' signatures are what bind a
-release to veyq's publish; it does not check that the Docker it talks to is the host's own; and an instance that was
-never set up has no tenant, so the backup tool refuses it and `upgrade` with it — such an instance is reinstalled.
+Its limits: it drives Compose only (Kubernetes upgrades with `helm upgrade`, decision 8); the source still decides
+WHICH releases exist — `releases.json` and the GitHub listing are unsigned, so a mirror can withhold a newer release or
+keep serving an older signed one (a freeze; `upgrade` refuses to go below the running release, and nothing here
+proves freshness), though it can no longer serve a forged one; `backup` and `restore` check the release's
+`instance_backup.py` against the manifest on disk, verified when it was fetched, and do not verify it again (cosign,
+and perhaps the network, during a disaster restore would be a new dependency); it does not check that the Docker it
+talks to is the host's own; and an instance that was never set up has no tenant, so the backup tool refuses it and
+`upgrade` with it — such an instance is reinstalled.
 """
 from __future__ import annotations  # `str | None` below — the repo's scripts run on Python 3.9
 
@@ -143,12 +157,20 @@ GITHUB_DOWNLOAD = f"https://github.com/{UPSTREAM}/releases/download"
 # `cosign verify`, held to what signs by `scripts/validate_release_identity.py` assertion 7, which reads them here.
 COSIGN_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 COSIGN_IDENTITY_REGEXP = r"^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$"
+# The oldest cosign veyqctl verifies a manifest with. The publish signs it into a Sigstore bundle, which cosign 3 reads
+# by default (no format flag, so none a later cosign may drop); and every cosign up to 3.1.2 accepts a forged bundle in
+# the LEGACY format without checking its identity (GHSA-fx35-mq7g-6g98, fixed in 3.1.3) — a source that controls the
+# manifest controls the bundle beside it, so it could hand exactly that one.
+COSIGN_MIN_VERSION = "3.1.3"
+COSIGN_VERSION = re.compile(r"GitVersion:\s*v?([0-9]+)\.([0-9]+)\.([0-9]+)")
 
 COMPOSE_ASSET = "docker-compose.prod.yml"
 TEMPLATE_ASSET = "env.example"  # validate_release_identity.py holds each `*_ASSET` to a name the producer writes
 BACKUP_ASSET = "instance_backup.py"
 SELF_ASSET = "veyqctl"
 MANIFEST_ASSET = "manifest.json"
+# The manifest's signature, an asset beside it: `cosign sign-blob` by the publish, under the images' identity.
+MANIFEST_BUNDLE_ASSET = "manifest.json.bundle"
 RELEASES_INDEX = "releases.json"
 # Every release carries these; the manifest lists them with their sha256, and more (the recipe's other files).
 REQUIRED_ASSETS = (COMPOSE_ASSET, TEMPLATE_ASSET, BACKUP_ASSET, SELF_ASSET)
@@ -477,6 +499,7 @@ class Manifest(NamedTuple):
     unscheduled: bool
     assets: dict  # asset name -> sha256 hex
     raw: bytes = b""  # the manifest as the source served it, kept verbatim beside the release
+    bundle: bytes = b""  # its signature as the source served it, verified; empty under --unsigned-local
 
 
 def parse_manifest(raw: bytes, tag: str) -> Manifest:
@@ -511,11 +534,67 @@ def parse_manifest(raw: bytes, tag: str) -> Manifest:
                     bytes(raw))
 
 
-def fetch_manifest(source: Source, chosen: Listed) -> Manifest:
-    return parse_manifest(source.fetch(chosen.tag, MANIFEST_ASSET), chosen.tag)
+def fetch_manifest(host: Host, source: Source, chosen: Listed, unsigned_local: bool) -> Manifest:
+    """The one entry that trusts a manifest: its bundle verified against the identity that publishes veyq FIRST, and
+    only then a single field of it read. Under `--unsigned-local` no bundle is fetched (a release produced from a local
+    build has none), and `verify_images` refuses such a release unless both of its images are local builds."""
+    if unsigned_local:
+        return parse_manifest(source.fetch(chosen.tag, MANIFEST_ASSET), chosen.tag)
+    cosign = require_cosign(host)
+    raw = source.fetch(chosen.tag, MANIFEST_ASSET)
+    try:
+        bundle = source.fetch(chosen.tag, MANIFEST_BUNDLE_ASSET)
+    except Refused as e:
+        raise Refused(f"{source.describe()} serves no {MANIFEST_BUNDLE_ASSET} for {chosen.tag} ({e}) — the manifest's "
+                      f"signature, without which nothing it names is trusted. A mirror copies it like any other file of "
+                      f"the release; a release produced locally from `docker build` has none and is installed with "
+                      f"--unsigned-local. Nothing was pulled, written or started.") from None
+    verify_manifest(host, cosign, raw, bundle, f"the manifest of {chosen.tag} from {source.describe()}")
+    return parse_manifest(raw, chosen.tag)._replace(bundle=bytes(bundle))
 
 
 # ---- verification ---------------------------------------------------------------------------------------------
+
+def require_cosign(host: Host) -> str:
+    cosign = host.which("cosign")
+    if not cosign:
+        raise Refused("cosign is not on PATH, and nothing is pulled or started unverified "
+                      "(https://docs.sigstore.dev/cosign/system_config/installation/)")
+    return cosign
+
+
+def check_cosign_version(host: Host, cosign: str) -> None:
+    """Refused below `COSIGN_MIN_VERSION`, by name: the manifest's bundle is only as safe as the cosign that reads it."""
+    result = host.run([cosign, "version"], check=False)
+    found = COSIGN_VERSION.search(f"{result.stdout or ''}\n{result.stderr or ''}")
+    have = tuple(int(x) for x in found.groups()) if found else None
+    floor = tuple(int(x) for x in COSIGN_MIN_VERSION.split("."))
+    if have is None or have < floor:
+        shown = ".".join(map(str, have)) if have else "a version `cosign version` does not state"
+        raise Refused(f"cosign {shown} is older than {COSIGN_MIN_VERSION}, the oldest veyqctl verifies a manifest with: "
+                      f"the publish signs it into a Sigstore bundle, which cosign 3 reads by default, and every cosign "
+                      f"up to 3.1.2 accepts a forged bundle in the legacy format without checking its identity "
+                      f"(GHSA-fx35-mq7g-6g98) — a source could hand exactly that one. Install cosign "
+                      f"{COSIGN_MIN_VERSION} or later. Nothing was pulled, written or started.")
+
+
+def verify_manifest(host: Host, cosign: str, raw: bytes, bundle: bytes, what: str) -> None:
+    """`cosign verify-blob` of the manifest's exact bytes against its bundle and the one identity that publishes veyq."""
+    check_cosign_version(host, cosign)
+    with tempfile.TemporaryDirectory(prefix="veyqctl-manifest-") as tmp:  # 0700: nobody swaps the blob in between
+        blob, sig = Path(tmp) / MANIFEST_ASSET, Path(tmp) / MANIFEST_BUNDLE_ASSET
+        blob.write_bytes(raw)
+        sig.write_bytes(bundle)
+        result = host.run([cosign, "verify-blob", str(blob), "--bundle", str(sig), "--certificate-oidc-issuer",
+                           COSIGN_OIDC_ISSUER, "--certificate-identity-regexp", COSIGN_IDENTITY_REGEXP], check=False)
+    if result.returncode != 0:
+        raise Refused(
+            f"{what} does not verify against its {MANIFEST_BUNDLE_ASSET} and the identity that publishes veyq "
+            f"({COSIGN_IDENTITY_REGEXP}): {(result.stderr or '').strip()[-800:]}\n"
+            f"Nothing was pulled, written or started."
+        )
+    say(f"{what}: signature verified")
+
 
 def cosign_target(role: str, ref: str) -> str:
     """`<name>@sha256:<digest>` for a published reference; refused for anything that is not one."""
@@ -547,10 +626,7 @@ def verify_images(host: Host, manifest: Manifest, unsigned_local: bool) -> None:
             say(f"{role} image {ref}: a local build, NOT VERIFIED")
         return
     targets = {role: cosign_target(role, ref) for role, ref in refs.items()}
-    cosign = host.which("cosign")
-    if not cosign:
-        raise Refused("cosign is not on PATH, and nothing is pulled or started unverified "
-                      "(https://docs.sigstore.dev/cosign/system_config/installation/)")
+    cosign = require_cosign(host)
     for role, target in targets.items():
         result = host.run([cosign, "verify", target, "--certificate-oidc-issuer", COSIGN_OIDC_ISSUER,
                            "--certificate-identity-regexp", COSIGN_IDENTITY_REGEXP], check=False)
@@ -581,11 +657,18 @@ def fetch_release(source: Source, chosen: Listed, manifest: Manifest, home: Path
     """
     dest = release_dir(home, manifest.release)
     if dest.is_dir():
+        on_disk = dest / MANIFEST_ASSET
+        if not on_disk.is_file() or on_disk.read_bytes() != manifest.raw:
+            raise Refused(f"{on_disk} is not the manifest of release {manifest.release} that was just verified — a "
+                          f"release does not change; move {dest} aside and run again")
         for name, want in manifest.assets.items():
             path = dest / name
             if not path.is_file() or sha256(path.read_bytes()) != want:
                 raise Refused(f"{path} is not the {name} release {manifest.release} names — a release does not "
                               f"change; move {dest} aside and run again")
+        bundle = dest / MANIFEST_BUNDLE_ASSET
+        if manifest.bundle and not bundle.is_file():
+            bundle.write_bytes(manifest.bundle)
         say(f"release {manifest.release}: already in {dest}, every asset matches its manifest")
         return dest
     staging = dest.parent / f".{manifest.release}.partial"
@@ -600,6 +683,8 @@ def fetch_release(source: Source, chosen: Listed, manifest: Manifest, home: Path
                               f"manifest says {want}")
             (staging / name).write_bytes(data)
         (staging / MANIFEST_ASSET).write_bytes(manifest.raw)
+        if manifest.bundle:
+            (staging / MANIFEST_BUNDLE_ASSET).write_bytes(manifest.bundle)
         os.replace(staging, dest)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -887,7 +972,7 @@ def cmd_install(args: argparse.Namespace, host: Host) -> int:
     source = open_source(spec)
     chosen = select(source.releases(), selector, source.describe())
     say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
-    manifest = fetch_manifest(source, chosen)
+    manifest = fetch_manifest(host, source, chosen, args.unsigned_local)
     verify_images(host, manifest, args.unsigned_local)
 
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -961,11 +1046,11 @@ def cmd_verify(args: argparse.Namespace, host: Host) -> int:
     selector = selected(args, home)
     source = open_source(source_spec(args, home))
     chosen = select(source.releases(), selector, source.describe())
-    manifest = fetch_manifest(source, chosen)
     say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
+    manifest = fetch_manifest(host, source, chosen, args.unsigned_local)
     verify_images(host, manifest, args.unsigned_local)
     say(f"release {chosen.release}: " + ("NOT VERIFIED (--unsigned-local)" if args.unsigned_local
-                                          else "both images verified; nothing was pulled"))
+                                          else "its manifest and both images verified; nothing was pulled"))
     return 0
 
 
@@ -1188,12 +1273,12 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
         + (f" — {selection.release} lies in a later major, entered from the last release of the one before"
            if chosen != selection else ""))
 
-    # 2. its assets into releases/<release>/, both images verified by the manifest's digests
-    manifest = fetch_manifest(source, chosen)
+    # 2. its manifest verified, both images verified by the manifest's digests, then its assets into releases/<release>/
+    manifest = fetch_manifest(host, source, chosen, args.unsigned_local)
     verify_images(host, manifest, args.unsigned_local)
     directory = fetch_release(source, chosen, manifest, home)
     say(f"step 2: release {manifest.release} fetched and " + ("NOT verified (--unsigned-local)" if args.unsigned_local
-                                                             else "both images verified"))
+                                                             else "its manifest and both images verified"))
 
     # 3. refuse if the new template requires a value .env lacks, naming it
     template = (directory / TEMPLATE_ASSET).read_text()
@@ -1295,6 +1380,17 @@ def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
     """This file, replaced by the installed release's `veyqctl` — the one its manifest names, checked by sha256."""
     home = Path(args.home)
     state = read_state(home)
+    if not state.unsigned_local:
+        # `self-update` replaces the verifier itself, so the manifest on disk is verified again before its sha256 of
+        # `veyqctl` is believed: a manifest edited in the home to match a swapped `veyqctl` must not install it.
+        directory = release_dir(home, state.release)
+        try:
+            raw, bundle = (directory / MANIFEST_ASSET).read_bytes(), (directory / MANIFEST_BUNDLE_ASSET).read_bytes()
+        except OSError as e:
+            raise Refused(f"release {state.release} on disk has no verifiable manifest ({e}): its "
+                          f"{MANIFEST_BUNDLE_ASSET} is kept beside the manifest at `install` and `upgrade`, and "
+                          f"without it the `veyqctl` the manifest names is not trusted. Nothing was replaced.") from None
+        verify_manifest(host, require_cosign(host), raw, bundle, f"the manifest of release {state.release} in {directory}")
     asset = verified_asset(home, state.release, SELF_ASSET)
     target = SELF.resolve()
     if target == asset.resolve():

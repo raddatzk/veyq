@@ -46,7 +46,12 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      step of the file runs `gh release create`, in the `publish` job, for `kind == release` only, after the step that
      creates the ref and after every `cosign sign` of an image or the chart; it carries `--verify-tag` and neither
      `--draft` nor `--prerelease`; it runs `scripts/release_assets.py` into a directory and uploads that directory's
-     `v$VERSION/*` whole, after a `cosign sign-blob` of its `veyqctl` that writes the `--bundle` among those files; and
+     `v$VERSION/*` whole, after exactly two `cosign sign-blob` lines, every one of the step collected (never the first
+     match alone): one of `v$VERSION/veyqctl` into `--bundle v$VERSION/<release_assets.VEYQCTL_BUNDLE>` and one of
+     `v$VERSION/manifest.json` into `--bundle v$VERSION/<release_assets.MANIFEST_BUNDLE>` — so the names the publish
+     writes are the producer's reserved ones, which assertion 4 holds `veyqctl` to — both with `--new-bundle-format`,
+     both after the producer line and before `gh release create`, and no line between the manifest's signing and
+     that upload runs the producer again or names the manifest (the file uploaded must be the file signed); and
      it hands the boolean dispatch input `unscheduled_major` (default false) to the producer as `--unscheduled`, which
      an earlier step of the job also runs the producer with, before the job's first push, so its refusals come before
      anything is published. No step anywhere uploads to, edits or deletes a GitHub Release (`gh release
@@ -67,7 +72,10 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      path, `../`, a directory in it, a name GitHub would rename, `include:`, `extends`). Here that derivation is run
      on the tree, its refusals are this guard's reds, and the producer's carry step is run into a scratch directory,
      where every derived file must be, byte-identical to the tree (the `.env` template under its asset name,
-     `env.example`). Every `*_ASSET` name `scripts/veyqctl.py` fetches must be one the producer writes. The derived list is printed on the OK line. Plus: every veyq image
+     `env.example`). Every `*_ASSET` name `scripts/veyqctl.py` fetches must be one a release has — the producer's
+     files, the manifest, or one of the two bundle names the producer reserves and the publish writes (assertion 11)
+     — and its `MANIFEST_BUNDLE_ASSET`, the file it verifies the manifest against, is the manifest's bundle by name.
+     The derived list is printed on the OK line. Plus: every veyq image
      tag written down under `infra/` or on the Run pages (`site/src/content/docs/run/`, where the operator
      procedures live) matches a tag the pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
@@ -91,8 +99,9 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      **rejects** every other workflow in `.github/workflows/`, non-release branches (which the version step must
      refuse as well), pull-request and tag refs, another owner, a repository whose name only starts with ours,
      and the right identity quoted inside another URL. Every image the build matrix publishes is verified, by
-     digest and never by tag, `veyqctl` itself is verified with `cosign verify-blob`, and the workflow states no identity
-     of its own. The upstream is the chart's
+     digest and never by tag, `veyqctl` itself is verified with `cosign verify-blob`, and so is the manifest — `cosign
+     verify-blob --bundle <release_assets.MANIFEST_BUNDLE>` on `manifest.json`, before its digests are read (inbox
+     #469) — and the workflow states no identity of its own. The upstream is the chart's
      `home`, not the workflow's `github.repository_owner`, which is whoever runs it — a fork included. The
      operator's tool runs the same check (`veyqctl verify`, `install`, `upgrade`, ADR 0096): `scripts/veyqctl.py`'s
      `COSIGN_OIDC_ISSUER` and `COSIGN_IDENTITY_REGEXP` are held to the same accepts and rejects, and to be exactly
@@ -153,6 +162,13 @@ REST docs, "Upload a release asset"), so every `veyqctl install` from GitHub wou
 not have. The producer now names it `env.example` and refuses a recipe file GitHub would rename, and assertion 4 holds
 `veyqctl`'s asset names to what the producer writes.
 
+Assertion 11's two signatures came with inbox #469 (cr-signed-release-manifest), no incident — no release exists —
+but a hole in the design that was there from the first release: the manifest was unsigned, so whoever controls the
+source (a mirror, a local directory) could serve a forged manifest with a forged compose file that matched it. The
+images stayed safe by their own signatures; the recipe, which can mount the host or add an unverified container, was
+exactly as trustworthy as its source. Collecting every `sign-blob` line came with it: the old check read the first
+match only, so a correct step that signed the manifest first read red.
+
 Assertion 8 came with the chart's OCI release (same CR): no incident, the chart had never been published. Each of
 its halves was bitten by injection before it counted, and the measurement that shaped it is in ADR 0064 — `helm
 push` appends the chart's name to the target, which is why the target ends in `/charts`.
@@ -185,6 +201,10 @@ glob expands to every file is the producer's to keep true: it refuses a name wit
 `*` skips. A writer to a GitHub Release it does not recognise (another CLI, an action named otherwise) is not held.
 It cannot prove `gh release create` ran, that the repository's immutable-releases setting is on, or which name GitHub
 gave each asset — no remote exists, so the GitHub Release is a statement about a file like the rest of the publish.
+That a `sign-blob` line names the manifest is not that cosign signed it: the step's shell has run only locally, with
+stand-ins for `cosign` and `gh`, and that the bundle verifies is `veyqctl`'s self-test's, with a stand-in for cosign.
+The between-lines check knows two ways to touch the manifest — the producer, and a line naming `manifest.json` — and a
+rewrite through another variable or a script that writes it unnamed is not held.
 
 Assertion 3's gating is read as a conservative model of GitHub's expression language: an `if:` counts as gated
 only if it is a pure `&&` chain with the dispatch (or release) test as one term, so an equivalent condition
@@ -218,8 +238,8 @@ fails here as it would there. The two engines agree on what the pattern uses (an
 construct where they diverge would be judged by the wrong one. The rejected identities are a probe list of the
 ways a pattern is too wide, not a proof that no other string is accepted; the accepted ones are derived. The
 registry (`ghcr.io`) is a constant here. And it cannot see whether an operator runs the command at all. For
-`veyqctl` it reads the two constants, not the `cosign verify` call that passes them: `scripts/veyqctl_selftest.py`
-holds that call to exactly those two values.
+`veyqctl` it reads the two constants, not the `cosign verify` and `cosign verify-blob` calls that pass them:
+`scripts/veyqctl_selftest.py` holds both calls to exactly those two values.
 """
 from __future__ import annotations
 
@@ -299,6 +319,9 @@ RELEASE_ASSET_WRITE = re.compile(
 )
 RELEASE_ACTION = re.compile(r"release", re.IGNORECASE)  # an action's `owner/name`: softprops/action-gh-release, …
 IMAGE_SIGN = re.compile(r"\bcosign\s+sign\s")  # an image or the chart, not `sign-blob`
+SIGN_BLOB = re.compile(r"\bcosign\s+sign-blob\b")
+PRODUCER = re.compile(r"scripts/release_assets\.py\b")
+NEW_BUNDLE_FORMAT = "--new-bundle-format"
 FIRST_PUBLISH_WRITE = re.compile(r"\b(?:imagetools\s+create|cosign\s+sign|helm\s+push|git\s+push|gh\s+release)\b")
 
 
@@ -929,7 +952,7 @@ if workflow_doc:
             return re.sub(r"\$\{(\w+)\}", r"$\1", token)
 
         create = argv_of(GH_RELEASE_CREATE) or []
-        producer = argv_of(re.compile(r"scripts/release_assets\.py\b")) or []
+        producer = argv_of(PRODUCER) or []
         if "--verify-tag" not in create:
             fail(
                 f"{named}'s `gh release create` does not carry `--verify-tag` — without it a missing ref is CREATED by "
@@ -955,18 +978,57 @@ if workflow_doc:
                     f"{named}'s `gh release create` does not upload `{whole}`, the producer's whole output for the "
                     f"release — every asset goes in the one call, because an immutable release takes none later"
                 )
-            sign_blob = argv_of(re.compile(r"\bcosign\s+sign-blob\b")) or []
-            bundle = [sign_blob[i + 1] for i, t in enumerate(sign_blob[:-1]) if t == "--bundle"]
-            if not sign_blob or not bundle or not norm(bundle[0]).startswith(f"{out}/v$VERSION/") \
-                    or not norm(sign_blob[-1]) == f"{out}/v$VERSION/veyqctl":
-                fail(
-                    f"{named} does not `cosign sign-blob` the release's `veyqctl` with its `--bundle` written among "
-                    f"the assets — `veyqctl` is signed with the images' identity, and the bundle is an asset (ADR 0096 "
-                    f"decision 3)"
-                )
-            elif lines.index(next(line for line in lines if "cosign sign-blob" in line)) > lines.index(
-                    next(line for line in lines if GH_RELEASE_CREATE.search(line))):
-                fail(f"{named} signs `veyqctl` after `gh release create` — the bundle would miss the one call")
+            # Every `sign-blob` of the step, not the first one: the release signs two files, and a lookup that stops
+            # at the first match reads a correct step red as soon as the two lines trade places.
+            create_at = next((i for i, line in enumerate(lines) if GH_RELEASE_CREATE.search(line)), len(lines))
+            producer_at = [i for i, line in enumerate(lines) if PRODUCER.search(line)]
+            blobs: dict[str, list[tuple[int, list[str]]]] = {}
+            for at, line in enumerate(lines):
+                if not SIGN_BLOB.search(line):
+                    continue
+                try:
+                    argv = shlex.split(line.split(" #", 1)[0])
+                except ValueError as e:
+                    fail(f"{named}: cannot parse `{line[:80]}`: {e}")
+                    continue
+                blobs.setdefault(norm(argv[-1]), []).append((at, argv))
+            for blob, bundle_name, why in (
+                (f"{out}/v$VERSION/veyqctl", release_assets.VEYQCTL_BUNDLE,
+                 "`veyqctl` is signed with the images' identity for the copy an operator fetches by hand, and the bundle "
+                 "is an asset (ADR 0096 decision 3)"),
+                (f"{out}/v$VERSION/{release_assets.MANIFEST}", release_assets.MANIFEST_BUNDLE,
+                 "`veyqctl` verifies the manifest's bundle before it trusts any sha256 or digest in it, so an unsigned "
+                 "manifest is a recipe exactly as trustworthy as its source (inbox #469, ADR 0057 §3)"),
+            ):
+                signed = blobs.get(blob, [])
+                want = f"{out}/v$VERSION/{bundle_name}"
+                if len(signed) != 1:
+                    fail(f"{named} runs {len(signed)} `cosign sign-blob` of `{blob}`, not one — {why}")
+                    continue
+                at, argv = signed[0]
+                bundles = [norm(argv[i + 1]) for i, t in enumerate(argv[:-1]) if t == "--bundle"]
+                if bundles != [want]:
+                    fail(f"{named} signs `{blob}` with `--bundle` {bundles or 'missing'}, not `{want}` — the bundle is "
+                         f"an asset of the one upload, under the name `veyqctl` and the Run page fetch; {why}")
+                if NEW_BUNDLE_FORMAT not in argv:
+                    fail(f"{named} signs `{blob}` without `{NEW_BUNDLE_FORMAT}` — a GitHub Release is immutable, so a "
+                         f"bundle in the legacy format cosign is retiring can never be re-signed, and `veyqctl` needs "
+                         f"cosign 3, which writes and reads the Sigstore bundle by default")
+                if not producer_at or at < max(producer_at):
+                    fail(f"{named} signs `{blob}` before the producer writes it — the signature would be of another file")
+                if at > create_at:
+                    fail(f"{named} signs `{blob}` after `gh release create` — the bundle would miss the one call")
+                if bundle_name == release_assets.MANIFEST_BUNDLE:
+                    rewrite = [lines[i] for i in range(at + 1, create_at)
+                               if PRODUCER.search(lines[i])
+                               or (release_assets.MANIFEST in lines[i] and not SIGN_BLOB.search(lines[i]))]
+                    if rewrite:
+                        fail(f"{named} touches the manifest between its `cosign sign-blob` and `gh release create` "
+                             f"(`{rewrite[0][:80]}`) — the manifest uploaded must be the one signed, or every "
+                             f"`veyqctl install` refuses the release")
+            for blob in sorted(set(blobs) - {f"{out}/v$VERSION/veyqctl", f"{out}/v$VERSION/{release_assets.MANIFEST}"}):
+                fail(f"{named} runs `cosign sign-blob` on `{blob}`, which is neither `veyqctl` nor the manifest — this "
+                     f"guard holds exactly those two signatures")
         unscheduled_env = str(release_step.get("env") or {})
         if f"inputs.{UNSCHEDULED_INPUT}" not in unscheduled_env or "--unscheduled" not in body:
             fail(f"{named} does not hand `inputs.{UNSCHEDULED_INPUT}` to the producer as `--unscheduled` — the manifest "
@@ -1035,10 +1097,23 @@ if not refusals:
                     recipe_assets.append(asset)
             # `veyqctl` fetches the assets it names, by name: each must be one the producer writes, or an install
             # from a real release misses it (the template's name moved once, to `env.example`, for GitHub's sake).
-            produced = {p.name for p in carried.iterdir()} | {release_assets.MANIFEST}
-            veyqctl_assets = veyqctl_constants(r"[A-Z]+_ASSET")
+            # The manifest and the two bundles are written beside the carried files (the bundles by the publish's
+            # `cosign sign-blob`, which assertion 11 holds to these names), so they are names a release has too.
+            produced = {p.name for p in carried.iterdir()} | {
+                release_assets.MANIFEST, release_assets.VEYQCTL_BUNDLE, release_assets.MANIFEST_BUNDLE}
+            # Underscores in the prefix too: `[A-Z]+_ASSET` never saw `MANIFEST_BUNDLE_ASSET`, and an anchor set
+            # found by a name pattern loses a constant silently, green (cr-signed-release-manifest).
+            veyqctl_assets = veyqctl_constants(r"[A-Z][A-Z_]*_ASSET")
             if not veyqctl_assets:
                 fail("scripts/veyqctl.py names no `*_ASSET` constant, so the names it fetches checked NOTHING")
+            # The manifest's bundle by name, not merely a name a release has: `veyqctl.bundle` is one too, and a
+            # `veyqctl` that verified the manifest against it would refuse every published release.
+            if veyqctl_assets.get("MANIFEST_BUNDLE_ASSET") != release_assets.MANIFEST_BUNDLE:
+                fail(
+                    f"scripts/veyqctl.py's `MANIFEST_BUNDLE_ASSET` is `{veyqctl_assets.get('MANIFEST_BUNDLE_ASSET')}`, not "
+                    f"`{release_assets.MANIFEST_BUNDLE}`, the manifest's bundle the publish writes — `veyqctl` would "
+                    f"verify the manifest against another file, or refuse every release for the lack of it"
+                )
             for constant, name in sorted(veyqctl_assets.items()):
                 if name not in produced:
                     fail(
@@ -1467,6 +1542,14 @@ else:
             f"`cosign sign-blob` (ADR 0096 decision 3) because an operator fetches it by hand before anything else "
             f"is checked — a signature nobody is told to check protects nobody, and that `veyqctl` is what checks "
             f"every image after it."
+        )
+    if commands and not any(argv[0] == "verify-blob" and release_assets.MANIFEST in argv[1:]
+                            and flag_values(argv, "--bundle") == [release_assets.MANIFEST_BUNDLE] for argv in commands):
+        fail(
+            f"{VERIFY_PAGE.relative_to(ROOT)} never runs `cosign verify-blob --bundle {release_assets.MANIFEST_BUNDLE}` "
+            f"on `{release_assets.MANIFEST}`. The publish signs the manifest, and `veyqctl` verifies it before it trusts "
+            f"any sha256 or digest in it (inbox #469) — the page keeps every step `veyqctl` runs, so that one can be done "
+            f"by hand, and a by-hand check that reads the manifest's digests unverified trusts its source."
         )
     chart_ref = f"charts/{(yaml.safe_load(CHART.read_text()) or {}).get('name') or ''}"
     if commands and chart_ref not in verified_images:

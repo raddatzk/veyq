@@ -21,8 +21,9 @@ acceptanceCriteria:
       container is stopped.
   - id: an-unverified-release-is-never-started
     text: >-
-      A release whose images do not verify by the manifest's digests is neither pulled nor started, and nothing on
-      the host changes.
+      A release whose manifest does not verify against its signature and veyq's publish identity — from GitHub, a
+      mirror or a directory alike — or whose images do not verify by the manifest's digests, is neither pulled nor
+      started, no sha256 or digest in that manifest is used, and nothing on the host changes.
   - id: an-upgrade-backs-up-before-it-migrates
     text: >-
       An upgrade takes a three-leg backup, the key to a separate medium, before the new release's app starts and

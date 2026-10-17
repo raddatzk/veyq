@@ -11,18 +11,22 @@ A release is two images, `ghcr.io/raddatzk/veyq` and `ghcr.io/raddatzk/veyq-admi
 `ghcr.io/raddatzk/charts/veyq`, and a GitHub Release on the tag `v<major>.<minor>` whose assets are the Compose recipe
 (`docker-compose.prod.yml`, the `.env` template as `env.example`, `garage.toml`), `instance_backup.py`, `veyqctl` with
 its signature `veyqctl.bundle`, and a `manifest.json` naming both images by `tag@digest` and every other asset by its
-sha256 ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md) §3,
+sha256, with its signature `manifest.json.bundle` ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md) §3,
 [ADR 0096](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)).
-The publish signs the images, the chart and `veyqctl` keylessly with cosign, under one identity.
+The publish signs the images, the chart, `veyqctl` and the manifest keylessly with cosign, under one identity.
 
-On Docker Compose, `veyqctl` runs every check below itself, before it pulls anything. You verify one thing by hand:
-`veyqctl`, the first time you fetch it. The rest of this page is what `veyqctl` runs, so each step can be done
+On Docker Compose, `veyqctl` runs every check below itself, before it pulls anything: the manifest's signature first,
+because every other check trusts what the manifest names. You verify one thing by hand: `veyqctl`, the first time you
+fetch it. The rest of this page is what `veyqctl` runs, so each step can be done
 without it, and the chart's check for Helm.
 
 ## veyqctl, the first time
 
-You need `cosign` **v2.6.5 or later, or v3.1.3 or later**: older ones accept a forged signature bundle in the old
-format without checking its identity (GHSA-fx35-mq7g-6g98). Then:
+You need `cosign` **v3.1.3 or later**, and so does `veyqctl`, which refuses an older one by name. The publish signs
+`veyqctl` and the manifest into Sigstore bundles, the format cosign 3 reads by default; and every cosign up to 3.1.2
+(and up to 2.6.4) accepts a forged bundle in the older format without checking its identity
+(GHSA-fx35-mq7g-6g98, fixed in 3.1.3 and 2.6.5) — whoever serves you a release could hand you exactly that one.
+Then:
 
 ```sh
 release=<release>        # <major>.<minor>, e.g. 1.4
@@ -39,10 +43,9 @@ install -m 0755 veyqctl /opt/veyq/veyqctl
 
 **If `cosign verify-blob` fails, stop**, and do not run the file. `veyqctl` needs `python3` 3.9 or later, Docker with
 Compose v2, and `cosign` on the host, and runs as a user who may use Docker. From then on `veyqctl self-update`
-replaces it with the copy of the release you run, checked against that release's manifest
-([Upgrade](/veyq/run/upgrade/)). `self-update` does not check `veyqctl.bundle`: that copy is bound to veyq by the
-manifest's sha256 and the source it came from, as every other file of the release is (below). Signing the manifest
-itself is planned.
+replaces it with the copy of the release you run: it verifies that release's manifest on disk against the
+`manifest.json.bundle` kept beside it, then checks the copy against the manifest's sha256 — the signed manifest binds
+`veyqctl` as it binds every other file of the release (below), so `self-update` needs no `veyqctl.bundle`.
 
 ## The images: `veyqctl verify`
 
@@ -51,12 +54,17 @@ cd /opt/veyq
 ./veyqctl verify                    # the release .env's VEYQ_RELEASE selects; before an install, --release <selector>
 ```
 
-It reads the release's `manifest.json`, checks both images' signatures by the digests it names, and pulls nothing.
-`install` and `upgrade` run the same check first, and stop if it fails. By hand:
+It verifies the release's `manifest.json` against its signature, checks both images' signatures by the digests it
+names, and pulls nothing. `install` and `upgrade` run the same checks first, and stop if one fails. By hand:
 
 ```sh
-# 1. the manifest names both images by tag@digest
+# 1. the manifest, verified against the one identity that publishes veyq, names both images by tag@digest
 curl -fsSLO "${base}/manifest.json"
+curl -fsSLO "${base}/manifest.json.bundle"
+cosign verify-blob --bundle manifest.json.bundle \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$' \
+  manifest.json
 app_digest="$(python3 -c 'import json; print(json.load(open("manifest.json"))["images"]["app"].split("@")[1])')"
 admin_digest="$(python3 -c 'import json; print(json.load(open("manifest.json"))["images"]["admin"].split("@")[1])')"
 
@@ -78,7 +86,8 @@ pull it, and a digest cannot. In the two image lines Docker pulls by the digest 
 so a person can still read which release a line names. Without the manifest — under Helm — a tag resolves to the same
 digest: `docker buildx imagetools inspect "ghcr.io/raddatzk/veyq:${release}" --format '{{.Manifest.Digest}}'`.
 
-**If either `cosign verify` fails, stop.** Nothing has run yet, and nothing should.
+**If `cosign verify-blob` or either `cosign verify` fails, stop.** Nothing has run yet, and nothing should. Read
+the manifest only after its `verify-blob` passed: until then, every digest and sha256 in it is the source's word.
 
 ## The release's files
 
@@ -87,17 +96,21 @@ it uses it; a release already on disk is checked again, never overwritten. By ha
 from:
 
 ```sh
-mkdir -p "/opt/veyq/releases/${release}" && mv manifest.json "/opt/veyq/releases/${release}/" && cd "/opt/veyq/releases/${release}"
+mkdir -p "/opt/veyq/releases/${release}" && mv manifest.json manifest.json.bundle "/opt/veyq/releases/${release}/" && cd "/opt/veyq/releases/${release}"
 python3 -c 'import json; [print(f"{h}  {n}") for n, h in json.load(open("manifest.json"))["assets"].items()]' > SHA256SUMS
 while read -r _ name; do curl -fsSLO "${base}/${name}"; done < SHA256SUMS
 sha256sum -c SHA256SUMS
 ```
 
-**What binds these files to veyq is the release, not a signature.** The manifest is not signed: on GitHub it is an
-asset of an immutable release, which nobody can change once it is published, and the images it names verify only if
-veyq's publish signed them. A mirror (`veyqctl --source <directory or URL>`, the same layout: `releases.json` and
-`<tag>/<asset>`) is trusted by you, not checked: it could hand you a genuine older veyq release under a newer number.
-Choosing one is your decision (ADR 0096 decision 7).
+**What binds these files to veyq is the manifest's signature.** Each file is checked against the sha256 the manifest
+names, and the manifest verifies only if veyq's publish signed it — wherever it came from. A mirror (`veyqctl --source
+<directory or URL>`, the same layout: `releases.json`, `<tag>/<asset>`, and `manifest.json.bundle` beside the manifest
+like any other file) is verified exactly as GitHub is, so it cannot change what a release contains. What a source
+still decides is **which** releases it offers: the list of releases is not signed, so a mirror can withhold a newer
+release, or keep offering an older one as if nothing newer existed. `veyqctl upgrade` never goes below the release you
+run, but nothing here proves you were shown the newest; choosing a mirror is a decision about that, not about
+integrity (ADR 0096 decision 7). A release produced locally from `docker build` has no bundle, and `veyqctl` installs
+it only `--unsigned-local`, which says on every line that nothing was verified.
 
 ## The chart, under Helm
 
@@ -136,9 +149,12 @@ The chart half has been run against a local OCI registry, with a key of its own 
 verified the chart by that digest, and Helm installed it by digest and by exact version. `cosign verify-blob --bundle`
 has run with cosign 3.1.3 against a bundle `cosign sign-blob --bundle` wrote for `veyqctl` with a key of its own, not
 the keyless identity: it verified the file and refused it with one byte appended, and the command above, run as
-written against that bundle, refused it for carrying no transparency-log entry. The publish signs with the cosign its
-workflow installs (v2.5.2), which writes the older bundle format; cosign 3 still reads that format (the advisory
-above is about exactly that path), but the pairing has not run. The by-hand file check ran against a release produced
+written against that bundle, refused it for carrying no transparency-log entry. The manifest's check, in the exact
+form `veyqctl` runs it, has run with cosign 3.1.3 against a keyless Sigstore bundle of another project — cosign's own
+v3.1.3 release, `cosign_checksums.txt` and its `.sigstore.json`: refused under veyq's identity (the certificate names
+another signer), accepted under the identity that bundle's certificate carries, and refused with one byte appended to
+the file. The publish signs with the cosign its workflow installs (v2.5.2), with `--new-bundle-format`; a bundle cosign
+2.5.2 writes that way has not been read by cosign 3.1.3, and no veyq manifest has been signed. The by-hand file check ran against a release produced
 from the tree by `scripts/release_assets.py`, fetched with `curl` from a `file://` base and checked with `shasum -a 256 -c`, macOS's equivalent of `sha256sum -c`. `veyqctl upgrade` has run `cosign verify` on a release whose app digest was one hex digit off, and stopped before
 any pull; with nothing published an unaltered digest is refused the same way, so the accepting half is held only by
 its self-test, with a stand-in for `cosign`. The GitHub Release is created by the same publish, as its last step;
