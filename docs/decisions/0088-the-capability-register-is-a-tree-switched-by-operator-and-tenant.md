@@ -4,7 +4,8 @@
   links included (inbox #442, #439 step 2), and so are four requirements (#439 step 3) and the three external
   services (#439 step 4); a member's share list says why a link serves no guest (#457) (§ Consequences). It replaces
   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
-  [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match.
+  [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match. Decision 14
+  (the operating mode as a preset, 2026-10-17) is not built.
 - Date: 2026-10-15
 
 ## Context
@@ -43,7 +44,9 @@ instance and tenant layers.
      no client keeps a table per server version.
 4. **What makes an entry switchable.** An entry gets `*` or `+` only if it names two things: what the server
    **refuses**, by something the server sees (a node kind, a blob role, a share role, an endpoint, a CSP origin),
-   and what happens to **existing** data. An entry that cannot name both is presence only (`○`).
+   and what happens to **existing** data. An entry that cannot name both is presence only (`○`). A switch over
+   something the server **keeps** rather than serves names what it stops writing instead of what it refuses
+   (`guest-write-record`: no new row, and the next purge deletes the live ones).
 5. **What "off" does.** A share switch, a device switch and a requirement (decision 8) act at once, on what
    exists too: a link that keeps working, or a remembered device that keeps unlocking without the password,
    defeats the reason it was switched off. A device switch withholds its wraps (`DEVICE` for `remember-device`,
@@ -93,6 +96,18 @@ instance and tenant layers.
     *what switching it off does*, both to new and to existing data (decision 5). The catalog holds that text and
     the API serves it. `admin-web`, the CLI and `web/`'s tenant settings render it from there, and none of them
     keeps its own copy.
+14. **An operating mode is a preset, not a level** (owner, 2026-10-17;
+    [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 14). The Server
+    Owner chooses *private* or *club, organisation or company* at first-run setup and may change it later. Choosing
+    one **sets** the instance-level switches the preset names — the catalog carries each such entry's value per mode,
+    so the register still describes itself (decision 13) — and nothing more: afterwards each is an ordinary switch
+    the Server Owner may set on its own, and the AND of decision 2 is unchanged, with no third level. Choosing a mode
+    again sets the preset's switches again, after admin-web and the CLI have shown which ones will change. A tenant's
+    own switches are never touched. What the mode decides beyond switches — whether admin-web warns about an empty
+    instance contact or provider identification, the variant of the terms' operator section
+    ([ADR 0035](0035-server-terms-of-service.md) decisions 6–7), the statement of reasons' form — refuses nothing, so
+    by decision 4 it is no entry: those read the mode itself. Today's preset differs in one entry,
+    `core.public-shares.guest-write-record` (off in *private*); no entry the report path needs is a switch.
 
 ### The register
 
@@ -110,6 +125,7 @@ core/
   *+  public-shares                → share role READ
     *+  contribute                 → share role READ_WRITE
     *+  drop-box                   → share role WRITE_ONLY
+    *   guest-write-record [planned] → stops writing veyq_guest_write_record (ADR 0093 § 10); off in the private preset
   *   breached-password            → external (HIBP); CSP connect-src (instance only: checked before sign-in)
   *+  push                [native] → external (APNs/FCM); a content-free wake-up
   ○   kept-shares (#435), search, live-collab, notifications   [later]

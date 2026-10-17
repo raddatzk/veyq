@@ -21,16 +21,20 @@ information with the right to object (Art. 21) as a notice of its own. It is ser
 the endpoints that serve the terms, shown at the member gate, the share gate and (once it exists) the login page; its
 revision moves only with its text, a bump reopens the gate, a changed value renders without reopening it; a space with
 no terms (revision 0) shows the section without a gate. The template's clause 9 then points here, and clauses 2 and 7
-lose what they said about the host's duties. This is **last** in the moderation order because the section describes
+lose what they said about the host's duties. The section comes in **two variants** chosen by the operating mode
+(ADR 0093 § 14, ADR 0035 decision 6): **full** for *club, organisation or company*, **reduced** for *private*. This
+is **last** in the moderation order because the section describes
 what the other CRs build: written earlier, it would promise a report path that does not exist.
 
 ## Context & constraints
 
-- Entry conditions: `cr-instance-contact-and-provider-identification`, `cr-guest-write-record` **done** (the values);
+- Entry conditions: `cr-instance-contact-and-provider-identification`, `cr-guest-write-record` **done** (the values,
+  and the operating mode that picks the variant);
   `cr-report-and-hold`, `cr-moderation-review-and-measures`, `cr-statement-of-reasons-and-objection`,
   `cr-authority-orders-and-art18-reports` **done** (what the text describes) — or the owner decides that the section
   ships describing only what is built, and the later CRs each extend it (then this CR's entry is the first two only).
-- Decisions: ADR 0035 decisions 3 and 6 (and its Consequences); [ADR 0093](../docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+- Decisions: ADR 0035 decisions 3 and 6 (and its Consequences; decision 6 defines both variants), ADR 0093 § 14 (the
+  mode, read through `cr-instance-contact-and-provider-identification`'s `operating_mode`); [ADR 0093](../docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 10's disclosure list, § Consequences ("Docs" bullet: the clauses 2, 7 and 9, ADR 0035 decisions 3, 6 and 7);
   [ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md) (the site pages).
 - **ADR 0092 is not built here.** ADR 0093 § Consequences and ADR 0092 § Inventory both say the docs both ADRs change
@@ -54,14 +58,21 @@ what the other CRs build: written earlier, it would promise a report path that d
 1. **The section's text lives in `contracts/`** (one file, DE and EN, with named placeholders and its own revision),
    read by the backend to serve it and by nothing else — clients render what the endpoints serve. The drafts of the
    2026-10-16 research are the starting text (ADR 0035 decision 6: "written in the CR that builds this").
-2. **The gate compares a pair** (space revision, operator revision): either moving reopens it; the member's accepted
-   history keeps one row per pair; the guest's local key becomes tenant + both revisions.
-3. **A missing value renders as a visible gap** ("not stated by this operator"), never as an empty sentence; admin-web
-   already warns for the contact and the identification.
+2. **The gate compares a triple** (space revision, operator revision, variant): any of them moving reopens it; the
+   member's accepted history keeps one row per triple; the guest's local key becomes tenant + the triple.
+3. **A missing value renders as a visible gap** ("not stated by this operator") in the full variant, never as an
+   empty sentence; admin-web already warns for the contact and the identification there. In the reduced variant an
+   empty value is simply absent (ADR 0035 decision 6), and nothing warns.
+4. **Two variants, one file, one revision.** The text file marks each passage `both`, `full` or `record` (the
+   guest-write record's Art. 13 information, rendered exactly while `core.public-shares.guest-write-record` is
+   effectively on, in either variant). The **reduced** variant is the full one without the `full` passages, which
+   are exactly what ADR 0035 decision 6 lists under *drops* (`grep -n 'drops:' docs/decisions/0035-*.md`). The
+   variant is part of what the gate compares (decision 2), so a mode change reopens the gate and a record switch
+   does not.
 
 ## Open questions (owner) and legal items
 
-**Decided (Q14–Q15).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions.
+**Decided (Q14–Q15).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions. The variant per operating mode is the owner's of the same day ("Ja", ADR 0093 § 14).
 
 - **Q14 — Ship the section complete, last, or growing with each CR?** **Recommendation: last and complete** (this CR's
   order): a section that grows with each CR changes the gate's revision up to five times before the first release for
@@ -73,22 +84,26 @@ what the other CRs build: written earlier, it would promise a report path that d
 
 ## Phases
 
-- [ ] **0 docs** — Q15's two sentences; the three use-cases gain the operator section in their flows (the gate's pair,
+- [ ] **0 docs** — Q15's two sentences; the three use-cases gain the operator section in their flows (the gate's triple, the two variants,
   the section without a gate at revision 0); coverage criteria added as planned gaps. · Done when: feature-format,
   coverage, doc-link, doc-citation, change guards green.
 - [ ] **1 contracts** — the section's text file; the terms responses gain the rendered section and its revision; the
   accept request names both revisions. · Done when: `npm run generate:api`; the contracts guards; `npm run check` in
   `web/` once to see the typed lines a reshaped accept request reddens (name them).
-- [ ] **2 backend** — render with the current values; the gate on the pair; the history row per pair. · Done when:
+- [ ] **2 backend** — render the mode's variant with the current values; the gate on the triple; the history row per triple. · Done when:
   `./gradlew check` green. **Bites, with controls:** a value changed in admin-web → the served text changes and an
   accepted member is not gated (control: an operator-revision bump gates them); a space at revision 0 → the section
-  served, no gate.
+  served, no gate; *private* → the reduced variant: no authorities passage, no deferral passage, the notice path
+  present (control: *organisation* → all three present); the mode changed → an accepted member is gated again
+  (control: switching the guest-write record is not); the record's passage present exactly while its switch is on, in
+  both variants. Bite: render the record passage by mode instead of by switch → the private-with-record-on test is
+  red.
 - [ ] **3 web** — both gates render the section after the space's text, the right to object set apart; the guest's local
-  key on the pair; the template's clause 9 points to the section, clauses 2 and 7 trimmed (EN and DE). · Done when:
-  `npm run check` green; a browser pass of the member gate and the share gate in DE and EN.
+  key on the triple; the template's clause 9 points to the section, clauses 2 and 7 trimmed (EN and DE). · Done when:
+  `npm run check` green; a browser pass of the member gate and the share gate in DE and EN, in both modes.
 - [ ] **4 docs** — ADR 0035's status line (decisions 6 and 7 built); `site/src/content/docs/space-owners/terms.mdx`
   and its DE twin (the operator section exists, the space owner cannot remove it), `sharing/what-guests-see.mdx` and
-  its DE twin, `run/moderation.md` (what the section says and which values feed it); coverage refs. · Done when:
+  its DE twin, `run/moderation.md` (what the section says in each mode and which values feed it); coverage refs. · Done when:
   coverage, wiki-sources and the site check green.
 
 ## Definition of done

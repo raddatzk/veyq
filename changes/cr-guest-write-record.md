@@ -17,7 +17,8 @@ Build ADR 0093 § 10: one core table `veyq_guest_write_record`, a row per guest 
 editor — an upload's commit, an identity folder's creation, a folder's creation, a rename or move, a medium's meta at
 upload — holding the client address from ADR 0094's one resolver, its source port where one is known, the server time
 in milliseconds UTC, the share identity, the object and `expires_at`. Switched by `core.public-shares.guest-write-record`
-(operator only, on by default); kept **N days** (instance setting, 7 by default, 1 to 30) with the two-limit purge that
+(operator only; its default follows the operating mode, ADR 0093 § 14: off in *private*, on in *club, organisation or
+company*); kept **N days** (instance setting, 7 by default, 1 to 30) with the two-limit purge that
 never keeps a guest longer than the page told them; purged at startup too; **left out of the instance backup's
 database dump** (schema kept); copied into a hold by `cr-report-and-hold`'s seam; disclosed on every guest write page
 in one first-layer sentence that links the operator section of the terms. This CR builds **only what ADR 0093 owns**:
@@ -26,7 +27,9 @@ work; nothing of § 3–§ 7 there is built here.
 
 ## Context & constraints
 
-- Entry conditions: `cr-report-and-hold` **done** (its hold seam takes the record's rows). Independent of
+- Entry conditions: `cr-report-and-hold` **done** (its hold seam takes the record's rows);
+  `cr-instance-contact-and-provider-identification` **done** (the operating mode and the preset mechanism: the
+  catalog's `modes` field, `CapabilityPresets`, the apply step — this entry is the first to carry a preset). Independent of
   `cr-moderation-review-and-measures` and `cr-statement-of-reasons-and-objection`: it may run beside them.
 - Decisions: [ADR 0093](../docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 10 (all of it), § 4 (the hold copies the rows); [ADR 0094](../docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)
@@ -34,7 +37,7 @@ work; nothing of § 3–§ 7 there is built here.
   [ADR 0092](../docs/decisions/0092-logs-are-operational-and-name-no-person.md) § 2 (the range 1–30, the default 7, the
   two-limit rule, the startup purge — ADR 0093 § 10 takes these over by reference);
   [ADR 0088](../docs/decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) (the switch,
-  operator-only); [ADR 0089](../docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
+  operator-only; decision 4's "what it stops writing" for a switch over kept data; decision 14, the preset); [ADR 0089](../docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
   (the retention setting); [ADR 0056](../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) (the
   database leg changes: ADR 0093 § Consequences says so).
 - **Sibling CR, named, not edited:** `cr-backup-store-leg-is-an-index` (planned; ADR 0056/0096/0098,
@@ -77,12 +80,19 @@ work; nothing of § 3–§ 7 there is built here.
    1–30 by the contract; a row is written with `expires_at = observed_at + N`; the purge deletes where
    `expires_at <= now OR observed_at + N_now <= now` (§ 10, ADR 0092 § 2).
 4. **Switched off**, nothing is recorded and the next purge deletes every live row; hold copies stay (§ 10).
-5. **The disclosure value is served with the share**, so a guest page renders the N current at the write: one more
+   **Its default is the mode's** (ADR 0093 § 14): the entry carries `modes: { "private": false, "organisation": true }`,
+   so choosing a mode sets it and the Server Owner may still set it on its own afterwards. The migration that adds
+   the record also applies the current mode once (ADR 0088 decision 14): it writes the entry's instance-level off row
+   where `operating_mode` is `PRIVATE`, and none where it is `ORGANISATION` or `NULL`.
+5. **The disclosure follows the switch, never the mode** (ADR 0093 § 10): while the switch is on, in either mode,
+   the first-layer sentence shows; while it is off, it does not.
+6. **The disclosure value is served with the share**, so a guest page renders the N current at the write: one more
    field on the share's resolve answer (the switch's state and N), never a separate pre-auth read.
 
 ## Open questions and legal blockers
 
-**Decided (Q13).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions.
+**Decided (Q13).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions. The switch's default per operating mode
+(decisions 4 and 5) is the owner's of the same day ("Ja", ADR 0093 § 14).
 
 - **Legal blocker (ADR 0093 § Legal basis, Still open 4):** what the recorded port is worth when an operator's own NAT
   sits behind the edge, and whether the disclosure must say which edge an instance runs before a record is handed
@@ -108,10 +118,10 @@ wants a built use-case).
   guest-write record`) stays until phase 4. · Done when: feature-format, coverage, doc-link, doc-citation, change guards
   green.
 - [ ] **1 contracts** — the switch in `contracts/platform/capabilities.json` (EN+DE title, purpose, whenOff;
-  `levels: ["instance"]`); the retention setting's operations; the share resolve's disclosure field. · Done when:
+  `levels: ["instance"]`; `modes` per decision 4); the retention setting's operations; the share resolve's disclosure field. · Done when:
   `validate_capabilities.py` green; `npm run generate:api`; `./gradlew check` (the generated register; a new field on an
   existing response reddens its builder until phase 2: name it).
-- [ ] **2 backend** — decisions 1–5; the purge as a `@Scheduled` with its interval in `VeyqConfig`; readers in
+- [ ] **2 backend** — decisions 1–6; the purge as a `@Scheduled` with its interval in `VeyqConfig`; readers in
   `EveryStoredTimeHasAReaderTest`; the hold seam's contributor copies the record rows of a held object
   (`cr-report-and-hold` decision 4). · Done when: `./gradlew check` and `run_backend_races_on_mariadb.py` green.
   **Bites, from ADR 0094 § For the moderation CR, each with its control:** `198.51.100.66, 203.0.113.77` records
@@ -120,7 +130,12 @@ wants a built use-case).
   `source=header` a stop entry `203.0.113.77` with `X-Veyq-Client-Addr: 203.0.113.77:51234` records `51234`, under
   `none` no port; a member's write records nothing (control: the same write as a guest records one); the switch off
   → nothing recorded and the next purge empties the table while a hold copy stays; shortening N reaches an old row at
-  the next purge, lengthening does not extend it.
+  the next purge, lengthening does not extend it. **The mode's bites** (handed over by
+  `cr-instance-contact-and-provider-identification`): setup in *private* → the switch is effectively off and a guest
+  write records nothing (control: setup in *organisation* → on, the same write records one); a *private* instance
+  that switches it on by hand records (the preset does not pin it); changing to *organisation* turns it on, back to
+  *private* off; the migration on a *private* instance writes the off row (control: an *organisation* instance gets
+  none). Bite: drop `modes` from the entry → the private-setup test is red.
 - [ ] **3 admin-web + CLI** — the retention setting with its range and the sentence that a value above 7 needs a
   reason in the record of processing (§ 10); `veyq-admin` gets the setting; the switch appears in the capability panel
   by itself (the register). · Done when: `npm run check` in `admin-web/` green.
@@ -133,11 +148,12 @@ wants a built use-case).
   or the phase records which half waited for the backup CR.
 - [ ] **5 web** — the first-layer sentence (per Q13 and the legal blocker's wording), with the N from the resolve and
   the right to object (Art. 21) as a sentence of its own, linking the operator section's anchor; EN+DE. · Done when:
-  `npm run check` green; a guest-mode test that the sentence shows N as served and is absent on a `READ` link.
+  `npm run check` green; a guest-mode test that the sentence shows N as served and is absent on a `READ` link and
+  while the switch is off (control: the same `READ_WRITE` link with it on).
 - [ ] **6 docs + coverage** — `CLAUDE.md`'s invariant on what the server keeps (the record's address, port and time join
   the operator-visible metadata: ADR 0093 § Consequences names it); `security/what-the-server-sees.md` (a sixth
   concession, or the record under Sharing — measured: the five concessions are a table there); `run/configuration.md`
-  or `run/capabilities.mdx` (the setting, its range, NTP on the host, the deletion concept for backups made otherwise,
+  or `run/capabilities.mdx` (the setting, its range, the switch's default per operating mode, NTP on the host, the deletion concept for backups made otherwise,
   N + B); the security model's T&S section; coverage refs. · Done when: coverage, wiki-sources, the site check and
   `validate_doc_links.py` green.
 
