@@ -7,6 +7,10 @@
   `veyqctl`, each keeping the commands the tool runs, and *Verify a release*'s `cosign verify-blob` for `veyqctl`
   itself and for the manifest (held by assertion 7); the manifest signed by the publish and verified by `veyqctl`
   before it is trusted, from every source (decisions 3 and 7). What waits on the owner: the remote, immutable releases switched on, the first publish.
+  Decided 2026-10-17 and not yet built (cr-backup-store-leg-is-an-index): `backup` and `upgrade` capture the database and
+  the store's index with an optional object pool, `restore` checks the objects and copies them only into an empty
+  store, and `status` warns while the bundled store has no pool (decisions 1 and 5, [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)
+  §3 and §7); today they still copy the whole bucket.
 - Date: 2026-10-16
 
 ## Context
@@ -45,9 +49,9 @@ its Node CLI (`admin-web/src/cli/`). Management is the instance's lifecycle *on 
 | Command | Does |
 |---|---|
 | `install` | fetch the release `VEYQ_RELEASE` selects, verify it, write `.env` from its template with fresh secrets, `up` |
-| `start` / `stop` / `status` / `logs` | the stack, addressed by the recipe's project name |
+| `start` / `stop` / `status` / `logs` | the stack, addressed by the recipe's project name; `status` also warns while the instance uses the bundled store and no object pool is configured — Garage keeps no object versions ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3) |
 | `upgrade` | decision 5 |
-| `backup` / `restore` | today's `instance_backup.py` capture, verify and restore; leg (c), the config-secret key, still goes to a separate medium, so `--key-into` stays required ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)) |
+| `backup` / `restore` | the release's `instance_backup.py` capture, verify and restore ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)): the database and the store's **index**, and — when `--objects-to` or `.env`'s `VEYQ_BACKUP_OBJECTS_TO` names one — the new objects copied into an object pool that only grows; `restore` checks every object the dump needs against the live store, or with `--objects-from` copies them out of a pool, which it does only into an empty store. Leg (c), the config-secret key, still goes to a separate medium, so `--key-into` stays required |
 | `verify` | check the signatures of the release `VEYQ_RELEASE` selects, nothing else |
 | `check` | which release `upgrade` would take, and whether a newer major exists beyond the selector |
 | `self-update` | replace `veyqctl` with the one of the installed release |
@@ -84,12 +88,17 @@ keys, so it stays a deliberate act. In order, and nothing is stopped before step
    assets into `releases/<version>/`, each against the manifest's sha256;
 3. refuse if the new `.env.example` requires a value `.env` lacks, naming it — with `latest` this is what stops a
    major whose removals need the operator;
-4. back up; stop the app; switch to the new release's recipe and image lines; `up`; wait until healthy.
+4. back up; stop the app; switch to the new release's recipe and image lines; `up`; wait until healthy. The backup is
+   the database and the store's index (ADR 0056 §3), taken with the app stopped. With an object pool configured, the
+   objects are copied into it **before** the app stops and the copy is topped up with the index's keys after: objects
+   are immutable, so the early copy cannot go stale, and the downtime grows by the new uploads only.
 
 The previous release's directory stays, so the diff and the way back are both on disk.
 
 **6. An instance lives in `/opt/veyq`** (`--home` overrides): `releases/<version>/`, `.env`, `backups/`. There is
-nothing to migrate from today's `infra/` layout: no release has ever been published.
+nothing to migrate from today's `infra/` layout: no release has ever been published. The object pool gets no
+directory here: it lives where `VEYQ_BACKUP_OBJECTS_TO` names, by intent another disk or another store, since a pool
+on the store's own disk dies with it.
 
 **7. GitHub is the default source, never a requirement.** `veyqctl` takes a source override, a mirror the operator
 runs, verified exactly as GitHub is: the manifest's signature holds its contents to veyq's publish, so trusting a
