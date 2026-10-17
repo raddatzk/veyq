@@ -21,7 +21,7 @@ Both targets run the same images and the same procedures; every page in this are
 
 | | Docker Compose | Kubernetes (Helm) |
 |---|---|---|
-| What you need | One host with Docker (Compose v2), `python3` 3.9 or later and `cosign` (v2.6.5 / v3.1.3 or later) | A cluster you already run (Kubernetes 1.31 or later), the Gateway API CRDs (v1.5 or later) and an implementation of them, and cert-manager 1.21 or later if the chart should obtain certificates |
+| What you need | One host with Docker (Compose v2), `python3` 3.9 or later and `cosign` (v3.1.3 or later) | A cluster you already run (Kubernetes 1.31 or later), the Gateway API CRDs (v1.5 or later) and an implementation of them, and cert-manager 1.21 or later if the chart should obtain certificates |
 | Install and upgrade | `veyqctl`, from a release's files; upgrades by hand, a new major only from the previous one's last release | `helm install` / `helm upgrade` by digest |
 | Proxy and TLS | The bundled Traefik, with Let's Encrypt over HTTP-01 | Your Gateway API implementation, serving the chart's `Gateway`; TLS by `gateway.tls.mode`, optionally through the chart's cert-manager issuer |
 | Object store | Same origin as the instance, under a path | A host of its own (`storeDomain`) |

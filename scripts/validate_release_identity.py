@@ -51,14 +51,19 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      `v$VERSION/*` whole, after exactly two `cosign sign-blob` lines, every one of the step collected (never the first
      match alone): one of `v$VERSION/veyqctl` into `--bundle v$VERSION/<release_assets.VEYQCTL_BUNDLE>` and one of
      `v$VERSION/manifest.json` into `--bundle v$VERSION/<release_assets.MANIFEST_BUNDLE>` — so the names the publish
-     writes are the producer's reserved ones, which assertion 4 holds `veyqctl` to — both with `--new-bundle-format`,
-     both after the producer line and before `gh release create`, and no line between the manifest's signing and
-     that upload runs the producer again or names the manifest (the file uploaded must be the file signed); and
+     writes are the producer's reserved ones, which assertion 4 holds `veyqctl` to — both after the producer line and
+     before `gh release create`, and no line between the manifest's signing and that upload runs the producer again or
+     names the manifest (the file uploaded must be the file signed); and
      it hands the boolean dispatch input `unscheduled_major` (default false) to the producer as `--unscheduled`, which
      an earlier step of the job also runs the producer with, before the job's first push, so its refusals come before
      anything is published. No step anywhere uploads to, edits or deletes a GitHub Release (`gh release
      upload|edit|delete`, `gh api …/releases`, `uploads.github.com`, an action whose name says `release`): an immutable
-     release takes no asset after it is published.
+     release takes no asset after it is published. **And the cosign that signs is the line operators verify with**
+     (inbox #474): exactly one `sigstore/cosign-installer` step in the file, in the `publish` job before every step
+     that runs `cosign`, with `cosign-release` an exact `v<major>.<minor>.<patch>` no older than `scripts/veyqctl.py`'s
+     `COSIGN_MIN_VERSION` — never the installer's default, which lags — and no `cosign` line anywhere passes the
+     deprecated flag that chose the bundle format (cosign 3 writes the Sigstore bundle by default, and only its
+     `=false` spelling still writes the legacy one).
   8. **The chart is the release's third artifact** (ADR 0064). The refuse step names every published image (the
      build matrix) AND `charts/<name>` (`Chart.yaml`'s `name`), so a release with any of the three already out
      is refused; the step that runs `helm package` sets `--version` and `--app-version` from the tree-derived
@@ -171,6 +176,14 @@ images stayed safe by their own signatures; the recipe, which can mount the host
 exactly as trustworthy as its source. Collecting every `sign-blob` line came with it: the old check read the first
 match only, so a correct step that signed the manifest first read red.
 
+Assertion 11's cosign half came with inbox #474, from a measured gap rather than an incident: the publish installed
+cosign through `sigstore/cosign-installer` v3.9.1, whose default is cosign v2.5.2, while `veyqctl` and the Run page
+refuse anything older than 3.1.3 — so the one cosign that had never read a veyq bundle was the one writing them. The
+v4.1.2 installer's own default is v3.0.6, inside the advisory's range, which is why the version is pinned and held
+here. And the bundle flag this assertion used to REQUIRE had become the hazard: cosign 3.1.3 marks it deprecated
+("this will be the only supported format in future versions", its `--help` hides it), so the requirement would have
+broken the publish at the first cosign that removes it; its `=false` spelling, measured, writes the legacy bundle.
+
 Assertion 8 came with the chart's OCI release (same CR): no incident, the chart had never been published. Each of
 its halves was bitten by injection before it counted, and the measurement that shaped it is in ADR 0064 — `helm
 push` appends the chart's name to the target, which is why the target ends in `/charts`.
@@ -206,7 +219,10 @@ gave each asset — no remote exists, so the GitHub Release is a statement about
 That a `sign-blob` line names the manifest is not that cosign signed it: the step's shell has run only locally, with
 stand-ins for `cosign` and `gh`, and that the bundle verifies is `veyqctl`'s self-test's, with a stand-in for cosign.
 The between-lines check knows two ways to touch the manifest — the producer, and a line naming `manifest.json` — and a
-rewrite through another variable or a script that writes it unnamed is not held.
+rewrite through another variable or a script that writes it unnamed is not held. The cosign half reads the installer's
+`cosign-release` input, not the binary a run puts on the path: that the installer installs exactly that version is the
+action's (it verifies the download with a bootstrap cosign it pins by sha256), and a `cosign` fetched another way — a
+`curl`, another action — is not recognised. A `cosign` called through a variable or a script is not a line here.
 
 Assertion 3's gating is read as a conservative model of GitHub's expression language: an `if:` counts as gated
 only if it is a pure `&&` chain with the dispatch (or release) test as one term, so an equivalent condition
@@ -323,7 +339,11 @@ RELEASE_ACTION = re.compile(r"release", re.IGNORECASE)  # an action's `owner/nam
 IMAGE_SIGN = re.compile(r"\bcosign\s+sign\s")  # an image or the chart, not `sign-blob`
 SIGN_BLOB = re.compile(r"\bcosign\s+sign-blob\b")
 PRODUCER = re.compile(r"scripts/release_assets\.py\b")
+# Deprecated in cosign 3 (default true, `--help` hides it); only `=false` still changes anything — to the legacy format.
 NEW_BUNDLE_FORMAT = "--new-bundle-format"
+COSIGN_INSTALLER = "sigstore/cosign-installer"
+COSIGN_RUN = re.compile(r"(?:^|[\s;&|(])cosign\s")
+EXACT_VERSION = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$")
 FIRST_PUBLISH_WRITE = re.compile(r"\b(?:imagetools\s+create|cosign\s+sign|helm\s+push|git\s+push|gh\s+release)\b")
 
 
@@ -339,6 +359,7 @@ def non_release_branches(major: str) -> list[str]:
 publishing_branches: list[str] = []
 
 errors: list[str] = []
+signing_cosign = ""  # assertion 11's installer pin, for the OK line
 
 
 def fail(message: str) -> None:
@@ -375,6 +396,20 @@ elif version_text != f"{version_value}\n":
 def job_steps(doc: dict, job: str) -> list[dict]:
     steps = ((doc.get("jobs") or {}).get(job) or {}).get("steps") or []
     return [s for s in steps if isinstance(s, dict)]
+
+
+def veyqctl_constants(pattern: str) -> dict[str, str]:
+    """`scripts/veyqctl.py`'s module-level string constants whose names match `pattern`, read without importing it."""
+    path = ROOT / "scripts/veyqctl.py"
+    if not path.is_file():
+        return {}
+    found = {}
+    for node in ast.parse(path.read_text()).body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and re.fullmatch(pattern, node.targets[0].id)
+                and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
+            found[node.targets[0].id] = node.value.value
+    return found
 
 
 def step_by_id(doc: dict, job: str, step_id: str) -> dict | None:
@@ -1035,10 +1070,6 @@ if workflow_doc:
                 if bundles != [want]:
                     fail(f"{named} signs `{blob}` with `--bundle` {bundles or 'missing'}, not `{want}` — the bundle is "
                          f"an asset of the one upload, under the name `veyqctl` and the Run page fetch; {why}")
-                if NEW_BUNDLE_FORMAT not in argv:
-                    fail(f"{named} signs `{blob}` without `{NEW_BUNDLE_FORMAT}` — a GitHub Release is immutable, so a "
-                         f"bundle in the legacy format cosign is retiring can never be re-signed, and `veyqctl` needs "
-                         f"cosign 3, which writes and reads the Sigstore bundle by default")
                 if not producer_at or at < max(producer_at):
                     fail(f"{named} signs `{blob}` before the producer writes it — the signature would be of another file")
                 if at > create_at:
@@ -1074,22 +1105,69 @@ if workflow_doc:
                 f"the images, the chart and the ref are out, leaving a release with no GitHub Release"
             )
 
+    # The cosign that signs is the line operators verify with (inbox #474): one installer, before every `cosign`, at an
+    # exact version no older than the floor `veyqctl` refuses below — the installer's default lags (v4.1.2: v3.0.6).
+    installers = [
+        (job_name, index, step)
+        for job_name in sorted(jobs)
+        for index, step in enumerate(job_steps(workflow_doc, job_name))
+        if str(step.get("uses") or "").split("@", 1)[0] == COSIGN_INSTALLER
+    ]
+    cosign_runs = [
+        (job_name, index, step, line.strip())
+        for job_name in sorted(jobs)
+        for index, step in enumerate(job_steps(workflow_doc, job_name))
+        for line in str(step.get("run") or "").replace("\\\n", " ").splitlines()
+        if COSIGN_RUN.search(line.split(" #", 1)[0])
+    ]
+    cosign_floor = veyqctl_constants(r"COSIGN_MIN_VERSION").get("COSIGN_MIN_VERSION") or ""
+    floor_parts = tuple(int(x) for x in cosign_floor.split(".")) if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", cosign_floor) else None
+    if not cosign_runs:
+        fail(f"{WORKFLOW.relative_to(ROOT)} runs no `cosign` at all, so the check of the cosign that signs checked NOTHING")
+    if floor_parts is None:
+        fail(f"scripts/veyqctl.py assigns no `COSIGN_MIN_VERSION` as `<major>.<minor>.<patch>` (found {cosign_floor!r}) "
+             f"— the floor the publish's cosign is held to is the one `veyqctl` verifies with")
+    if len(installers) != 1 or installers[0][0] != PUBLISH_JOB:
+        fail(
+            f"{WORKFLOW.relative_to(ROOT)} uses `{COSIGN_INSTALLER}` in {len(installers)} step(s) "
+            f"({', '.join(j for j, _, _ in installers) or 'none'}) — the publish installs the cosign it signs with "
+            f"exactly once, in the `{PUBLISH_JOB}` job, so there is one answer to which cosign wrote a bundle"
+        )
+    else:
+        _, installer_at, installer = installers[0]
+        cosign_release = str((installer.get("with") or {}).get("cosign-release") or "")
+        signing_cosign = cosign_release
+        pinned = EXACT_VERSION.match(cosign_release)
+        if not pinned:
+            fail(
+                f"the `{COSIGN_INSTALLER}` step's `cosign-release` is {cosign_release or 'unset'!r}, not an exact "
+                f"`v<major>.<minor>.<patch>` — unset, the installer installs its own default, which lags (v4.1.2 "
+                f"installs v3.0.6, a cosign `veyqctl` refuses: GHSA-fx35-mq7g-6g98)"
+            )
+        elif floor_parts and tuple(int(x) for x in pinned.groups()) < floor_parts:
+            fail(
+                f"the `{COSIGN_INSTALLER}` step installs cosign {cosign_release}, older than {cosign_floor}, the oldest "
+                f"`veyqctl` (scripts/veyqctl.py COSIGN_MIN_VERSION) and the Run page verify with — the publish would "
+                f"sign with a cosign its own operators are told to refuse"
+            )
+        for job_name, index, step, line in cosign_runs:
+            if job_name != PUBLISH_JOB or index < installer_at:
+                where = f"outside the `{PUBLISH_JOB}` job" if job_name != PUBLISH_JOB else "before the installer"
+                fail(
+                    f"job `{job_name}`, step `{step.get('name') or step.get('id')}` runs `cosign` {where} — it would "
+                    f"run whichever cosign the runner has, not the pinned one"
+                )
+    for job_name, index, step, line in cosign_runs:
+        if NEW_BUNDLE_FORMAT in line:
+            fail(
+                f"job `{job_name}`, step `{step.get('name') or step.get('id')}` passes `{NEW_BUNDLE_FORMAT}` "
+                f"(`{line[:80]}`) — cosign 3 deprecates it: the Sigstore bundle is its default and will be its only "
+                f"format, so the flag can only break a later cosign, and its `=false` spelling writes the legacy "
+                f"bundle every cosign up to 3.1.2 accepts forged (GHSA-fx35-mq7g-6g98)"
+            )
+
 
 # ---- 4. the release carries every file its recipe reads; written-down tags name a shape the pipeline emits --
-
-def veyqctl_constants(pattern: str) -> dict[str, str]:
-    """`scripts/veyqctl.py`'s module-level string constants whose names match `pattern`, read without importing it."""
-    path = ROOT / "scripts/veyqctl.py"
-    if not path.is_file():
-        return {}
-    found = {}
-    for node in ast.parse(path.read_text()).body:
-        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
-                and re.fullmatch(pattern, node.targets[0].id)
-                and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
-            found[node.targets[0].id] = node.value.value
-    return found
-
 
 recipe_assets: list[str] = []
 reads, refusals = release_assets.recipe_reads()
@@ -1629,7 +1707,7 @@ print(
     f"release identity OK: VERSION {version_value} is the major, the minor is counted offline from the history "
     f"({len(publishing_branches)} publishing branch(es), a shallow checkout refused), every registry write waits for "
     f"a dispatch, the stamp is declared by the {stamped_targets} published target stage(s) and no other, a release "
-    f"refuses a republish, creates its v{version_value}.<minor> ref and last its one GitHub Release in one call, the publish waits on every one of the "
+    f"refuses a republish, creates its v{version_value}.<minor> ref and last its one GitHub Release in one call, signed by the pinned cosign {signing_cosign or '?'}, the publish waits on every one of the "
     f"{len([j for j in (workflow_doc.get('jobs') or {}) if j != PUBLISH_JOB])} other jobs as a green stage, the producer carries "
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
