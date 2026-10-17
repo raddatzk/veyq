@@ -13,13 +13,19 @@ import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
 import java.net.URI
+import java.security.MessageDigest
 import java.time.Duration
+import java.time.Instant
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -87,6 +93,28 @@ interface BlobStore {
      */
     fun delete(keys: List<String>): List<String>
 
+    /**
+     * One page of the bucket's objects in key order, starting after [startAfter] (null: from the first key), at most
+     * [maxKeys] of them — or null when this store cannot list (it holds no bucket). Read-only: the bucket reconcile's
+     * one view of the store ([StoreReconcileSweep], ADR 0062 § Consequences).
+     *
+     * The cursor is a **key**, not a continuation token: a key survives a restart and a store that forgets its tokens,
+     * and it is the store's own name for a position. [StoreListing.storeTime] is the store's clock at the answer — an
+     * object's age is judged against it, never against this process's clock, so no skew between the two enters the
+     * judgement. An implementation that cannot read the store's clock throws [MissingStoreClock] rather than answer
+     * with another one. Any other failure throws: the caller decides what a failed page means, and the answer is never
+     * "classify what you have".
+     */
+    fun list(startAfter: String?, maxKeys: Int): StoreListing?
+
+    /**
+     * Which bucket [list] reads, as a digest — SHA-256 over the endpoint, the bucket, the region and the access key
+     * (never a secret) — or null when this store lists nothing. The reconcile binds its pass, its first-seen clocks and
+     * the Server Owner's exclusive-bucket confirmation to it (cr-bucket-reconcile decision 16): read off the object that
+     * lists, so a setting that moves between two reads cannot pair one store's confirmation with another's listing.
+     */
+    val bucketDigest: String?
+
     companion object {
         /** The object key for chunk [index] under a blob's [storageKey] prefix. */
         fun chunkKey(storageKey: String, index: Int): String = "$storageKey/$index"
@@ -101,6 +129,15 @@ interface BlobStore {
         fun chunkKeys(storageKey: String, chunkCount: Int): List<String> = chunkKeys(storageKey, 0 until chunkCount)
     }
 }
+
+/** One object of a [BlobStore.list] page: its key, its size in bytes, and when the store last wrote it (its clock). */
+data class StoredObject(val key: String, val size: Long, val lastModified: Instant)
+
+/** One page of [BlobStore.list]: the objects in key order, the store's clock at the answer, and whether more follow. */
+data class StoreListing(val objects: List<StoredObject>, val storeTime: Instant, val truncated: Boolean)
+
+/** The store answered a listing without its clock (no `Date` header), so no object's age can be read on it. */
+class MissingStoreClock : RuntimeException("the store's listing carried no Date header")
 
 /** A presigned URL for one chunk object, [index] in chunk order — what every presign site hands a client. */
 data class PresignedRef(val index: Int, val url: String)
@@ -144,6 +181,10 @@ class InMemoryBlobStore : BlobStore {
      * handed and delegates the rest.
      */
     override fun delete(keys: List<String>): List<String> = emptyList()
+
+    /** No bucket, so nothing to list. The hermetic suite's scripted listing is `RecordingBlobStore`'s. */
+    override fun list(startAfter: String?, maxKeys: Int): StoreListing? = null
+    override val bucketDigest: String? = null
 }
 
 /**
@@ -205,6 +246,9 @@ class S3BlobStore(
         if (publicEndpoint.isBlank()) SigningMode.INTERNAL_ENDPOINT else signingMode
 
     private val presigners = ConcurrentHashMap<String, S3Presigner>()
+
+    override val bucketDigest: String =
+        digestOf(internalEndpoint, bucket, region, credentials.resolveCredentials().accessKeyId())
 
     /**
      * Read off [endpointFor], never off the config, so it cannot name another origin than the URLs do. Only
@@ -317,10 +361,45 @@ class S3BlobStore(
             runCatching { s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build()) }.isFailure
         }
 
+    /**
+     * ListObjectsV2 with `start-after`, through the same client as [stat]. The store's clock is the response's `Date`
+     * header — measured on Garage v2.0.0 to come from the same clock as every object's `LastModified` — and a response
+     * without one throws [MissingStoreClock]: a page judged against this process's clock instead would read a clock
+     * skew as an age. An S3 refusal (`S3Exception`, a `403` when the key may not list) and an unreachable store
+     * (`SdkClientException`) leave as they are, for the caller to name.
+     */
+    override fun list(startAfter: String?, maxKeys: Int): StoreListing {
+        val request = ListObjectsV2Request.builder().bucket(bucket).maxKeys(maxKeys)
+            .apply { if (startAfter != null) startAfter(startAfter) }
+            .build()
+        val response = s3.listObjectsV2(request)
+        val storeTime = response.sdkHttpResponse().firstMatchingHeader("Date").orElse(null)?.let(::httpDate)
+            ?: throw MissingStoreClock()
+        return StoreListing(
+            objects = response.contents().map { StoredObject(it.key(), it.size() ?: 0L, it.lastModified()) },
+            storeTime = storeTime,
+            truncated = response.isTruncated == true,
+        )
+    }
+
     private companion object {
         /** The only type a presigned PUT lets the store keep and the type every presigned GET is served as. */
         const val INERT_TYPE = "application/octet-stream"
         const val INERT_DISPOSITION = "attachment"
+
+        /** [BlobStore.bucketDigest]'s value: one field per line, so no two fields can run into each other. */
+        fun digestOf(endpoint: String, bucket: String, region: String, accessKey: String): String =
+            MessageDigest.getInstance("SHA-256")
+                .digest(listOf(endpoint, bucket, region, accessKey).joinToString("\n").toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+
+        /** An HTTP `Date` (RFC 1123, the only form RFC 9110 lets a server send), or null when it is not one. */
+        fun httpDate(value: String): Instant? =
+            try {
+                ZonedDateTime.parse(value.trim(), DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()
+            } catch (e: DateTimeParseException) {
+                null
+            }
 
         /** `scheme://host[:port]` — the form a CSP source expression and a browser's `origin` share. An explicit
          *  port stays: it is part of the origin unless it is the scheme's default, which URI leaves as -1. */
@@ -345,6 +424,8 @@ object UnconfiguredBlobStore : BlobStore {
     override fun presignGet(key: String, domain: String?): String? = null
     override fun stat(key: String): Long? = null
     override fun delete(keys: List<String>): List<String> = keys
+    override fun list(startAfter: String?, maxKeys: Int): StoreListing? = null
+    override val bucketDigest: String? = null
 }
 
 /**
@@ -390,6 +471,8 @@ class SwitchingBlobStore(
     override fun presignGet(key: String, domain: String?): String? = delegate().presignGet(key, domain)
     override fun stat(key: String): Long? = delegate().stat(key)
     override fun delete(keys: List<String>): List<String> = delegate().delete(keys)
+    override fun list(startAfter: String?, maxKeys: Int): StoreListing? = delegate().list(startAfter, maxKeys)
+    override val bucketDigest: String? get() = delegate().bucketDigest
 }
 
 /**

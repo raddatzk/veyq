@@ -311,7 +311,9 @@ def not_data_cases() -> None:
     check("every table a migration seeds is excluded — a fresh install holds those rows, so a restore onto it "
           "would be refused (veyq_external_service did exactly that, 2026-10-16)",
           seeded <= set(ib.NOT_DATA), str(sorted(seeded - set(ib.NOT_DATA))))
-    check("the exclusion list is the seven named tables, no pattern", len(ib.NOT_DATA) == 7, str(ib.NOT_DATA))
+    check("the gate excludes the bucket reconcile's tables, which a fresh install's first pass fills",
+          set(ib.RECONCILE_TABLES) <= set(ib.NOT_DATA), str(ib.RECONCILE_TABLES))
+    check("the exclusion list is the nine named tables, no pattern", len(ib.NOT_DATA) == 9, str(ib.NOT_DATA))
 
 
 # The vector `backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.
@@ -407,6 +409,10 @@ class FakeDatabase:
 
     def load(self, source):
         self.w.calls.append("load")
+
+    def reset_reconcile(self):
+        self.w.calls.append("reset-reconcile")
+        return list(ib.RECONCILE_TABLES)
 
     def describe(self):
         return "the fake database"
@@ -639,7 +645,14 @@ def g5_index_restore(tmp: pathlib.Path) -> None:
     whole = [["sk1/0", 10, "a" * 32], ["sk1/1", 20, "b" * 32]]
     outcome, calls, _ = restore_index(tmp, "g5-whole", whole)
     check("G5 restore: an index capture whose objects are all in the live store loads, and never writes to the store",
-          outcome == "ok 0" and calls == ["index", "drop", "load"], f"{outcome} {calls}")
+          outcome == "ok 0" and calls[:3] == ["index", "drop", "load"], f"{outcome} {calls}")
+    # B16 of cr-bucket-reconcile: a restore (and so a rollback, which restores with the check only) restarts every
+    # first-seen clock of the bucket reconcile and disarms its deletions — by emptying its tables AFTER the load, since
+    # the dump brings them as they were at the capture. The reset itself is SQL against the real tables in the live
+    # proof; here, that the restore asks for it, last.
+    check("G5 restore: the restore empties the bucket reconcile's tables right after the load",
+          calls[-1:] == ["reset-reconcile"] and calls.index("reset-reconcile") == calls.index("load") + 1,
+          f"{calls}")
     outcome, calls, _ = restore_index(tmp, "g5-missing", whole[:1])
     check("G5 restore: a missing object refuses naming it, before the load",
           outcome.startswith("refused:") and "missing object  sk1/1" in outcome and "load" not in calls, outcome)

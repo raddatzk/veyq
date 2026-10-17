@@ -1440,7 +1440,7 @@ paths:
                     lastPass: null
                     passInProgress: null
                     failure: null
-                    candidates: { keys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
+                    candidates: { storageKeys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
                     exclusiveBucketConfirmedAt: null
                     pausedAt: null
                     clocksRestartedAt: null
@@ -1454,7 +1454,7 @@ paths:
                     lastPass: { startedAt: 2026-10-17T06:00:00Z, completedAt: 2026-10-17T06:04:10Z, objects: 18240, orphanObjects: 0, orphanBytes: 0, notVeyqObjects: 0, enqueuedKeys: 0 }
                     passInProgress: { startedAt: 2026-10-17T12:00:00Z, objects: 7000 }
                     failure: null
-                    candidates: { keys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
+                    candidates: { storageKeys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
                     exclusiveBucketConfirmedAt: null
                     pausedAt: null
                     clocksRestartedAt: null
@@ -1468,7 +1468,7 @@ paths:
                     lastPass: { startedAt: 2026-10-17T12:00:00Z, completedAt: 2026-10-17T12:04:31Z, objects: 18263, orphanObjects: 23, orphanBytes: 61865984, notVeyqObjects: 1, enqueuedKeys: 0 }
                     passInProgress: null
                     failure: null
-                    candidates: { keys: 9, objects: 23, bytes: 61865984, dueKeys: 0, oldestFirstSeenAt: 2026-10-17T12:01:02Z, newestFirstSeenAt: 2026-10-17T12:03:40Z, firstDueAt: 2026-11-16T12:01:02Z }
+                    candidates: { storageKeys: 9, objects: 23, bytes: 61865984, dueKeys: 0, oldestFirstSeenAt: 2026-10-17T12:01:02Z, newestFirstSeenAt: 2026-10-17T12:03:40Z, firstDueAt: 2026-11-16T12:01:02Z }
                     exclusiveBucketConfirmedAt: 2026-10-17T12:10:00Z
                     pausedAt: null
                     clocksRestartedAt: null
@@ -1482,7 +1482,7 @@ paths:
                     lastPass: null
                     passInProgress: { startedAt: 2026-10-17T12:00:00Z, objects: 0 }
                     failure: { at: 2026-10-17T12:00:01Z, reason: LIST_DENIED }
-                    candidates: { keys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
+                    candidates: { storageKeys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
                     exclusiveBucketConfirmedAt: null
                     pausedAt: null
                     clocksRestartedAt: null
@@ -2822,9 +2822,9 @@ components:
       description: >
         Storage keys no row claimed in any pass since they were first seen — each one's objects are orphans. A key is
         due once it has been one for the grace period.
-      required: [keys, objects, bytes, dueKeys, oldestFirstSeenAt, newestFirstSeenAt, firstDueAt]
+      required: [storageKeys, objects, bytes, dueKeys, oldestFirstSeenAt, newestFirstSeenAt, firstDueAt]
       properties:
-        keys:
+        storageKeys:
           x-veyq-visibility: measure
           type: integer
           format: int64

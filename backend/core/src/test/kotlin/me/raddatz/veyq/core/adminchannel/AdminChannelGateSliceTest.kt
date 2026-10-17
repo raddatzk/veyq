@@ -154,6 +154,7 @@ class AdminChannelGateSliceTest {
             me.raddatz.veyq.core.generated.api.TenantsApi::class.java,
             me.raddatz.veyq.core.generated.api.InstanceApi::class.java,
             me.raddatz.veyq.core.generated.api.InstanceModerationApi::class.java,
+            me.raddatz.veyq.core.generated.api.InstanceStoreReconcileApi::class.java,
             me.raddatz.veyq.core.generated.api.SetupApi::class.java,
         )
     }

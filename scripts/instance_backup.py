@@ -285,8 +285,13 @@ NOT_DATA = (
     "veyq_external_service",
     "veyq_release_check",
     "veyq_release_notice",
+    "veyq_store_reconcile",
+    "veyq_store_orphan",
 )
 NOT_DATA_SQL = ", ".join(f"'{t}'" for t in NOT_DATA)
+# The bucket reconcile's state and its first-seen clocks (ADR 0062 § Consequences): every restore empties them after the
+# load ([Database.reset_reconcile]), so a dump's clocks never come back and no deletion stays armed across a restore.
+RECONCILE_TABLES = ("veyq_store_orphan", "veyq_store_reconcile")
 
 
 class DbUrl(NamedTuple):
@@ -467,6 +472,11 @@ class Database:
             the switch is a seeded singleton, and a stamped install checks on its own from its first start, so a
             fresh target can hold notices before anyone restores onto it. Neither is anyone's data; the dump replaces
             both, so the restored instance's switch and notices win.
+          - `veyq_store_reconcile` and `veyq_store_orphan` are the bucket reconcile's state and first-seen clocks (ADR
+            0062 § Consequences): a fresh install's first pass writes both — and so does the one start of the capture's
+            release that `veyqctl rollback` makes on an emptied database, which sees every object of the store as
+            unclaimed. Counts and opaque storage keys, nobody's data; and the restore empties both after its load
+            ([reset_reconcile]), so neither the target's nor the dump's rows survive it.
 
         The table set is read out of `information_schema` rather than listed here, so a table a future migration
         adds is covered without anyone remembering to add it (changes/README.md § a guard derives its anchor set
@@ -513,6 +523,24 @@ class Database:
         if names:
             self.query("SET FOREIGN_KEY_CHECKS = 0; DROP TABLE " + ", ".join(f"`{n}`" for n in names) + ";")
         return len(names)
+
+    def reset_reconcile(self) -> list[str]:
+        """Empty the bucket reconcile's tables after a load; the tables emptied, `[]` when the dump has none.
+
+        **Every restore and every rollback restarts every first-seen clock** (ADR 0062 § Consequences, the owner's
+        condition of 2026-10-17). The dump carries the reconcile's rows as they were at the capture: loaded and kept,
+        a key that was an orphan for weeks before the capture would be due on the first pass after a restore that just
+        made it an orphan again — exactly the moment the operator may have loaded the wrong dump, when those objects
+        are the data the right one needs. Nothing inside the dump can tell the app it was loaded again, so the tool
+        that loads it says so, by leaving the tables empty: every clock starts over, and the exclusive-bucket
+        confirmation and a pause go with the state row, so nothing is deleted until the Server Owner confirms the
+        bucket again. A dump from before the reconcile existed has neither table; the app's next start creates them
+        empty. Deleting rows, never dropping: the dump's history says the tables exist.
+        """
+        present = [t for t in RECONCILE_TABLES if t in self.base_tables()]
+        if present:
+            self.query(" ".join(f"DELETE FROM `{t}`;" for t in present))
+        return present
 
     def domains(self) -> list[str]:
         return sorted(row[0] for row in self.query("SELECT domain FROM veyq_tenant;"))
@@ -1864,6 +1892,9 @@ def cmd_restore(args: argparse.Namespace) -> int:
 
     log(f"loading {DUMP_NAME} into {db.describe()}")
     db.load(backup / DUMP_NAME)
+    if db.reset_reconcile():
+        log("emptied the bucket reconcile's state: every first-seen clock restarts, and its deletions stay off until "
+            "the Server Owner confirms the bucket again (Server → Object store)")
 
     if key_source is not None:
         log(f"placing the config-secret key from {key_source} at {target_key}")

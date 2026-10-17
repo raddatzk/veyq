@@ -22,6 +22,12 @@ class UnconfiguredBlobStoreTest {
     }
 
     @Test
+    fun anUnconfiguredStoreListsNoBucket() {
+        assertNull(UnconfiguredBlobStore.list(null, 1000), "the reconcile reads this as NO_STORE")
+        assertNull(UnconfiguredBlobStore.bucketDigest, "no bucket to confirm as exclusive")
+    }
+
+    @Test
     fun anUnconfiguredStoreReportsNothingDeleted() {
         assertEquals(listOf("a", "b"), UnconfiguredBlobStore.delete(listOf("a", "b")), "every key stays on the reclaim list")
     }

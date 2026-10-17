@@ -48,6 +48,7 @@ interface VeyqConfig {
 
     fun bundledStore(): BundledStore
     fun storeReclaim(): StoreReclaim
+    fun storeReconcile(): StoreReconcile
     fun tasks(): Tasks
     fun ratelimit(): RateLimit
     fun share(): Share
@@ -384,6 +385,38 @@ interface VeyqConfig {
         /** Rows one tick attempts. Bounds the batch handed to the store, not the list — the rest waits a tick. */
         @WithDefault("500")
         fun batchSize(): Int
+    }
+
+    /**
+     * `veyq.store-reconcile.*` — the bucket reconcile (ADR 0062 § Consequences, `StoreReconcileSweep`): a pass lists
+     * the whole bucket, a few pages per tick, and counts the objects no row claims; a key that stayed one for [grace]
+     * goes onto the reclaim list while the Server Owner's switches allow it.
+     */
+    interface StoreReconcile {
+        /** How often a tick runs. A tick lists at most [pagesPerTick] pages, so this and that bound the work per minute. */
+        @WithDefault("PT1M")
+        fun every(): Duration
+
+        /** The earliest a pass starts after the previous one started. */
+        @WithDefault("PT6H")
+        fun period(): Duration
+
+        /** Pages one tick lists — the bound per tick, so a large bucket takes several ticks rather than one long one. */
+        @WithDefault("10")
+        fun pagesPerTick(): Int
+
+        /** Keys per page: S3's own ceiling for one ListObjectsV2 answer. Lower only in tests. */
+        @WithDefault("1000")
+        fun pageSize(): Int
+
+        /** How long a key must stay an orphan in every pass, from when it was first seen, before it is due. */
+        @WithDefault("P30D")
+        fun grace(): Duration
+
+        /** Two listed pages further apart than this on the store's clock restart every first-seen clock: the grace
+         *  counts only time the reconcile observed. Must exceed [period] plus [every] (`BlobStoreStartupCheck`). */
+        @WithDefault("P1D")
+        fun maxGap(): Duration
     }
 
     interface Blob {

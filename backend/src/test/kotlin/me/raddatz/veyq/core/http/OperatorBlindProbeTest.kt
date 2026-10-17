@@ -276,6 +276,8 @@ class OperatorBlindProbeTest {
             "getInstanceReleaseNotices", "setInstanceReleaseCheck",
             "getInstanceMailSettings", "updateInstanceMailSettings", "confirmInstanceMail",
             "getInstanceModeration", "appointModerator", "removeModerator", "mintModerationEpoch",
+            "getStoreReconcile", "confirmStoreExclusiveBucket", "withdrawStoreExclusiveBucket", "pauseStoreReconcile",
+            "resumeStoreReconcile",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +

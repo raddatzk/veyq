@@ -80,12 +80,49 @@ acceptanceCriteria:
           and the whole suite runs under `%test`, where it is true: the `else` branch that a production profile takes
           is read by no test, only the store it picks is proven. The upload handlers' `store_unavailable` answer is
           pinned by the many slice tests that run on a store which cannot presign.
+  - id: objects-no-row-claims-are-counted
+    text: >-
+      A background sweep lists the store in use page by page and counts the objects no row claims — veyq-shaped, past
+      the safe age on the store's own clock, still present when asked again — apart from the probe and from keys not
+      shaped like veyq's; a page that fails (the store, its clock, the database) counts and publishes nothing, and the
+      next tick resumes where it stopped.
+    coverage:
+      backend:
+        unit: [S3BlobStoreListTest.aPageCarriesItsObjectsTheStoresClockAndWhetherMoreFollow, S3BlobStoreListTest.anAnswerWithoutTheStoresClockIsRefused, S3BlobStoreListTest.aRefusedListingLeavesAsTheStoresOwn403, UnconfiguredBlobStoreTest.anUnconfiguredStoreListsNoBucket]
+        integration: [StoreReconcileSliceTest.anObjectAnyClaimRowNamesIsNoOrphanAndAnUnclaimedOneIs, StoreReconcileSliceTest.theProbeIsIgnoredAndAKeyNotShapedLikeVeyqsIsNeverAnOrphan, StoreReconcileSliceTest.anObjectPastItsClaimedCountIsCountedAndItsKeyIsNeverEnqueued, StoreReconcileSliceTest.theSafeAgeIsReadOnTheStoresClock, StoreReconcileSliceTest.anObjectGoneWhenAskedAgainIsNoOrphan, StoreReconcileSliceTest.aFailedPageKeepsThePassesPlaceAndTheNextTickResumesIt, StoreReconcileSliceTest.aClaimQueryThatFailsCountsNothingAndCompletesNothing, StoreReconcileSliceTest.aListingWithoutTheStoresClockIsNotJudged, StoreReconcileSliceTest.aStoreThatCannotOrMayNotListIsNamed, StoreReconcileSliceTest.aPageAnotherTickWroteFirstIsCountedOnce, InstanceStoreReconcileSliceTest.theSwitchesMoveTheVerdictAndThePassReachesTheWire]
+    gaps:
+      - surface: backend
+        reason: >-
+          The listing is read from a scripted bucket and from a raw HTTP stub; a real store's answer (Garage's `Date`
+          against its `LastModified`, paging by `start-after`) is `S3BlobStoreListE2ETest`'s, opt-in behind
+          `VEYQ_S3_E2E=1`, which no workflow sets. That the claim set is every table with a `storage_key` is the guard
+          `scripts/validate_store_reconcile_claims.py`, not a test.
+  - id: orphans-are-reclaimed-only-after-the-grace-on-an-exclusive-bucket
+    text: >-
+      An unclaimed storage key goes onto the reclaim list — never deleted by the sweep itself — only once it stayed
+      unclaimed in every pass for the grace period from when it was first seen, while the Server Owner has confirmed
+      that the bucket in use is this instance's alone and has not paused it; a claim that reappears takes it out, and
+      another store setting, a gap in the listing and any restore restart every grace period and withdraw the
+      confirmation. The Server Owner reads the candidates with their due date and confirms, withdraws, pauses and
+      resumes; nobody else does.
+    coverage:
+      backend:
+        unit: [BlobStoreStartupCheckTest.aReconcileGapBoundThatCannotOutlastAHealthyQuietIsRefused, S3BlobStoreListTest.theDigestNamesTheBucketAndNotTheSecret]
+        integration: [StoreReconcileSliceTest.withoutTheExclusiveBucketConfirmationNothingIsEnqueued, StoreReconcileSliceTest.aConfirmationIsVoidOnceAnotherBucketIsListed, StoreReconcileSliceTest.aKeyIsDueOnlyOnceTheGraceHasPassedSinceItWasFirstSeen, StoreReconcileSliceTest.aClaimThatReappearsRemovesTheCandidate, StoreReconcileSliceTest.aGapLongerThanTheBoundRestartsEveryClock, StoreReconcileSliceTest.aPauseStopsTheEnqueueingAndKeepsTheCounting, StoreReconcileSliceTest.anObjectPastItsClaimedCountIsCountedAndItsKeyIsNeverEnqueued, StoreReconcileSliceTest.theReadCarriesTheCandidatesAndTheirDueDate, InstanceStoreReconcileSliceTest.theSwitchesMoveTheVerdictAndThePassReachesTheWire, InstanceStoreReconcileSliceTest.withNoStoreThereIsNothingToConfirm, InstanceStoreReconcileSliceTest.aMemberIsNotTheServerOwnerAndIsRefusedOnEveryOperation]
+    gaps:
+      - surface: backend
+        reason: >-
+          "Any restore restarts every grace period" is the restore tool's half: `instance_backup.py restore` empties the
+          reconcile's tables after its load, pinned by `scripts/instance_backup_selftest.py` (G5, `ci.yml`'s `web-e2e`
+          job) and shown on a real rollback in cr-bucket-reconcile's live proof — neither a coverage surface. The backend
+          proves the gap rule, its other detector. That the reclaim sweep then deletes what was recorded is
+          `StoreReclaimSweepSliceTest`'s.
 gaps:
   admin-web: >-
-    The console's Object store page, the create-tenant dialog's closed state and `veyq-admin store show | set | check |
-    discard` live
-    in `admin-web` (ADR 0065), and their suites (`StorePanel.test.ts`, `store.test.ts`, `cli.test.ts`,
-    `CreateTenantDialog.test.ts`, `AdminConsoleView.test.ts`) exist and pass locally, but `admin-web`'s job
+    The console's Object store page with its bucket reconcile panel, the create-tenant dialog's closed state and
+    `veyq-admin store show | set | check | discard | reconcile` live
+    in `admin-web` (ADR 0065), and their suites (`StorePanel.test.ts`, `StoreReconcilePanel.test.ts`, `store.test.ts`,
+    `cli.test.ts`, `CreateTenantDialog.test.ts`, `AdminConsoleView.test.ts`) exist and pass locally, but `admin-web`'s job
     (`ci.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR 0040 admits none of them. They
     are mocked-client tests that pin the call and the rendering, never the server's answer. On the first run of that
     job they flip to refs on the criteria above.
