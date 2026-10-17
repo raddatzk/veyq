@@ -15,6 +15,15 @@ the recipe:
      `veyqctl`, `instance_backup.py` and the manifest naming both images. What is installed is what a release ships.
      A value this run gives as a template value (`VEYQ_DOMAIN`, `VEYQ_ACME_EMAIL`) that the release's template
      (`env.example`) no longer assigns is red here.
+  1b. **client port** — the release's own Traefik and client-address plugin (ADR 0094 decision 7), read from the
+     release's compose file — the image digest, the `--experimental.*` flags, the plugin's two read-only mounts, the
+     service's user and posture; never a second copy of them — started on a run-private `--internal` network (no route
+     out, so the plugin loads with nothing to fetch) with a router through the plugin and a control router without it
+     to one echo (the overlay's Playwright image, `node`). A sender in a container forges the header on two lines in
+     two casings: through the plugin the echo must show exactly ONE line equal to the sender's own `localAddress:
+     localPort`; through the control it must show the forged values, or the oracle could not see a forgery. Its
+     containers and network carry the run's project label and are removed by the stage itself; Traefik's log is
+     `client-port-traefik.log`.
   2. **pebble** — Pebble alone first, under the run's own project, `veyq-e2e-<stamp>`, so it cannot address an
      instance on this host. Its root is generated when it starts, and the app must trust it before IT starts, while
      `veyqctl install` starts everything at once: so this stage brings Pebble up from the release's recipe and the
@@ -80,7 +89,11 @@ builds, so `install` runs `--unsigned-local` and says so on every line — a pub
 
 **Its limits — what a green run does NOT prove.** Pebble is told every challenge is valid (the overlay says why), so
 Traefik's HTTP-01 router on :80 is not exercised. The certificate stage asserts the bootstrap domain; the tenant's
-domain is asserted by the browser, which opens the invite link over it. The browser reaches Traefik on the run's
+domain is asserted by the browser, which opens the invite link over it. The client-port stage hands the plugin the
+app's default header name and attaches it as the app's routing file does, but writes that routing itself. The
+app's own routers, plugin attached, are the ones every later stage reaches the instance through — a middleware Traefik
+cannot build answers 404 there — but nothing asserts the port the app then resolves (before the moderation CR nothing
+keeps or returns it). The browser reaches Traefik on the run's
 `edge` network, not through the host's published :443 — the published ports themselves are exercised by the
 certificate stage only. The host check compares before and after: it
 cannot tell this run's touch from another process's on the same host in the same window, so a red there names the
@@ -313,6 +326,192 @@ def assets(app_image: str, admin_image: str, workdir: Path) -> Release:
     names = sorted(json.loads((tag / "manifest.json").read_text(encoding="utf-8"))["assets"])
     print(f"assets: {tag.name} in {source.relative_to(ROOT)}: {', '.join(names)}", flush=True)
     return Release(source, tag)
+
+
+# ---------------------------------------------------------------- client port (ADR 0094 decision 7)
+
+# Where Traefik reads a local plugin from (its working directory is `/`), and the static flag that declares one.
+PLUGIN_ROOT = "/plugins-local/src/"
+LOCAL_PLUGIN_FLAG = re.compile(r"^--experimental\.localplugins\.([A-Za-z0-9_-]+)\.modulename=(\S+)$", re.IGNORECASE)
+# The header the app reads by default (`ClientAddress.PORT_HEADER`, veyq.http.client-port.header). The stage hands it
+# to the plugin in the middleware's `header` option, as the routing file the app renders does.
+CLIENT_ADDR_HEADER = "X-Veyq-Client-Addr"
+# What a client writes to name another subscriber behind its own address: two lines, two casings.
+FORGED = (("X-Veyq-Client-Addr", "203.0.113.77:4711"), ("x-veyq-client-addr", "198.51.100.66:4712"))
+CLIENT_PORT_SECS = 60
+ECHO = (
+    "require('http').createServer((q, s) => { const b = JSON.stringify({headers: q.headers, raw: q.rawHeaders}); "
+    "s.writeHead(200, {'content-type': 'application/json', 'content-length': Buffer.byteLength(b)}); s.end(b); })"
+    ".listen(8080)"
+)
+# One raw connection per route, so the sender knows the exact local address and port Traefik accepted; it polls until
+# both routes answer 200 (Traefik loads the file provider after it starts) and prints what each echoed.
+SENDER = r"""
+const net = require('net');
+const cfg = JSON.parse(process.env.CFG);
+const once = (path) => new Promise((resolve) => {
+  const s = net.connect(cfg.port, cfg.host);
+  let local = null, buf = '';
+  s.setTimeout(5000, () => s.destroy());
+  s.on('connect', () => {
+    local = s.localAddress + ':' + s.localPort;
+    let req = 'GET ' + path + ' HTTP/1.1\r\nHost: echo.test\r\nConnection: close\r\n';
+    for (const [name, value] of cfg.forged) req += name + ': ' + value + '\r\n';
+    s.write(req + '\r\n');
+  });
+  s.on('data', (d) => { buf += d; });
+  s.on('close', () => resolve({local, raw: buf}));
+  s.on('error', () => {});
+});
+(async () => {
+  const deadline = Date.now() + cfg.secs * 1000;
+  let last = {};
+  while (Date.now() < deadline) {
+    last = {through: await once('/through'), control: await once('/control')};
+    if (last.through.raw.startsWith('HTTP/1.1 200') && last.control.raw.startsWith('HTTP/1.1 200')) break;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  console.log(JSON.stringify(last));
+})();
+"""
+
+
+class TraefikPlugin(NamedTuple):
+    """The release's Traefik as its compose file runs it, reduced to what loads the local plugin."""
+    image: str
+    posture: list[str]  # `docker run` flags for the service's user, capabilities and read-only root
+    flags: list[str]  # the `--experimental.localplugins.*` flags, verbatim
+    plugin: str  # the name a middleware refers to the plugin by
+    mounts: list[tuple[Path, str]]  # (file in the release, target in the container), each mounted read-only
+
+
+def traefik_plugin(compose_file: Path) -> TraefikPlugin:
+    """Read the Traefik service, its local-plugin flag and the plugin's mounts out of the release's compose file — the
+    flags are never written a second time here. No Docker: this half runs anywhere."""
+    doc = yaml.safe_load(compose_file.read_text(encoding="utf-8")) or {}
+    service = (doc.get("services") or {}).get(TRAEFIK_SERVICE) or {}
+    if not service.get("image"):
+        raise Red(f"{compose_file.name} has no `{TRAEFIK_SERVICE}` service with an image")
+    command = [str(c) for c in service.get("command") or []]
+    declared = [(m.group(1), m.group(2), c) for c in command for m in [LOCAL_PLUGIN_FLAG.match(c)] if m]
+    if len(declared) != 1:
+        raise Red(f"{compose_file.name}'s Traefik declares {len(declared)} local plugins, not the one client-address "
+                  f"middleware: {[c for _, _, c in declared]}")
+    plugin, module, _ = declared[0]
+    flags = [c for c in command if c.lower().startswith("--experimental.")]
+    mounts: list[tuple[Path, str]] = []
+    for entry in service.get("volumes") or []:
+        parts = str(entry).split(":")
+        if len(parts) < 2 or not parts[1].startswith(PLUGIN_ROOT):
+            continue
+        if not parts[1].startswith(f"{PLUGIN_ROOT}{module}/") or "ro" not in parts[2:]:
+            raise Red(f"{compose_file.name} mounts `{entry}` under {PLUGIN_ROOT} but not read-only under the module {module}")
+        mounts.append(((compose_file.parent / parts[0]).resolve(), parts[1]))
+    targets = [t for _, t in mounts]
+    if not any(t.endswith(".go") for t in targets) or not any(t.endswith("/.traefik.yml") for t in targets):
+        raise Red(f"{compose_file.name} must mount both the plugin's .go file and its .traefik.yml under "
+                  f"{PLUGIN_ROOT}{module}/; it mounts {targets}")
+    missing = [str(s) for s, _ in mounts if not s.is_file()]
+    if missing:
+        raise Red(f"the release does not carry the plugin file(s) its compose file mounts: {missing}")
+    posture: list[str] = []
+    if service.get("user"):
+        posture += ["--user", str(service["user"])]
+    if service.get("read_only"):
+        posture.append("--read-only")
+    posture += [f"--cap-drop={c}" for c in service.get("cap_drop") or []]
+    posture += [f"--security-opt={o}" for o in service.get("security_opt") or []]
+    return TraefikPlugin(str(service["image"]), posture, flags, plugin, mounts)
+
+
+def client_port_routes(plugin: str) -> str:
+    """Two routers to one echo: `/through` with the plugin as the app's routing file attaches it, `/control` without."""
+    return (
+        "http:\n"
+        "  routers:\n"
+        "    through:\n"
+        "      rule: \"PathPrefix(`/through`)\"\n"
+        "      entryPoints: [web]\n"
+        "      service: echo\n"
+        "      middlewares: [client-addr]\n"
+        "    control:\n"
+        "      rule: \"PathPrefix(`/control`)\"\n"
+        "      entryPoints: [web]\n"
+        "      service: echo\n"
+        "  services:\n"
+        "    echo:\n"
+        "      loadBalancer:\n"
+        "        servers:\n"
+        "          - url: \"http://echo:8080\"\n"
+        "  middlewares:\n"
+        "    client-addr:\n"
+        "      plugin:\n"
+        f"        {plugin}:\n"
+        f"          header: \"{CLIENT_ADDR_HEADER}\"\n"
+    )
+
+
+def echoed(raw: str) -> dict:
+    """The echo's JSON body from a raw HTTP/1.1 response, or a Red naming what came back instead."""
+    head, _, body = raw.partition("\r\n\r\n")
+    if not head.startswith("HTTP/1.1 200"):
+        raise Red(f"the route answered {head.splitlines()[0] if head else 'nothing'!r}, not 200")
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        raise Red(f"the echo's body is not JSON: {body[:200]!r}") from None
+
+
+def client_port(release: Release, project: str, workdir: Path) -> None:
+    """The release's own Traefik and plugin, hardened as its compose file runs them, on a run-private network with no
+    route out: a client that forges the header must see it replaced by its own address and port, exactly."""
+    spec = traefik_plugin(release.tag / "docker-compose.prod.yml")
+    node = overlay_image("browser")
+    out = workdir / "client-port"
+    out.mkdir(mode=0o755)
+    routes = out / "routes.yml"
+    routes.write_text(client_port_routes(spec.plugin), encoding="utf-8")
+    routes.chmod(0o644)  # Traefik reads it as its own non-root uid
+    label = ["--label", f"com.docker.compose.project={project}"]
+    network = f"{project}-client-port"
+    traefik, echo = f"{project}-client-port-traefik", f"{project}-client-port-echo"
+    hardened = ["--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges:true"]
+    try:
+        run("docker", "network", "create", "--internal", *label, network)
+        run("docker", "run", "-d", "--name", echo, "--network", network, "--network-alias", "echo", *label, *hardened,
+            node, "node", "-e", ECHO)
+        run("docker", "run", "-d", "--name", traefik, "--network", network, "--network-alias", "traefik", *label,
+            *spec.posture, "-v", f"{out}:/etc/traefik/dynamic:ro",
+            *(a for source, target in spec.mounts for a in ("-v", f"{source}:{target}:ro")),
+            spec.image, *spec.flags, "--providers.file.directory=/etc/traefik/dynamic", "--entrypoints.web.address=:8000",
+            "--log.level=INFO")
+        cfg = {"host": "traefik", "port": 8000, "forged": FORGED, "secs": CLIENT_PORT_SECS}
+        sent = run("docker", "run", "--rm", "--network", network, *label, *hardened, "-e", f"CFG={json.dumps(cfg)}",
+                   node, "node", "-e", SENDER).stdout
+        (out / "sender.json").write_text(sent, encoding="utf-8")
+        result = json.loads(sent.strip().splitlines()[-1])
+    finally:
+        logs = run("docker", "logs", traefik, check=False)
+        (workdir / "client-port-traefik.log").write_text(logs.stdout + logs.stderr, encoding="utf-8")
+        run("docker", "rm", "-f", traefik, echo, check=False)
+        run("docker", "network", "rm", network, check=False)
+
+    name = CLIENT_ADDR_HEADER.lower()
+    forged = [value for _, value in FORGED]
+    through, control = result.get("through") or {}, result.get("control") or {}
+    # The control first: without the plugin the forged lines arrive, or the oracle below could not see a forgery.
+    seen = str((echoed(control.get("raw", "")).get("headers") or {}).get(name, ""))
+    if not all(value in seen for value in forged):
+        raise Red(f"control: the route without the plugin echoed {name}={seen!r}, not the forged {forged} — the echo "
+                  "would not show a forgery either")
+    body = echoed(through.get("raw", ""))
+    raw_names = [str(h).lower() for h in (body.get("raw") or [])[0::2]]
+    value = (body.get("headers") or {}).get(name)
+    if through.get("local") is None or value != through["local"] or raw_names.count(name) != 1:
+        raise Red(f"the plugin let {name}={value!r} through ({raw_names.count(name)} line(s)) for a client at "
+                  f"{through.get('local')!r} that forged {forged} — it must be exactly the client's own address and port")
+    print(f"client port: through the release's Traefik and plugin, a forged {name} became the sender's own "
+          f"{value}; without the plugin it arrived as {seen!r}", flush=True)
 
 
 def run_values(project: str, workdir: Path) -> dict[str, str]:
@@ -752,6 +951,7 @@ def main() -> int:
     try:
         if release:
             started = not red
+            stage("client port", client_port, release, project, workdir)
             pebble_id = stage("pebble", pebble, release, workdir, values, args.app)
             installed = stage("install", install, release, workdir, values, pebble_id)
             stage("certificate", certificate, workdir)

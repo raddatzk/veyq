@@ -11,11 +11,13 @@
      whose query string starts with the `domain` column.
   C. **A user is looked up by email** only in `core/identity/AccountStore.kt`: `VeyqUser.find`/`count`/`list`/
      `stream` whose query string starts with the `email` column.
-  D. **A client's forwarded address is read** only in `core/http/ClientAddress.kt` (ADR 0094 decision 1): a string
-     literal naming the forwarded-for header (any case), wherever it stands — a call argument, a constant, a map key.
+  D. **A client's forwarded address is read** only in `core/http/ClientAddress.kt` (ADR 0094 decisions 1 and 7): a
+     string literal naming the forwarded-for header, or the client-port header an edge overwrites (each in any case),
+     wherever it stands — a call argument, a constant, a map key.
 
 Each home must itself still carry its rule's lookup, so a home that moved or was renamed reads red ("nothing
-there to be the only one"), never as a vacuous green. A header read through the resolver
+there to be the only one"), never as a vacuous green. Rule D's home must carry EACH of its two literals: it holds two
+headers, and a home that kept one would leave the other's single home unchecked. A header read through the resolver
 (`hosts.hostOf { headers.getHeaderString(it) }`) is not a hit: it passes the resolver's own header names, which
 is the point of having one resolver.
 
@@ -31,7 +33,11 @@ Rule D came with cr-client-address-resolver (ADR 0094). Quarkus's forwarding too
 the one a client writes, and keyed the per-IP rate limiter on it; the guest-write record of ADR 0093 § 10 will keep
 the address as evidence. A second hand parse there takes the leftmost entry again and records a forged address
 that names a third party, and every test that sends a single-entry header stays green, so no human notices. Its
-first run, before `ClientAddress.kt` existed, was red on the missing home.
+first run, before `ClientAddress.kt` existed, was red on the missing home. Its port header came with
+cr-client-port-sources (ADR 0094 decision 7): the resolver reads it only when the operator says the edge overwrites
+it, and a second, unconditional reader — the guest-write record is the next one to want the port — would honour a
+port any client forged and name another subscriber behind the same CGNAT address; a test that sends no such header
+notices nothing. Its first run, before the resolver held the header's name, was red on the missing home.
 
 **Its limit.**
 
@@ -40,14 +46,18 @@ first run, before `ClientAddress.kt` existed, was red on the missing home.
       which a buildless grep does not have. `validate_guard_gaps.py` pins this gap, so closing it turns that
       guard red instead of landing silently. Rule D matches its literal anywhere, so a constant holding the name
       is caught; what defeats it is a name that is never one literal — assembled from two (`"X-Forwarded-" +
-      "For"`), or matched by a prefix over every header — which is the same data-flow gap, pinned the same way.
+      "For"`), or matched by a prefix over every header — which is the same data-flow gap, pinned the same way. The
+      port header is read through the configured name (`veyq.http.client-port.header`), so a reader that takes the
+      name from configuration rather than as a literal is invisible to it too.
   (b) **It reads text, not code.** A comment or KDoc that spells a forbidden call is red too: describe the call
       instead of writing it. (Masking comments was considered and dropped: `validate_coverage.py`'s Kotlin
       masker blanks string literals as well — the very thing rules A–C read — and that module runs its whole
       check on import, so it cannot be reused as a library.) The converse also holds: a query assembled at
       runtime (`find(column, value)`), HQL outside Panache's shorthand (`"from VeyqUser where email = ?1"`), or a
       native query is invisible.
-  (c) **It proves where a lookup lives, not that its callers agree.** One home for the email lookup does not make
+  (c) **It proves where a lookup lives, not that its callers agree — nor that the home reads conditionally.** Rule
+      D says the port header is read in one file, not that that file reads it only under `source=header`: that is
+      behaviour, pinned by `ClientAddressDefaultSourceSliceTest.aClientSentPortHeaderIsNeverHonoured`. One home for the email lookup does not make
       every caller normalize before calling; `AccountStore` normalizes for itself, which is what closes that.
       And one home for Host resolution does not say which tenant a handler then acts on — whether recovery mails
       only a member of that tenant is behaviour, pinned by `RecoverySliceTest`.
@@ -87,8 +97,12 @@ RULES: list[tuple[str, str, pathlib.Path, list[re.Pattern[str]]]] = [
     ]),
     ("D", "a client's forwarded address read", CLIENT_ADDRESS, [
         re.compile(r'"x-forwarded-for"', re.I),
+        re.compile(r'"x-veyq-client-addr"', re.I),
     ]),
 ]
+
+# Rules whose home must carry every one of its patterns, not just one: rule D's two literals are two headers.
+EVERY_PATTERN_HOME = {"D"}
 
 # Rules B and C match any query string and then ask which column it starts with; the column is the predicate.
 COLUMN = {"B": "domain", "C": "email"}
@@ -119,9 +133,12 @@ def main() -> int:
         if home not in sources:
             failures.append(f"rule {rule}: home {home.relative_to(ROOT)} is missing — {what} has no home to be in")
             continue
-        if not hits(rule, patterns, sources[home]):
-            failures.append(f"rule {rule}: home {home.relative_to(ROOT)} no longer carries {what} — "
-                            "it moved; re-point this guard rather than letting it pass vacuously")
+        required = [[p] for p in patterns] if rule in EVERY_PATTERN_HOME else [patterns]
+        for group in required:
+            if not hits(rule, group, sources[home]):
+                failures.append(f"rule {rule}: home {home.relative_to(ROOT)} no longer carries {what} "
+                                f"({' / '.join(p.pattern for p in group)}) — it moved; re-point this guard rather than "
+                                "letting it pass vacuously")
         for f, src in sources.items():
             if f == home:
                 continue
@@ -134,8 +151,8 @@ def main() -> int:
             print(f"  {msg}")
         return 1
     print(f"lookup-single-home OK: {len(files)} Kotlin file(s); Host read + tenant-by-domain only in "
-          f"{RESOLVER.name}, user-by-email only in {ACCOUNTS.name}, forwarded client address only in "
-          f"{CLIENT_ADDRESS.name}")
+          f"{RESOLVER.name}, user-by-email only in {ACCOUNTS.name}, forwarded client address and client-port "
+          f"header only in {CLIENT_ADDRESS.name}")
     return 0
 
 

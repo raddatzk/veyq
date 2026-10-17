@@ -18,12 +18,14 @@ import java.net.InetAddress
 object AdminChannel {
 
     fun isAdminChannel(request: HttpServerRequest, adminPort: Int): Boolean =
-        // The SOCKET, never the request: `request.remoteAddress()` is the forwarded-parsed client address and
-        // `host()` the forwarded host, so anyone who writes `Forwarded: for=10.0.0.1` or `X-Forwarded-Host` looks
-        // private through them. Quarkus' ForwardedServerRequestWrapper rewrites exactly those and delegates
-        // `localAddress()` and `connection()` to the socket (measured at refine: a forged header moved `host()`
-        // and `remoteAddress()` and left `localAddress()` untouched).
-        isAdminChannel(request.localAddress(), request.connection().remoteAddress(), adminPort)
+        // The REAL SOCKET, never the request and never a statement about it. `request.remoteAddress()` is the
+        // forwarded-parsed client address and `host()` the forwarded host, so anyone who writes
+        // `Forwarded: for=10.0.0.1` or `X-Forwarded-Host` looks private through them (Quarkus'
+        // ForwardedServerRequestWrapper rewrites exactly those). And under the PROXY protocol the connection's own
+        // `localAddress()` / `remoteAddress()` are the PROXY header's destination and source (Vert.x's overrides,
+        // ADR 0094 M10): a header naming the admin port and a private client would open the Server-Owner operations
+        // on the public port. `(true)` asks for the channel's real addresses, which nothing a client sends can move.
+        isAdminChannel(request.connection().localAddress(true), request.connection().remoteAddress(true), adminPort)
 
     fun isAdminChannel(local: SocketAddress?, peer: SocketAddress?, adminPort: Int): Boolean {
         if (local == null || !local.isInetSocket || local.port() != adminPort) return false

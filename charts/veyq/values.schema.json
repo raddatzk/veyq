@@ -35,7 +35,16 @@
     "app": {
       "type": "object",
       "properties": {
-        "trustedProxies": { "type": "string" }
+        "trustedProxies": { "type": "string" },
+        "clientPort": {
+          "type": "object",
+          "additionalProperties": false,
+          "$comment": "ADR 0094 decision 7: one configured source of the client's port. proxyProtocol also turns the PROXY protocol on and moves the probes to the admin listener (app-deployment.yaml).",
+          "properties": {
+            "source": { "enum": ["none", "proxyProtocol", "header"] },
+            "header": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$" }
+          }
+        }
       }
     },
     "networkPolicy": {

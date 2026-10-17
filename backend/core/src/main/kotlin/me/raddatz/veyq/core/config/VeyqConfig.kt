@@ -552,6 +552,21 @@ interface VeyqConfig {
     }
 
     /**
+     * Where the client's source port comes from (ADR 0094 decision 7, `veyq.http.client-port.source`). Property text is
+     * hyphenated (`proxy-protocol`), the same SmallRye mapping [StoreType] uses.
+     */
+    enum class ClientPortSource {
+        /** No source: the port is the one the stop entry of `X-Forwarded-For` carries, or unknown. The default. */
+        NONE,
+
+        /** The PROXY protocol header the gateway opens each connection with (Helm: Envoy Gateway, Istio). */
+        PROXY_PROTOCOL,
+
+        /** A header the edge overwrites on every request, `veyq.http.client-port.header` (Compose: the Traefik plugin). */
+        HEADER,
+    }
+
+    /**
      * Which [me.raddatz.veyq.core.tenant.TenantIngressSink] the tenant→routing projection is written to
      * (ADR 0063's principle, ADR 0064's second target). Property text is hyphenated
      * (`veyq.tenant.ingress.sink=kubernetes`), the same SmallRye mapping [StoreType] and [SigningMode] use;
@@ -754,6 +769,29 @@ interface VeyqConfig {
          */
         @WithConverter(TrustedProxiesConverter::class)
         fun trustedProxies(): Optional<ClientAddress.TrustList>
+
+        /** `veyq.http.client-port.*` — where the client's source port comes from (ADR 0094 decision 7). */
+        fun clientPort(): ClientPort
+
+        interface ClientPort {
+            /**
+             * `veyq.http.client-port.source` (`VEYQ_HTTP_CLIENT_PORT_SOURCE`): the one source of the client's port
+             * where the `X-Forwarded-For` entry the walk stops at carries none. Configured, never detected — a header
+             * the edge does not overwrite is one any client writes. `proxy-protocol` requires
+             * `quarkus.http.proxy.use-proxy-protocol=true` and every other value requires it off, or the app does not
+             * start (`ClientPortSourceCheck`). An unknown value fails the mapping.
+             */
+            @WithDefault("none")
+            fun source(): ClientPortSource
+
+            /**
+             * `veyq.http.client-port.header` (`VEYQ_HTTP_CLIENT_PORT_HEADER`): the header the edge overwrites with the
+             * client's `address:port` on every request, read only under `source=header`. On Compose the app's routing
+             * file hands this name to the Traefik plugin, so the two cannot drift apart.
+             */
+            @WithDefault(ClientAddress.PORT_HEADER)
+            fun header(): String
+        }
 
         /**
          * `Strict-Transport-Security` (cc.security.csp § *The other response headers*). On by default; the one

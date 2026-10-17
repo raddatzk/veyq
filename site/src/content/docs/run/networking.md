@@ -1,6 +1,6 @@
 ---
 title: Networking and TLS
-description: How requests reach the instance on each target, the certificates, HSTS, the client address the rate limits see, and what a proxy of your own changes.
+description: How requests reach the instance on each target, the certificates, HSTS, the client address and source port the application sees, and what a proxy of your own changes.
 sources:
   - docs/decisions/0063-database-driven-tenant-ingress.md
   - docs/features/admin/use-cases/uc.admin.tenant-reachability.md
@@ -94,7 +94,9 @@ What arrives, and what the rate limit keys on, by how each hop treats the header
 
 | In front of the application | `X-Forwarded-For` as it arrives | Key | Source port |
 |---|---|---|---|
-| Traefik (Docker Compose, or Traefik as your gateway) | `203.0.113.77` | the client | unknown |
+| Traefik on Docker Compose (the recipe's plugin, below) | `203.0.113.77` | the client | Traefik's peer's |
+| Traefik as your Kubernetes gateway | `203.0.113.77` | the client | unknown, unless a source is configured |
+| A gateway that sends the PROXY protocol, `app.clientPort.source: proxyProtocol` | `203.0.113.77` | the client | the PROXY header's |
 | A gateway that appends to what the client sent | `198.51.100.66, 203.0.113.77` | the client | unknown |
 | A load balancer, then a gateway that replaces the header | `10.0.0.5` | the load balancer | unknown |
 | A load balancer, then a gateway that appends, `app.trustedProxies: "10.0.0.5"` | `198.51.100.66, 203.0.113.77, 10.0.0.5` | the client | unknown |
@@ -105,13 +107,14 @@ Traefik replaces the header from a peer it does not trust and adds no port; that
 gateway and load balancer replace or append, check in their documentation. Where the key is your load balancer, every
 client behind it shares one bucket: list the load balancer.
 
-- **The source port.** The application keeps it only where the entry it stops at carries one: an AWS Application
-  Load Balancer writes it when `routing.http.xff_client_port.enabled` is set, and an Azure Application Gateway
-  always does. An entry with a port reads `203.0.113.77:51234`, or `[2001:db8::1]:443` for IPv6. A bare IPv6
-  address is never read as having a port, so a load balancer that writes `2001:db8::1:4711` without brackets hands
-  the application a different address. The Application Gateway's IPv6 form is not documented: with IPv6 behind
-  one, look at the header it sends. Everywhere else the port is unknown, which is the normal case. The rate limit
-  keys on the address alone.
+- **The source port.** Behind carrier-grade NAT many subscribers share one address, and only the address with its
+  source port and an exact time names one of them. The application keeps the port where the entry it stops at carries
+  one: an AWS Application Load Balancer writes it when `routing.http.xff_client_port.enabled` is set, and an Azure
+  Application Gateway always does. An entry with a port reads `203.0.113.77:51234`, or `[2001:db8::1]:443` for IPv6.
+  A bare IPv6 address is never read as having a port, so a load balancer that writes `2001:db8::1:4711` without
+  brackets hands the application a different address. The Application Gateway's IPv6 form is not documented: with
+  IPv6 behind one, look at the header it sends. Where the entry carries no port, the one **source you configure**
+  may state it (next section); otherwise the port is unknown. The rate limit keys on the address alone.
 - **Keep the client's address up to the gateway.** A layer-4 load balancer in front of your gateway that rewrites
   the source address makes the gateway see a node, not the client, and no setting in veyq can repair that. Check
   the setting that keeps it: for a Kubernetes `LoadBalancer` Service, `externalTrafficPolicy: Local`, or the PROXY
@@ -122,6 +125,38 @@ client behind it shares one bucket: list the load balancer.
 
 The buckets live in memory, per application instance, and a restart clears them. Behind a NAT every client shares
 one bucket.
+
+### Where the source port comes from
+
+One setting, `VEYQ_HTTP_CLIENT_PORT_SOURCE` (`app.clientPort.source` on Kubernetes), names the one source the
+application believes for the port where the `X-Forwarded-For` entry carries none. It believes it only when the source
+names the same IP as that entry; otherwise the port stays unknown. **It is configured, never detected**: Traefik and
+most gateways pass a header they do not know straight through, so a header nobody overwrites is one any client writes
+— and with its own address and another port, a client would name another subscriber behind the same NAT.
+
+- **`none`** (the default): no source. A client-sent header is never read.
+- **`header`**: your edge overwrites a header (`X-Veyq-Client-Addr` by default, `app.clientPort.header`) with the
+  client's `address:port` on **every** request. **Docker Compose ships this, fixed:** the recipe's Traefik loads a small
+  local plugin that travels with the release (`traefik-clientaddr.go` and its manifest, mounted read-only; nothing is
+  fetched) and attaches it to the application's routes. Traefik files local plugins as `experimental`; the recipe pins
+  Traefik's image, and a Traefik that can no longer load the plugin answers 404 for the instance rather than passing a
+  forged header. On Kubernetes, choose `header` only if your edge overwrites it. Pointers to check in their own
+  documentation: Envoy Gateway's `ClientTrafficPolicy` `headers.earlyRequestHeaders` can `set` it to
+  `%DOWNSTREAM_DIRECT_REMOTE_ADDRESS%` (the address and port of the connection Envoy accepted — right only when
+  nothing sits in front of Envoy), NGINX Gateway Fabric's `SnippetsFilter`, GCP's `{client_port}` and Cloudflare's
+  `cf.edge.client_port`.
+- **`proxyProtocol`** (Kubernetes): your gateway opens every connection to the application with a PROXY protocol
+  header (v1 or v2), and the application reads the client's address and port from it. Envoy Gateway:
+  a `BackendTrafficPolicy` with `proxyProtocol`, targeted at the application's routes by label — the chart's route
+  carries `app.kubernetes.io/component: app`, and the routes the backend creates for tenants carry its owner label
+  `app.kubernetes.io/managed-by`. Istio: a `DestinationRule` on `veyq-app` with `trafficPolicy.proxyProtocol`.
+  **Send it to the application's routes only, never to the whole `Gateway`:** the object store speaks no PROXY
+  protocol, and every upload and download would fail. The chart renders none of these objects. With PROXY on, the
+  application closes every connection that does not start with a PROXY header, so the chart moves its probes to the
+  admin listener ([Operations](/veyq/run/operations/#health)).
+
+A port is only as good as the server's clock: carrier-grade NAT hands a port to the next subscriber quickly, so keep
+the host's time synchronised (NTP).
 
 ## A proxy of your own in front
 
@@ -139,4 +174,6 @@ one bucket.
 The hardened Compose recipe was brought up once (2026-09-28, on Docker Desktop, with the staging directory set);
 no certificate order against a public domain is recorded. On Kubernetes only the rendered chart is checked; no
 `Gateway`, `ListenerSet`, certificate or NetworkPolicy has run in a cluster, and no gateway implementation has
-accepted these routes.
+accepted these routes. The Compose recipe's client-address plugin is proven on every run of the release's stack test:
+the release's own Traefik and plugin replace a forged header with the sender's own address and port. No gateway has
+yet sent the PROXY protocol to the chart, and the Envoy Gateway header above is read from its source, not run.

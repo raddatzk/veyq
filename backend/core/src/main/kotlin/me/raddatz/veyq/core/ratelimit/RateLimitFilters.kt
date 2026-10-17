@@ -85,7 +85,8 @@ class IpRateLimitFilter : ContainerRequestFilter {
         RateLimitPosture.enforcedKey(resourceInfo.resourceClass, resourceInfo.resourceMethod, RateLimitKey.IP)
             ?: return
 
-        val ip = (request.clientAddress(veyqConfig.http().trustedProxies().orElse(null)) ?: request.socketPeer())
+        val http = veyqConfig.http()
+        val ip = (request.clientAddress(http.trustedProxies().orElse(null), http.clientPort()) ?: request.socketPeer())
             ?.ip?.hostAddress ?: "unknown"
         val auth = rateLimitConfig.auth()
         val retryAfter = counter.consume(

@@ -4,6 +4,7 @@ description: Every setting an operator gives veyq — the Compose variables, the
 sources:
   - docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
+  - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
 ---
 
 veyq splits its configuration in two
@@ -46,7 +47,9 @@ By hand, copy the template to `.env` and fill it in: every required variable has
 | `VEYQ_MEM_LIMIT` | No | `1g` | The application container's memory limit; the JVM heap is 60 % of it |
 
 The compose file sets the rest of the application's environment itself (the database URL, the bundled store's
-internal addresses, the config-secret key path, the routing file). Leave those to it.
+internal addresses, the config-secret key path, the routing file, and `VEYQ_HTTP_CLIENT_PORT_SOURCE: header`, which
+goes with the recipe's Traefik plugin — [Networking](/veyq/run/networking/#where-the-source-port-comes-from)). Leave
+those to it.
 
 ## Kubernetes: the chart's values
 
@@ -78,6 +81,8 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | Value | Default | Meaning |
 |---|---|---|
 | `app.trustedProxies` | — | The hops in front of the gateway, such as a load balancer: IP addresses and CIDR ranges, comma-separated; renders `VEYQ_HTTP_TRUSTED_PROXIES` ([Hardening](/veyq/run/hardening/#list-only-the-hops-in-front-of-the-gateway)) |
+| `app.clientPort.source` | `none` | Where the client's source port comes from: `none`, `proxyProtocol` (the gateway sends the PROXY protocol to the app's routes; also turns it on in the app and moves the probes to the admin listener) or `header` (your edge overwrites the header on every request); renders `VEYQ_HTTP_CLIENT_PORT_SOURCE` ([Networking](/veyq/run/networking/#where-the-source-port-comes-from)) |
+| `app.clientPort.header` | `X-Veyq-Client-Addr` | The header `header` reads; rendered as `VEYQ_HTTP_CLIENT_PORT_HEADER` only when it differs |
 | `app.resources.limits.memory` | `1Gi` | The memory limit; the JVM heap is 60 % of it |
 | `app.resources.requests.cpu` | `250m` | |
 | `app.resources.requests.memory` | `512Mi` | |

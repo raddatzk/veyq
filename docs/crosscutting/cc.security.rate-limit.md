@@ -195,7 +195,20 @@ asserted directly.
   balancer and not the forged leftmost entry.
 - `ClientAddressTest` — the resolver itself, in the backend mutation gate: every row of ADR 0094's topology table,
   the entry grammar with its ports, the trust list and its CIDR match, and the setting's refusal of a hostname, a
-  bad prefix and an empty element.
+  bad prefix and an empty element. The configured port source of decision 7 (B1):
+  `aSourceWithTheStopEntrysIpHandsItsPortOver`, `aSourceWithAnotherIpLeavesThePortUnknown`,
+  `theStopEntrysOwnPortWinsOverTheSource`, `withNoForwardedForAProxyPeerIsTheClientWithItsPort`,
+  `theHeaderSourceSaysNothingForAnythingElse` and their neighbours.
+- `ClientAddressProxyProtocolSliceTest` (B2, under the PROXY protocol) —
+  `thePortOfAProxySourceWithTheStopEntrysIpIsTheClients`, `withNoForwardedForTheProxySourceIsTheClient`,
+  `aStopEntryWithAnotherIpKeepsItsIpAndGetsNoPort`; `aConnectionWithoutAProxyHeaderIsClosedWithNoBytes` with its
+  control `theProbesStillAnswerOnTheAdminListener`.
+- `ClientAddressHeaderSliceTest` (B3) — `theHeaderWithTheStopEntrysIpNamesItsPort`, `theHeaderWithAnotherIpNamesNoPort`;
+  and the forged-header bite, `ClientAddressDefaultSourceSliceTest.aClientSentPortHeaderIsNeverHonoured`: under the
+  default source a client-sent port header names no port. `aProxyLineIsAMalformedRequestWhenTheProtocolIsOff`: with
+  the protocol off a PROXY line is a 400 that names no address.
+- `ProxyProtocolRateLimitTest.twoSourcePortsOfOneAddressShareOneBucket` (B5) — under the PROXY protocol, where the
+  port is known, the limiter still keys on the IP alone.
 
 **Out of scope for any test:** whether the configured *limit value* is the right number — that is a policy
 judgement (review + config), not something a test asserts.

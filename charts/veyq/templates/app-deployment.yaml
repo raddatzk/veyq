@@ -71,6 +71,23 @@ spec:
             - name: VEYQ_HTTP_TRUSTED_PROXIES
               value: {{ . | quote }}
             {{- end }}
+            {{- $clientPort := .Values.app.clientPort | default dict }}
+            {{- if eq (include "veyq.clientPortSource" .) "proxyProtocol" }}
+            # The client's port from the PROXY header the Gateway opens each connection with (ADR 0094 decision 7) —
+            # the source and the protocol together, or the app refuses to start. See app.clientPort in values.yaml.
+            - name: VEYQ_HTTP_CLIENT_PORT_SOURCE
+              value: proxy-protocol
+            - name: QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL
+              value: "true"
+            {{- else if eq (include "veyq.clientPortSource" .) "header" }}
+            # The client's port from a header your edge overwrites on every request (ADR 0094 decision 7).
+            - name: VEYQ_HTTP_CLIENT_PORT_SOURCE
+              value: header
+            {{- with $clientPort.header }}{{ if ne . "X-Veyq-Client-Addr" }}
+            - name: VEYQ_HTTP_CLIENT_PORT_HEADER
+              value: {{ . | quote }}
+            {{- end }}{{ end }}
+            {{- end }}
             # HSTS on the app's responses (ADR 0069) — the deployment's switch, `hsts.enabled` in values.yaml.
             - name: VEYQ_HTTP_HSTS_ENABLED
               value: {{ .Values.hsts.enabled | quote }}
@@ -116,20 +133,20 @@ spec:
           startupProbe:
             httpGet:
               path: /api/setup
-              port: http
+              port: {{ include "veyq.probePort" . }}
             periodSeconds: {{ .Values.app.startupProbe.periodSeconds }}
             failureThreshold: {{ .Values.app.startupProbe.failureThreshold }}
           readinessProbe:
             httpGet:
               path: /api/setup
-              port: http
+              port: {{ include "veyq.probePort" . }}
             periodSeconds: {{ .Values.app.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.app.readinessProbe.timeoutSeconds }}
           {{- if .Values.app.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
               path: /api/setup
-              port: http
+              port: {{ include "veyq.probePort" . }}
             periodSeconds: {{ .Values.app.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.app.livenessProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.app.livenessProbe.failureThreshold }}

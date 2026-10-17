@@ -59,6 +59,22 @@ app:
   # and a range that survives a pod restart trusts every pod beside it (ADR 0071 §4). A hostname or a malformed entry
   # stops the app at startup. Behind an appending load balancer that is not listed, every client shares its bucket.
   trustedProxies: ""
+  # Where the client's SOURCE PORT comes from (veyq.http.client-port.*, ADR 0094 decision 7): behind carrier-grade NAT
+  # an address names no subscriber without its port. Used only where the X-Forwarded-For entry veyq stops at carries
+  # none, and only when the source's IP is that entry's. Configured, never detected: name a source your edge provides.
+  clientPort:
+    # `none` (the default): no source — the port is known only where a load balancer writes ip:port into
+    # X-Forwarded-For. `proxyProtocol`: the Gateway sends the PROXY protocol (v1 or v2) to the app's routes — Envoy
+    # Gateway's BackendTrafficPolicy, Istio's DestinationRule; the chart renders no such object (gateway.className is
+    # never interpreted), so write it yourself, aimed at the app's routes ONLY: the store speaks no PROXY, and a
+    # Gateway that sends it there fails every upload. The app then closes every connection that does not open with a
+    # PROXY header, so the three probes move to the admin listener (they then prove the process and the database, not
+    # the public listener). `header`: your edge OVERWRITES `header` on every request with the client's address:port —
+    # set it only if it does: Traefik and the common gateways pass an unknown header through, and then any client
+    # names any port.
+    source: none
+    # The header `header` reads. Rendered only when it differs from the app's default.
+    header: X-Veyq-Client-Addr
   # `Recreate`, and NOT Kubernetes' default RollingUpdate — the second half of "one app pod" is the one that
   # matters. quarkus.flyway.migrate-at-start=true runs the schema migration at boot with no gate (ADR 0096 decides
   # who starts an upgrade — by hand, here `helm upgrade` — not how the schema moves); RollingUpdate with its

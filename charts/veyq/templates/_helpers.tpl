@@ -98,3 +98,19 @@ over `fromYaml` sees an empty map. The merge copies — `set` on .Values itself 
 {{- end -}}
 {{- toYaml $annotations -}}
 {{- end }}
+
+{{/*
+The client port's source (app.clientPort.source, ADR 0094 decision 7), `none` when unset.
+*/}}
+{{- define "veyq.clientPortSource" -}}
+{{- (.Values.app.clientPort | default dict).source | default "none" -}}
+{{- end }}
+
+{{/*
+The port the app's three probes poll /api/setup on. Under the PROXY protocol the public listener closes every
+connection that does not open with a PROXY header — a kubelet probe sends none — so they poll the admin listener,
+which never speaks PROXY. Otherwise the public one, so they also prove the listener every request reaches.
+*/}}
+{{- define "veyq.probePort" -}}
+{{- if eq (include "veyq.clientPortSource" .) "proxyProtocol" }}admin{{ else }}http{{ end -}}
+{{- end }}

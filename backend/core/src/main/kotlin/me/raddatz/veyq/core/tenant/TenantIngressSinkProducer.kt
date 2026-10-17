@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.tenant
 
 import me.raddatz.veyq.core.blobstore.StoreSettings
 import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig.ClientPortSource
 import me.raddatz.veyq.core.config.VeyqConfig.IngressSinkType
 import me.raddatz.veyq.core.config.VeyqConfig.IngressTlsMode
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -67,6 +68,7 @@ class TenantIngressSinkProducer(
             adminDomain = hostname(ingress.adminDomain().orElse(null), "admin-domain"),
             upstreams = TraefikFileIngressSink.Upstreams(app = upstream.app(), blobs = upstream.blobs(), admin = upstream.admin()),
             bucket = { store.routeBucket() },
+            clientPortHeader = config.http().clientPort().takeIf { it.source() == ClientPortSource.HEADER }?.header(),
         )
     }
 
