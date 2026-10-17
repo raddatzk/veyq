@@ -99,8 +99,9 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      **rejects** every other workflow in `.github/workflows/`, non-release branches (which the version step must
      refuse as well), pull-request and tag refs, another owner, a repository whose name only starts with ours,
      and the right identity quoted inside another URL. Every image the build matrix publishes is verified, by
-     digest and never by tag, `veyqctl` itself is verified with `cosign verify-blob`, and the workflow states no identity
-     of its own. The upstream is the chart's
+     digest and never by tag, `veyqctl` itself is verified with `cosign verify-blob`, and so is the manifest — `cosign
+     verify-blob --bundle <release_assets.MANIFEST_BUNDLE>` on `manifest.json`, before its digests are read (inbox
+     #469) — and the workflow states no identity of its own. The upstream is the chart's
      `home`, not the workflow's `github.repository_owner`, which is whoever runs it — a fork included. The
      operator's tool runs the same check (`veyqctl verify`, `install`, `upgrade`, ADR 0096): `scripts/veyqctl.py`'s
      `COSIGN_OIDC_ISSUER` and `COSIGN_IDENTITY_REGEXP` are held to the same accepts and rejects, and to be exactly
@@ -237,8 +238,8 @@ fails here as it would there. The two engines agree on what the pattern uses (an
 construct where they diverge would be judged by the wrong one. The rejected identities are a probe list of the
 ways a pattern is too wide, not a proof that no other string is accepted; the accepted ones are derived. The
 registry (`ghcr.io`) is a constant here. And it cannot see whether an operator runs the command at all. For
-`veyqctl` it reads the two constants, not the `cosign verify` call that passes them: `scripts/veyqctl_selftest.py`
-holds that call to exactly those two values.
+`veyqctl` it reads the two constants, not the `cosign verify` and `cosign verify-blob` calls that pass them:
+`scripts/veyqctl_selftest.py` holds both calls to exactly those two values.
 """
 from __future__ import annotations
 
@@ -1541,6 +1542,14 @@ else:
             f"`cosign sign-blob` (ADR 0096 decision 3) because an operator fetches it by hand before anything else "
             f"is checked — a signature nobody is told to check protects nobody, and that `veyqctl` is what checks "
             f"every image after it."
+        )
+    if commands and not any(argv[0] == "verify-blob" and release_assets.MANIFEST in argv[1:]
+                            and flag_values(argv, "--bundle") == [release_assets.MANIFEST_BUNDLE] for argv in commands):
+        fail(
+            f"{VERIFY_PAGE.relative_to(ROOT)} never runs `cosign verify-blob --bundle {release_assets.MANIFEST_BUNDLE}` "
+            f"on `{release_assets.MANIFEST}`. The publish signs the manifest, and `veyqctl` verifies it before it trusts "
+            f"any sha256 or digest in it (inbox #469) — the page keeps every step `veyqctl` runs, so that one can be done "
+            f"by hand, and a by-hand check that reads the manifest's digests unverified trusts its source."
         )
     chart_ref = f"charts/{(yaml.safe_load(CHART.read_text()) or {}).get('name') or ''}"
     if commands and chart_ref not in verified_images:

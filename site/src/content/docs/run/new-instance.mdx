@@ -40,8 +40,9 @@ variable ([Configuration](/veyq/run/configuration/)) is passed the same way, `--
 `install` refuses a home that already holds an instance, and then, in order:
 
 1. **Resolves the release** `VEYQ_RELEASE` selects among the GitHub Releases of `raddatzk/veyq`, never a prerelease or
-   a snapshot. `--source <directory or URL>` reads a mirror in the same layout instead; trusting it is your decision.
-2. **Verifies both images** by the digests the release's `manifest.json` names, before anything is pulled, and
+   a snapshot. `--source <directory or URL>` reads a mirror in the same layout instead, verified exactly the same way.
+2. **Verifies the release's `manifest.json`** against its signature, then **both images** by the digests it names,
+   before anything is pulled, and
    **fetches the release's files** into `releases/<release>/`, each checked against its sha256 — both exactly as
    [Verify a release](/veyq/run/verify-a-release/) shows by hand.
 3. **Writes `.env`** (mode `0600`) from the release's template, `env.example`: the four secrets generated, the two
