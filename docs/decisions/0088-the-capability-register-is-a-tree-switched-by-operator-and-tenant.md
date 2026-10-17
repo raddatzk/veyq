@@ -7,7 +7,7 @@
   [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match. Decision 14
   (the operating mode as a preset, 2026-10-17) is built: the catalog's `modes`, the generated `CapabilityPresets`
   and the write that sets them with the mode ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
-  no entry carries a preset yet.
+  one entry carries a preset, `core.public-shares.guest-write-record` (off in *private*; cr-guest-write-record).
 - Date: 2026-10-15
 
 ## Context
