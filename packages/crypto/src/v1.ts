@@ -478,6 +478,70 @@ export function identityVerify(
   }
 }
 
+// ── The instance moderation key (ADR 0099 § 2) ─────────────────────────────────────────────────────────
+// One key per epoch for the whole instance: a 32-byte random M_n, drawn by admin-web (or veyq-admin) and never held by
+// the server. From it, under labels of their own, an X-Wing key — reports seal to its public half — and an Ed25519 key,
+// which signs the `moderation-proof` statement every key-proved moderation call carries. The epoch's public bundle is
+// what the server publishes and stores; a moderator's client compares it with the one it derives on every unlock. M_n
+// reaches a moderator only as a `moderation-grant` seal to their identity. Pinned by `moderation_key`,
+// `moderation_proof` and `seal.asym['moderation-grant']` in the vectors.
+
+/** The size of an epoch's `M_n`. */
+export const MODERATION_KEY_BYTES = 32
+
+/** An epoch's public bundle: the X-Wing encapsulation key reports seal to, and the Ed25519 key that checks a proof. */
+export type ModerationBundle = { kem: HybridPublic; sign: Uint8Array }
+
+const moderationSeed = (m: Uint8Array, label: 'kem' | 'sign'): Uint8Array => {
+  if (!(m instanceof Uint8Array) || m.length !== MODERATION_KEY_BYTES) throw new TypeError('moderation key: not 32 bytes')
+  return hkdf(sha256, m, new Uint8Array(0), utf8(`veyq/v1/moderation/${label}`), 32)
+}
+
+/** A fresh `M_n` — what a mint draws, seals to every moderator, and forgets. */
+export const generateModerationKey = (): Uint8Array => randomBytes(MODERATION_KEY_BYTES)
+
+/** The X-Wing decapsulation key of an epoch (its seed), for opening what was sealed to the epoch's bundle. */
+export const moderationKemSecret = (m: Uint8Array): HybridSecret => moderationSeed(m, 'kem')
+
+/** The public bundle `M_n` derives — what a mint uploads and what a moderator compares with the published one. */
+export function moderationBundle(m: Uint8Array): ModerationBundle {
+  return { kem: kemPublic(moderationSeed(m, 'kem')), sign: ed25519.getPublicKey(moderationSeed(m, 'sign')) }
+}
+
+/** Whether two bundles are the same key, byte for byte in both halves. */
+export const moderationBundleEquals = (a: ModerationBundle, b: ModerationBundle): boolean =>
+  bytesEqual(a.kem, b.kem) && bytesEqual(a.sign, b.sign)
+
+const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((x, i) => x === b[i])
+
+/** One key proof as its statement sees it: the server's challenge, the contract operation, the case (or none). */
+export type ModerationProofInput = { challenge: Uint8Array; operationId: string; caseId: string | null }
+
+/** The typed `moderation-proof` statement. */
+export const moderationProofStatement = (p: ModerationProofInput): Extract<StatementContext, { purpose: 'moderation-proof' }> => ({
+  purpose: 'moderation-proof',
+  challenge: p.challenge,
+  operationId: p.operationId,
+  caseId: p.caseId,
+})
+
+/** Sign a key proof with the epoch's Ed25519 key, derived from `M_n`. Only the typed statement can be signed. */
+export const moderationSign = (m: Uint8Array, statement: Extract<StatementContext, { purpose: 'moderation-proof' }>): Uint8Array =>
+  ed25519.sign(encodeStatement(statement), moderationSeed(m, 'sign'))
+
+/** Verify a key proof against an epoch's published signing key. False — never a throw — for malformed input. */
+export function moderationVerify(
+  signPublicKey: Uint8Array,
+  statement: Extract<StatementContext, { purpose: 'moderation-proof' }>,
+  signature: Uint8Array,
+): boolean {
+  try {
+    return ed25519.verify(signature, encodeStatement(statement), signPublicKey)
+  } catch {
+    return false
+  }
+}
+
 /** The user's identity: an X-Wing KEM keypair (X25519 + ML-KEM-768, ADR 0017 decision 2) + an Ed25519 signing
  *  keypair. The KEM's private half is its 32-byte seed — X-Wing's decapsulation key — and its public half the
  *  1216-byte encapsulation key derived from it. */

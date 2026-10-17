@@ -28,11 +28,13 @@ const config = {
   // NEXT line changes that verdict (emergencyKit.ts's `if (!m)` stayed "Survived" after `m[1]` moved out of the
   // try). Judge a local fix with `--force`, not with the incremental rerun.
   incremental: true,
-  // break: the gate goes red below this, and here it is 100 — no margin. Measured with `--force` (2026-10-09,
-  // blobMeta.ts joined the scope): 564 mutants, 557 killed, 2 timed out (the fingerprint's loop counters turned into
-  // endless loops), 0 survived, 0 without coverage, 5 ignored — 100.00 % on every file. Its first run had 3
-  // survivors, all one cause: the writer's `modifiedAt` bound was asserted through the reader, which drops the
-  // same values — so blobMeta.test.ts reads what the writer wrote. Each ignored mutant carries
+  // break: the gate goes red below this, and here it is 100 — no margin. Measured with `--force` (2026-10-17, the
+  // instance moderation key joined v1.ts and seal.ts): 644 mutants, 637 killed, 2 timed out (the fingerprint's loop
+  // counters turned into endless loops), 0 survived, 0 without coverage, 5 ignored — 100.00 % on every file. Its first
+  // run had 1 survivor: the bundle compare's length check, equivalent while only the LONGER side was tested; a prefix
+  // on the other side kills it. When blobMeta.ts joined (2026-10-09) the first run had 3 survivors, all one cause: the
+  // writer's `modifiedAt` bound was asserted through the reader, which drops the same values — so blobMeta.test.ts
+  // reads what the writer wrote. Each ignored mutant carries
   // its measured reason on its line: the two `typeof` operands in seal.ts (uint, scope kind) are equivalent,
   // primitives.ts's 'NFC' is a runner artefact, and emergencyKit.ts's two are equivalent. So a new survivor is killed by a test, or — only once measured to be
   // equivalent — disabled at its line with that measurement; there is no third way. WHY not the 5-point margin ADR
