@@ -140,6 +140,32 @@ describe('a member renames the node on screen', () => {
     expect(push, 'the same logical position: replaced, not pushed').not.toHaveBeenCalled()
   })
 
+  it('the dialog closes only once the fragment follows — a reload the moment it is gone opens the renamed folder (inbox #475)', async () => {
+    // The move's dialog re-reads the tree before it closes (`move.ts` `memberMover`); the rename's closed first and the
+    // host re-read after, so for one tree read the dialog was gone and the URL still the OLD path — a reload in that
+    // window (lane L1's, under load) resolved nothing and stood on the scope root.
+    await mountAt('#~me/trips/rome/')
+    await click(byLabel(t('node.rename'))!)
+    let release!: () => void
+    vi.mocked(loadTree).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = () => {
+            treeStore.nodes = treeStore.nodes.map((n) => (n.id === 'rome' ? { ...n, name: 'Roma Antica' } : n))
+            resolve()
+          }
+        }),
+    )
+    await renameTo('Roma Antica')
+    expect(renameNode).toHaveBeenCalled()
+    expect(document.body.querySelector('.veyq-form'), 'open while the tree is re-read').not.toBeNull()
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/rome/')
+    release()
+    await flushPromises()
+    expect(document.body.querySelector('.veyq-form'), 'closed once the re-read is in').toBeNull()
+    expect(router.currentRoute.value.hash, 'the URL followed before the dialog went').toBe('#~me/trips/roma-antica/')
+  })
+
   it('an opened Memory from its detail: the detail stays open under the new path', async () => {
     await mountAt('#~me/trips/memories/italy')
     await click(document.body.querySelector('.detail-rename')!)
