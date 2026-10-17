@@ -54,6 +54,7 @@ function createServerOwner(m: BuiltAccount['material'], email: string) {
       wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey, authPublicKey: m.authPublicKey,
       masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
       moderationEpoch: moderationEpochOne(m.identityPublicKey),
+      operatingMode: 'ORGANISATION',
     },
   })
 }

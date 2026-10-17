@@ -137,6 +137,8 @@ await orFail('setup/owner', new SetupApi(new SetupConfiguration(adminChannel()))
     suiteId: m.suiteId, identityPublicKey: m.identityPublicKey, wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey,
     authPublicKey: m.authPublicKey, masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
     moderationEpoch: moderationEpochOne(m.identityPublicKey),
+    // The dev instance runs as an unchosen one would (ADR 0093 § 14): club, organisation or company.
+    operatingMode: 'ORGANISATION',
   },
 }))
 console.log(`owner: created ${email}`)

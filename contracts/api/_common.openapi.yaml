@@ -135,6 +135,19 @@ components:
       enum: [PENDING, ACTIVE, SUSPENDED]
       example: ACTIVE
 
+    OperatingMode:
+      # Shared by the setup spec (first-run setup chooses it) and the instance spec (the Server Owner changes it).
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        How the instance is run, on the Server Owner's own assessment (ADR 0093 § 14): PRIVATE (family, circle of
+        friends) or ORGANISATION (club, organisation or company). A preset over the capability register's instance
+        switches (ADR 0088 decision 14), and what decides whether admin-web warns about an empty instance contact or
+        provider identification. It never switches the report path or the moderators off. An instance where none was
+        ever chosen runs as ORGANISATION.
+      enum: [PRIVATE, ORGANISATION]
+      example: ORGANISATION
+
     Capability:
       type: object
       description: >

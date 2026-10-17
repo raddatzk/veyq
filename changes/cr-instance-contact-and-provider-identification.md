@@ -172,7 +172,7 @@ planned). After phase 0 the front matter's `satisfies:` names both.
 - [x] **0 docs** — `uc.admin.operator-details` + its planned coverage YAML; the mode step in `uc.admin.setup-server`;
   ADR 0097 decision 5 gains the contact's confirmation (per Q1); `docs/features/admin/_index.md` lists it. · Done when: `python3 scripts/validate_feature_format.py`,
   `validate_coverage.py`, `validate_doc_links.py`, `validate_changes.py` green; `satisfies:` here names the use-case.
-- [ ] **1 contracts** — tag `instance-operator` on `instance.openapi.yaml` (get, put, clear, confirm the notification
+- [x] **1 contracts** — tag `instance-operator` on `instance.openapi.yaml` (get, put, clear, confirm the notification
   code; get and set the mode; admin-channel marked; bounds per field with `x-field-extra-annotation`); new spec
   `operator.openapi.yaml` with the public read; both classified in `OperatorBlindProbeTest`; `operatingMode` required
   on `CreateServerOwnerRequest`; the catalog's `modes` field, its rule in `validate_capabilities.py` (bite by

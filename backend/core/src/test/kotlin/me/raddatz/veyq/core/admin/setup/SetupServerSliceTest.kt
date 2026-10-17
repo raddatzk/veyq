@@ -38,7 +38,8 @@ class SetupServerSliceTest {
          "authPublicKey":"$authPublicKey",
          "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"$kdfParams"}],
          "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5",
-         "moderationEpoch":{"kemPublicKey":"$kemPublicKey","signPublicKey":"$SIGN_PUBLIC_KEY","sealedGrant":"c2VhbGVkLWdyYW50"}}
+         "moderationEpoch":{"kemPublicKey":"$kemPublicKey","signPublicKey":"$SIGN_PUBLIC_KEY","sealedGrant":"c2VhbGVkLWdyYW50"},
+         "operatingMode":"ORGANISATION"}
     """.trimIndent()
 
     @Test
