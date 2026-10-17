@@ -246,7 +246,11 @@ docs: phase 3's pages. **Baseline** — before the first edit, on a detached wor
 `for f in scripts/validate_*.py; do python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done`, plus
 `python3 scripts/validate_guard_gaps.py --force` (phase 1 changes a guard) and `python3 scripts/veyqctl_selftest.py`.
 
-## Open for the owner
+## Decided with the owner
+
+Owner 2026-10-17 ("Passt", to "alles wie empfohlen"): Q1 no unsigned mirror — only `--unsigned-local`; Q2 the new bundle format on both `sign-blob`s, `veyqctl`
+needs cosign ≥ 3 (the installer bump to v4 is its own inbox row); Q3 no migration code. The download of cosign
+v3.1.3's public release bundles for the foreign-identity bite is allowed. The options stay below as the record.
 
 - **Q1 — May a mirror serve an UNSIGNED manifest behind a flag?** (a) **No** — only `--unsigned-local` skips the
   manifest's signature, and only for local image builds, as today. A mirror of a published release copies
@@ -273,4 +277,4 @@ docs: phase 3's pages. **Baseline** — before the first edit, on a detached wor
   anyway, it is one refusal in `self-update`/`upgrade` for a signed-mode release directory without a bundle, which
   phase 2 already writes.
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-17); `cr-veyqctl` has closed, so its entry condition holds.

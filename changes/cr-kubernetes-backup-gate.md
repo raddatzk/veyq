@@ -159,7 +159,11 @@ ADR 0098's R1–R7, and four this refine adds. Each says which step measures it,
 | R10 | The app's database user (`MARIADB_USER`'s grant on its database) can `mariadb-dump --single-transaction`, drop every table and load | decision 4; the Helm restore page uses the root password today (`grep -n mariadbRootPassword site/src/content/docs/run/backup-and-restore.md`) | phase 1, against `mariadb:11.4` with the chart's user/grant shape |
 | R11 | A bundled `veyq_store_setting` row names its bucket (or the tool's default `blobs` holds) | decision 5 | phase 1, a freshly provisioned bundled instance's row |
 
-## Open for the owner
+## Decided with the owner
+
+Owner 2026-10-17 ("Passt", to "alles wie empfohlen"): every recommendation below is taken — O1 (a), O2 (a) `backup.store.existingSecret`, O3 (a), O4 (b) refuse with
+`--accept-missing-objects`, O5 (a) `kind` installed once via Homebrew for the cluster proof, O6 (a). The options stay
+below as the record of what was weighed.
 
 - **O1 — Which use case owns the gate's criteria?** (a) `uc.admin.install-and-upgrade-instance` owns *"a release change
   backs up before it migrates, on Kubernetes too"* (its A6 widens from "not this use-case" to the gate), and
@@ -365,7 +369,7 @@ ADR 0098's R1–R7, and four this refine adds. Each says which step measures it,
 - **No CI run exists in this repository** (no remote): "green" is the local run over the committed tree,
   `python3 scripts/run_pipeline.py`, or the per-phase commands above.
 
-Implementation has the owner's go (2026-10-16); phase 1 waits for O2–O4 and O6, phase 3 for O5, phase 4 for O1.
+Implementation has the owner's go (2026-10-16) and every answer (2026-10-17). Its entry: after `cr-signed-release-manifest` lands — both edit the publish step, `release_assets.py` and `validate_release_identity.py`.
 
 ## Retrospective
 
