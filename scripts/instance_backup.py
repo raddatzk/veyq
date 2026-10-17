@@ -536,6 +536,12 @@ class Database:
         confirmation and a pause go with the state row, so nothing is deleted until the Server Owner confirms the
         bucket again. A dump from before the reconcile existed has neither table; the app's next start creates them
         empty. Deleting rows, never dropping: the dump's history says the tables exist.
+
+        Why the tool and not something the app reads at start: the app is stopped for every restore, and the one trace
+        the engine leaves of a reload — a table's `CREATE_TIME` — is MariaDB's only (H2, the test engine, has none) and
+        survives a volume copy, which restores it with the rest. The app keeps a backstop of its own for a database
+        brought back by anything else: two listed pages further apart than `veyq.store-reconcile.max-gap` restart every
+        clock (`StoreReconcileStore.writePage`).
         """
         present = [t for t in RECONCILE_TABLES if t in self.base_tables()]
         if present:

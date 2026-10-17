@@ -159,7 +159,7 @@ class StoreReconcileSweep(
     }
 }
 
-/** What a listed key is, before it is judged (cr-bucket-reconcile decision 3). */
+/** What a listed key is, before it is judged: the probe and a key not shaped like veyq's are never orphans (ADR 0062). */
 sealed interface ListedKey {
     /** The store check's probe ([StoreCheck.PROBE_KEY]): overwritten by every check, never anyone's, never counted. */
     data object Probe : ListedKey

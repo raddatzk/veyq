@@ -191,7 +191,7 @@ data class CompletedPass(
     val enqueuedKeys: Long,
 )
 
-/** The reconcile as the Server Owner reads it (decision 9). */
+/** The reconcile as the Server Owner reads it. */
 data class StoreReconcileView(
     val verdict: Verdict,
     val grace: Duration,
@@ -275,7 +275,7 @@ class StoreReconcileStore {
      * Where this tick starts, or null when no pass is due. Creates the state row on the first tick. A bucket other than
      * the one the row was listing ([digest]) restarts the pass from its first key, empties the candidates
      * ([ClocksRestart.STORE_CHANGED]: their clocks belong to another bucket) and voids a confirmation given for
-     * another bucket (decision 16). With no pass in progress, a new one starts once [period] has passed since the last
+     * another bucket. With no pass in progress, a new one starts once [period] has passed since the last
      * one started.
      */
     @Transactional
@@ -311,8 +311,8 @@ class StoreReconcileStore {
 
     /**
      * Write one judged page — **only if no other tick wrote it first**: a compare-and-set on the pass and its page
-     * counter (decision 17), so two backend processes listing the same page count it once. Then, in the same
-     * transaction: the gap rule (decision 13), the pass's counts and cursor, the candidates, and — on the last page —
+     * counter, so two backend processes listing the same page count it once. Then, in the same
+     * transaction: the gap rule, the pass's counts and cursor, the candidates, and — on the last page —
      * the pass's completion with its enqueue ([complete]).
      */
     @Transactional
@@ -336,7 +336,7 @@ class StoreReconcileStore {
         if (won == 0) return PageWrite.Lost
         val row = StoreReconcileEntity.findById(StoreReconcileEntity.ID)!!
 
-        // The grace counts only time the reconcile observed (decision 13): a database brought back from before the last
+        // The grace counts only time the reconcile observed: a database brought back from before the last
         // listed page, by anything but the restore tool, or plain downtime, lies across a gap no healthy instance has.
         val last = row.lastListedAt
         val gap = last != null && Duration.between(last, storeTime).abs() > maxGap
@@ -385,7 +385,7 @@ class StoreReconcileStore {
     /**
      * The pass listed its last page. Drop every candidate it did not see — so a candidate that survives was an orphan
      * in every pass since it was first seen, and one whose key a row claims again is gone — publish the pass, and,
-     * while [StoreReconcileEntity.armed], put every due candidate onto the reclaim list (decision 15). Due is
+     * while [StoreReconcileEntity.armed], put every due candidate onto the reclaim list. Due is
      * `storeTime − firstSeen ≥ grace`, both on the store's clock. The claim query runs once more over the due keys in
      * this transaction, so a row that appeared after a key's page was listed still saves it. **Never a delete**: the
      * reclaim list's sweep is the only deleter (ADR 0062 Decision 3), and its not-before applies on top.
@@ -443,7 +443,7 @@ class StoreReconcileStore {
         StoreOrphanEntity.deleteAll()
     }
 
-    /** Confirm that the bucket [digest] names holds only this instance's objects (decision 11). */
+    /** Confirm that the bucket [digest] names holds only this instance's objects. */
     @Transactional
     fun confirmExclusive(digest: String, now: Instant) {
         val row = StoreReconcileEntity.findById(StoreReconcileEntity.ID)
@@ -460,7 +460,7 @@ class StoreReconcileStore {
         row.exclusiveStoreDigest = null
     }
 
-    /** Pause (or resume) the enqueueing; the listing and the counting go on either way (decision 14). */
+    /** Pause (or resume) the enqueueing; the listing and the counting go on either way. */
     @Transactional
     fun pause(paused: Boolean, now: Instant) {
         val row = StoreReconcileEntity.findById(StoreReconcileEntity.ID)
@@ -470,7 +470,7 @@ class StoreReconcileStore {
     }
 
     /**
-     * The read (decision 9). [digest] is the bucket the store in use lists, null when none: a confirmation given for
+     * The read. [digest] is the bucket the store in use lists, null when none: a confirmation given for
      * another bucket reads as none, which is what it is — the next tick clears it.
      */
     @Transactional

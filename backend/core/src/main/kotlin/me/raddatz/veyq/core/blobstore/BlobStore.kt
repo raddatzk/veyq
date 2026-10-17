@@ -110,7 +110,7 @@ interface BlobStore {
     /**
      * Which bucket [list] reads, as a digest — SHA-256 over the endpoint, the bucket, the region and the access key
      * (never a secret) — or null when this store lists nothing. The reconcile binds its pass, its first-seen clocks and
-     * the Server Owner's exclusive-bucket confirmation to it (cr-bucket-reconcile decision 16): read off the object that
+     * the Server Owner's exclusive-bucket confirmation to it (ADR 0062 § Consequences): read off the object that
      * lists, so a setting that moves between two reads cannot pair one store's confirmation with another's listing.
      */
     val bucketDigest: String?
