@@ -238,7 +238,8 @@ FORMATS = (MIRROR_FORMAT, INDEX_FORMAT)
 INDEX = "index"
 # The store check's probe object (`StoreCheck.kt`, `PROBE_KEY`): "overwritten by every check and never deleted", so a
 # store the app ever checked holds it. Not data — the empty-store gate ignores exactly this key, the way `NOT_DATA`
-# spares the database's non-data tables.
+# spares the database's non-data tables. A fresh install's bucket holds nothing at all (measured 2026-10-17 after a
+# first boot: `size --json` → count 0); the probe appears with the first store check.
 PROBE_KEY = "veyq-check/probe"
 # A pool's ledger: one entry per capture that named the pool, the keys of its index (module docstring). Object keys
 # are UUIDs (`BlobUploadHandler`) and the probe's `veyq-check/`, so this prefix names nothing a store holds.
