@@ -1,6 +1,13 @@
 # ADR 0099 — Moderators share one instance moderation key, and review without a vault
 
-- Status: Accepted 2026-10-17; nothing of it is built. It changes
+- Status: Accepted 2026-10-17. **Built** (cr-moderators-and-the-moderation-key, 2026-10-17): who moderates and the key
+  — §§ 1–5 (the roster, epochs, grants, delivery, rotation, the `MODERATOR` role and the key proof, the step-down
+  rules), § 6's moderation surface as a shell (sign-in, accept, unlock without the vault, the empty queue), § 7's
+  address confirmation, and the instance events of the moderation log
+  ([uc.moderation.appoint-moderators](../features/moderation/use-cases/uc.moderation.appoint-moderators.md),
+  [uc.moderation.serve-as-moderator](../features/moderation/use-cases/uc.moderation.serve-as-moderator.md)). Not built:
+  everything a report brings — the queue's content, review, decisions, the objection rule of § 5 and the new-case mail
+  of § 7. It changes
   [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md), which is not built
   in the parts touched here (§§ 1–3, 6–7, 11–13), and [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
   decisions 3, 5 and 6; both are edited in place (§ Consequences lists the edits). From [inbox](../inbox.md) #463

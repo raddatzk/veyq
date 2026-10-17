@@ -2,6 +2,8 @@
 title: What the server sees
 description: The metadata a veyq server can read by design, what stays sealed, and the five deliberate concessions with their reasons.
 sources:
+  - docs/features/moderation/enablers/en.moderation.moderation-key.md
+  - docs/features/moderation/enablers/en.moderation.log.md
   - docs/crosscutting/security-model.md
   - docs/decisions/0044-field-visibility-declared-at-the-field.md
   - docs/decisions/0047-inline-video-playback-range-streaming.md
@@ -134,6 +136,19 @@ time the server observes live is not kept for them. What it does hold, each with
   mail carries release numbers, a date and a link. The **release check** behind it stores its switch, its source and
   what it found about published releases; its daily request names no release
   ([ADR 0097](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)).
+
+### Moderation
+
+- **The roster**: which accounts the Server Owner appointed as moderators, by whom and when, whether each accepted,
+  and the address confirmation for moderation notices (the hash of an outstanding code, which address was confirmed
+  when) ([ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)).
+- **The moderation key's epochs**: per epoch its public half (what a report seals to, and the key a moderator's proof
+  verifies under), why it was made, and whether a rotation is due; per moderator and epoch a grant sealed to that
+  moderator's identity. Never the key itself: it opens on a moderator's device only.
+- **The moderation log's structured fields**: the event (appointed, accepted, key handed on, removed, stepped down,
+  identity replaced, new key), its time, the moderator it concerns, who acted, the epoch and a reason category. Free
+  text would be sealed to the moderation key. Kept to 31 December of the third year after the moderator's removal.
+- A key proof's challenge, for five minutes.
 
 ### Account email
 

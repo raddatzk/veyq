@@ -4,8 +4,10 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
   A **model** enabler: it states what is derived from what, who holds it and what proves it.
-- **Status:** **planned** — decided in [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
-  § 2.
+- **Status:** **built** — decided in [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
+  § 2, built by cr-moderators-and-the-moderation-key (2026-10-17): `@veyq/crypto`'s `moderationBundle`,
+  `moderationSign`/`moderationVerify` and `sealTo` purpose `moderation-grant`; the server's `ModerationProof` and
+  `ModerationProofGate` (`backend/core/.../moderation/`).
 - **Provides:** one key per epoch that every report seals to, held by every accepted moderator and by nobody else;
   a proof of that key every moderation call carries.
 - **Serves (use-cases):** [uc.moderation.appoint-moderators](../use-cases/uc.moderation.appoint-moderators.md),
@@ -71,3 +73,4 @@ reason why it cannot carry one (a newcomer holds no key yet).
   [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md) (the typed seal),
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md) (forward-only rotation)
 - [en.moderation.log](en.moderation.log.md)
+- Docs site: [What the server sees](../../../../site/src/content/docs/security/what-the-server-sees.md)

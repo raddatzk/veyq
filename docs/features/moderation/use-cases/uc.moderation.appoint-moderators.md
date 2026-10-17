@@ -79,3 +79,5 @@ to follows who is on the roster.
 - [uc.moderation.serve-as-moderator](uc.moderation.serve-as-moderator.md),
   [en.moderation.moderation-key](../enablers/en.moderation.moderation-key.md),
   [en.moderation.log](../enablers/en.moderation.log.md)
+- Docs site: the Run area's [Moderation](../../../../site/src/content/docs/run/moderation.md) (the commands) and the
+  Security area's [Roadmap](../../../../site/src/content/docs/security/roadmap.md)

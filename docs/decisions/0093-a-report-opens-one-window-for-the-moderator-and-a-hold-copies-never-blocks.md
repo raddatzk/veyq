@@ -4,7 +4,8 @@
   so is § 9 (every field purpose seals under its own `K_field`), the rest is not. Who moderates — moderators the
   Server Owner appoints, sharing one instance moderation key — is
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
-  not built, and stated here in §§ 1–3, 6–7 and 11–13. It is on the V1 line (owner 2026-10-16, [inbox](../inbox.md) #462).
+  and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here
+  in §§ 1–3, 6–7 and 11–13. It is on the V1 line (owner 2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
 Provenance: **(M)** is measured in this worktree (file and line named); **(S)** comes from a read-only sweep of the

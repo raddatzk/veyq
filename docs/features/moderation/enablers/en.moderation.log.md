@@ -4,7 +4,8 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
   A **model** enabler: a table and its retention.
-- **Status:** **planned** — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+- **Status:** **built for the instance events** (cr-moderators-and-the-moderation-key, 2026-10-17: `ModerationLog`,
+  `ModerationPurge`); a case's events come with the report — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 11 and [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 4.
 - **Provides:** accountability within a team and to the affected: who did what, when, kept as long as it can be
   contested and no longer.
@@ -48,3 +49,5 @@ closes (ADR 0093 § 11; not built).
 - [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 11,
   [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 4,
   [ADR 0092](../../../decisions/0092-logs-are-operational-and-name-no-person.md)
+- Docs site: [Moderate an instance](../../../../site/src/content/docs/account/moderate.md),
+  [What the server sees](../../../../site/src/content/docs/security/what-the-server-sees.md)

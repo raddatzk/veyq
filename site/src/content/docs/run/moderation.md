@@ -10,6 +10,7 @@ sources:
   - docs/decisions/0032-capability-discovery-version-gating.md
   - docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md
   - docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md
+  - docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md
 ---
 
 There is no central moderation service, because there is no central service. And an instance's operator cannot
@@ -67,18 +68,65 @@ You can switch a feature off for the whole instance, for example public links, d
 without a password, in the admin console or with `veyq-admin capabilities`. What each switch does to new and to
 existing data, and how to switch it, is on [Capabilities](/veyq/run/capabilities/).
 
+## Moderators
+
+You decide who acts on reports for the whole instance
+([uc.moderation.appoint-moderators](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md),
+[ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)).
+A moderator is an existing account, and every moderator holds the same **moderation key**, which reports will be
+sealed to. The server stores the key's public half and a copy of the key sealed to each moderator's account; it can
+open none of them. Reports themselves are not built yet (below), so today this sets up who will review them.
+
+**Turn moderation on.** In the admin console, **Server → Moderation**, choose **Turn moderation on**. The console
+makes the first moderation key, seals it to your own account and forgets it: you are the first moderator. Until you
+do, the panel says moderation is off, and reporting stays off with it.
+
+**Appoint someone.** Enter the address of an existing account and choose **Appoint**, or:
+
+```sh
+docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env exec \
+  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
+  admin veyq-admin moderator appoint --address deputy@example.com
+```
+
+Someone who has no account yet is first invited into a space. The appointment stays **pending** until that person
+opens `/moderation` on a space's address they sign in on, reads what accepting means and accepts. Accepting mails them
+a code through the instance mail (Server → Mail must be set up) to confirm their address for notices. The key reaches
+them from a moderator who holds it, the next time that moderator opens `/moderation`; the roster then shows they hold
+it. `veyq-admin moderator list` prints the roster.
+
+**Remove someone.** **Remove** on their row, or `veyq-admin moderator remove --address <address>`. Their access and
+their copy of every key end at once, and the console then makes a new key for everyone who stays, so reports from then
+on are sealed to a key they never held. A removal that would leave nobody holding the key is refused.
+
+**Rotate the key by hand.** Choose a reason (by hand, suspected compromise, identity rotation, removal) and **Rotate
+the key**, or `veyq-admin moderation rotate --reason compromise`. Reports already made stay sealed to the key they
+were made under; only later ones use the new key.
+
+**When a moderator steps down.** A moderator can step down in `/moderation`, and you can step down too while another
+moderator holds the key. Their access ends at once, but until you rotate, reports are still sealed to the key they
+held. The panel then says **rotation due**, and the instance mail tells you once. Rotate when you see it. The same
+happens when a moderator replaces their account keys; they get the key again from another moderator.
+
+**What is logged.** Every appointment, acceptance, handing on of the key, removal, step-down and new key is an entry
+in the moderation log: who, when and for whom, never a key. Entries are kept until 31 December of the third year after
+the moderator concerned left the roster, then deleted.
+
+**What this does not protect against.** You own the server and the roster. A server that hands out a key of its own
+choosing could read later reports; moderators' pages compare the key the server publishes with the one they hold and
+stop when it differs, but a reporter cannot check it. Moderation keeps a team accountable to each other; it is not a
+control against the operator.
+
 ## Not built
 
 - **Report intake.** There is no form or address that collects abuse reports; a report reaches you however your
   members reach you.
 - **An operator action on a single share.**
-- **Moderators.** Decided, not built
-  ([ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)):
-  you will appoint existing accounts as moderators, who share one moderation key. They review and decide in the web
-  app on any tenant's address, with only that key open, never the rest of their account. A moderator can block a
-  share, its content, or a guest uploader with the link they came through; blocking a member and taking a tenant
-  offline stay yours, and a moderator can only propose them. You are a moderator too, and can step down while
-  another moderator holds the key. Where there are two or more, a different moderator reviews an objection.
+- **Reports, the review and every decision.** Moderators exist (above), and they hold the key a report will be sealed
+  to; the report itself, the queue's content, blocking a share or its content, and the review of an objection by a
+  second moderator are decided in
+  [ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
+  and not built.
 
 These are on the security model's target, decided in
 [ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md);

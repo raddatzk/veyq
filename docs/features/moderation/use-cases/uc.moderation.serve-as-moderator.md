@@ -78,3 +78,4 @@ to anything else of theirs.
 - [uc.moderation.appoint-moderators](uc.moderation.appoint-moderators.md),
   [en.moderation.moderation-key](../enablers/en.moderation.moderation-key.md),
   [en.moderation.log](../enablers/en.moderation.log.md)
+- Docs site: [Moderate an instance](../../../../site/src/content/docs/account/moderate.md)

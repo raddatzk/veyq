@@ -2,24 +2,58 @@ useCase: uc.moderation.appoint-moderators
 feature: moderation
 title: Appoint moderators and keep the moderation key
 status: planned
+# Built by cr-moderators-and-the-moderation-key: the roster, the epochs and the mint on the backend
+# (core/moderation/ModerationHandler, InstanceModerationResource), the Server → Moderation panel and `veyq-admin
+# moderator …` / `moderation rotate` on admin-web (features/instance/moderation.ts, ModerationPanel.vue, cli/).
+#
+# `status: planned` is correct for the reason uc.admin.identify-instance-release gives: `admin-web`'s job has never
+# executed, so its suites are no coverage yet (ADR 0040), and one criterion — admin-web never opens a grant — has its
+# observable on admin-web alone. The backend refs below are claims like any other; the admin-web suites wait under
+# gaps, named, so the flip is mechanical once a run executed that job.
 acceptanceCriteria:
   - id: turning-on-mints-epoch-one-to-the-server-owner
     text: >-
       Turning moderation on mints epoch 1 in admin-web, sealed to the Server Owner's identity alone; the server stores
       the public bundle and the sealed grant, records the Server Owner as an accepted moderator, and refuses a second
       turn-on. Until then the panel says reporting is off.
+    coverage:
+      backend:
+        integration: [ModerationSliceTest.moderationIsOffUntilTheServerOwnerMintsEpochOne, ModerationSliceTest.turningOnSealedToAnotherIdentityIsRefusedAndStoresNothing]
+    gaps:
+      - surface: backend
+        reason: >-
+          The mint itself (epoch 1 sealed to the Server Owner's identity) and the panel's warning are admin-web's
+          (features/instance/moderation.test.ts, ModerationPanel.test.ts), a surface awaiting its first run.
   - id: appoint-an-existing-account-by-address
     text: >-
       The Server Owner appoints an existing account by its address; an unknown address is refused and records nothing,
       and appointing someone already on the roster changes nothing.
+    coverage:
+      backend:
+        integration: [ModerationSliceTest.anUnknownAddressIsRefusedAndAPendingAppointmentIsIdempotent, ModerationSliceTest.appointingBeforeModerationIsOnIsRefused]
   - id: removal-deletes-every-grant-and-rotates
     text: >-
       Removing a moderator deletes their grants for every epoch and their role at once, and admin-web then mints the
       next epoch for the remaining accepted moderators; removing the last holder of the key is refused.
+    coverage:
+      backend:
+        integration: [ModerationSliceTest.aRemovedModeratorsSessionHasNoRoleAndTheSameProofIsRefused, ModerationSliceTest.theLastHolderCannotLeaveAndTheServerOwnerMayStepDownWhileAnotherHolds, ModerationRaceSliceTest.aRemovalOverlappingADeliveryLeavesTheRemovedModeratorNoGrant]
+    gaps:
+      - surface: backend
+        reason: >-
+          The rotation that follows a removal is admin-web's facade (features/instance/moderation.test.ts), awaiting
+          its first run.
   - id: a-mint-covers-exactly-the-accepted-moderators
     text: >-
-      The server refuses a mint whose grants do not cover exactly the accepted moderators, and admin-web shows that
-      refusal rather than swallowing it.
+      The server refuses a mint whose grants do not cover exactly the accepted moderators, or that names any epoch but
+      the next, and admin-web shows that refusal rather than swallowing it.
+    coverage:
+      backend:
+        integration: [ModerationSliceTest.aMintMissingOneModeratorIsRefusedAndTheCompleteOnePasses, ModerationSliceTest.aMintForAnyEpochButTheNextIsRefused, ModerationSliceTest.aMintSealedToAStaleIdentityIsRefused]
+    gaps:
+      - surface: backend
+        reason: >-
+          That the panel shows the refusal is ModerationPanel.test.ts (admin-web, awaiting its first run).
   - id: admin-web-never-opens-a-grant
     text: >-
       admin-web and the CLI mint and forget: no module of theirs imports a function that opens a seal.
@@ -27,9 +61,20 @@ acceptanceCriteria:
     text: >-
       After a moderator steps down or rotates their identity, the panel says rotation due and one instance mail tells
       the Server Owner, until the next mint clears it.
+    coverage:
+      backend:
+        integration: [ModerationMailSliceTest.aStepDownMailsTheServerOwnerRotationDueOnce, ModerationSliceTest.anIdentityRotationDeletesTheGrantsAndMakesTheDeliveryPendingAgain, ModerationSliceTest.aMintMissingOneModeratorIsRefusedAndTheCompleteOnePasses]
   - id: roster-operations-are-server-owner-only-on-the-admin-channel
     text: >-
       Every roster and key operation is a Server-Owner operation answered on the admin channel only.
+    coverage:
+      backend:
+        integration: [ModerationSliceTest.aMemberIsNotTheServerOwnerOnTheRoster, AdminChannelGateSliceTest.everyRoleGatedMarkedOperationIsAnUnknownRouteOnThePublicPortAndAnswersOnTheAdminListener]
 gaps:
-  backend: "Not built: cr-moderators-and-the-moderation-key builds the roster, the epochs and the mint."
   web: "No part here: the Server Owner's side lives on admin-web; web/ carries the moderator's side (uc.moderation.serve-as-moderator)."
+  admin-web: >-
+    Built and tested (features/instance/moderation.test.ts, moderation.noOpen.test.ts — the admin-web-never-opens-a-grant
+    criterion —, ModerationPanel.test.ts, cli/cli.test.ts), but admin-web's job has never executed (ADR 0040).
+  stack: >-
+    e2e/tests/features/moderation.spec.ts tags turning moderation on and appointing; stack refs are admitted only once a
+    CI run executed lane L1 (ADR 0040).

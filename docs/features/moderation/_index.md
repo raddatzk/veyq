@@ -18,10 +18,11 @@ the log that keeps them accountable. A **core** feature
 
 ## Use-cases
 
-- ★ [Appoint moderators and keep the moderation key](use-cases/uc.moderation.appoint-moderators.md) — **planned**
+- ★ [Appoint moderators and keep the moderation key](use-cases/uc.moderation.appoint-moderators.md) — **built
+  (backend + admin-web)**; coverage stays `planned` while admin-web's job has never run
   (ADR 0099 §§ 1, 3–5): the Server Owner turns moderation on, appoints existing accounts by address, removes them and
   rotates the key.
-- ★ [Serve as a moderator](use-cases/uc.moderation.serve-as-moderator.md) — **planned** (ADR 0099 §§ 1, 3, 6, 7): an
+- ★ [Serve as a moderator](use-cases/uc.moderation.serve-as-moderator.md) — **built (backend + web)** (ADR 0099 §§ 1, 3, 6, 7): an
   appointee accepts, confirms their address, receives the key from a holder, delivers it to the next newcomer, and can
   step down.
 - Report a share, an item or an uploader — planned (ADR 0093 §§ 1–2, 4).
@@ -29,7 +30,7 @@ the log that keeps them accountable. A **core** feature
 
 ## Enablers
 
-- [en.moderation.moderation-key](enablers/en.moderation.moderation-key.md) — **planned** (ADR 0099 § 2: per epoch a
+- [en.moderation.moderation-key](enablers/en.moderation.moderation-key.md) — **built** (ADR 0099 § 2: per epoch a
   32-byte `M_n`, its public bundle, a grant per moderator, and the key proof every moderation call carries).
-- [en.moderation.log](enablers/en.moderation.log.md) — **planned** (ADR 0093 § 11: an append-only table, structured
+- [en.moderation.log](enablers/en.moderation.log.md) — **built** for the instance events (ADR 0093 § 11: an append-only table, structured
   fields in the clear and free text sealed to the moderation key; the instance events and their retention).
