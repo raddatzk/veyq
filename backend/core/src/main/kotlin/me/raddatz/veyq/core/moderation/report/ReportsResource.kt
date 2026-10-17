@@ -13,18 +13,21 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 /**
- * A member's report (uc.moderation.report): thin over [ReportHandler]. A guest's report is `SharingResource.reportInShare`,
- * the same handler behind the link's own gate.
+ * A member's report (uc.moderation.report): thin over [ReportHandler], then [ReportReceived] after the commit. A guest's
+ * report is `SharingResource.reportInShare`, the same handler behind the link's own gate.
  */
 @Authenticated
 class ReportsResource(
     private val reports: ReportHandler,
+    private val received: ReportReceived,
     private val identity: SecurityIdentity,
 ) : ReportsApi {
 
     @RateLimit(key = RateLimitKey.USER) // the open-report cap (owner decision Q8) is the handler's, a database count
     override fun reportInScope(scopeId: UUID, reportSubmission: ReportSubmission): Response =
-        answer(reports.report(Reporter.Member(identity.principal.name, scopeId.toString()), reportSubmission.toReport()))
+        reportSubmission.toReport().let { report ->
+            answer(reports.report(Reporter.Member(identity.principal.name, scopeId.toString()), report), received, report.receiptAddress)
+        }
 
     companion object {
         /** The wire's report as the handler takes it. */
@@ -36,11 +39,14 @@ class ReportsResource(
             receiptAddress = receiptAddress?.takeIf { it.isNotBlank() },
         )
 
-        /** `201` with the reference and the time once the report is stored; else the refusal. */
-        fun answer(outcome: ReportOutcome): Response = when (outcome) {
-            is ReportOutcome.Received -> Response.status(Response.Status.CREATED)
-                .entity(ReportReceipt(UUID.fromString(outcome.reportId), outcome.receivedAt.atOffset(ZoneOffset.UTC)))
-                .build()
+        /** `201` with the reference and the time once the report is stored and [received] ran; else the refusal. */
+        fun answer(outcome: ReportOutcome, received: ReportReceived, receiptAddress: String?): Response = when (outcome) {
+            is ReportOutcome.Received -> {
+                received.after(outcome, receiptAddress)
+                Response.status(Response.Status.CREATED)
+                    .entity(ReportReceipt(UUID.fromString(outcome.reportId), outcome.receivedAt.atOffset(ZoneOffset.UTC)))
+                    .build()
+            }
             is ReportOutcome.Refused -> httpError(outcome)
         }
     }

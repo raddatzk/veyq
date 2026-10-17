@@ -235,6 +235,10 @@ class ReportHandler(
         val key = ModerationCaseEntity.openKeyOf(kind, itemId)
         ModerationCaseEntity.find("openKey", key).firstResult()?.let { open ->
             open.category = ReportCategory.valueOf(open.category).mostUrgent(category).name
+            // A report that makes an unmailed case urgent mails it at once rather than in the day's bundle.
+            if (open.noticeDue == ModerationCaseEntity.NOTICE_BUNDLE && ReportCategory.valueOf(open.category).urgent) {
+                open.noticeDue = ModerationCaseEntity.NOTICE_URGENT
+            }
             return open to false
         }
         val case = ModerationCaseEntity().apply {
@@ -245,6 +249,7 @@ class ReportHandler(
             this.category = category.name
             state = CaseState.OPEN.name
             openKey = key
+            noticeDue = if (category.urgent) ModerationCaseEntity.NOTICE_URGENT else ModerationCaseEntity.NOTICE_BUNDLE
         }
         case.persist()
         return case to true

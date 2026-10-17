@@ -91,7 +91,21 @@ class ModerationCaseEntity : PanacheEntityBase {
     @Column(name = "open_key", length = 80)
     var openKey: String? = null
 
+    /** The "new case" mail still owed: [NOTICE_URGENT] or [NOTICE_BUNDLE]; null once it went out ([CaseNotices]). */
+    @Column(name = "notice_due", length = 8)
+    var noticeDue: String? = null
+
+    /** When the new-case mail went out, and in which kind of mail ([noticeKind]). */
+    @Column(name = "noticed_at")
+    var noticedAt: Instant? = null
+
+    @Column(name = "notice_kind", length = 8)
+    var noticeKind: String? = null
+
     companion object : PanacheCompanionBase<ModerationCaseEntity, String> {
+        const val NOTICE_URGENT = "URGENT"
+        const val NOTICE_BUNDLE = "BUNDLE"
+
         fun openKeyOf(kind: ReportItemKind, itemId: String) = "${kind.name}:$itemId"
     }
 }

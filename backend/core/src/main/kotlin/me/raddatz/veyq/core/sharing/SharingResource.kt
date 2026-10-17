@@ -33,6 +33,7 @@ import me.raddatz.veyq.core.generated.model.UpdateShareRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.moderation.report.ReportHandler
+import me.raddatz.veyq.core.moderation.report.ReportReceived
 import me.raddatz.veyq.core.moderation.report.Reporter
 import me.raddatz.veyq.core.moderation.report.ReportsResource
 import me.raddatz.veyq.core.moderation.report.ReportsResource.Companion.toReport
@@ -68,6 +69,7 @@ class SharingResource(
     private val identity: SecurityIdentity,
     private val tenant: RequestTenant,
     private val reports: ReportHandler,
+    private val received: ReportReceived,
 ) : SharingApi {
 
     /** As in `MediaResource`: the resolved tenant's own domain (ADR 0063), never the raw `Host` header. A share
@@ -305,7 +307,9 @@ class SharingResource(
     // count open reports against (owner decision Q8).
     @RateLimit(key = RateLimitKey.IP)
     override fun reportInShare(shareId: String, reportSubmission: ReportSubmission, xSharePassword: String?, xShareWrite: String?): Response =
-        ReportsResource.answer(reports.report(Reporter.Guest(shareId, xSharePassword, xShareWrite), reportSubmission.toReport()))
+        reportSubmission.toReport().let { report ->
+            ReportsResource.answer(reports.report(Reporter.Guest(shareId, xSharePassword, xShareWrite), report), received, report.receiptAddress)
+        }
 
     private fun toShareNode(n: ShareNodeRow) = ShareNode(
         id = UUID.fromString(n.id),
