@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.setup
 
+import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.ServerRoles
 import me.raddatz.veyq.core.identity.WrapData
@@ -11,7 +12,11 @@ import jakarta.transaction.Transactional
 /** Persistence for first-run setup. Reads the setup lock and stores the owner — the account itself is born
  *  the shared operator-blind way via [AccountStore]; setup adds only the single-owner lock. */
 @ApplicationScoped
-class SetupStore(private val accounts: AccountStore, private val moderation: ModerationHandler) {
+class SetupStore(
+    private val accounts: AccountStore,
+    private val moderation: ModerationHandler,
+    private val modes: OperatingModeHandler,
+) {
 
     fun isSetupComplete(): Boolean = ServerSetup.count() > 0
 
@@ -36,6 +41,10 @@ class SetupStore(private val accounts: AccountStore, private val moderation: Mod
             userId, epoch.kemPublicKey, epoch.signPublicKey, registration.identityPublicKey, epoch.sealedGrant,
         )
         if (minted !is ModerationOutcome.Ok) throw ModerationEpochInvalid()
+
+        // The operating mode and its preset, in the same transaction (ADR 0093 § 14, ADR 0088 decision 14): no instance
+        // completes setup without one, and a setup that rolls back leaves no mode and no preset switch behind.
+        modes.apply(registration.operatingMode)
 
         ServerSetup().apply {
             id = ServerSetup.SINGLETON_ID

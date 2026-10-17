@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation
 
+import me.raddatz.veyq.core.admin.instance.CodeConfirmation
 import me.raddatz.veyq.core.admin.instance.InstanceMailConfirmation
 import me.raddatz.veyq.core.admin.instance.InstanceNoticeMailer
 import me.raddatz.veyq.core.crypto.Tokens
@@ -11,7 +12,6 @@ import me.raddatz.veyq.core.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
-import java.security.MessageDigest
 import java.time.Instant
 
 /**
@@ -55,8 +55,7 @@ class ModeratorAddressHandler(private val mailer: InstanceNoticeMailer) {
             val row = ModeratorEntity.findById(accountId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.accepted }
                 ?: return@call false
             val email = VeyqUser.findById(accountId)?.email
-            val entered = Tokens.hash(code.trim()).toByteArray()
-            if (ModeratorAddress.codeLive(row, email, now) && MessageDigest.isEqual(entered, row.codeHash!!.toByteArray())) {
+            if (ModeratorAddress.codeLive(row, email, now) && CodeConfirmation.matches(code, row.codeHash)) {
                 row.confirmedAddress = row.codeAddress
                 row.confirmedAt = now
                 row.codeHash = null

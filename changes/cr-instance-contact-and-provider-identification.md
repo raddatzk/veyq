@@ -182,7 +182,7 @@ planned). After phase 0 the front matter's `satisfies:` names both.
   `./gradlew check` green (two new tags end green, except the probe test until classified in this phase). **Predicted
   red:** the required `operatingMode` reddens admin-web's typed `createServerOwner` call until phase 3 (and the
   backend's setup handler only if it builds the request; name the lines `npm run check` and the build report).
-- [ ] **2 backend** — a singleton table `veyq_operator_details` (new migration, pinned in
+- [x] **2 backend** — a singleton table `veyq_operator_details` (new migration, pinned in
   `scripts/applied_migrations.sha256`), the handler with the confirmation rule shared with `InstanceMailConfirmation`
   (one rule, not a copy), the code mail through `InstanceNoticeMailer`; rate-limit posture on each operation
   (`@RateLimit(USER)` on the confirm, as `confirmInstanceMail` has); readers in `EveryStoredTimeHasAReaderTest`.

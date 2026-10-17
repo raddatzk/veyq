@@ -12,8 +12,6 @@ import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
-import java.security.MessageDigest
-import java.security.SecureRandom
 import java.time.Duration
 import java.time.Instant
 
@@ -52,28 +50,22 @@ sealed interface InstanceMailConfirmOutcome {
 }
 
 /**
- * The rule every reader of the confirmation shares — the read, the code entry and the mailer — so the console never
- * says "confirmed" about settings the mailer would refuse to send with.
- *
- * Confirmed means: a code confirmed the address the Server Owner's account has **now**. A changed account address
- * therefore unconfirms by itself, without a write; a save starts over (it clears what a code confirmed).
+ * The Server Owner's instance-mail confirmation, read by the console, the code entry and the mailer alike, so the
+ * console never says "confirmed" about settings the mailer would refuse to send with. The rule itself is
+ * [CodeConfirmation]'s, shared with every other confirmed address; this object only says which address is current —
+ * the one the Server Owner's account has **now** — so a changed account address unconfirms by itself, without a write,
+ * and a save starts over (it clears what a code confirmed).
  */
 object InstanceMailConfirmation {
-    /** How long a code may be entered. Long enough to fetch a mail, short because nothing waits on it. */
-    val CODE_TTL: Duration = Duration.ofHours(1)
+    val CODE_TTL: Duration get() = CodeConfirmation.CODE_TTL
 
-    /** Wrong entries that spend a code. With eight digits and the per-caller rate limit, guessing is not a strategy. */
-    const val MAX_ATTEMPTS = 5
+    const val MAX_ATTEMPTS = CodeConfirmation.MAX_ATTEMPTS
 
-    private val rng = SecureRandom()
-
-    /** A fresh code: eight digits, short enough to type from a phone's mail into the console. Stored only hashed. */
-    fun newCode(): String = "%08d".format(rng.nextInt(100_000_000))
+    fun newCode(): String = CodeConfirmation.newCode()
 
     fun state(row: InstanceMailRow?, ownerAddress: String?, now: Instant): InstanceMailConfirmationState = when {
         row == null || row.transport.host == null -> InstanceMailConfirmationState.NOT_CONFIGURED
-        row.confirmedAt != null && ownerAddress != null && row.confirmedAddress.sameAddress(ownerAddress) ->
-            InstanceMailConfirmationState.CONFIRMED
+        CodeConfirmation.confirmed(row.confirmedAt, row.confirmedAddress, ownerAddress) -> InstanceMailConfirmationState.CONFIRMED
         row.testMailFailed -> InstanceMailConfirmationState.SEND_FAILED
         codeLive(row, ownerAddress, now) -> InstanceMailConfirmationState.CODE_SENT
         else -> InstanceMailConfirmationState.UNCONFIRMED
@@ -81,14 +73,11 @@ object InstanceMailConfirmation {
 
     /** Whether [row]'s code may still be entered, for [ownerAddress]. */
     fun codeLive(row: InstanceMailRow, ownerAddress: String?, now: Instant): Boolean =
-        row.codeHash != null && row.codeExpiresAt?.isAfter(now) == true && row.codeAttempts < MAX_ATTEMPTS &&
-            ownerAddress != null && row.codeAddress.sameAddress(ownerAddress)
+        CodeConfirmation.codeLive(row.codeHash, row.codeExpiresAt, row.codeAttempts, row.codeAddress, ownerAddress, now)
 
     /** The current address of the account [userId], or null when there is none. */
     fun addressOf(userId: String?): String? =
         userId?.let { id -> QuarkusTransaction.joiningExisting().call { VeyqUser.findById(id)?.email } }
-
-    private fun String?.sameAddress(other: String): Boolean = this != null && equals(other, ignoreCase = true)
 }
 
 /**
@@ -161,13 +150,9 @@ class InstanceMailSettingsHandler(
      * and only for the address it was sent to, which must still be the account's; a wrong entry counts against it.
      */
     fun confirm(callerId: String, code: String, now: Instant = Instant.now()): InstanceMailConfirmOutcome {
-        val entered = Tokens.hash(code.trim()).toByteArray()
         val confirmed = store.enterCode(now, InstanceMailConfirmation.MAX_ATTEMPTS) { row ->
             val owner = InstanceMailConfirmation.addressOf(row.ownerUserId)
-            row.codeAddress.takeIf {
-                InstanceMailConfirmation.codeLive(row, owner, now) &&
-                    MessageDigest.isEqual(entered, row.codeHash!!.toByteArray())
-            }
+            row.codeAddress.takeIf { InstanceMailConfirmation.codeLive(row, owner, now) && CodeConfirmation.matches(code, row.codeHash) }
         }
         return if (confirmed) InstanceMailConfirmOutcome.Ok(view(store.find(), callerId, now)) else InstanceMailConfirmOutcome.CodeInvalid
     }

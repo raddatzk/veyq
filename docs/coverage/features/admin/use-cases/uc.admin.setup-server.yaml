@@ -29,6 +29,23 @@ acceptanceCriteria:
     text: The email is trimmed before validation and storage (the account carries no display name — identity is a per-tenant username, ADR 0023).
     coverage:
       backend: { unit: [SetupRequestSanitizationTest.trimsNameFields] }
+  - id: setup-stores-the-operating-mode
+    text: >-
+      Setup requires an operating mode: a request without one, or with a mode that is neither private nor club,
+      organisation or company, is refused and creates nothing; the chosen one is stored with the Server Owner, its
+      preset's switches in the same transaction.
+    coverage:
+      backend:
+        integration: [SetupServerSliceTest.rejectsASetupWithoutAnOperatingMode, SetupServerSliceTest.createsOwner]
+    gaps:
+      - surface: backend
+        reason: >-
+          The setup slice proves the refusal and the stored mode. The preset rides the same call into
+          `OperatingModeHandler.apply` inside setup's transaction, whose effect on the switches is proven against a
+          preset built in the test (`OperatorDetailsSliceTest`, uc.admin.operator-details); the catalog carries no
+          `modes` yet, so a setup that sets a switch is first observable with cr-guest-write-record. The step that
+          asks the mode after the kit, and refuses *private* without the tick, is admin-web's
+          (`src/views/SetupView.test.ts`, `src/features/setup/setupServer.test.ts`), waiting under the use-case gap.
 gaps:
   admin-web: >-
     Implemented (cr-0002) and, since cr-admin-web-extraction (ADR 0065), implemented HERE rather than in `web`:

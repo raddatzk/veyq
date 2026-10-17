@@ -60,6 +60,32 @@ class InstanceNoticeMailer(
     }
 
     /**
+     * Whether instance mail may carry anything beyond the Server Owner's own test mail: configured, its address
+     * confirmed (ADR 0097 decision 5), and able to send. The instance contact's notification address gets its code only
+     * then (owner 2026-10-17), and admin-web says so until it holds (`instanceMailReady`).
+     */
+    fun ready(now: Instant): Boolean {
+        val row = settings.find() ?: return false
+        val owner = InstanceMailConfirmation.addressOf(row.ownerUserId) ?: return false
+        return InstanceMailConfirmation.state(row, owner, now) == InstanceMailConfirmationState.CONFIRMED && sendable(row.transport)
+    }
+
+    /**
+     * The code that confirms the instance contact's notification address (ADR 0097 decision 5, ADR 0093 § 11) to [to] —
+     * the address the Server Owner stored, read from the stored row by the caller, never from a request body. Only while
+     * [ready]: an unconfirmed relay would be a code nobody can trust reached its address.
+     */
+    fun sendOperatorCode(to: String, code: String, expiresAt: Instant, now: Instant): DeliveryResult {
+        if (!ready(now)) return DeliveryResult.FAILED
+        val transport = settings.find()?.transport ?: return DeliveryResult.FAILED
+        val from = transport.from ?: return DeliveryResult.FAILED
+        return wire.deliver(
+            transport.smtp(), from, to, InstanceMailCopy.operatorCodeSubject(),
+            InstanceMailCopy.operatorCodeBody(code, expiresAt), "the instance contact's notification code",
+        )
+    }
+
+    /**
      * A moderation notice (ADR 0097 decision 3, ADR 0099 § 7) to [to] — a confirmed moderator's own account address,
      * which the caller (`ModeratorNotices`) read from the roster and the account row, never from a request. Through the
      * instance's settings whenever they can send.
@@ -169,6 +195,30 @@ object InstanceMailCopy {
             $code
 
         Er wird nach ${EXPIRY.format(expiresAt)} ungültig. In der Moderation kannst du einen neuen anfordern.
+    """.trimIndent()
+
+    fun operatorCodeSubject() = "Confirm the notification address of a veyq instance / Benachrichtigungsadresse einer veyq-Instanz bestätigen"
+
+    fun operatorCodeBody(code: String, expiresAt: Instant) = """
+        This address was entered as the notification address of a veyq instance's contact. Notices about new
+        moderation cases reach it only once it is confirmed.
+
+        To confirm it, type this code into the admin console, Server → Operator:
+
+            $code
+
+        It stops working after ${EXPIRY.format(expiresAt)}. Saving the address again sends a new one.
+
+        —
+
+        Diese Adresse wurde als Benachrichtigungsadresse der Kontaktstelle einer veyq-Instanz eingetragen. Hinweise auf
+        neue Moderationsfälle erreichen sie erst, wenn sie bestätigt ist.
+
+        Um sie zu bestätigen, gib diesen Code in der Admin-Konsole unter Server → Betreiber ein:
+
+            $code
+
+        Er wird nach ${EXPIRY.format(expiresAt)} ungültig. Wenn du die Adresse erneut speicherst, kommt ein neuer.
     """.trimIndent()
 
     fun noticeSubject(n: StoredNotice): String = when (n.kind) {

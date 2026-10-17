@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.setup
 
+import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.identity.ModeratorEntity
 import me.raddatz.veyq.core.identity.VeyqUser
@@ -31,6 +32,7 @@ class SetupServerSliceTest {
         authPublicKey: String = "ZWQyNTUxOS1hdXRoLXB1Yg==",
         kdfParams: String = "AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz",
         kemPublicKey: String = KEM_PUBLIC_KEY,
+        operatingMode: String? = "ORGANISATION",
     ) = """
         {"email":"$email","suiteId":"v1",
          "identityPublicKey":"aWRlbnRpdHktcHVibGljLWtleQ==",
@@ -38,9 +40,12 @@ class SetupServerSliceTest {
          "authPublicKey":"$authPublicKey",
          "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"$kdfParams"}],
          "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5",
-         "moderationEpoch":{"kemPublicKey":"$kemPublicKey","signPublicKey":"$SIGN_PUBLIC_KEY","sealedGrant":"c2VhbGVkLWdyYW50"},
-         "operatingMode":"ORGANISATION"}
+         "moderationEpoch":{"kemPublicKey":"$kemPublicKey","signPublicKey":"$SIGN_PUBLIC_KEY","sealedGrant":"c2VhbGVkLWdyYW50"}
+         ${modeField(operatingMode)}}
     """.trimIndent()
+
+    /** The `operatingMode` member, or nothing — a request without one is what [rejectsASetupWithoutAnOperatingMode] sends. */
+    private fun modeField(mode: String?): String = if (mode == null) "" else ",\"operatingMode\":\"$mode\""
 
     @Test
     @Order(1)
@@ -89,12 +94,30 @@ class SetupServerSliceTest {
         given().`when`().get("/api/moderation/key").then().statusCode(404)
     }
 
+    /**
+     * uc.admin.setup-server `setup-stores-the-operating-mode`: no instance completes setup without a mode (ADR 0093
+     * § 14) — a request without one is refused at the boundary and creates nothing. Its positive control is
+     * [createsOwner], the same body with a mode, answering 201 and storing it.
+     */
+    @Test
+    @Order(3)
+    fun rejectsASetupWithoutAnOperatingMode() {
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(operatingMode = null))
+            .`when`().post("/api/setup/owner")
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(operatingMode = "HOUSEHOLD"))
+            .`when`().post("/api/setup/owner")
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
+        given().`when`().get("/api/setup").then().body("setupRequired", equalTo(true))
+    }
+
     @Test
     @Order(4)
     fun createsOwner() {
         ModerationTestKit.reset()
+        QuarkusTransaction.requiringNew().run { OperatorDetailsEntity.deleteAll() }
         given().`when`().get("/api/moderation/key").then().statusCode(404)
-        val userId: String = givenAdminChannel().contentType(ContentType.JSON).body(ownerBody())
+        val userId: String = givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(operatingMode = "PRIVATE"))
             .`when`().post("/api/setup/owner")
             .then().statusCode(201)
             .body("userId", notNullValue())
@@ -112,6 +135,8 @@ class SetupServerSliceTest {
         QuarkusTransaction.requiringNew().run {
             assertEquals(listOf(userId to 1), ModerationGrantEntity.listAll().map { it.moderatorId to it.epoch })
             assertEquals(true, ModeratorEntity.findById(userId)?.accepted)
+            // The mode the Server Owner chose is stored with the owner, in the same transaction (ADR 0093 § 14).
+            assertEquals("PRIVATE", OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode)
         }
     }
 
