@@ -3,6 +3,7 @@ package me.raddatz.veyq.depot.share
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
 import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
 import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.ClientSeen
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.sharing.IdentityFolderOutcome
@@ -38,7 +39,7 @@ class DropFolderHandler(
 ) {
     fun ensure(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, encryptedName: String,
-        slugToken: String, epoch: Int, wrappedContentKey: String,
+        slugToken: String, epoch: Int, wrappedContentKey: String, seen: ClientSeen?,
     ): DropFolderOutcome {
         // The folder is a row a guest adds, so it spends the per-share upload budget, as a guest's create does.
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true, onlyRole = ShareEntity.WRITE_ONLY)) {
@@ -49,7 +50,7 @@ class DropFolderHandler(
             ShareWriteGate.NotContributable -> return DropFolderOutcome.NotContributable
         }
         if (gated.rootKind != DepotNodeKinds.DROPBOX) return DropFolderOutcome.NotContributable
-        return when (val o = folders.ensure(gated, nodeId, encryptedName, slugToken, epoch, wrappedContentKey)) {
+        return when (val o = folders.ensure(gated, nodeId, encryptedName, slugToken, epoch, wrappedContentKey, seen)) {
             is IdentityFolderOutcome.Folder -> DropFolderOutcome.Folder(o)
             IdentityFolderOutcome.NotFound -> DropFolderOutcome.NotFound
             IdentityFolderOutcome.NotContributable -> DropFolderOutcome.NotContributable

@@ -1,11 +1,12 @@
 ---
 title: What the server sees
-description: The metadata a veyq server can read by design, what stays sealed, and the five deliberate concessions with their reasons.
+description: The metadata a veyq server can read by design, what stays sealed, and the six deliberate concessions with their reasons.
 sources:
   - docs/features/moderation/enablers/en.moderation.moderation-key.md
   - docs/features/moderation/enablers/en.moderation.log.md
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
+  - docs/features/moderation/enablers/en.moderation.guest-write-record.md
   - docs/crosscutting/security-model.md
   - docs/decisions/0044-field-visibility-declared-at-the-field.md
   - docs/decisions/0047-inline-video-playback-range-streaming.md
@@ -16,7 +17,7 @@ sources:
 
 The server never sees content, only structure. Operator-blind does not mean metadata-blind: a defined set of
 operational facts stays readable so the server can sort, paginate, route, authorize and bill without decrypting.
-This page lists that set by category, what is sealed instead, and the five places where veyq knowingly shows the
+This page lists that set by category, what is sealed instead, and the six places where veyq knowingly shows the
 operator more than the general rule would suggest
 ([security model § What is encrypted vs. server-visible](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-is-encrypted-vs-server-visible)).
 
@@ -165,6 +166,11 @@ time the server observes live is not kept for them. What it does hold, each with
 - **A hold** ([en.moderation.hold](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.hold.md)):
   copies of the reported rows as stored (ciphertext and metadata) and the storage keys it pins, until its end — so the
   server keeps what a member deleted after a report, for up to 90 days, readable to no one but the moderators.
+- **The guest-write record** ([en.moderation.guest-write-record](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.guest-write-record.md)),
+  while the Server Owner keeps it switched on: for each write a link's guest makes (naming itself, a folder or file it
+  creates, renames or moves, a photo or file it adds), the client's IP address and source port as the server's one
+  resolver vouches for them, the time to the millisecond, the guest identity and the object — for N days (7 by
+  default, 1 to 30). Concession 6.
 
 ### Account email
 
@@ -177,7 +183,7 @@ The tenant's **terms text and revision** are the space owner's public policy, se
 **accepted terms revisions and when they accepted each** are kept as a history, one row per revision, never
 overwritten: audit evidence for a dispute, served by no API.
 
-## The five concessions
+## The six concessions
 
 Each of these shows the operator something finer than, or outside, the general rule, and each was accepted for a
 stated reason.
@@ -189,6 +195,7 @@ stated reason.
 | 3 | **Node `kind`** | The kind of every node (`FOLDER`, `MEMORY`, `CHAPTER`, `FILE`, `DEPOT_DROPBOX` today), and so which applications a scope uses and the rows, timestamps and sizes each kind produces. | The node tree belongs to the platform, not to one application, so sharing, trash and move are built once; the server applies each kind's placement and guest rules through fail-closed seams that read the kind. | [ADR 0079](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) |
 | 4 | **Member enumeration within a tenant** | To any fellow tenant member: every member's username, identity public key and group-add-consent flag. | Adding someone to a group resolves a username to an identity public key on the server. The resolve is owner-gated, but any member can create a group and own it at once, so the gate is convenience, not confidentiality, and is not presented as such. | [ADR 0014](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0014-group-scopes-and-governance.md) §5 |
 | 5 | **Share linkability via the scope id** | A guest learns the shared node's scope id, so two links into one space are linkable by anyone holding both. | Every node-key seal the viewer opens is bound to its scope, so the id travels with the subtree. The shared node's and its media's ids already made one subtree linkable; the scope id extends that to sibling Memories of the same space. | [ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md) |
+| 6 | **The guest-write record** | While its switch is on: the IP address, source port and millisecond time of each write a link's guest makes, with the guest identity and the object written, for N days (default 7, at most 30). Never a member's write, never a read, never content or a User-Agent. Off by default in the *private* operating mode. | A host that is told of misuse through a guest link must be able to name the connection it came from, and behind carrier-grade NAT only the address, the port and an exact time together name a subscriber. The address is the hop the network vouches for, never one the client wrote, so it cannot name an innocent third party; guests are told before their first write. A report's hold copies the rows of what it concerns; everything else expires. The instance backup leaves the rows out. | [ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 10, [ADR 0094](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md) |
 
 
 :::note

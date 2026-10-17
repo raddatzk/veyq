@@ -9,7 +9,7 @@
 // the object-store setting and its check + the bucket reconcile and its two switches + the capability switches with
 // their requirements + the external services +
 // the moderator roster and the rotation of the instance moderation key (ADR 0099) + the operating mode and the
-// operator's published values (ADR 0093 §§ 11 and 14). The operating mode's notice is printed from admin-web's own
+// operator's published values (ADR 0093 §§ 11 and 14) + the guest-write record's retention (ADR 0093 § 10). The operating mode's notice is printed from admin-web's own
 // i18n (`i18n/operatingModeNotice.ts`), the words the console shows, and *private* needs `--accept-notice` — the
 // facade's rule (`operatingModeRequest`), not one of this file's. The notification address's code is typed into the
 // console only, as instance mail's is.
@@ -96,6 +96,15 @@ import {
   type InstanceOperatingMode,
   type InstanceOperatorUpdate,
 } from '../features/instance/operator'
+import {
+  getGuestWriteRecord,
+  MAX_DAYS,
+  MIN_DAYS,
+  needsReason,
+  parseRetentionDays,
+  setGuestWriteRecord,
+  type InstanceGuestWriteRecord,
+} from '../features/instance/guestWriteRecord'
 import { noticeText, OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
@@ -544,6 +553,27 @@ export const COMMANDS: Record<string, Command> = {
     },
     render: (r, f, env) => renderMode(r as InstanceOperatingMode, cliLocale(f, env)),
   },
+  'guest-write-record show': {
+    usage: 'guest-write-record show',
+    summary:
+      'Print how many days a guest’s write keeps its IP address, source port and time (default 7, whether you set it). Whether anything is kept at all is the capability core.public-shares.guest-write-record.',
+    flags: {},
+    run: () => getGuestWriteRecord(),
+    render: (r) => renderGuestWriteRecord(r as InstanceGuestWriteRecord),
+  },
+  'guest-write-record set': {
+    usage: 'guest-write-record set <days>',
+    summary:
+      'Set how many days a guest’s write is kept, 1 to 30. A shorter time reaches what is kept at the next cleanup, a longer one only what is kept from now on. More than 7 needs a reason in your record of processing.',
+    flags: {},
+    operand: { name: 'days', describe: `whole days, ${MIN_DAYS} to ${MAX_DAYS}` },
+    run: (f) => {
+      const days = parseRetentionDays(f.days ?? '')
+      if (days === undefined) throw new CliError(`guest-write-record set takes whole days from ${MIN_DAYS} to ${MAX_DAYS} (got '${f.days}'); nothing was set`)
+      return setGuestWriteRecord(days)
+    },
+    render: (r) => renderGuestWriteRecord(r as InstanceGuestWriteRecord),
+  },
   'operator show': {
     usage: 'operator show',
     summary: 'Print the instance contact, the provider identification, the supervisory authority and the notification address with its confirmation.',
@@ -581,4 +611,11 @@ export const COMMANDS: Record<string, Command> = {
     run: (f) => rotateModerationKey(ROTATION_REASONS[f.reason]),
     render: (r) => renderRoster(r as InstanceModeration),
   },
+}
+
+/** The retention in words, with the reason owed above seven days (ADR 0093 § 10) — the console's warning, here. */
+function renderGuestWriteRecord(r: InstanceGuestWriteRecord): string {
+  const lines = [`guest-write-record ${r.retentionDays} days${r.chosen ? '' : ' (the default)'}`]
+  if (needsReason(r.retentionDays)) lines.push('More than 7 days needs a reason, which you write into your record of processing.')
+  return lines.join('\n')
 }

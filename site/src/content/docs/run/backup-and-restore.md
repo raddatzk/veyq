@@ -6,6 +6,7 @@ sources:
   - docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md
   - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
   - docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md
+  - docs/features/moderation/enablers/en.moderation.guest-write-record.md
 ---
 
 The use-case owns the goal and the failure modes
@@ -17,7 +18,10 @@ module docstring carries the tool's reference. Each block below also shows what 
 hand.
 
 **An instance's durable state is exactly three legs:** (a) the database, (b) the object store's *contents*,
-(c) the **config-secret key file**. Two legs produce an instance that boots, serves content, and refuses member
+(c) the **config-secret key file**. The database leg holds every table but the rows of one: the guest-write record
+(a guest's address, port and time, kept at most 30 days as evidence) travels as its schema only, so a restored instance
+has it empty ([Moderation](/veyq/run/moderation/#what-a-guests-write-keeps)). A backup made any other way holds those
+rows; the same section says how long to keep it. Two legs produce an instance that boots, serves content, and refuses member
 invites and password resets with `503 mail_unavailable` — the leg that gets forgotten is the one whose absence
 looks like health.
 

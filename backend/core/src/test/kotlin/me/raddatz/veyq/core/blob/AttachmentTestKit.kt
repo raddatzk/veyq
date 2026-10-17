@@ -36,13 +36,13 @@ class ExpenseAttachmentCompletion(
 ) : UploadCompletion {
     override fun accepts(nodeKind: String): Boolean = nodeKind == EXPENSE
 
-    override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult {
+    override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean, attached: (String) -> Unit): CompleteItemResult {
         val session = blobs.findSession(scopeId, item.originalUploadId, opener) ?: return failed("upload_not_found")
         val manifest = when (val v = uploads.verifyBlob(session)) {
             is BlobUploadHandler.BlobVerify.Ok -> v.manifest
             BlobUploadHandler.BlobVerify.Budget -> return failed("budget_exceeded")
         }
-        return when (val o = attachments.attach(scopeId, node.id, setOf(EXPENSE), SLOT, session, manifest, item.payloads[EXPECTED], admitted)) {
+        return when (val o = attachments.attach(scopeId, node.id, setOf(EXPENSE), SLOT, session, manifest, item.payloads[EXPECTED], admitted, attached)) {
             is AttachOutcome.Attached -> CompleteItemResult(o.blobId, node.id, null)
             is AttachOutcome.Conflict -> failed("attachment_conflict")
             AttachOutcome.NotAdmitted, AttachOutcome.UploadNotFound -> failed("upload_not_found")

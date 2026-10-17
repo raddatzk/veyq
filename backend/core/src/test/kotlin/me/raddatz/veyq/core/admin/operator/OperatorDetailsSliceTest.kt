@@ -40,7 +40,7 @@ import java.util.UUID
  *   - an instance where no mode was ever chosen reads as ORGANISATION;
  *   - a mode sets its preset's instance switches and nothing else — never a tenant's row, never an entry without a
  *     preset — and setting it again sets the preset again (against a preset built here, as `CapabilityRegistryTest`
- *     builds its own register: the catalog carries no `modes` yet);
+ *     builds its own register, so the rules do not hang on what the catalog's presets are today);
  *   - the values are set and cleared, each may stay empty, an out-of-bounds one is refused with nothing stored;
  *   - the notification address is confirmed by a mailed code ([me.raddatz.veyq.core.admin.instance.CodeConfirmation]):
  *     a wrong code spends an attempt, a changed address unconfirms without a write to the confirmation, no code goes
@@ -81,7 +81,10 @@ class OperatorDetailsSliceTest {
     @Test
     fun anInstanceWhereNoModeWasChosenReadsAsOrganisation() {
         owner().`when`().get("$PATH/mode").then().statusCode(200)
-            .body("mode", equalTo("ORGANISATION")).body("chosen", equalTo(false)).body("preset.size()", equalTo(0))
+            .body("mode", equalTo("ORGANISATION")).body("chosen", equalTo(false))
+            // The catalog's one preset entry today, served with its value per mode and its own switch now.
+            .body("preset.id", equalTo(listOf("core.public-shares.guest-write-record")))
+            .body("preset[0].onInPrivate", equalTo(false)).body("preset[0].onInOrganisation", equalTo(true)).body("preset[0].off", equalTo(false))
         // A row that holds values but no mode (operating_mode NULL) reads the same.
         put("""{"providerName":"Example e. V."}""").statusCode(200).body("operatingMode", equalTo("ORGANISATION"))
         assertNull(row()!!.operatingMode, "precondition: the row exists and holds no mode")

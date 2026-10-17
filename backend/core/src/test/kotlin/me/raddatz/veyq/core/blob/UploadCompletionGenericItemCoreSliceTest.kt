@@ -32,7 +32,7 @@ class UploadCompletionGenericItemCoreSliceTest {
     private class ExpenseCompletion(val answer: CompleteItemResult) : UploadCompletion {
         val received = mutableListOf<CompleteItem>()
         override fun accepts(nodeKind: String): Boolean = nodeKind == EXPENSE
-        override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult {
+        override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean, attached: (String) -> Unit): CompleteItemResult {
             assertEquals(item.nodeId, node.id, "the implementation is handed the item's own node")
             received += item
             return answer

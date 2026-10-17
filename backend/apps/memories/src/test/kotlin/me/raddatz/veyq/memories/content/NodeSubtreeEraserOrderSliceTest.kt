@@ -3,6 +3,7 @@ package me.raddatz.veyq.memories.content
 import me.raddatz.veyq.core.blob.AttachmentNodeSubtreeEraser
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.items.NodeItemsRevisionNodeSubtreeEraser
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecordNodeSubtreeEraser
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import me.raddatz.veyq.core.sharing.ShareEntity
@@ -55,6 +56,7 @@ class NodeSubtreeEraserOrderSliceTest {
                 MediaNodeSubtreeEraser::class.java.simpleName to 100,
                 AttachmentNodeSubtreeEraser::class.java.simpleName to 200,
                 NodeItemsRevisionNodeSubtreeEraser::class.java.simpleName to 300,
+                GuestWriteRecordNodeSubtreeEraser::class.java.simpleName to 400,
                 ItemFavoritesNodeSubtreeEraser::class.java.simpleName to 610,
             ),
             byName,

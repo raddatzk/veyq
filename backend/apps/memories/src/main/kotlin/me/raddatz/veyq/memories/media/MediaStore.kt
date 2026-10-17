@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.BlobUploadStore
@@ -92,6 +93,8 @@ class MediaStore(
     private val blobs: BlobUploadStore,
     private val nodes: NodesStore,
     private val items: NodeItemsRevisions,
+    /** Core's guest-write record: a medium's rows go with the medium (ADR 0093 § 10), from [purgeMediaRows]. */
+    private val guestWriteRecords: GuestWriteRecords,
 ) {
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
@@ -130,6 +133,8 @@ class MediaStore(
         shareIdentityId: String? = null, // cr-0101: the contributor identity, when attached via a READ_WRITE share
         uploaderUserId: String? = null,  // cr-0113: the member uploader (member path); null on the contributor path
         admitted: () -> Boolean = { true },
+        /** Told the medium's id last, once it is attached (the guest-write record, ADR 0093 § 10); never on a refusal. */
+        attached: (mediaId: String) -> Unit = {},
     ): Pair<String, String>? {
         if (!admitted()) return null
         val sessionIds = listOf(original.id) + derivatives.map { it.session.id }
@@ -168,6 +173,7 @@ class MediaStore(
             }.persist()
         }
         items.bump(scopeId, nodeId) // cr-0107: an add moves the node's item revision (the live-updates change signal), not its delete revision
+        attached(mediaId)
         return originalBlobId to mediaId
     }
 
@@ -257,6 +263,7 @@ class MediaStore(
         derivatives.forEach { MediaDerivativeEntity.deleteById(it.id) } // FK: the referencing rows go first
         MediaEntity.deleteById(media.id)
         blobIds.forEach { blobs.deleteBlobRow(it) }
+        guestWriteRecords.forget(listOf(media.id)) // a guest's upload record names the medium: it goes with it
     }
 
     /**

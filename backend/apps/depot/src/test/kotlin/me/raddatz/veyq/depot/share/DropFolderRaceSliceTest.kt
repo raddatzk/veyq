@@ -52,7 +52,7 @@ class DropFolderRaceSliceTest {
     }
 
     private fun ensure(link: GuestTreeShare.Link): DropFolderOutcome =
-        folders.ensure(link.shareId, null, link.token, UUID.randomUUID().toString(), "bmFtZQ==", GuestTreeShare.slug(), 0, "d3JhcA==")
+        folders.ensure(link.shareId, null, link.token, UUID.randomUUID().toString(), "bmFtZQ==", GuestTreeShare.slug(), 0, "d3JhcA==", seen = null)
 
     @Test
     fun concurrentFirstCallsOfOneIdentityMakeOneFolder() {

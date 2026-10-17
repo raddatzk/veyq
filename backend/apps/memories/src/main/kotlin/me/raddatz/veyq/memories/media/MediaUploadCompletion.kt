@@ -37,7 +37,10 @@ class MediaUploadCompletion(
      * upload session are resolved first, then **every** blob is declare-then-verified, and only if all pass are
      * the blobs + media + derivative rows attached. On a budget failure the item's staged objects are purged.
      */
-    override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult {
+    override fun complete(
+        scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean,
+        attached: (objectId: String) -> Unit,
+    ): CompleteItemResult {
         val original = blobs.findSession(scopeId, item.originalUploadId, opener)
             ?: return CompleteItemResult(null, null, "upload_not_found")
         val derivSessions = item.derivatives.map { d ->
@@ -84,6 +87,7 @@ class MediaUploadCompletion(
             (opener as? UploadOpener.Contributor)?.shareIdentityId,
             (opener as? UploadOpener.Member)?.userId, // cr-0113: the member uploader → owner_key "user:{id}" (null on the contributor path)
             admitted,
+            attached,
         ) ?: return CompleteItemResult(null, null, "upload_not_found") // sessions spent concurrently, or no longer admitted
         return CompleteItemResult(blobId, mediaId, null)
     }

@@ -182,7 +182,13 @@ async function notYou() {
     </div>
     <p>{{ t('depot.dropBox.guestHint', { name: head.name }) }}</p>
 
-    <GuestNaming v-if="!shown" :action="start" :hint="t('depot.dropBox.guestNameHint')" :error-text="() => t('depot.dropBox.guestFailed')" />
+    <GuestNaming
+      v-if="!shown"
+      :action="start"
+      :hint="t('depot.dropBox.guestNameHint')"
+      :error-text="() => t('depot.dropBox.guestFailed')"
+      :record-days="head.share.guestWriteRecordDays"
+    />
 
     <template v-else>
       <!-- "Not you?" asks only when there is something to lose: a session (the way back into its folder), not a name
@@ -194,6 +200,7 @@ async function notYou() {
         :ask-before-forget="!linkGone && !!session"
         :forget-disabled="sending || preparing"
         :forget-busy="restarting"
+        :record-days="head.share.guestWriteRecordDays"
       />
       <Message v-if="linkGone" severity="error" :closable="false">{{ t('depot.dropBox.guestGone') }}</Message>
       <template v-else>

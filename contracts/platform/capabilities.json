@@ -80,6 +80,25 @@
       "levels": ["instance", "tenant"],
       "description": "Public share links in the WRITE_ONLY access mode (a drop box: a guest adds and cannot read what others added; what it adds is the application's). Off => createShare, reactivateShare and reissueShare of a WRITE_ONLY link are refused with 422 capability_disabled, and so is creating a drop-box node (Depot's DEPOT_DROPBOX, createNode); the client hides the write-only option and the drop box. Every guest endpoint answers an existing WRITE_ONLY link exactly as an unknown link (404 share_not_found) until the entry is back on (ADR 0088 decision 5); an existing drop box node stays, since creating one is a feature switch that refuses only what is new."
     },
+    "core.public-shares.guest-write-record": {
+      "title": {
+        "en": "Record guests' writes",
+        "de": "Schreibvorgänge von Gästen festhalten"
+      },
+      "purpose": {
+        "en": "When a guest of a link adds or names something, veyq keeps the guest's IP address, source port and the time for a number of days you set, so that if what they added is reported, a moderator can hand it to the authorities. Guests are told before they add anything. Nothing a member does and nothing anyone only looks at is kept.",
+        "de": "Wenn ein Gast eines Links etwas hinzufügt oder benennt, bewahrt veyq die IP-Adresse, den Quellport und die Uhrzeit des Gastes für eine von dir festgelegte Zahl von Tagen auf – damit eine Moderatorin oder ein Moderator sie an Behörden weitergeben kann, falls das Hinzugefügte gemeldet wird. Gäste werden informiert, bevor sie etwas hinzufügen. Was Mitglieder tun und was jemand nur ansieht, wird nicht aufbewahrt."
+      },
+      "whenOff": {
+        "en": "Nothing a guest does is kept from then on, and guests are no longer told that it is. What was kept is deleted at the next cleanup, within the hour; only what a report already holds stays, as long as the report's hold lasts. This entry is also off whenever Public links is off. Choosing the private operating mode switches it off, choosing club, organisation or company switches it on; you can change it on its own afterwards.",
+        "de": "Ab dann wird nichts mehr aufbewahrt, was ein Gast tut, und Gäste werden nicht mehr darauf hingewiesen. Was aufbewahrt war, wird bei der nächsten Bereinigung gelöscht, innerhalb einer Stunde; nur was eine Meldung bereits sichert, bleibt, solange diese Sicherung dauert. Dieser Eintrag ist außerdem immer dann aus, wenn „Öffentliche Links“ aus ist. Die Betriebsart „privat“ schaltet ihn aus, „Verein, Organisation oder Unternehmen“ ein; danach lässt er sich einzeln ändern."
+      },
+      "serves": ["uc.sharing.share-contributor", "uc.sharing.share-uploader", "uc.depot.drop-box"],
+      "source": "operator-policy",
+      "levels": ["instance"],
+      "modes": { "private": false, "organisation": true },
+      "description": "The guest-write record (ADR 0093 § 10, en.moderation.guest-write-record): one row per guest write that enters a guest as last editor, holding the client address of core's one resolver (ADR 0094), its source port where known, the time in milliseconds and the object, kept N days (an instance setting, 1 to 30, default 7; PUT /api/instance/guest-write-record). A switch over kept data, so it names what it stops writing (ADR 0088 decision 4): off => no new row, and the next purge deletes every live row; rows a hold copied stay. Off also => the share resolve serves no guestWriteRecordDays, so the guest page says nothing. Its default follows the operating mode (ADR 0093 § 14): the preset below; the migration that added the table applied the mode once (an off row on a PRIVATE instance)."
+    },
     "core.group-space": {
       "title": {
         "en": "Groups",

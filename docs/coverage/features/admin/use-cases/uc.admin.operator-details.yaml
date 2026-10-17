@@ -19,12 +19,12 @@ acceptanceCriteria:
       and setting it again sets the preset again.
     coverage:
       backend:
-        integration: [OperatorDetailsSliceTest.privateWritesTheInstanceRowOfAnEntryWhoseValueIsOffAndOrganisationDeletesIt, OperatorDetailsSliceTest.aModeNeverTouchesATenantsRowOrAnEntryWithoutAPreset, OperatorDetailsSliceTest.settingAModeAgainSetsItsPresetAgain]
+        integration: [OperatorDetailsSliceTest.privateWritesTheInstanceRowOfAnEntryWhoseValueIsOffAndOrganisationDeletesIt, OperatorDetailsSliceTest.aModeNeverTouchesATenantsRowOrAnEntryWithoutAPreset, OperatorDetailsSliceTest.settingAModeAgainSetsItsPresetAgain, GuestWriteRecordCoreSliceTest.privateSwitchesTheRecordOffAndOrganisationOn, GuestWriteRecordCoreSliceTest.aPrivateInstanceThatSwitchesTheRecordOnByHandRecords, SetupServerSliceTest.createsOwner]
     gaps:
       - surface: backend
         reason: >-
-          Against a preset built in the test (the catalog carries no `modes` yet; `cr-guest-write-record` adds the
-          first and bites "off in private" on the real entry). That the mode and the switches commit together is the
+          The rules run against a preset built in the test; the catalog's one real preset (the guest-write record, off
+          in private) is bitten through the mode's write and first-run setup by the last three refs. That the mode and the switches commit together is the
           one transaction the handler opens, not a failure injected between them. That the catalog's `modes` reach
           `CapabilityPresets` is `validate_capabilities.py`'s rule plus the generator, not a test.
   - id: the-notice-comes-before-the-mode

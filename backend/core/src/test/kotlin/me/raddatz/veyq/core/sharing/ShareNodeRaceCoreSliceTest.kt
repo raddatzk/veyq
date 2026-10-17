@@ -154,10 +154,10 @@ class ShareNodeRaceCoreSliceTest {
         nodes.update(t.userId, t.scopeId, node, placementTo(to), null, null, null)
 
     private fun guestMoves(t: Tree, node: String, to: String): UpdateShareNodeOutcome =
-        guest.update(t.link.shareId, null, t.link.token, node, to, "cGxhY2Vk", GuestTreeShare.slug(), "cmUtd3JhcHBlZA==", 0)
+        guest.update(t.link.shareId, null, t.link.token, node, to, "cGxhY2Vk", GuestTreeShare.slug(), "cmUtd3JhcHBlZA==", 0, seen = null)
 
     private fun guestCreates(t: Tree, parent: String, id: String): CreateShareNodeOutcome =
-        guest.create(t.link.shareId, null, t.link.token, id, parent, NodeEntity.FOLDER, "bmV3", GuestTreeShare.slug(), 0, 0, CONTENT_KEY)
+        guest.create(t.link.shareId, null, t.link.token, id, parent, NodeEntity.FOLDER, "bmV3", GuestTreeShare.slug(), 0, 0, CONTENT_KEY, seen = null)
 
     private fun <T> inRequest(body: () -> T): T {
         val request = Arc.container().requestContext()

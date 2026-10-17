@@ -55,6 +55,13 @@ tags:
       of its own, so its resource owns the `/api/instance/operator` subtree. The public read of the published values
       is `operator.openapi.yaml`.
 
+  - name: instance-guest-write-record
+    description: >
+      How long the guest-write record keeps a row (ADR 0093 § 10, ADR 0092 § 2): N days, an instance setting the Server
+      Owner sets (ADR 0089). Whether the record is kept at all is the capability switch
+      `core.public-shares.guest-write-record`, not this. A tag of its own, so its resource owns the
+      `/api/instance/guest-write-record` subtree.
+
   - name: instance-store-reconcile
     description: >
       The bucket reconcile (ADR 0062 § Consequences, uc.admin.configure-object-store A7): what its passes found and the
@@ -1696,6 +1703,84 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
 
+  /api/instance/guest-write-record:
+    get:
+      tags: [instance-guest-write-record]
+      operationId: getInstanceGuestWriteRecord
+      x-veyq-channel: admin
+      summary: Read how many days the guest-write record keeps a row.
+      description: >
+        N, the days a row of the guest-write record is kept (ADR 0093 § 10): 7 until the Server Owner sets another
+        value (`chosen: false`). Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The retention.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceGuestWriteRecord" }
+              example: { retentionDays: 7, chosen: false }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+    put:
+      tags: [instance-guest-write-record]
+      operationId: setInstanceGuestWriteRecord
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the retention is one value, and the purge reads it as it stands.
+      x-veyq-channel: admin
+      summary: Set how many days the guest-write record keeps a row.
+      description: >
+        Stores N, 1 to 30 (ADR 0092 § 2). A new row is kept N days from its write; the purge deletes a row once it is
+        older than N as it now stands, too, so a shortening reaches every row at the next purge and a lengthening only
+        new ones — no guest is kept longer than the page told them (ADR 0093 § 10). A value above 7 needs a reason the
+        Server Owner writes into their record of processing; that is admin-web's and the CLI's to say, the server does
+        not record it. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceGuestWriteRecordUpdate" }
+            example: { retentionDays: 14 }
+      responses:
+        "200":
+          description: Set; the retention as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceGuestWriteRecord" }
+        "400":
+          description: The request was malformed (no value, or one outside 1 to 30).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
   /api/instance/store/reconcile:
     get:
       tags: [instance-store-reconcile]
@@ -3234,6 +3319,36 @@ components:
         mode:
           $ref: "#/components/schemas/OperatingMode"
 
+
+    InstanceGuestWriteRecord:
+      type: object
+      description: How many days the guest-write record keeps a row, and whether the Server Owner set it.
+      required: [retentionDays, chosen]
+      properties:
+        retentionDays:
+          x-veyq-visibility: measure
+          type: integer
+          description: N, 1 to 30; 7 until set.
+          example: 7
+        chosen:
+          x-veyq-visibility: flag
+          type: boolean
+          description: False while no value was ever set; N is then the default, 7.
+          example: false
+
+    InstanceGuestWriteRecordUpdate:
+      type: object
+      description: The retention to store.
+      required: [retentionDays]
+      properties:
+        retentionDays:
+          x-veyq-visibility: measure
+          type: integer
+          description: N, the days a row is kept, 1 to 30.
+          minimum: 1
+          maximum: 30
+          example: 14
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(30)'
     OperatingMode:
       $ref: '_common.openapi.yaml#/components/schemas/OperatingMode'
 

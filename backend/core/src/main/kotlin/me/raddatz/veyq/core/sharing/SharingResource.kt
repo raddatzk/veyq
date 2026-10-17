@@ -31,6 +31,8 @@ import me.raddatz.veyq.core.generated.model.ShareSummary
 import me.raddatz.veyq.core.generated.model.ShareTerms
 import me.raddatz.veyq.core.generated.model.UpdateShareRequest
 import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.RequestClient
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.moderation.report.ReportHandler
 import me.raddatz.veyq.core.moderation.report.ReportReceived
@@ -70,6 +72,10 @@ class SharingResource(
     private val tenant: RequestTenant,
     private val reports: ReportHandler,
     private val received: ReportReceived,
+    /** The client a guest write records (ADR 0093 § 10, ADR 0094): resolved once per write, handed down to it. */
+    private val client: RequestClient,
+    /** What a guest page discloses before the first write (ADR 0093 § 10, decision 6 of cr-guest-write-record). */
+    private val guestWriteRecords: GuestWriteRecords,
 ) : SharingApi {
 
     /** As in `MediaResource`: the resolved tenant's own domain (ADR 0063), never the raw `Host` header. A share
@@ -244,6 +250,9 @@ class SharingResource(
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = o.nodes.map(::toShareNode),
+                    // N while the switch is on and the role writes — the sentence the page shows before a first write. In
+                    // the body, so the tag below changes when the switch or N does and an open page learns it.
+                    guestWriteRecordDays = guestWriteRecords.disclosedDays(o.share.scopeId, o.share.role),
                 )
                 // ADR 0081: the tag is a digest of what this response serves — nothing the guest could not already read, and
                 // so (unlike the member listing's scope revision) blind to every change outside the shared subtree.
@@ -337,7 +346,7 @@ class SharingResource(
     ): Response =
         when (val o = handler.createIdentity(
             shareId, xSharePassword, xShareWrite, createShareIdentityRequest.identityId.toString(), createShareIdentityRequest.sealedDisplayName,
-            createShareIdentityRequest.wrappedIdentityKey,
+            createShareIdentityRequest.wrappedIdentityKey, client.seen(),
         )) {
             is CreateIdentityOutcome.Created -> Response.status(Response.Status.CREATED)
                 .entity(ShareIdentityCreated(identityId = UUID.fromString(o.identityId), contributorToken = o.contributorToken)).build()
@@ -419,6 +428,7 @@ class SharingResource(
             orderIndex = createShareNodeRequest.orderIndex ?: 0,
             epoch = createShareNodeRequest.epoch.validated(),
             wrappedContentKey = createShareNodeRequest.wrappedContentKey,
+            seen = client.seen(),
         )) {
             is CreateShareNodeOutcome.Created -> Response.status(Response.Status.CREATED)
                 .entity(ShareNodeCreated(nodeId = UUID.fromString(o.nodeId))).build()
@@ -443,6 +453,7 @@ class SharingResource(
             slugToken = updateShareNodeRequest.slugToken,
             wrappedContentKey = updateShareNodeRequest.wrappedContentKey,
             placementRevision = updateShareNodeRequest.placementRevision.validated(),
+            seen = client.seen(),
         )) {
             UpdateShareNodeOutcome.Updated -> Response.noContent().build()
             is HttpFailure -> httpError(o)

@@ -45,6 +45,7 @@ vi.mock('../features/instance/ExternalServicesPanel.vue', () => ({ default: { te
 vi.mock('../features/instance/ReleaseNoticesPanel.vue', () => ({ default: { template: '<div class="stub-notices" />' } }))
 vi.mock('../features/instance/InstanceMailPanel.vue', () => ({ default: { template: '<div class="stub-mail" />' } }))
 vi.mock('../features/instance/ModerationPanel.vue', () => ({ default: { template: '<div class="stub-moderation" />' } }))
+vi.mock('../features/instance/GuestWriteRecordPanel.vue', () => ({ default: { template: '<div class="stub-guest-write-record" />' } }))
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
@@ -210,6 +211,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Moderation'))!.trigger('click')
     await flushPromises()
     expect(w.find('.stub-moderation').exists()).toBe(true)
+    expect(w.find('.stub-guest-write-record').exists()).toBe(true) // the record's retention, below the roster
     expect(w.find('.stub-mail').exists()).toBe(false)
   })
 })

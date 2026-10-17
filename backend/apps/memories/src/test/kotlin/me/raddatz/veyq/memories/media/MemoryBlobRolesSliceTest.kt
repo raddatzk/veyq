@@ -81,7 +81,8 @@ class MemoryBlobRolesSliceTest {
                 w.live.scopeId, NodeEntity.findById(w.live.nodeId)!!,
                 MediaUploadCompletion.item(mediaId, w.live.nodeId, original, derivatives, null, null),
                 UploadOpener.Member(w.live.ownerId),
-            ) { true }.error
+                admitted = { true },
+            ).error
         }
 
     private fun attached(mediaId: String) = QuarkusTransaction.requiringNew().call { MediaEntity.findById(mediaId) }

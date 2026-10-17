@@ -21,6 +21,7 @@ import Message from 'primevue/message'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useConfirm } from '../../shared/state/useConfirm'
 import type { GuestIdentity } from './guestIdentity'
+import GuestWriteRecordNotice from './GuestWriteRecordNotice.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -43,6 +44,9 @@ const props = withDefaults(
     askBeforeForget?: boolean
     forgetDisabled?: boolean
     forgetBusy?: boolean
+    /** The guest-write record's N while this link's writes are recorded (`PublicShare.guestWriteRecordDays`): its
+     *  notice shows in every shape, before the guest writes (ADR 0093 § 10). Null or absent: nothing is said. */
+    recordDays?: number | null
   }>(),
   { current: null, askBeforeForget: true },
 )
@@ -100,6 +104,7 @@ async function notYou() {
         <InputText v-model="name" class="guest-naming-input" autocomplete="name" required autofocus :disabled="saving" />
       </label>
       <p v-if="hint" class="veyq-form-copy">{{ hint }}</p>
+      <GuestWriteRecordNotice :days="recordDays" />
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="saving" @click="emit('close')" />
@@ -108,21 +113,24 @@ async function notYou() {
     </form>
   </Dialog>
 
-  <p v-else-if="current" class="guest-naming guest-naming-identity">
-    <span>{{ named ? t('share.guest.as', { name: named }) : t('share.guest.asUnnamed') }}</span>
-    <Button
-      v-if="forget"
-      type="button"
-      class="guest-naming-not-you"
-      :label="forgetLabel ?? t('share.guest.notYou')"
-      size="small"
-      severity="secondary"
-      text
-      :disabled="forgetDisabled"
-      :loading="forgetBusy"
-      @click="notYou"
-    />
-  </p>
+  <div v-else-if="current" class="guest-naming">
+    <p class="guest-naming-identity">
+      <span>{{ named ? t('share.guest.as', { name: named }) : t('share.guest.asUnnamed') }}</span>
+      <Button
+        v-if="forget"
+        type="button"
+        class="guest-naming-not-you"
+        :label="forgetLabel ?? t('share.guest.notYou')"
+        size="small"
+        severity="secondary"
+        text
+        :disabled="forgetDisabled"
+        :loading="forgetBusy"
+        @click="notYou"
+      />
+    </p>
+    <GuestWriteRecordNotice :days="recordDays" />
+  </div>
 
   <form v-else class="veyq-form guest-naming" @submit.prevent="submit">
     <label>
@@ -137,6 +145,7 @@ async function notYou() {
       />
       <small v-if="hint">{{ hint }}</small>
     </label>
+    <GuestWriteRecordNotice :days="recordDays" />
     <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
     <div class="veyq-dialog-action-row">
       <Button

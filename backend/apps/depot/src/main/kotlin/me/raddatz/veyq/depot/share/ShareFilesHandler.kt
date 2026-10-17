@@ -5,6 +5,9 @@ import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
 import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
 import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.ClientSeen
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteObject
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.sharing.ShareGuestGate
@@ -53,6 +56,7 @@ class ShareFilesHandler(
     private val completions: UploadCompletions,
     private val guestWrites: DepotShareGuestWrites,
     private val store: FilesStore,
+    private val guestWriteRecords: GuestWriteRecords,
 ) {
 
     /** The live files of the share's live subtree, each with its blob or null. A `WRITE_ONLY` link sees nothing. */
@@ -74,11 +78,12 @@ class ShareFilesHandler(
      * none but its root, which is never a `FILE`), its kind must be Depot's — the check that keeps this route from
      * handing an upload to another application's completion, as the member route's is — and the write re-decides link
      * and target under the scope lock ([ShareGuestGate.admittedInto], handed on unevaluated: asked here, a revoke or a
-     * trash committing in between would be missed).
+     * trash committing in between would be missed). The content attached records [seen] in the attach's transaction (the
+     * guest-write record, ADR 0093 § 10).
      */
     fun complete(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, uploadId: String,
-        expectedBlobId: String?,
+        expectedBlobId: String?, seen: ClientSeen?,
     ): ShareFileCompleteOutcome {
         // Attaching creates the attachment row, so it spends the per-share upload budget the start spends (ADR 0051).
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true)) {
@@ -97,6 +102,7 @@ class ShareFilesHandler(
         val item = DepotUploadCompletion.item(target.nodeId, uploadId, expectedBlobId)
         val result = completions.complete(
             gated.scopeId, listOf(item), UploadOpener.Contributor(gated.identityId), gate.admittedInto(gated, target),
+            attached = { fileId -> guestWriteRecords.record(seen, gated.identityId, gated.scopeId, GuestWriteObject.NODE, fileId, null) },
         ).single()
         return ShareFileCompleteOutcome.Completed(completedOutcome(store, gated.scopeId, target.nodeId, result))
     }

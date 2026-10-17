@@ -84,6 +84,11 @@ sequenceDiagram
   an upload in flight stops at its next window or its complete. While `core.public-shares.drop-box` (or its parent)
   is switched off on the instance, an existing WRITE_ONLY link answers every guest endpoint as an unknown link does,
   a `404`, and serves again unchanged once it is back on; a drop box node stays ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md) A3, ADR 0088 decision 5).
+- **A3 — the instance records guest writes** ([en.moderation.guest-write-record](../../moderation/enablers/en.moderation.guest-write-record.md),
+  ADR 0093 § 10): while `core.public-shares.guest-write-record` is on, the drop page says, before the first upload,
+  that the guest's IP address, source port and the time are kept for N days (the N the resolve serves), with the right
+  to object as a sentence of its own, both linking the operator section of the terms; naming itself and every photo it
+  adds then record that address, port and time. While the switch is off, nothing is recorded and nothing is said.
 - **E1 — blank name:** the pre-screen blocks submission until a non-blank name is entered.
 - **E2 — delete after reload:** not possible — the client no longer holds the id (session-only); the photo remains
   (the curator can still delete it from their own gallery).

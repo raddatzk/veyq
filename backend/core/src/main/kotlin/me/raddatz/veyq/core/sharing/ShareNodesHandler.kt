@@ -15,6 +15,9 @@ import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.PrincipalKey
+import me.raddatz.veyq.core.http.ClientSeen
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteObject
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.persistence.createOrConflict
 import io.quarkus.arc.All
@@ -126,11 +129,15 @@ class ShareNodesHandler(
     @All private val writeOnlyKinds: MutableList<WriteOnlyGuestKinds>,
     @All private val placeholders: MutableList<GuestPlaceholders>,
     private val purge: NodeSubtreePurge,
+    /** The guest-write record (ADR 0093 § 10): a create and a placement enter the guest as the name's last editor. */
+    private val guestWriteRecords: GuestWriteRecords,
 ) {
 
+    /** [seen] is the client the resource resolved; a create that stored the node records it (ADR 0093 § 10), in this
+     *  transaction — a replay ([NodesHandler.createReplay]) stored nothing and records nothing. */
     fun create(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, parentId: String, kind: String,
-        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String,
+        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, seen: ClientSeen?,
     ): CreateShareNodeOutcome {
         // A create adds a row, so it spends the upload budget (ADR 0051, `@RateLimit(key = SHARE)`) — after every check
         // of the gate, so an unauthorized caller spends nothing.
@@ -178,13 +185,19 @@ class ShareNodesHandler(
                     wrappedMeta = null, editor = PrincipalKey.Share(gated.identityId), boundary = SubtreeBoundary(root),
                     identityWriter = if (writeOnly) gated.identityId else null,
                 ),
-            )
+            ).also {
+                if (it is CreateShareNodeOutcome.Created) {
+                    guestWriteRecords.record(seen, gated.identityId, scopeId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
+                }
+            }
         }
     }
 
+    /** [seen] is the client the resource resolved; a placement that was written records it (ADR 0093 § 10: a rename or a
+     *  move re-seals the name, so the guest is its last editor), in this transaction. */
     fun update(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, parentId: String,
-        encryptedName: String, slugToken: String, wrappedContentKey: String, placementRevision: Long,
+        encryptedName: String, slugToken: String, wrappedContentKey: String, placementRevision: Long, seen: ClientSeen?,
     ): UpdateShareNodeOutcome {
         // A placement adds no row, so it spends no budget (`@RateLimitExempt` on the route).
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = false, onlyRole = ShareEntity.READ_WRITE)) {
@@ -232,7 +245,9 @@ class ShareNodesHandler(
                 wrappedContentKey = wrappedContentKey, epoch = null, placementRevision = placementRevision,
             )
             when (nodes.updateInScope(scopeId, nodeId, placement, null, null, null, PrincipalKey.Share(gated.identityId), SubtreeBoundary(root))) {
-                UpdateNodeOutcome.Updated -> UpdateShareNodeOutcome.Updated
+                UpdateNodeOutcome.Updated -> UpdateShareNodeOutcome.Updated.also {
+                    guestWriteRecords.record(seen, gated.identityId, scopeId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
+                }
                 UpdateNodeOutcome.NotFound -> UpdateShareNodeOutcome.NodeNotFound
                 UpdateNodeOutcome.IllegalStructure -> UpdateShareNodeOutcome.IllegalStructure
                 UpdateNodeOutcome.SlugTaken -> UpdateShareNodeOutcome.SlugTaken
