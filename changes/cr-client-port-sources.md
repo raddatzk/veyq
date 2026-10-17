@@ -1,7 +1,7 @@
 ---
 id: cr-client-port-sources
 title: The client's source port where no hop writes it into X-Forwarded-For — PROXY protocol, a header the edge overwrites, a local Traefik plugin
-status: planned
+status: in-progress
 satisfies: ["cc.security.rate-limit", "uc.admin.admin-channel"]
 adrs: ["0094", "0093", "0071", "0065", "0064", "0057", "0090", "0092"]
 invariants:
@@ -235,7 +235,7 @@ compose recipe, the risk named. The options stay below as the record.
 
 ## Phases
 
-- [ ] **1 backend — the source setting, the rule, the admin channel on the real socket.**
+- [x] **1 backend — the source setting, the rule, the admin channel on the real socket.**
   - **Order:** B4 red first (live defect, D4), then the config, the resolver and the refusal, then the rest.
   - **Build:** D1 on `VeyqConfig.Http` (an enum converter; an unknown value fails the mapping); D2 in
     `ClientAddress.resolve` as one more parameter (the port source, already chosen by the accessor) — pure, no config;

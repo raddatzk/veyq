@@ -31,6 +31,13 @@ class TraefikFileIngressSink(
     /** The current store's bucket, read at every render — the store is a runtime setting (ADR 0089 decision 5), and
      *  a bucket is refused unless it is a valid S3 bucket name before it is stored. */
     private val bucket: () -> String,
+    /**
+     * The header the app reads the client's port from, when `veyq.http.client-port.source` is `header` — and null
+     * under every other source (ADR 0094 decision 7). Set, every app router carries [CLIENT_ADDR], the recipe's local
+     * Traefik plugin, which overwrites exactly this header on every request: the app never reads a header its own
+     * routing file does not make Traefik overwrite, because both follow the one setting of this process.
+     */
+    private val clientPortHeader: String? = null,
 ) : TenantIngressSink {
 
     constructor(target: Path, bootstrapDomain: String?, adminDomain: String?, upstreams: Upstreams, bucket: String) :
@@ -63,7 +70,8 @@ class TraefikFileIngressSink(
      * higher priority because its rule is the longer one and must win over the catch-all app router, and its
      * service keeps `passHostHeader` because SigV4 signs the host. Every blobs router also carries
      * `veyq-blobs-inert` (ADR 0013 §6): the store shares the app's origin here, so a store response must never
-     * render as a page on it.
+     * render as a page on it. Every app router — never a blobs or the admin router — carries `veyq-client-addr`
+     * when the app reads its client port from a header (ADR 0094 decision 7).
      *
      * `internal` rather than private so `TenantIngressEmptyProjectionTest` can call it with an explicit domain
      * list. The alternative — driving it through [TenantIngressProjector.regenerate] — cannot reach every state:
@@ -89,7 +97,7 @@ class TraefikFileIngressSink(
                 // logs. The hostname shape the projector validated is exactly what a router name allows, and the
                 // `veyq-tenant-` prefix keeps a tenant's name from ever colliding with the bootstrap pair's.
                 val name = if (domain == bootstrapDomain) "veyq" else "veyq-tenant-${domain.replace('.', '-')}"
-                router("$name-app", "Host(`$domain`)", priority = 1, service = APP)
+                router("$name-app", "Host(`$domain`)", priority = 1, service = APP, middleware = clientPortHeader?.let { CLIENT_ADDR })
                 router("$name-blobs", "Host(`$domain`) && PathPrefix(`$blobsPrefix`)", priority = 100, service = BLOBS, middleware = INERT)
             }
             adminDomain?.let { router(ADMIN, "Host(`$it`)", priority = null, service = ADMIN) }
@@ -103,6 +111,14 @@ class TraefikFileIngressSink(
         append("      headers:\n")
         append("        contentTypeNosniff: true\n")
         append("        contentSecurityPolicy: \"sandbox; default-src 'none'\"\n")
+        clientPortHeader?.let {
+            // The plugin is declared by the recipe's Traefik (`--experimental.localplugins.<PLUGIN>`); a middleware
+            // naming one it did not declare fails its routers loudly — 404, never an unwritten header.
+            append("    $CLIENT_ADDR:\n")
+            append("      plugin:\n")
+            append("        $PLUGIN:\n")
+            append("          header: \"$it\"\n")
+        }
     }
 
     /** No prefix strip and the `Host` preserved, on every router: SigV4 signs host+path, so either rewrite breaks every presigned URL. */
@@ -170,5 +186,9 @@ class TraefikFileIngressSink(
         const val BLOBS = "veyq-blobs"
         const val ADMIN = "veyq-admin"
         const val INERT = "veyq-blobs-inert"
+        const val CLIENT_ADDR = "veyq-client-addr"
+
+        /** The local plugin's name as the compose recipe declares it (`infra/traefik-clientaddr.go`). */
+        const val PLUGIN = "clientaddr"
     }
 }

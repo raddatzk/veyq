@@ -1,6 +1,8 @@
 package me.raddatz.veyq.core.http
 
 import io.vertx.core.http.HttpServerRequest
+import me.raddatz.veyq.core.config.VeyqConfig.ClientPortSource
+import me.raddatz.veyq.core.config.VeyqConfig.Http.ClientPort
 import org.eclipse.microprofile.config.spi.Converter
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -8,10 +10,11 @@ import java.net.InetAddress
 /**
  * **The one place veyq learns a client's address** (ADR 0094):
  * the rightmost `X-Forwarded-For` entry that `veyq.http.trusted-proxies` does not list, with the port that entry
- * carries. The socket peer is vouched for by the network (ADR 0071's reachability), never by a header, and the entry
- * the walk stops at was written by a proxy the request really passed. Its consumers are the per-IP rate limiter and,
- * later, the guest-write record of ADR 0093 § 10; neither reads an address anywhere else
- * (`scripts/validate_lookup_single_home.py` rule D holds the header's name to this file).
+ * carries — or, where it carries none, the port of the one source `veyq.http.client-port.source` names (decision 7).
+ * The socket peer is vouched for by the network (ADR 0071's reachability), never by a header, and the entry the walk
+ * stops at was written by a proxy the request really passed. Its consumers are the per-IP rate limiter and, later,
+ * the guest-write record of ADR 0093 § 10; neither reads an address anywhere else
+ * (`scripts/validate_lookup_single_home.py` rule D holds both headers' names to this file).
  *
  * This object is the pure decision, and the backend mutation gate's scope (`backend/core/pitest.scope.json`): no
  * request, no clock, no config. The request accessor is [clientAddress], below it, and holds no decision.
@@ -21,9 +24,15 @@ import java.net.InetAddress
 object ClientAddress {
 
     /**
-     * A client's address and its source port. [port] is null when no hop wrote one — "unknown", the common case
-     * behind Traefik and the Envoy-based gateways (ADR 0094 M6). The rate limiter keys on [ip] alone: a port
-     * changes with every connection.
+     * The default of `veyq.http.client-port.header`: the header an edge that overwrites it on every request writes
+     * the client's `address:port` into (ADR 0094 decision 7) — on Compose, the recipe's local Traefik plugin.
+     */
+    const val PORT_HEADER = "X-Veyq-Client-Addr"
+
+    /**
+     * A client's address and its source port. [port] is null when no hop wrote one and no configured source spoke —
+     * "unknown" (ADR 0094 decisions 3 and 7). The rate limiter keys on [ip] alone: a port changes with every
+     * connection.
      */
     data class Resolved(val ip: InetAddress, val port: Int?)
 
@@ -36,19 +45,39 @@ object ClientAddress {
     class TrustList(val ranges: List<Range>)
 
     /**
-     * ADR 0094 decision 3. [forwardedFor] is every `X-Forwarded-For` line in arrival order; with none the client is
-     * the [peer]. Otherwise the entries are walked from the right, a listed one skipped by its IP alone; the first one
-     * not listed is the client, with the port it carries — and if it is not an IP address there is no client (null),
-     * never a guess. If every entry is listed, the leftmost is the client.
+     * ADR 0094 decisions 3 and 7. [forwardedFor] is every `X-Forwarded-For` line in arrival order; with none the
+     * client is the [peer]. Otherwise the entries are walked from the right, a listed one skipped by its IP alone; the
+     * first one not listed is the client, with the port it carries — and if it is not an IP address there is no
+     * client (null), never a guess. If every entry is listed, the leftmost is the client.
+     *
+     * [portSource] is the configured source's statement of the client (decision 7), already chosen by the caller:
+     * null when the source is `none` or said nothing usable. It speaks only where the stop entry carries no port of
+     * its own, and only if its IP equals that entry's; otherwise the port stays unknown. It never changes the IP.
      */
-    fun resolve(peer: Resolved?, forwardedFor: List<String>, trusted: List<Range>): Resolved? {
+    fun resolve(peer: Resolved?, forwardedFor: List<String>, trusted: List<Range>, portSource: Resolved?): Resolved? {
         val entries = forwardedFor.flatMap { it.split(',') }
         if (entries.isEmpty()) return peer
         for (i in entries.indices.reversed()) {
             val entry = entry(entries[i]) ?: return null
-            if (i == 0 || !listed(trusted, entry.ip)) return entry
+            if (i == 0 || !listed(trusted, entry.ip)) return withPort(entry, portSource)
         }
         return null // unreachable: the loop returns at i == 0
+    }
+
+    private fun withPort(stop: Resolved, source: Resolved?): Resolved {
+        if (stop.port != null || source == null || source.port == null) return stop
+        return if (source.ip == stop.ip) Resolved(stop.ip, source.port) else stop
+    }
+
+    /**
+     * The `header` source's statement (decision 7): exactly one line holding exactly one entry, which carries a port
+     * — or null. Two lines, a comma, an entry without a port or a value that is no address all say nothing, because
+     * an edge that overwrites the header writes one `address:port` and nothing else.
+     */
+    fun headerSource(lines: List<String>): Resolved? {
+        if (lines.size != 1 || ',' in lines[0]) return null
+        val stated = entry(lines[0]) ?: return null
+        return if (stated.port != null) stated else null
     }
 
     private fun listed(trusted: List<Range>, ip: InetAddress): Boolean {
@@ -162,14 +191,30 @@ class TrustedProxiesConverter : Converter<ClientAddress.TrustList> {
 }
 
 /**
- * The client of this request by [ClientAddress.resolve]. It reads the SOCKET peer, `connection().remoteAddress()`,
- * never `remoteAddress()`: that one is Quarkus's forwarding-parsed client, which a forwarding setting turned back on
- * would hand a forged header (the measurement in `AdminChannel`). So no setting can reach this resolver.
+ * The client of this request by [ClientAddress.resolve], its port source picked by `veyq.http.client-port.source`.
+ *
+ * The peer is the connection's `remoteAddress()`, never the request's: the request's is Quarkus's forwarding-parsed
+ * client, which a forwarding setting turned back on would hand a forged header (the measurement in `AdminChannel`).
+ * Under `proxy-protocol` the connection's address is the PROXY header's source — the gateway's own statement of its
+ * peer, the only connection the network lets reach this port (ADR 0071) and the only kind Vert.x accepts once the
+ * protocol is on — so it is both the peer and the port source. Under `header` and `none` there is no PROXY header
+ * (startup refuses the mismatch, `ClientPortSourceCheck`), so it is the socket itself. The configured header is read
+ * under `header` alone: under `none` a client-sent one is never looked at, whatever it says.
  */
-fun HttpServerRequest.clientAddress(trusted: ClientAddress.TrustList?): ClientAddress.Resolved? =
-    ClientAddress.resolve(socketPeer(), headers().getAll("X-Forwarded-For"), trusted?.ranges.orEmpty())
+fun HttpServerRequest.clientAddress(trusted: ClientAddress.TrustList?, port: ClientPort): ClientAddress.Resolved? {
+    val peer = socketPeer()
+    val portSource = when (port.source()) {
+        ClientPortSource.NONE -> null
+        ClientPortSource.PROXY_PROTOCOL -> peer
+        ClientPortSource.HEADER -> ClientAddress.headerSource(headers().getAll(port.header()))
+    }
+    return ClientAddress.resolve(peer, headers().getAll("X-Forwarded-For"), trusted?.ranges.orEmpty(), portSource)
+}
 
-/** The socket peer, with its port, or null when the connection is not an inet socket. Never a header. */
+/**
+ * The connection's peer, with its port, or null when the connection is not an inet socket. Never a header — but
+ * under the PROXY protocol the PROXY header's source, which is what the gateway accepted (see [clientAddress]).
+ */
 fun HttpServerRequest.socketPeer(): ClientAddress.Resolved? {
     val socket = connection().remoteAddress()?.takeIf { it.isInetSocket } ?: return null
     return socket.hostAddress()?.let(ClientAddress::literal)?.let { ClientAddress.Resolved(it, socket.port()) }
