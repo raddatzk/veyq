@@ -1,6 +1,6 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
-- Status: Accepted 2026-10-16; built so far: L1 installs the candidate through `veyqctl install --unsigned-local` from its release assets (decision 1), then first run, the Memory round trip and four feature scenarios (the capability off states; every field read back after a reload and on a second device; a guest's take-back; the release check and instance mail, decision 7) in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `e2e/`), and lane L1's job in `ci.yml` (`stack`, per architecture after the build; the publish waits on it, decision 2 — it pulls `build-<sha>-<arch>` by digest where a run pushed it, today the dispatch, and builds in its own job where none did, until a push publishes the snapshot (ADR 0091 decision 5)) — run locally, step by step; no CI run, which awaits the remote
+- Status: Accepted 2026-10-16; built so far: L1 installs the candidate through `veyqctl install --unsigned-local` from its release assets (decision 1), then first run, the Memory round trip and four feature scenarios (the capability off states; every field read back after a reload and on a second device; a guest's take-back; the release check, its notices and instance mail, decision 7) in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `e2e/`), and lane L1's job in `ci.yml` (`stack`, per architecture after the build; the publish waits on it, decision 2 — it pulls `build-<sha>-<arch>` by digest where a run pushed it, today the dispatch, and builds in its own job where none did, until a push publishes the snapshot (ADR 0091 decision 5)) — run locally, step by step; no CI run, which awaits the remote
 - Date: 2026-10-16
 
 ## Context
@@ -36,7 +36,15 @@ What a green run proves today stops short of what a Server Owner runs:
    domain (an alias of Traefik on `edge`, so the app reaches its public origin), a CA it trusts (the run's Pebble
    root, in the app's truststore and Traefik's ACME client) and a mail relay (Mailpit, whose API the suite reads the
    instance's mail from). Measured in phase 2: the store check uploads through the
-   public origin from inside the app container, so without them no tenant can be created.
+   public origin from inside the app container, so without them no tenant can be created. One more **test double,
+   like Pebble** (owner, inbox #464, 2026-10-17): the release check ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md))
+   reads releases only on a release-stamped build, and the candidate of a push is a `-SNAPSHOT` by design, so the run
+   stamps its own instance with the release `veyqctl` installed (`VEYQ_VERSION` on the app's container, never on the
+   image), checks every 5 s instead of daily (`VEYQ_RELEASE_CHECK_EVERY` — the first check runs at startup, before the
+   console can point it anywhere), resolves the GitHub source's hosts to the app's loopback (an offline run's check
+   fails, ADR 0097), and serves a stub mirror on `admin` whose releases — newer than the stamp, one of them an
+   unscheduled major — `scripts/release_assets.py`'s own `produce` writes into the run directory. No production
+   change: the app's mirror reader verifies no signature, so the producer's unsigned files are what it reads.
 
 2. **It gates the snapshot, on the exact bytes it publishes.** On a push to `main` or `release/<major>.x` the lanes
    pull `build-<sha>-<arch>` by digest, and the snapshot is published on those digests only when every lane is green;

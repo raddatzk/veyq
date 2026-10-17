@@ -29,6 +29,19 @@ export interface Stack {
    * Server → Mail: host `mail.relay.test`, port 1025, no STARTTLS.
    */
   mailApi: string
+  /**
+   * The release check's test double (infra/e2e/docker-compose.e2e.yml, `release-mirror`; inbox #464): the release the
+   * run stamped its instance with, and the newer ones the stub mirror at `source` lists — the next minor, the next
+   * major (planned, published on `plannedDate`) and the one after (marked unscheduled). Each a `<major>.<minor>`.
+   */
+  releases: {
+    source: string
+    running: string
+    newer: string
+    planned: string
+    plannedDate: string
+    unscheduled: string
+  }
   /** Where the run keeps its evidence: traces, the report, the state the setup project hands on. */
   outDir: string
 }

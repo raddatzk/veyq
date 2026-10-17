@@ -58,7 +58,8 @@ export default defineConfig({
     // The scenarios start from the instance the setup project left (instance.json in the run directory).
     { name: 'scenarios', testMatch: /scenarios\/.*\.spec\.ts/, dependencies: ['setup'] },
     // The feature scenarios start from a tenant whose owner is active, which the round trip leaves; each one restores
-    // what it switches (capability-off-states.spec.ts ends with every entry back on).
+    // what it switches (capability-off-states.spec.ts ends with every entry back on), except that instance-mail.spec.ts
+    // ends with the release check switched off, the state an offline run's check belongs in (ADR 0097).
     { name: 'features', testMatch: /features\/.*\.spec\.ts/, dependencies: ['scenarios'] },
   ],
 })
