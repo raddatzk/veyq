@@ -6,7 +6,8 @@
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
 // + the tenant storage quota + release info with the release check's notices and its switch + the config-secret state +
-// the object-store setting and its check + the capability switches with their requirements + the external services +
+// the object-store setting and its check + the bucket reconcile and its two switches + the capability switches with
+// their requirements + the external services +
 // the moderator roster and the rotation of the instance moderation key (ADR 0099) + the operating mode and the
 // operator's published values (ADR 0093 §§ 11 and 14). The operating mode's notice is printed from admin-web's own
 // i18n (`i18n/operatingModeNotice.ts`), the words the console shows, and *private* needs `--accept-notice` — the
@@ -48,6 +49,13 @@ import {
   ownStoreUpdate,
   setInstanceStore,
 } from '../features/instance/store'
+import {
+  confirmExclusiveBucket,
+  getStoreReconcile,
+  pauseReconcile,
+  resumeReconcile,
+  withdrawExclusiveBucket,
+} from '../features/instance/storeReconcile'
 import {
   capabilityTree,
   inLocale,
@@ -385,6 +393,32 @@ export const COMMANDS: Record<string, Command> = {
     summary: 'Discard the pending object-store setting; the one in use stays. Changes nothing when none is pending.',
     flags: {},
     run: () => discardPendingInstanceStore(),
+  },
+  'store reconcile': {
+    usage: 'store reconcile [--confirm-exclusive-bucket | --withdraw-exclusive-bucket | --pause | --resume]',
+    summary:
+      'Print what the bucket reconcile found: the last full listing, the objects no record claims, the candidates with the date the first is deleted, and the verdict (ARMED, NOT_CONFIRMED, PAUSED, NO_STORE). With one switch, change it first: confirm that this bucket holds this server\'s objects alone (arms deleting after the grace), withdraw that, pause or resume deleting.',
+    flags: {
+      'confirm-exclusive-bucket': {
+        describe: "confirm no other server or tool writes to this bucket; candidates past their grace are then deleted",
+        required: false,
+        switch: true,
+      },
+      'withdraw-exclusive-bucket': { describe: 'withdraw that confirmation: only count again', required: false, switch: true },
+      pause: { describe: 'pause deleting; the counting goes on', required: false, switch: true },
+      resume: { describe: 'resume deleting after a pause', required: false, switch: true },
+    },
+    run: (f) => {
+      const SWITCHES = {
+        'confirm-exclusive-bucket': confirmExclusiveBucket,
+        'withdraw-exclusive-bucket': withdrawExclusiveBucket,
+        pause: pauseReconcile,
+        resume: resumeReconcile,
+      } as const
+      const given = (Object.keys(SWITCHES) as (keyof typeof SWITCHES)[]).filter((k) => f[k])
+      if (given.length > 1) throw new CliError(`store reconcile takes one switch at most (got --${given.join(', --')})`)
+      return given.length ? SWITCHES[given[0]]() : getStoreReconcile()
+    },
   },
   'capabilities list': {
     usage: 'capabilities list [--lang en|de]',

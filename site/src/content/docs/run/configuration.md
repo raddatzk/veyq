@@ -214,6 +214,9 @@ environment-variable form is the key in upper case with `.` and `-` turned into 
 | `veyq.blob.upload.retention` | `PT1H` | When an abandoned upload is cleaned up; must be longer than the presigned-link lifetime |
 | `veyq.blob-store.presign-ttl-seconds` | `600` | The lifetime of a presigned upload or download link |
 | `veyq.blob-store.garage.node-capacity` | `1G` | The capacity veyq declares when it lays out a Garage it sets up |
+| `veyq.store-reconcile.grace` | `P30D` | How long an object no record claims stays before it is deleted, once you confirmed the bucket ([Operations](/veyq/run/operations/#objects-no-record-claims)) |
+| `veyq.store-reconcile.period` | `PT6H` | How long after one full listing of the store the next one starts |
+| `veyq.store-reconcile.max-gap` | `P1D` | Two listings further apart than this restart every grace period; must exceed the period by more than a minute, or the application refuses to start |
 | `veyq.ratelimit.*` | see [cc.security.rate-limit](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.rate-limit.md) | The rate limits of the public endpoints, per address and per account |
 | `veyq.http.hsts.max-age` | `P180D` | The HSTS lifetime |
 | `veyq.admin-channel.port` | `8090` | The admin listener's port. The recipes assume 8090; do not change it |

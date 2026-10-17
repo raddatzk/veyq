@@ -70,11 +70,22 @@ class RecordingBlobStore(
 
     fun reset() = deletedKeys.clear()
 
+    /**
+     * The bucket the reconcile lists (cr-bucket-reconcile), or null for the delegate's — which in the hermetic suite
+     * lists nothing. While set, [list] pages through it, [stat] answers for its keys, and [bucketDigest] is its digest:
+     * the store half of a reconcile is then as assertable as [deletedKeys] makes a reclaim's. The same singleton rule:
+     * a test that sets it clears it in a `finally`.
+     */
+    @Volatile
+    var bucket: ScriptedBucket? = null
+
     override val canPresign: Boolean get() = delegate.canPresign
     override val storeOrigin: String? get() = delegate.storeOrigin
     override fun presignPut(key: String, contentLength: Long, domain: String?): String? = delegate.presignPut(key, contentLength, domain)
     override fun presignGet(key: String, domain: String?): String? = delegate.presignGet(key, domain)
-    override fun stat(key: String): Long? = delegate.stat(key)
+    override fun stat(key: String): Long? = bucket?.stat(key) ?: delegate.stat(key)
+    override fun list(startAfter: String?, maxKeys: Int): StoreListing? = bucket?.list(startAfter, maxKeys) ?: delegate.list(startAfter, maxKeys)
+    override val bucketDigest: String? get() = bucket?.digest ?: delegate.bucketDigest
 
     /**
      * Refuses the marked keys by **returning** them, not by throwing — the port's contract since ADR 0062

@@ -23,6 +23,7 @@ vi.mock('./store', async () => {
   }
 })
 vi.mock('./StoreProvisioningPanel.vue', () => ({ default: { template: '<div class="provisioning" />' } }))
+vi.mock('./StoreReconcilePanel.vue', () => ({ default: { template: '<div class="reconcile" />' } }))
 vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn() }) }))
 
 import StorePanel from './StorePanel.vue'

@@ -121,7 +121,8 @@ capture verifies against the live store, and asks before it empties the database
 stops the app, empties the database (the tool's `empty-database`), switches `.env`'s image lines and `state.json` back to
 that release (`upgrade_values` over its template), starts it once so it migrates the empty schema, stops it, restores
 with the check only, places the key and starts. The store is never written; objects uploaded under the failed release
-stay as orphans with no reclaim row.
+stay as orphans with no reclaim row, which the app's bucket reconcile counts and — after its grace, once the Server Owner
+confirms the bucket again (the restore emptied that confirmation) — puts on the reclaim list (ADR 0062).
 
 **`self-update`** replaces this file with the installed release's `veyqctl` after checking it against that release's
 manifest — and, because it replaces the verifier itself, it first verifies that manifest on disk against the
@@ -1501,7 +1502,8 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
     are still in this instance's own store, which an upgrade never rewrites, so nothing but the database moves back:
     every check runs first, then stop, empty the database, switch `.env` and the state to the capture's release, start
     it once (it migrates the empty schema; the bucket exists), stop, restore with the check only, place the key, start.
-    Objects uploaded under the failed release stay in the store as orphans with no reclaim row."""
+    Objects uploaded under the failed release stay in the store as orphans with no reclaim row, for the app's bucket
+    reconcile to count and, after its grace on a bucket the Server Owner confirms again, reclaim (ADR 0062)."""
     home = Path(args.home)
     state = read_state(home)
     capture_dir = Path(args.capture).absolute()

@@ -10,7 +10,13 @@
 import { Configuration, SetupApi } from './generated'
 import { Configuration as AuthConfiguration, LoginApi, SessionApi } from './generated/auth'
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
-import { Configuration as InstanceConfiguration, InstanceApi, InstanceModerationApi, InstanceOperatorApi } from './generated/instance'
+import {
+  Configuration as InstanceConfiguration,
+  InstanceApi,
+  InstanceModerationApi,
+  InstanceOperatorApi,
+  InstanceStoreReconcileApi,
+} from './generated/instance'
 import { session } from '../app/session'
 import { refreshOnUnauthorized } from '../app/sessionRefresh'
 
@@ -51,6 +57,12 @@ export function instanceApi(): InstanceApi {
 // instance spec, so admin-web still has four specs: a fifth client CLASS, not a fifth contract.
 export function instanceModerationApi(): InstanceModerationApi {
   return new InstanceModerationApi(new InstanceConfiguration(bearerParams()))
+}
+
+// The bucket reconcile's read and its two switches (ADR 0062 § Consequences) — the `instance-store-reconcile` tag of
+// the same instance spec: one more client class, not one more contract.
+export function instanceStoreReconcileApi(): InstanceStoreReconcileApi {
+  return new InstanceStoreReconcileApi(new InstanceConfiguration(bearerParams()))
 }
 
 // The operating mode and the operator's published values (ADR 0093 §§ 11 and 14) — the `instance-operator` tag of the

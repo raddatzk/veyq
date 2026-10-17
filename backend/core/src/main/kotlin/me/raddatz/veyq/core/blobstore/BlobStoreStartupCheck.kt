@@ -19,6 +19,7 @@ import java.time.Duration
  * And it refuses, in every mode, a `veyq.blob.upload.retention` that does not outlast
  * `veyq.blob-store.presign-ttl-seconds`: the retention is both the upload-session purge's idle bound and the store
  * reclaim's not-before (ADR 0062 Decision 1), and both hold only while no PUT signed under the TTL can still land.
+ * And a `veyq.store-reconcile.max-gap` no longer than one reconcile period plus one tick ([reconcileGapRefusal]).
  */
 @ApplicationScoped
 class BlobStoreStartupCheck(
@@ -27,10 +28,12 @@ class BlobStoreStartupCheck(
     private val bundledBucket: String = config.bundledStore().bucket()
     private val uploadRetention: Duration = config.blob().upload().retention()
     private val presignTtlSeconds: Int = config.blobStore().presignTtlSeconds()
+    private val reconcile = config.storeReconcile()
 
     fun onStart(@Observes ev: StartupEvent) {
         check(isValidBucketName(bundledBucket)) { bucketNameRefusal(bundledBucket) }
         retentionRefusal(uploadRetention, presignTtlSeconds)?.let { error(it) }
+        reconcileGapRefusal(reconcile.maxGap(), reconcile.period(), reconcile.every())?.let { error(it) }
     }
 
     companion object {
@@ -48,6 +51,17 @@ class BlobStoreStartupCheck(
             else "veyq.blob.upload.retention=$retention must exceed veyq.blob-store.presign-ttl-seconds=" +
                 "$presignTtlSeconds: an upload session idle past it is purged and its staged keys reclaimed while a " +
                 "PUT signed under that TTL can still land (ADR 0062 Decision 1)."
+
+        /**
+         * Null when the reconcile's gap bound outlasts the longest quiet a healthy instance has between two listed
+         * pages — one period plus one tick — else what the operator reads. A shorter bound would restart every
+         * first-seen clock at every pass, so nothing would ever be due and no deletion would ever be armed in fact.
+         */
+        fun reconcileGapRefusal(maxGap: Duration, period: Duration, every: Duration): String? =
+            if (maxGap > period.plus(every)) null
+            else "veyq.store-reconcile.max-gap=$maxGap must exceed veyq.store-reconcile.period=$period plus " +
+                "veyq.store-reconcile.every=$every: a pass is that far from the previous one, so a shorter gap restarts " +
+                "every first-seen clock at every pass and the grace never ends."
 
         private val BUCKET_NAME = Regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
         private val IPV4_SHAPED = Regex("^\\d+\\.\\d+\\.\\d+\\.\\d+$")
