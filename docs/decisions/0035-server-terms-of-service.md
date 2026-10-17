@@ -2,7 +2,9 @@
 
 - Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the terms' change counter is a
   **revision** (`terms_revision`, `accepted_terms_revision`, `termsRevision`, was `…version`); the pre-E2EE
-  product's `Tenant.termsVersion` below keeps its own name.
+  product's `Tenant.termsVersion` below keeps its own name. Decisions 6 (the fixed operator section) and 7 (the
+  provider identification), added 2026-10-16 from the legal research behind ADR 0093, are **not built**; they belong
+  to the moderation work (inbox #462).
 - Date: 2026-07-10
 
 ## Context
