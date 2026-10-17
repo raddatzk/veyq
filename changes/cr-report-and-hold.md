@@ -23,9 +23,10 @@ affected rows plus a pin on their storage keys that `StoreReclaimSweep` skips �
 
 ## Context & constraints
 
-- Entry conditions: `cr-moderators-and-the-moderation-key` **done** (the published bundle, the role, the proof gate,
-  the log table, mail to confirmed moderators). Re-read its decisions 1, 3 and 5 against the merged tree before the
-  first edit (`changes/README.md` § A sibling CR still in flight is cited as PLANNED). The instance contact's
+- Entry conditions, built (ADR 0099; `uc.moderation.appoint-moderators`, `uc.moderation.serve-as-moderator`): the
+  published bundle (`getModerationKey`), the role, the proof gate, the log table, mail to confirmed moderators, and
+  epoch 1 minted by first-run setup itself (ADR 0099 § 3), so no operation turns moderation on. Re-read ADR 0099
+  §§ 1–3 and 7 and those use-cases against the merged tree before the first edit. The instance contact's
   notification address (`cr-instance-contact-and-provider-identification`) joins the new-case mail **if it has
   landed**; the mail phase reads the merged tree and says which.
 - Decisions: [ADR 0093](../docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
@@ -85,8 +86,8 @@ affected rows plus a pin on their storage keys that `StoreReclaimSweep` skips �
    `cr-statement-of-reasons-and-objection`; orders and the CSAM handover: `cr-authority-orders-and-art18-reports`).
    The purge that ends an expired hold drops the snapshot and the pins (`@Scheduled`, so it also runs at the first
    trigger after startup).
-7. **The report action is off until an epoch exists** (ADR 0099 § 3) — read from the unauthenticated bundle read of
-   `cr-moderators-and-the-moderation-key`.
+7. **The report action is off until an epoch exists** (ADR 0099 § 3) — read from the unauthenticated bundle read
+   `getModerationKey` (`contracts/api/moderation.openapi.yaml`).
 
 ## Open questions (owner)
 
@@ -115,7 +116,7 @@ affected rows plus a pin on their storage keys that `StoreReclaimSweep` skips �
 
 Phase 0 writes `uc.moderation.report` (member and guest; the dialog; the categories; the WRITE_ONLY case; the
 action off before an epoch) and the enabler `en.moderation.hold` (snapshot, pin, the sweep's skip, the ends table and
-who sets each), with planned coverage, under the feature `cr-moderators-and-the-moderation-key` created.
+who sets each), with planned coverage, under the feature `moderation` (`docs/features/moderation/`).
 
 ## Phases
 

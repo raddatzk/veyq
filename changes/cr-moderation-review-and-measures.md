@@ -125,7 +125,7 @@ coverage. Existing use-cases whose behaviour changes and gain an alternate flow 
   opening a case navigates to the reported tenant's host. EN+DE. · Done when: `npm run check` green; a test per
   decision call that it carries a fresh proof over its own operation id.
 - [ ] **5 web: moderation mode and placeholder** — `ShareView` in moderation mode: the surface's unlock (no vault
-  after the grants are opened, `cr-moderators-and-the-moderation-key` decision 7), the sealed report opened with the
+  after the grants are opened: ADR 0099 § 6, as the moderation surface of `uc.moderation.serve-as-moderator` already unlocks), the sealed report opened with the
   epoch's key, `K_report` unwrapped, the guest viewer over the moderation data source, read-only, the report's details
   beside it. The "Blocked by the operator" placeholder in the level rows and tiles, the lightbox and the file view, for
   members and guests alike, with no reason shown (ADR 0093 § 6); delete offered to the uploader, replace and restore
