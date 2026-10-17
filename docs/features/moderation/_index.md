@@ -25,7 +25,7 @@ the log that keeps them accountable. A **core** feature
 - ★ [Serve as a moderator](use-cases/uc.moderation.serve-as-moderator.md) — **built (backend + web)** (ADR 0099 §§ 1, 3, 6, 7): an
   appointee accepts, confirms their address, receives the key from a holder, delivers it to the next newcomer, and can
   step down.
-- ★ [Report what you see](use-cases/uc.moderation.report.md) — **planned** (ADR 0093 §§ 1–2, 4–5; cr-report-and-hold): a
+- ★ [Report what you see](use-cases/uc.moderation.report.md) — **built (backend + web)** (ADR 0093 §§ 1–2, 4–5): a
   member or a guest reports up to 100 items; one case per item, a hold on each, moderators mailed.
 - Review a report and decide — planned (ADR 0093 §§ 3, 6–7, 11–13).
 
@@ -33,7 +33,7 @@ the log that keeps them accountable. A **core** feature
 
 - [en.moderation.moderation-key](enablers/en.moderation.moderation-key.md) — **built** (ADR 0099 § 2: per epoch a
   32-byte `M_n`, its public bundle, a grant per moderator, and the key proof every moderation call carries).
-- [en.moderation.hold](enablers/en.moderation.hold.md) — **planned** (ADR 0093 § 4: a snapshot of the reported rows and
-  a pin on their store objects, which the reclaim sweep skips; the ends).
+- [en.moderation.hold](enablers/en.moderation.hold.md) — **built** for the case-open hold (ADR 0093 § 4: a snapshot of
+  the reported rows and a pin on their store objects, which the reclaim sweep skips; the ends).
 - [en.moderation.log](enablers/en.moderation.log.md) — **built** for the instance events (ADR 0093 § 11: an append-only table, structured
   fields in the clear and free text sealed to the moderation key; the instance events and their retention).

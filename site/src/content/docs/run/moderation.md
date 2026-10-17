@@ -12,12 +12,39 @@ sources:
   - docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md
   - docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md
   - docs/features/admin/use-cases/uc.admin.operator-details.md
+  - docs/features/moderation/use-cases/uc.moderation.report.md
+  - docs/features/moderation/enablers/en.moderation.hold.md
 ---
 
 There is no central moderation service, because there is no central service. And an instance's operator cannot
 read what its members keep: private content is unscannable by design. Moderation on a veyq instance therefore
 works where content is distributed, at the public share, and with one lever on the whole tenant
 ([security model § Sharing & share-boundary Trust & Safety](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#sharing--share-boundary-trust--safety)).
+
+## What a report does
+
+Anyone who sees something — a member of a space or a guest of a link — can choose **Report** on it
+([Report something](/veyq/help/report-something/)). What happens on your server
+([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md)):
+
+- **It arrives sealed.** The reporter's device seals their text, their address and the keys to exactly what they
+  reported to the current moderation key. The database holds the category, the time, the reported items' ids and who
+  reported (an account, or the link a guest came through) — nothing it can open.
+- **One case per item.** A further report of the same item joins its open case and raises its category if it is more
+  urgent.
+- **It is kept.** The rows of what was reported are copied, and its stored objects are pinned: the reclaim sweep leaves
+  them alone, so a delete after the report takes the item away from everyone but not from the moderators — for 90
+  days after the report ([en.moderation.hold](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.hold.md)).
+  You store those bytes, and a backup includes them; the tenant's quota falls as its members expect. A space's erasure
+  leaves the report and the copy.
+- **Moderators are mailed** the category and "new case", with no id and no link: child sexual abuse material, terrorist
+  content and a threat to life at once, the rest in one mail a day. The instance contact's notification address is
+  mailed too once confirmed. A reporter who left an address gets a receipt.
+- **Nothing is blocked.** The item stays where it was until a person decides.
+
+A report a member sends counts against a cap of open reports per account (`veyq.moderation.report.open-cap`, 100); a
+guest has no account, so a guest's reports are bounded only per address and per link (`veyq.moderation.report.per-share-max-requests`).
+Someone rotating addresses can still send many; each costs you a moderator's look and the held bytes for 90 days.
 
 ## A reported public share
 
@@ -163,12 +190,10 @@ control against the operator.
 
 ## Not built
 
-- **Report intake.** There is no form or address that collects abuse reports; a report reaches you however your
-  members reach you.
 - **An operator action on a single share.**
-- **Reports, the review and every decision.** Moderators exist (above), and they hold the key a report will be sealed
-  to; the report itself, the queue's content, blocking a share or its content, and the review of an objection by a
-  second moderator are decided in
+- **The review and every decision.** Reports arrive and are kept (above), but the moderation page does not list or open
+  them yet: the queue's content, ending a hold before its 90 days, blocking a share or its content, and the review of
+  an objection by a second moderator are decided in
   [ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
   and not built.
 

@@ -92,3 +92,6 @@ person who shared it, and what they reported is kept for review even if it is de
   [en.moderation.moderation-key](../enablers/en.moderation.moderation-key.md),
   [en.moderation.log](../enablers/en.moderation.log.md),
   [en.platform.field-key](../../platform/enablers/en.platform.field-key.md)
+- Docs site: [Report something](../../../../site/src/content/docs/help/report-something.mdx),
+  [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
+  [What the server sees](../../../../site/src/content/docs/security/what-the-server-sees.md)

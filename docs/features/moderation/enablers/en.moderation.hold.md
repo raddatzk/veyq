@@ -4,8 +4,10 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
   A **model** enabler: tables, a seam, one skip in the reclaim sweep, and the ends.
-- **Status:** **planned** — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-  § 4; built by cr-report-and-hold.
+- **Status:** **built** for the case-open hold — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+  § 4, built by cr-report-and-hold (2026-10-17): `core/moderation/hold` (`Holds`, `HoldSnapshot`, `CoreHoldSnapshot`),
+  Memories' `MediaHoldSnapshot`, `StoreReclaimStore.due`'s skip; the reconcile's claim query and the backup's blob index
+  read the pins too.
 - **Provides:** a copy of what was reported, taken when it was reported, that no delete, overwrite or revoke reaches —
   the evidence a moderator opens with the keys a report hands over.
 - **Serves (use-cases):** [uc.moderation.report](../use-cases/uc.moderation.report.md); later the review and an
@@ -24,9 +26,9 @@ A report share holds, sealed under the report's `K_report` and addressed by its 
 | Item | Keys | Role tags |
 |---|---|---|
 | a node (folder, Memory, chapter, Depot file) | `K_node`, the `K_field` of its name (the name is sealed under the **parent's** key, so `K_node` does not open it), the `K_field` of its meta | `NODE`, `NODE_NAME`, `NODE_META` |
-| a link's root node, reported by its guest | as a node, but the root's name is the link's: the `share-memory-name` `K_field` instead of `NODE_NAME` | `NODE`, `SHARE_MEMORY_NAME`, `NODE_META` |
+| a link's root node, reported by its guest | as a node, but the root's name is the link's: the `share-memory-name` `K_field` instead of `NODE_NAME` | `NODE`, `LINK_NAME`, `NODE_META` |
 | an application's item on a node — a Memories medium | the `K_blob` of every blob it has (original and derivatives, each with its blob id), its `media-meta` and `media-exif` `K_field`s (a guest's lightbox has no EXIF to hand over) | `BLOB`, `MEDIA_META`, `MEDIA_EXIF` |
-| an upload (`WRITE_ONLY`) link | its `K_share` (it opens no content) and its name's and note's `K_field`s | `SHARE`, `SHARE_MEMORY_NAME`, `SHARE_NOTE` |
+| an upload (`WRITE_ONLY`) link | its `K_share` (it opens no content) and its name's and note's `K_field`s | `SHARE`, `LINK_NAME`, `LINK_NOTE` |
 
 A `K_field` opens that one revision of that one field
 ([en.platform.field-key](../../platform/enablers/en.platform.field-key.md)); a `K_node` opens the node and every
@@ -88,3 +90,6 @@ end, since the skip asks for a pin whose end is still ahead.
   pinned objects too: `scripts/instance_backup.py`'s `blob_index`),
   [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 - [uc.moderation.report](../use-cases/uc.moderation.report.md)
+- Docs site: [Report something](../../../../site/src/content/docs/help/report-something.mdx),
+  [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
+  [What the server sees](../../../../site/src/content/docs/security/what-the-server-sees.md)

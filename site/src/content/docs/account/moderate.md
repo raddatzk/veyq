@@ -6,8 +6,10 @@ sources:
 ---
 
 The person who runs a veyq server can ask you to **moderate** it: to look at what people report, in every space on
-that server, and to decide what happens with it. Reporting itself is not built yet. What you can do today is take up
-the role, so that you hold the key reports will be sealed to.
+that server, and to decide what happens with it. People can already report ([Report something](/veyq/help/report-something/)):
+reports arrive sealed to the key you will hold, what they name is kept for you, and you are mailed when a new case
+comes in. The page that lists and opens them is not built yet. What you can do today is take up the role, so that you
+hold the key reports are sealed to.
 
 ## Accept
 
@@ -35,7 +37,8 @@ Notices about new cases reach you only at a confirmed address. If the code did n
 4. If you hold the key and someone else is waiting for it, your page passes it on, after checking that person's key
    is the one you have seen before. If their account key changed, it is not passed on, and the page says so: compare
    their safety number first ([Verify a person](/veyq/account/verify-a-person/)).
-5. Then the page shows **Reports**. Until reporting is built, it says nothing has been reported.
+5. Then the page shows **Reports**. Until the list of reports is built, it says nothing has been reported, even when
+   reports have arrived; the mail about a new case tells you that one did.
 
 If the page says it **stopped** because the key the server publishes is not the one you hold, do not go on, and tell
 the person who runs the server.
