@@ -63,6 +63,11 @@ decisions 1, 5 and 6, ADR 0098 decisions 4 and 8, ADR 0091 decision 6; read them
 - **Kubernetes is touched by nothing here but the format's shared code**: the gate takes no pool (ADR 0098 decision 4);
   `gate` keeps calling `take_capture(leg=INDEX)`. `chart_meta_check.py` and the tools image's in-image self-test must
   stay green (`grep -n 'instance_backup_selftest' .github/workflows/ci.yml tools/Dockerfile`).
+- **Sibling CRs, named, not edited** (planned on `main` 2026-10-17): `cr-report-and-hold` adds `veyq_hold_pin` — an
+  object a hold pins whose live blob row is gone is known only to that table, so the *required* keys must later
+  include pinned ones; that CR owns the extension, at `Database.blob_index` (the one query that decides which rows
+  require an object, its docstring says so). `cr-guest-write-record` takes its rows out of the logical dump. This CR
+  builds nothing for either; its index reads `veyq_blob`, correct until holds exist.
 - A parallel agent edits ADR 0093, 0097, 0065, 0099, `docs/crosscutting/security-model.md` and
   `site/src/content/docs/run/moderation.md`. This CR stays out of them; O3 names the one sentence of security-model.md
   that this decision reaches and routes it.
@@ -123,6 +128,14 @@ Each binds this CR's work; the pointer settles it.
     loses every photo and file whatever `backups/` holds, and how to name a pool. `none` warns the same (the first
     store an instance gets is the bundled one by default); `own` is silent; an unreadable setting says so and warns.
     `install` ends with the same line.
+
+**Decided at implement — O3's "retained captures" are the pool's own ledger.** Compose has no capture rotation:
+`veyqctl` never deleted a capture in `backups/`, and a capture directory may be moved or encrypted off the host. So the
+pool records every capture that named it (`veyq-pool/captures/<stamp>-<capture>.json`, the keys of its index, written
+only once every key is in the pool) and rotates *those* by `--pool-keep` (`VEYQ_BACKUP_POOL_KEEP`, default 3 like the
+gate's `backup.keep`); the prune deletes every object no kept entry names. A capture outside the newest N can then still
+restore without a source (its objects are in the store) and refuses by name with `--objects-from` for whatever the pool
+no longer holds. A pool therefore serves one instance. Nothing in `backups/` is deleted.
 
 ## Phases
 

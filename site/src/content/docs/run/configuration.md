@@ -45,6 +45,12 @@ By hand, copy the template to `.env` and fill it in: every required variable has
 | `VEYQ_ACME_CASERVER` | No | Let's Encrypt production | The ACME directory; point it at the staging directory while testing |
 | `VEYQ_HSTS_ENABLED` | No | `true` | HSTS on the instance and the admin surface ([Hardening](/veyq/run/hardening/#tls-hsts-and-csp)) |
 | `VEYQ_MEM_LIMIT` | No | `1g` | The application container's memory limit; the JVM heap is 60 % of it |
+| `VEYQ_BACKUP_OBJECTS_TO` | No | unset | Read by `veyqctl` only: the object pool every `backup` and `upgrade` copies the store's new objects into — an absolute directory on another disk, or `s3:<bucket>[/<prefix>]`. Unset, a backup holds no object, and `veyqctl status` warns while the bundled store is in use ([Backup and restore](/veyq/run/backup-and-restore/#capture)) |
+| `VEYQ_BACKUP_POOL_ENDPOINT` | With an S3 pool | — | The S3 pool's endpoint, as the backup tool's container reaches it |
+| `VEYQ_BACKUP_POOL_ACCESS_KEY` | With an S3 pool | — | The S3 pool's access key; reaches the tool through its environment, never a capture |
+| `VEYQ_BACKUP_POOL_SECRET_KEY` | With an S3 pool | — | Its secret key, the same way |
+| `VEYQ_BACKUP_POOL_REGION` | No | `us-east-1` | The S3 pool's region |
+| `VEYQ_BACKUP_POOL_KEEP` | No | `3` | The pool keeps the objects its newest this-many captures index, and deletes the rest |
 
 The compose file sets the rest of the application's environment itself (the database URL, the bundled store's
 internal addresses, the config-secret key path, the routing file, and `VEYQ_HTTP_CLIENT_PORT_SOURCE: header`, which

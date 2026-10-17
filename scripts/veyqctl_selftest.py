@@ -51,7 +51,11 @@ what prove it. Everything here runs against a mirror directory this file writes 
   9. **`backup` / `restore`** — the order (stop, key out, capture, check, up / stop, restore, key in, up), the tool's
      Compose pointed at this instance with its credentials in the environment and in no argv, a tool that changed on
      disk refused before the app stops, the restored key on stdin of a one-off `app` container, the app left stopped
-     after a failed restore;
+     after a failed restore; and the object pool (`test_pool`, V1–V4): `status` and `install` warning while the store
+     in use is bundled (or none, or unreadable) and no pool is named, never changing the exit code; `backup` and
+     `upgrade` running `copy-objects` before the app stops and the capture with `--objects-to` after it, the command
+     line winning over `.env`, none without a pool, a failed early copy stopping nothing, a pool inside `releases/`
+     refused; `restore --objects-from` absolute and never implied; an S3 pool's key only in the tool's environment;
  10. **`self-update`** — replaced by the installed release's `veyqctl` with its mode kept, nothing to do the second
      time, refused (nothing replaced) when the installed copy no longer matches its manifest; for a signed release,
      the manifest on disk verified against its bundle first — refused when it was edited to match a swapped
@@ -139,7 +143,9 @@ class FakeHost(vc.Host):
     )
 
     def __init__(self, *, local_images=(), signed=(), cosign=True, project="veyq", answers=None, ps=HEALTHY,
-                 fail_tool: str = "", cosign_version: str = "v3.1.3", watch: pathlib.Path | None = None) -> None:
+                 fail_tool: str = "", cosign_version: str = "v3.1.3", watch: pathlib.Path | None = None,
+                 store_in_use: str | None = "bundled") -> None:
+        self.store_in_use = store_in_use    # what the tool's `store-in-use` prints; None: it fails
         self.commands: list[list[str]] = []
         self.blobs: list[bytes] = []        # what `cosign verify-blob` was handed as the blob, at the moment it ran
         self.watch = watch                  # a path whose existence is recorded per command (the home, say)
@@ -164,6 +170,8 @@ class FakeHost(vc.Host):
         rc, out = 0, ""
         if cmd[0] == sys.executable and cmd[1].endswith(vc.BACKUP_ASSET):
             rc = 1 if cmd[2] == self.fail_tool else 0
+            if cmd[2] == "store-in-use":
+                rc, out = (1, "") if self.store_in_use is None else (rc, self.store_in_use + "\n")
             if cmd[2] == "restore" and not rc:  # the tool places leg (c) where veyqctl told it to
                 key = cmd[cmd.index("--config-secret-file") + 1]
                 pathlib.Path(key).write_bytes(b"restored-key")
@@ -776,6 +784,144 @@ def test_backup_restore(tmp: pathlib.Path) -> None:
           rc == 1 and not host.ran("up") and not host.ran("run", "--rm", "app"))
 
 
+def with_env(home: pathlib.Path, **values: str) -> None:
+    """Lines an operator adds to `.env` (or uncomments from the template)."""
+    with (home / vc.ENV_FILE).open("a") as f:
+        f.writelines(f"{k}={v}\n" for k, v in values.items())
+
+
+def run_quiet(argv: list, host: FakeHost) -> tuple:
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+        try:
+            rc = vc.main(argv, host)
+        except SystemExit as e:  # argparse: a flag this veyqctl does not know
+            rc = e.code or 2
+    return rc, out.getvalue()
+
+
+POOL_SECRET = "pool-secret-in-env-file"
+
+
+def test_pool(tmp: pathlib.Path) -> None:
+    """ADR 0096 decisions 5 and 6, ADR 0056 §3: the pool `.env` names, the early copy, the warning (V1–V4)."""
+    mirror = upgrade_mirror(tmp / "mirror-pool")
+    unhealthy = ({**FakeHost.HEALTHY[0], "Health": "unhealthy"}, FakeHost.HEALTHY[1])
+
+    # V1 — status warns while the bundled store has no pool; its exit code stays the health verdict.
+    home = installed(tmp, "home-status", mirror, "1.3", "1.3")
+    for label, host_kw, pool, rc_want, warns in (
+            ("bundled, no pool, healthy: the warning, exit 0", {}, None, 0, True),
+            ("no store chosen yet (none): the warning", {"store_in_use": "none"}, None, 0, True),
+            ("a store setting it cannot read: says so, and the warning", {"store_in_use": None}, None, 0, True),
+            ("a store of your own: no warning", {"store_in_use": "own"}, None, 0, False),
+            ("unhealthy, bundled, no pool: exit 1 and the warning", {"ps": unhealthy}, None, 1, True),
+    ):
+        rc, out = run_quiet(["--home", str(home), "status"], FakeHost(project="veyq-proof", **host_kw))
+        check(f"status: {label}", rc == rc_want and ("keeps no object versions" in out) == warns
+              and (host_kw.get("store_in_use", "") is not None or "could not be read" in out), out[-400:])
+    pooled = installed(tmp, "home-status-pool", mirror, "1.3", "1.3")
+    with_env(pooled, VEYQ_BACKUP_OBJECTS_TO=str(tmp / "pool"))
+    for label, ps, rc_want in (("healthy", FakeHost.HEALTHY, 0), ("unhealthy", unhealthy, 1)):
+        rc, out = run_quiet(["--home", str(pooled), "status"], FakeHost(project="veyq-proof", ps=ps))
+        check(f"status (control): a pool named in .env, {label} — no warning, exit {rc_want}",
+              rc == rc_want and "keeps no object versions" not in out, out[-300:])
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(tmp / "home-install-warn"), "--source", str(mirror), "install",
+                         "--unsigned-local", *INSTALL_SETS, "--set", "VEYQ_RELEASE=1.3"], host)
+    check("install: ends with the same warning while no pool is named",
+          rc == 0 and "keeps no object versions" in out.splitlines()[-1], out[-300:])
+
+    # V2 — backup: the early copy before the stop, the capture after it into the same pool.
+    home = installed(tmp, "home-pool-backup", mirror, "1.3", "1.3")
+    with_env(home, VEYQ_BACKUP_OBJECTS_TO=str(tmp / "pool-a"))
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "pool-b1.key")], host)
+    first = first_of(host)
+    early, cap = host.ran("copy-objects"), host.ran("capture")
+    capture = host.commands[cap[0]] if cap else []
+    check("backup with VEYQ_BACKUP_OBJECTS_TO: copy-objects into it BEFORE the app stops, the capture after with "
+          "--objects-to the same pool",
+          rc == 0 and len(early) == 1 and early[0] < first("stop", "app") < cap[0]
+          and host.commands[early[0]][host.commands[early[0]].index("--objects-to") + 1] == str(tmp / "pool-a")
+          and capture[capture.index("--objects-to") + 1] == str(tmp / "pool-a"), out[-400:])
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "pool-b2.key"), "--objects-to",
+                         str(tmp / "pool-cli")], host)
+    capture = host.commands[host.ran("capture")[0]] if host.ran("capture") else []
+    check("backup: --objects-to on the command line wins over .env",
+          rc == 0 and capture[capture.index("--objects-to") + 1] == str(tmp / "pool-cli")
+          and str(tmp / "pool-a") not in " ".join(" ".join(c) for c in host.commands), out[-300:])
+    plain = installed(tmp, "home-no-pool", mirror, "1.3", "1.3")
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(plain), "backup", "--key-into", str(tmp / "pool-b3.key")], host)
+    check("backup with no pool configured: no copy-objects, no --objects-to",
+          rc == 0 and not host.ran("copy-objects") and not any("--objects-to" in c for c in host.commands), out[-300:])
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(plain), "backup", "--key-into", str(tmp / "pool-b4.key"), "--objects-to",
+                         str(plain / vc.RELEASES_DIR / "pool")], host)
+    check("backup: a pool inside releases/ is refused before the app stops",
+          rc == 1 and "releases" in out and not host.ran("stop"), out[-300:])
+    s3 = installed(tmp, "home-s3-pool", mirror, "1.3", "1.3")
+    with_env(s3, VEYQ_BACKUP_OBJECTS_TO="s3:veyq-pool/inst", VEYQ_BACKUP_POOL_ENDPOINT="https://s3.example",
+             VEYQ_BACKUP_POOL_ACCESS_KEY="AKpool", VEYQ_BACKUP_POOL_SECRET_KEY=POOL_SECRET)
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(s3), "backup", "--key-into", str(tmp / "pool-b5.key")], host)
+    tool_calls = host.ran("copy-objects") + host.ran("capture")
+    check("backup with an S3 pool: its credentials reach the tool through env, never argv",
+          rc == 0 and len(tool_calls) == 2 and all(host.envs[i].get("VEYQ_BACKUP_POOL_SECRET_KEY") == POOL_SECRET
+                                                  for i in tool_calls)
+          and not any(POOL_SECRET in arg for c in host.commands for arg in c), out[-300:])
+
+    # V3 — upgrade: the same order; a failed early copy stops nothing.
+    home = installed(tmp, "home-pool-up", mirror, "1.3", "1")
+    with_env(home, VEYQ_BACKUP_OBJECTS_TO=str(tmp / "pool-up"))
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(tmp / "pool-u1.key"))
+    first = first_of(host)
+    order = [first("config", "--quiet"), first("copy-objects"), first("stop", "app"), first("capture"),
+             first("verify", "--key-from"), first("up", str(home / "releases/1.12" / vc.COMPOSE_ASSET))]
+    capture = host.commands[first("capture")] if host.ran("capture") else []
+    check("upgrade with a pool: template checked, copy-objects, stop, capture --objects-to, check, switch, up",
+          rc == 0 and order == sorted(order) and order[-1] < 10 ** 6
+          and capture[capture.index("--objects-to") + 1] == str(tmp / "pool-up"), f"{order} {out[-300:]}")
+    home = installed(tmp, "home-pool-up-fail", mirror, "1.3", "1")
+    with_env(home, VEYQ_BACKUP_OBJECTS_TO=str(tmp / "pool-up"))
+    before = ((home / vc.ENV_FILE).read_bytes(), (home / vc.STATE_FILE).read_bytes())
+    host = FakeHost(local_images=all_images(), project="veyq-proof", fail_tool="copy-objects")
+    rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(tmp / "pool-u2.key"))
+    check("upgrade: a failed early copy stops nothing — no stop, no capture, .env and state untouched",
+          rc == 1 and not host.ran("stop") and not host.ran("capture") and not (home / ".env.next").exists()
+          and ((home / vc.ENV_FILE).read_bytes(), (home / vc.STATE_FILE).read_bytes()) == before, out[-300:])
+
+    # V4 — restore --objects-from: absolute, and an S3 pool's credentials through env.
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    here = os.getcwd()
+    os.chdir(tmp)
+    expected = str(pathlib.Path(os.getcwd()) / "relative-pool")  # the cwd as the process sees it (/private/var on macOS)
+    try:
+        rc, out = run_quiet(["--home", str(s3), "restore", str(tmp / "a-capture"), "--domain", "family.veyq.test",
+                             "--without-key", "--objects-from", "relative-pool"], host)
+    finally:
+        os.chdir(here)
+    ran = host.commands[host.ran("restore")[0]] if host.ran("restore") else []
+    check("restore --objects-from P: the tool is handed --objects-from with P absolute",
+          rc == 0 and ran[ran.index("--objects-from") + 1] == expected, str(ran))
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(s3), "restore", str(tmp / "a-capture"), "--domain", "family.veyq.test",
+                         "--without-key", "--objects-from", "s3:veyq-pool/inst"], host)
+    i = host.ran("restore")[0] if host.ran("restore") else 0
+    check("restore from an S3 pool: its credentials reach the tool through env, never argv",
+          rc == 0 and host.envs[i].get("VEYQ_BACKUP_POOL_SECRET_KEY") == POOL_SECRET
+          and not any(POOL_SECRET in arg for c in host.commands for arg in c), out[-300:])
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(s3), "restore", str(tmp / "a-capture"), "--domain", "family.veyq.test",
+                         "--without-key"], host)
+    ran = host.commands[host.ran("restore")[0]] if host.ran("restore") else []
+    check("restore without --objects-from never implies .env's pool (objects go only into an empty store, by choice)",
+          rc == 0 and "--objects-from" not in ran, str(ran))
+
+
 def test_self_update(tmp: pathlib.Path) -> None:
     mirror = upgrade_mirror(tmp / "mirror-su")
     home = installed(tmp, "home-su", mirror, "1.3", "1.3")
@@ -1043,6 +1189,7 @@ def main() -> int:
         test_upgrade_order(tmp)
         test_upgrade_refusals(tmp)
         test_backup_restore(tmp)
+        test_pool(tmp)
         test_self_update(tmp)
         test_manifest_signature(tmp)
     if failures:
