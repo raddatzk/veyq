@@ -73,7 +73,8 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      on the tree, its refusals are this guard's reds, and the producer's carry step is run into a scratch directory,
      where every derived file must be, byte-identical to the tree (the `.env` template under its asset name,
      `env.example`). Every `*_ASSET` name `scripts/veyqctl.py` fetches must be one a release has — the producer's
-     files, the manifest, or one of the two bundle names the producer reserves and the publish writes (assertion 11).
+     files, the manifest, or one of the two bundle names the producer reserves and the publish writes (assertion 11)
+     — and its `MANIFEST_BUNDLE_ASSET`, the file it verifies the manifest against, is the manifest's bundle by name.
      The derived list is printed on the OK line. Plus: every veyq image
      tag written down under `infra/` or on the Run pages (`site/src/content/docs/run/`, where the operator
      procedures live) matches a tag the pipeline emits.
@@ -1099,9 +1100,19 @@ if not refusals:
             # `cosign sign-blob`, which assertion 11 holds to these names), so they are names a release has too.
             produced = {p.name for p in carried.iterdir()} | {
                 release_assets.MANIFEST, release_assets.VEYQCTL_BUNDLE, release_assets.MANIFEST_BUNDLE}
-            veyqctl_assets = veyqctl_constants(r"[A-Z]+_ASSET")
+            # Underscores in the prefix too: `[A-Z]+_ASSET` never saw `MANIFEST_BUNDLE_ASSET`, and an anchor set
+            # found by a name pattern loses a constant silently, green (cr-signed-release-manifest).
+            veyqctl_assets = veyqctl_constants(r"[A-Z][A-Z_]*_ASSET")
             if not veyqctl_assets:
                 fail("scripts/veyqctl.py names no `*_ASSET` constant, so the names it fetches checked NOTHING")
+            # The manifest's bundle by name, not merely a name a release has: `veyqctl.bundle` is one too, and a
+            # `veyqctl` that verified the manifest against it would refuse every published release.
+            if veyqctl_assets.get("MANIFEST_BUNDLE_ASSET") != release_assets.MANIFEST_BUNDLE:
+                fail(
+                    f"scripts/veyqctl.py's `MANIFEST_BUNDLE_ASSET` is `{veyqctl_assets.get('MANIFEST_BUNDLE_ASSET')}`, not "
+                    f"`{release_assets.MANIFEST_BUNDLE}`, the manifest's bundle the publish writes — `veyqctl` would "
+                    f"verify the manifest against another file, or refuse every release for the lack of it"
+                )
             for constant, name in sorted(veyqctl_assets.items()):
                 if name not in produced:
                     fail(
