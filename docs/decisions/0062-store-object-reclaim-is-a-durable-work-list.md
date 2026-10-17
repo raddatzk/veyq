@@ -112,45 +112,63 @@ messaging pattern this codebase does not have.
 - **Backup `verify` keeps tolerating orphaned objects, on a better reason.** A capture taken between a row
   delete and the sweep tick that drains it legitimately holds objects whose rows are gone — so the asymmetry
   stands, but because reclaim is *pending*, not because deletion is *unreliable*.
-- **A bucket-versus-database reconcile becomes worth building later, and only now means something.** Until this
-  ADR, an orphaned object was the documented steady state, so a report of them asserted nothing. Once reclaim is
-  guaranteed, "objects no row claims and no reclaim row explains" is an anomaly with a meaning — and a report of
-  it can have a Definition of done other than *"finds nothing"*. It is deliberately not built here: there is no
-  production instance for it to measure. Four things it will have to solve are already decided or measured, and
-  are recorded here so that design starts from them rather than re-deriving them:
-  - **Built in the backend, it needs a new port operation, and the listing is unpartitionable.** Decision 1
-    above states why the reclaim list needs no listing; the same two facts are what make a backend reconcile
-    expensive rather than free. Built as an **operator tool** instead, it needs no port at all:
-    `scripts/instance_backup.py` already lists the bucket through rclone (every capture's index), so a reconcile
-    there is that listing plus one database snapshot.
-  - **The keys now live in three tables, not two** — `veyq_blob`, `veyq_upload_session` and
-    `veyq_store_reclaim`. An object is an anomaly only when **none** of the three explains it, and the third is
-    what turns the question from unanswerable into answerable: before it, an object whose row was legitimately
-    deleted a second ago was indistinguishable from one leaked a year ago.
+- **A bucket-versus-database reconcile counts the objects no row claims, and reclaims them only after a grace, on a
+  bucket the Server Owner confirmed is this instance's alone** (owner 2026-10-17, inbox #134; decided, not yet built —
+  cr-bucket-reconcile). Until this ADR an orphaned object was the documented steady state, so a report of them asserted
+  nothing; once reclaim is guaranteed, "objects no row claims and no reclaim row explains" is an anomaly with a meaning.
+  What made it worth building is that veyq itself now produces them: an in-place rollback
+  ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §7) empties the database and restores the
+  pre-upgrade capture with the check only, so every upload made under the failed release stays in the store with no
+  row and no reclaim row — bytes nobody can read, since their wrapped keys were in the emptied database. Its shape:
+  - **In the backend, on a read-only port operation** — `BlobStore.list(startAfter, maxKeys)`, ListObjectsV2 with
+    `start-after`, so the cursor is a key that survives a restart (a continuation token is opaque and may expire).
+    Bounded per tick, resumable from that cursor, one pass every period. Chosen over the operator tool on
+    `scripts/instance_backup.py`'s rclone listing, which needs no port but runs only when someone runs it, cannot put a
+    number in the console, and reads the database and the listing at two moments with nothing to bracket them but
+    the operator's timing. The listing is unpartitionable (`storage_key` is a flat UUID, Decision 1), which is the
+    price the bound per tick pays.
+  - **The keys live in every table a migration gives a `storage_key`** — today `veyq_blob`, `veyq_upload_session` and
+    `veyq_store_reclaim`; `scripts/validate_store_reconcile_claims.py` derives that set from the migrations and holds
+    the claim query to it, because a table that keeps a key alive and is missing there turns a wrong count into lost
+    media. An object is an anomaly only when **none** of them explains it: some row names its prefix with a
+    `chunk_count` above its index. The third table is what makes the question answerable at all — before it, an
+    object whose row was legitimately deleted a second ago was indistinguishable from one leaked a year ago.
   - **A `storage_key` can legitimately appear twice**, so nothing may assume one row per key.
     `BlobUploadStore.persistBlob` gives a committed blob the same `storage_key` as the upload session it was promoted
     from, and the over-budget purge records a session's objects while deliberately leaving its row standing —
     which is why `veyq_store_reclaim` carries no unique index on that column.
-  - **It starts read-only because of the stock, not because the race is unsolvable — and the window that
-    excludes the race is stateable, so no design here needs a heuristic.** The write paths leave no moment at
-    which an object exists unnamed. At **presign** time: `presignPut` is reached only through `presignPuts`,
-    whose one caller (`BlobUploadHandler.presignWindow`) runs *after* `BlobUploadStore.createSession` has committed
-    (`@Transactional`, with no enclosing transaction on the resource or handler), the `storage_key` and every
-    chunk key are server-minted and signed into the URL by SigV4, and `persistBlob` writes no object at all — it
+  - **The window that excludes the race is stateable, so no design here needs a heuristic.** The write paths leave
+    no moment at which an object exists unnamed. At **presign** time: `presignPut` is reached only through
+    `presignPuts`, whose one caller (`BlobUploadHandler.presignWindow`) runs *after* `BlobUploadStore.createSession`
+    has committed (`@Transactional`, with no enclosing transaction on the resource or handler), the `storage_key` and
+    every chunk key are server-minted and signed into the URL by SigV4, and `persistBlob` writes no object at all — it
     inherits the session's key, and both callers delete the session row in the same transaction that inserts the
-    blob row. At **PUT** time, which the presign argument alone does not reach: a signed URL outlives the row
-    that named its key for up to the presign TTL, so the reclaim row Decision 1 writes is not due until that
-    window has passed — the not-before. Without it a member could purge a just-completed blob and re-PUT its
-    chunks after the next tick, 16 MiB per presign window per cycle, under a key nothing names. What is left
-    is a **read-order** artifact, and two rules remove it: read the three tables in **one** snapshot, or a key
-    promoted from `veyq_upload_session` to `veyq_blob` between two SELECTs is missed by both; and **bracket** the listing with a read before and a read
-    after, reporting only what *both* fail to explain — the later read catches the upload that began during the
-    listing, the earlier one the row deleted and reclaim-drained during it (the sweep deletes objects before it
-    settles the row, which is what makes the earlier read sufficient). No age threshold covers anything those
-    two do not. What remains true is the stock: against zero, a delete arm buys nothing, which is the rejected
-    arm's surviving reason. The closest thing to a prototype already exists and is the same question asked of a
-    *capture* rather than a live instance — `scripts/instance_backup.py`'s `verify` counts orphaned objects and
-    tolerates them — but it is weaker than it sounds: it compares the capture's index of the bucket against
+    blob row. At **PUT** time, which the presign argument alone does not reach: a signed URL outlives the row that
+    named its key for up to the presign TTL, so the reclaim row Decision 1 writes is not due until that window has
+    passed — the not-before. What is left is a **read-order** artifact, and the reconcile removes it per listed page:
+    the three tables are read in **one** statement (one snapshot — a key promoted from `veyq_upload_session` to
+    `veyq_blob` between two SELECTs would be missed by both), **after** the listing, which catches the upload that
+    began during it; and each object that statement leaves unexplained is `stat`ed, and counted only if still present
+    — a row deleted and reclaim-drained during the listing deleted its object first (the sweep deletes objects before
+    it settles the row), so the `stat` does what a read *before* the listing would. The age bound —
+    `storeTime − lastModified ≥ veyq.blob.upload.retention`, both instants the store's own (the response's `Date`
+    and the object's `LastModified`, so no clock skew enters) — is a second layer, not the primary: an upload
+    session's lifetime is unbounded, and its row is what covers it. The probe (`veyq-check/probe`) and every key that
+    is not `<uuid>/<index>` are never orphans; they are counted apart as *not veyq's*.
+  - **Deletion goes through this ADR's list and nothing else, on three conditions** (the owner's answer to *"does the
+    reconcile ever delete?"*). It never calls `BlobStore.delete`; it records a key on `veyq_store_reclaim`, so
+    Decision 3's one deleter, its not-before and its retry do the deleting. (1) The Server Owner has **confirmed the
+    bucket is this instance's alone**, for the store in use — a changed store setting voids the confirmation; without
+    it the reconcile only reports. (2) The key stayed an orphan in **every** pass for the **grace** (default 30 days)
+    since it was **first seen**, on the store's clock; a claim row that reappears makes it explained again and drops
+    it; and any **restore or rollback restarts every clock** — the restore tool empties the reconcile's tables after
+    loading the dump (so the confirmation must be given again), and a gap in the listing longer than a bound restarts
+    them for a database brought back by anything else. (3) It is **visible**: the console shows the candidates, their
+    age and the date the first will go, and a **pause** stops the enqueueing while the counting goes on. A key any
+    claim row names is never enqueued, even for an object past its `chunk_count`, because a reclaim row deletes
+    `0 … n−1`.
+  - **The closest thing to a prototype is weaker than it sounds**: `scripts/instance_backup.py`'s `verify` counts
+    orphaned objects and tolerates them, but it compares a capture's index of the bucket against
     `manifest["store"]["blobs"]`, **one** table and never a bucket, so its orphan count includes every pending
     reclaim and every in-flight upload by construction.
 - **Rejected — leave it best-effort and add a failure log.** Nine lines, and it makes future failures visible.
@@ -173,11 +191,17 @@ messaging pattern this codebase does not have.
   group's erasure keeps that group's `scope_id` and size, against Decision 5; and a tombstoned row still counts
   as *required* to backup `verify`, which would go red on healthy instances. A separate table costs one
   migration and clears all four.
-- **Rejected — a scheduled sweep that lists the bucket and deletes what no row claims.** It is the only shape
-  that can reclaim objects already orphaned, and it is the one no foreign key protects — a listing and a
-  database read taken at two moments disagree about anything written between them. That is a read-order problem
-  with a stated answer (the reconcile bullet above carries it), **not** the reason this arm is rejected: against
-  a leak that this ADR prevents at the source and an existing stock of zero, it buys nothing, and a delete path
-  that buys nothing is one more thing that can be wrong about user content.
+- **Rejected — a scheduled sweep that lists the bucket and deletes what no row claims, on its own judgement.** It is
+  the only shape that can reclaim objects already orphaned, and the decided reconcile keeps that — but not the
+  judgement. Its read-order problem has a stated answer (the reconcile bullet above), so that is not the reason. Three
+  are, each turning a wrong judgement into silent, irreversible loss of someone's media, and each is what one of the
+  reconcile's conditions answers: (i) a store of the operator's own need not be a dedicated bucket, and two instances
+  sharing one would each see the other's objects as veyq-shaped orphans — answered by the Server Owner's confirmation
+  that the bucket is exclusive; (ii) after a restore of the *wrong* dump the database is the wrong side, and the
+  orphans are the data a restore of the right dump needs — answered by the grace, which every restore restarts; (iii)
+  a future table that keeps a key alive and is missing from the claim set turns a wrong count into lost media —
+  answered by the guard that derives the claim set from the migrations. Report-only was rejected the other way: the
+  rollback's residue is unreadable bytes nobody else will ever free, and freeing them by hand needs exactly the
+  classification the reconcile already does.
 
 For Server Owners, on the docs site: [Operations](../../site/src/content/docs/run/operations.md).

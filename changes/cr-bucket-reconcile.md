@@ -1,13 +1,13 @@
 ---
 id: cr-bucket-reconcile
-title: A bounded, resumable sweep lists the bucket and counts the objects no row claims
-status: planned
+title: A bounded, resumable sweep lists the bucket, counts the objects no row claims, and reclaims them after a grace on an exclusive bucket
+status: in-progress
 satisfies: [uc.admin.configure-object-store]
 adrs: ["0062", "0056", "0089", "0092", "0093", "0067"]
 invariants:
   - operator-blind E2EE — the sweep reads opaque keys, sizes and the store's timestamps; it opens nothing, attributes nothing to a scope (ADR 0062 Decision 6), and no key reaches a log
   - self-hostable by default — one S3 operation every S3-compatible store has (ListObjectsV2), on both deployment targets, no new dependency
-  - ADR 0062 Decision 3 — StoreReclaimSweep stays the only deleter of store objects
+  - ADR 0062 Decision 3 — StoreReclaimSweep stays the only deleter of store objects; the reconcile only puts keys on its list
 ---
 
 ## Goal
@@ -18,8 +18,10 @@ resumable from a cursor in the database — and counts the objects that **no row
 `veyq_upload_session`, no `veyq_store_reclaim` row names their prefix and chunk index, and they are older than a safe
 age read off the store's own clock. The Server Owner sees the count (objects, bytes, when the last full pass ended,
 what is not veyq's), next to the reclaim list's pending and abandoned counts, in admin-web's **Object store** page and
-in `veyq-admin`. **Whether an orphan is ever deleted is open (O1)**; the CR is written for the recommendation —
-report only — and states what each other answer changes.
+in `veyq-admin`. **An orphan is deleted only after a grace period, on a bucket the Server Owner confirmed is this
+instance's alone, unless paused** (O1, answered 2026-10-17 — § Decided with the owner): every orphan key keeps a
+first-seen clock, a key that stayed an orphan in every pass for the grace goes onto the existing reclaim list, and any
+restore or rollback restarts every clock.
 
 ## Why this is no longer a reconcile that can only find nothing
 
@@ -48,7 +50,7 @@ live proof of phase 2.
   decision 5 (the store follows the setting at runtime — `SwitchingBlobStore`); ADR 0092's spirit (logs are
   operational: counts, never keys); [ADR 0093](../docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 4 (hold pins).
 - Use-case: [uc.admin.configure-object-store](../docs/features/admin/use-cases/uc.admin.configure-object-store.md) —
-  gains an alternate flow (phase 4), written when O1 is answered.
+  gains A7 (phase 0), written from O1's answer.
 - **Objects veyq writes, and what names them** (measured at refine, this worktree at `c1e3ffee`):
   - a chunk is `<storage_key>/<index>` (`grep -n 'fun chunkKey' backend/core/src/main/kotlin/me/raddatz/veyq/core/blobstore/BlobStore.kt`);
     `storage_key` is a server-minted `UUID.randomUUID()` (`grep -n 'val storageKey = UUID' backend/core/src/main/kotlin/me/raddatz/veyq/core/blob/BlobUploadHandler.kt` → `:212`);
@@ -88,8 +90,8 @@ live proof of phase 2.
   reclaim list's counts are SQL only today (`operations.md:77`). The chart runs one app replica
   (`grep -n 'replicas:' charts/veyq/templates/app-deployment.yaml` → `1`).
 - `validate_store_reclaim_arity.py` already proves *"exactly 1 BlobStore delete call site … StoreReclaimSweep.kt"*
-  (run at refine: `OK … StoreReclaimSweep.kt:83`). Under the recommended O1 it is this CR's proof that the reconcile
-  deletes nothing, with no new guard.
+  (run at refine: `OK … StoreReclaimSweep.kt:83`). Under O1's answer it stays this CR's proof that the reconcile
+  deletes nothing (it only records keys on the reclaim list), with no new guard.
 - Parallel work: `cr-instance-contact-and-provider-identification` edits admin-web's console and the backend admin
   surface, and likely `contracts/api/instance.openapi.yaml`. This CR adds its own path to that file and its own panel
   component; in `StorePanel.vue` it adds one import and one tag (`changes/README.md` § Two CRs that write the same page).
@@ -123,11 +125,12 @@ live proof of phase 2.
    so the object is absent at the `stat`; the after-read catches an upload that began during the listing (the
    continuity argument above). Phase 4 amends ADR 0062's bullet to this.
 5. **State: one row, `veyq_store_reconcile` (id 1), written per page in its own transaction** — the in-progress pass
-   (`started_at`, `cursor`, running counts) and the last completed pass (`completed_at`, objects, orphan objects,
-   orphan bytes, not-veyq's objects), plus the last failure (`failed_at`, a reason enum: `STORE_UNREACHABLE`,
-   `LIST_DENIED`, `NO_STORE`, `DATABASE`). Created on first write, no seed. It joins `NOT_DATA` in
-   `scripts/instance_backup.py` (`grep -n '^NOT_DATA = ' -A8`), or a fresh instance's first pass would make A5 refuse a
-   restore onto it. Counts only — no key but the cursor, which is the store's own name for a position.
+   (`started_at`, `cursor`, page counter, running counts) and the last completed pass (`completed_at`, objects, orphan
+   objects, orphan bytes, not-veyq's objects), plus the last failure (`failed_at`, a reason enum: `STORE_UNREACHABLE`,
+   `LIST_DENIED`, `NO_STORE`, `NO_STORE_CLOCK`, `DATABASE`), and the owner's switches of decisions 11 and 14. Created on
+   first write, no seed. It and `veyq_store_orphan` (decision 12) join `NOT_DATA` in `scripts/instance_backup.py`
+   (`grep -n '^NOT_DATA = ' -A8`), or a fresh instance's first pass would make A5 refuse a restore onto it. No key in
+   the state row but the cursor, which is the store's own name for a position.
 6. **Bounded and resumable:** `@Scheduled(every = "{veyq.store-reconcile.every}", concurrentExecution = SKIP)`; a tick
    lists at most `veyq.store-reconcile.pages-per-tick` pages from the cursor; a pass that reaches `truncated = false`
    is published as the last completed pass, and a new pass starts no sooner than `veyq.store-reconcile.period` after
@@ -136,51 +139,91 @@ live proof of phase 2.
 7. **What it must never count as an orphan, and never act on:** a key a live upload may still PUT (its session row
    claims it; the age is the second layer); the probe; anything not veyq-shaped; any page classified while the
    database or the listing failed — **a failure ends the tick, keeps the cursor, records the reason, and publishes
-   nothing**: the last completed pass stays what the console shows, with the failure beside it. A store setting that
-   moves (ADR 0089) restarts the pass from the beginning (the pass records the setting it lists; locator at implement:
-   `grep -n 'fun current' backend/core/src/main/kotlin/me/raddatz/veyq/core/blobstore/StoreSetting.kt`).
+   nothing and enqueues nothing**: the last completed pass stays what the console shows, with the failure beside it.
+   A store setting that moves (ADR 0089) restarts the pass from the beginning (decision 16). *Acting* on an orphan is
+   only decision 15's enqueue, under decisions 11–14.
 8. **One log line per completed pass, at INFO, counts only.** A failure logs once at the transition into it (the
    reclaim sweep's rule, `StoreReclaimSweep.run`), never per tick and never a key.
-9. **The read is the Server Owner's:** `GET /api/instance/store/reconcile`, `x-veyq-channel: admin`, `403
-   not_server_owner` otherwise — the last completed pass, the pass in progress (started, objects so far), the last
-   failure, and the reclaim list's `pending` and `abandoned` counts (`SELECT count(*)` both — what operations.md
-   tells the operator to type today). No key, no scope. `veyq-admin store reconcile` prints the same through the same
+9. **The read and the switches are the Server Owner's:** `GET /api/instance/store/reconcile`, `x-veyq-channel:
+   admin`, `403 not_server_owner` otherwise — the last completed pass, the pass in progress (started, objects so far),
+   the last failure, the candidates and the verdict (decision 14), the exclusive confirmation, the pause, the last
+   clock restart, and the reclaim list's `pending` and `abandoned` counts (`SELECT count(*)` both — what operations.md
+   tells the operator to type today). `PUT`/`DELETE …/reconcile/exclusive-bucket` confirm and withdraw (decision 11,
+   `409 no_store` while no store is usable), `PUT`/`DELETE …/reconcile/pause` pause and resume; each answers the read.
+   Their own tag (`instance-store-reconcile`, its resource owns the subtree) so the parallel admin CR's `instance`
+   tag stays untouched. No key, no scope. `veyq-admin store reconcile` prints and switches the same through the same
    facade (`admin-web/src/cli/commands.ts`, the "mirrors what admin-web holds" rule in its header).
 10. **Rejected — the operator tool on rclone** (ADR 0062's cheaper arm: `instance_backup.py`'s listing plus one
     database snapshot). It needs no port, but it runs only when someone runs it, cannot put a number in the console,
     and would read the database and the listing at two moments with nothing to bracket them but the operator's
     timing. The backend sweep pays one port operation and is periodic.
 
-## Open for the owner
+## Decided with the owner
 
-**O1 — Does the reconcile ever delete an orphan?** The parking reasons, re-read against the tree:
+**O1 — answered 2026-10-17 ("ja"): an orphan is deleted after a grace period, under three conditions** — neither
+(a) report only nor (c) blind automatic reclaim. The re-read reasons (i)–(iii) below are what each condition answers;
+they stay the reason the rejected arm (c) stays rejected.
 
-- *"Against a stock of zero it buys nothing"* — **no longer true**: an in-place rollback leaves every upload of the
-  failed release behind, and those bytes are unreadable by anyone (their wrapped keys were in the emptied database).
-- *"A delete path that buys nothing is one more thing that can be wrong about user content"* — **still true, and
-  sharper than in ADR 0062**: (i) a store of the operator's own need not be a dedicated bucket, and two veyq instances
-  sharing one (a staging instance) would each see the other's objects as veyq-shaped orphans; (ii) after a restore of
-  the *wrong* dump the database is the wrong side, and the orphans are the data a restore of the right dump needs;
-  (iii) a future table that keeps a key alive and is missing from the claim set turns a wrong count into lost media.
+- (i) a store of the operator's own need not be a dedicated bucket, and two veyq instances sharing one would each see
+  the other's objects as veyq-shaped orphans;
+- (ii) after a restore of the *wrong* dump the database is the wrong side, and the orphans are the data a restore of
+  the right dump needs;
+- (iii) a future table that keeps a key alive and is missing from the claim set turns a wrong count into lost media
+  (guard G1 holds the claim set to the migrations).
 
-Options:
-
-- **(a) Report only (recommended).** This CR as written. Nothing deletes; `validate_store_reclaim_arity.py` stays the
-  proof. The operations page says what a non-zero count means (after a rollback: that release's uploads; otherwise: a
-  writer other than this instance, or a bug — report it) and how to free the bytes by hand if the operator is sure.
-- **(b) Report, plus a reclaim the Server Owner confirms.** Adds an action — console and `veyq-admin store reconcile
-  --reclaim` — that re-runs the classification for the last pass's orphans and puts the still-unclaimed,
-  still-present ones on `veyq_store_reclaim` (so the existing sweep, its not-before and its one call site do the
-  deleting). Costs: a table of orphan prefixes (opaque, no scope), a contract `POST`, a confirm dialog, and bites for
-  (i)–(iii) at the enqueue step. Decides nothing for the operator: they know whether the bucket is shared and which
-  dump is right.
-- **(c) Automatic reclaim** of every orphan past the safe age. Rejected by (i)–(iii): it turns each into silent,
-  irreversible loss on someone's media, with no human between the count and the delete.
-
-**Recommendation: (a) now, (b) as its own CR once a real instance shows a count.** (a) is the whole of (b)'s
-classification, so nothing built here is thrown away, and (b) can then be designed against an actual rollback residue
-instead of an imagined one. If the owner answers (b) now, phases 1–3 each gain the action named above and phase 2 the
-orphan table; the bites below stay and B13–B15 are added for (i)–(iii).
+11. **Exclusive bucket — answers (i).** The Server Owner confirms once, in admin-web's panel or with
+    `veyq-admin store reconcile --confirm-exclusive-bucket`, that the bucket in use holds only this instance's objects.
+    Without that confirmation the reconcile **only reports**. The confirmation is stored with its time and with the
+    digest of the store it was given for (decision 16); a store setting that changes (ADR 0089 — a new setting put in
+    use, or one a restore brings) no longer matches the digest, and the confirmation is void and cleared. It can be
+    withdrawn (`--withdraw-exclusive-bucket`).
+12. **Grace from first seen — answers (ii) and the race no read can close.** `veyq_store_orphan` holds one row per
+    orphan **storage key** (the prefix: no row claims it at all) with its first-seen instant, read off the store's
+    clock like the safe age, and the pass that last saw it. A completed pass drops every row it did not see, so a
+    row that survives was an orphan in **every** pass since it was first seen; a claim row that reappears (a restore)
+    makes its key explained, so the next completed pass drops it, and the enqueue re-checks the claim set anyway.
+    A key is **due** once `storeTime − firstSeen ≥ veyq.store-reconcile.grace` (default `P30D`). The table holds
+    opaque keys and counts — no scope, as `veyq_store_reclaim` (ADR 0062 Decision 6). It joins `NOT_DATA` with the
+    state row: a fresh instance's first pass, or the rollback's one start on an emptied database, writes rows there.
+13. **A restore or a rollback restarts every clock — detected twice.**
+    - **The restore writes the reset.** Every restore and rollback veyq documents ends in `instance_backup.py
+      restore` (`cmd_restore`: `veyqctl restore`, `veyqctl rollback` with the capture's release's tool, the
+      cluster's gate restore through its record), which, after the dump is loaded, **empties** both reconcile
+      tables: every first-seen clock restarts, and the exclusive confirmation and a pause are gone with the state row,
+      so nothing is deleted until the Server Owner confirms the bucket again. Clearing the confirmation too is a
+      choice on the safe side: a restore is exactly the moment of (ii), when the Server Owner alone knows whether the
+      dump was the right one. Why the tool and not something the app reads: the app is stopped for every restore, and
+      the dump it loads carries both tables as they were at the capture — no row inside it can say it was loaded
+      again — while the engine's own trace (a table's `CREATE_TIME`) is MariaDB's only, absent on H2, and survives a
+      volume copy.
+    - **The app's backstop: a clock counts only observed time.** When two consecutive listed pages are further apart
+      on the store's clock than `veyq.store-reconcile.max-gap` (default `P1D`), every clock restarts. It catches a
+      database brought back by anything else (a hand-loaded dump, a database-only volume copy) once it is older than
+      the gap, and plain downtime too, which only delays a deletion. The documented volume-copy fast path copies the
+      store's volumes together with the database, so its clocks come back with the very objects they describe.
+    The console shows when the clocks last restarted and why (`RESTORE` is the empty state the tool leaves, `GAP`,
+    `STORE_CHANGED`).
+14. **Visible, not silent.** The read carries the candidates — keys, objects, bytes, the oldest and newest first-seen,
+    how many are due, and the first deletion date when deleting is armed — and a verdict the console renders totally:
+    `ARMED`, `NOT_CONFIRMED`, `PAUSED`, `NO_STORE`. **Pause** stops the enqueueing and keeps every count; **resume**
+    lets the next completed pass enqueue what is due. `veyq-admin store reconcile [--pause | --resume]` mirrors it.
+    What a pause does not reach is said where it is clicked: keys already handed to the reclaim list are the reclaim
+    sweep's (ADR 0062), within that list's not-before.
+15. **Deletion goes through the reclaim list; the reconcile never deletes.** In the transaction that completes a
+    pass: drop the rows the pass did not see; select the due rows; re-run the claim query on their keys; record each
+    still-unclaimed key with `StoreReclaimStore.record(key, highestIndexSeen + 1)` (so `StoreReclaimSweep`, its
+    not-before and its one call site delete) and delete its orphan row. `validate_store_reclaim_arity.py` stays the
+    proof that the reconcile deletes nothing. A key **any** claim row names is never a candidate: an object past its
+    claimed `chunk_count` (B6) is counted as an orphan, never enqueued, because a reclaim row deletes `0 … n−1` and
+    would take the claimed chunks with it. A key with an unclaimed object younger than the safe age is not a
+    candidate in that pass (its clock restarts), because an unexplained young object is a writer the age bound has not
+    yet ruled out.
+16. **The store a pass lists is recorded by digest** — SHA-256 over the resolved store's type, endpoint, bucket,
+    region and access key (no secret). A pass, the clocks and the confirmation each hold the digest they were made
+    under; a different current digest restarts the pass from the first key, empties the orphan rows
+    (`STORE_CHANGED`) and voids the confirmation. This is decision 7's *"the pass records the setting it lists"*.
+17. **Two backend processes cannot double-count.** Every page's write is a compare-and-set on the pass's page
+    counter in the state row; a tick that lost the race writes nothing and ends. No lock is held across a store call.
 
 ## Phases
 
@@ -188,21 +231,27 @@ Baseline before the first edit: `for f in scripts/validate_*.py; do [ "$f" = scr
 continue; python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done` and `(cd backend && ./gradlew check)` exit code on
 `main`, recorded in the retrospective — a red afterwards is this CR's only against that list.
 
-- [ ] **0 refine completion** (after O1) — ADR 0062's reconcile bullet amended to what O1 and decisions 2–4 settle
-  (built; report only or (b); the `stat` in place of the read-before; the age on the store's clock), its rejected
-  *"scheduled sweep that deletes"* arm kept with the re-read reasons (i)–(iii); uc.admin.configure-object-store gains
-  **A7 — Objects no row claims** and its coverage file the criterion `orphans-are-counted-never-deleted` (or (b)'s
-  wording) marked decided, not built. · Done when: `python3 scripts/validate_changes.py` and `validate_coverage.py` green.
-- [ ] **1 contracts** — `GET /api/instance/store/reconcile` in `contracts/api/instance.openapi.yaml` with its schema
-  (decision 9), examples for *never ran*, *in progress*, *completed with orphans*, *failed: LIST_DENIED*. · Done when:
-  the contract validators green (`python3 scripts/validate_*.py`); the backend's generated interface is red until
-  phase 2, and admin-web's client until phase 3 (`changes/README.md` § Phases only above real size).
-- [ ] **2 backend** — decisions 1–9: the port operation and its three implementations (+ the test-scope
-  `RecordingBlobStore` gains a scripted listing), the migration (`V<stamp>__core_store_reconcile.sql`), the sweep
+- [ ] **0 refine completion** (after O1) — ADR 0062's reconcile bullet amended to what O1 and decisions 2–4 and
+  11–17 settle (decided, not yet built: the grace on an exclusive bucket, the enqueue through the reclaim list, the
+  `stat` in place of the read-before, the age on the store's clock, the restore's reset), its rejected *"scheduled
+  sweep that deletes"* arm kept with the re-read reasons (i)–(iii) as what the three conditions answer;
+  uc.admin.configure-object-store gains **A7 — Objects no row claims**. Its coverage criterion
+  `orphans-are-reclaimed-only-after-the-grace-on-an-exclusive-bucket` lands with phase 2's refs: the file is built,
+  and a built file's criterion without a ref is red (`docs/coverage/README.md` § Rules). · Done when: `python3
+  scripts/validate_changes.py` and `validate_coverage.py` green.
+- [ ] **1 contracts** — the five operations of decision 9 in `contracts/api/instance.openapi.yaml` under the new tag
+  with their schema, examples for *never ran*, *in progress*, *completed with candidates, armed*, *failed:
+  LIST_DENIED*. · Done when: the contract validators green (`python3 scripts/validate_*.py`); a new tag compiles, so the
+  backend is red only where a new operation is seen on day one (`OperatorBlindProbeTest`, the admin-channel posture
+  sweep and gate test — `changes/README.md` § Phases only above real size) until phase 2.
+- [ ] **2 backend** — decisions 1–9 and 11–17: the port operation and its three implementations (+ the test-scope
+  `RecordingBlobStore` gains a scripted listing), the migration (`V<stamp>__core_store_reconcile.sql`: both tables, and
+  an index on `storage_key` in each claim table, which the per-page `IN (…)` reads), the sweep
   (`core/blobstore/StoreReconcile.kt`), config (`veyq.store-reconcile.*` in `VeyqConfig` + `application.properties`),
-  the resource, `NOT_DATA`; guard **G1** `scripts/validate_store_reconcile_claims.py`: every table a migration gives a
-  `storage_key` column is named by the claim query (derived from the migrations, never listed in the guard). Slice
-  tests on the scripted store, one per bite:
+  the resource, `NOT_DATA` and the restore's reset in `scripts/instance_backup.py` (decision 13) with its self-test
+  case; guard **G1** `scripts/validate_store_reconcile_claims.py`: every table a migration gives a `storage_key` column
+  is named by the claim query (derived from the migrations, never listed in the guard). Slice tests on the scripted
+  store, one per bite:
   - **B1 live upload** — an open session with a PUT chunk older than the safe age → 0 orphans; drop the session branch
     from the claim query → 1 (red).
   - **B2 pending reclaim** — a blob purged (its reclaim row pending) → 0; drop the reclaim branch → red.
@@ -222,26 +271,48 @@ continue; python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done` and `(cd backend 
   - **B11 no `Date` header** — the scripted listing omits it → the page is not classified; fall back to the backend
     clock → red.
   - **B12 store unusable** — `UnconfiguredBlobStore` → `NO_STORE`, nothing counted; `LIST_DENIED` on an S3 `403`.
+  - **B13 exclusive bucket** — an orphan past the grace on an unconfirmed bucket → reported, nothing recorded on the
+    reclaim list; the same after confirming → recorded (control); confirmed, then the store digest changes → the
+    confirmation is void and nothing is recorded. Lever: skip the confirmation check → red.
+  - **B14 the grace** — first seen `grace − 1s` before the completing page's store time → not recorded; at `grace` →
+    recorded. Lever: measure the grace from the object's `lastModified` instead of first seen → red.
+  - **B15 a claim reappears** — a candidate whose key gains a claim row → its orphan row is gone after the next pass and
+    nothing is recorded; a claim inserted after the key's page was listed and before the completing page → not
+    recorded (the enqueue's re-check). Lever: drop the re-check → red.
+  - **B16 a restore restarts the clocks** — `instance_backup_selftest.py`: a restore empties both reconcile tables
+    (lever: remove the reset → red); backend: two pages further apart than `max-gap` → every clock restarts and nothing
+    past the old first-seen is recorded (lever: skip the gap check → red).
+  - **B17 pause** — paused → counts published, nothing recorded; resumed → the next completed pass records it.
+    Lever: ignore the pause → red.
+  - **B18 a claimed key is never enqueued** — an object past its claimed `chunk_count` is counted and never recorded
+    (lever: track every orphan's key → the claimed key reaches the reclaim list, red).
+  - **B19 two processes** — a page written by another tick between this tick's read and its write → this tick writes
+    nothing (lever: drop the compare-and-set → the page is counted twice, red).
   - **G1 bite** — a scratch migration adding `storage_key` to a new table → G1 red naming it; G1 joins
     `validate_guard_gaps.py`'s cases only if it changes a guard there (`changes/README.md` § trust-chain guards).
   - **Opt-in S3 e2e** (`VEYQ_S3_E2E=1`, beside `BlobBatchE2ETest`): `S3BlobStore.list` against a real Garage — pages
     by `startAfter`, `storeTime` from `Date`, `truncated` — the one un-mocked test that runs before the mapping is
     trusted (`changes/README.md` § Where a mapping depends on a library's output).
-  · Done when: `(cd backend && ./gradlew check)` green (own build, never `quarkusDev`); the sweep takes no lock, so
-  `scripts/run_backend_races_on_mariadb.py` is not required (if implement adds one, it runs); `validate_store_reclaim_arity.py`
-  still reports exactly one site; `instance_backup_selftest.py` green; **live proof** on a throwaway Compose project of
-  this CR's own (never the owner's dev stack, never `run_web_e2e.py`): capture, upload two files, restore the capture in
-  place with the check only, run a pass → orphans = those files' chunk count and bytes; a pass on the untouched
+  · Done when: `(cd backend && ./gradlew check)` green (own build, never `quarkusDev`); the sweep holds no lock
+  across a store call, but its compare-and-set is a row write two processes can race, so B19's class runs in
+  `scripts/run_backend_races_on_mariadb.py` too; `validate_store_reclaim_arity.py` still reports exactly one site;
+  `instance_backup_selftest.py` green; **live proof** on a throwaway Compose project of this CR's own (never the owner's
+  dev stack, never `run_web_e2e.py`): capture, upload two files, roll back in place with the check only, run a pass →
+  orphans = those files' chunk count and bytes, and the restore left no clock; unconfirmed → only reported; with a
+  short test grace, confirmed → recorded on the reclaim list and reclaimed from the store; a pass on the untouched
   instance → 0.
 - [ ] **3 admin-web** — `features/instance/StoreReconcilePanel.vue` (its own component, shown by `StorePanel.vue`
-  while a store is in use), a total render map over the failure enum (as `StoreProvisioningPanel.vue` does for its
-  states), EN + DE strings, the `store reconcile` CLI command; unit tests per state. · Done when: `npm run check` in
-  `admin-web/` green and the panel clicked in a browser against the live proof's instance (orphans shown, then a
-  failure shown after stopping its Garage).
+  while a store is in use), a total render map over the failure enum and the verdict (as `StoreProvisioningPanel.vue`
+  does for its states), the candidates with their deletion date, the exclusive-bucket confirmation (a confirm dialog
+  that says what it arms) and withdraw, pause and resume; EN + DE strings; the `store reconcile` CLI command with
+  `--confirm-exclusive-bucket`, `--withdraw-exclusive-bucket`, `--pause`, `--resume`; unit tests per state. · Done
+  when: `npm run check` in `admin-web/` green and the panel clicked in a browser against the live proof's instance
+  (candidates shown, confirmed, paused, then a failure shown after stopping its Garage).
 - [ ] **4 docs** — ADR 0062 status of the bullet (built), ADR 0056 § Context 2's last sentence about counting;
   `site/src/content/docs/run/operations.md` (the Background jobs table row; the console replaces the SQL, which stays
   as the database-side form); `run/upgrade.mdx`'s rollback paragraph and `run/backup-and-restore.md`'s tolerated
-  orphans point at the count; `run/storage-and-email.md` says an own store's key needs to list the bucket for the count
+  orphans point at the count and say a restore restarts the clocks and disarms the deletion; the confirm, the grace,
+  the pause and the deletion date on `run/operations.md`; `run/storage-and-email.md` says an own store's key needs to list the bucket for the count
   (`LIST_DENIED` otherwise); coverage criterion flipped to built. · Done when: every `scripts/validate_*.py` green and
   `npm run check` in `site/` green.
 
