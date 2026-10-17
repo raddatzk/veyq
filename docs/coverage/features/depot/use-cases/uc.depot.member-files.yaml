@@ -30,7 +30,7 @@ acceptanceCriteria:
         e2e: [src/features/depot/depot.e2e.test.ts]
     gaps:
       - surface: web
-        reason: The download streams into a save target (a picked file, the Service Worker's download route, or a Blob up to 512 MiB), proven by unit tests with fake sinks and ports; no real browser has streamed a multi-gigabyte file, and the streamed e2e step is written but not yet run (inbox #371).
+        reason: The download streams into a save target (a picked file, the Service Worker's download route, or a Blob up to 512 MiB), proven by unit tests with fake sinks and ports; lane L1 streams a 25-frame file through each sink in Chromium (the `stack` gap below), but no browser has streamed a multi-gigabyte file, and Firefox, Safari and phones none (inbox #371).
   - id: replace-is-a-compare-and-set-on-the-blob
     text: A replace completes with the blob the member read (expectedBlobId); the server swaps it and frees the old blob in the same transaction. A stale or missing expectation is 409 stale_file with the slot's current blob, the slot unchanged and the new upload freed; the client then offers replace anyway on the current blob.
     coverage:
@@ -65,3 +65,16 @@ acceptanceCriteria:
       web:
         unit: [src/features/depot/levelRows.test.ts]
         e2e: [src/features/depot/depot.e2e.test.ts]
+gaps:
+  stack: >-
+    Lane L1's browser suite (`e2e/tests/features/depot-download.spec.ts`, `e2e/tests/features/depot-files.spec.ts`)
+    drives `upload-attaches-one-sealed-blob`, `download-returns-the-original-bytes`, `a-file-name-is-folded-as-a-file-name`,
+    `replace-is-a-compare-and-set-on-the-blob`, `metadata-is-the-blobs-own`, `delete-goes-to-the-trash` in Chromium
+    against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its
+    criterion. A 25-frame file downloads byte for byte into a picked file (the picker answered by an origin-private
+    file, one write per frame) and through the Service Worker's `/__download/` route, neither building a Blob of the
+    file's size, and a store cut off mid-download leaves a download the browser marks failed; three files dropped at
+    once upload, a picked name that folds onto a file replaces it after the question, a renamed file saves under its
+    new name, a delete goes to the trash and Undo restores it. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits the first CI
+    run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On that run each
+    file becomes a ref on the criteria its tests are tagged with, and this gap goes.
