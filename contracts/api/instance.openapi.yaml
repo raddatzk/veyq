@@ -2967,6 +2967,8 @@ components:
     InstanceOperatingModePresetEntry:
       type: object
       description: One entry of the preset (ADR 0088 decision 14) — its value in each mode, and its own instance switch now.
+      # "off" quoted, here as on the property: bare, YAML 1.1 reads it as the boolean false, and the client generator
+      # then refuses the whole spec ("required is not of type `string`").
       required: [id, title, onInPrivate, onInOrganisation, "off"]
       properties:
         id:

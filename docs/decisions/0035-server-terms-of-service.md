@@ -4,7 +4,10 @@
   **revision** (`terms_revision`, `accepted_terms_revision`, `termsRevision`, was `…version`); the pre-E2EE
   product's `Tenant.termsVersion` below keeps its own name. Decisions 6 (the fixed operator section) and 7 (the
   provider identification), added 2026-10-16 from the legal research behind ADR 0093 and made mode-dependent on
-  2026-10-17 (ADR 0093 § 14), are **not built**; they belong to the moderation work (inbox #462).
+  2026-10-17 (ADR 0093 § 14), belong to the moderation work (inbox #462): decision 7 is **built** (set in admin-web
+  and the CLI, warned about in the organisation mode, shown on the login and share pages,
+  [uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md)), and so are the values
+  decision 6 renders; the operator section itself is **not built**.
 - Date: 2026-07-10
 
 ## Context

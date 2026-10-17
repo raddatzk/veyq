@@ -73,7 +73,7 @@ acceptanceCriteria:
   - id: admin-web-warns-in-the-organisation-mode-only
     text: >-
       In the club, organisation or company mode admin-web warns while public links are on and no contact is set, and
-      while the identification is empty; in private neither warning shows.
+      while the identification lacks its name, address for service or email; in private neither warning shows.
     coverage:
       backend:
         integration: [OperatorDetailsSliceTest.anInstanceWhereNoModeWasChosenReadsAsOrganisation]
@@ -81,8 +81,7 @@ acceptanceCriteria:
       - surface: backend
         reason: >-
           The backend serves the mode the warnings read. The warnings themselves are admin-web's
-          (`OperatorPanel.test.ts`, `operator.test.ts`; "empty" is read as a missing name, address for service or
-          email), waiting under the use-case gap, and lane L1 walks them in both modes (the `stack` gap).
+          (`OperatorPanel.test.ts`, `operator.test.ts`), waiting under the use-case gap, and lane L1 walks them in both modes (the `stack` gap).
   - id: the-identification-appears-on-the-login-and-share-pages
     text: >-
       Where set, in either mode, the identification is shown on the login and the share pages through the public read;

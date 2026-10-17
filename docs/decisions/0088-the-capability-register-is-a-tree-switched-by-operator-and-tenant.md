@@ -5,7 +5,9 @@
   services (#439 step 4); a member's share list says why a link serves no guest (#457) (§ Consequences). It replaces
   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
   [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match. Decision 14
-  (the operating mode as a preset, 2026-10-17) is not built.
+  (the operating mode as a preset, 2026-10-17) is built: the catalog's `modes`, the generated `CapabilityPresets`
+  and the write that sets them with the mode ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
+  no entry carries a preset yet.
 - Date: 2026-10-15
 
 ## Context

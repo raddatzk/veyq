@@ -54,7 +54,9 @@ sequenceDiagram
 
 - **A1 — Values left empty.** Nothing is refused, in either mode. In *club, organisation or company* the admin console
   warns while public links (`core.public-shares`) are on and no contact is set, and, independently, while the
-  identification is empty. In *private* neither warning shows; a value that is set is still published.
+  identification lacks its name, its address for service or its email (a half-filled identification is as
+  incomplete as an empty one; the representative is never asked for, since the console cannot tell a legal person).
+  In *private* neither warning shows; a value that is set is still published.
 - **A2 — Instance mail not ready.** A notification address saved while instance mail is not configured and confirmed
   gets no code; the panel says so, and saving again once instance mail is confirmed sends one.
 - **A3 — A wrong or stale code.** It is refused and spends one of a few attempts; a code expires; a changed

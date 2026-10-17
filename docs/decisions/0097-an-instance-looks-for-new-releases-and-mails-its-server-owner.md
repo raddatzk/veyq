@@ -4,7 +4,8 @@
   `core/mail/`, admin-web's Server → Release and Server → Mail). The GitHub source reads each candidate major's
   `manifest.json` release asset, which exists once `veyqctl`'s publish uploads it; until then a new major on GitHub
   is a failed check, a mirror is not. Not built: moderation notices to the moderators, which decisions 3, 5 and 6
-  carry for [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7.
+  carry for [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7; the
+  code confirmations they wait on — a moderator's and the instance contact's notification address — are built.
 - Date: 2026-10-16
 
 ## Context
