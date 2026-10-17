@@ -1417,6 +1417,7 @@ paths:
             example:
               kemPublicKey: a2VtLXB1YmxpYy1rZXk=
               signPublicKey: c2lnbi1wdWJsaWMta2V5
+              epoch: 3
               reason: REMOVAL
               grants:
                 - accountId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
@@ -1448,9 +1449,10 @@ paths:
               example: { code: not_server_owner }
         "409":
           description: >
-            `moderation_off` = no epoch exists yet (turn moderation on); `moderation_grants_incomplete` = the grants do
-            not name exactly the accepted moderators; `identity_changed` = a grant is sealed to an identity that is not
-            its moderator's current one. Nothing is stored.
+            `moderation_off` = no epoch exists yet (turn moderation on); `moderation_epoch_stale` = `epoch` is not the
+            current epoch plus one (another mint landed in between; read again); `moderation_grants_incomplete` = the
+            grants do not name exactly the accepted moderators; `identity_changed` = a grant is sealed to an identity
+            that is not its moderator's current one. Nothing is stored.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2442,8 +2444,19 @@ components:
     MintModerationEpochRequest:
       type: object
       description: The next epoch's public bundle, one grant per accepted moderator, and why it is minted.
-      required: [kemPublicKey, signPublicKey, reason, grants]
+      required: [epoch, kemPublicKey, signPublicKey, reason, grants]
       properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 2
+          description: >
+            The epoch the grants are sealed for (`moderation-grant` [epoch]) — the current one plus one, as the minting
+            client read it. The server refuses any other (`409 moderation_epoch_stale`): grants are opaque to it, so a
+            mint that raced another would otherwise store grants no moderator could open as the epoch they are filed under.
+          example: 3
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(2)'
         kemPublicKey:
           type: string
           description: The epoch's X-Wing encapsulation key (1216 bytes), standard base64.

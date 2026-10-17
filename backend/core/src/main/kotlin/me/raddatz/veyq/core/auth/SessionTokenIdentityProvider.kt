@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.auth
 
 import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
+import me.raddatz.veyq.core.identity.ModeratorEntity
 import me.raddatz.veyq.core.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.security.AuthenticationFailedException
@@ -45,6 +46,9 @@ class SessionTokenIdentityProvider(private val sessions: AccessTokenResolver) :
             .setPrincipal(QuarkusPrincipal(userId))
             .addCredential(TokenCredential(token, "bearer"))
         if (user.serverRole == SERVER_OWNER) builder.addRole(SERVER_OWNER)
+        // The second role, read from its own table (ADR 0099 § 1): an accepted, unremoved appointment. A removal ends
+        // it on the session's next request, since every request resolves its identity again.
+        if (ModeratorEntity.isModerator(userId)) builder.addRole(ModeratorEntity.MODERATOR)
         return builder.build()
     }
 }

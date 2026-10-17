@@ -88,6 +88,17 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_release_notice.mailed_at" to "served: InstanceReleaseNotice.mailedAt; a notice with one is never mailed again",
             "veyq_instance_mail_settings.code_expires_at" to "InstanceMailConfirmation refuses an expired code",
             "veyq_instance_mail_settings.confirmed_at" to "served: InstanceMailSettings.confirmedAt; its presence is the confirmation",
+            // --- moderation (ADR 0099, ADR 0093 § 11)
+            "veyq_moderator.appointed_at" to "served: InstanceModerator.appointedAt, ModeratorAppointment.appointedAt; orders the roster",
+            "veyq_moderator.accepted_at" to "its presence is the MODERATOR role (ModeratorEntity.accepted); served: acceptedAt",
+            "veyq_moderator.removed_at" to "its presence ends the role and the roster entry (ModeratorEntity.onRoster)",
+            "veyq_moderator.code_expires_at" to "ModeratorAddress.codeLive refuses an expired code",
+            "veyq_moderator.confirmed_at" to "its presence is the address confirmation (ModeratorAddress.confirmed)",
+            "veyq_moderation_epoch.rotation_due_at" to "served: InstanceModeration.rotationDueSince; RotationDueNotice mails it",
+            "veyq_moderation_epoch.rotation_due_mailed_at" to "RotationDueNotice's claim: mailed once, released on a failed send",
+            "veyq_moderation_challenge.expires_at" to "ModerationProofGate refuses an expired challenge; ModerationPurge deletes it",
+            "veyq_moderation_event.occurred_at" to "ModerationLog.closeFor dates an event from the later of it and the removal",
+            "veyq_moderation_event.expires_at" to "ModerationPurge deletes the event past it (ModerationLog.purgeExpired)",
             // --- tasks
             "veyq_job.created_at" to "TasksStore claims the oldest job first and picks the newest covering rotation",
             "veyq_job.lease_expires_at" to "TasksStore re-offers a job whose lease ran out",

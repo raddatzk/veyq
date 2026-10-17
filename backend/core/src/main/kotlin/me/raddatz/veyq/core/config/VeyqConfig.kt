@@ -40,6 +40,7 @@ interface VeyqConfig {
     fun recovery(): Recovery
     fun emailConfirmation(): EmailConfirmation
     fun pairing(): Pairing
+    fun moderation(): Moderation
     fun scope(): Scope
     fun node(): Node
     fun blob(): Blob
@@ -312,6 +313,11 @@ interface VeyqConfig {
             @WithDefault("P7D")
             fun retention(): Duration
         }
+    }
+
+    /** Moderation (ADR 0099, ADR 0093 § 11): how often expired key-proof challenges and moderation-log events go. */
+    interface Moderation {
+        fun purge(): Interval
     }
 
     /** Device linking (ADR 0059) — how long a pairing channel lives, and how long a spent one is kept. */

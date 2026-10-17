@@ -44,6 +44,48 @@ class InstanceNoticeMailer(
     }
 
     /**
+     * The code that confirms a moderator's address (ADR 0097 decision 5, ADR 0099 § 7), to [to] — the moderator's own
+     * account address, which their caller read from their account row, never from a request. Sent through the instance's
+     * settings whenever they can send: the Server Owner's own confirmation is about the Server Owner's address, not about
+     * the relay, and a moderator's code is what confirms theirs.
+     */
+    fun sendModeratorCode(to: String, code: String, expiresAt: Instant): DeliveryResult {
+        val transport = settings.find()?.transport?.takeIf { it.host != null } ?: return DeliveryResult.FAILED
+        val from = transport.from ?: return DeliveryResult.FAILED
+        if (!sendable(transport)) return DeliveryResult.FAILED
+        return wire.deliver(
+            transport.smtp(), from, to, InstanceMailCopy.moderatorCodeSubject(),
+            InstanceMailCopy.moderatorCodeBody(code, expiresAt), "a moderator's address code",
+        )
+    }
+
+    /**
+     * A moderation notice (ADR 0097 decision 3, ADR 0099 § 7) to [to] — a confirmed moderator's own account address,
+     * which the caller (`ModeratorNotices`) read from the roster and the account row, never from a request. Through the
+     * instance's settings whenever they can send.
+     */
+    fun mailTo(to: String, subject: String, body: String, what: String): DeliveryResult {
+        val transport = settings.find()?.transport?.takeIf { it.host != null } ?: return DeliveryResult.FAILED
+        val from = transport.from ?: return DeliveryResult.FAILED
+        if (!sendable(transport)) return DeliveryResult.FAILED
+        return wire.deliver(transport.smtp(), from, to, subject, body, what)
+    }
+
+    /**
+     * One instance notice of another kind than a release (ADR 0097 decision 6: rotation due, ADR 0099 § 4) to the
+     * confirmed Server Owner's address — under the same conditions [mailPending] has. Null when it could not be tried
+     * (no confirmed settings, or settings that cannot send); the caller keeps its claim open then.
+     */
+    fun mailServerOwner(subject: String, body: String, what: String, now: Instant): DeliveryResult? {
+        val row = settings.find() ?: return null
+        val owner = InstanceMailConfirmation.addressOf(row.ownerUserId) ?: return null
+        if (InstanceMailConfirmation.state(row, owner, now) != InstanceMailConfirmationState.CONFIRMED) return null
+        val from = row.transport.from ?: return null
+        if (!sendable(row.transport)) return null
+        return wire.deliver(row.transport.smtp(), from, owner, subject, body, what)
+    }
+
+    /**
      * Mail every notice that still applies to [running] and was not mailed yet — only with confirmed settings that can
      * send, and only to the confirmed Server Owner's address. Returns how many went out.
      */
@@ -105,6 +147,28 @@ object InstanceMailCopy {
             $code
 
         Er wird nach ${EXPIRY.format(expiresAt)} ungültig. Bis er eingegeben ist, wird kein Hinweis gemailt.
+    """.trimIndent()
+
+    fun moderatorCodeSubject() = "Confirm your address for moderating veyq / Deine Adresse für die Moderation bei veyq bestätigen"
+
+    fun moderatorCodeBody(code: String, expiresAt: Instant) = """
+        You accepted to moderate this veyq instance. Its notices about new cases reach you only at a confirmed address.
+
+        To confirm that this address reaches you, type this code into the moderation surface:
+
+            $code
+
+        It stops working after ${EXPIRY.format(expiresAt)}. In the moderation surface you can ask for a new one.
+
+        —
+
+        Du hast zugestimmt, diese veyq-Instanz zu moderieren. Ihre Hinweise auf neue Fälle erreichen dich nur an einer bestätigten Adresse.
+
+        Um zu bestätigen, dass diese Adresse dich erreicht, gib diesen Code in der Moderation ein:
+
+            $code
+
+        Er wird nach ${EXPIRY.format(expiresAt)} ungültig. In der Moderation kannst du einen neuen anfordern.
     """.trimIndent()
 
     fun noticeSubject(n: StoredNotice): String = when (n.kind) {

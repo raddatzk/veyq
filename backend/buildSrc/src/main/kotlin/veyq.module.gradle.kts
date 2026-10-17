@@ -56,8 +56,12 @@ dependencies {
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
     systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
-    // The root's reason, unchanged: a forked test JVM's default heap OOMs partway through a Quarkus suite.
-    maxHeapSize = "2g"
+    // The root's reason, unchanged: a forked test JVM's default heap OOMs partway through a Quarkus suite. 3g, not 2g:
+    // `:core`'s one JVM boots Quarkus once per test profile (32 of them), each boot loading all of core's main code. The
+    // moderation CR's main code (five tables, a request filter, a dozen beans) took it over 2g — `OutOfMemoryError: Java
+    // heap space` at `TenantIngressProjectorTest`'s boot, reproduced with its new test classes moved out (2026-10-17);
+    // the same suite had passed at 2g one commit before.
+    maxHeapSize = "3g"
     // Every backend test runs from `backend/`, as it did before the split: tests read `../contracts/…` and write
     // under `build/` relative to the working directory, and a module's test must not see a different tree.
     workingDir = rootProject.projectDir
