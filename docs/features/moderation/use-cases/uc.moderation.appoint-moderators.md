@@ -14,11 +14,12 @@
 
 ## Main flow
 
-1. **Turn moderation on.** The Server → Moderation panel shows "no epoch: reporting is off". The Server Owner turns it
-   on: admin-web reads the Server Owner's identity public key from the roster read, draws a 32-byte `M_1`, derives the
-   epoch's public bundle ([en.moderation.moderation-key](../enablers/en.moderation.moderation-key.md)), seals `M_1` to
-   that key (`moderation-grant` [epoch 1]) and uploads the bundle and the grant, then forgets `M_1`. The server records
-   epoch 1 and the Server Owner as an accepted moderator holding it.
+1. **Moderation is on from first-run setup** (owner 2026-10-17, [uc.admin.setup-server](../../admin/use-cases/uc.admin.setup-server.md)).
+   The setup client, which has just born the Server Owner's identity, draws a 32-byte `M_1`, derives the epoch's
+   public bundle ([en.moderation.moderation-key](../enablers/en.moderation.moderation-key.md)), seals `M_1` to that
+   identity (`moderation-grant` [epoch 1]) and sends the bundle and the grant with the account, then forgets `M_1`. The
+   server stores epoch 1 and records the Server Owner as an accepted moderator holding it, in the setup's own
+   transaction. The Server → Moderation panel shows epoch 1 and the Server Owner on the roster.
 2. **Appoint.** The Server Owner enters an account's address (or runs `veyq-admin moderator appoint <address>`). The
    server finds the account and records a pending appointment (appointed by, appointed at); the roster shows it
    *pending*.
@@ -52,7 +53,9 @@
   decision 6); a mint clears it.
 - **A6 — The Server Owner steps down as a moderator.** Allowed while another accepted moderator holds the key (ADR 0099
   § 5, decided with the owner 1); they can appoint themselves again like anyone else.
-- **A7 — On the public listener.** Every operation here is a Server-Owner operation on the admin channel; the public
+- **A7 — An instance with no epoch** (none that setup made can be one). The panel says moderation is off and
+  reporting is off with it; there is no operation that makes epoch 1 afterwards.
+- **A8 — On the public listener.** Every operation here is a Server-Owner operation on the admin channel; the public
   port answers it as an unknown route ([ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md)).
 
 ## Quality notes

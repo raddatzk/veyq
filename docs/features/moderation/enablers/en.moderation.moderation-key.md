@@ -38,7 +38,7 @@ a scope grant. One per moderator and live epoch; no chain link between epochs (A
 holds `M_n` to write one). **Unsigned** (owner decision Q4): the residual is stated in ADR 0099 § 3, and the moderator's
 client compares each epoch's derived public bundle with the published one on every unlock.
 
-- **Minted** by admin-web for every accepted moderator at once (epoch 1 to the Server Owner alone); the server refuses
+- **Minted** by admin-web for every accepted moderator at once (epoch 1 by first-run setup, to the Server Owner alone); the server refuses
   a mint whose grants do not cover exactly the accepted moderators.
 - **Delivered** by a holder's client to an accepted moderator missing an epoch, after the pin check; only by an
   account holding a grant of that epoch, only to an accepted moderator, idempotent.

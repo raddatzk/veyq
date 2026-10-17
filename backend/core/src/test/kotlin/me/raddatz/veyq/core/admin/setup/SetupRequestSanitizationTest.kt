@@ -20,7 +20,8 @@ class SetupRequestSanitizationTest {
         val json = """
             {"email":"  kev@example.com  ","suiteId":"v1",
              "identityPublicKey":"YQ==","wrappedIdentityPrivateKey":"YQ==","authPublicKey":"YQ==",
-             "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"YQ=="}],"secretKeyProofPublicKey":"YQ=="}
+             "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"YQ=="}],"secretKeyProofPublicKey":"YQ==",
+             "moderationEpoch":{"kemPublicKey":"YQ==","signPublicKey":"YQ==","sealedGrant":"YQ=="}}
         """.trimIndent()
 
         val req = mapper.readValue(json, CreateServerOwnerRequest::class.java)

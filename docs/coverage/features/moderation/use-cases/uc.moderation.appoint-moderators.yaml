@@ -11,19 +11,20 @@ status: planned
 # observable on admin-web alone. The backend refs below are claims like any other; the admin-web suites wait under
 # gaps, named, so the flip is mechanical once a run executed that job.
 acceptanceCriteria:
-  - id: turning-on-mints-epoch-one-to-the-server-owner
+  - id: setup-mints-epoch-one-to-the-server-owner
     text: >-
-      Turning moderation on mints epoch 1 in admin-web, sealed to the Server Owner's identity alone; the server stores
-      the public bundle and the sealed grant, records the Server Owner as an accepted moderator, and refuses a second
-      turn-on. Until then the panel says reporting is off.
+      First-run setup mints epoch 1 in admin-web, sealed to the identity born in that same setup; the server stores the
+      public bundle and the one grant with the Server Owner's account, records them as its first, accepted moderator,
+      and publishes the key a report seals to at once. A setup whose epoch is no bundle stores nothing, and no second
+      epoch 1 is accepted.
     coverage:
       backend:
-        integration: [ModerationSliceTest.moderationIsOffUntilTheServerOwnerMintsEpochOne, ModerationSliceTest.turningOnSealedToAnotherIdentityIsRefusedAndStoresNothing]
+        integration: [SetupServerSliceTest.createsOwner, SetupServerSliceTest.rejectsAMalformedModerationEpoch, ModerationSliceTest.moderationIsOffUntilTheServerOwnerMintsEpochOne, ModerationSliceTest.epochOneSealedToAnotherIdentityIsRefusedAndStoresNothing]
     gaps:
       - surface: backend
         reason: >-
-          The mint itself (epoch 1 sealed to the Server Owner's identity) and the panel's warning are admin-web's
-          (features/instance/moderation.test.ts, ModerationPanel.test.ts), a surface awaiting its first run.
+          The mint itself (M_1 sealed to the born identity) is admin-web's (features/setup/setupServer.moderation.test.ts,
+          features/instance/moderation.test.ts), a surface awaiting its first run.
   - id: appoint-an-existing-account-by-address
     text: >-
       The Server Owner appoints an existing account by its address; an unknown address is refused and records nothing,

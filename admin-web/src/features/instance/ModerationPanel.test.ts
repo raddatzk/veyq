@@ -14,7 +14,6 @@ vi.mock('./moderation', async () => {
   return {
     ...actual,
     getModeration: vi.fn(),
-    enableModeration: vi.fn(),
     appointModerator: vi.fn(),
     removeModerator: vi.fn(),
     rotateModerationKey: vi.fn(),
@@ -25,7 +24,7 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 
 import ModerationPanel from './ModerationPanel.vue'
 import {
-  appointModerator, enableModeration, getModeration, removeModerator, rotateModerationKey,
+  appointModerator, getModeration, removeModerator, rotateModerationKey,
   type InstanceModeration, type InstanceModerator,
 } from './moderation'
 import { i18n } from '../../i18n'
@@ -92,23 +91,11 @@ describe('ModerationPanel (uc.moderation.appoint-moderators, admin-web)', () => 
     i18n.global.locale.value = 'en'
   })
 
-  it('says reporting is off while no key exists, and turns moderation on only after asking', async () => {
-    vi.mocked(enableModeration).mockResolvedValue(on({ currentEpoch: 1, moderators: [moderator({})] }))
+  it('says reporting is off while no key exists, and offers no way to make one here (setup makes epoch 1)', async () => {
     const w = await mountPanel(off)
     expect(w.find('.mod-off').text()).toBe(t('moderation.off'))
     expect(w.find('.mod-roster').exists()).toBe(false)
-
-    confirmAsk.mockResolvedValueOnce(false)
-    await w.find('.mod-enable').trigger('click')
-    await flushPromises()
-    expect(enableModeration).not.toHaveBeenCalled()
-
-    confirmAsk.mockResolvedValueOnce(true)
-    await w.find('.mod-enable').trigger('click')
-    await flushPromises()
-    expect(enableModeration).toHaveBeenCalledOnce()
-    expect(w.find('.mod-off').exists()).toBe(false)
-    expect(w.find('.mod-epoch').text()).toContain('1')
+    expect(w.find('.mod-enable').exists()).toBe(false)
   })
 
   it('shows each moderator’s state and whether the address is confirmed', async () => {

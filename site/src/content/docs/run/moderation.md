@@ -77,9 +77,9 @@ A moderator is an existing account, and every moderator holds the same **moderat
 sealed to. The server stores the key's public half and a copy of the key sealed to each moderator's account; it can
 open none of them. Reports themselves are not built yet (below), so today this sets up who will review them.
 
-**Turn moderation on.** In the admin console, **Server → Moderation**, choose **Turn moderation on**. The console
-makes the first moderation key, seals it to your own account and forgets it: you are the first moderator. Until you
-do, the panel says moderation is off, and reporting stays off with it.
+**From first-run setup on.** Setting the instance up also makes the first moderation key: the admin console seals it
+to the account it has just created for you and forgets it. You are the first moderator, and reporting is on from the
+first day. **Server → Moderation** shows the key's epoch and the roster.
 
 **Appoint someone.** Enter the address of an existing account and choose **Appoint**, or:
 

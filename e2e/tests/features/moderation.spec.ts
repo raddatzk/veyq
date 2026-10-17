@@ -2,7 +2,7 @@
 // ADR 0099, uc.moderation.appoint-moderators, uc.moderation.serve-as-moderator). A second account is born the only way
 // accounts are born — a tenant invite, here a second tenant whose owner it becomes — and then:
 //
-//   1. the Server Owner turns moderation on in admin-web (epoch 1 sealed to their own account) and appoints it;
+//   1. the Server Owner finds moderation on since first-run setup (epoch 1 sealed to their own account) and appoints it;
 //   2. the appointee opens `/moderation` on its own tenant's address, reads what accepting means, accepts, types the
 //      code the instance mail sent it, and unlocks with password and Secret Key — and waits for the key;
 //   3. the Server Owner opens `/moderation` on the first tenant's address and unlocks: their page passes the key on;
@@ -113,20 +113,19 @@ test(
 )
 
 test(
-  'the Server Owner turns moderation on and appoints the account; it stays pending',
+  'moderation is on since first-run setup, the Server Owner holds epoch 1 and appoints the account; it stays pending',
   {
     tag: [
-      '@uc.moderation.appoint-moderators:turning-on-mints-epoch-one-to-the-server-owner',
+      '@uc.moderation.appoint-moderators:setup-mints-epoch-one-to-the-server-owner',
       '@uc.moderation.appoint-moderators:appoint-an-existing-account-by-address',
     ],
   },
   async () => {
     const { page } = admin
     await openModerationPanel(page)
-    await expect(page.getByText('Moderation is off: there is no moderation key, so reporting is off.')).toBeVisible()
-    await page.getByRole('button', { name: 'Turn moderation on' }).click()
-    await page.getByRole('dialog', { name: 'Turn moderation on?' }).getByRole('button', { name: 'Turn moderation on' }).click()
+    // Setup minted epoch 1 (ADR 0099 § 3): no "off" state, the Server Owner its one holder.
     await expect(page.getByText('Current moderation key: epoch 1.')).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByText('Moderation is off: there is no moderation key, so reporting is off.')).toHaveCount(0)
     await expect(page.locator(`.mod-row[data-address="${instance().owner.email}"]`)).toContainText('Moderator, holds the key')
 
     await page.locator('.mod-address').fill(deputyAccount.email)

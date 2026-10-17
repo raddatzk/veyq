@@ -49,22 +49,15 @@ export function getModeration(): Promise<InstanceModeration> {
 }
 
 /**
- * Turn moderation on: epoch 1, sealed to the Server Owner's own identity as the server serves it, so the Server Owner
- * becomes the first moderator and holder (ADR 0099 § 3). Until then reporting is off. Refusals: 409
- * `moderation_enabled` (an epoch exists already), 409 `identity_changed` (the Server Owner's identity changed between
- * the read and the upload — read again), 403 `not_server_owner`.
+ * Epoch 1, for first-run setup (ADR 0099 § 3; owner 2026-10-17): drawn, sealed to the identity public key the setup
+ * just birthed (`moderation-grant` [1]) and forgotten, so the instance has a moderation key — and reporting is on —
+ * from its first day, with the Server Owner as its first moderator. Setup sends it with the owner's account in one
+ * request (`createServerOwner`); it is minted here so this file stays the one place that mints.
  */
-export async function enableModeration(): Promise<InstanceModeration> {
-  const { serverOwner } = await getModeration()
+export function epochOneFor(identityPublicKey: string): { kemPublicKey: string; signPublicKey: string; sealedGrant: string } {
   const m = generateModerationKey()
   try {
-    return await instanceModerationApi().enableModeration({
-      enableModerationRequest: {
-        ...wireBundle(m),
-        identityPublicKey: serverOwner.identityPublicKey,
-        sealedGrant: sealGrant(m, 1, serverOwner.identityPublicKey),
-      },
-    })
+    return { ...wireBundle(m), sealedGrant: sealGrant(m, 1, identityPublicKey) }
   } finally {
     m.fill(0)
   }

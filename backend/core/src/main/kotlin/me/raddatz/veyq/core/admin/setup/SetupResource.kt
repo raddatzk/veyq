@@ -8,6 +8,7 @@ import me.raddatz.veyq.core.generated.model.SetupStatus
 import me.raddatz.veyq.core.generated.model.Version
 import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
 import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.normalizeEmail
 import me.raddatz.veyq.core.ratelimit.RateLimit
@@ -55,6 +56,8 @@ class SetupResource(private val handler: SetupHandler) : SetupApi {
                 .build()
         } catch (e: SetupAlreadyComplete) {
             httpError(httpFailure("setup_already_complete", CONFLICT))
+        } catch (e: ModerationEpochInvalid) {
+            httpError(Failures.invalidRequest)
         }
 }
 
@@ -66,4 +69,5 @@ private fun CreateServerOwnerRequest.toRegistration() = OwnerRegistration(
     authPublicKey = authPublicKey,
     secretKeyProofPublicKey = secretKeyProofPublicKey,
     wraps = masterKeyWraps.map { WrapInput(method = it.method.value, wrappedKey = it.wrappedKey, kdfParams = it.kdfParams) },
+    moderationEpoch = ModerationEpochOne(moderationEpoch.kemPublicKey, moderationEpoch.signPublicKey, moderationEpoch.sealedGrant),
 )

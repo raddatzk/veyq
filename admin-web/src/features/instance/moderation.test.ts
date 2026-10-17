@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({ instanceModerationApi: vi.fn() }))
 
-import { enableModeration, removeModerator, rotateModerationKey, type InstanceModeration } from './moderation'
+import { epochOneFor, removeModerator, rotateModerationKey, type InstanceModeration } from './moderation'
 import { instanceModerationApi } from '../../api/client'
 import type { InstanceModerator, MintModerationEpochRequest } from '../../api/generated/instance'
 import { fakeApi } from '../../test/apiMock'
@@ -108,16 +108,13 @@ describe('rotateModerationKey', () => {
   })
 })
 
-describe('enableModeration', () => {
-  it('seals epoch 1 to the Server Owner’s own identity, with the bundle of that key', async () => {
-    const mocks = fakeApi(instanceModerationApi, {
-      getInstanceModeration: async () => state({ enabled: false, currentEpoch: null, moderators: [] }),
-      enableModeration: async () => state({ currentEpoch: 1 }),
-    })
-    await enableModeration()
-    const req = mocks.enableModeration.mock.calls[0][0].enableModerationRequest
-    expect(req.identityPublicKey).toBe(pubB64(owner))
-    opensToUploadedBundle(req, req.sealedGrant, owner, 1)
+describe('epochOneFor (first-run setup)', () => {
+  it('seals epoch 1 to the identity it is handed, with the bundle of that key, and calls no client', () => {
+    const epoch = epochOneFor(pubB64(owner))
+    opensToUploadedBundle(epoch, epoch.sealedGrant, owner, 1)
+    // A fresh key every time: two setups never share a moderation key.
+    expect(epochOneFor(pubB64(owner)).signPublicKey).not.toBe(epoch.signPublicKey)
+    expect(instanceModerationApi).not.toHaveBeenCalled()
   })
 })
 

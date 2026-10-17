@@ -20,7 +20,7 @@ the log that keeps them accountable. A **core** feature
 
 - ★ [Appoint moderators and keep the moderation key](use-cases/uc.moderation.appoint-moderators.md) — **built
   (backend + admin-web)**; coverage stays `planned` while admin-web's job has never run
-  (ADR 0099 §§ 1, 3–5): the Server Owner turns moderation on, appoints existing accounts by address, removes them and
+  (ADR 0099 §§ 1, 3–5): first-run setup makes the Server Owner the first moderator; they appoint existing accounts by address, remove them and
   rotates the key.
 - ★ [Serve as a moderator](use-cases/uc.moderation.serve-as-moderator.md) — **built (backend + web)** (ADR 0099 §§ 1, 3, 6, 7): an
   appointee accepts, confirms their address, receives the key from a holder, delivers it to the next newcomer, and can

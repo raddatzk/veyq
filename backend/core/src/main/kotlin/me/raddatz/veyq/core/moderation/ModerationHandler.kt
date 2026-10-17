@@ -116,7 +116,10 @@ class ModerationHandler(
         )
     }
 
-    /** Epoch 1, sealed to the Server Owner alone; the Server Owner becomes an accepted moderator holding it. */
+    /**
+     * Epoch 1, sealed to the Server Owner alone; the Server Owner becomes an accepted moderator holding it. First-run
+     * setup calls it in its own transaction (`SetupStore.persistOwner`): no operation turns moderation on later.
+     */
     @Transactional
     fun enable(ownerId: String, kem: String, sign: String, identityPublicKey: String, sealedGrant: String, now: Instant = Instant.now()): ModerationOutcome<Unit> {
         if (!bundleWellFormed(kem, sign)) return ModerationOutcome.Refused(Failures.invalidRequest)

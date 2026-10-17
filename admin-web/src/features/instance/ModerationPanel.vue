@@ -17,7 +17,7 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import {
-  appointModerator, enableModeration, getModeration, ModeratorState, removeModerator, rotateModerationKey, RotationReason,
+  appointModerator, getModeration, ModeratorState, removeModerator, rotateModerationKey, RotationReason,
   type InstanceModeration, type InstanceModerator,
 } from './moderation'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
@@ -48,7 +48,6 @@ const loadError = computed(() => loadErrorKind(loadErr.value))
 
 /** The panel's words for each refusal the moderation operations name (instance.openapi.yaml, tag instance-moderation). */
 const REFUSALS: Record<string, string> = {
-  moderation_enabled: 'moderation.errors.enabled',
   identity_changed: 'moderation.errors.identityChanged',
   account_not_found: 'moderation.errors.accountNotFound',
   moderation_off: 'moderation.errors.off',
@@ -78,16 +77,6 @@ async function act(change: () => Promise<InstanceModeration>): Promise<boolean> 
   } finally {
     busy.value = false
   }
-}
-
-async function enable() {
-  const accepted = await ask({
-    header: t('moderation.enableTitle'),
-    message: t('moderation.enableBody'),
-    acceptLabel: t('moderation.enable'),
-    acceptIcon: 'pi pi-shield',
-  })
-  if (accepted) await act(enableModeration)
 }
 
 async function appoint() {
@@ -153,10 +142,6 @@ const dueSince = computed(() => moderation.value?.rotationDueSince?.toLocaleStri
 
         <template v-if="!moderation.enabled">
           <Message severity="warn" :closable="false" class="mod-off">{{ t('moderation.off') }}</Message>
-          <p class="settings-muted">{{ t('moderation.enableHint') }}</p>
-          <div>
-            <Button type="button" class="mod-enable" :label="t('moderation.enable')" icon="pi pi-shield" :loading="busy" @click="enable" />
-          </div>
         </template>
 
         <template v-else>

@@ -2,7 +2,6 @@ package me.raddatz.veyq.core.moderation
 
 import me.raddatz.veyq.core.generated.api.InstanceModerationApi
 import me.raddatz.veyq.core.generated.model.AppointModeratorRequest
-import me.raddatz.veyq.core.generated.model.EnableModerationRequest
 import me.raddatz.veyq.core.generated.model.InstanceModeration
 import me.raddatz.veyq.core.generated.model.InstanceModerationOwner
 import me.raddatz.veyq.core.generated.model.InstanceModerator
@@ -34,10 +33,6 @@ class InstanceModerationResource(
 ) : InstanceModerationApi {
 
     override fun getInstanceModeration(): Response = ok()
-
-    override fun enableModeration(enableModerationRequest: EnableModerationRequest): Response = with(enableModerationRequest) {
-        answer(moderation.enable(caller(), kemPublicKey, signPublicKey, identityPublicKey, sealedGrant))
-    }
 
     override fun appointModerator(appointModeratorRequest: AppointModeratorRequest): Response =
         answer(moderation.appoint(caller(), appointModeratorRequest.address))

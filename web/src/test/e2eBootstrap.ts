@@ -20,6 +20,7 @@ import { session } from '../app/session'
 import { setUnlocked } from '../app/vault'
 import { login } from '../features/account/login/login'
 import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
+import { moderationEpochOne } from './moderationEpochOne'
 import { setupApi } from '../api/client'
 import { Configuration as SetupConfiguration, SetupApi } from '../api/generated'
 import { Configuration as TenantsConfiguration, TenantsApi } from '../api/generated/tenants'
@@ -52,6 +53,7 @@ function createServerOwner(m: BuiltAccount['material'], email: string) {
       email, suiteId: m.suiteId, identityPublicKey: m.identityPublicKey,
       wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey, authPublicKey: m.authPublicKey,
       masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
+      moderationEpoch: moderationEpochOne(m.identityPublicKey),
     },
   })
 }

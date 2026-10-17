@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.crypto.ModerationProof
 import me.raddatz.veyq.core.identity.ModeratorEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -66,14 +67,16 @@ object ModerationTestKit {
     fun asOwner(ownerId: String): RequestSpecification =
         givenAdminChannel().header("Authorization", bearer(ownerId)).contentType(ContentType.JSON)
 
-    /** Turn moderation on as [ownerId] with [key] as epoch 1, sealed to [identityPublicKey]. */
+    /**
+     * Epoch 1 with [key], sealed to [identityPublicKey], [ownerId] its first moderator — what first-run setup does
+     * (`SetupStore.persistOwner`); these tests' owners are seeded, not set up, so they mint it through the same call.
+     */
     fun enable(ownerId: String, key: EpochKey, identityPublicKey: String) {
-        asOwner(ownerId).body(
-            mapOf(
-                "kemPublicKey" to key.kemPublicKey, "signPublicKey" to key.signPublicKey,
-                "identityPublicKey" to identityPublicKey, "sealedGrant" to sealedGrant(),
-            ),
-        ).post("/api/instance/moderation").then().statusCode(200)
+        val outcome = QuarkusTransaction.requiringNew().call {
+            Arc.container().instance(ModerationHandler::class.java).get()
+                .enable(ownerId, key.kemPublicKey, key.signPublicKey, identityPublicKey, sealedGrant())
+        }
+        check(outcome is ModerationOutcome.Ok) { "epoch 1 not minted: $outcome" }
     }
 
     /** Appoint [address] and accept as [userId]. */

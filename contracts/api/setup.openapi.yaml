@@ -79,7 +79,9 @@ paths:
         Creates the first account as an E2EE registration and marks setup complete (single-owner lock).
         The body carries only ciphertext, public keys and operational metadata; the server stores them
         as-is. It does not verify the password (there is none) — `authPublicKey` is stored for later
-        challenge-response login.
+        challenge-response login. In the same transaction it stores `moderationEpoch`, epoch 1 of the instance
+        moderation key sealed to this identity, and records the Server Owner as its first moderator (ADR 0099 § 3);
+        an epoch that is no public bundle answers `400 invalid_request` and stores nothing.
       requestBody:
         required: true
         content:
@@ -95,6 +97,7 @@ paths:
                 - method: PASSWORD
                   wrappedKey: d3JhcHBlZC1tYXN0ZXIta2V5
               secretKeyProofPublicKey: c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5
+              moderationEpoch: { kemPublicKey: a2VtLXB1YmxpYy1rZXk=, signPublicKey: c2lnbi1wdWJsaWMta2V5, sealedGrant: c2VhbGVkLWdyYW50 }
       responses:
         "201":
           description: The Server Owner was created and setup is now locked.
@@ -202,6 +205,38 @@ components:
     Capability:
       $ref: '_common.openapi.yaml#/components/schemas/Capability'
 
+    ModerationEpochOne:
+      type: object
+      description: >
+        Epoch 1 of the instance moderation key (ADR 0099 § 3; owner 2026-10-17), minted in the same first-run setup that
+        births the Server Owner: the setup client draws `M_1`, derives its public bundle, seals `M_1` to the identity
+        public key in this very request (`sealTo` purpose `moderation-grant` [1]) and forgets it. So reporting is on from
+        the first day, and the Server Owner is its first moderator. The server stores the bundle and the sealed grant,
+        never `M_1`; a later epoch is minted on the admin channel (`mintModerationEpoch`).
+      required: [kemPublicKey, signPublicKey, sealedGrant]
+      properties:
+        kemPublicKey:
+          type: string
+          description: Epoch 1's X-Wing encapsulation key (1216 bytes), which reports seal to.
+          contentEncoding: base64
+          maxLength: 1700
+          example: a2VtLXB1YmxpYy1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1700) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        signPublicKey:
+          type: string
+          description: Epoch 1's Ed25519 public key (32 bytes), which checks a key proof.
+          contentEncoding: base64
+          maxLength: 64
+          example: c2lnbi1wdWJsaWMta2V5
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedGrant:
+          type: string
+          description: "`M_1` sealed to this request's identity public key (`sealTo` purpose `moderation-grant` [1])."
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWdyYW50
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
     MasterKeyWrap:
       $ref: '_common.openapi.yaml#/components/schemas/MasterKeyWrap'
 
@@ -215,6 +250,7 @@ components:
         - masterKeyWraps
         - authPublicKey
         - secretKeyProofPublicKey
+        - moderationEpoch
       properties:
         email:
           x-veyq-visibility: pii
@@ -275,6 +311,9 @@ components:
           maxLength: 128
           example: c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        moderationEpoch:
+          $ref: "#/components/schemas/ModerationEpochOne"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
     SetupResult:
       type: object

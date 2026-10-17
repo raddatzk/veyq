@@ -39,8 +39,8 @@ tags:
 
   - name: instance-moderation
     description: >
-      The Server Owner's half of moderation (ADR 0099): the moderator roster, turning moderation on, and minting each
-      epoch of the instance moderation key. A tag of its own, so its resource owns the `/api/instance/moderation`
+      The Server Owner's half of moderation (ADR 0099): the moderator roster and minting each epoch of the instance
+      moderation key after the first, which first-run setup mints. A tag of its own, so its resource owns the `/api/instance/moderation`
       subtree. The moderator's half is `moderation.openapi.yaml`, on the public listener.
 
 # x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
@@ -1190,9 +1190,10 @@ paths:
       description: >
         The moderators the Server Owner appointed and where each stands, with the identity public key admin-web seals a
         new epoch to; the current epoch; whether a rotation is due (a moderator stepped down or rotated their identity
-        since the current epoch was minted, ADR 0097 decision 6); and the Server Owner's own identity public key, which
-        turning moderation on seals epoch 1 to ([ADR 0099](../../docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md),
-        uc.moderation.appoint-moderators). `enabled: false` = no epoch exists, and reporting is off. Server-Owner only.
+        since the current epoch was minted, ADR 0097 decision 6); and the Server Owner's own identity public key
+        ([ADR 0099](../../docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md),
+        uc.moderation.appoint-moderators). First-run setup mints epoch 1 (`createServerOwner`), so an instance set up
+        through it is never without one; `enabled: false` = no epoch exists, and reporting is off. Server-Owner only.
       security:
         - bearerAuth: []
       responses:
@@ -1237,62 +1238,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
-    post:
-      tags: [instance-moderation]
-      operationId: enableModeration
-      x-veyq-channel: admin
-      summary: Turn moderation on — epoch 1 of the instance moderation key, sealed to the Server Owner alone.
-      description: >
-        admin-web draws `M_1`, derives its public bundle, seals `M_1` to the Server Owner's identity public key
-        (`moderation-grant` [1]) and uploads both, then forgets `M_1` (ADR 0099 § 3). The server stores epoch 1 and the
-        grant and records the Server Owner as an accepted moderator holding it. `409 moderation_enabled` once an epoch
-        exists; `409 identity_changed` when the grant is sealed to an identity that is not the Server Owner's current
-        one. Server-Owner only.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/EnableModerationRequest" }
-            example:
-              kemPublicKey: a2VtLXB1YmxpYy1rZXk=
-              signPublicKey: c2lnbi1wdWJsaWMta2V5
-              identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
-              sealedGrant: c2VhbGVkLWdyYW50
-      responses:
-        "200":
-          description: Moderation is on; the roster and the key's state.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/InstanceModeration" }
-        "400":
-          description: The request was malformed.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: invalid_request }
-        "401":
-          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: authentication_failed }
-        "403":
-          description: The caller is authenticated but is not the Server Owner.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: not_server_owner }
-        "409":
-          description: >
-            `moderation_enabled` = an epoch exists already; `identity_changed` = the grant is not sealed to the Server
-            Owner's current identity. Nothing is stored.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: moderation_enabled }
-
   /api/instance/moderation/moderators:
     post:
       tags: [instance-moderation]
@@ -2317,7 +2262,7 @@ components:
 
     InstanceModerationOwner:
       type: object
-      description: The Server Owner, whom turning moderation on seals epoch 1 to.
+      description: The Server Owner, whose identity first-run setup sealed epoch 1 to.
       required: [accountId, identityPublicKey]
       properties:
         accountId:
@@ -2389,40 +2334,6 @@ components:
           type: boolean
           description: Whether their address is confirmed for moderation notices (ADR 0097 decision 5).
           example: true
-
-    EnableModerationRequest:
-      type: object
-      description: Epoch 1's public bundle and the grant sealed to the Server Owner.
-      required: [kemPublicKey, signPublicKey, identityPublicKey, sealedGrant]
-      properties:
-        kemPublicKey:
-          type: string
-          description: The epoch's X-Wing encapsulation key (1216 bytes), standard base64.
-          contentEncoding: base64
-          maxLength: 1700
-          example: a2VtLXB1YmxpYy1rZXk=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1700) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        signPublicKey:
-          type: string
-          description: The epoch's Ed25519 public key (32 bytes), standard base64.
-          contentEncoding: base64
-          maxLength: 64
-          example: c2lnbi1wdWJsaWMta2V5
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        identityPublicKey:
-          type: string
-          description: The identity the grant is sealed to, as `getInstanceModeration` served it.
-          contentEncoding: base64
-          maxLength: 2048
-          example: aWRlbnRpdHktcHVibGljLWtleQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        sealedGrant:
-          type: string
-          description: "`M_1` sealed to the Server Owner's identity (`sealTo` purpose `moderation-grant` [1])."
-          contentEncoding: base64
-          maxLength: 2048
-          example: c2VhbGVkLWdyYW50
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     AppointModeratorRequest:
       type: object

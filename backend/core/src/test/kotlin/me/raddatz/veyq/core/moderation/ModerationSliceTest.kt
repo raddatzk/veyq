@@ -70,15 +70,19 @@ class ModerationSliceTest {
             .body("moderators", hasSize<Any>(1))
             .body("moderators[0].accountId", equalTo(OWNER)).body("moderators[0].state", equalTo("ACCEPTED"))
             .body("moderators[0].holdsCurrentEpoch", equalTo(true))
-        // A second turn-on is refused, and so is one sealed to an identity that is not the owner's.
-        asOwner(OWNER).body(enableBody(epochKey(), IDENTITY_PUBLIC_KEY)).post("/api/instance/moderation")
-            .then().statusCode(409).body("code", equalTo("moderation_enabled"))
+        // A second epoch 1 is refused: only a mint makes the next epoch.
+        val again = QuarkusTransaction.requiringNew().call {
+            handler.enable(OWNER, epochKey().kemPublicKey, key.signPublicKey, IDENTITY_PUBLIC_KEY, sealedGrant())
+        }
+        assertEquals(ModerationOutcome.Refused(ModerationFailures.moderationEnabled), again)
     }
 
     @Test
-    fun turningOnSealedToAnotherIdentityIsRefusedAndStoresNothing() {
-        asOwner(OWNER).body(enableBody(key, "b3RoZXItaWRlbnRpdHk=")).post("/api/instance/moderation")
-            .then().statusCode(409).body("code", equalTo("identity_changed"))
+    fun epochOneSealedToAnotherIdentityIsRefusedAndStoresNothing() {
+        val other = QuarkusTransaction.requiringNew().call {
+            handler.enable(OWNER, key.kemPublicKey, key.signPublicKey, "b3RoZXItaWRlbnRpdHk=", sealedGrant())
+        }
+        assertEquals(ModerationOutcome.Refused(ModerationFailures.identityChanged), other)
         given().get("/api/moderation/key").then().statusCode(404)
     }
 
@@ -310,11 +314,6 @@ class ModerationSliceTest {
     private fun deliveryBody(epoch: Int, identity: String = IDENTITY_PUBLIC_KEY) = mapOf(
         "identityPublicKey" to identity,
         "grants" to listOf(mapOf("epoch" to epoch, "sealedGrant" to sealedGrant())),
-    )
-
-    private fun enableBody(k: EpochKey, identity: String) = mapOf(
-        "kemPublicKey" to k.kemPublicKey, "signPublicKey" to k.signPublicKey,
-        "identityPublicKey" to identity, "sealedGrant" to sealedGrant(),
     )
 
     private fun mintBody(k: EpochKey, to: List<String>, identity: String = IDENTITY_PUBLIC_KEY, epoch: Int = 2) = mapOf(
