@@ -5,6 +5,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.setup-server.md
   - docs/features/admin/use-cases/uc.admin.admin-channel.md
   - docs/features/admin/use-cases/uc.admin.configure-object-store.md
+  - docs/features/admin/use-cases/uc.admin.operator-details.md
   - docs/decisions/0065-admin-ui-cli-separate-service.md
   - docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md
 ---
@@ -20,8 +21,9 @@ nobody who finds its domain can claim it first.
 :::note[How far this is proven]
 This page describes the console and the CLI as their code and tests define them (`admin-web/src/views`,
 `admin-web/src/cli`). The labels below are the console's own. The console's part of first run — the not-set-up page,
-the Server Owner and the Emergency Kit, signing in, the bundled store and its check, the first tenant and its invite
-link — is driven in this order in a real browser against the images that ship, by the end-to-end suite
+the Server Owner, the Emergency Kit and the operating mode, signing in, the bundled store and its check, the operating
+mode switched both ways with the operator details and their warnings, the first tenant and its invite link, and the
+provider identification on the tenant's sign-in page — is driven in this order in a real browser against the images that ship, by the end-to-end suite
 (`e2e/tests/setup/first-run.setup.ts`), locally so far; no CI run yet. The CLI is not exercised on a running
 instance.
 :::
@@ -77,12 +79,17 @@ On a fresh instance the console opens on **Set up this instance**
 2. **Continue.** Your browser generates every key of the account — the server only ever sees ciphertext. Nothing has
    been sent yet.
 3. **Save your Emergency Kit.** **Download Emergency Kit (PDF)**, tick **I have saved my Emergency Kit somewhere
-   safe.**, then **Create the account and sign in**. Only now is the account created, and from this moment the
-   instance is set up: the setup screen does not open again. The kit holds your email and your **Secret Key** (and a
-   QR code of both); it does not hold your password. The same step makes the instance's first moderation key, sealed
-   to your new account: you are its first moderator, and reports can be made from the first day
+   safe.**, then **Continue**. The kit holds your email and your **Secret Key** (and a QR code of both); it does not
+   hold your password.
+4. **How is this instance run?** Read the notice, then choose **Private (family, circle of friends)** or **Club,
+   organisation or company**. It is your own assessment, not veyq's; *private* needs the tick **I have read this and
+   choose Private on my own responsibility.** What each mode means is on
+   [Moderation](/veyq/run/moderation/#the-operating-mode); you can change it later. Then **Create the account and
+   sign in**. Only now is the account created, and from this moment the instance is set up: the setup screen does not
+   open again. The same step stores the mode and makes the instance's first moderation key, sealed to your new
+   account: you are its first moderator, and reports can be made from the first day
    ([Moderation](/veyq/run/moderation/)).
-4. **Sign in** with your email and password.
+5. **Sign in** with your email and password.
 
 :::caution[The Emergency Kit is shown once]
 The account is created only after you confirmed the kit, so a screen closed before that leaves setup open: start
@@ -162,6 +169,10 @@ app.
   ([Backup and restore](/veyq/run/backup-and-restore/)).
 - **Capabilities** — what the instance offers at all, as a tree of switches
   ([Capabilities](/veyq/run/capabilities/)).
+- **Operating mode** — private, or club, organisation or company, with its notice and the switches choosing the other
+  mode would change ([Moderation](/veyq/run/moderation/#the-operating-mode)).
+- **Operator** — the instance contact, the provider identification and the supervisory authority, and the private
+  notification address with its code ([Moderation](/veyq/run/moderation/#who-runs-the-instance)).
 
 ## The veyq-admin CLI
 
@@ -199,6 +210,8 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `store check` | Check the saved change (else the store in use) and print every step; a passing saved change is put in use; exits `1` if it failed |
 | `store discard` | Drop a saved change that has not passed its check; the store in use stays |
 | `capabilities list` / `capabilities off <id>` / `capabilities on <id>` | Print the switches as a tree, switch one off or on; prints text, not JSON ([Capabilities](/veyq/run/capabilities/#switch-an-entry)) |
+| `mode show` / `mode set <private\|organisation> [--accept-notice]` | Print the operating mode, its notice and what the other mode would switch; set it. `set private` prints the notice and is refused without `--accept-notice`; prints text, not JSON |
+| `operator show` / `operator set --<value> <text>` / `operator clear` | Print the operator details; change the values given (`none` clears one) and keep the rest; clear them all. The notification address's code is typed into the console, never the CLI |
 
 Output is JSON on standard output. A failure prints one line, `veyq-admin: <reason>`, to standard error and exits
 `1`. `veyq-admin --help` prints the usage. Setup is deliberately not a command: it creates key material and an

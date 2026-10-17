@@ -1,48 +1,120 @@
 useCase: uc.admin.operator-details
 feature: admin
 title: Choose the operating mode and publish who runs the instance
-status: planned
-# Refined with cr-instance-contact-and-provider-identification; every surface below is built by that CR's phases.
+# Built by cr-instance-contact-and-provider-identification. The mode, the values and the code live on the admin
+# channel, so most refs are the backend's slice; the web's are the identification on the login and share pages.
+# admin-web's suites (the panels, the setup step, the facade, the CLI) and lane L1's scenario wait under `gaps` until
+# their CI jobs have executed (ADR 0040), as every admin use-case's do.
 acceptanceCriteria:
   - id: an-unchosen-mode-runs-as-organisation
     text: >-
       An instance where no mode was ever chosen reads as club, organisation or company.
+    coverage:
+      backend:
+        integration: [OperatorDetailsSliceTest.anInstanceWhereNoModeWasChosenReadsAsOrganisation]
   - id: a-mode-sets-its-presets-switches-and-nothing-else
     text: >-
       Setting a mode stores it and, in the same transaction, sets the instance-level switch of each register entry the
       catalog's `modes` names to that mode's value; a tenant's switches and every entry without a preset are untouched,
       and setting it again sets the preset again.
+    coverage:
+      backend:
+        integration: [OperatorDetailsSliceTest.privateWritesTheInstanceRowOfAnEntryWhoseValueIsOffAndOrganisationDeletesIt, OperatorDetailsSliceTest.aModeNeverTouchesATenantsRowOrAnEntryWithoutAPreset, OperatorDetailsSliceTest.settingAModeAgainSetsItsPresetAgain]
+    gaps:
+      - surface: backend
+        reason: >-
+          Against a preset built in the test (the catalog carries no `modes` yet; `cr-guest-write-record` adds the
+          first and bites "off in private" on the real entry). That the mode and the switches commit together is the
+          one transaction the handler opens, not a failure injected between them. That the catalog's `modes` reach
+          `CapabilityPresets` is `validate_capabilities.py`'s rule plus the generator, not a test.
   - id: the-notice-comes-before-the-mode
     text: >-
       admin-web and the CLI show the notice and the switches the other mode's preset would change before the mode is
       set; choosing private needs the tick in admin-web and `--accept-notice` in the CLI.
+    coverage:
+      backend:
+        integration: [OperatorDetailsSliceTest.privateWritesTheInstanceRowOfAnEntryWhoseValueIsOffAndOrganisationDeletesIt]
+    gaps:
+      - surface: backend
+        reason: >-
+          The backend serves the preset with each entry's value per mode and its switch now, from which the clients
+          list what would change. The notice, the list and the tick are admin-web's (`OperatingModePanel.test.ts`,
+          `operator.test.ts`, `SetupView.test.ts`, `cli.test.ts`), waiting under the use-case gap; the server records
+          no tick by design (ADR 0093 § 14).
   - id: the-values-are-set-and-cleared
     text: >-
       The Server Owner sets and clears the contact with its languages, the statement address, the notification
       address, the identification and the supervisory authority; every value may stay empty, and an out-of-bounds one
       is refused with nothing stored.
+    coverage:
+      backend:
+        integration: [OperatorDetailsSliceTest.theValuesAreSetAndClearedAndEveryOneMayStayEmpty, OperatorDetailsSliceTest.anOutOfBoundsValueIsRefusedAndNothingIsStored]
   - id: the-notification-address-is-confirmed-by-a-code
     text: >-
       A saved, unconfirmed notification address gets a one-time code through confirmed instance mail; typing it into
       admin-web confirms it; a wrong code spends an attempt; a changed address unconfirms without a further write; no
       code goes out while instance mail is not confirmed.
+    coverage:
+      backend:
+        integration: [OperatorDetailsSliceTest.aSavedNotificationAddressGetsACodeAndAWrongCodeSpendsAnAttempt, OperatorDetailsSliceTest.theLastWrongEntrySpendsTheCode, OperatorDetailsSliceTest.aChangedAddressUnconfirmsWithoutAWriteToTheConfirmation, OperatorDetailsSliceTest.noCodeGoesOutWhileInstanceMailIsNotConfirmed]
+    gaps:
+      - surface: backend
+        reason: >-
+          Over a real SMTP server in the JVM and the confirm endpoint over HTTP. The code entry on the panel is
+          admin-web's (`OperatorPanel.test.ts`), waiting under the use-case gap; that notices reach the address only
+          once confirmed is for the CR that mails them (cr-report-and-hold).
   - id: the-public-values-are-served-pre-auth-and-never-the-notification-address
     text: >-
       The contact with its languages, the statement address, the identification and the supervisory authority are
       served without sign-in on any host; the notification address never leaves the admin channel.
+    coverage:
+      backend:
+        integration: [OperatorDetailsSliceTest.thePublicReadNeverCarriesTheNotificationAddressOnAnyHost]
   - id: admin-web-warns-in-the-organisation-mode-only
     text: >-
       In the club, organisation or company mode admin-web warns while public links are on and no contact is set, and
       while the identification is empty; in private neither warning shows.
+    coverage:
+      backend:
+        integration: [OperatorDetailsSliceTest.anInstanceWhereNoModeWasChosenReadsAsOrganisation]
+    gaps:
+      - surface: backend
+        reason: >-
+          The backend serves the mode the warnings read. The warnings themselves are admin-web's
+          (`OperatorPanel.test.ts`, `operator.test.ts`; "empty" is read as a missing name, address for service or
+          email), waiting under the use-case gap, and lane L1 walks them in both modes (the `stack` gap).
   - id: the-identification-appears-on-the-login-and-share-pages
     text: >-
       Where set, in either mode, the identification is shown on the login and the share pages through the public read;
       a failed read shows nothing and blocks nothing.
+    coverage:
+      backend:
+        integration: [OperatorDetailsSliceTest.thePublicReadNeverCarriesTheNotificationAddressOnAnyHost]
+      web:
+        unit: [src/core/operator/OperatorIdentification.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The component is mounted alone, in guest mode; that the login and share pages place it is their templates
+          (`LoginView.vue`'s card footer, `ShareView.vue`'s footer), walked on the login page by lane L1 (the `stack`
+          gap) and not by a web suite.
   - id: operator-operations-are-server-owner-only-on-the-admin-channel
     text: >-
       Every operation that reads the notification address or writes a value or the mode is a Server-Owner operation
       answered on the admin channel only.
+    coverage:
+      backend:
+        integration: [OperatorDetailsSliceTest.theOperationsAreTheServerOwnersOnTheAdminChannelOnly, AdminChannelGateSliceTest.theEnumerationSeesEveryRoleGatedMarkedOperation]
 gaps:
-  backend: Planned — phase 2 of cr-instance-contact-and-provider-identification.
-  web: Planned — phase 4 of cr-instance-contact-and-provider-identification (the login and share pages).
-  admin-web: Planned — phase 3 of cr-instance-contact-and-provider-identification (the panels, the setup step, the CLI).
+  admin-web: >-
+    Built and passing locally: `src/features/instance/OperatorPanel.test.ts`, `OperatingModePanel.test.ts`,
+    `operator.test.ts`, `src/views/SetupView.test.ts`, `src/features/setup/setupServer.test.ts` and `src/cli/cli.test.ts`
+    (the notice, the tick, the preset's changes, the warnings per mode, the code entry, `veyq-admin mode` and
+    `operator`). admin-web's job has never executed, so ADR 0040 admits it nowhere; on its first run they become refs
+    on the criteria named in each criterion's gap.
+  stack: >-
+    Lane L1's first-run scenario (`e2e/tests/setup/first-run.setup.ts`) chooses the mode at setup, switches it both ways
+    in the console with the warnings per mode, publishes the contact and the identification, and opens the tenant's
+    sign-in page to find the identification behind its footer link, in Chromium against the release candidate's two
+    images; each test is tagged with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`; the lane's
+    CI job awaits its first run.

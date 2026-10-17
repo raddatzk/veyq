@@ -79,4 +79,7 @@ imprint it may not need, and the operator's choice is theirs and stated as such.
 - [uc.admin.setup-server](uc.admin.setup-server.md) (the first choice of the mode),
   [uc.admin.switch-capabilities](uc.admin.switch-capabilities.md) (the switches a preset sets),
   [uc.admin.learn-of-new-releases](uc.admin.learn-of-new-releases.md) (instance mail)
-- Run area of the docs site: [Configuration](../../../../site/src/content/docs/run/configuration.md)
+- Run area of the docs site: [Moderation](../../../../site/src/content/docs/run/moderation.md) (the mode, the values,
+  the warnings), [First-run setup](../../../../site/src/content/docs/run/first-run.mdx) (the setup step, the panels, the
+  CLI), [Configuration](../../../../site/src/content/docs/run/configuration.md); Use area:
+  [What a guest sees](../../../../site/src/content/docs/sharing/what-guests-see.mdx) (the identification on the share page)

@@ -139,6 +139,11 @@ time the server observes live is not kept for them. What it does hold, each with
 
 ### Moderation
 
+- **The operating mode and who runs the instance** ([uc.admin.operator-details](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.operator-details.md)): the mode the Server Owner
+  chose; the instance contact with its languages, the statement address, the provider identification and the
+  supervisory authority, which are published by design and served to anyone; and the notification address in the
+  clear, which the server must hold to mail it and serves only on the admin channel, with the hash of an outstanding
+  confirmation code and which address was confirmed when.
 - **The roster**: which accounts the Server Owner appointed as moderators, by whom and when, whether each accepted,
   and the address confirmation for moderation notices (the hash of an outstanding code, which address was confirmed
   when) ([ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)).

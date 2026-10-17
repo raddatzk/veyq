@@ -11,6 +11,7 @@ sources:
   - docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md
   - docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md
   - docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md
+  - docs/features/admin/use-cases/uc.admin.operator-details.md
 ---
 
 There is no central moderation service, because there is no central service. And an instance's operator cannot
@@ -67,6 +68,49 @@ You still cannot read anything private, which is the design working as intended.
 You can switch a feature off for the whole instance, for example public links, drop boxes or devices that unlock
 without a password, in the admin console or with `veyq-admin capabilities`. What each switch does to new and to
 existing data, and how to switch it, is on [Capabilities](/veyq/run/capabilities/).
+
+## The operating mode
+
+At first-run setup you choose how the instance is run, and you can change it under **Server → Operating mode** or
+with `veyq-admin mode set` ([uc.admin.operator-details](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.operator-details.md), [ADR 0093 § 14](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)):
+
+- **Private (family, circle of friends)** — veyq leaves off what only the GDPR, the Digital Services Act and the EU
+  regulation on terrorist content ask of a host: the contact and the provider identification become optional and
+  nothing warns about them. Reporting, blocking and the moderators stay on in either mode: criminal law applies to
+  every operator, and an operator who learns of illegal content has to act.
+- **Club, organisation or company** — the contact and the provider identification are expected: the console warns
+  while public links are on and no contact is set, and while the identification lacks a name, an address for service
+  or an email. An instance where no mode was ever chosen runs as this one.
+
+**It is your own assessment, not veyq's, and not legal advice.** The choice comes with a notice that says so: the
+GDPR's household exemption covers only a purely personal or family activity and ends once a link is shared publicly
+(CJEU *Lindqvist*, C-101/01; *Buivids*, C-345/17), and whether the Digital Services Act and the terrorist-content
+regulation reach an unpaid private instance is legally uncertain. If you share links publicly, or run veyq for a club,
+an organisation or a company, you are probably not exempt. Choosing *private* needs a tick in the console, and
+`--accept-notice` with `veyq-admin mode set private`; the server does not record either.
+
+**A mode is a preset.** Choosing one sets the switches it names to its values, after the console and the CLI have
+shown which ones would change; each stays an ordinary switch you can set on its own
+([Capabilities](/veyq/run/capabilities/)), and choosing the mode again sets them again. A tenant's own switches are
+never touched. Nothing is required and nothing is refused in either mode: a warning is a warning.
+
+## Who runs the instance
+
+**Server → Operator** (or `veyq-admin operator set`) holds what a host publishes about itself; every field may stay
+empty:
+
+- **The instance contact** — the single point of contact for users and authorities, and for removal orders on
+  terrorist content, with the **languages it answers in**;
+- **the address statements of reasons name** — may be the same as the contact;
+- **the provider identification** — **Name**, **Address for service**, **Email**, and for a club or a company who
+  represents it;
+- **the data-protection supervisory authority**.
+
+These are public: the app reads them before sign-in on every address of the instance, and shows the identification,
+where it is set, behind **Legal notice** on the sign-in and share pages. The **notification address** is not public:
+new moderation cases will be mailed there. Saving it mails a code to it through the instance mail, once Server → Mail
+is set up and confirmed (the panel says so until then); you type the code into the same panel, and nothing is mailed
+to the address before. A changed address asks again. **Clear all** removes every value and keeps the mode.
 
 ## Moderators
 
