@@ -1,7 +1,7 @@
 ---
 id: cr-report-and-hold
 title: Anyone who sees something can report it; a report seals to the moderation key and holds a snapshot
-status: in-progress
+status: done
 satisfies: [uc.moderation.report]
 adrs: ["0093", "0099", "0062", "0079", "0051", "0072", "0080", "0034", "0083", "0097"]
 invariants:
@@ -125,36 +125,36 @@ who sets each), with planned coverage, under the feature `moderation` (`docs/fea
 
 ## Phases
 
-- [ ] **0 docs** — the use-case, the enabler, planned coverage; ADR 0097 decision 3 per Q6. · Done when:
+- [x] **0 docs** — the use-case, the enabler, planned coverage; ADR 0097 decision 3 per Q6. · Done when:
   `validate_feature_format.py`, `validate_coverage.py`, `validate_doc_links.py`, `validate_changes.py` green.
-- [ ] **1 crypto** — the report bundle: `K_report` minted, the per-kind wraps of decision 3 under it, the sealed part
+- [x] **1 crypto** — the report bundle: `K_report` minted, the per-kind wraps of decision 3 under it, the sealed part
   (`sealTo` a new purpose `moderation-report` [epoch] to the epoch's X-Wing public half); vectors. · Done when:
   `npm run check` and `npm run mutation -- --force` in `packages/crypto/` (exit code in the commit), the conformance
   test both ways. **Bite:** open a report sealed to epoch n with epoch n+1's key → refused (test red if it opens).
-- [ ] **2 contracts** — submit a report (member: bearer; guest: the share's existing credentials, password token
+- [x] **2 contracts** — submit a report (member: bearer; guest: the share's existing credentials, password token
   included; a WRITE_ONLY guest: the link only), the response a case reference and time; classified in
   `OperatorBlindProbeTest`; bounds on every field and the 100-item cap in the schema. · Done when:
   `npm run generate:api` (web), the contracts guards, `./gradlew check` green or the predicted red named (a new
   operation on the existing `sharing` tag reddens `SharingResource` until phase 3: say which).
-- [ ] **3 backend: report and case** — decision 1's and 2's tables; the reach check per kind (a member's scope grant;
+- [x] **3 backend: report and case** — decision 1's and 2's tables; the reach check per kind (a member's scope grant;
   a guest's `authorizedBlob`/subtree; a WRITE_ONLY guest only its link); attach to an open case; the instance
   events of the log for "received" and "report attached"; posture `IP` + `SHARE` (guest) and `USER` (member); Q8's
   cap. · Done when: `./gradlew check` and `run_backend_races_on_mariadb.py` green (two reports of one item race).
   **Bites, each with its positive control:** a guest reporting a node outside its link's subtree → refused while one
   inside is accepted; a READ guest reporting a medium of the link → accepted, of another memory → refused; the same
   item twice → one case, two reports.
-- [ ] **4 backend: hold** — decision 4's seam and tables, the snapshot in the report's transaction, decision 5's skip,
+- [x] **4 backend: hold** — decision 4's seam and tables, the snapshot in the report's transaction, decision 5's skip,
   decision 6's end and purge, readers in `EveryStoredTimeHasAReaderTest`. · Done when: `./gradlew check` and
   `run_backend_races_on_mariadb.py` green. **Bites:** (i) a held medium deleted by its uploader → the row is gone
   from every member and guest read (positive control: the hold is invisible), its store objects are still there after
   the sweep runs past five attempts' time, and its reclaim row's `attempts` is unchanged; remove the skip → the
   objects are gone (red); (ii) the hold expires → the sweep removes them (the positive control of (i)); (iii) a
   scope erase of the reported space → the snapshot survives (the report reads from it, ADR 0093 § 4).
-- [ ] **5 backend: mail** — the new-case mail to every accepted moderator with a confirmed address (and the contact's
+- [x] **5 backend: mail** — the new-case mail to every accepted moderator with a confirmed address (and the contact's
   notification address if present): category and "new case" only, no key, no link, no id (ADR 0093 § 2); the urgent
   three at once, the rest per Q7; the reporter's receipt per Q6. · Done when: `./gradlew check` green; a test that the
   mail body carries neither a case id nor a URL (bite: put the case id in the subject → red).
-- [ ] **6 web** — "Report" in the selection bar, each row's and the header's core actions, Memories' lightbox (the
+- [x] **6 web** — "Report" in the selection bar, each row's and the header's core actions, Memories' lightbox (the
   application calls core's dialog: application → core is the allowed direction), the WRITE_ONLY body's link report;
   the dialog with ADR 0093 § 1's fields (reason and good-faith confirmation required; contact optional; the five
   categories; the CSAM category's no-name note), the 100-item cap with the offer to report the enclosing node, the
@@ -163,7 +163,7 @@ who sets each), with planned coverage, under the feature `moderation` (`docs/fea
   asserts at `fetch` that the request carries no plaintext of the reason, the contact or the context; a browser pass:
   a member and a READ guest each report a medium and a folder, the moderator receives the mail.
   **Bite:** send the reason in the clear field → the wire test is red.
-- [ ] **7 docs + coverage** — `site/src/content/docs/privacy/is-my-data-safe.md` and its DE twin ("there is no report
+- [x] **7 docs + coverage** — `site/src/content/docs/privacy/is-my-data-safe.md` and its DE twin ("there is no report
   button" becomes false: `grep -n 'report' site/src/content/docs/privacy/is-my-data-safe.md site/src/content/docs/de/privacy/is-my-data-safe.md`),
   a Use page "Report something" (EN+DE), `run/moderation.md` (what a report does and does not do yet),
   `security/what-the-server-sees.md` (a report's clear fields), the security model's T&S "built" line
@@ -191,4 +191,31 @@ Implementation has the owner's go (2026-10-17), in the order of inbox #462; a le
 
 ## Retrospective
 
-_Filled at implementation._
+Built 2026-10-17, phases 0–7 as one commit each, plus the reconcile coupling after `main` brought
+cr-bucket-reconcile (`veyq_hold_pin` in `CLAIM_TABLES`, a pin-only key no orphan; the backup index reads the pins).
+Implemented shape where the plan was open: the item kinds on the wire are `NODE`, `ITEM` (an application's record on a
+node, located through the core seam `ReportableItems` — core names no Memories term) and `LINK`; the clear reporter is
+the account or the link (Q8's cap needs the account); the snapshot is one generic `veyq_hold_row` (a row as JSON) filled
+through `HoldSnapshotContributor`; a guest's report proves the whole link (`X-Share-Write`, ADR 0076). Not built, named
+in the use-case and inbox #462: a field reported on its own, and "everything by this uploader" — decision 3 listed
+both, no phase-6 entry point sends either. No buildless guard was added: the skip lives in the one `due` query, and
+`HoldMemoriesSliceTest` (i)/(iii) are its permanent bite.
+
+- **Planning: decision 3's kinds and phase 6's entry points were written from two lists.** The decision took the
+  kinds from ADR 0093 § 1 (a field, an uploader), the UI phase from the places a user clicks; two kinds had no click.
+  Next time: a per-kind decision names, per kind, the phase and the entry point that sends it.
+- **Execution: phase 3's commit was split by hand** — phase 4 had edited four shared files while phase 3's check ran
+  (harvested: `changes/README.md` § Phases only above real size). And a commit message passed inline with backticks
+  was run by the shell (`reports`, `sharing` executed); amended from a message file — every message since went
+  through `-F`.
+- **Execution: a role token of 17 characters** (`SHARE_MEMORY_NAME`) passed every unit test of the key builders and
+  was refused by the sealer at send time; only the guest-mode ShareView test, which seals for real, caught it. The
+  builders' tests now open what they hand over. And the report action's key read on mount reddened 198 unit tests
+  through the test network net; the read became a module of its own that `src/test/setup.ts` stands in for (said
+  there).
+- **Execution: lane L1 took four runs**, every red the spec's own locators (a file row is "Open <name>", the row box
+  is a label over its checkbox, two buttons named "Close"); the product passed unchanged. The first run spent the whole
+  suite to find the first one. Next time: a new spec runs first with its preconditions only (`-- <their specs>`).
+- **Process:** the shared scratchpad held generic file names (`msg3.txt`, `bite.py`) while another agent wrote there;
+  the coordinator flagged an overwrite. Next time: a CR-named subdirectory from the first file.
+
