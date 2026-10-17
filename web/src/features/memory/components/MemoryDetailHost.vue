@@ -18,6 +18,9 @@ import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { downloadHeaderActions } from '../../../core/export/downloadActions'
 import { copyHeaderActions } from '../../../core/export/copyActions'
+import { canReport, reportHeaderActions, reportNodes, reportScope } from '../../../core/report/reportActions'
+import { openReport, useReportOffered } from '../../../core/report/report'
+import { mediumReportKeys, type MediaItem } from '../media'
 import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
 import { FULL_FRAME } from '../../../core/node/cover/coverModel'
@@ -57,13 +60,28 @@ const { t } = useI18n()
 // The cover DIALOG is core's too (`CoverEditor`, mounted below); the Memory only adds its extra source to it - a photo chosen
 // in the gallery lightbox (`coverFromPhoto`) - through its descriptor's `cover.extraSource`.
 const cover = useNodeCover(() => props.access, () => props.tree, () => [props.node])
+const reportOn = useReportOffered()
 // …and core's "Copy to…" (uc.platform.copy-node) beside the move, a member's, where this build copies the kind.
 const coreActions = computed(() => [
   ...favoriteHeaderActions(t, props.access, props.node),
   ...cover.headerActions(props.node),
   ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
   ...downloadHeaderActions(t, props.access, props.node, () => emit('download')),
+  ...reportHeaderActions(t, reportOn.value, props.access, props.node, () => reportNodes(props.access, props.tree, [props.node], null)),
 ])
+// Core's "Report" (uc.moderation.report) for the Memory itself in the header, and for one medium in the lightbox: the
+// medium is this application's item, so its keys are Memories' to name (`mediumReportKeys`).
+const reportsMedia = computed(() => reportOn.value && canReport(props.access))
+function onReportMedium(item: MediaItem) {
+  const memoryKey = props.contentKey
+  if (!memoryKey) return
+  const scopeId = reportScope(props.access)
+  openReport({
+    access: props.access,
+    scopeId,
+    targets: [{ kind: 'ITEM', id: item.mediaId, keys: () => mediumReportKeys(scopeId, memoryKey, item, !guest) }],
+  })
+}
 
 /** The lightbox's "Set as cover": crop that photo in the dialog; a photo with no thumbnail yet is set full-frame at once. */
 function onCoverFromPhoto(p: { mediaId: string; src: string | null }) {
@@ -85,6 +103,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     :personal-scope="personalScope"
     :core-actions="coreActions"
     :cover-editing="cover.editor.value !== null"
+    :can-report="reportsMedia"
     :chapters="chapters"
     :rights="rights"
     :source="source"
@@ -98,6 +117,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     @meta-updated="onMetaUpdated"
     @edit-cover="cover.open(node)"
     @cover-from-photo="onCoverFromPhoto"
+    @report-medium="onReportMedium"
   />
   <CoverEditor :cover="cover" />
 </template>

@@ -51,6 +51,8 @@ import { setPreferenceAudience } from '../shared/state/scopedPreference'
 import { shareTreeFingerprint } from '../core/sharing/shareTreeFingerprint'
 import { isNoteAccepted, recordNoteAccepted } from '../core/sharing/shareNote'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
+import { openReport, useReportOffered } from '../core/report/report'
+import { linkReportKeys } from '../core/report/reportKeys'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -195,6 +197,14 @@ function onNamingClose() {
 const access = computed(() =>
   head.value ? guestAccess({ head: head.value, pwToken: pwToken.value, fragmentKey: fragmentKey.value, requestGuest, reload: load, poll }) : null,
 )
+// An upload link's guest sees no node, so it reports the link itself (uc.moderation.report, ADR 0093 § 1): its name and
+// note, with `K_share`, which opens no content. A viewing guest reports what it sees from the views themselves.
+const reportOn = useReportOffered()
+const reportsLink = computed(() => reportOn.value && status.value === 'ready' && head.value?.role === ShareRole.WriteOnly)
+function reportLink() {
+  const a = access.value
+  if (a) openReport({ access: a, scopeId: a.head.scopeId, targets: [{ kind: 'LINK', keys: () => linkReportKeys(a) }] })
+}
 // This document's pages are a guest's: its stored view mode and tab are the guest's own, never an account's
 // (`shared/state/scopedPreference`, inbox #408).
 setPreferenceAudience('guest')
@@ -387,6 +397,7 @@ onMounted(() => {
 
     <footer class="share-view-footer">
       <a :href="securityDocUrl" target="_blank" rel="noopener noreferrer">{{ t('share.securityFooter') }}</a>
+      <button v-if="reportsLink" type="button" class="share-view-report" @click="reportLink">{{ t('report.reportLink') }}</button>
       <OperatorIdentification />
     </footer>
   </div>
@@ -476,8 +487,16 @@ onMounted(() => {
   border-top: 1px solid var(--app-line);
   text-align: center;
 }
-.share-view-footer a {
+.share-view-footer a,
+.share-view-report {
   color: var(--app-muted);
   font-size: 0.82rem;
+}
+.share-view-report {
+  padding: 0;
+  border: none;
+  background: none;
+  text-decoration: underline;
+  cursor: pointer;
 }
 </style>

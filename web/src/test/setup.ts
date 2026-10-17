@@ -3,7 +3,7 @@
 // mounted component satisfies the `usePrimeToast()` injection without each test having to register it (tests
 // that stub the shared `useToast` composable are unaffected).
 import { config, enableAutoUnmount } from '@vue/test-utils'
-import { beforeAll, beforeEach, afterEach } from 'vitest'
+import { beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { installWireRecorder } from './wireRecorder'
 import ToastService from 'primevue/toastservice'
 
@@ -107,6 +107,13 @@ if (happyDOM?.settings?.fetch) {
 beforeEach((ctx) => {
   armed = !ctx.task.file.name.endsWith('.e2e.test.ts')
 })
+
+// Every level, header and share page reads the published moderation key when it mounts, to show "Report" only while
+// the instance has one (uc.moderation.report). A unit test sees no key — no report action, no request — unless it
+// tests reporting and takes the real module back with `vi.unmock` (core/report/moderationKey.ts).
+vi.mock('../core/report/moderationKey', () => ({
+  readModerationKey: () => Promise.reject(new Error('no moderation key in a unit test (src/test/setup.ts)')),
+}))
 
 afterEach(() => {
   if (!attempted.length) return

@@ -31,7 +31,7 @@ import { Configuration as ScopesConfiguration, ScopesApi } from './generated/sco
 import { ContentApi, Configuration as ContentConfiguration } from './generated/content'
 import { BlobApi, Configuration as BlobConfiguration } from './generated/blob'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
-import { ModerationApi, Configuration as ModerationConfiguration } from './generated/moderation'
+import { ModerationApi, ReportsApi, Configuration as ModerationConfiguration } from './generated/moderation'
 import { SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
 import { FavoritesApi, Configuration as FavoritesConfiguration } from './generated/favorites'
 import { OperatorApi, Configuration as OperatorConfiguration } from './generated/operator'
@@ -157,6 +157,17 @@ export function tasksApi(): TasksApi {
  *  proof are the server's (`ModerationProofGate`); the proof headers come from `features/moderation/proof.ts`. */
 export function moderationApi(): ModerationApi {
   return new ModerationApi(new ModerationConfiguration(bearerParams()))
+}
+
+/** The published moderation key a reporter seals to (`getModerationKey`, ADR 0099 § 2): read before any sign-in, by a
+ *  member and by a guest of a link alike, so token-less — a guest's page sends no Authorization header. */
+export function publicModerationApi(): ModerationApi {
+  return new ModerationApi(new ModerationConfiguration(publicParams()))
+}
+
+/** A member's report of what their space holds (uc.moderation.report). A guest reports through `publicSharesApi`. */
+export function reportsApi(): ReportsApi {
+  return new ReportsApi(new ModerationConfiguration(bearerParams()))
 }
 
 // Public viewer shares (cr-0100). The **curator** ops (create/list/revoke) are bearer-authed like the rest.

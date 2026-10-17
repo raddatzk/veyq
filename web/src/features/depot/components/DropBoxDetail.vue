@@ -39,6 +39,8 @@ import { standardNodeActions } from '../../../core/node/nodeHeader'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { downloadHeaderActions } from '../../../core/export/downloadActions'
 import { copyHeaderActions } from '../../../core/export/copyActions'
+import { reportHeaderActions, reportNodes } from '../../../core/report/reportActions'
+import { useReportOffered } from '../../../core/report/report'
 import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import NodeCoverImage from '../../../core/node/cover/components/NodeCoverImage.vue'
 import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
@@ -55,11 +57,14 @@ const { t } = useI18n()
 const cover = useNodeCover(() => props.access, () => props.tree, () => [props.node])
 // …and core's Download (cr-download-is-the-export Decision 7): the drop box as a ZIP of its guests' folders, for a member and a READ
 // or READ_WRITE guest of a folder link above it - never its own WRITE_ONLY guest, who holds no key (core's `canDownload`).
+// …and core's Report (uc.moderation.report), for whoever sees it.
+const reportOn = useReportOffered()
 const coreActions = computed(() => [
   ...favoriteHeaderActions(t, props.access, props.node),
   ...cover.headerActions(props.node),
   ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
   ...downloadHeaderActions(t, props.access, props.node, () => emit('download')),
+  ...reportHeaderActions(t, reportOn.value, props.access, props.node, () => reportNodes(props.access, props.tree, [props.node], null)),
 ])
 const nodeCover = computed(() => cover.covers.value.get(props.node.id) ?? null)
 const { ask } = useConfirm()

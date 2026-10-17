@@ -84,12 +84,15 @@ const props = defineProps<{
    *  Absent: no uploader is shown (a share guest's session carries none). */
   uploaderOf?: (item: MediaItem) => UploaderLabel | null
   suspendKeys?: boolean // pause the global Escape/arrow handler while a modal (the cover cropper) is open over the lightbox
+  /** Offer "Report" for the shown item (`report` event; core's dialog, uc.moderation.report): its host decides. */
+  canReport?: boolean
 }>()
 const emit = defineEmits<{
   close: []
   updated: [{ mediaId: string } & SealedMetaState] // a meta write landed, or a conflict handed back the current tier
   setCover: [{ mediaId: string }] // "use this photo as the Memory's cover" (cr-0073 §gallery-source)
   delete: [{ mediaId: string }] // delete this photo: a member's trash with undo (cr-0110), a guest's purge of its own (asked first)
+  report: [item: MediaItem] // report this medium (uc.moderation.report): the host opens core's report dialog with its keys
 }>()
 
 const { t, locale } = useI18n()
@@ -721,6 +724,16 @@ onBeforeUnmount(() => {
           @click="!isCover && item && emit('setCover', { mediaId: item.mediaId })"
         >
           <span class="pi" :class="isCover ? 'pi-check' : 'pi-image'" />
+        </button>
+        <button
+          v-if="item && canReport"
+          class="veyq-icon-button lightbox-icon-button lightbox-report-button"
+          type="button"
+          :aria-label="t('report.action')"
+          :title="t('report.action')"
+          @click="emit('report', item)"
+        >
+          <span class="pi pi-flag" />
         </button>
         <button
           v-if="item && canDelete(item)"

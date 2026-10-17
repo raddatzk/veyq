@@ -96,6 +96,8 @@ import LevelNotices from './components/LevelNotices.vue'
 import { standardNodeActions } from './nodeHeader'
 import { downloadHeaderActions, downloadRowActions } from '../export/downloadActions'
 import { canCopy, copyHeaderActions, copyRowActions } from '../export/copyActions'
+import { canReport, reportHeaderActions, reportNodes, reportRowActions } from '../report/reportActions'
+import { useReportOffered } from '../report/report'
 import { isDownloadArchive } from '../export/importSubtree'
 import {
   directoryHoldsManifest, holdsManifest, readDroppedDirectory, type DirectoryInput, type DroppedDirectory, type DroppedEntry, type ImportOffer,
@@ -343,11 +345,22 @@ const copiesNode = (id: string): boolean => {
   return !!item && !item.unsupported && canCopy(props.access, item.node)
 }
 const anyCopy = computed(() => [...levelItems.value.keys()].some(copiesNode))
-const canSelect = computed(() => (mode.value === 'grid' || mode.value === 'list') && (anyMove.value || anyDelete.value || anyCopy.value))
+// "Report" is core's (uc.moderation.report): anyone who sees a node reports it, a READ guest included — so it alone
+// makes a level selectable — while the instance publishes a moderation key.
+const reportOn = useReportOffered()
+const reportsNode = (id: string): boolean => {
+  const item = levelItems.value.get(id)
+  return !!item && !item.unsupported
+}
+const anyReport = computed(() => reportOn.value && canReport(props.access) && [...levelItems.value.keys()].some(reportsNode))
+const canSelect = computed(
+  () => (mode.value === 'grid' || mode.value === 'list') && (anyMove.value || anyDelete.value || anyCopy.value || anyReport.value),
+)
 const selectedIds = computed(() => [...selection.ids.value].filter((id) => levelItems.value.has(id)))
 const movable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.move === true))
 const deletable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.delete === true))
 const copyable = computed(() => selectedIds.value.filter(copiesNode))
+const reportable = computed(() => selectedIds.value.filter(reportsNode))
 const shownIds = computed(() => items.value.map((i) => i.key))
 const hiddenCount = computed(() => {
   const shown = new Set(shownIds.value)
@@ -384,6 +397,10 @@ function copySelected(): void {
   const nodes = copyable.value.map((id) => levelItems.value.get(id)!.node)
   if (nodes.length) emit('copyNodes', nodes)
 }
+function reportSelected(): void {
+  const nodes = reportable.value.map((id) => levelItems.value.get(id)!.node)
+  if (nodes.length) reportNodes(props.access, props.tree, nodes, props.folder)
+}
 function deleteSelected(): void {
   const chosen = deletable.value.map((id) => {
     const item = levelItems.value.get(id)!
@@ -418,6 +435,7 @@ const coreRowActions = (item: Item): CoreRowAction[] =>
         ...cover.rowActions(item.node),
         ...copyRowActions(t, props.access, item.node, () => emit('copyNodes', [item.node])),
         ...downloadRowActions(t, props.access, item.node, () => emit('downloadNode', item.node)),
+        ...reportRowActions(t, reportOn.value, props.access, item.node, () => reportNodes(props.access, props.tree, [item.node], null)),
       ]
 // The folder on screen is a node too: its header carries the same heart and cover action (the scope root is no node and
 // has neither).
@@ -426,6 +444,7 @@ const folderCoreActions = computed(() => [
   ...cover.headerActions(props.folder),
   ...copyHeaderActions(t, props.access, props.folder, () => props.folder && emit('copyNodes', [props.folder])),
   ...downloadHeaderActions(t, props.access, props.folder, () => props.folder && emit('downloadNode', props.folder)),
+  ...reportHeaderActions(t, reportOn.value, props.access, props.folder, () => props.folder && reportNodes(props.access, props.tree, [props.folder], null)),
 ])
 const folderCover = computed(() => (props.folder ? (cover.covers.value.get(props.folder.id) ?? null) : null))
 const itemMode = computed<'grid' | 'list'>(() => (mode.value === 'list' ? 'list' : 'grid'))
@@ -616,6 +635,17 @@ async function onDrop(e: DragEvent): Promise<void> {
           :disabled="copyable.length === 0"
           :aria-describedby="cannotCopyText ? 'veyq-select-cannot-copy' : undefined"
           @click="copySelected"
+        />
+        <Button
+          v-if="anyReport"
+          type="button"
+          class="veyq-select-report"
+          :label="t('report.action')"
+          icon="pi pi-flag"
+          size="small"
+          outlined
+          :disabled="reportable.length === 0"
+          @click="reportSelected"
         />
         <Button
           v-if="anyDelete"
