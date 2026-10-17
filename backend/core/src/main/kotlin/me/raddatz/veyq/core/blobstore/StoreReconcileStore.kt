@@ -529,8 +529,9 @@ class StoreReconcileStore {
          * The claim set: every table a migration gives a `storage_key` column, except this reconcile's own
          * `veyq_store_orphan` (whose rows are what NO row claims). A table that keeps a key alive and is missing here
          * turns a wrong count into lost media once the key is due, so `scripts/validate_store_reconcile_claims.py`
-         * derives the set from the migrations and holds this list to it — never the other way round.
+         * derives the set from the migrations and holds this list to it — never the other way round. `veyq_hold_pin`
+         * (ADR 0093 § 4, en.moderation.hold) keeps a reported object alive while every other row naming it is gone.
          */
-        val CLAIM_TABLES = listOf("veyq_upload_session", "veyq_blob", "veyq_store_reclaim")
+        val CLAIM_TABLES = listOf("veyq_upload_session", "veyq_blob", "veyq_store_reclaim", "veyq_hold_pin")
     }
 }
