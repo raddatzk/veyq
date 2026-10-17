@@ -1,8 +1,10 @@
 # ADR 0093 — A report opens one window for the moderator, and a hold copies, never blocks
 
 - Status: Accepted 2026-10-16; § 8 is built (the last editor per field group, and the take-back it tightens), and
-  so is § 9 (every field purpose seals under its own `K_field`), the rest is not. It is on the V1 line (owner 2026-10-16,
-  [inbox](../inbox.md) #462).
+  so is § 9 (every field purpose seals under its own `K_field`), the rest is not. Who moderates — moderators the
+  Server Owner appoints, sharing one instance moderation key — is
+  [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
+  not built, and stated here in §§ 1–3, 6–7 and 11–13. It is on the V1 line (owner 2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
 Provenance: **(M)** is measured in this worktree (file and line named); **(S)** comes from a read-only sweep of the
@@ -89,35 +91,50 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
   sexual abuse material, terrorist content, threat to life or safety, other illegal content, breach of the terms.
   On the first, the dialog says that a report without a name is expected (Art. 16(2)(c) exempts it). The exact
   location is the report's own ids.
-- **A report share is invisible and inert to everyone but the moderator.** It appears in no listing, carries no
+- **A report share is invisible and inert to everyone but the moderators.** It appears in no listing, carries no
   `sealed_share_key`, no member can revoke it, it lives as long as its case, and the server serves it **only
-  against proof of the moderation key** (§ 2) — never to the client that minted it, or a reporter about to lose
-  access would keep it. It is served regardless of what later happens to the original share (revoked, expired,
+  against proof of the moderation key** (§ 2) **and to a session with the `MODERATOR` role**
+  ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 2) — never to the
+  client that minted it, or a reporter about to lose access would keep it. It is served regardless of what later happens to the original share (revoked, expired,
   password changed) or to the tenant (suspended).
 - **Context is not evidence.** The reporter's client may add what it saw (a note's text) as context; evidence is
   only what the moderator opens from the held ciphertext.
 
 ### 2. A report is sealed to the moderation key
 
-- **The moderation key is the Server Owner's identity key** today (it exists from first-run setup,
-  [ADR 0065](0065-admin-ui-cli-separate-service.md)). The reporter's client seals to its public half (`sealTo`).
+- **The moderation key is the instance moderation key's current epoch**
+  ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 2): one key, granted
+  to every moderator the Server Owner appoints, the Server Owner among them, and rotated into a new epoch when one leaves. The
+  reporter's client seals to the public half the server publishes for that epoch (`sealTo`); a report stays sealed
+  to the epoch it was made under.
 - **In the clear:** category, time, the reported ids (the hold needs them). **Sealed:** `K_report`, the reporter's
   text, the reporter's contact, the context. A database dump opens no report.
 - **Nobody else learns of a report** until it is decided: not the creator, the uploader, the tenant owner or a member.
-  The Server Owner is notified by mail to the instance contact (§ 11): category and "new case", never a key or a
-  link; the first three categories of § 1 at once, the rest bundled. A reporter who left a contact gets a receipt
-  and, later, the decision (DSA Art. 16(4)–(5), L).
+  Every accepted moderator is notified by mail at their account address, and the instance contact's notification
+  address where one is set (§ 11;
+  [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7): category and "new
+  case", never a key or a link; the first three categories of § 1 at once, the rest bundled. A reporter who left a
+  contact gets a receipt and, later, the decision (DSA Art. 16(4)–(5), L).
 - **Nothing is blocked by a report.** A human decides.
 
-### 3. Review is a share view in moderation mode; deciding is admin-web's
+### 3. Review is a share view in moderation mode; deciding is the moderation surface's
 
-- **admin-web shows the queue** (clear fields only) and opens `https://<tenant domain>/s/…#<sealed report>`.
-- **web/'s share viewer in moderation mode** signs the Server Owner in and unlocks their vault (any method they have,
-  a trusted device included; passkeys when they exist), opens the report, proves the moderation key to fetch the
-  report share, and shows it **with the guest viewer** plus the report's details, read-only. It loads no member shell
-  and needs no tenant membership; this is the only flow where a Server Owner signs in on a tenant host without one.
-- **Every decision is a Server-Owner operation on the admin channel** ([ADR 0065](0065-admin-ui-cli-separate-service.md)),
-  in admin-web and with the same reach in `veyq-admin`, so an operator away from admin-web can act over SSH.
+- **web/'s moderation surface**, a route on every tenant host reachable only with the `MODERATOR` role and the key
+  proof ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6), shows the
+  instance-wide queue (clear fields only) and opens `https://<tenant domain>/s/…#<sealed report>` on the reported
+  tenant's host.
+- **web/'s share viewer in moderation mode** signs the moderator in and unlocks their vault **only to open their
+  moderation grants** — no member shell, no scope grant fetched — keeps the moderation key and drops the Master Key
+  and the identity private key before any reported content opens. It then opens the report, proves the moderation
+  key to fetch the report share, and shows it **with the guest viewer** plus the report's details, read-only. It
+  needs no membership in the reported tenant; this is the only flow where an account acts on a tenant host it does
+  not belong to. The surface never offers to keep a trusted device there (0099 § 6).
+- **Every decision is a moderator operation** in that surface — dismissing, the steps of § 6 within a moderator's
+  reach, the statement of reasons and its deferral, objection decisions, hold extensions, the order path (§ 12), the
+  CSAM flow and the BKA export (§ 13) — gated by the `MODERATOR` role and the key proof on the public listener.
+- **admin-web keeps the Server Owner's part** on the admin channel ([ADR 0065](0065-admin-ui-cli-separate-service.md)),
+  with the same reach in `veyq-admin` so an operator away from admin-web can act over SSH: the moderator roster, minting
+  and rotating the key, the instance contact (§ 11), the steps of § 6 that stay theirs, and the order path (§ 12).
 
 ### 4. A hold is a snapshot plus a pin
 
@@ -160,12 +177,16 @@ a delayed erasure and a moderator's look.
 
 ### 6. Measures are chosen when deciding, in steps, and all are reversible
 
-| Step | Effect |
-|---|---|
-| Block the share | the link answers as revoked |
-| Block the content | the server refuses to serve it to anyone, members included; members and guests see "Blocked by the operator", no reason; the uploader can delete it but not replace or restore it |
-| Block the uploader | a member: sign-in on the instance; a guest: the identity **and the link it came through** (it could mint a new identity on the same link); the link's creator may issue a new one |
-| Take the tenant offline | [ADR 0066](0066-tenant-suspension.md) |
+| Step | Effect | Taken by |
+|---|---|---|
+| Block the share | the link answers as revoked | a moderator |
+| Block the content | the server refuses to serve it to anyone, members included; members and guests see "Blocked by the operator", no reason; the uploader can delete it but not replace or restore it | a moderator |
+| Block the uploader | a member: sign-in on the instance; a guest: the identity **and the link it came through** (it could mint a new identity on the same link); the link's creator may issue a new one | a guest: a moderator; a member: the Server Owner |
+| Take the tenant offline | [ADR 0066](0066-tenant-suspension.md) | the Server Owner |
+
+**A moderator proposes the Server Owner's steps**; the case shows the proposal, and the Server Owner takes it in
+admin-web or `veyq-admin` ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
+§ 6). Blocking a member's sign-in and taking a tenant offline reach content and people nobody reported, while blocking the share and the content already stops what was reported from being served.
 
 Blocking deletes nothing, so every step can be lifted. Every step hangs on ids, never on a report or a key, so an
 authority's order (§ 12) takes the same steps. **An address is evidence, never the ground of a block.** A
@@ -180,11 +201,16 @@ a block reaches only the reported copy.
   courts (Art. 17(3), L). A dismissed report is told only to the reporter.
 - **Deferring the statement is an authority's switch, never the moderator's discretion** (L: Art. 17 DSA has no
   exception of its own; TCO Art. 11(3) lets the authority forbid the notice for six weeks, renewable once by six).
-  It needs the authority's reference (sealed) and an end date, at most six weeks per request; at that date admin-web
-  reminds and the statement goes out unless a new request renews it.
+  It needs the authority's reference (sealed) and an end date, at most six weeks per request; at that date the
+  moderation surface reminds and the statement goes out unless a new request renews it.
 - **Objection in the app**, for the affected only, on the placeholder and the statement: free text sealed to the
   moderation key, reopening the case; one per measure, then the courts. A guest uses the instance contact. A
   reporter has no objection to a dismissal; they may report again with more.
+- **Another moderator reviews the objection**
+  ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 5): the server
+  refuses a decision on it from the account that took the measure while another accepted moderator holds the key,
+  and the log records the reviewer. With one moderator the objection does not wait: the decider reviews it, the log
+  marks the review as theirs, and the answer to the objector says so.
 
 ### 8. Every sealed field records its last editor
 
@@ -280,9 +306,13 @@ range and its no-extension rule (§ 2 there).
   and ids), lifted, hold extended or ended, statement sent or deferred, objection received, order received (§ 12),
   information given to an authority, handed to an authority.
   Structured fields in the clear (event, time, moderator account, ids, step); every free text (reasons, notes, an
-  authority's reference) sealed to the moderation key. No content, no key. Shown per case in admin-web. Never in a
-  log: a log names a case id and nothing more (0092 § 1). Not tamper-evident: the operator owns the database, and
+  authority's reference) sealed to the moderation key. No content, no key. Shown per case in the moderation
+  surface. Never in a log: a log names a case id and nothing more (0092 § 1). Not tamper-evident: the operator owns the database, and
   the log is for accountability to the affected and within a team.
+- **Instance events**, with no case id
+  ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 4): a moderator
+  appointed, accepted, delivered the key (epoch, by whom), removed or stepped down, and an epoch minted (by whom, and a reason category: removal, identity rotation,
+  compromise, by hand). Kept to 31 December of the third year after the moderator's removal.
 - **Its retention** (L): a case's events are kept until **31 December of the third year after the case closes** —
   the civil limitation period from year's end, and the one for the DSA's fines — dismissed cases included, since a
   dismissal is what an injured party may later contest. A case closes when its last hold has ended and no objection
@@ -297,8 +327,11 @@ range and its no-extension rule (§ 2 there).
 ### 12. An authority's order acts on ids, within the hour, without a key and without a report
 
 - **A removal order names a URL**, which the server cannot read and for which no report share exists. So the order
-  path is separate from the report flow, in admin-web **and** in `veyq-admin`: in goes the share URL or share id,
-  the authority's reference and the time of receipt; at once, with no review of its own (the authority has
+  path is separate from the report flow, entered by a moderator in the moderation surface with the key proof, or by
+  the Server Owner in admin-web **and** in `veyq-admin` without a key — two operations, because the admin channel's
+  marker names a door per operation
+  ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6): in goes the
+  share URL or share id, the authority's reference and the time of receipt; at once, with no review of its own (the authority has
   reviewed), the server **blocks the share and the content it reaches** by id (§ 6) and opens a case with a **hold
   without a report** whose end the order sets (§ 4). Out comes the text for the feedback form (TCO Annex II, the
   time of the block in UTC to the second) and a draft for the form that reports an obstacle (Annex III).
@@ -315,11 +348,11 @@ range and its no-extension rule (§ 2 there).
 - **Where an Art. 18 report goes** (L): in Germany to the BKA as the central office (§ 13 DDG), through its portal
   `u-entrance.bka.de` after registering by mail (the Run docs say to register **before** an emergency); without a
   registration, a criminal complaint with the police; in acute danger, 110. Terrorist content already reported
-  under TCO Art. 14(5) needs no second report. admin-web exports the clear fields the BKA form asks for — case id,
+  under TCO Art. 14(5) needs no second report. The moderation surface exports the clear fields the BKA form asks for — case id,
   times in UTC, the uploader's account or share identity, the address from a held guest-write record, the category —
   and **never a content file**. Handing over is an event in the moderation log (§ 11).
-- **Child sexual abuse material gets its own flow.** The mail goes out at once (§ 2); admin-web shows, before the
-  report opens, "do not download, forward or screenshot; review only as far as needed, block the content, inform
+- **Child sexual abuse material gets its own flow.** The mail goes out at once (§ 2); the moderation surface shows, before
+  the report opens, "do not download, forward or screenshot; review only as far as needed, block the content, inform
   the police or the BKA"; and it **proposes "Block the content" as the first measure**, because once known,
   serving it on is a making-available of the host's own. A human still decides (§ 2). The hold ends at the
   handover (§ 4), so it serves the reporting duty and nothing else (§ 184b(5) StGB, L). A file or a screenshot never
@@ -330,11 +363,13 @@ range and its no-extension rule (§ 2 there).
 - The operator can act on one share, one item or one uploader instead of a whole tenant, and reads only what was
   reported. Unreported content stays unreadable; the T&S target in the security model becomes buildable as written.
 - Costs: a new share kind (medium-scoped and field-scoped), hold tables and the sweep's skip, a moderation mode in
-  the share viewer, admin-web's queue and the CLI's moderation commands, an editor column per field group (built), per-field
-  keys in the crypto suite with new vectors (built), the guest-write record, the moderation log. `EveryStoredTimeHasAReaderTest`
-  needs a reader for each new time: the purge for records, holds and the log (each hold's and each case's own end).
-- Further costs from the operator premise: the order path in admin-web and the CLI with a hold that has no report
-  and an end the order sets (§ 12); per-trigger hold ends and logged extensions (§ 4); the deferral switch (§ 7);
+  the share viewer, web/'s moderation surface with the queue, admin-web's and the CLI's Server-Owner steps, the
+  moderator role and key ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)),
+  an editor column per field group (built), per-field keys in the crypto suite with new vectors (built), the
+  guest-write record, the moderation log. `EveryStoredTimeHasAReaderTest` needs a reader for each new time: the purge
+  for records, holds and the log (each hold's and each case's own end).
+- Further costs from the operator premise: the order path in the moderation surface, admin-web and the CLI with a
+  hold that has no report and an end the order sets (§ 12); per-trigger hold ends and logged extensions (§ 4); the deferral switch (§ 7);
   the report dialog's fields and categories (§ 1); the CSAM flow and the BKA export (§ 13); the backup dump without
   the record's rows, which changes what [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
   database leg holds (§ 10); and in [ADR 0035](0035-server-terms-of-service.md) the fixed operator section and the
@@ -343,11 +378,8 @@ range and its no-extension rule (§ 2 there).
   asks for one only in a year the host acted on terrorist content, by 1 March) and an internal complaint system
   (Art. 20, online platforms only). The in-app objection of § 7 is voluntary. A TCO report could later be derived
   from the moderation log.
-- **A single operator reviews their own measure** on objection, and the whole Server Owner vault is open while
-  reviewing. A moderator role with its own key pair (inbox #463) answers both and adds a deputy for when the owner
-  is away.
-- An operator away from admin-web acts over SSH with `veyq-admin`, and the Run docs show how to reach admin-web
-  remotely (an SSH tunnel or a VPN).
+- A moderator acts from any tenant host they can sign in on; an operator away from admin-web acts over SSH with
+  `veyq-admin`, and the Run docs show how to reach admin-web remotely (an SSH tunnel or a VPN).
 - **Limits stated in the docs:** a copy escapes a block; held data and the moderation log live in backups beyond
   their retention; an address without a port may name no single subscriber; an operator who cannot keep the TCO
   hour has to turn public links off. A household instance may be outside the DSA, the TCO Regulation and the GDPR
@@ -371,9 +403,11 @@ range and its no-extension rule (§ 2 there).
 - **Moderating by mail**, information in the mail and the decision as a reply. Puts keys at a mail provider, makes a
   spoofable mailbox a Server-Owner channel past the admin channel, needs inbound mail, and mail scanners pre-open
   links. Mail notifies only.
-- **Moderation actions in web/.** They would put Server-Owner operations back on the public listener, in the surface
-  that renders untrusted content. **A vault in admin-web**, to avoid web/: contradicts admin-web's "no vault, no
-  content key, ever".
+- **Server-Owner operations in web/.** They would put them back on the public listener, in the surface that renders
+  untrusted content. A moderator's operations are there, because the moderator role carries none of them and its
+  gate is the role plus the key proof
+  ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6). **A vault in
+  admin-web**, to avoid web/: contradicts admin-web's "no vault, no content key, ever".
 - **A review mode that presents a password token** to the original share. Superseded by the report share, which has
   no password and does not depend on the original.
 - **Handing over `K_share` or a parent key for a text field.** Opens the whole subtree or the siblings.
