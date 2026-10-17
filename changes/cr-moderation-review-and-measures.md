@@ -1,7 +1,7 @@
 ---
 id: cr-moderation-review-and-measures
 title: A moderator reviews a case from the held snapshot and takes reversible measures by id
-status: in-progress
+status: done
 satisfies: [uc.moderation.review-a-case, uc.moderation.take-a-measure]
 adrs: ["0093", "0099", "0066", "0065", "0026", "0088"]
 invariants:
@@ -101,13 +101,13 @@ coverage. Existing use-cases whose behaviour changes and gain an alternate flow 
 
 - [x] **0 docs** — the two use-cases, the alternate flows above, planned coverage. · Done when: `validate_feature_format.py`,
   `validate_coverage.py`, `validate_doc_links.py`, `validate_changes.py` green.
-- [ ] **1 contracts** — the queue, open a case (fetch the report share), the snapshot reads in the guest viewer's
+- [x] **1 contracts** — the queue, open a case (fetch the report share), the snapshot reads in the guest viewer's
   schemas, decide (dismiss, block, propose, lift, extend, bar a reporter) on the moderation spec; the Server-Owner
   operations (proposals, a member's sign-in block and its lift) on the admin channel; `blockedByOperator` on the
   listed models; `451` on byte reads per Q9; every operation classified. · Done when: `npm run generate:api` (web,
   admin-web), the contracts guards, `./gradlew check` (red predicted where an existing tag gains an operation: name the
   resource) and `npm run check` in `web/` run once to see which typed lines a new required field reddens.
-- [ ] **2 backend: decisions and blocks** — decisions 1–5 and 7; every decision a log event (decided, lifted,
+- [x] **2 backend: decisions and blocks** — decisions 1–5 and 7; every decision a log event (decided, lifted,
   hold extended or ended); the separation in `@RolesAllowed`: moderator operations never carry the admin marker, the
   Server Owner's always do (`AdminChannelPostureSweepTest` holds the latter). · Done when: `./gradlew check` and
   `run_backend_races_on_mariadb.py` green. **Bites, each with a positive control:** a blocked share → every guest
@@ -116,15 +116,15 @@ coverage. Existing use-cases whose behaviour changes and gain an alternate flow 
   another identity on a re-issued link writes; a moderator's session calling the member-block operation on the public
   port → `404` (the admin channel), the Server Owner on the admin port → done; a dismissal → the hold's pins are gone
   and the sweep reclaims a meanwhile-deleted object.
-- [ ] **3 backend: review reads** — decision 6's endpoints over the snapshot, gated by role and proof; the log's
+- [x] **3 backend: review reads** — decision 6's endpoints over the snapshot, gated by role and proof; the log's
   "opened" event per fetch (ADR 0093 § 11). · Done when: `./gradlew check` green. **Bite:** delete the original
   share, the node and the scope after the report → the review read still answers the held rows (control: the live
   read is gone).
-- [ ] **4 web: moderation surface** — the queue (category, time, tenant, state; urgent first), a case's details and
+- [x] **4 web: moderation surface** — the queue (category, time, tenant, state; urgent first), a case's details and
   log, the decision panel with each step's reach stated, proposals shown as such, extend with a reason, bar a reporter;
   opening a case navigates to the reported tenant's host. EN+DE. · Done when: `npm run check` green; a test per
   decision call that it carries a fresh proof over its own operation id.
-- [ ] **5 web: moderation mode and placeholder** — `ShareView` in moderation mode: the surface's unlock (no vault
+- [x] **5 web: moderation mode and placeholder** — `ShareView` in moderation mode: the surface's unlock (no vault
   after the grants are opened: ADR 0099 § 6, as the moderation surface of `uc.moderation.serve-as-moderator` already unlocks), the sealed report opened with the
   epoch's key, `K_report` unwrapped, the guest viewer over the moderation data source, read-only, the report's details
   beside it. The "Blocked by the operator" placeholder in the level rows and tiles, the lightbox and the file view, for
@@ -133,10 +133,10 @@ coverage. Existing use-cases whose behaviour changes and gain an alternate flow 
   (`guardedClients` pattern; bite: route one read through `resolvePublicShare` → red); a browser pass: report a medium
   as a guest, review it as a moderator on the tenant host, block the content, see the placeholder as the member and the
   guest, lift it, see the medium again.
-- [ ] **6 admin-web + CLI** — the proposals list per case, a member's sign-in block and lift, the link to the existing
+- [x] **6 admin-web + CLI** — the proposals list per case, a member's sign-in block and lift, the link to the existing
   suspension; `veyq-admin moderation proposals`, `account block|unblock`. · Done when: `npm run check` in `admin-web/`
   green; the container build run or its omission stated.
-- [ ] **7 docs + coverage** — `run/moderation.md` (the queue, the steps, who takes which, lifting; drop "ask the tenant's
+- [x] **7 docs + coverage** — `run/moderation.md` (the queue, the steps, who takes which, lifting; drop "ask the tenant's
   owner", ADR 0093 § Consequences), a Use page section on "Blocked by the operator" (EN+DE: what a member and a guest
   see and what they can still do), `security/what-the-server-sees.md` (blocks are clear metadata), the security model's
   T&S "built" line; coverage refs. · Done when: `validate_coverage.py`, `validate_wiki_sources.py`, `npm run check` in
@@ -154,4 +154,43 @@ Implementation has the owner's go (2026-10-17), in the order of inbox #462; a le
 
 ## Retrospective
 
-_Filled at implementation._
+What it built and proved, measured (commands re-runnable in this worktree): `./gradlew check` green (backend, every
+project, after the last merge of `main`); `python3 scripts/run_backend_races_on_mariadb.py` green (default run, MariaDB
+11.4); `npm run check` green in `web/` (4205 tests), `admin-web/` (397), `e2e/` and `site/`;
+`python3 scripts/instance_backup_selftest.py` green; every `scripts/validate_*.py` but `validate_guard_gaps.py` green (no
+validator changed). Lane L1 green on `veyq-review:local` (`python3 scripts/run_stack_e2e.py --app veyq-review:local
+--admin veyq-review-admin:local`, 272 s, 57 tests, the sweep clean): `e2e/tests/features/review-and-measures.spec.ts`
+reports a photo as a guest, reviews it at `/s/<case id>#moderation` on the tenant's host with no link or scope read,
+blocks it — the owner and the guest see the placeholder — and lifts it. Bites, each by snapshot-and-restore with a
+byte-equal restore, each red: the presign-callers scan (an unchecked caller), the decision and report races (locks
+removed, after the rewrite below), the review guard (the media listing routed to the link's read; the chunk path routed
+to the link's presign), the blocked level row, the lightbox, the tile, a blocked node's page, the creator's stop
+wording, the bearer on the held media listing (its scheme dropped from the spec), and phase 4's three (a proof over
+another operation, the wrong guest target, a Review that does not navigate).
+
+- **Planning: decision 6's route did not survive contact with the reads.** `/s/<report share id>#<sealed report>` names
+  one report, while a case's review is every report of it, read through key-proved moderation reads that hand the
+  sealed reports over anyway. Built as `/s/<case id>#moderation` (the fragment names the mode and carries no key); ADR
+  0093 § 3 says so as built. Root cause: the route was copied from the ADR's wording, written before the case existed
+  as the unit of review.
+- **Planning: the invariant "every measure is lifted by deleting its row" contradicted decision 1**, which lists a
+  `lifted at` column. Built per decision 1: a lift clears the row's `active_key` and stamps `lifted_at`, so the case keeps
+  its record of what stood when; uniqueness holds only over measures in force. Two more choices the CR left open: lifting
+  a case's last measure also closes the case (not only the hold), and the review shows the held snapshot unblocked — a
+  block never hides evidence from the moderator (`CaseReviewResource` serves `blockedByOperator = false`, the one
+  presign caller the scan exempts).
+- **Execution: the first race tests proved nothing.** Two writers released at a barrier ran one after the other and the
+  tests stayed green with every lock removed. Rewritten to hold one writer's commit (`whileUncommitted` over
+  `MANDATORY`-transaction entry points) and to assert what the loser must not have done; red with the locks out, green
+  with them. Harvested into the developer styleguide § 10 (a race test forces its overlap).
+- **Execution: a spec of anonymous operations hid a bearer.** `share-media.openapi.yaml`'s one moderation read declared
+  `security: bearerAuth` but the spec declared no scheme, so the generator dropped it: unit tests (mocked factories)
+  were green and lane L1's first run answered 401. The scheme is declared (with why, at the line) and
+  `caseReads.wire.test.ts` records the four review reads at `fetch`. No guard catches an operation naming an undeclared
+  scheme; every spec but this one was clean when measured (`grep` over `contracts/api`), so it is left as a candidate
+  guard, not built here.
+- **Execution: Kotlin default arguments through an ArC client proxy.** A default reading a bean field ran on the proxy's
+  empty fields (NPE); replaced by overloads, with the reason at the line (`CaseTargets`).
+- **Execution: the docs pass found two promises the code had not kept** — the creator's share list worded
+  `operatorBlocked` as an unknown stop, and a blocked file's page had no test — both fixed before closing. Two remain
+  as named coverage gaps: the trash's "deleted, never restored" wording, and the member's own page of a blocked node.
