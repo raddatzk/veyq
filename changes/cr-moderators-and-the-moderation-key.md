@@ -207,4 +207,25 @@ Implementation has the owner's go (2026-10-17), in the order of inbox #462; a le
 
 ## Retrospective
 
-_Filled at implementation._
+- **Planning — the contracts phase's "new tag ends green" was stale, and the CR copied it.** Phase 2 predicted a green
+  `./gradlew check`; three tests see a new tag the day it lands (`ModuleCompositionTest`, and for an admin-marked tag
+  `AdminChannelPostureSweepTest` and `AdminChannelGateSliceTest`, whose interface list is by hand). Root cause: the
+  rule in `changes/README.md` had been true before those tests existed and nobody re-measured it. Harvested there.
+- **Planning — the sweep the Definition of done asked for could not be literal.** "Every resource method of the
+  moderation spec is gated by the role and the proof" contradicts the CR's own decision 5: reading one's appointment,
+  accepting, confirming the address, reading one's grants and asking for a challenge happen before a newcomer holds a
+  key. Built as: proof derived from the contract (the operation declares the proof header) or a listed exemption with
+  its reason, plus a runtime probe of every proof operation. Next time a refine that promotes an invariant to a sweep
+  lists the operations it would refuse and checks them against its own flows.
+- **Planning — two gaps the implementation found, not the refine.** A mint carried no epoch, so a raced mint would
+  have filed grants under an epoch they do not open as (found by the admin-web phase; the contract gained
+  `MintModerationEpochRequest.epoch`); and decision 1's `minted_at`/`delivered_at` had no reader for
+  `EveryStoredTimeHasAReaderTest` (dropped: the log keeps those times under its retention). And the owner's mid-run
+  decision that first-run setup mints epoch 1 removed `enableModeration` after it was built — the right call, made
+  late; a refine that asks "how does the first X come to exist?" for every keyed thing would have asked it earlier.
+- **Execution — `:core`'s test heap ran out.** The suite went `OutOfMemoryError` from this CR's main code alone (its
+  test classes moved out to measure it); the heap went 2 GB → 3 GB with the measurement written next to it. A capture
+  test at `Level.ALL` read Hibernate's DEBUG entity dumps as a "log line"; the test now captures at the configured
+  levels with a control record.
+- **Next time:** a CR that adds a contract tag runs `./gradlew check` once at refine with the spec stub in place, so
+  its phase-2 Done-when names the reds it will see instead of the README's remembered "green".
