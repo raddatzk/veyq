@@ -77,7 +77,7 @@ Three structural costs sit on top of those numbers:
    - **L2 upgrade in place** — `veyqctl install` of the previous release, write; `veyqctl upgrade` to the candidate
      on the same instance (its backup, template check and health wait, ADR 0096 §5); read.
    - **L3 backup import** — every archived backup of the current major and the previous major's last release
-     (decision 6), each `veyqctl restore`d into a
+     (decision 6), each `veyqctl restore --objects-from` its archived pool into a
      fresh `veyqctl install` of the candidate (ADR 0056 §7); read. One runner per backup.
 
    Feature scenarios are Playwright tests tagged with the acceptance criterion they cover
@@ -119,8 +119,9 @@ Three structural costs sit on top of those numbers:
    - **Retention**: the 20 newest unpromoted snapshots per branch and every promoted one; a scheduled job deletes the
      rest.
 
-6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) as a
-   signed OCI artifact beside its images. L3 restores every archived backup of the current major — within a major,
+6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) **with its
+   object pool** (`--objects-to`: a capture's store leg is only its index, ADR 0056 §3) as a signed OCI artifact
+   beside its images. L3 restores every archived backup of the current major — within a major,
    everything older must open ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md)) — and the previous major's
    last release, the only one [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §5 enters a new
    major from. Before the first release the

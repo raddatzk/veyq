@@ -93,7 +93,13 @@ An upgrade migrates the schema; it does not rewrite an object — every object i
 the database plus the index is the whole rollback point. Before a restore writes, the index is checked against the
 live store (ADR 0056's A4): every object the dump references must still be there. Keeping the objects themselves is
 the store's own promise — its versioning, replication or volume snapshots — which the Run page names as the
-operator's part. This gate is an upgrade's way back, not a disaster backup of the store. (c) **The gate never touches the key.** It does not mount
+operator's part. This gate is an upgrade's way back, not a disaster backup of the store. Since 2026-10-17 this is
+every target's store leg, not the cluster's alone ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3).
+**The optional object pool ADR 0056 §3 offers (`--objects-to`) does not apply to the gate**, as decided: a copy in an
+init container lengthens every release change by the new objects, and a pool outside the cluster is a new egress
+peer for the default-deny NetworkPolicy set (Context 4), while a cluster's store is the operator's to keep durable
+anyway. A restore Job may still name `--objects-from`, like any restore — the tool is one — and then, as everywhere,
+only into an empty store (ADR 0056 §7). (c) **The gate never touches the key.** It does not mount
 `veyq-config-secret`, so a capture on the backup volume cannot hold the KEK, and ADR 0056 §1's *never beside the
 dump* holds by construction rather than by a refused flag. The key does not change between upgrades (Context 3);
 it is kept on its claim (kept on uninstall) and on the operator's own medium, exported once after the first start —
@@ -126,8 +132,10 @@ change has no termination guarantee (M7), so a due capture could be a hot one.
 
 **8. The gate runs `instance_backup.py`, the one capture implementation.** The tool gains a mode for running inside
 the pod (database and store by address, client binaries on `PATH`, no Docker), the record, the refusals and the
-retention; its format stays the one Compose writes, so a capture taken in a cluster restores onto Compose and back
-(same domain, ADR 0056 §4). The image the gate runs is pinned by digest and released and signed with the other two
+retention; its format is the one every capture writes (`backupFormat` 3, ADR 0056 §3 — for Compose decided, built by
+cr-backup-store-leg-is-an-index), so a capture taken in a
+cluster restores onto Compose and back (same domain, ADR 0056 §4) — onto the other target's store only with its
+objects, from a pool (ADR 0056 §7). The image the gate runs is pinned by digest and released and signed with the other two
 ([ADR 0057](0057-release-identity-and-deployment-recipe.md), [ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md));
 which image it is, is § Open for the owner, 3.
 
