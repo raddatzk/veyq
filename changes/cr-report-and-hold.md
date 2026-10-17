@@ -1,8 +1,8 @@
 ---
 id: cr-report-and-hold
 title: Anyone who sees something can report it; a report seals to the moderation key and holds a snapshot
-status: planned
-satisfies: []            # phase 0 writes the use-case and the enabler; see § Use-cases
+status: in-progress
+satisfies: [uc.moderation.report]
 adrs: ["0093", "0099", "0062", "0079", "0051", "0072", "0080", "0034", "0083", "0097"]
 invariants:
   - operator-blind E2EE (a dump opens no report; the server learns category, time and ids, nothing more)
@@ -37,6 +37,11 @@ affected rows plus a pin on their storage keys that `StoreReclaimSweep` skips �
   the report action is off"); [ADR 0062](../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md) (the
   one choke point every store object passes); [ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
   (core / application direction).
+- **Coupling with `cr-bucket-reconcile`** (planned, built in parallel; not landed when this CR last took `main`:
+  `ls scripts/validate_store_reconcile_claims.py` → absent). Its sweep counts the objects no row claims, and its guard
+  G1 requires every table with a `storage_key` in its claim query. `veyq_hold_pin` is such a table — a held medium's
+  pinned objects are named by no `veyq_blob` row once its uploader deleted it — so whichever of the two lands second
+  adds `veyq_hold_pin` to the reconcile's claim query, or every held object counts as an orphan.
 - The guest-write record that § 4 also copies into the hold does not exist yet; `cr-guest-write-record` extends this
   CR's snapshot seam with its rows.
 
@@ -179,6 +184,8 @@ keeps the index "listed cold as today", i.e. from `veyq_blob`): phase 4 names th
 a held medium's live `veyq_blob` row is deleted, its pinned objects are named only by `veyq_hold_pin`, so an index read
 from `veyq_blob` alone leaves them out of a backup's store leg while the database leg still carries the hold that needs
 them. Whichever CR lands second makes the index read the pins too (`changes/README.md` § Two CRs that write the same page).
+**Re-read at implement (2026-10-17):** `cr-backup-store-leg-is-an-index` is done (no file under `changes/`), and its
+`blob_index` docstring already says a pin "adds its keys here" — so phase 4 adds `veyq_hold_pin` to `blob_index` itself.
 
 Implementation has the owner's go (2026-10-17), in the order of inbox #462; a legal blocker named above still blocks the part it names.
 
