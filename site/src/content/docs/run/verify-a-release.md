@@ -24,8 +24,8 @@ without it, and the chart's check for Helm.
 ## veyqctl, the first time
 
 You need `cosign` **v3.1.3 or later**, and so does `veyqctl`, which refuses an older one by name. The publish signs
-`veyqctl` and the manifest into Sigstore bundles, the format cosign 3 reads by default; and every cosign up to 3.1.2
-(and up to 2.6.4) accepts a forged bundle in the older format without checking its identity
+with cosign 3.1.3, `veyqctl` and the manifest into Sigstore bundles, the format cosign 3 reads by default; and every
+cosign up to 3.1.2 (and up to 2.6.4) accepts a forged bundle in the older format without checking its identity
 (GHSA-fx35-mq7g-6g98, fixed in 3.1.3 and 2.6.5) — whoever serves you a release could hand you exactly that one.
 Then:
 
@@ -158,15 +158,19 @@ names the last publish of a commit, not a release. Major `0` is pre-release and 
 written against another image that is keyless-signed from a GitHub workflow on `main`, with that image's own identity.
 The chart half has been run against a local OCI registry, with a key of its own instead of the keyless identity:
 `helm push` put the chart at `<registry>/charts/veyq`, the digest above resolved from its tag, `cosign` signed and
-verified the chart by that digest, and Helm installed it by digest and by exact version. `cosign verify-blob --bundle`
+verified the chart by that digest, and Helm installed it by digest and by exact version. With cosign 3.1.3, the one the
+publish installs, an image and the chart were signed by digest as the publish signs them, against a local registry and
+with a key of its own: each signature was stored as a Sigstore bundle beside its subject, `cosign verify` accepted it,
+and a digest one hex digit off found no signature. `cosign verify-blob --bundle`
 has run with cosign 3.1.3 against a bundle `cosign sign-blob --bundle` wrote for `veyqctl` with a key of its own, not
 the keyless identity: it verified the file and refused it with one byte appended, and the command above, run as
 written against that bundle, refused it for carrying no transparency-log entry. The manifest's check, in the exact
 form `veyqctl` runs it, has run with cosign 3.1.3 against a keyless Sigstore bundle of another project — cosign's own
 v3.1.3 release, `cosign_checksums.txt` and its `.sigstore.json`: refused under veyq's identity (the certificate names
 another signer), accepted under the identity that bundle's certificate carries, and refused with one byte appended to
-the file. The publish signs with the cosign its workflow installs (v2.5.2), with `--new-bundle-format`; a bundle cosign
-2.5.2 writes that way has not been read by cosign 3.1.3, and no veyq manifest has been signed. The by-hand file check ran against a release produced
+the file. The publish's signing step has run as written with cosign 3.1.3 behind a stand-in that swaps the keyless
+identity for a key: it wrote both bundles as Sigstore bundles, and cosign 3.1.3 verified each and refused it with one
+byte appended. No veyq manifest has been signed keylessly. The by-hand file check ran against a release produced
 from the tree by `scripts/release_assets.py`, fetched with `curl` from a `file://` base and checked with `shasum -a 256 -c`, macOS's equivalent of `sha256sum -c`. `veyqctl upgrade` has run `cosign verify` on a release whose app digest was one hex digit off, and stopped before
 any pull; with nothing published an unaltered digest is refused the same way, so the accepting half is held only by
 its self-test, with a stand-in for `cosign`. The GitHub Release is created by the same publish, as its last step;

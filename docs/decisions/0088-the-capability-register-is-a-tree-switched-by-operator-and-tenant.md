@@ -252,8 +252,8 @@ both off a place still works, named by hand. The user's own consent to the two
   asks no geocoder even where `memories.places` is on, because the one consent the geocoder rides on is asked only
   with the map (ADR 0018); `memories.places` alone still names a photo in the lightbox for a member who consented
   earlier. Not built: admin-web's own policy, a static `<meta>`, which keeps the default HIBP origin.
-- **Not built:** configuration as code (#444). The off states have not yet been seen in a real browser, nor has a
-  share list's row of a stopped link.
+- **Not built:** configuration as code (#444). The off states are driven in a real browser by lane L1's
+  `capability-off-states.spec.ts` (#447, cr-stack-e2e phase 5); a share list's row of a stopped link is not.
 - **The two enforcement gaps of the flat ids are closed.** The server gated `core.group-space` only at group creation
   although the catalog names five use-cases - decided a doc fault, since a feature switch refuses only what is new
   (decision 5), so group creation is the one gate. Depot let a member create a drop box while uploader links were off,
