@@ -44,6 +44,7 @@ vi.mock('../features/instance/CapabilitiesPanel.vue', () => ({ default: { templa
 vi.mock('../features/instance/ExternalServicesPanel.vue', () => ({ default: { template: '<div class="stub-services" />' } }))
 vi.mock('../features/instance/ReleaseNoticesPanel.vue', () => ({ default: { template: '<div class="stub-notices" />' } }))
 vi.mock('../features/instance/InstanceMailPanel.vue', () => ({ default: { template: '<div class="stub-mail" />' } }))
+vi.mock('../features/instance/ModerationPanel.vue', () => ({ default: { template: '<div class="stub-moderation" />' } }))
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
@@ -70,6 +71,7 @@ const i18n = createI18n({
       capabilities: { navTitle: 'Capabilities' },
       services: { navTitle: 'External services' },
       instanceMail: { navTitle: 'Mail' },
+      moderation: { navTitle: 'Moderation' },
     },
   },
 })
@@ -199,6 +201,16 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     await flushPromises()
     expect(w.find('.stub-mail').exists()).toBe(true)
     expect(w.find('.stub-notices').exists()).toBe(false)
+  })
+
+  it('opens Server → Moderation from the nav, one rubric at a time (uc.moderation.appoint-moderators)', async () => {
+    vi.mocked(listTenants).mockResolvedValue([])
+    const { w } = await mountConsole()
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Mail'))!.trigger('click')
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Moderation'))!.trigger('click')
+    await flushPromises()
+    expect(w.find('.stub-moderation').exists()).toBe(true)
+    expect(w.find('.stub-mail').exists()).toBe(false)
   })
 })
 

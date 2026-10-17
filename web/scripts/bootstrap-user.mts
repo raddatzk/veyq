@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std, b64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
+import { moderationEpochOne } from '../src/test/moderationEpochOne'
 import { sealName } from '../src/features/account/profile/memberName'
 import { admissionVerifies, sealGrant, tagAdmission } from '../src/features/spaces/grant'
 import { MAILPIT, MAILPIT_SMTP_PORT, mailCursor, mailpitReachable, waitForMail } from '../src/test/mailpit'
@@ -135,6 +136,7 @@ await orFail('setup/owner', new SetupApi(new SetupConfiguration(adminChannel()))
     email,
     suiteId: m.suiteId, identityPublicKey: m.identityPublicKey, wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey,
     authPublicKey: m.authPublicKey, masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
+    moderationEpoch: moderationEpochOne(m.identityPublicKey),
   },
 }))
 console.log(`owner: created ${email}`)

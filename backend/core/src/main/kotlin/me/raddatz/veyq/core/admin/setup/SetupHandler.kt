@@ -32,7 +32,14 @@ data class OwnerRegistration(
     val authPublicKey: String,
     val secretKeyProofPublicKey: String,
     val wraps: List<WrapInput>,
+    val moderationEpoch: ModerationEpochOne,
 )
+
+/** Epoch 1 of the instance moderation key, minted by the setup client and sealed to this owner (ADR 0099 § 3). */
+data class ModerationEpochOne(val kemPublicKey: String, val signPublicKey: String, val sealedGrant: String)
+
+/** The moderation epoch the setup carried is no public bundle; nothing is stored. */
+class ModerationEpochInvalid : RuntimeException("invalid_request")
 
 data class WrapInput(val method: String, val wrappedKey: String, val kdfParams: String? = null)
 

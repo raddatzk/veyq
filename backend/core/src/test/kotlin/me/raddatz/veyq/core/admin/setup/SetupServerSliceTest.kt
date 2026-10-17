@@ -1,7 +1,10 @@
 package me.raddatz.veyq.core.admin.setup
 
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.identity.ModeratorEntity
 import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.moderation.ModerationGrantEntity
+import me.raddatz.veyq.core.moderation.ModerationTestKit
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.answer
 import me.raddatz.veyq.core.testing.assertWinnerAndLoser
@@ -27,13 +30,15 @@ class SetupServerSliceTest {
         email: String = "kevin@example.com",
         authPublicKey: String = "ZWQyNTUxOS1hdXRoLXB1Yg==",
         kdfParams: String = "AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz",
+        kemPublicKey: String = KEM_PUBLIC_KEY,
     ) = """
         {"email":"$email","suiteId":"v1",
          "identityPublicKey":"aWRlbnRpdHktcHVibGljLWtleQ==",
          "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
          "authPublicKey":"$authPublicKey",
          "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"$kdfParams"}],
-         "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5"}
+         "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5",
+         "moderationEpoch":{"kemPublicKey":"$kemPublicKey","signPublicKey":"$SIGN_PUBLIC_KEY","sealedGrant":"c2VhbGVkLWdyYW50"}}
     """.trimIndent()
 
     @Test
@@ -71,9 +76,23 @@ class SetupServerSliceTest {
             .then().statusCode(400)
     }
 
+    /** A moderation epoch that is no public bundle refuses the whole setup: no owner, no epoch, still not set up. */
+    @Test
+    @Order(3)
+    fun rejectsAMalformedModerationEpoch() {
+        ModerationTestKit.reset()
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(kemPublicKey = "c2hvcnQ="))
+            .`when`().post("/api/setup/owner")
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
+        given().`when`().get("/api/setup").then().body("setupRequired", equalTo(true))
+        given().`when`().get("/api/moderation/key").then().statusCode(404)
+    }
+
     @Test
     @Order(4)
     fun createsOwner() {
+        ModerationTestKit.reset()
+        given().`when`().get("/api/moderation/key").then().statusCode(404)
         val userId: String = givenAdminChannel().contentType(ContentType.JSON).body(ownerBody())
             .`when`().post("/api/setup/owner")
             .then().statusCode(201)
@@ -85,6 +104,14 @@ class SetupServerSliceTest {
             "c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5",
             QuarkusTransaction.requiringNew().call<String?> { VeyqUser.findById(userId)?.secretKeyProofPublicKey },
         )
+        // Setup minted epoch 1 (ADR 0099 § 3): reporting is on from the first day — the key a report seals to is
+        // published at once — with exactly one grant, the Server Owner's, who is its first, accepted moderator.
+        given().`when`().get("/api/moderation/key").then().statusCode(200)
+            .body("epoch", equalTo(1)).body("kemPublicKey", equalTo(KEM_PUBLIC_KEY)).body("signPublicKey", equalTo(SIGN_PUBLIC_KEY))
+        QuarkusTransaction.requiringNew().run {
+            assertEquals(listOf(userId to 1), ModerationGrantEntity.listAll().map { it.moderatorId to it.epoch })
+            assertEquals(true, ModeratorEntity.findById(userId)?.accepted)
+        }
     }
 
     @Test
@@ -232,9 +259,17 @@ class SetupServerSliceTest {
         givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(email = email))
             .`when`().post("/api/setup/owner").then().extract().answer()
 
+    /** Take setup back as if it never ran — and with it the epoch 1 it minted, which a second setup mints again. */
     private fun clearSetupRow() {
         QuarkusTransaction.requiringNew().run { ServerSetup.deleteAll() }
+        ModerationTestKit.reset()
     }
 
     private fun setupRows(): Long = QuarkusTransaction.requiringNew().call { ServerSetup.count() }
+
+    private companion object {
+        /** A public bundle of the right sizes (1216 + 32 bytes): the server stores and serves it, never uses it. */
+        val KEM_PUBLIC_KEY: String = java.util.Base64.getEncoder().encodeToString(ByteArray(1216) { (it % 251).toByte() })
+        val SIGN_PUBLIC_KEY: String = java.util.Base64.getEncoder().encodeToString(ByteArray(32) { 7 })
+    }
 }

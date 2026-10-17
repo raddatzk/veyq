@@ -86,4 +86,6 @@ handling of reported shares.
 - ★ [Learn of a new release without looking for one](use-cases/uc.admin.learn-of-new-releases.md) — **planned**
   ([ADR 0097](../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md); a daily check,
   console notices, and instance mail for the Server Owner only)
-- Act on a reported public share — planned
+- Act on a reported public share — planned, under [Moderation](../moderation/_index.md): who moderates and the key a
+  report is sealed to are [uc.moderation.appoint-moderators](../moderation/use-cases/uc.moderation.appoint-moderators.md)
+  (the Server Owner's side, on admin-web)

@@ -1,0 +1,706 @@
+openapi: 3.1.0
+info:
+  title: veyq Moderation API
+  version: 0.1.0
+  description: >
+    The **moderator's** operations, on the public listener: web/'s moderation surface calls them from any tenant host
+    the moderator signs in on ([ADR 0099](../../docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
+    § 6, uc.moderation.serve-as-moderator). A moderator is an existing account the Server Owner appointed on the
+    admin channel (`instance.openapi.yaml`, tag `instance-moderation`); this spec carries none of the Server Owner's
+    operations.
+
+    **Two gates, both needed** (ADR 0099 § 2): the `MODERATOR` role — an accepted, unremoved appointment — names who
+    acted, and the **key proof** makes a stolen session without the instance moderation key worth nothing. An
+    operation that declares the two proof headers (`X-Veyq-Moderation-Challenge`, `X-Veyq-Moderation-Signature`) is
+    refused unless they carry an Ed25519 signature with the **current** epoch's moderation key over the statement
+    `moderation-proof` (the challenge, this operation's `operationId`, the case id in its path or none), made over a
+    challenge from `createModerationChallenge` that is single use and lives five minutes. The few operations a
+    newcomer needs before holding the key (their appointment, accepting it, confirming their address, reading their
+    grants, asking for a challenge) carry no proof, and the posture sweep lists each with its reason.
+
+    Operator-blind: the server stores each epoch's public bundle and the grants sealed to each moderator's identity,
+    never `M_n` or a private half. Authorization is enforced by code annotations, not this spec (ADR 0008).
+tags:
+  - name: moderation
+    description: >
+      A moderator's own appointment, their grants of the instance moderation key and their delivery to a newcomer,
+      the key proof's challenge, and the published key a reporter seals to. One tag = one resource interface owning
+      the `/api/moderation` subtree.
+
+paths:
+  /api/moderation/key:
+    get:
+      tags: [moderation]
+      operationId: getModerationKey
+      summary: Read the current epoch's public bundle — what a report is sealed to.
+      description: >
+        The instance moderation key's current epoch and its public bundle (ADR 0099 § 2): anyone may read it, because a
+        reporter is mostly a guest with nothing pinned and seals once to this one key. `404 moderation_off` while the
+        Server Owner has not turned moderation on — then there is nothing to report to, and the report action is off.
+        Unauthenticated; rate-limited per client address.
+      security: []
+      responses:
+        "200":
+          description: The current epoch and its public bundle.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationEpochKey" }
+              example:
+                epoch: 2
+                kemPublicKey: a2VtLXB1YmxpYy1rZXk=
+                signPublicKey: c2lnbi1wdWJsaWMta2V5
+        "404":
+          description: No epoch exists yet (`moderation_off`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: moderation_off }
+        "429":
+          description: Too many requests from this address; retry after the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
+  /api/moderation/appointment:
+    get:
+      tags: [moderation]
+      operationId: getMyModeratorAppointment
+      summary: Read the caller's own appointment as a moderator.
+      description: >
+        Whether the caller is appointed (`PENDING` until they accept), a moderator (`ACCEPTED`), or neither (`NONE`),
+        where the confirmation of their address stands, and whether they still wait for the key. Any signed-in account
+        may ask about itself; it learns nothing about anyone else. No key proof: a pending appointee holds no key.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's appointment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeratorAppointment" }
+              example:
+                state: ACCEPTED
+                appointedAt: 2026-10-17T09:00:00Z
+                acceptedAt: 2026-10-17T09:30:00Z
+                address: deputy@example.com
+                confirmation: CONFIRMED
+                awaitingKey: false
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+    delete:
+      tags: [moderation]
+      operationId: stepDownAsModerator
+      summary: Step down as a moderator.
+      description: >
+        The caller's appointment ends at once: the `MODERATOR` role and their grants for every epoch go, and the
+        Server Owner is told a rotation is due (ADR 0099 § 4; reports keep sealing to the current epoch until the Server
+        Owner mints the next). Key-proved. `409 moderation_last_holder` while it would leave no accepted moderator
+        holding the current epoch — the key would be lost with them (ADR 0099 § 5).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "204":
+          description: Stepped down.
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: >
+            `moderation_proof_invalid` = the key proof is missing, its challenge is unknown, spent or expired, or the
+            signature does not verify under the current epoch's key for this operation; or the caller is no moderator.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: moderation_proof_invalid }
+        "409":
+          description: The caller is the last moderator holding the key (`moderation_last_holder`). Nothing changes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: moderation_last_holder }
+
+  /api/moderation/appointment/acceptance:
+    post:
+      tags: [moderation]
+      operationId: acceptModeratorAppointment
+      summary: Accept a pending appointment, which mails a code to confirm the caller's address.
+      description: >
+        Turns the caller's pending appointment into an accepted one — from now on their sessions carry the
+        `MODERATOR` role — and sends a one-time code to their account address through the instance mail, to be typed
+        into `confirmModeratorAddress` ([ADR 0097](../../docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
+        decision 5). The surface shows, before this, what accepting means (ADR 0099 § 1). Accepting an accepted
+        appointment again changes nothing. No key proof: an appointee holds no key until a holder delivers it.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Accepted; the appointment as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeratorAppointment" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: The caller has no appointment (`not_appointed`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_appointed }
+        "429":
+          description: Too many requests from this caller; retry after the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
+  /api/moderation/appointment/confirmation-code:
+    post:
+      tags: [moderation]
+      operationId: sendModeratorAddressCode
+      summary: Mail a new code to confirm the caller's address.
+      description: >
+        A new one-time code to the caller's account address, replacing any earlier one — for a code that expired, was
+        entered wrong too often, or went to an address the account no longer has (ADR 0097 decision 5). No key proof,
+        so a moderator still waiting for the key can confirm their address.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The code was attempted; the appointment as it now stands (`confirmation` says whether it went out).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeratorAppointment" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is no moderator (`not_moderator`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_moderator }
+        "429":
+          description: Too many requests from this caller; retry after the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
+  /api/moderation/appointment/confirmation:
+    post:
+      tags: [moderation]
+      operationId: confirmModeratorAddress
+      summary: Confirm the caller's address with the code the instance mail carried.
+      description: >
+        Takes the last code sent to the caller (ADR 0097 decision 5). It confirms only while it is live (unexpired, not
+        spent by wrong entries) and only for the address it was sent to, which must still be the account's; a wrong
+        entry counts against it. Once confirmed, moderation notices may reach this address. No key proof.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModeratorAddressConfirmation" }
+            example: { code: "48213075" }
+      responses:
+        "200":
+          description: The address is confirmed; the appointment as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeratorAppointment" }
+        "400":
+          description: The request was malformed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is no moderator (`not_moderator`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_moderator }
+        "409":
+          description: >
+            `mail_code_invalid` = no code is outstanding, it expired, it was entered wrong too often, the address changed
+            since it was sent, or this is not it. Ask for a new one. Nothing is confirmed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_code_invalid }
+        "429":
+          description: Too many requests from this caller; retry after the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
+  /api/moderation/grants:
+    get:
+      tags: [moderation]
+      operationId: listMyModerationGrants
+      summary: Read every live epoch's public bundle and the caller's grant for each.
+      description: >
+        What the moderation surface opens on unlock (ADR 0099 § 3): for every live epoch its published bundle and the
+        grant sealed to the caller's identity, or null where the caller waits for a holder to deliver it. The client
+        opens each grant, derives the bundle from the opened `M_n` and refuses to go on where it differs from the
+        published one. No key proof: this is how a moderator comes to hold the key.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Every live epoch, oldest first, with the caller's grant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationGrants" }
+              example:
+                currentEpoch: 2
+                epochs:
+                  - epoch: 1
+                    kemPublicKey: a2VtLXB1YmxpYy1rZXk=
+                    signPublicKey: c2lnbi1wdWJsaWMta2V5
+                    sealedGrant: c2VhbGVkLWdyYW50
+                  - epoch: 2
+                    kemPublicKey: a2VtLXB1YmxpYy1rZXk=
+                    signPublicKey: c2lnbi1wdWJsaWMta2V5
+                    sealedGrant: null
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is no moderator (`not_moderator`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_moderator }
+
+  /api/moderation/challenge:
+    post:
+      tags: [moderation]
+      operationId: createModerationChallenge
+      summary: Ask for a single-use challenge to sign a key proof over.
+      description: >
+        32 random bytes, bound to the caller's account, single use, valid for five minutes. The next key-proved call
+        signs `moderation-proof` over it and sends both in its proof headers. No key proof (it is the proof's input).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: A fresh challenge.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationChallenge" }
+              example: { challenge: Y2hhbGxlbmdlLWJ5dGVzLWNoYWxsZW5nZS1ieXRlcyE= }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is no moderator (`not_moderator`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_moderator }
+        "429":
+          description: Too many requests from this caller; retry after the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
+  /api/moderation/deliveries:
+    get:
+      tags: [moderation]
+      operationId: listPendingModerationDeliveries
+      summary: List the accepted moderators still missing an epoch the caller holds.
+      description: >
+        Every accepted moderator who lacks a grant for a live epoch, with their identity public key (to pin-check and
+        seal to) and the epochs they miss that the caller holds (ADR 0099 § 3). Key-proved: only a holder delivers, and
+        the surface opens the queue after this succeeds.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The pending deliveries the caller can make.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationDeliveries" }
+              example:
+                deliveries:
+                  - accountId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+                    identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+                    epochs: [1, 2]
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The key proof failed, or the caller is no moderator (`moderation_proof_invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: moderation_proof_invalid }
+
+  /api/moderation/deliveries/{accountId}:
+    put:
+      tags: [moderation]
+      operationId: putModerationDelivery
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          Idempotent per (moderator, epoch): every holder seals the same M_n, so whichever delivery lands first stays
+          and a later one for an epoch already granted changes nothing.
+      summary: Deliver the epochs the recipient is missing, sealed to their identity.
+      description: >
+        A holder's client, after the pin check (ADR 0028), seals every epoch it holds that the recipient misses to the
+        recipient's identity (`moderation-grant` [epoch]) and uploads them with the identity key it sealed to. Refused
+        unless the recipient is an accepted moderator (`404 not_moderator`), the identity key is still theirs
+        (`409 identity_changed`: re-read and pin-check again), and the caller holds a grant of every epoch it delivers
+        (`409 not_holder`). An epoch the recipient already holds is skipped. Key-proved.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ModeratorAccountId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationDelivery" }
+            example:
+              identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+              grants:
+                - epoch: 1
+                  sealedGrant: c2VhbGVkLWdyYW50
+      responses:
+        "204":
+          description: Delivered (or already held).
+        "400":
+          description: The request was malformed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The key proof failed, or the caller is no moderator (`moderation_proof_invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: moderation_proof_invalid }
+        "404":
+          description: The recipient is no accepted moderator (`not_moderator`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_moderator }
+        "409":
+          description: >
+            `identity_changed` = the recipient's identity is no longer the one sealed to; `not_holder` = the caller holds
+            no grant of an epoch it delivers, or the epoch is not live. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: identity_changed }
+
+components:
+  parameters:
+    ModeratorAccountId:
+      name: accountId
+      in: path
+      required: true
+      description: The moderator's account id.
+      schema: { type: string, format: uuid }
+    ModerationChallenge:
+      name: X-Veyq-Moderation-Challenge
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The challenge `createModerationChallenge` issued, as it returned it. Declared optional so a call without the
+        proof reaches the gate and gets its `403 moderation_proof_invalid`; the gate is what requires it.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    ModerationSignature:
+      name: X-Veyq-Moderation-Signature
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        Ed25519 signature with the current epoch's moderation signing key over `moderation-proof` (the challenge, this
+        operation's `operationId`, the case id in the path or none), standard base64.
+      schema: { type: string, maxLength: 128, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+
+  schemas:
+    ModerationEpochKey:
+      type: object
+      description: One epoch's public bundle.
+      required: [epoch, kemPublicKey, signPublicKey]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The epoch, from 1.
+          example: 2
+        kemPublicKey:
+          type: string
+          description: The epoch's X-Wing encapsulation key (1216 bytes), which reports seal to.
+          contentEncoding: base64
+          maxLength: 1700
+          example: a2VtLXB1YmxpYy1rZXk=
+        signPublicKey:
+          type: string
+          description: The epoch's Ed25519 public key (32 bytes), which checks a key proof.
+          contentEncoding: base64
+          maxLength: 64
+          example: c2lnbi1wdWJsaWMta2V5
+
+    ModeratorAppointment:
+      type: object
+      description: The caller's own appointment.
+      required: [state, appointedAt, acceptedAt, address, confirmation, awaitingKey]
+      properties:
+        state:
+          x-veyq-visibility: enum
+          type: string
+          description: "`NONE` = not appointed; `PENDING` = appointed, not yet accepted; `ACCEPTED` = a moderator."
+          enum: [NONE, PENDING, ACCEPTED]
+          example: ACCEPTED
+        appointedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the Server Owner appointed the caller; null for `NONE`.
+          example: 2026-10-17T09:00:00Z
+        acceptedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the caller accepted; null unless `ACCEPTED`.
+          example: 2026-10-17T09:30:00Z
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The caller's own account address, already server-held plaintext — the only address moderation notices may
+            reach (ADR 0097 decision 3), shown back to its holder so they see where the code goes.
+          type: string
+          description: The caller's account address, where the code and moderation notices go.
+          maxLength: 254
+          example: deputy@example.com
+        confirmation:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            `NOT_SENT` = no code was sent (not accepted yet, or instance mail is not set up); `CODE_SENT` = enter the
+            code before it expires; `SEND_FAILED` = the code could not be mailed; `UNCONFIRMED` = no code is
+            outstanding, or the address changed since it was confirmed — ask for a new code; `CONFIRMED` = moderation
+            notices reach this address.
+          enum: [NOT_SENT, CODE_SENT, SEND_FAILED, UNCONFIRMED, CONFIRMED]
+          example: CONFIRMED
+        awaitingKey:
+          x-veyq-visibility: flag
+          type: boolean
+          description: True for an accepted moderator who misses a grant of a live epoch — a holder delivers it.
+          example: false
+
+    ModeratorAddressConfirmation:
+      type: object
+      description: The code the instance mail carried.
+      required: [code]
+      properties:
+        code:
+          x-veyq-visibility: token
+          type: string
+          description: The one-time code, as the mail shows it.
+          minLength: 1
+          maxLength: 16
+          example: "48213075"
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 16)'
+
+    ModerationGrants:
+      type: object
+      description: Every live epoch with the caller's grant.
+      required: [currentEpoch, epochs]
+      properties:
+        currentEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The epoch reports seal to now, and the one a key proof signs with.
+          example: 2
+        epochs:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationEpochGrant" }
+
+    ModerationEpochGrant:
+      type: object
+      description: One live epoch's public bundle and the caller's grant of it.
+      required: [epoch, kemPublicKey, signPublicKey, sealedGrant]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The epoch.
+          example: 1
+        kemPublicKey:
+          type: string
+          description: The epoch's published X-Wing encapsulation key.
+          contentEncoding: base64
+          maxLength: 1700
+          example: a2VtLXB1YmxpYy1rZXk=
+        signPublicKey:
+          type: string
+          description: The epoch's published Ed25519 public key.
+          contentEncoding: base64
+          maxLength: 64
+          example: c2lnbi1wdWJsaWMta2V5
+        sealedGrant:
+          type: [string, "null"]
+          description: >
+            `M_n` sealed to the caller's identity (`sealTo` purpose `moderation-grant` [epoch]); null while the caller
+            waits for a holder to deliver it.
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWdyYW50
+
+    ModerationChallenge:
+      type: object
+      description: A single-use challenge.
+      required: [challenge]
+      properties:
+        challenge:
+          type: string
+          description: 32 random bytes, standard base64; send them back as `X-Veyq-Moderation-Challenge`.
+          contentEncoding: base64
+          maxLength: 64
+          example: Y2hhbGxlbmdlLWJ5dGVzLWNoYWxsZW5nZS1ieXRlcyE=
+
+    ModerationDeliveries:
+      type: object
+      description: The deliveries the caller can make.
+      required: [deliveries]
+      properties:
+        deliveries:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationPendingDelivery" }
+
+    ModerationPendingDelivery:
+      type: object
+      description: One accepted moderator missing epochs the caller holds.
+      required: [accountId, identityPublicKey, epochs]
+      properties:
+        accountId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The recipient's account id (what the pin store keys by).
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        identityPublicKey:
+          type: string
+          description: The recipient's identity public bundle as the directory serves it; pin-check it before sealing.
+          contentEncoding: base64
+          maxLength: 2048
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+        epochs:
+          x-veyq-visibility: structure
+          type: array
+          maxItems: 1000
+          description: The epochs the recipient misses that the caller holds, ascending.
+          items: { type: integer, format: int32 }
+          example: [1, 2]
+
+    ModerationDelivery:
+      type: object
+      description: The grants a holder delivers to one moderator.
+      required: [identityPublicKey, grants]
+      properties:
+        identityPublicKey:
+          type: string
+          description: The recipient identity the grants are sealed to, as the delivery listing served it.
+          contentEncoding: base64
+          maxLength: 2048
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grants:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationGrantUpload" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 1000)'
+
+    ModerationGrantUpload:
+      type: object
+      description: One epoch's grant, sealed to its recipient's identity.
+      required: [epoch, sealedGrant]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The epoch.
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        sealedGrant:
+          type: string
+          description: "`M_n` sealed to the recipient's identity (`sealTo` purpose `moderation-grant` [epoch])."
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWdyYW50
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        The opaque access token issued by login / refresh. A moderator's operations additionally require the
+        `MODERATOR` role, and the key-proved ones the key proof (enforced by code, not this spec).

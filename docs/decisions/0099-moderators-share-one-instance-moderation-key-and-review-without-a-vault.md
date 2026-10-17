@@ -1,6 +1,13 @@
 # ADR 0099 — Moderators share one instance moderation key, and review without a vault
 
-- Status: Accepted 2026-10-17; nothing of it is built. It changes
+- Status: Accepted 2026-10-17. **Built** (cr-moderators-and-the-moderation-key, 2026-10-17): who moderates and the key
+  — §§ 1–5 (the roster, epochs, grants, delivery, rotation, the `MODERATOR` role and the key proof, the step-down
+  rules), § 6's moderation surface as a shell (sign-in, accept, unlock without the vault, the empty queue), § 7's
+  address confirmation, and the instance events of the moderation log
+  ([uc.moderation.appoint-moderators](../features/moderation/use-cases/uc.moderation.appoint-moderators.md),
+  [uc.moderation.serve-as-moderator](../features/moderation/use-cases/uc.moderation.serve-as-moderator.md)). Not built:
+  everything a report brings — the queue's content, review, decisions, the objection rule of § 5 and the new-case mail
+  of § 7. It changes
   [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md), which is not built
   in the parts touched here (§§ 1–3, 6–7, 11–13), and [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
   decisions 3, 5 and 6; both are edited in place (§ Consequences lists the edits). From [inbox](../inbox.md) #463
@@ -83,9 +90,11 @@ What exists to build on (measured in this worktree):
 
 - **Minting needs no vault.** admin-web draws `M_n`, seals it to every current moderator's identity public key,
   uploads the public half and the grants, and forgets it — the same class of work as the account birth it already
-  does at setup. It never opens a grant. Epoch 1 is minted when the Server Owner first turns moderation on, sealed to
-  their own identity; until an epoch exists the report action is off and admin-web warns, as it does for a missing
-  instance contact (0093 § 11).
+  does at setup. It never opens a grant. **Epoch 1 is minted by first-run setup itself** (owner 2026-10-17): the setup
+  client draws `M_1` and seals it to the identity born in that same setup, and the server stores it with the Server
+  Owner's account in one transaction — so reporting is on from the first day, with the Server Owner as the first
+  moderator, and no operation turns moderation on later. Later epochs are minted on the admin channel as below. An
+  instance without an epoch keeps the report action off, and admin-web says so.
 - **A new moderator receives the key from a holder.** Once they accept, the next holder to open the moderation
   surface finds a pending delivery and their client seals every live epoch to the newcomer's identity — after the
   pinned-identity check of ADR 0028, as a scope grant is. admin-web cannot deliver: it does not hold `M`.
@@ -94,6 +103,10 @@ What exists to build on (measured in this worktree):
   check it (a guest has no pins), and need not beyond what [ADR 0026](0026-client-trust-tiers.md) already says: the
   reporter's client is operator-served, and the operator is the moderation authority, so a substituted key gains an
   active operator only what the served code already could.
+- **A moderation grant is unsigned** (owner 2026-10-17), unlike a scope grant ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
+  decision 6): admin-web mints without a vault and so has no identity signing key. A server that substitutes a grant
+  must also substitute the published bundle to read anything, which this section already grants an active operator,
+  the moderation authority itself; the published-key comparison above is the check that matters.
 - **Passkeys, once they exist,** add a wrap of `M` per moderator passkey, so the moderation surface opens the key
   without the identity at all. The identity grant stays as the delivery path.
 
@@ -121,7 +134,7 @@ What exists to build on (measured in this worktree):
 - **With one moderator**, the objection does not wait: the decider reviews it, the log marks the review as by the
   decider, and the answer to the objector says so. Waiting for a second moderator who may never come would leave a
   measure unreviewed indefinitely; the courts stay open either way (0093 § 7).
-- **The Server Owner is a moderator from the moment moderation is turned on**, and holds the key. They may step
+- **The Server Owner is a moderator from first-run setup on**, and holds the key. They may step
   down while at least one other accepted moderator holds it: their grants go, the key rotates (decision 4), and they
   can reappoint themselves (§ Decided with the owner, 1).
 - **Against the operator this is accountability, not a control.** The Server Owner owns the server and the roster;

@@ -1,0 +1,86 @@
+useCase: uc.moderation.serve-as-moderator
+feature: moderation
+title: Serve as a moderator
+# Built by cr-moderators-and-the-moderation-key: the role (SessionTokenIdentityProvider over veyq_moderator), the proof
+# gate (core/moderation/ModerationProofGate), the delivery and the log on the backend; the moderation surface
+# (views/ModerationView.vue, features/moderation/) on web. Lane L1's browser pass is e2e/tests/features/moderation.spec.ts,
+# tagged per criterion; `stack` waits under gaps until a run admits it.
+acceptanceCriteria:
+  - id: accepting-grants-the-role-and-mails-a-code
+    text: >-
+      A pending appointee accepts after a text naming child sexual abuse material and that every opening is logged;
+      the account then carries the MODERATOR role, and a code goes to its address through the instance mail.
+    coverage:
+      backend:
+        integration: [ModerationSliceTest.acceptingGrantsTheRoleAndAPendingAppointeeHasNone, ModerationMailSliceTest.acceptingMailsACodeToTheModeratorAndTheCodeConfirms]
+      web:
+        unit: [src/views/ModerationView.test.ts]
+  - id: the-address-is-confirmed-by-the-code
+    text: >-
+      Typing the code confirms the moderator's address for moderation notices; a wrong, expired or spent code confirms
+      nothing, and the instance mail can reach a confirmed moderator only.
+    coverage:
+      backend:
+        integration: [ModerationMailSliceTest.acceptingMailsACodeToTheModeratorAndTheCodeConfirms, ModerationMailSliceTest.aConfirmedModeratorIsMailedAndAnUnconfirmedOneIsNot]
+      web:
+        unit: [src/views/ModerationView.test.ts]
+  - id: a-holder-delivers-after-the-pin-check
+    text: >-
+      A holder's surface delivers every live epoch to an accepted moderator missing one, after the pin check; a changed
+      identity is declined, a delivery by someone not holding the epoch or to someone not accepted is refused, and a
+      repeated delivery changes nothing.
+    coverage:
+      backend:
+        integration: [ModerationSliceTest.aHolderDeliversOnlyWhatItHoldsOnlyToAnAcceptedModeratorAndOnce, ModerationRaceSliceTest.twoConcurrentDeliveriesOfOneEpochLeaveOneGrant]
+      web:
+        unit: [src/features/moderation/unlockModeration.test.ts]
+  - id: unlock-compares-the-published-key-and-drops-the-vault
+    text: >-
+      The surface unlocks with the password and the Secret Key, opens the moderation grants, refuses on a published
+      bundle that differs from the one it derives, and zeroes the Master Key and the identity private key before the
+      queue renders; it fetches no scope grant.
+    coverage:
+      web:
+        unit: [src/features/moderation/unlockModeration.test.ts, src/app/boot.moderation.test.ts]
+  - id: every-key-proved-operation-needs-role-and-proof
+    text: >-
+      Every moderation operation but those a newcomer needs before holding the key is refused without a fresh,
+      single-use key proof for that operation by the current epoch's key, and without the MODERATOR role.
+    coverage:
+      backend:
+        unit: [ModerationProofTest.theProofAnswersForNoOtherChallengeOperationCaseOrKey]
+        integration: [ModerationSliceTest.aStolenSessionWithoutTheKeyIsRefusedEveryKeyProvedOperationAndTheSameSessionWithItPasses, ModerationSliceTest.aProofForAnotherOperationIsRefused, ModerationSliceTest.aReplayedChallengeIsRefused, ModerationSliceTest.anotherAccountsChallengeOrAnExpiredOneIsRefused, ModerationSliceTest.aRemovedModeratorsSessionHasNoRoleAndTheSameProofIsRefused, ModerationProofPostureSweepTest.everyOperationIsKeyProvedOrExemptWithAReason, ModerationProofPostureSweepTest.everyKeyProvedOperationRefusesAModeratorWithoutTheProof]
+      web:
+        unit: [src/features/moderation/unlockModeration.test.ts]
+  - id: step-down-removes-role-and-grants
+    text: >-
+      A moderator steps down with a key proof: the role and every grant go at once; refused while it would leave no
+      holder of the key.
+    coverage:
+      backend:
+        integration: [ModerationSliceTest.theLastHolderCannotLeaveAndTheServerOwnerMayStepDownWhileAnotherHolds]
+      web:
+        unit: [src/views/ModerationView.test.ts]
+  - id: identity-rotation-exposes-the-grants
+    text: >-
+      A moderator's identity rotation deletes their grants and makes their delivery pending again.
+    coverage:
+      backend:
+        integration: [ModerationSliceTest.anIdentityRotationDeletesTheGrantsAndMakesTheDeliveryPendingAgain]
+    gaps:
+      - surface: backend
+        reason: >-
+          The test calls the hook RotationHandler calls under the account lock; that the rotation endpoint reaches it
+          is the one call line in RotationHandler.rotate, read, not driven through a full key rotation.
+  - id: every-instance-event-is-logged-and-kept-to-its-date
+    text: >-
+      Every appointment, acceptance, delivery, removal, step-down and mint writes its instance event in the same
+      transaction, never in a log line, kept to 31 December of the third year after the moderator's removal.
+    coverage:
+      backend:
+        integration: [ModerationLogSliceTest.aModeratorsEventsAreKeptFromTheirRemovalNotTheirAppointment, ModerationLogSliceTest.anEventAboutAnAccountOffTheRosterIsDatedAtOnce, ModerationLogSliceTest.thePurgeDeletesWhatExpiredAndKeepsTheRest, ModerationLogSliceTest.theLogIsNeverInALogLine]
+        unit: [ModerationLogSliceTest.theRetentionEndIsTheLastDayOfTheThirdYearAfter]
+gaps:
+  stack: >-
+    e2e/tests/features/moderation.spec.ts tags its criteria (accept and code, delivery, unlock, the queue behind the
+    proof); stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

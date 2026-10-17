@@ -2,6 +2,7 @@
 title: Roadmap
 description: What is designed or decided in principle and not built — the gap each item would close, what exists today instead, and where it is decided.
 sources:
+  - docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md
   - docs/crosscutting/security-model.md
   - docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md
   - docs/decisions/0026-client-trust-tiers.md
@@ -83,6 +84,10 @@ Decision 4 and [§ What is still open](https://github.com/raddatzk/veyq/blob/mai
 revoking one is its creator's alone. The operator's only lever is suspending the whole tenant, which takes every link
 in it down
 ([uc.admin.suspend-tenant](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.suspend-tenant.md)).
+What is built is who will act on a report: moderators the Server Owner appoints, who share one instance moderation
+key in epochs that the server stores only as a public half and sealed grants, and every moderator call proved with
+that key ([uc.moderation.appoint-moderators](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md),
+[uc.moderation.serve-as-moderator](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.serve-as-moderator.md)).
 
 **Gap it would close.** Notice-and-takedown at the share boundary. In the target model, trust and safety operates
 where content is distributed: an abuse report includes the full share URL and thus the key in its fragment, so the
@@ -90,9 +95,15 @@ operator **can decrypt a reported public share** to verify it, quarantine it, pr
 intake serves takedown requests. Private, unshared content stays unscannable by design; public shares become
 decryptable on report, so notice-and-takedown works exactly where content is distributed.
 
-**Design state.** Described in the security model's target; no use-case or ADR for the intake is referenced there.
+**Design state.** Decided: a report is a report share sealed to the moderation key plus a hold that copies and never
+blocks, reviewed in web's moderation surface holding only that key
+([ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md),
+[ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)).
+The intake, the hold, the measures and the log's case events are not built.
 
-**Decided in:** [security-model § Sharing & share-boundary Trust & Safety](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#sharing--share-boundary-trust--safety).
+**Decided in:** [security-model § Sharing & share-boundary Trust & Safety](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#sharing--share-boundary-trust--safety),
+[ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md),
+[ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md).
 
 ## Passkey unlock
 

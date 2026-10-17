@@ -43,12 +43,13 @@ function openVault(
   masterKey: Uint8Array,
   origin: UnlockOrigin,
   label?: string,
+  noteDevice = true,
 ): void {
   const identityPrivate = v1.deserializeIdentityPrivate(
     v1.open({ purpose: 'identity-priv' }, masterKey, fromB64std(material.wrappedIdentityPrivateKey)),
   )
   setUnlocked(masterKey, identityPrivate, origin)
-  noteThisDevice(label)
+  if (noteDevice) noteThisDevice(label)
 }
 
 /**
@@ -100,8 +101,15 @@ function noteThisDevice(label?: string): void {
  * session on a 401), derives the Unlock KEK, AEAD-unwraps the Master Key, then the identity private key.
  * Throws on a wrong password / Secret Key (AEAD tag mismatch) or a missing PASSWORD wrap — one generic
  * failure, server uninvolved.
+ *
+ * `noteDevice: false` is the moderation surface's (ADR 0099 § 6): it opens the vault only to open the moderation
+ * grants and drops it at once, so it records nothing about this device — no register write, no wrap.
  */
-export async function unlockMasterKey(password: string, secretKeyB64: string): Promise<void> {
+export async function unlockMasterKey(
+  password: string,
+  secretKeyB64: string,
+  { noteDevice = true }: { noteDevice?: boolean } = {},
+): Promise<void> {
   const material = await fetchKeyMaterial()
   const passwordWrap = material.wraps.find((w) => w.method === MasterKeyWrapMethodEnum.Password)
   if (!passwordWrap?.kdfParams) throw new Error('unlock_unavailable') // E2 — no floor wrap
@@ -110,7 +118,7 @@ export async function unlockMasterKey(password: string, secretKeyB64: string): P
   const kek = await unlockKekAsync(secretKey, password, salt, params)
   const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(passwordWrap.wrappedKey))
   // The 2SKD floor: password AND Secret Key. `cold` is what ADR 0060's rotation gate is looking for.
-  openVault(material, masterKey, 'cold')
+  openVault(material, masterKey, 'cold', undefined, noteDevice)
 }
 
 /**

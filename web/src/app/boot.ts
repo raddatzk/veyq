@@ -12,6 +12,7 @@ import { clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { maybeDevAutoUnlock } from './devAutoUnlock'
 import { listenForSessionEnd } from './sessionEnd'
 import { isTenantSuspended } from './tenantSuspension'
+import { isModerationPath } from './moderationPath'
 
 /**
  * Discover the instance state and prepare the app shell. The result is reflected in the shared server
@@ -51,6 +52,13 @@ export async function boot(): Promise<void> {
     () => null,
     (e: unknown) => ({ e }),
   )
+  // The moderation surface opens nothing a device holds (ADR 0099 § 6, owner decision Q2): on its page neither the
+  // remembered vault nor the dev auto-unlock runs, so the page that will open reported content never holds the vault
+  // a convenience wrap would have opened. Its own unlock asks for the password and the Secret Key every time.
+  if (isModerationPath(globalThis.location?.pathname ?? '')) {
+    if (failure !== null) await keepOrDropTiers(failure.e)
+    return
+  }
   if (failure === null) await restoreVaultFromCache().catch(() => {})
   else await keepOrDropTiers(failure.e)
   // DEV-ONLY (cr-dev-auto-unlock): if still locked, an opt-in (`?devlogin`) local-dev auto-unlock from seed creds.

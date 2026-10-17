@@ -3,13 +3,15 @@ package me.raddatz.veyq.core.admin.setup
 import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.ServerRoles
 import me.raddatz.veyq.core.identity.WrapData
+import me.raddatz.veyq.core.moderation.ModerationHandler
+import me.raddatz.veyq.core.moderation.ModerationOutcome
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
 /** Persistence for first-run setup. Reads the setup lock and stores the owner — the account itself is born
  *  the shared operator-blind way via [AccountStore]; setup adds only the single-owner lock. */
 @ApplicationScoped
-class SetupStore(private val accounts: AccountStore) {
+class SetupStore(private val accounts: AccountStore, private val moderation: ModerationHandler) {
 
     fun isSetupComplete(): Boolean = ServerSetup.count() > 0
 
@@ -25,6 +27,15 @@ class SetupStore(private val accounts: AccountStore) {
             secretKeyProofPublicKey = registration.secretKeyProofPublicKey,
             wraps = registration.wraps.map { WrapData(it.method, it.wrappedKey, it.kdfParams) },
         )
+
+        // Epoch 1 of the moderation key, in the same transaction (ADR 0099 § 3; owner 2026-10-17): the setup client
+        // minted it and sealed it to the identity born in this very request, so reporting is on from the first day and
+        // the Server Owner is its first moderator. A bundle that is no bundle rolls the whole setup back.
+        val epoch = registration.moderationEpoch
+        val minted = moderation.enable(
+            userId, epoch.kemPublicKey, epoch.signPublicKey, registration.identityPublicKey, epoch.sealedGrant,
+        )
+        if (minted !is ModerationOutcome.Ok) throw ModerationEpochInvalid()
 
         ServerSetup().apply {
             id = ServerSetup.SINGLETON_ID

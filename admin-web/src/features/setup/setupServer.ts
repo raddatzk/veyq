@@ -5,6 +5,7 @@
 import { fromB64std } from '@veyq/crypto/base64'
 import { setupApi } from '../../api/client'
 import { buildAccount } from '@veyq/crypto/accountBirth'
+import { epochOneFor } from '../instance/moderation'
 import {
   type CreateServerOwnerRequest,
   CreateServerOwnerRequestSuiteIdEnum,
@@ -35,6 +36,8 @@ export async function buildCreateServerOwnerRequest(
       kdfParams: w.kdfParams,
     })),
     secretKeyProofPublicKey: material.secretKeyProofPublicKey,
+    // Epoch 1 of the moderation key, sealed to the identity born just above (ADR 0099 § 3): reporting is on from day 1.
+    moderationEpoch: epochOneFor(material.identityPublicKey),
   }
   return { request, emergencyKit }
 }

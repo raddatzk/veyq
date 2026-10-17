@@ -275,6 +275,7 @@ class OperatorBlindProbeTest {
             "listInstanceExternalServices", "setInstanceExternalService", "clearInstanceExternalService",
             "getInstanceReleaseNotices", "setInstanceReleaseCheck",
             "getInstanceMailSettings", "updateInstanceMailSettings", "confirmInstanceMail",
+            "getInstanceModeration", "appointModerator", "removeModerator", "mintModerationEpoch",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +
@@ -305,6 +306,23 @@ class OperatorBlindProbeTest {
                 "the gate would refuse (left, proposed-only, suspended tenant) by asking the gate's own READ answer — " +
                 "pinned by ItemFavoritesSliceTest.listOwnLeavesOutEveryScopeTheGateRefuses.",
             "listOwnItemFavorites",
+        )
+        reason(
+            "moderator route: MODERATOR role + key proof (ADR 0099 § 2). It acts for the Server Owner across the " +
+                "instance, inside no space, so no space's gate applies; who may call it is ModerationProofPostureSweepTest's.",
+            "stepDownAsModerator", "listPendingModerationDeliveries", "putModerationDelivery",
+        )
+        reason(
+            "moderator route before the key: the caller's own appointment, its address confirmation, its own grants and " +
+                "the proof's challenge — account-wide, inside no space, and carrying no proof because a newcomer holds no " +
+                "key yet (ModerationProofPostureSweepTest lists each).",
+            "getMyModeratorAppointment", "acceptModeratorAppointment", "sendModeratorAddressCode",
+            "confirmModeratorAddress", "listMyModerationGrants", "createModerationChallenge",
+        )
+        reason(
+            "public: the current epoch's public bundle, which every reporter — mostly a guest — seals to (ADR 0099 § 2); " +
+                "it names no space and no account.",
+            "getModerationKey",
         )
     }
 

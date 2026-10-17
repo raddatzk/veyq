@@ -23,6 +23,7 @@ import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.MembershipStore
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
+import me.raddatz.veyq.core.moderation.ModerationHandler
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -93,6 +94,7 @@ class RotationHandler(
     private val deviceRegister: DeviceRegisterStore,
     private val access: ScopeAccess,
     private val accounts: AccountStore,
+    private val moderation: ModerationHandler,
     config: VeyqConfig,
 ) {
     private val maxAttempts: Int = config.tasks().maxAttempts()
@@ -185,6 +187,11 @@ class RotationHandler(
         }
 
         pairings.supersede(pairings.liveChannels(userId).map { it.id })
+
+        // A moderator's grants of the instance moderation key were sealed to the identity this replaces, and are treated
+        // as exposed (ADR 0099 § 4): deleted here, delivered again at the new identity by a holder, and a rotation of
+        // the key is due where they held the current epoch. Under the account lock, then the roster's epoch lock.
+        moderation.onIdentityRotated(userId)
 
         // The split (ADR 0060 Decision 5): a scope with exactly one member is self-served — nobody to be
         // re-admitted by, nobody to exclude but the rotator's own old identity. Everything else is queued for

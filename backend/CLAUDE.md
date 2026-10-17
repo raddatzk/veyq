@@ -31,9 +31,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   its own `%test` keys** in `src/test/resources/application-test.properties` beside a comment-only
   `application.properties` anchor (a profile file is read only beside one); the base config is `:core`'s
   `src/main/resources/application.properties`. **A new `@TestProfile` is one more Quarkus boot in its project's one
-  test JVM (2 GB heap, `veyq.module`), and `:core`'s is near the ceiling:** two new profiles took `:core:test` to
+  test JVM (3 GB heap, `veyq.module`), and `:core`'s is near the ceiling:** two new profiles took `:core:test` to
   `OutOfMemoryError: Java heap space` late in the suite, twice, while the tests themselves were green (2026-10-17,
-  cr-client-port-sources); one fitted. Share a profile class across the classes that need the same keys, and reach a
+  cr-client-port-sources); one fitted. Main code counts too, every boot loads all of it: the moderation CR's (five
+  tables, a request filter, a dozen beans, no new profile) did it from the main code alone, its test classes moved out
+  (measured 2026-10-17), which is when the heap went from 2 GB to 3 GB. Share a profile class across the classes that need the same keys, and reach a
   variant through a test-scope seam rather than a profile where the config mapping is proven elsewhere. Shared test helpers live in **`:core`'s test fixtures**
   (`core/src/testFixtures`, `java-test-fixtures`), consumed as `testImplementation(testFixtures(project(":core")))`:
   Quarkus loads them as a workspace module of the application under test, so a seed that persists entities, a

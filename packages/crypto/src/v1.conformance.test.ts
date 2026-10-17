@@ -930,6 +930,105 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
+  describe('instance moderation key (ADR 0099 § 2)', () => {
+    const k = vectors.moderation_key
+    const p = vectors.moderation_proof
+    const m = unhex(k.m)
+    type ProofCase = { operationId: string; caseId: string | null; statement: string; signature: string }
+    const cases: [string, ProofCase][] = [
+      ['without a case', p.without_case],
+      ['with a case', p.with_case],
+    ]
+    const stmtOf = (c: ProofCase) =>
+      v1.moderationProofStatement({ challenge: unhex(p.challenge), operationId: c.operationId, caseId: c.caseId })
+
+    it('derives both seeds from M_n under labels of their own, and the bundle from them', () => {
+      expect(hex(v1.moderationKemSecret(m))).toBe(k.kem_seed)
+      const bundle = v1.moderationBundle(m)
+      expect(hex(bundle.kem)).toBe(k.kem_public)
+      expect(hex(bundle.sign)).toBe(k.sign_public)
+      // The kem public key is the X-Wing derivation of the kem seed, the function #xwing holds to the draft.
+      expect(hex(raw.kemPublic(unhex(k.kem_seed)))).toBe(k.kem_public)
+      expect(hex(ed25519.getPublicKey(unhex(k.sign_seed)))).toBe(k.sign_public)
+    })
+
+    it('the grant vector carries M_n, and what it seals opens to the bundle the key derives', () => {
+      expect(vectors.seal.asym['moderation-grant'].plaintext).toBe(k.m)
+      const opened = v1.openAs({ purpose: 'moderation-grant', epoch: 3 }, unhex(vectors.xwing.vectors[0].sk), unhex(vectors.seal.asym['moderation-grant'].blob))
+      expect(v1.moderationBundleEquals(v1.moderationBundle(opened), v1.moderationBundle(m))).toBe(true)
+    })
+
+    it('a key that is not 32 bytes derives nothing', () => {
+      expect(() => v1.moderationBundle(new Uint8Array(31))).toThrow(new TypeError('moderation key: not 32 bytes'))
+      expect(() => v1.moderationKemSecret(new Uint8Array(33))).toThrow(new TypeError('moderation key: not 32 bytes'))
+      expect(() => v1.moderationKemSecret([...m] as unknown as Uint8Array)).toThrow(new TypeError('moderation key: not 32 bytes'))
+    })
+
+    it('a fresh key is 32 random bytes, and two are not the same', () => {
+      const a = v1.generateModerationKey()
+      expect(a.length).toBe(v1.MODERATION_KEY_BYTES)
+      expect(hex(a)).not.toBe(hex(v1.generateModerationKey()))
+    })
+
+    it('bundles are equal only when both halves are', () => {
+      const a = v1.moderationBundle(m)
+      const flip = (b: Uint8Array, i: number) => {
+        const out = b.slice()
+        out[i] ^= 1
+        return out
+      }
+      expect(v1.moderationBundleEquals(a, { kem: a.kem.slice(), sign: a.sign.slice() })).toBe(true)
+      expect(v1.moderationBundleEquals(a, { kem: flip(a.kem, 1215), sign: a.sign })).toBe(false)
+      expect(v1.moderationBundleEquals(a, { kem: a.kem, sign: flip(a.sign, 0) })).toBe(false)
+      expect(v1.moderationBundleEquals(a, { kem: a.kem.slice(0, 1215), sign: a.sign })).toBe(false)
+      expect(v1.moderationBundleEquals(a, { kem: a.kem, sign: a.sign.slice(0, 31) })).toBe(false)
+      // A prefix of the published key is not the key, whichever side is the shorter.
+      expect(v1.moderationBundleEquals({ kem: a.kem.slice(0, 1215), sign: a.sign }, a)).toBe(false)
+    })
+
+    it.each(cases)('%s: statement bytes and signature', (_name, c) => {
+      const stmt = stmtOf(c)
+      expect(hex(v1.encodeStatement(stmt))).toBe(c.statement)
+      expect(hex(v1.moderationSign(m, stmt))).toBe(c.signature)
+      expect(v1.moderationVerify(unhex(k.sign_public), stmt, unhex(c.signature))).toBe(true)
+    })
+
+    it.each(cases)('%s: the proof answers for no other challenge, operation, case or key', (_name, c) => {
+      const sig = unhex(c.signature)
+      const pub = unhex(k.sign_public)
+      const base = { challenge: unhex(p.challenge), operationId: c.operationId, caseId: c.caseId }
+      const otherChallenge = unhex(p.challenge)
+      otherChallenge[31] ^= 1
+      const variants: [string, v1.ModerationProofInput][] = [
+        ['challenge', { ...base, challenge: otherChallenge }],
+        ['operationId', { ...base, operationId: `${c.operationId}X` }],
+        ['caseId', { ...base, caseId: c.caseId === null ? 'c0ffee00-0000-4000-8000-0000000000cb' : null }],
+      ]
+      for (const [name, v] of variants) expect(v1.moderationVerify(pub, v1.moderationProofStatement(v), sig), name).toBe(false)
+      expect(v1.moderationVerify(unhex(vectors.grant_signature.sign_public), stmtOf(c), sig)).toBe(false)
+      expect(v1.moderationVerify(pub.slice(0, 31), stmtOf(c), sig)).toBe(false)
+      expect(v1.moderationVerify(pub, stmtOf(c), sig.slice(0, 63))).toBe(false)
+    })
+
+    it('refuses an operation id that is not a contract operationId, and a case that is not a canonical UUID', () => {
+      const bad = (patch: Record<string, unknown>) => () =>
+        v1.encodeStatement({ ...stmtOf(p.without_case), ...patch } as never)
+      for (const op of ['', 'ListDeliveries', 'list-deliveries', 'x'.repeat(65), 7, new String('listX')]) {
+        expect(bad({ operationId: op })).toThrow(new v1.SealContextInvalid('moderation-proof.operationId is not an operation id'))
+      }
+      expect(bad({ operationId: 'a' + 'b'.repeat(63) })).not.toThrow()
+      expect(bad({ caseId: 'C0FFEE00-0000-4000-8000-0000000000CA' })).toThrow(new v1.SealContextInvalid('moderation-proof.caseId is not a canonical lowercase UUID'))
+      expect(bad({ challenge: 'c0' })).toThrow(new v1.SealContextInvalid('moderation-proof.challenge is not a byte string'))
+    })
+
+    it('the statement\'s label domain-separates it from every seal purpose and the grant statement', () => {
+      const stmt = v1.encodeStatement(stmtOf(p.without_case))
+      expect(new TextDecoder().decode(stmt.slice(4, 20))).toBe('moderation-proof')
+      expect(Object.keys(vectors.seal.sym)).not.toContain('moderation-proof')
+      expect(Object.keys(vectors.seal.asym)).not.toContain('moderation-proof')
+    })
+  })
+
   describe('pairing channel (ADR 0059 §11)', () => {
     const p = vectors.pairing_channel
     const secret = unhex(p.secret)

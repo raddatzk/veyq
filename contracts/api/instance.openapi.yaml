@@ -37,6 +37,12 @@ tags:
       and its notices, the instance mail settings). One tag = one resource interface owning the whole
       `/api/instance` subtree.
 
+  - name: instance-moderation
+    description: >
+      The Server Owner's half of moderation (ADR 0099): the moderator roster and minting each epoch of the instance
+      moderation key after the first, which first-run setup mints. A tag of its own, so its resource owns the `/api/instance/moderation`
+      subtree. The moderator's half is `moderation.openapi.yaml`, on the public listener.
+
 # x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
 # request that came through the admin container; the public port 404s it. Reachability, not a role: the role
 # stays in code (ADR 0008). The backend derives its set from this marker at build time, and a posture sweep
@@ -1175,7 +1181,237 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: rate_limited }
 
+  /api/instance/moderation:
+    get:
+      tags: [instance-moderation]
+      operationId: getInstanceModeration
+      x-veyq-channel: admin
+      summary: Read the moderation roster, the current epoch of the instance moderation key, and whether a rotation is due.
+      description: >
+        The moderators the Server Owner appointed and where each stands, with the identity public key admin-web seals a
+        new epoch to; the current epoch; whether a rotation is due (a moderator stepped down or rotated their identity
+        since the current epoch was minted, ADR 0097 decision 6); and the Server Owner's own identity public key
+        ([ADR 0099](../../docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md),
+        uc.moderation.appoint-moderators). First-run setup mints epoch 1 (`createServerOwner`), so an instance set up
+        through it is never without one; `enabled: false` = no epoch exists, and reporting is off. Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The roster and the key's state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceModeration" }
+              example:
+                enabled: true
+                currentEpoch: 2
+                rotationDueSince: null
+                serverOwner:
+                  accountId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                  identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+                moderators:
+                  - accountId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                    address: owner@example.com
+                    state: ACCEPTED
+                    appointedAt: 2026-10-17T09:00:00Z
+                    acceptedAt: 2026-10-17T09:00:00Z
+                    identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+                    holdsCurrentEpoch: true
+                    addressConfirmed: true
+                  - accountId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+                    address: deputy@example.com
+                    state: PENDING
+                    appointedAt: 2026-10-17T10:00:00Z
+                    acceptedAt: null
+                    identityPublicKey: null
+                    holdsCurrentEpoch: false
+                    addressConfirmed: false
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+  /api/instance/moderation/moderators:
+    post:
+      tags: [instance-moderation]
+      operationId: appointModerator
+      x-veyq-channel: admin
+      summary: Appoint an existing account as a moderator, by its address.
+      description: >
+        Records a pending appointment for the account with this address (ADR 0099 § 1); it becomes a moderator when the
+        appointee accepts it in web/'s moderation surface. `404 account_not_found` when no account has the address —
+        nothing is recorded. Appointing someone already on the roster changes nothing. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AppointModeratorRequest" }
+            example: { address: deputy@example.com }
+      responses:
+        "200":
+          description: Appointed (or already on the roster); the roster and the key's state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceModeration" }
+        "400":
+          description: The request was malformed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No account has this address (`account_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: account_not_found }
+        "409":
+          description: Moderation is not on yet (`moderation_off`); turn it on first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: moderation_off }
+
+  /api/instance/moderation/moderators/{accountId}:
+    delete:
+      tags: [instance-moderation]
+      operationId: removeModerator
+      x-veyq-channel: admin
+      summary: Remove a moderator — their role and their grants of every epoch go at once.
+      description: >
+        Ends the appointment (pending or accepted) and deletes the moderator's grants for every epoch in the same
+        transaction (ADR 0099 § 4, layer 1); admin-web then mints the next epoch for the remaining moderators
+        (`mintModerationEpoch`, reason `REMOVAL`). `409 moderation_last_holder` while it would leave no accepted
+        moderator holding the current epoch. Server-Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ModeratorAccountId"
+      responses:
+        "200":
+          description: Removed; the roster and the key's state (with `rotationDueSince` set until the next mint).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceModeration" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: The account is not on the roster (`not_moderator`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_moderator }
+        "409":
+          description: The account is the last moderator holding the key (`moderation_last_holder`). Nothing changes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: moderation_last_holder }
+
+  /api/instance/moderation/epochs:
+    post:
+      tags: [instance-moderation]
+      operationId: mintModerationEpoch
+      x-veyq-channel: admin
+      summary: Rotate the instance moderation key — a new epoch, sealed to every accepted moderator.
+      description: >
+        admin-web (or `veyq-admin moderation rotate`) draws `M_{n+1}`, derives its public bundle, seals it to the
+        identity public key of every accepted moderator as `getInstanceModeration` served it, and uploads the bundle
+        with one grant per moderator and a reason category (ADR 0099 §§ 3–4). The server refuses
+        (`409 moderation_grants_incomplete`) unless the grants name exactly the accepted moderators, and
+        (`409 identity_changed`) where a grant is sealed to an identity that is no longer its moderator's. Reports
+        seal to the new epoch from then on; a rotation due is cleared. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MintModerationEpochRequest" }
+            example:
+              kemPublicKey: a2VtLXB1YmxpYy1rZXk=
+              signPublicKey: c2lnbi1wdWJsaWMta2V5
+              epoch: 3
+              reason: REMOVAL
+              grants:
+                - accountId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                  identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+                  sealedGrant: c2VhbGVkLWdyYW50
+      responses:
+        "200":
+          description: Minted; the roster and the key's state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceModeration" }
+        "400":
+          description: The request was malformed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "409":
+          description: >
+            `moderation_off` = no epoch exists yet (turn moderation on); `moderation_epoch_stale` = `epoch` is not the
+            current epoch plus one (another mint landed in between; read again); `moderation_grants_incomplete` = the
+            grants do not name exactly the accepted moderators; `identity_changed` = a grant is sealed to an identity
+            that is not its moderator's current one. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: moderation_grants_incomplete }
+
 components:
+  parameters:
+    ModeratorAccountId:
+      name: accountId
+      in: path
+      required: true
+      description: The moderator's account id.
+      schema: { type: string, format: uuid }
+
   schemas:
     InstanceRelease:
       type: object
@@ -1992,6 +2228,199 @@ components:
           maxLength: 16
           example: "48213075"
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 16)'
+
+    InstanceModeration:
+      type: object
+      description: The moderation roster and the state of the instance moderation key (ADR 0099).
+      required: [enabled, currentEpoch, rotationDueSince, serverOwner, moderators]
+      properties:
+        enabled:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether an epoch exists. False = moderation is off, and the report action is off with it.
+          example: true
+        currentEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int32
+          description: The epoch reports seal to now; null while moderation is off.
+          example: 2
+        rotationDueSince:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: >
+            When a holder of the current epoch stepped down, was removed or rotated their identity; reports keep
+            sealing to an epoch that holder had until the next mint, which clears it. Null = no rotation due.
+          example: null
+        serverOwner:
+          $ref: "#/components/schemas/InstanceModerationOwner"
+        moderators:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/InstanceModerator" }
+
+    InstanceModerationOwner:
+      type: object
+      description: The Server Owner, whose identity first-run setup sealed epoch 1 to.
+      required: [accountId, identityPublicKey]
+      properties:
+        accountId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The Server Owner's account id.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        identityPublicKey:
+          type: string
+          description: The Server Owner's identity public bundle (`serializeIdentityPublic`).
+          contentEncoding: base64
+          maxLength: 2048
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+
+    InstanceModerator:
+      type: object
+      description: One moderator on the roster.
+      required: [accountId, address, state, appointedAt, acceptedAt, identityPublicKey, holdsCurrentEpoch, addressConfirmed]
+      properties:
+        accountId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The moderator's account id.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The account address the Server Owner appointed the moderator by (ADR 0099 § 1), already server-held
+            plaintext, shown back to the Server Owner on the admin channel so the roster says who is on it.
+          type: string
+          description: The moderator's account address.
+          maxLength: 254
+          example: deputy@example.com
+        state:
+          x-veyq-visibility: enum
+          type: string
+          description: "`PENDING` = appointed, not yet accepted; `ACCEPTED` = a moderator."
+          enum: [PENDING, ACCEPTED]
+          example: ACCEPTED
+        appointedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the Server Owner appointed them.
+          example: 2026-10-17T10:00:00Z
+        acceptedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When they accepted; null while pending.
+          example: 2026-10-17T10:30:00Z
+        identityPublicKey:
+          type: [string, "null"]
+          description: >
+            The moderator's current identity public bundle, which a mint seals to; null while pending (a pending
+            appointee is sealed nothing).
+          contentEncoding: base64
+          maxLength: 2048
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+        holdsCurrentEpoch:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether they hold a grant of the current epoch (false while a holder has not delivered it yet).
+          example: true
+        addressConfirmed:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether their address is confirmed for moderation notices (ADR 0097 decision 5).
+          example: true
+
+    AppointModeratorRequest:
+      type: object
+      description: The address of the account to appoint.
+      required: [address]
+      properties:
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The Server Owner names an existing account by its address (ADR 0099 § 1); the server looks the account up
+            by the address it already holds and stores nothing new.
+          type: string
+          format: email
+          description: The account's address.
+          maxLength: 254
+          example: deputy@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    MintModerationEpochRequest:
+      type: object
+      description: The next epoch's public bundle, one grant per accepted moderator, and why it is minted.
+      required: [epoch, kemPublicKey, signPublicKey, reason, grants]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 2
+          description: >
+            The epoch the grants are sealed for (`moderation-grant` [epoch]) — the current one plus one, as the minting
+            client read it. The server refuses any other (`409 moderation_epoch_stale`): grants are opaque to it, so a
+            mint that raced another would otherwise store grants no moderator could open as the epoch they are filed under.
+          example: 3
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(2)'
+        kemPublicKey:
+          type: string
+          description: The epoch's X-Wing encapsulation key (1216 bytes), standard base64.
+          contentEncoding: base64
+          maxLength: 1700
+          example: a2VtLXB1YmxpYy1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1700) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        signPublicKey:
+          type: string
+          description: The epoch's Ed25519 public key (32 bytes), standard base64.
+          contentEncoding: base64
+          maxLength: 64
+          example: c2lnbi1wdWJsaWMta2V5
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        reason:
+          x-veyq-visibility: enum
+          type: string
+          description: Why the key rotates (ADR 0099 § 4), kept in the moderation log.
+          enum: [REMOVAL, IDENTITY_ROTATION, COMPROMISE, BY_HAND]
+          example: REMOVAL
+        grants:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationGrantForMint" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 1000)'
+
+    ModerationGrantForMint:
+      type: object
+      description: The new epoch's grant for one accepted moderator.
+      required: [accountId, identityPublicKey, sealedGrant]
+      properties:
+        accountId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The moderator's account id.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        identityPublicKey:
+          type: string
+          description: The identity the grant is sealed to, as `getInstanceModeration` served it.
+          contentEncoding: base64
+          maxLength: 2048
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedGrant:
+          type: string
+          description: "`M_n` sealed to that identity (`sealTo` purpose `moderation-grant` [epoch])."
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWdyYW50
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

@@ -8,7 +8,9 @@
   encrypted account and mark the instance set up.
 - **Preconditions:** A freshly installed instance with setup **not yet completed**.
 - **Postconditions (success):** The Server Owner account exists with its own identity keys, Master Key
-  wraps and a saved Emergency Kit; the instance is marked set up; the operator holds **no** content keys.
+  wraps and a saved Emergency Kit; the instance is marked set up; the operator holds **no** content keys. The
+  instance moderation key has its epoch 1, granted to the Server Owner alone, so reporting is on from the first day
+  ([uc.moderation.appoint-moderators](../../moderation/use-cases/uc.moderation.appoint-moderators.md)).
 
 ## Main flow
 
@@ -24,7 +26,10 @@
 4. The client uploads the **identity public key + wrapped blobs + a password-derived auth *public* key**
    (operator-blind password auth, [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md):
    the server never sees the password and stores no credential/verifier — login is challenge-response);
-   the server stores ciphertext + the public key only and **marks setup complete** (single-owner lock).
+   the server stores ciphertext + the public key only and **marks setup complete** (single-owner lock). With it go
+   epoch 1 of the instance moderation key — its public bundle and `M_1` sealed to the identity just born, `M_1` then
+   forgotten ([ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
+   § 3) — stored in the same transaction, the Server Owner its first moderator.
 
 ```mermaid
 ---

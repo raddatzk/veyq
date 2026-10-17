@@ -6,13 +6,19 @@
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
 // + the tenant storage quota + release info with the release check's notices and its switch + the config-secret state +
-// the object-store setting and its check + the capability switches with their requirements + the external services.
+// the object-store setting and its check + the capability switches with their requirements + the external services +
+// the moderator roster and the rotation of the instance moderation key (ADR 0099).
 // Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
 // they are not Server-Owner commands. The instance's OWN mail settings are the Server Owner's, but stay console-only
 // as tenant mail is: their save sends a code that is typed back into the same screen.
 // First-run **setup** is excluded on purpose (cr-admin-cli): it is a one-time interactive ceremony that mints
 // key material and force-confirms a saved Emergency Kit — not something a script should be able to do blind.
+// `moderation rotate` (and `moderator remove`, which rotates after a holder leaves) mints key material too, and is a
+// command anyway, because it shares none of what excludes setup: ADR 0099 § 4 names `veyq-admin moderation rotate`; it
+// draws `M_n`, seals it to the moderators' identity PUBLIC keys only, uploads, and forgets it — there is nothing to
+// save and nothing to confirm, and it opens nothing (`features/instance/moderation.noOpen.test.ts` holds that for
+// every file here). The minting itself is the facade's, the same one the console's Moderation panel calls.
 import {
   changeTenantDomain,
   createTenant,
@@ -25,7 +31,7 @@ import {
   setTenantStorageQuota,
   suspendTenant,
 } from '../features/tenants/tenants'
-import { CliError } from './output'
+import { CliError, renderResult } from './output'
 import { getInstanceRelease } from '../features/instance/release'
 import { getReleaseNotices, setReleaseCheck } from '../features/instance/releaseNotices'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
@@ -56,6 +62,14 @@ import {
   setExternalService,
   type InstanceExternalService,
 } from '../features/instance/externalServices'
+import {
+  appointModerator,
+  getModeration,
+  removeModerator,
+  rotateModerationKey,
+  RotationReason,
+  type InstanceModeration,
+} from '../features/instance/moderation'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
 export type Flag = {
@@ -137,6 +151,34 @@ function renderCapabilities(entries: InstanceCapability[], locale: CapabilityLoc
 function renderSwitched(entry: InstanceCapability, locale: CapabilityLocale): string {
   const state = entry.off ? 'off' : entry.effective ? 'on' : 'off through a parent'
   return `${entry.id}  ${state}  ${inLocale(entry.title, locale)}`
+}
+
+/** `--reason` as typed → the reason category the moderation log records. */
+const ROTATION_REASONS: Record<string, RotationReason> = {
+  'by-hand': RotationReason.ByHand,
+  compromise: RotationReason.Compromise,
+  'identity-rotation': RotationReason.IdentityRotation,
+  removal: RotationReason.Removal,
+}
+
+/** The roster as a script reads it: whether moderation is on, the epoch, a due rotation, and per moderator its
+ *  address, its state and whether it holds the current key. The identity public keys stay out — they are what the
+ *  facade seals to, not what an operator reads. */
+function renderRoster(r: InstanceModeration): string {
+  return renderResult({
+    enabled: r.enabled,
+    currentEpoch: r.currentEpoch,
+    rotationDueSince: r.rotationDueSince,
+    moderators: r.moderators.map((m) => ({ address: m.address, state: m.state, holdsKey: m.holdsCurrentEpoch })),
+  })
+}
+
+/** The roster entry with this address (case-insensitive, as the server matches an account address). */
+async function moderatorByAddress(address: string): Promise<string> {
+  const wanted = address.trim().toLowerCase()
+  const found = (await getModeration()).moderators.find((m) => m.address.toLowerCase() === wanted)
+  if (!found) throw new CliError(`${address} is not on the moderator roster (see \`moderator list\`)`)
+  return found.accountId
 }
 
 /**
@@ -367,5 +409,33 @@ export const COMMANDS: Record<string, Command> = {
     operand: capabilityId,
     run: (f) => setInstanceCapability(f.id, false),
     render: (r, f, env) => renderSwitched(r as InstanceCapability, cliLocale(f, env)),
+  },
+  'moderator list': {
+    usage: 'moderator list',
+    summary: 'Print the moderator roster: whether moderation is on, the key’s current epoch, a due rotation, and each moderator’s address, state and whether it holds the key.',
+    flags: {},
+    run: () => getModeration(),
+    render: (r) => renderRoster(r as InstanceModeration),
+  },
+  'moderator appoint': {
+    usage: 'moderator appoint --address <address>',
+    summary: 'Appoint an existing account as a moderator. It stays PENDING until they accept in the web app’s moderation page; a holder then delivers the key.',
+    flags: { address: { describe: 'the account’s address', required: true } },
+    run: (f) => appointModerator(f.address),
+    render: (r) => renderRoster(r as InstanceModeration),
+  },
+  'moderator remove': {
+    usage: 'moderator remove --address <address>',
+    summary: 'Remove a moderator; if they held the key, rotate it for the remaining moderators (reason removal).',
+    flags: { address: { describe: 'the moderator’s address, as `moderator list` prints it', required: true } },
+    run: async (f) => removeModerator(await moderatorByAddress(f.address)),
+    render: (r) => renderRoster(r as InstanceModeration),
+  },
+  'moderation rotate': {
+    usage: 'moderation rotate --reason by-hand|compromise|identity-rotation|removal',
+    summary: 'Mint a new moderation key, sealed to every moderator who has accepted; reports from then on are sealed to it. The key is never printed or kept.',
+    flags: { reason: { describe: 'the reason category the moderation log records', required: true, oneOf: Object.keys(ROTATION_REASONS) } },
+    run: (f) => rotateModerationKey(ROTATION_REASONS[f.reason]),
+    render: (r) => renderRoster(r as InstanceModeration),
   },
 }

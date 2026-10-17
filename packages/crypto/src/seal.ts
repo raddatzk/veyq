@@ -34,11 +34,11 @@ import {
 /**
  * What a binding field is: a canonical lowercase UUID, a share id (the 43-character base64url bearer token a share
  * is addressed by — a capability, so it keeps its 256-bit form rather than becoming a UUID), an unsigned integer
- * (epoch/revision), or a blob role (a bounded token). Statements (below) add five kinds a seal never binds: an id that may be absent
- * (encoded as the empty field), a scope kind, a 32-byte SHA-256 digest, an opaque byte string bound whole, and a
- * six-digit pairing code (its ASCII digits).
+ * (epoch/revision), or a blob role (a bounded token). Statements (below) add six kinds a seal never binds: an id that may be absent
+ * (encoded as the empty field), a scope kind, a 32-byte SHA-256 digest, an opaque byte string bound whole, a
+ * six-digit pairing code (its ASCII digits), and a contract operation id (its UTF-8 name).
  */
-type FieldKind = 'id' | 'shareId' | 'uint' | 'role' | 'optionalId' | 'scopeKind' | 'digest' | 'bytes' | 'pairingCode'
+type FieldKind = 'id' | 'shareId' | 'uint' | 'role' | 'optionalId' | 'scopeKind' | 'digest' | 'bytes' | 'pairingCode' | 'operationId'
 
 /**
  * The role a sealed `K_blob` plays for its owner: an open, bounded token (`BLOB_ROLE` below), the same token as the
@@ -132,6 +132,9 @@ export const SEAL_TO_PURPOSES = {
   'upload-identity-key': [['scopeId', 'id'], ['nodeId', 'id'], ['identityId', 'id']],
   // Purpose only: a single-use pairing envelope to a fresh ephemeral key (ADR 0072 Decision 2).
   'pairing-grant': [],
+  // The instance moderation key M_n of one epoch, sealed to a moderator's identity (ADR 0099 § 2). There is one key per
+  // epoch for the whole instance, so the epoch is the whole address; the recipient is the identity it is sealed to.
+  'moderation-grant': [['epoch', 'uint']],
 } as const satisfies Schema
 
 type KindValue<K extends FieldKind> = K extends 'uint'
@@ -183,6 +186,8 @@ const SHARE_ID = /^[A-Za-z0-9_-]{43}$/
 const BLOB_ROLE = /^[A-Z][A-Z0-9_]{0,15}$/
 const SCOPE_KINDS: readonly string[] = ['TENANT', 'GROUP', 'PERSONAL'] satisfies ScopeKind[]
 const PAIRING_CODE = /^[0-9]{6}$/
+// A contract operationId, as the generated interfaces name their methods: lower camel case, bounded.
+const OPERATION_ID = /^[a-z][A-Za-z0-9]{0,63}$/
 
 const u64be = (n: number): Uint8Array => {
   const b = new Uint8Array(8)
@@ -249,6 +254,11 @@ function encodeField(purpose: string, name: string, kind: FieldKind, value: unkn
         throw new SealContextInvalid(`${purpose}.${name} is not a six-digit pairing code`)
       }
       return utf8(value)
+    case 'operationId':
+      if (typeof value !== 'string' || !OPERATION_ID.test(value)) {
+        throw new SealContextInvalid(`${purpose}.${name} is not an operation id`)
+      }
+      return utf8(value)
   }
 }
 
@@ -290,6 +300,9 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  *     MACs over the two values the relay carries — the new device's serialized transport public bundle (and, when
  *     signing in with a QR code, the transcribed code), and the sealed grant's DECODED ciphertext. Two answer labels
  *     keep one direction's answer from passing for the other's.
+ *   - `moderation-proof` (ADR 0099 § 2): what the current epoch's moderation signing key signs to prove the key on one
+ *     moderation call — the server's single-use challenge, the contract operation it is for, and the case it acts on
+ *     (absent, the empty field, for an operation on no case). The server rebuilds it from the operation it matched.
  */
 export const STATEMENT_PURPOSES = {
   'admission-tag': [['scopeId', 'id'], ['epoch', 'uint'], ['admissionId', 'id'], ['userId', 'optionalId']],
@@ -305,6 +318,7 @@ export const STATEMENT_PURPOSES = {
   'pairing-answer': [['transportKey', 'bytes']],
   'pairing-sign-in-answer': [['transportKey', 'bytes'], ['code', 'pairingCode']],
   'pairing-envelope': [['envelope', 'bytes']],
+  'moderation-proof': [['challenge', 'bytes'], ['operationId', 'operationId'], ['caseId', 'optionalId']],
 } as const satisfies Schema
 
 /** A statement's context: its label and exactly its fields. */

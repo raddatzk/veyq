@@ -78,7 +78,10 @@ confirmed, and a changed address asks again.
 **6. The channel is built for instance notices, and carries release notices and moderation notices.** Nothing in
 decisions 3–5 is specific to releases, so another kind of notice (a certificate about to expire, a failed backup) is
 one decision away — but each needs its own, because each is a new thing the instance watches. Moderation notices —
-a new case — are the second kind, decided by ADR 0099 § 7, and the only one that reaches anyone but the Server Owner. The first tenant owner's invite is
+a new case — are the second kind, decided by ADR 0099 § 7, and the only one that reaches anyone but the Server Owner.
+**Rotation due** is the third, to the Server Owner alone: after a moderator steps down or rotates their identity, reports
+keep sealing to an epoch that moderator held until the Server Owner mints the next one in admin-web, which shows the same
+warning (owner 2026-10-17, ADR 0099 § 4); it is mailed once per epoch. The first tenant owner's invite is
 not an instance notice and stays ADR 0048 §5's copy-link (inbox #465).
 
 ## Consequences

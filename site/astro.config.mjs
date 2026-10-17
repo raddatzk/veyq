@@ -54,6 +54,7 @@ export default defineConfig({
                 'account/your-profile',
                 'account/appearance-and-language',
                 'account/verify-a-person',
+                'account/moderate',
               ],
             },
             {

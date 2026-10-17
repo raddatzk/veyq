@@ -67,9 +67,14 @@ green" for a contracts phase that added `metaVersion` (now `metaRevision`) to `N
 because that fixture reached the code cast `as unknown as` (165 such casts, inbox #195). So a phase that predicts
 a client red names the typed line it expects to fail — and runs `npm run check` once to see it.
 
-**The qualifier is load-bearing: an operation on a NEW tag ends green.** A new tag generates a *new* `…Api`
+**The qualifier is load-bearing: an operation on a NEW tag compiles.** A new tag generates a *new* `…Api`
 interface that no `…Resource` implements yet, and an unimplemented interface compiles — so that contracts phase
-is green on every surface, `./gradlew check` included. `cr-favorites-two-objects` predicted a red from the
+is green on every surface but three tests of `./gradlew check`, which see a new tag the day it lands:
+`ModuleCompositionTest` (a generated API no deployed resource implements answers 404) and, for an operation marked
+`x-veyq-channel: admin`, `AdminChannelPostureSweepTest` and `AdminChannelGateSliceTest` (a marked operation no resource
+implements; the gate test's interface list is by hand, and its tripwire names the new interface).
+`cr-moderators-and-the-moderation-key` predicted an all-green contracts phase from this paragraph's earlier wording and
+got exactly those three reds; the phase states them, it does not stub them. `cr-favorites-two-objects` predicted a red from the
 unconditional wording this paragraph used to carry, ran `./gradlew check` to confirm it, and got `BUILD
 SUCCESSFUL`. Cheap to check and worth checking: the prediction decides whether the phase's Done-when lists the
 backend at all, and a phase that says "this will not compile" is a phase nobody runs the backend check on —

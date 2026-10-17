@@ -17,6 +17,8 @@ import ShareView from './views/ShareView.vue'
 import RecoverView from './views/RecoverView.vue'
 import ConfirmEmailView from './views/ConfirmEmailView.vue'
 import ConfirmEmailChangeView from './views/ConfirmEmailChangeView.vue'
+import ModerationView from './views/ModerationView.vue'
+import { MODERATION_PATH } from './app/moderationPath'
 
 // A fresh instance lands on /not-set-up; an already-set-up one on /login. First-run setup is NOT a route here
 // any more — it moved to `admin-web` with the rest of the Server-Owner surface (ADR 0065), which is what lets
@@ -64,6 +66,10 @@ const router = createRouter({
     // A change of the sign-in address (uc.account.change-email): the same gates as the confirmation above — this
     // device's own session, no unlock, no shell, the one-time token in the #fragment.
     { path: '/confirm-email-change', name: 'confirm-email-change', component: ConfirmEmailChangeView },
+    // The moderation surface (ADR 0099 § 6, uc.moderation.serve-as-moderator), on every tenant host. Not unlock-gated
+    // and not in the shell: it signs in and unlocks inside the view, with the password and the Secret Key every time,
+    // only to open the moderation grants — never through LoginView, which would open or enrol a device wrap.
+    { path: MODERATION_PATH, name: 'moderation', component: ModerationView },
     { path: '/:pathMatch(.*)*', redirect: { name: 'login' } },
   ],
 })
